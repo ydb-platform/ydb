@@ -18,12 +18,12 @@ namespace NMonitoring {
         ~TIndexMonPage() override {
         }
 
-        void Output(IMonHttpRequest& request) override; 
-        void OutputIndexPage(IMonHttpRequest& request); 
+        void Output(IMonHttpRequest& request) override;
+        void OutputIndexPage(IMonHttpRequest& request);
         virtual void OutputIndex(IOutputStream& out, bool pathEndsWithSlash);
         virtual void OutputCommonJsCss(IOutputStream& out);
         void OutputHead(IOutputStream& out);
-        void OutputBody(IMonHttpRequest& out); 
+        void OutputBody(IMonHttpRequest& out);
 
         void Register(TMonPagePtr page);
         TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);

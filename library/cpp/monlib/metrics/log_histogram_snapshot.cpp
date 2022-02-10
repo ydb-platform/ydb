@@ -1,9 +1,9 @@
-#include "log_histogram_snapshot.h" 
- 
-#include <util/stream/output.h> 
- 
+#include "log_histogram_snapshot.h"
+
+#include <util/stream/output.h>
+
 #include <iostream>
- 
+
 
 namespace {
 
@@ -14,14 +14,14 @@ auto& Output(TStream& o, const NMonitoring::TLogHistogramSnapshot& hist) {
     for (auto i = 0u; i < hist.Count(); ++i) {
         o << hist.UpperBound(i) << TStringBuf(": ") << hist.Bucket(i);
         o << TStringBuf(", ");
-    } 
- 
+    }
+
     o << TStringBuf("zeros: ") << hist.ZerosCount();
- 
+
     o << TStringBuf("}");
 
     return o;
-} 
+}
 
 } // namespace
 

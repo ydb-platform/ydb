@@ -1,5 +1,5 @@
-RECURSE( 
-    client 
+RECURSE(
+    client
     common
     server
-) 
+)

@@ -13,13 +13,13 @@ namespace NMonitoring {
         {
         }
 
-        void OutputContent(NMonitoring::IMonHttpRequest& request) override; 
+        void OutputContent(NMonitoring::IMonHttpRequest& request) override;
 
         // hook to customize output
-        virtual void BeforePre(NMonitoring::IMonHttpRequest& request); 
+        virtual void BeforePre(NMonitoring::IMonHttpRequest& request);
 
         // put your text here
-        virtual void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) = 0; 
+        virtual void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) = 0;
 
         const bool PreTag;
     };

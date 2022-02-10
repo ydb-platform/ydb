@@ -217,8 +217,8 @@ namespace NActors {
             TString formatted;
             vsprintf(formatted, c, params);
 
-            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted); 
-            Y_UNUSED(ok); 
+            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
+            Y_UNUSED(ok);
             va_end(params);
         }
     }
@@ -230,9 +230,9 @@ namespace NActors {
 
     void TLoggerActor::LogIgnoredCount(TInstant now) {
         TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount);
-        if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) { 
-            BecomeDefunct(); 
-        } 
+        if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
+            BecomeDefunct();
+        }
     }
 
     void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -242,14 +242,14 @@ namespace NActors {
         PassedCount = 0;
     }
 
-    void TLoggerActor::HandleIgnoredEventDrop() { 
-        // logger backend is unavailable, just ignore 
-    } 
- 
-    void TLoggerActor::WriteMessageStat(const NLog::TEvLog& ev) { 
+    void TLoggerActor::HandleIgnoredEventDrop() {
+        // logger backend is unavailable, just ignore
+    }
+
+    void TLoggerActor::WriteMessageStat(const NLog::TEvLog& ev) {
         Metrics->IncActorMsgs();
 
-        const auto prio = ev.Level.ToPrio(); 
+        const auto prio = ev.Level.ToPrio();
 
         switch (prio) {
             case ::NActors::NLog::EPrio::Alert:
@@ -262,11 +262,11 @@ namespace NActors {
                 break;
         }
 
-    } 
- 
-    void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) { 
-        i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds(); 
-        WriteMessageStat(*ev->Get()); 
+    }
+
+    void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
+        i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
+        WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
             // Disable throttling if it was enabled previously
             if (AtomicGet(IsOverflow))
@@ -291,17 +291,17 @@ namespace NActors {
                 AtomicSet(IsOverflow, 0);
         }
 
-        const auto prio = ev->Get()->Level.ToPrio(); 
-        if (!OutputRecord(ev->Get()->Stamp, prio, ev->Get()->Component, ev->Get()->Line)) { 
-            BecomeDefunct(); 
-        } 
+        const auto prio = ev->Get()->Level.ToPrio();
+        if (!OutputRecord(ev->Get()->Stamp, prio, ev->Get()->Component, ev->Get()->Line)) {
+            BecomeDefunct();
+        }
     }
 
-    void TLoggerActor::BecomeDefunct() { 
-        Become(&TThis::StateDefunct); 
-        Schedule(WakeupInterval, new TEvents::TEvWakeup); 
-    } 
- 
+    void TLoggerActor::BecomeDefunct() {
+        Become(&TThis::StateDefunct);
+        Schedule(WakeupInterval, new TEvents::TEvWakeup);
+    }
+
     void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Metrics->IncLevelRequests();
         TString explanation;
@@ -367,7 +367,7 @@ namespace NActors {
      * 4. Log level changes (last N changes)
      */
     void TLoggerActor::HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        const auto& params = ev->Get()->Request.GetParams(); 
+        const auto& params = ev->Get()->Request.GetParams();
         NLog::EComponent component = NLog::InvalidComponent;
         NLog::EPriority priority = NLog::PRI_DEBUG;
         NLog::EPriority samplingPriority = NLog::PRI_DEBUG;
@@ -574,8 +574,8 @@ namespace NActors {
 
     constexpr size_t TimeBufSize = 512;
 
-    bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, 
-                                    const TString& formatted) noexcept try { 
+    bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
+                                    const TString& formatted) noexcept try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
@@ -634,21 +634,21 @@ namespace NActors {
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
         }
- 
-        return true; 
-    } catch (...) { 
-        return false; 
+
+        return true;
+    } catch (...) {
+        return false;
     }
 
-    void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) { 
-        WriteMessageStat(*ev->Get()); 
+    void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
+        WriteMessageStat(*ev->Get());
         Metrics->IncDroppedMsgs();
-    } 
- 
-    void TLoggerActor::HandleWakeup() { 
-        Become(&TThis::StateFunc); 
-    } 
- 
+    }
+
+    void TLoggerActor::HandleWakeup() {
+        Become(&TThis::StateFunc);
+    }
+
     const char* TLoggerActor::FormatLocalTimestamp(TInstant time, char* buf) {
         struct tm localTime;
         time.LocalTime(&localTime);

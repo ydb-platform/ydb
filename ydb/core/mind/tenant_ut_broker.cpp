@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
         runtime.CreateTenantPool(0, AssignedTenantPoolConfig());
 
         TAutoPtr<IEventHandle> captured = nullptr;
-        auto captureRegister = [&captured](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto { 
+        auto captureRegister = [&captured](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvTenantSlotBroker::EvRegisterPool
                 && !captured) {
                 captured = event;

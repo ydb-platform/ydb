@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Run multishard tx but drop RS to pause it on the first shard.
         {
-            auto captureRS = [shard=shards[1]](TTestActorRuntimeBase&, 
+            auto captureRS = [shard=shards[1]](TTestActorRuntimeBase&,
                                             TAutoPtr<IEventHandle> &event) -> auto {
                 if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
                     auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Run multishard tx but drop all RS acks to the table-1.
         // Tx should still finish successfully.
         {
-            auto captureRS = [shard=shards1[0]](TTestActorRuntimeBase&, 
+            auto captureRS = [shard=shards1[0]](TTestActorRuntimeBase&,
                                                 TAutoPtr<IEventHandle> &event) -> auto {
                 if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSetAck) {
                     auto &rec = event->Get<TEvTxProcessing::TEvReadSetAck>()->Record;
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // We want to intercept all RS from table-1 and all RS acks
         // from table-3.
-        auto captureRS = [shard1,shard3](TTestActorRuntimeBase&, 
+        auto captureRS = [shard1,shard3](TTestActorRuntimeBase&,
                                          TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
                 auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;

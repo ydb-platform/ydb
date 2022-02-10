@@ -7,11 +7,11 @@
 
 namespace NMonitoring {
 
-    THolder<ICountableConsumer> CreateEncoder( 
-        IOutputStream* out, 
-        EFormat format, 
-        TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public 
-    ); 
+    THolder<ICountableConsumer> CreateEncoder(
+        IOutputStream* out,
+        EFormat format,
+        TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public
+    );
 
     THolder<ICountableConsumer> AsCountableConsumer(
         NMonitoring::IMetricEncoderPtr encoder,

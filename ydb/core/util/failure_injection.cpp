@@ -182,7 +182,7 @@ namespace NKikimr {
             void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
                 TStringStream str;
 
-                const auto& params = ev->Get()->Request.GetParams(); 
+                const auto& params = ev->Get()->Request.GetParams();
                 if (params.Has("queue")) {
                     TString queue = params.Get("queue");
                     if (queue) {

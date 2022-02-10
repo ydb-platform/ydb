@@ -853,14 +853,14 @@ public:
             return -2;
         }
 
-        NGrpc::TCallMeta meta; 
+        NGrpc::TCallMeta meta;
         if (config.SecurityToken) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
         Ydb::Operations::Operation response;
-        NGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb = 
-            [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void { 
+        NGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb =
+            [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void {
             res = (int)grpcStatus.GRpcStatusCode;
             if (!res) {
                 response.CopyFrom(resp.operation());
@@ -870,7 +870,7 @@ public:
         };
 
         {
-            NGrpc::TGRpcClientLow clientLow; 
+            NGrpc::TGRpcClientLow clientLow;
             Ydb::Table::DescribeTableOptionsRequest request;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(ClientConfig);
             connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncDescribeTableOptions, meta);

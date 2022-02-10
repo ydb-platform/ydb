@@ -9,27 +9,27 @@ RECURSE(
     counters/ut
     deprecated
     dynamic_counters
-    dynamic_counters/percentile 
-    dynamic_counters/percentile/ut 
+    dynamic_counters/percentile
+    dynamic_counters/percentile/ut
     dynamic_counters/ut
     encode
     encode/buffered
     encode/buffered/ut
-    encode/fake 
-    encode/fuzz 
+    encode/fake
+    encode/fuzz
     encode/json
     encode/json/ut
-    encode/legacy_protobuf 
-    encode/legacy_protobuf/ut 
+    encode/legacy_protobuf
+    encode/legacy_protobuf/ut
     encode/prometheus
     encode/prometheus/ut
-    encode/protobuf 
+    encode/protobuf
     encode/spack
     encode/spack/ut
     encode/text
     encode/text/ut
-    encode/unistat 
-    encode/unistat/ut 
+    encode/unistat
+    encode/unistat/ut
     encode/ut
     example
     exception

@@ -167,48 +167,48 @@ namespace NMonitoring {
 
             AssertResult(samples);
         }
- 
-        Y_UNIT_TEST(PrivateSubgroupIsNotSerialized) { 
-            TBuffer result; 
-            auto subGroup = MakeIntrusive<TDynamicCounters>(TCountableBase::EVisibility::Private); 
-            subGroup->GetCounter("hello"); 
-            Data.RegisterSubgroup("foo", "bar", subGroup); 
- 
-            { 
-                TBufferOutput out(result); 
-                auto encoder = CreateEncoder(&out, EFormat::SPACK); 
-                Data.Accept(TString(), TString(), *encoder); 
-            } 
- 
-            NProto::TSingleSamplesList samples; 
-            { 
-                auto e = EncoderProtobuf(&samples); 
-                TBufferInput in(result); 
-                DecodeSpackV1(&in, e.Get()); 
-            } 
- 
-            AssertResult(samples); 
-        } 
- 
-        Y_UNIT_TEST(PrivateCounterIsNotSerialized) { 
-            TBuffer result; 
-            Data.GetCounter("foo", false, TCountableBase::EVisibility::Private); 
- 
-            { 
-                TBufferOutput out(result); 
-                auto encoder = CreateEncoder(&out, EFormat::SPACK); 
-                Data.Accept(TString(), TString(), *encoder); 
-            } 
- 
-            NProto::TSingleSamplesList samples; 
-            { 
-                auto e = EncoderProtobuf(&samples); 
-                TBufferInput in(result); 
-                DecodeSpackV1(&in, e.Get()); 
-            } 
- 
-            AssertResult(samples); 
-        } 
+
+        Y_UNIT_TEST(PrivateSubgroupIsNotSerialized) {
+            TBuffer result;
+            auto subGroup = MakeIntrusive<TDynamicCounters>(TCountableBase::EVisibility::Private);
+            subGroup->GetCounter("hello");
+            Data.RegisterSubgroup("foo", "bar", subGroup);
+
+            {
+                TBufferOutput out(result);
+                auto encoder = CreateEncoder(&out, EFormat::SPACK);
+                Data.Accept(TString(), TString(), *encoder);
+            }
+
+            NProto::TSingleSamplesList samples;
+            {
+                auto e = EncoderProtobuf(&samples);
+                TBufferInput in(result);
+                DecodeSpackV1(&in, e.Get());
+            }
+
+            AssertResult(samples);
+        }
+
+        Y_UNIT_TEST(PrivateCounterIsNotSerialized) {
+            TBuffer result;
+            Data.GetCounter("foo", false, TCountableBase::EVisibility::Private);
+
+            {
+                TBufferOutput out(result);
+                auto encoder = CreateEncoder(&out, EFormat::SPACK);
+                Data.Accept(TString(), TString(), *encoder);
+            }
+
+            NProto::TSingleSamplesList samples;
+            {
+                auto e = EncoderProtobuf(&samples);
+                TBufferInput in(result);
+                DecodeSpackV1(&in, e.Get());
+            }
+
+            AssertResult(samples);
+        }
 
         Y_UNIT_TEST(ToJson) {
             TString result = ToJson(Data);

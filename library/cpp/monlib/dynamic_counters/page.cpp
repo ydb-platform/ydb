@@ -14,7 +14,7 @@ namespace {
     currentCounters(nullptr);
 }
 
-TMaybe<EFormat> ParseFormat(TStringBuf str) { 
+TMaybe<EFormat> ParseFormat(TStringBuf str) {
     if (str == TStringBuf("json")) {
         return EFormat::JSON;
     } else if (str == TStringBuf("spack")) {
@@ -26,20 +26,20 @@ TMaybe<EFormat> ParseFormat(TStringBuf str) {
     }
 }
 
-void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) { 
+void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     if (OutputCallback) {
         OutputCallback();
     }
 
-    TCountableBase::EVisibility visibility{ 
-        TCountableBase::EVisibility::Public 
-    }; 
- 
-    TVector<TStringBuf> parts; 
-    StringSplitter(request.GetPathInfo()) 
-        .Split('/') 
-        .SkipEmpty() 
-        .Collect(&parts); 
+    TCountableBase::EVisibility visibility{
+        TCountableBase::EVisibility::Public
+    };
+
+    TVector<TStringBuf> parts;
+    StringSplitter(request.GetPathInfo())
+        .Split('/')
+        .SkipEmpty()
+        .Collect(&parts);
 
     TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
     if (format) {
@@ -47,29 +47,29 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 
     if (!parts.empty() && parts.back() == TStringBuf("private")) {
-        visibility = TCountableBase::EVisibility::Private; 
-        parts.pop_back(); 
-    } 
- 
+        visibility = TCountableBase::EVisibility::Private;
+        parts.pop_back();
+    }
+
     auto counters = Counters;
 
-    for (const auto& escaped : parts) { 
-        const auto part = CGIUnescapeRet(escaped); 
- 
+    for (const auto& escaped : parts) {
+        const auto part = CGIUnescapeRet(escaped);
+
         TVector<TString> labels;
-        StringSplitter(part).Split('=').SkipEmpty().Collect(&labels); 
+        StringSplitter(part).Split('=').SkipEmpty().Collect(&labels);
 
         if (labels.size() != 2U)
             return NotFound(request);
 
-        if (const auto child = counters->FindSubgroup( 
-                labels.front(), 
-                labels.back())) { 
- 
+        if (const auto child = counters->FindSubgroup(
+                labels.front(),
+                labels.back())) {
+
             counters = child;
-        } else { 
-            return HandleAbsentSubgroup(request); 
-        } 
+        } else {
+            return HandleAbsentSubgroup(request);
+        }
     }
 
     if (!format) {
@@ -95,21 +95,21 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     out.Flush();
 }
 
-void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) { 
-    if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) { 
-        NotFound(request); 
-    } else if (UnknownGroupPolicy == EUnknownGroupPolicy::Ignore) { 
-        NoContent(request); 
-    } else { 
-        Y_FAIL("Unsupported policy set"); 
-    } 
-} 
- 
-void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) { 
-    IOutputStream& out = request.Output(); 
+void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
+    if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) {
+        NotFound(request);
+    } else if (UnknownGroupPolicy == EUnknownGroupPolicy::Ignore) {
+        NoContent(request);
+    } else {
+        Y_FAIL("Unsupported policy set");
+    }
+}
+
+void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
+    IOutputStream& out = request.Output();
     HTML(out) {
         DIV() {
-            out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>"; 
+            out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
             out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
         }
 
@@ -117,13 +117,13 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             out << "Counters subgroups";
         }
         UL() {
-            currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) { 
-                LI() { 
-                    TString pathPart = name + "=" + value; 
-                    Quote(pathPart, ""); 
-                    out << "\n<a href='" << request.GetPath() << "/" << pathPart << "'>" << name << " " << value << "</a>"; 
-                } 
-            }); 
+            currentCounters->EnumerateSubgroups([&](const TString& name, const TString& value) {
+                LI() {
+                    TString pathPart = name + "=" + value;
+                    Quote(pathPart, "");
+                    out << "\n<a href='" << request.GetPath() << "/" << pathPart << "'>" << name << " " << value << "</a>";
+                }
+            });
         }
 
         H4() {
@@ -132,10 +132,10 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     }
 }
 
-void TDynamicCountersPage::OutputText(IOutputStream& out, IMonHttpRequest&) { 
+void TDynamicCountersPage::OutputText(IOutputStream& out, IMonHttpRequest&) {
     currentCounters->OutputPlainText(out);
 }
- 
-void TDynamicCountersPage::SetUnknownGroupPolicy(EUnknownGroupPolicy value) { 
-    UnknownGroupPolicy = value; 
-} 
+
+void TDynamicCountersPage::SetUnknownGroupPolicy(EUnknownGroupPolicy value) {
+    UnknownGroupPolicy = value;
+}

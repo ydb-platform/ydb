@@ -5,33 +5,33 @@
 
 using namespace NMonitoring;
 
-void TIndexMonPage::OutputIndexPage(IMonHttpRequest& request) { 
-    request.Output() << HTTPOKHTML; 
-    request.Output() << "<html>\n"; 
-    OutputHead(request.Output()); 
+void TIndexMonPage::OutputIndexPage(IMonHttpRequest& request) {
+    request.Output() << HTTPOKHTML;
+    request.Output() << "<html>\n";
+    OutputHead(request.Output());
     OutputBody(request);
-    request.Output() << "</html>\n"; 
+    request.Output() << "</html>\n";
 }
 
-void TIndexMonPage::Output(IMonHttpRequest& request) { 
-    TStringBuf pathInfo = request.GetPathInfo(); 
+void TIndexMonPage::Output(IMonHttpRequest& request) {
+    TStringBuf pathInfo = request.GetPathInfo();
     if (pathInfo.empty() || pathInfo == TStringBuf("/")) {
         OutputIndexPage(request);
         return;
     }
 
-    Y_VERIFY(pathInfo.StartsWith('/')); 
+    Y_VERIFY(pathInfo.StartsWith('/'));
 
     TMonPagePtr found;
     // analogous to CGI PATH_INFO
     {
         TGuard<TMutex> g(Mtx);
-        TStringBuf pathTmp = request.GetPathInfo(); 
+        TStringBuf pathTmp = request.GetPathInfo();
         for (;;) {
             TPagesByPath::iterator i = PagesByPath.find(pathTmp);
             if (i != PagesByPath.end()) {
                 found = i->second;
-                pathInfo = request.GetPathInfo().substr(pathTmp.size()); 
+                pathInfo = request.GetPathInfo().substr(pathTmp.size());
                 Y_VERIFY(pathInfo.empty() || pathInfo.StartsWith('/'));
                 break;
             }
@@ -43,11 +43,11 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
             }
         }
     }
-    if (found) { 
+    if (found) {
         THolder<IMonHttpRequest> child(request.MakeChild(found.Get(), TString{pathInfo}));
-        found->Output(*child); 
+        found->Output(*child);
     } else {
-        request.Output() << HTTPNOTFOUND; 
+        request.Output() << HTTPNOTFOUND;
     }
 }
 
@@ -123,17 +123,17 @@ void TIndexMonPage::OutputHead(IOutputStream& out) {
     out << "</head>\n";
 }
 
-void TIndexMonPage::OutputBody(IMonHttpRequest& req) { 
-    auto& out = req.Output(); 
-    out << "<body>\n"; 
+void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
+    auto& out = req.Output();
+    out << "<body>\n";
 
     // part of common navbar
     OutputNavBar(out);
 
-    out << "<div class='container'>\n" 
+    out << "<div class='container'>\n"
              << "<h2>" << Title << "</h2>\n";
-    OutputIndex(out, req.GetPathInfo().EndsWith('/')); 
-    out << "<div>\n" 
+    OutputIndex(out, req.GetPathInfo().EndsWith('/'));
+    out << "<div>\n"
         << "</body>\n";
 }
 

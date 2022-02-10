@@ -68,7 +68,7 @@ namespace NMonitoring {
      *
      * @param bounds array of upper bounds for buckets. Values must be sorted.
      */
-    IHistogramCollectorPtr ExplicitHistogram(TBucketBounds bounds); 
+    IHistogramCollectorPtr ExplicitHistogram(TBucketBounds bounds);
 
     /**
      * <p>Creates histogram collector for a sequence of buckets that have a

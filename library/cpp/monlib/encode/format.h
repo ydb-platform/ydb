@@ -117,17 +117,17 @@ namespace NMonitoring {
      * @param value  value of the "Accept" header.
      * @return most preffered serialization format type
      */
-    EFormat FormatFromAcceptHeader(TStringBuf value); 
+    EFormat FormatFromAcceptHeader(TStringBuf value);
 
     /**
-     * Matches serialization format by the given "Content-Type" header value 
-     * 
-     * @param value value of the "Content-Type" header 
-     * @return message format 
-     */ 
-    EFormat FormatFromContentType(TStringBuf value); 
- 
-    /** 
+     * Matches serialization format by the given "Content-Type" header value
+     *
+     * @param value value of the "Content-Type" header
+     * @return message format
+     */
+    EFormat FormatFromContentType(TStringBuf value);
+
+    /**
      * Returns value for "Content-Type" header determined by the given
      * format type.
      *
@@ -146,14 +146,14 @@ namespace NMonitoring {
     ECompression CompressionFromAcceptEncodingHeader(TStringBuf value);
 
     /**
-     * Matches compression algorithm by the given "Content-Encoding" header value. 
-     * 
-     * @param value  value of the "Accept-Encoding" header. 
-     * @return most preffered compression algorithm 
-     */ 
-    ECompression CompressionFromContentEncodingHeader(TStringBuf value); 
- 
-    /** 
+     * Matches compression algorithm by the given "Content-Encoding" header value.
+     *
+     * @param value  value of the "Accept-Encoding" header.
+     * @return most preffered compression algorithm
+     */
+    ECompression CompressionFromContentEncodingHeader(TStringBuf value);
+
+    /**
      * Returns value for "Content-Encoding" header determined by the given
      * compression algorithm.
      *

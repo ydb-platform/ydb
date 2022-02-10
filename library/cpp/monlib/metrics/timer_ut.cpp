@@ -5,7 +5,7 @@
 #include <library/cpp/threading/future/future.h>
 
 using namespace NMonitoring;
-using namespace NThreading; 
+using namespace NThreading;
 
 Y_UNIT_TEST_SUITE(TTimerTest) {
 
@@ -115,43 +115,43 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         }
         assertHistogram({1, 1, 0, 0}, histogram.TakeSnapshot());
     }
- 
-    Y_UNIT_TEST(Moving) { 
-        TTestClock::TimePoint = TTestClock::time_point::min(); 
- 
+
+    Y_UNIT_TEST(Moving) {
+        TTestClock::TimePoint = TTestClock::time_point::min();
+
         TCounter counter(0);
-        { 
+        {
             TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter};
-            [tt = std::move(t)] { 
-                TTestClock::TimePoint += milliseconds(5); 
-                Y_UNUSED(tt); 
-            }(); 
- 
-            TTestClock::TimePoint += milliseconds(10); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(counter.Get(), 5); 
-    } 
- 
-    Y_UNIT_TEST(MovingIntoApply) { 
-        TTestClock::TimePoint = TTestClock::time_point::min(); 
-        auto pool = CreateThreadPool(1); 
- 
+            [tt = std::move(t)] {
+                TTestClock::TimePoint += milliseconds(5);
+                Y_UNUSED(tt);
+            }();
+
+            TTestClock::TimePoint += milliseconds(10);
+        }
+
+        UNIT_ASSERT_EQUAL(counter.Get(), 5);
+    }
+
+    Y_UNIT_TEST(MovingIntoApply) {
+        TTestClock::TimePoint = TTestClock::time_point::min();
+        auto pool = CreateThreadPool(1);
+
         TCounter counter(0);
-        { 
+        {
             TFutureFriendlyTimer<TCounter, milliseconds, TTestClock> t{&counter};
- 
-            auto f = Async([=] { 
-                return; 
-            }, *pool).Apply([tt = t] (auto) { 
-                TTestClock::TimePoint += milliseconds(5); 
-                tt.Record(); 
-            }); 
- 
-            f.Wait(); 
-            TTestClock::TimePoint += milliseconds(10); 
-        } 
- 
-        UNIT_ASSERT_EQUAL(counter.Get(), 5); 
-    } 
+
+            auto f = Async([=] {
+                return;
+            }, *pool).Apply([tt = t] (auto) {
+                TTestClock::TimePoint += milliseconds(5);
+                tt.Record();
+            });
+
+            f.Wait();
+            TTestClock::TimePoint += milliseconds(10);
+        }
+
+        UNIT_ASSERT_EQUAL(counter.Get(), 5);
+    }
 }

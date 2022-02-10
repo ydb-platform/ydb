@@ -3789,7 +3789,7 @@ public:
         StartTime = CTimeR(&stime);
     }
 
-    virtual void Output(NMonitoring::IMonHttpRequest& request) { 
+    virtual void Output(NMonitoring::IMonHttpRequest& request) {
         TStringStream out;
         try {
             if (request.GetParams().Get("mode") == "") {
@@ -3836,11 +3836,11 @@ public:
                 }
             }
         }
-        request.Output() << out.Str(); 
+        request.Output() << out.Str();
     }
 
 private:
-    void OutputNavbar(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputNavbar(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         TString active = " class=\"active\"";
         out <<
@@ -3867,7 +3867,7 @@ private:
         }
     }
 
-    void OutputTracesAndSnapshots(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputTracesAndSnapshots(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         TLogSources logSources(Cleaner);
         TraceMngr->ReadTraces(logSources);
@@ -3890,7 +3890,7 @@ private:
         }
     }
 
-    void OutputProbes(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputProbes(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         TStringStream ss;
         TProbesHtmlPrinter printer;
@@ -3983,7 +3983,7 @@ private:
         }
     }
 
-    void OutputLog(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputLog(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         if (request.GetParams().NumOfValues("id") == 0) {
             ythrow yexception() << "Cgi-parameter 'id' is not specified";
@@ -4052,7 +4052,7 @@ private:
         }
     }
 
-    void OutputQuery(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputQuery(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         if (request.GetParams().NumOfValues("id") == 0) {
             ythrow yexception() << "Cgi-parameter 'id' is not specified";
@@ -4066,7 +4066,7 @@ private:
         }
     }
 
-    void OutputBuilder(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void OutputBuilder(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         Y_UNUSED(request);
         WWW_HTML(out) {
@@ -4093,7 +4093,7 @@ private:
         }
     }
 
-    void OutputAnalytics(const NMonitoring::IMonHttpRequest& request, TStringStream& out) 
+    void OutputAnalytics(const NMonitoring::IMonHttpRequest& request, TStringStream& out)
     {
         using namespace NAnalytics;
         const TCgiParameters& e = request.GetParams();
@@ -4515,14 +4515,14 @@ private:
         }
     }
 
-    TDuration GetGetTimeout(const NMonitoring::IMonHttpRequest& request) 
+    TDuration GetGetTimeout(const NMonitoring::IMonHttpRequest& request)
     {
         return (request.GetParams().Has("timeout")?
                 TDuration::Seconds(FromString<double>(request.GetParams().Get("timeout"))):
                 TDuration::Max());
     }
 
-    void PostNew(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void PostNew(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
         const TString& id = request.GetPostParams().Get("id");
@@ -4562,7 +4562,7 @@ private:
         }
     }
 
-    void PostDelete(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void PostDelete(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
         const TString& id = request.GetPostParams().Get("id");
@@ -4589,7 +4589,7 @@ private:
         }
     }
 
-    void PostSnapshot(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void PostSnapshot(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
         const TString& id = request.GetPostParams().Get("id");
@@ -4624,7 +4624,7 @@ private:
         }
     }
 
-    void PostSetTimeout(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
+    void PostSetTimeout(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
         const TString& id = request.GetPostParams().Get("id");

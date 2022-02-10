@@ -9,8 +9,8 @@
 
 #include <util/generic/yexception.h>
 #include <util/generic/buffer.h>
-#include <util/generic/size_literals.h> 
-#include <util/stream/format.h> 
+#include <util/generic/size_literals.h>
+#include <util/stream/format.h>
 
 #ifndef _little_endian_
 #error Unsupported platform
@@ -20,8 +20,8 @@ namespace NMonitoring {
     namespace {
 #define DECODE_ENSURE(COND, ...) MONLIB_ENSURE_EX(COND, TSpackDecodeError() << __VA_ARGS__)
 
-        constexpr ui64 LABEL_SIZE_LIMIT = 128_MB; 
- 
+        constexpr ui64 LABEL_SIZE_LIMIT = 128_MB;
+
         ///////////////////////////////////////////////////////////////////////
         // TDecoderSpackV1
         ///////////////////////////////////////////////////////////////////////
@@ -63,20 +63,20 @@ namespace NMonitoring {
                 TimePrecision_ = DecodeTimePrecision(Header_.TimePrecision);
 
                 const ui64 labelSizeTotal = ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize;
- 
-                DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "Label names & values size of " << HumanReadableSize(labelSizeTotal, SF_BYTES)
-                    << " exceeds the limit which is " << HumanReadableSize(LABEL_SIZE_LIMIT, SF_BYTES)); 
- 
-                // (2) read string pools
-                TVector<char> namesBuf(Header_.LabelNamesSize); 
-                readBytes = In_->Load(namesBuf.data(), namesBuf.size()); 
-                DECODE_ENSURE(readBytes == Header_.LabelNamesSize, "not enough data to read label names pool");
-                TStringPool labelNames(namesBuf.data(), namesBuf.size()); 
 
-                TVector<char> valuesBuf(Header_.LabelValuesSize); 
-                readBytes = In_->Load(valuesBuf.data(), valuesBuf.size()); 
+                DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "Label names & values size of " << HumanReadableSize(labelSizeTotal, SF_BYTES)
+                    << " exceeds the limit which is " << HumanReadableSize(LABEL_SIZE_LIMIT, SF_BYTES));
+
+                // (2) read string pools
+                TVector<char> namesBuf(Header_.LabelNamesSize);
+                readBytes = In_->Load(namesBuf.data(), namesBuf.size());
+                DECODE_ENSURE(readBytes == Header_.LabelNamesSize, "not enough data to read label names pool");
+                TStringPool labelNames(namesBuf.data(), namesBuf.size());
+
+                TVector<char> valuesBuf(Header_.LabelValuesSize);
+                readBytes = In_->Load(valuesBuf.data(), valuesBuf.size());
                 DECODE_ENSURE(readBytes == Header_.LabelValuesSize, "not enough data to read label values pool");
-                TStringPool labelValues(valuesBuf.data(), valuesBuf.size()); 
+                TStringPool labelValues(valuesBuf.data(), valuesBuf.size());
 
                 // (3) read common time
                 c->OnCommonTime(ReadTime());

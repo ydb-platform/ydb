@@ -22,7 +22,7 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
     bool hasFound = false;
     TAutoPtr<IEventHandle> proposeEvent = nullptr;
 
-    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto 
+    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto
     {
         if (event->GetTypeRewrite() == TEvTxProxy::EvProposeTransaction) {
             auto &rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record;

@@ -82,11 +82,11 @@ namespace {
             , ActorSystem(actorSystem)
         {}
 
-        void Output(NMonitoring::IMonHttpRequest& request) override { 
-            IOutputStream& out = request.Output(); 
+        void Output(NMonitoring::IMonHttpRequest& request) override {
+            IOutputStream& out = request.Output();
 
             // parse HTTP request
-            const TCgiParameters& params = request.GetParams(); 
+            const TCgiParameters& params = request.GetParams();
 
             auto generateError = [&](const TString& msg) {
                 out << "HTTP/1.1 400 Bad Request\r\n"

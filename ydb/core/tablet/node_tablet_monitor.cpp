@@ -445,7 +445,7 @@ private:
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
         NMon::TEvHttpInfo* msg = ev->Get();
-        const TCgiParameters& cgi = msg->Request.GetParams(); 
+        const TCgiParameters& cgi = msg->Request.GetParams();
         if (cgi.Has("action")) {
             const TString &actionParam = cgi.Get("action");
             if (actionParam == "browse_nodes") {

@@ -17,7 +17,7 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         // TEncoderSpackV1
         ///////////////////////////////////////////////////////////////////////
-        class TEncoderSpackV1 final: public TBufferedEncoderBase { 
+        class TEncoderSpackV1 final: public TBufferedEncoderBase {
         public:
             TEncoderSpackV1(
                 IOutputStream* out,
@@ -35,8 +35,8 @@ namespace NMonitoring {
             {
                 MetricsMergingMode_ = mergingMode;
 
-                LabelNamesPool_.SetSorted(true); 
-                LabelValuesPool_.SetSorted(true); 
+                LabelNamesPool_.SetSorted(true);
+                LabelValuesPool_.SetSorted(true);
             }
 
             ~TEncoderSpackV1() override {
@@ -45,7 +45,7 @@ namespace NMonitoring {
 
         private:
             void OnDouble(TInstant time, double value) override {
-                TBufferedEncoderBase::OnDouble(time, value); 
+                TBufferedEncoderBase::OnDouble(time, value);
             }
 
             void OnInt64(TInstant time, i64 value) override {
@@ -53,7 +53,7 @@ namespace NMonitoring {
             }
 
             void OnUint64(TInstant time, ui64 value) override {
-                TBufferedEncoderBase::OnUint64(time, value); 
+                TBufferedEncoderBase::OnUint64(time, value);
             }
 
             void OnHistogram(TInstant time, IHistogramSnapshotPtr snapshot) override {
@@ -74,8 +74,8 @@ namespace NMonitoring {
                 }
                 Closed_ = true;
 
-                LabelNamesPool_.Build(); 
-                LabelValuesPool_.Build(); 
+                LabelNamesPool_.Build();
+                LabelValuesPool_.Build();
 
                 // Sort all points uniquely by ts -- the size can decrease
                 ui64 pointsCount = 0;
@@ -192,12 +192,12 @@ namespace NMonitoring {
 
             void WriteLabels(const TPooledLabels& labels, const TPooledStr* skipKey) {
                 WriteVarUInt32(Out_, static_cast<ui32>(skipKey ? labels.size() - 1 : labels.size()));
-                for (auto&& label : labels) { 
+                for (auto&& label : labels) {
                     if (label.Key == skipKey) {
                         continue;
                     }
-                    WriteVarUInt32(Out_, label.Key->Index); 
-                    WriteVarUInt32(Out_, label.Value->Index); 
+                    WriteVarUInt32(Out_, label.Key->Index);
+                    WriteVarUInt32(Out_, label.Value->Index);
                 }
             }
 

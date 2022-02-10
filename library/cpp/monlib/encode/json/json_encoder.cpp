@@ -10,8 +10,8 @@
 #include <library/cpp/json/writer/json.h>
 
 #include <util/charset/utf8.h>
-#include <util/generic/algorithm.h> 
- 
+#include <util/generic/algorithm.h>
+
 namespace NMonitoring {
     namespace {
         enum class EJsonStyle {
@@ -22,7 +22,7 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         // TJsonWriter
         ///////////////////////////////////////////////////////////////////////
-        class TJsonWriter { 
+        class TJsonWriter {
         public:
             TJsonWriter(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
                 : Buf_(NJsonWriter::HEM_UNSAFE, out)
@@ -34,32 +34,32 @@ namespace NMonitoring {
                 Buf_.SetWriteNanAsString();
             }
 
-            void WriteTime(TInstant time) { 
-                if (time != TInstant::Zero()) { 
+            void WriteTime(TInstant time) {
+                if (time != TInstant::Zero()) {
                     Buf_.WriteKey(TStringBuf("ts"));
                     if (Style_ == EJsonStyle::Solomon) {
                         Buf_.WriteULongLong(time.Seconds());
                     } else {
                         Buf_.WriteString(time.ToString());
                     }
-                } 
-            } 
- 
-            void WriteValue(double value) { 
+                }
+            }
+
+            void WriteValue(double value) {
                 Buf_.WriteKey(TStringBuf("value"));
-                Buf_.WriteDouble(value); 
-            } 
- 
+                Buf_.WriteDouble(value);
+            }
+
             void WriteValue(i64 value) {
                 Buf_.WriteKey(TStringBuf("value"));
                 Buf_.WriteLongLong(value);
             }
 
-            void WriteValue(ui64 value) { 
+            void WriteValue(ui64 value) {
                 Buf_.WriteKey(TStringBuf("value"));
-                Buf_.WriteULongLong(value); 
-            } 
- 
+                Buf_.WriteULongLong(value);
+            }
+
             void WriteValue(IHistogramSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
@@ -143,19 +143,19 @@ namespace NMonitoring {
             }
 
             void WriteValue(EMetricValueType type, TMetricValue value) {
-                switch (type) { 
+                switch (type) {
                     case EMetricValueType::DOUBLE:
                         WriteValue(value.AsDouble());
-                        break; 
- 
+                        break;
+
                     case EMetricValueType::INT64:
                         WriteValue(value.AsInt64());
                         break;
 
                     case EMetricValueType::UINT64:
                         WriteValue(value.AsUint64());
-                        break; 
- 
+                        break;
+
                     case EMetricValueType::HISTOGRAM:
                         WriteValue(value.AsHistogram());
                         break;
@@ -170,20 +170,20 @@ namespace NMonitoring {
 
                     case EMetricValueType::UNKNOWN:
                         ythrow yexception() << "unknown metric value type";
-                } 
-            } 
- 
-            void WriteLabel(TStringBuf name, TStringBuf value) { 
-                Y_ENSURE(IsUtf(name), "label name is not valid UTF-8 string"); 
-                Y_ENSURE(IsUtf(value), "label value is not valid UTF-8 string"); 
+                }
+            }
+
+            void WriteLabel(TStringBuf name, TStringBuf value) {
+                Y_ENSURE(IsUtf(name), "label name is not valid UTF-8 string");
+                Y_ENSURE(IsUtf(value), "label value is not valid UTF-8 string");
                 if (Style_ == EJsonStyle::Cloud && name == MetricNameLabel_) {
                     CurrentMetricName_ = value;
                 } else {
                     Buf_.WriteKey(name);
                     Buf_.WriteString(value);
                 }
-            } 
- 
+            }
+
             void WriteMetricType(EMetricType type) {
                 if (Style_ == EJsonStyle::Cloud) {
                     Buf_.WriteKey("type");
@@ -222,23 +222,23 @@ namespace NMonitoring {
                 }
             }
 
-        protected: 
-            NJsonWriter::TBuf Buf_; 
+        protected:
+            NJsonWriter::TBuf Buf_;
             EJsonStyle Style_;
             TString MetricNameLabel_;
             TString CurrentMetricName_;
-        }; 
- 
+        };
+
         ///////////////////////////////////////////////////////////////////////
         // TEncoderJson
         ///////////////////////////////////////////////////////////////////////
         class TEncoderJson final: public IMetricEncoder, public TJsonWriter {
-        public: 
+        public:
             TEncoderJson(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
                 : TJsonWriter{out, indentation, style, metricNameLabel}
-            { 
-            } 
- 
+            {
+            }
+
             ~TEncoderJson() override {
                 Close();
             }
@@ -308,8 +308,8 @@ namespace NMonitoring {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
                 Buf_.BeginObject();
- 
-                EmptyLabels_ = true; 
+
+                EmptyLabels_ = true;
             }
 
             void OnLabelsEnd() override {
@@ -320,8 +320,8 @@ namespace NMonitoring {
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
- 
-                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty"); 
+
+                Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
                 Buf_.EndObject();
                 if (State_ == TEncoderState::EState::METRIC) {
                     WriteName();
@@ -330,12 +330,12 @@ namespace NMonitoring {
 
             void OnLabel(TStringBuf name, TStringBuf value) override {
                 if (State_ == TEncoderState::EState::METRIC_LABELS || State_ == TEncoderState::EState::COMMON_LABELS) {
-                    WriteLabel(name, value); 
+                    WriteLabel(name, value);
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
- 
-                EmptyLabels_ = false; 
+
+                EmptyLabels_ = false;
             }
 
             void OnDouble(TInstant time, double value) override {
@@ -385,7 +385,7 @@ namespace NMonitoring {
                         Buf_.BeginList();
                         Buf_.BeginObject();
                         Y_ENSURE(LastPoint_.GetTime() != TInstant::Zero(),
-                            "time cannot be empty or zero in a timeseries point"); 
+                            "time cannot be empty or zero in a timeseries point");
                         WriteTime(LastPoint_.GetTime());
                         WriteValue(LastPoint_.GetValueType(), LastPoint_.GetValue());
                         Buf_.EndObject();
@@ -394,8 +394,8 @@ namespace NMonitoring {
 
                     if (TimeSeries_) {
                         Buf_.BeginObject();
-                        Y_ENSURE(time != TInstant::Zero(), 
-                            "time cannot be empty or zero in a timeseries point"); 
+                        Y_ENSURE(time != TInstant::Zero(),
+                            "time cannot be empty or zero in a timeseries point");
 
                         WriteTime(time);
                         WriteValue(value);
@@ -408,26 +408,26 @@ namespace NMonitoring {
                 LastPoint_ = {};
             }
 
-        private: 
-            TEncoderState State_; 
+        private:
+            TEncoderState State_;
             TTypedPoint LastPoint_;
-            bool TimeSeries_ = false; 
-            bool EmptyLabels_ = false; 
-        }; 
- 
+            bool TimeSeries_ = false;
+            bool EmptyLabels_ = false;
+        };
+
         ///////////////////////////////////////////////////////////////////////
         // TBufferedJsonEncoder
         ///////////////////////////////////////////////////////////////////////
-        class TBufferedJsonEncoder : public TBufferedEncoderBase, public TJsonWriter { 
-        public: 
+        class TBufferedJsonEncoder : public TBufferedEncoderBase, public TJsonWriter {
+        public:
             TBufferedJsonEncoder(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
                 : TJsonWriter{out, indentation, style, metricNameLabel}
-            { 
+            {
                 MetricsMergingMode_ = EMetricsMergingMode::MERGE_METRICS;
             }
 
             ~TBufferedJsonEncoder() override {
-                Close(); 
+                Close();
             }
 
             void OnLabelsBegin() override {
@@ -445,54 +445,54 @@ namespace NMonitoring {
                 EmptyLabels_ = false;
             }
 
-            void OnLabelsEnd() override { 
-                TBufferedEncoderBase::OnLabelsEnd(); 
+            void OnLabelsEnd() override {
+                TBufferedEncoderBase::OnLabelsEnd();
                 Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
-            } 
- 
+            }
+
             void Close() final {
-                if (Closed_) { 
-                    return; 
-                } 
- 
-                Closed_ = true; 
+                if (Closed_) {
+                    return;
+                }
 
-                LabelValuesPool_.Build(); 
-                LabelNamesPool_.Build(); 
+                Closed_ = true;
 
-                Buf_.BeginObject(); 
+                LabelValuesPool_.Build();
+                LabelNamesPool_.Build();
 
-                WriteTime(CommonTime_); 
-                if (CommonLabels_.size() > 0) { 
+                Buf_.BeginObject();
+
+                WriteTime(CommonTime_);
+                if (CommonLabels_.size() > 0) {
                     Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels": "labels"));
                     WriteLabels(CommonLabels_, true);
                 }
- 
+
                 if (Metrics_.size() > 0) {
                     Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "sensors" : "metrics"));
                     WriteMetrics();
-                } 
- 
-                Buf_.EndObject(); 
+                }
+
+                Buf_.EndObject();
             }
 
         private:
             void WriteMetrics() {
-                Buf_.BeginList(); 
+                Buf_.BeginList();
                 for (auto&& metric : Metrics_) {
                     WriteMetric(metric);
-                } 
-                Buf_.EndList(); 
-            } 
- 
+                }
+                Buf_.EndList();
+            }
+
             void WriteMetric(TMetric& metric) {
-                Buf_.BeginObject(); 
- 
+                Buf_.BeginObject();
+
                 WriteMetricType(metric.MetricType);
- 
+
                 Buf_.WriteKey(TStringBuf("labels"));
                 WriteLabels(metric.Labels, false);
- 
+
                 metric.TimeSeries.SortByTs();
                 if (metric.TimeSeries.Size() == 1) {
                     const auto& point = metric.TimeSeries[0];
@@ -500,40 +500,40 @@ namespace NMonitoring {
                     WriteValue(metric.TimeSeries.GetValueType(), point.GetValue());
                 } else if (metric.TimeSeries.Size() > 1) {
                     Buf_.WriteKey(TStringBuf("timeseries"));
-                    Buf_.BeginList(); 
+                    Buf_.BeginList();
                     metric.TimeSeries.ForEach([this](TInstant time, EMetricValueType type, TMetricValue value) {
-                        Buf_.BeginObject(); 
-                        // make gcc 6.1 happy https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636 
+                        Buf_.BeginObject();
+                        // make gcc 6.1 happy https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
                         this->WriteTime(time);
                         this->WriteValue(type, value);
-                        Buf_.EndObject(); 
-                    }); 
- 
-                    Buf_.EndList(); 
-                } 
- 
-                Buf_.EndObject(); 
-            } 
- 
+                        Buf_.EndObject();
+                    });
+
+                    Buf_.EndList();
+                }
+
+                Buf_.EndObject();
+            }
+
             void WriteLabels(const TPooledLabels& labels, bool isCommon) {
-                Buf_.BeginObject(); 
- 
-                for (auto i = 0u; i < labels.size(); ++i) { 
-                    TStringBuf name = LabelNamesPool_.Get(labels[i].Key->Index); 
-                    TStringBuf value = LabelValuesPool_.Get(labels[i].Value->Index); 
- 
-                    WriteLabel(name, value); 
-                } 
- 
-                Buf_.EndObject(); 
+                Buf_.BeginObject();
+
+                for (auto i = 0u; i < labels.size(); ++i) {
+                    TStringBuf name = LabelNamesPool_.Get(labels[i].Key->Index);
+                    TStringBuf value = LabelValuesPool_.Get(labels[i].Value->Index);
+
+                    WriteLabel(name, value);
+                }
+
+                Buf_.EndObject();
 
                 if (!isCommon) {
                     WriteName();
                 }
-            } 
- 
-        private: 
-            bool Closed_{false}; 
+            }
+
+        private:
+            bool Closed_{false};
             bool EmptyLabels_ = false;
         };
     }
@@ -544,7 +544,7 @@ namespace NMonitoring {
 
     IMetricEncoderPtr BufferedEncoderJson(IOutputStream* out, int indentation) {
         return MakeHolder<TBufferedJsonEncoder>(out, indentation, EJsonStyle::Solomon, "");
-    } 
+    }
 
     IMetricEncoderPtr EncoderCloudJson(IOutputStream* out, int indentation, TStringBuf metricNameLabel) {
         return MakeHolder<TEncoderJson>(out, indentation, EJsonStyle::Cloud, metricNameLabel);

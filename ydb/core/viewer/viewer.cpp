@@ -255,7 +255,7 @@ private:
 
     TString GetSwaggerJson(NMon::TEvHttpInfo::TPtr &ev) {
         TStringStream json;
-        TString basepath = ev->Get()->Request.GetParams().Get("basepath"); 
+        TString basepath = ev->Get()->Request.GetParams().Get("basepath");
         if (basepath.empty()) {
             basepath = "/viewer";
         } else {
@@ -263,7 +263,7 @@ private:
                 basepath = basepath.substr(0, basepath.size() - 5);
             }
         }
-        TString protocol = ev->Get()->Request.GetParams().Get("protocol"); 
+        TString protocol = ev->Get()->Request.GetParams().Get("protocol");
         if (protocol.empty()) {
             protocol = "http";
         }
@@ -402,8 +402,8 @@ private:
             }
             return;
         }
-        if (msg->Request.GetPathInfo().StartsWith("/json/")) { 
-            auto itJson = JsonHandlers.find(msg->Request.GetPathInfo()); 
+        if (msg->Request.GetPathInfo().StartsWith("/json/")) {
+            auto itJson = JsonHandlers.find(msg->Request.GetPathInfo());
             if (itJson != JsonHandlers.end()) {
                 try {
                     ctx.ExecutorThread.RegisterActor(itJson->second->CreateRequestActor(this, ev));
@@ -424,7 +424,7 @@ private:
         }
         // TODO: check path validity
         // TODO: cache
-        if (msg->Request.GetPathInfo().StartsWith('/')) { 
+        if (msg->Request.GetPathInfo().StartsWith('/')) {
             if (filename.StartsWith("viewer")) {
                 filename.erase(0, 6);
             }
@@ -446,13 +446,13 @@ private:
                 return;
             }
         }
-        if (msg->Request.GetPathInfo() == "/tablet") { 
-            ui64 id = FromStringWithDefault<ui64>(ev->Get()->Request.GetParams().Get("id"), 0); 
+        if (msg->Request.GetPathInfo() == "/tablet") {
+            ui64 id = FromStringWithDefault<ui64>(ev->Get()->Request.GetParams().Get("id"), 0);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 302 Found\r\nLocation: ../tablets?TabletID=" + ToString(id) + "\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
-        if (msg->Request.GetPathInfo().empty()) { 
-            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 302 Found\r\nLocation: " + SplitPath(msg->Request.GetPage()->Path).back() + "/\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        if (msg->Request.GetPathInfo().empty()) {
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 302 Found\r\nLocation: " + SplitPath(msg->Request.GetPage()->Path).back() + "/\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND));

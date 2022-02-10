@@ -31,9 +31,9 @@ namespace NMonitoring {
         {
         }
 
-        void Output(NMonitoring::IMonHttpRequest& request) override; 
+        void Output(NMonitoring::IMonHttpRequest& request) override;
 
-        void NotFound(NMonitoring::IMonHttpRequest& request) const; 
+        void NotFound(NMonitoring::IMonHttpRequest& request) const;
 
     private:
         TString ResourceName;

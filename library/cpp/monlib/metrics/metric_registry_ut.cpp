@@ -10,33 +10,33 @@
 
 using namespace NMonitoring;
 
-template<> 
-void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMonitoring::NProto::TSingleSample::ValueCase val) { 
-    switch (val) { 
-    case NMonitoring::NProto::TSingleSample::ValueCase::kInt64: 
-        os << "Int64"; 
-        break; 
-    case NMonitoring::NProto::TSingleSample::ValueCase::kUint64: 
-        os << "Uint64"; 
-        break; 
-    case NMonitoring::NProto::TSingleSample::ValueCase::kHistogram: 
-        os << "Histogram"; 
-        break; 
-    case NMonitoring::NProto::TSingleSample::ValueCase::kFloat64: 
-        os << "Float64"; 
-        break; 
+template<>
+void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMonitoring::NProto::TSingleSample::ValueCase val) {
+    switch (val) {
+    case NMonitoring::NProto::TSingleSample::ValueCase::kInt64:
+        os << "Int64";
+        break;
+    case NMonitoring::NProto::TSingleSample::ValueCase::kUint64:
+        os << "Uint64";
+        break;
+    case NMonitoring::NProto::TSingleSample::ValueCase::kHistogram:
+        os << "Histogram";
+        break;
+    case NMonitoring::NProto::TSingleSample::ValueCase::kFloat64:
+        os << "Float64";
+        break;
     case NMonitoring::NProto::TSingleSample::ValueCase::kSummaryDouble:
         os << "DSummary";
         break;
     case NMonitoring::NProto::TSingleSample::ValueCase::kLogHistogram:
         os << "LogHistogram";
         break;
-    case NMonitoring::NProto::TSingleSample::ValueCase::VALUE_NOT_SET: 
-        os << "NOT SET"; 
-        break; 
-    } 
-} 
- 
+    case NMonitoring::NProto::TSingleSample::ValueCase::VALUE_NOT_SET:
+        os << "NOT SET";
+        break;
+    }
+}
+
 Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
     Y_UNIT_TEST(Gauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
@@ -79,29 +79,29 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TIntGauge* g = registry.IntGauge({{"my", "gauge"}});
 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
 
         i64 val;
 
         val = g->Inc();
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
 
         val = g->Dec();
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
 
         val = g->Add(1);
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
 
         val = g->Add(2);
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
 
         val = g->Add(-5);
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), -2); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), -2);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
     }
 
     Y_UNIT_TEST(LazyIntGauge) {
@@ -126,11 +126,11 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TCounter* c = registry.Counter({{"my", "counter"}});
 
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(c->Inc(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(c->Add(10), 11); 
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 11); 
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(c->Inc(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(c->Add(10), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 11);
     }
 
     Y_UNIT_TEST(LazyCounter) {
@@ -159,11 +159,11 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
 
         TCounter* c = registry.Counter({{"my", "counter"}});
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
         c->Add(10);
 
         c = registry.Counter({{"my", "counter"}});
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 10); 
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 10);
     }
 
     Y_UNIT_TEST(Sample) {
@@ -180,31 +180,31 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         auto now = TInstant::Now();
         registry.Accept(now, encoder.Get());
 
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 1); 
-        { 
-            const NProto::TLabel& label = samples.GetCommonLabels(0); 
-            UNIT_ASSERT_STRINGS_EQUAL(label.GetName(), "common"); 
-            UNIT_ASSERT_STRINGS_EQUAL(label.GetValue(), "label"); 
-        } 
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 1);
+        {
+            const NProto::TLabel& label = samples.GetCommonLabels(0);
+            UNIT_ASSERT_STRINGS_EQUAL(label.GetName(), "common");
+            UNIT_ASSERT_STRINGS_EQUAL(label.GetValue(), "label");
+        }
 
- 
+
         for (const NProto::TSingleSample& sample : samples.GetSamples()) {
-            UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1); 
-            UNIT_ASSERT_VALUES_EQUAL(sample.GetTime(), now.MilliSeconds()); 
+            UNIT_ASSERT_VALUES_EQUAL(sample.LabelsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sample.GetTime(), now.MilliSeconds());
 
             if (sample.GetMetricType() == NProto::GAUGE) {
-                UNIT_ASSERT_VALUES_EQUAL(sample.GetValueCase(), NProto::TSingleSample::kFloat64); 
+                UNIT_ASSERT_VALUES_EQUAL(sample.GetValueCase(), NProto::TSingleSample::kFloat64);
                 UNIT_ASSERT_DOUBLES_EQUAL(sample.GetFloat64(), 12.34, 1E-6);
 
-                const NProto::TLabel& label = sample.GetLabels(0); 
+                const NProto::TLabel& label = sample.GetLabels(0);
                 UNIT_ASSERT_STRINGS_EQUAL(label.GetName(), "my");
                 UNIT_ASSERT_STRINGS_EQUAL(label.GetValue(), "gauge");
             } else if (sample.GetMetricType() == NProto::COUNTER) {
-                UNIT_ASSERT_VALUES_EQUAL(sample.GetValueCase(), NProto::TSingleSample::kUint64); 
-                UNIT_ASSERT_VALUES_EQUAL(sample.GetUint64(), 10); 
+                UNIT_ASSERT_VALUES_EQUAL(sample.GetValueCase(), NProto::TSingleSample::kUint64);
+                UNIT_ASSERT_VALUES_EQUAL(sample.GetUint64(), 10);
 
-                const NProto::TLabel& label = sample.GetLabels(0); 
+                const NProto::TLabel& label = sample.GetLabels(0);
                 UNIT_ASSERT_STRINGS_EQUAL(label.GetName(), "my");
                 UNIT_ASSERT_STRINGS_EQUAL(label.GetValue(), "counter");
             } else {
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
             }
         }
     }
- 
+
     Y_UNIT_TEST(Histograms) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
 
@@ -239,32 +239,32 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_NO_DIFF(ss.Str(), NResource::Find("/histograms.json"));
     }
 
-    Y_UNIT_TEST(StreamingEncoderTest) { 
-        const TString expected { 
-            "{\"commonLabels\":{\"common\":\"label\"}," 
-            "\"sensors\":[{\"kind\":\"GAUGE\",\"labels\":{\"my\":\"gauge\"},\"value\":12.34}]}" 
-        }; 
- 
+    Y_UNIT_TEST(StreamingEncoderTest) {
+        const TString expected {
+            "{\"commonLabels\":{\"common\":\"label\"},"
+            "\"sensors\":[{\"kind\":\"GAUGE\",\"labels\":{\"my\":\"gauge\"},\"value\":12.34}]}"
+        };
+
         TMetricRegistry registry(TLabels{{"common", "label"}});
- 
-        TGauge* g = registry.Gauge({{"my", "gauge"}}); 
-        g->Set(12.34); 
- 
-        TStringStream os; 
-        auto encoder = EncoderJson(&os); 
-        registry.Accept(TInstant::Zero(), encoder.Get()); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(os.Str(), expected); 
-    } 
- 
+
+        TGauge* g = registry.Gauge({{"my", "gauge"}});
+        g->Set(12.34);
+
+        TStringStream os;
+        auto encoder = EncoderJson(&os);
+        registry.Accept(TInstant::Zero(), encoder.Get());
+
+        UNIT_ASSERT_STRINGS_EQUAL(os.Str(), expected);
+    }
+
     Y_UNIT_TEST(CreatingSameMetricWithDifferentTypesShouldThrow) {
         TMetricRegistry registry;
 
-        registry.Gauge({{"foo", "bar"}}); 
-        UNIT_ASSERT_EXCEPTION(registry.Counter({{"foo", "bar"}}), yexception); 
+        registry.Gauge({{"foo", "bar"}});
+        UNIT_ASSERT_EXCEPTION(registry.Counter({{"foo", "bar"}}), yexception);
 
-        registry.HistogramCounter({{"bar", "baz"}}, nullptr); 
-        UNIT_ASSERT_EXCEPTION(registry.HistogramRate({{"bar", "baz"}}, nullptr), yexception); 
+        registry.HistogramCounter({{"bar", "baz"}}, nullptr);
+        UNIT_ASSERT_EXCEPTION(registry.HistogramRate({{"bar", "baz"}}, nullptr), yexception);
     }
 
     Y_UNIT_TEST(EncodeRegistryWithCommonLabels) {

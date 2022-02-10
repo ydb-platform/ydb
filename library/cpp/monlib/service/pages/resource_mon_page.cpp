@@ -2,8 +2,8 @@
 
 using namespace NMonitoring;
 
-void TResourceMonPage::Output(NMonitoring::IMonHttpRequest& request) { 
-    IOutputStream& out = request.Output(); 
+void TResourceMonPage::Output(NMonitoring::IMonHttpRequest& request) {
+    IOutputStream& out = request.Output();
     switch (ResourceType) {
         case TEXT:
             out << HTTPOKTEXT;
@@ -42,8 +42,8 @@ void TResourceMonPage::Output(NMonitoring::IMonHttpRequest& request) {
     out << NResource::Find(ResourceName);
 }
 
-void TResourceMonPage::NotFound(NMonitoring::IMonHttpRequest& request) const { 
-    IOutputStream& out = request.Output(); 
+void TResourceMonPage::NotFound(NMonitoring::IMonHttpRequest& request) const {
+    IOutputStream& out = request.Output();
     out << HTTPNOTFOUND;
     out.Flush();
 }

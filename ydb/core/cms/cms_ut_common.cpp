@@ -452,7 +452,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     GenerateExtendedInfo(*this, config, pdisks, 4, tenants);
 
     // Set observer to pass fake base blobstorage config.
-    auto redirectConfigRequest = [](TTestActorRuntimeBase&, 
+    auto redirectConfigRequest = [](TTestActorRuntimeBase&,
                                     TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());

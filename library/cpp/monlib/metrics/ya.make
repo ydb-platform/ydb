@@ -14,7 +14,7 @@ SRCS(
     histogram_collector_exponential.cpp
     histogram_collector_linear.cpp
     histogram_snapshot.cpp
-    log_histogram_snapshot.cpp 
+    log_histogram_snapshot.cpp
     labels.cpp
     metric_registry.cpp
     metric_consumer.cpp

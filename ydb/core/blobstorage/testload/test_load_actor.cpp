@@ -271,7 +271,7 @@ public:
 
         info.ErrorMessage.clear();
 
-        const auto& params = ev->Get()->Request.GetParams(); 
+        const auto& params = ev->Get()->Request.GetParams();
         if (params.Has("protobuf")) {
             NKikimrBlobStorage::TEvTestLoadRequest record;
             bool status = google::protobuf::TextFormat::ParseFromString(params.Get("protobuf"), &record);

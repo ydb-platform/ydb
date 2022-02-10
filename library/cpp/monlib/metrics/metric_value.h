@@ -8,23 +8,23 @@
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
-#include <util/generic/cast.h> 
-#include <util/generic/ymath.h> 
+#include <util/generic/cast.h>
+#include <util/generic/ymath.h>
 
 namespace NMonitoring {
-    namespace NPrivate { 
-        template <typename T> 
-        T FromFloatSafe(double d) { 
-            static_assert(std::is_integral<T>::value, "this function only converts floats to integers"); 
+    namespace NPrivate {
+        template <typename T>
+        T FromFloatSafe(double d) {
+            static_assert(std::is_integral<T>::value, "this function only converts floats to integers");
             Y_ENSURE(::IsValidFloat(d) && d >= Min<T>() && d <= MaxFloor<T>(), "Cannot convert " << d << " to an integer value");
-            return static_cast<T>(d); 
-        } 
+            return static_cast<T>(d);
+        }
 
         inline auto POINT_KEY_FN = [](auto& p) {
             return p.GetTime();
         };
-    } // namespace NPrivate 
- 
+    } // namespace NPrivate
+
     template <typename T, typename Enable = void>
     struct TValueType;
 
@@ -132,9 +132,9 @@ namespace NMonitoring {
         ui64 AsUint64(EMetricValueType type) const {
             switch (type) {
                 case EMetricValueType::DOUBLE:
-                    return NPrivate::FromFloatSafe<ui64>(Value_.Double); 
+                    return NPrivate::FromFloatSafe<ui64>(Value_.Double);
                 case EMetricValueType::INT64:
-                    return SafeIntegerCast<ui64>(Value_.Int64); 
+                    return SafeIntegerCast<ui64>(Value_.Int64);
                 case EMetricValueType::UINT64:
                     return Value_.Uint64;
                 case EMetricValueType::HISTOGRAM:
@@ -158,11 +158,11 @@ namespace NMonitoring {
         i64 AsInt64(EMetricValueType type) const {
             switch (type) {
                 case EMetricValueType::DOUBLE:
-                    return NPrivate::FromFloatSafe<i64>(Value_.Double); 
+                    return NPrivate::FromFloatSafe<i64>(Value_.Double);
                 case EMetricValueType::INT64:
                     return Value_.Int64;
                 case EMetricValueType::UINT64:
-                    return SafeIntegerCast<i64>(Value_.Uint64); 
+                    return SafeIntegerCast<i64>(Value_.Uint64);
                 case EMetricValueType::HISTOGRAM:
                     ythrow yexception() << "histogram cannot be casted to Int64";
                 case EMetricValueType::SUMMARY:
@@ -434,8 +434,8 @@ namespace NMonitoring {
                     point.GetValue().AsLogHistogram()->Ref();
                 }
             }
-        } 
- 
+        }
+
         template <typename TConsumer>
         void ForEach(TConsumer c) const {
             for (const auto& point : Points_) {
@@ -470,8 +470,8 @@ namespace NMonitoring {
     private:
         static void CheckTypes(EMetricValueType t1, EMetricValueType t2) {
             Y_ENSURE(t1 == t2,
-                     "Series type mismatch: expected " << t1 << 
-                     ", but got " << t2); 
+                     "Series type mismatch: expected " << t1 <<
+                     ", but got " << t2);
         }
 
     private:

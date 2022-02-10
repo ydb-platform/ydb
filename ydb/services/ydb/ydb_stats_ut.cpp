@@ -72,7 +72,7 @@ public:
     void OnLabelsBegin() override { }
     void OnLabelsEnd() override { }
 
-    void OnLabel(const TStringBuf name, const TStringBuf value) override { 
+    void OnLabel(const TStringBuf name, const TStringBuf value) override {
         if (name != "sensor") {
             return;
         }

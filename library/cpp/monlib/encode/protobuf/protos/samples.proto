@@ -18,7 +18,7 @@ enum EMetricType {
     COUNTER = 3;
     RATE = 4;
     HISTOGRAM = 5;
-    HIST_RATE = 6; 
+    HIST_RATE = 6;
     DSUMMARY = 7;
     LOGHISTOGRAM = 8;
 }

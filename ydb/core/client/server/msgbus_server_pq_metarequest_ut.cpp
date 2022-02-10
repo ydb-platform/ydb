@@ -42,7 +42,7 @@ protected:
 
         // Initialize runtime
         Runtime = MakeHolder<TTestBasicRuntime>();
-        Runtime->SetObserverFunc([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) { 
+        Runtime->SetObserverFunc([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
             return EventsObserver(event);
         });
         Runtime->SetRegistrationObserverFunc([this](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {

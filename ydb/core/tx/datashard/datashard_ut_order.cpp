@@ -1262,7 +1262,7 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     TVector<TAutoPtr<IEventHandle>> rss;
 
     // We want to intercept all RS to table-2.
-    auto captureRS = [shard2,&rss](TTestActorRuntimeBase &, 
+    auto captureRS = [shard2,&rss](TTestActorRuntimeBase &,
                                    TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
@@ -1370,7 +1370,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"));
 
     // Send SQL request which should hang due to lost RS.
-    auto captureRS = [](TTestActorRuntimeBase&, 
+    auto captureRS = [](TTestActorRuntimeBase&,
                         TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet)
             return TTestActorRuntime::EEventAction::DROP;

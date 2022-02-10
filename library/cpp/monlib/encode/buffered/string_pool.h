@@ -9,13 +9,13 @@ namespace NMonitoring {
     ////////////////////////////////////////////////////////////////////////////////
     class TStringPoolBuilder {
     public:
-        struct TValue: TNonCopyable { 
-            TValue(ui32 idx, ui32 freq) 
-                : Index{idx} 
-                , Frequency{freq} 
-            { 
-            } 
- 
+        struct TValue: TNonCopyable {
+            TValue(ui32 idx, ui32 freq)
+                : Index{idx}
+                , Frequency{freq}
+            {
+            }
+
             ui32 Index;
             ui32 Frequency;
         };
@@ -24,16 +24,16 @@ namespace NMonitoring {
         const TValue* PutIfAbsent(TStringBuf str);
         const TValue* GetByIndex(ui32 index) const;
 
-        /// Determines whether pool must be sorted by value frequencies 
-        TStringPoolBuilder& SetSorted(bool sorted) { 
-            RequiresSorting_ = sorted; 
-            return *this; 
-        } 
+        /// Determines whether pool must be sorted by value frequencies
+        TStringPoolBuilder& SetSorted(bool sorted) {
+            RequiresSorting_ = sorted;
+            return *this;
+        }
 
-        TStringPoolBuilder& Build(); 
- 
+        TStringPoolBuilder& Build();
+
         TStringBuf Get(ui32 index) const {
-            Y_ENSURE(IsBuilt_, "Pool must be sorted first"); 
+            Y_ENSURE(IsBuilt_, "Pool must be sorted first");
             return StrVector_.at(index).first;
         }
 
@@ -43,7 +43,7 @@ namespace NMonitoring {
 
         template <typename TConsumer>
         void ForEach(TConsumer&& c) {
-            Y_ENSURE(IsBuilt_, "Pool must be sorted first"); 
+            Y_ENSURE(IsBuilt_, "Pool must be sorted first");
             for (const auto& value : StrVector_) {
                 c(value.first, value.second->Index, value.second->Frequency);
             }
@@ -60,8 +60,8 @@ namespace NMonitoring {
     private:
         THashMap<TString, TValue> StrMap_;
         TVector<std::pair<TStringBuf, TValue*>> StrVector_;
-        bool RequiresSorting_ = false; 
-        bool IsBuilt_ = false; 
+        bool RequiresSorting_ = false;
+        bool IsBuilt_ = false;
         size_t BytesSize_ = 0;
     };
 

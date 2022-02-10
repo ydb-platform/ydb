@@ -13,7 +13,7 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////
     class TExplicitHistogramCollector: public IHistogramCollector {
     public:
-        TExplicitHistogramCollector(TBucketBounds bounds) 
+        TExplicitHistogramCollector(TBucketBounds bounds)
             : Values_(bounds.size() + 1)
             , Bounds_(std::move(bounds))
         {
@@ -32,8 +32,8 @@ namespace NMonitoring {
         }
 
         IHistogramSnapshotPtr Snapshot() const override {
-            auto values = Values_.Copy(); 
-            return ExplicitHistogramSnapshot(Bounds_, values); 
+            auto values = Values_.Copy();
+            return ExplicitHistogramSnapshot(Bounds_, values);
         }
 
     private:

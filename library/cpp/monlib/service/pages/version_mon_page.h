@@ -9,7 +9,7 @@ namespace NMonitoring {
         {
         }
 
-        void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) override; 
+        void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) override;
     };
 
 }

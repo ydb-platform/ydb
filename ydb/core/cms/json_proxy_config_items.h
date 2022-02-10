@@ -21,7 +21,7 @@ public:
     TAutoPtr<TRequest> PrepareRequest(const TActorContext &) override
     {
         TAutoPtr<TRequest> request = new TRequest;
-        const TCgiParameters& cgi = RequestEvent->Get()->Request.GetParams(); 
+        const TCgiParameters& cgi = RequestEvent->Get()->Request.GetParams();
 
         if (cgi.Has("ids")) {
             TVector<TString> ids = StringSplitter(cgi.Get("ids")).Split(',').ToList<TString>();

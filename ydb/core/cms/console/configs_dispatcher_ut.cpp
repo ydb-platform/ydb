@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         ui64 nodeConfigRequests = 0;
-        auto observer = [&nodeConfigRequests](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction { 
+        auto observer = [&nodeConfigRequests](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
             switch (ev->GetTypeRewrite()) {
             case TEvConsole::EvGetNodeConfigRequest:
                 ++nodeConfigRequests;
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         ui64 notifications = 0;
         TActorId subscriber;
-        auto observer = [&notifications,&subscriber,recipient=runtime.Sender](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction { 
+        auto observer = [&notifications,&subscriber,recipient=runtime.Sender](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
             if (ev->Recipient == recipient && ev->Sender == subscriber) {
                 switch (ev->GetTypeRewrite()) {
                 case TEvPrivate::EvGotNotification:

@@ -7,65 +7,65 @@
 #include <util/string/cast.h>
 
 namespace NMonitoring {
-    static ECompression CompressionFromHeader(TStringBuf value) { 
-        if (value.empty()) { 
-            return ECompression::UNKNOWN; 
-        } 
- 
-        for (const auto& it : StringSplitter(value).Split(',').SkipEmpty()) { 
-            TStringBuf token = StripString(it.Token()); 
- 
-            if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::IDENTITY)) { 
-                return ECompression::IDENTITY; 
-            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::ZLIB)) { 
-                return ECompression::ZLIB; 
-            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::LZ4)) { 
-                return ECompression::LZ4; 
-            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::ZSTD)) { 
-                return ECompression::ZSTD; 
-            } 
-        } 
- 
-        return ECompression::UNKNOWN; 
-    } 
- 
-    static EFormat FormatFromHttpMedia(TStringBuf value) { 
-        if (AsciiEqualsIgnoreCase(value, NFormatContenType::SPACK)) { 
-            return EFormat::SPACK; 
-        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::JSON)) { 
-            return EFormat::JSON; 
-        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::PROTOBUF)) { 
-            return EFormat::PROTOBUF; 
-        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::TEXT)) { 
-            return EFormat::TEXT; 
+    static ECompression CompressionFromHeader(TStringBuf value) {
+        if (value.empty()) {
+            return ECompression::UNKNOWN;
+        }
+
+        for (const auto& it : StringSplitter(value).Split(',').SkipEmpty()) {
+            TStringBuf token = StripString(it.Token());
+
+            if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::IDENTITY)) {
+                return ECompression::IDENTITY;
+            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::ZLIB)) {
+                return ECompression::ZLIB;
+            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::LZ4)) {
+                return ECompression::LZ4;
+            } else if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::ZSTD)) {
+                return ECompression::ZSTD;
+            }
+        }
+
+        return ECompression::UNKNOWN;
+    }
+
+    static EFormat FormatFromHttpMedia(TStringBuf value) {
+        if (AsciiEqualsIgnoreCase(value, NFormatContenType::SPACK)) {
+            return EFormat::SPACK;
+        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::JSON)) {
+            return EFormat::JSON;
+        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::PROTOBUF)) {
+            return EFormat::PROTOBUF;
+        } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::TEXT)) {
+            return EFormat::TEXT;
         } else if (AsciiEqualsIgnoreCase(value, NFormatContenType::PROMETHEUS)) {
             return EFormat::PROMETHEUS;
         }
 
-        return EFormat::UNKNOWN; 
-    } 
- 
-    EFormat FormatFromAcceptHeader(TStringBuf value) { 
-        EFormat result{EFormat::UNKNOWN}; 
- 
+        return EFormat::UNKNOWN;
+    }
+
+    EFormat FormatFromAcceptHeader(TStringBuf value) {
+        EFormat result{EFormat::UNKNOWN};
+
         for (const auto& it : StringSplitter(value).Split(',').SkipEmpty()) {
             TStringBuf token = StripString(it.Token());
 
-            result = FormatFromHttpMedia(token); 
-            if (result != EFormat::UNKNOWN) { 
-                break; 
+            result = FormatFromHttpMedia(token);
+            if (result != EFormat::UNKNOWN) {
+                break;
             }
         }
 
-        return result; 
+        return result;
     }
 
-    EFormat FormatFromContentType(TStringBuf value) { 
-        value = value.NextTok(';'); 
- 
-        return FormatFromHttpMedia(value); 
-    } 
- 
+    EFormat FormatFromContentType(TStringBuf value) {
+        value = value.NextTok(';');
+
+        return FormatFromHttpMedia(value);
+    }
+
     TStringBuf ContentTypeByFormat(EFormat format) {
         switch (format) {
             case EFormat::SPACK:
@@ -86,11 +86,11 @@ namespace NMonitoring {
     }
 
     ECompression CompressionFromAcceptEncodingHeader(TStringBuf value) {
-        return CompressionFromHeader(value); 
-    } 
+        return CompressionFromHeader(value);
+    }
 
-    ECompression CompressionFromContentEncodingHeader(TStringBuf value) { 
-        return CompressionFromHeader(value); 
+    ECompression CompressionFromContentEncodingHeader(TStringBuf value) {
+        return CompressionFromHeader(value);
     }
 
     TStringBuf ContentEncodingByCompression(ECompression compression) {

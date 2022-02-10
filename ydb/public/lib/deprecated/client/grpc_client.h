@@ -8,7 +8,7 @@
 namespace NKikimr {
     namespace NGRpcProxy {
 
-        using TGRpcClientConfig = NGrpc::TGRpcClientConfig; 
+        using TGRpcClientConfig = NGrpc::TGRpcClientConfig;
 
         using TGrpcError = std::pair<TString, int>;
 

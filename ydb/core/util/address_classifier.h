@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/ipmath/range_set.h> 
+#include <library/cpp/ipmath/range_set.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

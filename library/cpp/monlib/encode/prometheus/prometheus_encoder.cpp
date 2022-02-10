@@ -126,7 +126,7 @@ namespace NMonitoring {
 
             void WriteLabels(const TLabels& labels, TStringBuf addLabelKey, TStringBuf addLabelValue) {
                 Out_->Write('{');
-                for (auto&& l: labels) { 
+                for (auto&& l: labels) {
                     Out_->Write(l.Name());
                     Out_->Write('=');
                     WriteLabelValue(l.Value());
@@ -354,7 +354,7 @@ namespace NMonitoring {
                 }
 
                 // XXX: poor performace
-                for (auto&& l: CommonLabels_) { 
+                for (auto&& l: CommonLabels_) {
                     MetricState_.Labels.Add(l.Name(), l.Value());
                 }
 
@@ -363,7 +363,7 @@ namespace NMonitoring {
                          "labels " << MetricState_.Labels <<
                          " does not contain label '" << MetricNameLabel_ << '\'');
 
-                const TString& metricName = ToString(nameLabel->Value()); 
+                const TString& metricName = ToString(nameLabel->Value());
                 if (MetricState_.Type != EMetricType::DSUMMARY) {
                     Writer_.WriteType(MetricState_.Type, metricName);
                 }

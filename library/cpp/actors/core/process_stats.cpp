@@ -136,23 +136,23 @@ namespace NActors {
 
 #endif
 
-namespace { 
+namespace {
     // Periodically collects process stats and exposes them as mon counters
-    template <typename TDerived> 
-    class TProcStatCollectingActor: public TActorBootstrapped<TProcStatCollectingActor<TDerived>> { 
+    template <typename TDerived>
+    class TProcStatCollectingActor: public TActorBootstrapped<TProcStatCollectingActor<TDerived>> {
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::ACTORLIB_STATS;
         }
 
-        TProcStatCollectingActor(TDuration interval) 
-            : Interval(interval) 
+        TProcStatCollectingActor(TDuration interval)
+            : Interval(interval)
         {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            ctx.Schedule(Interval, new TEvents::TEvWakeup()); 
-            Self()->Become(&TDerived::StateWork); 
+            ctx.Schedule(Interval, new TEvents::TEvWakeup());
+            Self()->Become(&TDerived::StateWork);
         }
 
         STFUNC(StateWork) {
@@ -163,85 +163,85 @@ namespace {
 
     private:
         void Wakeup(const TActorContext& ctx) {
-            Self()->UpdateCounters(ProcStat); 
-            ctx.Schedule(Interval, new TEvents::TEvWakeup()); 
+            Self()->UpdateCounters(ProcStat);
+            ctx.Schedule(Interval, new TEvents::TEvWakeup());
         }
 
-        TDerived* Self() { 
+        TDerived* Self() {
             ProcStat.Fill(getpid());
-            return static_cast<TDerived*>(this); 
+            return static_cast<TDerived*>(this);
         }
- 
-    private: 
-        const TDuration Interval; 
-        TProcStat ProcStat; 
+
+    private:
+        const TDuration Interval;
+        TProcStat ProcStat;
     };
 
-    // Periodically collects process stats and exposes them as mon counters 
-    class TDynamicCounterCollector: public TProcStatCollectingActor<TDynamicCounterCollector> { 
-        using TBase = TProcStatCollectingActor<TDynamicCounterCollector>; 
-    public: 
+    // Periodically collects process stats and exposes them as mon counters
+    class TDynamicCounterCollector: public TProcStatCollectingActor<TDynamicCounterCollector> {
+        using TBase = TProcStatCollectingActor<TDynamicCounterCollector>;
+    public:
         TDynamicCounterCollector(
             ui32 intervalSeconds,
             NMonitoring::TDynamicCounterPtr counters)
-            : TBase{TDuration::Seconds(intervalSeconds)} 
-        { 
-            ProcStatGroup = counters->GetSubgroup("counters", "utils"); 
- 
-            VmSize = ProcStatGroup->GetCounter("Process/VmSize", false); 
-            AnonRssSize = ProcStatGroup->GetCounter("Process/AnonRssSize", false); 
-            FileRssSize = ProcStatGroup->GetCounter("Process/FileRssSize", false); 
+            : TBase{TDuration::Seconds(intervalSeconds)}
+        {
+            ProcStatGroup = counters->GetSubgroup("counters", "utils");
+
+            VmSize = ProcStatGroup->GetCounter("Process/VmSize", false);
+            AnonRssSize = ProcStatGroup->GetCounter("Process/AnonRssSize", false);
+            FileRssSize = ProcStatGroup->GetCounter("Process/FileRssSize", false);
             CGroupMemLimit = ProcStatGroup->GetCounter("Process/CGroupMemLimit", false);
-            UserTime = ProcStatGroup->GetCounter("Process/UserTime", true); 
-            SysTime = ProcStatGroup->GetCounter("Process/SystemTime", true); 
-            MinorPageFaults = ProcStatGroup->GetCounter("Process/MinorPageFaults", true); 
-            MajorPageFaults = ProcStatGroup->GetCounter("Process/MajorPageFaults", true); 
+            UserTime = ProcStatGroup->GetCounter("Process/UserTime", true);
+            SysTime = ProcStatGroup->GetCounter("Process/SystemTime", true);
+            MinorPageFaults = ProcStatGroup->GetCounter("Process/MinorPageFaults", true);
+            MajorPageFaults = ProcStatGroup->GetCounter("Process/MajorPageFaults", true);
             UptimeSeconds = ProcStatGroup->GetCounter("Process/UptimeSeconds", false);
             NumThreads = ProcStatGroup->GetCounter("Process/NumThreads", false);
             SystemUptimeSeconds = ProcStatGroup->GetCounter("System/UptimeSeconds", false);
-        } 
- 
-        void UpdateCounters(const TProcStat& procStat) { 
-            *VmSize = procStat.Vsize; 
-            *AnonRssSize = procStat.AnonRss; 
-            *FileRssSize = procStat.FileRss; 
+        }
+
+        void UpdateCounters(const TProcStat& procStat) {
+            *VmSize = procStat.Vsize;
+            *AnonRssSize = procStat.AnonRss;
+            *FileRssSize = procStat.FileRss;
             if (procStat.CGroupMemLim) {
                 *CGroupMemLimit = procStat.CGroupMemLim;
             }
-            *UserTime = procStat.Utime; 
-            *SysTime = procStat.Stime; 
-            *MinorPageFaults = procStat.MinFlt; 
-            *MajorPageFaults = procStat.MajFlt; 
+            *UserTime = procStat.Utime;
+            *SysTime = procStat.Stime;
+            *MinorPageFaults = procStat.MinFlt;
+            *MajorPageFaults = procStat.MajFlt;
             *UptimeSeconds = procStat.Uptime.Seconds();
             *NumThreads = procStat.NumThreads;
             *SystemUptimeSeconds = procStat.Uptime.Seconds();
-        } 
- 
-    private: 
+        }
+
+    private:
         NMonitoring::TDynamicCounterPtr ProcStatGroup;
-        NMonitoring::TDynamicCounters::TCounterPtr VmSize; 
-        NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize; 
-        NMonitoring::TDynamicCounters::TCounterPtr FileRssSize; 
+        NMonitoring::TDynamicCounters::TCounterPtr VmSize;
+        NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize;
+        NMonitoring::TDynamicCounters::TCounterPtr FileRssSize;
         NMonitoring::TDynamicCounters::TCounterPtr CGroupMemLimit;
-        NMonitoring::TDynamicCounters::TCounterPtr UserTime; 
-        NMonitoring::TDynamicCounters::TCounterPtr SysTime; 
-        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults; 
-        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults; 
+        NMonitoring::TDynamicCounters::TCounterPtr UserTime;
+        NMonitoring::TDynamicCounters::TCounterPtr SysTime;
+        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
         NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;
         NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
         NMonitoring::TDynamicCounters::TCounterPtr SystemUptimeSeconds;
-    }; 
- 
- 
-    class TRegistryCollector: public TProcStatCollectingActor<TRegistryCollector> { 
-        using TBase = TProcStatCollectingActor<TRegistryCollector>; 
-    public: 
+    };
+
+
+    class TRegistryCollector: public TProcStatCollectingActor<TRegistryCollector> {
+        using TBase = TProcStatCollectingActor<TRegistryCollector>;
+    public:
         TRegistryCollector(TDuration interval, NMonitoring::TMetricRegistry& registry)
-            : TBase{interval} 
-        { 
-            VmSize = registry.IntGauge({{"sensor", "process.VmSize"}}); 
-            AnonRssSize = registry.IntGauge({{"sensor", "process.AnonRssSize"}}); 
-            FileRssSize = registry.IntGauge({{"sensor", "process.FileRssSize"}}); 
+            : TBase{interval}
+        {
+            VmSize = registry.IntGauge({{"sensor", "process.VmSize"}});
+            AnonRssSize = registry.IntGauge({{"sensor", "process.AnonRssSize"}});
+            FileRssSize = registry.IntGauge({{"sensor", "process.FileRssSize"}});
             CGroupMemLimit = registry.IntGauge({{"sensor", "process.CGroupMemLimit"}});
             UptimeSeconds = registry.IntGauge({{"sensor", "process.UptimeSeconds"}});
             NumThreads = registry.IntGauge({{"sensor", "process.NumThreads"}});
@@ -251,12 +251,12 @@ namespace {
             SysTime = registry.Rate({{"sensor", "process.SystemTime"}});
             MinorPageFaults = registry.Rate({{"sensor", "process.MinorPageFaults"}});
             MajorPageFaults = registry.Rate({{"sensor", "process.MajorPageFaults"}});
-        } 
- 
-        void UpdateCounters(const TProcStat& procStat) { 
-            VmSize->Set(procStat.Vsize); 
-            AnonRssSize->Set(procStat.AnonRss); 
-            FileRssSize->Set(procStat.FileRss); 
+        }
+
+        void UpdateCounters(const TProcStat& procStat) {
+            VmSize->Set(procStat.Vsize);
+            AnonRssSize->Set(procStat.AnonRss);
+            FileRssSize->Set(procStat.FileRss);
             CGroupMemLimit->Set(procStat.CGroupMemLim);
             UptimeSeconds->Set(procStat.Uptime.Seconds());
             NumThreads->Set(procStat.NumThreads);
@@ -276,12 +276,12 @@ namespace {
 
             MajorPageFaults->Reset();
             MajorPageFaults->Add(procStat.MajFlt);
-        } 
- 
-    private: 
-        NMonitoring::TIntGauge* VmSize; 
-        NMonitoring::TIntGauge* AnonRssSize; 
-        NMonitoring::TIntGauge* FileRssSize; 
+        }
+
+    private:
+        NMonitoring::TIntGauge* VmSize;
+        NMonitoring::TIntGauge* AnonRssSize;
+        NMonitoring::TIntGauge* FileRssSize;
         NMonitoring::TIntGauge* CGroupMemLimit;
         NMonitoring::TRate* UserTime;
         NMonitoring::TRate* SysTime;
@@ -290,14 +290,14 @@ namespace {
         NMonitoring::TIntGauge* UptimeSeconds;
         NMonitoring::TIntGauge* NumThreads;
         NMonitoring::TIntGauge* SystemUptimeSeconds;
-    }; 
-} // namespace 
- 
+    };
+} // namespace
+
     IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters) {
         return new TDynamicCounterCollector(intervalSec, counters);
     }
 
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry) {
-        return new TRegistryCollector(interval, registry); 
-    } 
+        return new TRegistryCollector(interval, registry);
+    }
 }

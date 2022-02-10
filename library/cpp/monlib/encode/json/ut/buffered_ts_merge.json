@@ -1,13 +1,13 @@
-{ 
-  "sensors": 
-    [ 
-      { 
-        "kind":"COUNTER", 
-        "labels": 
-          { 
-            "foo":"bar" 
-          }, 
+{
+  "sensors":
+    [
+      {
+        "kind":"COUNTER",
+        "labels":
+          {
+            "foo":"bar"
+          },
         "value":45
-      } 
-    ] 
-} 
+      }
+    ]
+}

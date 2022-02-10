@@ -217,7 +217,7 @@ namespace NActors {
 
     protected:
         TActorId TargetActorId;
-        IMonHttpRequest& Request; 
+        IMonHttpRequest& Request;
         NThreading::TPromise<THttpResponsePtr> Result;
         const TVector<TString> &AllowedSIDs;
         TMon::TRequestAuthorizer Authorizer;
@@ -286,13 +286,13 @@ namespace NActors {
             out << "</body>";
         }
 
-        void OutputContent(NMonitoring::IMonHttpRequest &request) override { 
+        void OutputContent(NMonitoring::IMonHttpRequest &request) override {
             if (PreTag) {
-                request.Output() << "<pre>\n"; 
+                request.Output() << "<pre>\n";
             }
-            Result.Output(request.Output()); 
+            Result.Output(request.Output());
             if (PreTag) {
-                request.Output() << "</pre>\n"; 
+                request.Output() << "</pre>\n";
             }
         }
 
@@ -342,7 +342,7 @@ namespace NActors {
         {
         }
 
-        void Output(IMonHttpRequest &request) override { 
+        void Output(IMonHttpRequest &request) override {
             auto promise = NThreading::NewPromise<THttpResponsePtr>();
             auto future = promise.GetFuture();
 
@@ -361,13 +361,13 @@ namespace NActors {
         }
 
     private:
-        void Output(IMonHttpRequest &request, const NMon::IEvHttpInfoRes &result) const { 
+        void Output(IMonHttpRequest &request, const NMon::IEvHttpInfoRes &result) const {
             if (result.GetContentType() == NMon::IEvHttpInfoRes::Html) {
                 THtmlResultMonPage resultPage(Path, Title, Host, PreTag, result);
                 resultPage.Parent = this->Parent;
                 resultPage.Output(request);
             } else {
-                result.Output(request.Output()); 
+                result.Output(request.Output());
             }
         }
 

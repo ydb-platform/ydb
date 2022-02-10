@@ -25,7 +25,7 @@ public:
         , SchVizUrl(schVizUrl)
     {}
 
-    virtual void Output(IMonHttpRequest& request) { 
+    virtual void Output(IMonHttpRequest& request) {
         TGuard<TMutex> guard(EmuMutex);
 
         TStringStream out;
@@ -53,11 +53,11 @@ public:
             out << "exception: " << CurrentExceptionMessage();
         }
 
-        request.Output() << out.Str(); 
+        request.Output() << out.Str();
     }
 
 private:
-    void OutputIndex(const IMonHttpRequest& request, IOutputStream& out) { 
+    void OutputIndex(const IMonHttpRequest& request, IOutputStream& out) {
         TGuard<TMutex> guard(EmuMutex);
         Y_UNUSED(request);
         out << HTTPOKHTML;
@@ -70,14 +70,14 @@ private:
         }
     }
 
-    void InputConfig(const IMonHttpRequest& request, IOutputStream& out) { 
+    void InputConfig(const IMonHttpRequest& request, IOutputStream& out) {
         TGuard<TMutex> guard(EmuMutex);
         JsonConfig = TString(request.GetPostContent());
         IsRunning = false;
         out << HTTPOKHTML;
     }
 
-    void GetJson(const IMonHttpRequest& request, IOutputStream& out) { 
+    void GetJson(const IMonHttpRequest& request, IOutputStream& out) {
         TGuard<TMutex> guard(EmuMutex);
         Y_UNUSED(request);
         out << HTTPOKHTML;
@@ -101,7 +101,7 @@ public:
         , DataUrl(dataUrl)
     {}
 
-    virtual void Output(IMonHttpRequest& request) { 
+    virtual void Output(IMonHttpRequest& request) {
         TStringStream out;
         try {
             if (request.GetParams().Get("mode") == "") {
@@ -117,11 +117,11 @@ public:
             out << "exception: " << CurrentExceptionMessage();
         }
 
-        request.Output() << out.Str(); 
+        request.Output() << out.Str();
     }
 
 private:
-    void OutputIndex(const IMonHttpRequest& request, IOutputStream& out) 
+    void OutputIndex(const IMonHttpRequest& request, IOutputStream& out)
     {
         Y_UNUSED(request);
         out << HTTPOKHTML;
@@ -143,7 +143,7 @@ private:
         }
     }
 
-    void OutputJavaScript(const IMonHttpRequest& request, IOutputStream& out) 
+    void OutputJavaScript(const IMonHttpRequest& request, IOutputStream& out)
     {
         Y_UNUSED(request);
         out << HTTPOKJAVASCRIPT;

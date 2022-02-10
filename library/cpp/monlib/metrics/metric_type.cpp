@@ -21,7 +21,7 @@ namespace NMonitoring {
                 return TStringBuf("HIST_RATE");
             case EMetricType::DSUMMARY:
                 return TStringBuf("DSUMMARY");
-            case EMetricType::LOGHIST: 
+            case EMetricType::LOGHIST:
                 return TStringBuf("LOGHIST");
             default:
                 return TStringBuf("UNKNOWN");
@@ -44,7 +44,7 @@ namespace NMonitoring {
         } else if (str == TStringBuf("DSUMMARY")) {
             return EMetricType::DSUMMARY;
         } else if (str == TStringBuf("LOGHIST")) {
-            return EMetricType::LOGHIST; 
+            return EMetricType::LOGHIST;
         } else {
             ythrow yexception() << "unknown metric type: " << str;
         }

@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(g:solomon) 
+OWNER(g:solomon)
 
 SRCS(
     monservice.cpp
     mon_service_http_request.cpp
     service.cpp
-    format.cpp 
-    auth.cpp 
+    format.cpp
+    auth.cpp
 )
 
 PEERDIR(

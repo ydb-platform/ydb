@@ -15,7 +15,7 @@
 #include <netinet/tcp.h>
 #endif
 
-namespace NGrpc { 
+namespace NGrpc {
 
 void EnableGRpcTracing() {
     grpc_tracer_set_enabled("tcp", true);
@@ -583,4 +583,4 @@ void TGRpcClientLow::ForgetContext(TContextImpl* context) {
     }
 }
 
-} // namespace NGRpc 
+} // namespace NGRpc

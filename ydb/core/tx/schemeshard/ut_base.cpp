@@ -7102,12 +7102,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         void SetUp(TTestActorRuntime& runtime) {
-            runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                return this->OnEvent(static_cast<TTestActorRuntime&>(runtime), event); 
+            runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return this->OnEvent(static_cast<TTestActorRuntime&>(runtime), event);
             });
         }
 
-        bool IsPlanStepMessage(TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& event) { 
+        bool IsPlanStepMessage(TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() != TEvTxProcessing::EvPlanStep) {
                 return false;
             }

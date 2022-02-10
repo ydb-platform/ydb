@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:solomon) 
+OWNER(g:solomon)
 
 NO_WSHADOW()
 
@@ -13,7 +13,7 @@ SRCS(
     resource_mon_page.cpp
     templates.cpp
     version_mon_page.cpp
-    registry_mon_page.cpp 
+    registry_mon_page.cpp
 )
 
 PEERDIR(

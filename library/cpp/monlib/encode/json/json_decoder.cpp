@@ -879,7 +879,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     State_.ToNext(TState::METRIC_LOG_HIST);
                 }
                 break;
- 
+
             case TState::METRIC_HIST:
                 if (key == TStringBuf("bounds")) {
                     State_.ToNext(TState::METRIC_HIST_BOUNDS);

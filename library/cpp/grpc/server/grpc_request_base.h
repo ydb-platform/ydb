@@ -60,16 +60,16 @@ public:
     //! Implementation can swap protobuf message
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
-    //! Send serialised response (The request shoult be created for bytes response type) 
+    //! Send serialised response (The request shoult be created for bytes response type)
     //! Implementation can swap ByteBuffer
     virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0) = 0;
 
     //! Send grpc UNAUTHENTICATED status
     virtual void ReplyUnauthenticated(const TString& in) = 0;
 
-    //! Send grpc error 
-    virtual void ReplyError(grpc::StatusCode code, const TString& msg) = 0; 
- 
+    //! Send grpc error
+    virtual void ReplyError(grpc::StatusCode code, const TString& msg) = 0;
+
     //! Returns deadline (server epoch related) if peer set it on its side, or Instanse::Max() otherwise
     virtual TInstant Deadline() const = 0;
 

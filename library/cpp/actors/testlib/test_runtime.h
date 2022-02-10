@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
@@ -182,7 +182,7 @@ namespace NActors {
         }
     };
 
-    class TTestActorRuntimeBase: public TNonCopyable { 
+    class TTestActorRuntimeBase: public TNonCopyable {
     public:
         class TEdgeActor;
         class TSchedulerThreadStub;
@@ -195,24 +195,24 @@ namespace NActors {
             RESCHEDULE
         };
 
-        typedef std::function<EEventAction(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventObserver; 
-        typedef std::function<void(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue)> TScheduledEventsSelector; 
-        typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventFilter; 
-        typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline)> TScheduledEventFilter; 
+        typedef std::function<EEventAction(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventObserver;
+        typedef std::function<void(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue)> TScheduledEventsSelector;
+        typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventFilter;
+        typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline)> TScheduledEventFilter;
         typedef std::function<void(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId)> TRegistrationObserver;
 
 
-        TTestActorRuntimeBase(THeSingleSystemEnv); 
-        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads); 
-        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount); 
-        TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false); 
-        virtual ~TTestActorRuntimeBase(); 
+        TTestActorRuntimeBase(THeSingleSystemEnv);
+        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount);
+        TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false);
+        virtual ~TTestActorRuntimeBase();
         bool IsRealThreads() const;
-        static EEventAction DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event); 
-        static void DroppingScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue); 
-        static void CollapsedTimeScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue); 
-        static bool DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event); 
-        static bool NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline); 
+        static EEventAction DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        static void DroppingScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue);
+        static void CollapsedTimeScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue);
+        static bool DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        static bool NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
         static void DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId);
         TEventObserver SetObserverFunc(TEventObserver observerFunc);
         TScheduledEventsSelector SetScheduledEventsSelectorFunc(TScheduledEventsSelector scheduledEventsSelectorFunc);
@@ -233,7 +233,7 @@ namespace NActors {
         void UpdateCurrentTime(TInstant newTime);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
-        virtual void Initialize(); 
+        virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
         ui64 AllocateLocalId();
@@ -291,7 +291,7 @@ namespace NActors {
         TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();
             const ui32 eventType = TEvent::EventType;
-            WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
+            WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
                 if (event->GetTypeRewrite() != eventType)
                     return false;
@@ -323,7 +323,7 @@ namespace NActors {
         {
             typename TEvent::TPtr handle;
             const ui32 eventType = TEvent::EventType;
-            WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
+            WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
                 if (event->GetTypeRewrite() != eventType)
                     return false;
@@ -383,7 +383,7 @@ namespace NActors {
         std::tuple<TEvents*...> GrabEdgeEvents(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();
             auto eventTypes = { TEvents::EventType... };
-            WaitForEdgeEvents([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) { 
+            WaitForEdgeEvents([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
                 if (std::find(std::begin(eventTypes), std::end(eventTypes), event->GetTypeRewrite()) == std::end(eventTypes))
                     return false;
                 handle = event;
@@ -472,26 +472,26 @@ namespace NActors {
         }
 
     protected:
-        struct TNodeDataBase; 
-        TNodeDataBase* GetRawNode(ui32 node) const { 
+        struct TNodeDataBase;
+        TNodeDataBase* GetRawNode(ui32 node) const {
             return Nodes.at(FirstNodeId + node).Get();
         }
 
-        static IExecutorPool* CreateExecutorPoolStub(TTestActorRuntimeBase* runtime, ui32 nodeIndex, TNodeDataBase* node, ui32 poolId); 
-        virtual TIntrusivePtr<NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const char* component) { 
-            Y_UNUSED(counters); 
-            Y_UNUSED(component); 
- 
-            // do nothing, just return the existing counters 
-            return counters; 
-        } 
- 
-        THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node); 
-        THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node); 
-        virtual void InitActorSystemSetup(TActorSystemSetup& setup) { 
-            Y_UNUSED(setup); 
-        } 
- 
+        static IExecutorPool* CreateExecutorPoolStub(TTestActorRuntimeBase* runtime, ui32 nodeIndex, TNodeDataBase* node, ui32 poolId);
+        virtual TIntrusivePtr<NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const char* component) {
+            Y_UNUSED(counters);
+            Y_UNUSED(component);
+
+            // do nothing, just return the existing counters
+            return counters;
+        }
+
+        THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
+        THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
+        virtual void InitActorSystemSetup(TActorSystemSetup& setup) {
+            Y_UNUSED(setup);
+        }
+
    private:
         IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
         void SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem);
@@ -506,18 +506,18 @@ namespace NActors {
         ui64 ScheduledLimit;
         THolder<TTempDir> TmpDir;
         const TThread::TId MainThreadId;
- 
+
     protected:
         bool UseRealInterconnect = false;
         TInterconnectMock InterconnectMock;
-        bool IsInitialized = false; 
-        bool SingleSysEnv = false; 
+        bool IsInitialized = false;
+        bool SingleSysEnv = false;
         const TString ClusterUUID;
         const ui32 FirstNodeId;
         const ui32 NodeCount;
         const ui32 DataCenterCount;
         const bool UseRealThreads;
- 
+
         ui64 LocalId;
         TMutex Mutex;
         TCondVar MailboxesHasEvents;
@@ -532,28 +532,28 @@ namespace NActors {
         TAutoPtr<TLogBackend> LogBackend;
         bool NeedMonitoring;
 
-        TIntrusivePtr<IRandomProvider> RandomProvider; 
-        TIntrusivePtr<ITimeProvider> TimeProvider; 
- 
+        TIntrusivePtr<IRandomProvider> RandomProvider;
+        TIntrusivePtr<ITimeProvider> TimeProvider;
+
     protected:
-        struct TNodeDataBase: public TThrRefBase { 
-            TNodeDataBase(); 
+        struct TNodeDataBase: public TThrRefBase {
+            TNodeDataBase();
             void Stop();
-            virtual ~TNodeDataBase(); 
-            virtual ui64 GetLoggerPoolId() const { 
-                return 0; 
-            } 
- 
-            template <typename T = void> 
-            T* GetAppData() { 
-                return static_cast<T*>(AppData0.get()); 
-            } 
- 
-            template <typename T = void> 
-            const T* GetAppData() const { 
-                return static_cast<T*>(AppData0.get()); 
-            } 
- 
+            virtual ~TNodeDataBase();
+            virtual ui64 GetLoggerPoolId() const {
+                return 0;
+            }
+
+            template <typename T = void>
+            T* GetAppData() {
+                return static_cast<T*>(AppData0.get());
+            }
+
+            template <typename T = void>
+            const T* GetAppData() const {
+                return static_cast<T*>(AppData0.get());
+            }
+
             TIntrusivePtr<NMonitoring::TDynamicCounters> DynamicCounters;
             TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
             TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
@@ -563,44 +563,44 @@ namespace NActors {
             TMap<TActorId, IActor*> LocalServicesActors;
             TMap<IActor*, TActorId> ActorToActorId;
             THolder<TMailboxTable> MailboxTable;
-            std::shared_ptr<void> AppData0; 
+            std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
-            THolder<IExecutorPool> SchedulerPool; 
+            THolder<IExecutorPool> SchedulerPool;
             TVector<IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
-        }; 
-
-        struct INodeFactory { 
-            virtual ~INodeFactory() = default; 
-            virtual TIntrusivePtr<TNodeDataBase> CreateNode() = 0; 
         };
 
-        struct TDefaultNodeFactory final: INodeFactory { 
-            virtual TIntrusivePtr<TNodeDataBase> CreateNode() override { 
-                return new TNodeDataBase(); 
-            } 
-        }; 
- 
-        INodeFactory& GetNodeFactory() { 
-            return *NodeFactory; 
-        } 
- 
-        virtual TNodeDataBase* GetNodeById(size_t idx) { 
-            return Nodes[idx].Get(); 
-        } 
- 
-        void InitNodes(); 
-        void CleanupNodes(); 
-        virtual void InitNodeImpl(TNodeDataBase*, size_t); 
- 
+        struct INodeFactory {
+            virtual ~INodeFactory() = default;
+            virtual TIntrusivePtr<TNodeDataBase> CreateNode() = 0;
+        };
+
+        struct TDefaultNodeFactory final: INodeFactory {
+            virtual TIntrusivePtr<TNodeDataBase> CreateNode() override {
+                return new TNodeDataBase();
+            }
+        };
+
+        INodeFactory& GetNodeFactory() {
+            return *NodeFactory;
+        }
+
+        virtual TNodeDataBase* GetNodeById(size_t idx) {
+            return Nodes[idx].Get();
+        }
+
+        void InitNodes();
+        void CleanupNodes();
+        virtual void InitNodeImpl(TNodeDataBase*, size_t);
+
         static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev);
 
-    protected: 
-        THolder<INodeFactory> NodeFactory{new TDefaultNodeFactory}; 
- 
+    protected:
+        THolder<INodeFactory> NodeFactory{new TDefaultNodeFactory};
+
     private:
-        void InitNode(TNodeDataBase* node, size_t idx); 
- 
+        void InitNode(TNodeDataBase* node, size_t idx);
+
         struct TDispatchContext {
             const TDispatchOptions* Options;
             TDispatchContext* PrevContext;
@@ -610,8 +610,8 @@ namespace NActors {
             bool FinalEventFound = false;
         };
 
-        TProgramShouldContinue ShouldContinue; 
-        TMap<ui32, TIntrusivePtr<TNodeDataBase>> Nodes; 
+        TProgramShouldContinue ShouldContinue;
+        TMap<ui32, TIntrusivePtr<TNodeDataBase>> Nodes;
         ui64 CurrentTimestamp;
         TSet<TActorId> EdgeActors;
         THashMap<TEventMailboxId, TActorId, TEventMailboxId::THash> EdgeActorByMailbox;

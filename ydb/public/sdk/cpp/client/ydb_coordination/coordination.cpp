@@ -17,7 +17,7 @@ namespace NCoordination {
 using NThreading::TFuture;
 using NThreading::TPromise;
 using NThreading::NewPromise;
-using NGrpc::TQueueClientFixedEvent; 
+using NGrpc::TQueueClientFixedEvent;
 
 namespace {
 
@@ -177,8 +177,8 @@ class TSessionContext : public TThrRefBase {
     using TService = Ydb::Coordination::V1::CoordinationService;
     using TRequest = Ydb::Coordination::SessionRequest;
     using TResponse = Ydb::Coordination::SessionResponse;
-    using TGrpcStatus = NGrpc::TGrpcStatus; 
-    using IProcessor = NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>; 
+    using TGrpcStatus = NGrpc::TGrpcStatus;
+    using IProcessor = NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
 
     friend class TSession::TImpl;
 

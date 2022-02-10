@@ -9,11 +9,11 @@
 #include <functional>
 
 namespace NMonitoring {
-    enum class EUnknownGroupPolicy { 
-        Error,  // send 404 
-        Ignore, // send 204 
-    }; 
- 
+    enum class EUnknownGroupPolicy {
+        Error,  // send 404
+        Ignore, // send 204
+    };
+
     struct TDynamicCountersPage: public TPreMonPage {
     public:
         using TOutputCallback = std::function<void()>;
@@ -21,11 +21,11 @@ namespace NMonitoring {
     private:
         const TIntrusivePtr<TDynamicCounters> Counters;
         TOutputCallback OutputCallback;
-        EUnknownGroupPolicy UnknownGroupPolicy {EUnknownGroupPolicy::Error}; 
+        EUnknownGroupPolicy UnknownGroupPolicy {EUnknownGroupPolicy::Error};
 
-    private: 
-        void HandleAbsentSubgroup(IMonHttpRequest& request); 
- 
+    private:
+        void HandleAbsentSubgroup(IMonHttpRequest& request);
+
     public:
         TDynamicCountersPage(const TString& path,
                              const TString& title,
@@ -37,14 +37,14 @@ namespace NMonitoring {
         {
         }
 
-        void Output(NMonitoring::IMonHttpRequest& request) override; 
+        void Output(NMonitoring::IMonHttpRequest& request) override;
 
-        void BeforePre(NMonitoring::IMonHttpRequest& request) override; 
+        void BeforePre(NMonitoring::IMonHttpRequest& request) override;
 
-        void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) override; 
- 
-        /// If set to Error, responds with 404 if the requested subgroup is not found. This is the default. 
-        /// If set to Ignore, responds with 204 if the requested subgroup is not found 
-        void SetUnknownGroupPolicy(EUnknownGroupPolicy value); 
+        void OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) override;
+
+        /// If set to Error, responds with 404 if the requested subgroup is not found. This is the default.
+        /// If set to Ignore, responds with 204 if the requested subgroup is not found
+        void SetUnknownGroupPolicy(EUnknownGroupPolicy value);
     };
 }

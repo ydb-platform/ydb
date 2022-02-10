@@ -55,15 +55,15 @@ const bool VARIATE_RANDOM_SEED = false;
 const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
 const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
 
-static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) { 
-    try { 
-        return dynamic_cast<NActors::TTestBasicRuntime&>(r); 
-    } catch (const std::bad_cast& e) { 
-        Cerr << e.what() << Endl; 
-        Y_FAIL("Failed to cast to TTestActorRuntime: %s", e.what()); 
-    } 
-} 
- 
+static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) {
+    try {
+        return dynamic_cast<NActors::TTestBasicRuntime&>(r);
+    } catch (const std::bad_cast& e) {
+        Cerr << e.what() << Endl;
+        Y_FAIL("Failed to cast to TTestActorRuntime: %s", e.what());
+    }
+}
+
 namespace NKikimr {
 
     class TFakeMediatorTimecastProxy : public TActor<TFakeMediatorTimecastProxy> {
@@ -164,7 +164,7 @@ namespace NKikimr {
             , TabletIds(tabletIds)
         {}
 
-        void OnEvent(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
+        void OnEvent(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             Y_UNUSED(runtime);
             if (event->GetTypeRewrite() == TEvStateStorage::EvInfo) {
                 auto info = static_cast<TEvStateStorage::TEvInfo*>(event->GetBase());
@@ -548,7 +548,7 @@ namespace NKikimr {
             : Tracer(tracer)
         {}
 
-        bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) { 
+        bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
             if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite()) || Tracer.IsTabletEvent(event)
                 || Tracer.IsTabletRelatedEvent(event)) {
                 deadline = runtime.GetTimeProvider()->Now() + delay;
@@ -759,19 +759,19 @@ namespace NKikimr {
             TTabletTracer tabletTracer(activeZone, tabletIds);
             TTabletScheduledFilter scheduledFilter(tabletTracer);
             try {
-                testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) { 
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                        tabletTracer.OnEvent(AsKikimrRuntime(runtime), event); 
+                testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) {
+                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                        tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     });
 
                     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-                        tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId); 
+                        tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
-                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, 
+                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event,
                         TDuration delay, TInstant& deadline) {
-                        auto& runtime = AsKikimrRuntime(r); 
+                        auto& runtime = AsKikimrRuntime(r);
                         return !(!scheduledFilter(runtime, event, delay, deadline) || !TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline));
                     });
 
@@ -860,18 +860,18 @@ namespace NKikimr {
             TTabletScheduledFilter scheduledFilter(tabletTracer);
 
             testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntime& runtime) {
-                runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                    tabletTracer.OnEvent(AsKikimrRuntime(runtime), event); 
+                runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                     return TTestActorRuntime::EEventAction::PROCESS;
                 });
 
                 runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-                    tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId); 
+                    tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                 });
 
-                runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, 
+                runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event,
                     TDuration delay, TInstant& deadline) {
-                    auto& runtime = AsKikimrRuntime(r); 
+                    auto& runtime = AsKikimrRuntime(r);
                     return scheduledFilter(runtime, event, delay, deadline) && TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
                 });
 
@@ -908,17 +908,17 @@ namespace NKikimr {
 
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                        return pipeResetingObserver.OnEvent(AsKikimrRuntime(runtime), event); 
+                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                        return pipeResetingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
                     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-                        pipeResetingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId); 
+                        pipeResetingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
-                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, 
+                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event,
                         TDuration delay, TInstant& deadline) {
-                        auto& runtime = AsKikimrRuntime(r); 
+                        auto& runtime = AsKikimrRuntime(r);
                         return scheduledFilter(runtime, event, delay, deadline) && TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
                     });
 
@@ -957,17 +957,17 @@ namespace NKikimr {
                     Cout << dispatchName << "\n";
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                        return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event); 
+                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                        return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
                     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-                        delayingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId); 
+                        delayingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
-                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, 
+                    runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
                         TDuration delay, TInstant& deadline) {
-                        return scheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline); 
+                        return scheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline);
                     });
 
                     runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);
@@ -995,24 +995,24 @@ namespace NKikimr {
             , TabletTracer(TracingActive, tabletIds)
             , ScheduledFilter(TabletTracer)
         {
-            PrevObserverFunc = Runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
-                TabletTracer.OnEvent(AsKikimrRuntime(runtime), event); 
+            PrevObserverFunc = Runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                TabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
             PrevRegistrationObserverFunc = Runtime.SetRegistrationObserverFunc(
                 [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-                TabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId); 
+                TabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
             });
 
-            PrevScheduledFilterFunc = Runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, 
+            PrevScheduledFilterFunc = Runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
                 TDuration delay, TInstant& deadline) {
                 if (event->GetRecipientRewrite() == Sender) {
                     deadline = runtime.GetTimeProvider()->Now() + delay;
                     return false;
                 }
 
-                return ScheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline); 
+                return ScheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline);
             });
 
             PrevScheduledEventsSelector = Runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);

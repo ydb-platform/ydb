@@ -99,9 +99,9 @@ namespace NMonitoring {
                 TimeSeries_.Add(time, snapshot.Get());
             }
 
-            void OnLogHistogram(TInstant ts, TLogHistogramSnapshotPtr snapshot) override { 
+            void OnLogHistogram(TInstant ts, TLogHistogramSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
-                TimeSeries_.Add(ts, snapshot.Get()); 
+                TimeSeries_.Add(ts, snapshot.Get());
             }
 
             void Close() override {
@@ -135,7 +135,7 @@ namespace NMonitoring {
                     (*Out_) << *value.AsSummaryDouble();
                     break;
                 case EMetricValueType::LOGHISTOGRAM:
-                    (*Out_) << *value.AsLogHistogram(); 
+                    (*Out_) << *value.AsLogHistogram();
                     break;
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown metric value type";
@@ -143,21 +143,21 @@ namespace NMonitoring {
             }
 
             void WriteLabels() {
-                auto& out = *Out_; 
-                const auto size = Labels_.Size(); 
-                size_t i = 0; 
- 
-                out << '{'; 
-                for (auto&& l : Labels_) { 
+                auto& out = *Out_;
+                const auto size = Labels_.Size();
+                size_t i = 0;
+
+                out << '{';
+                for (auto&& l : Labels_) {
                     out << l.Name() << TStringBuf("='") << l.Value() << '\'';
- 
-                    ++i; 
-                    if (i < size) { 
+
+                    ++i;
+                    if (i < size) {
                         out << TStringBuf(", ");
                     }
-                }; 
- 
-                out << '}'; 
+                };
+
+                out << '}';
             }
 
             void WriteMetric() {

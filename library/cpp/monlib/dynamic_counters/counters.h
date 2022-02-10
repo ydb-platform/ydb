@@ -6,7 +6,7 @@
 #include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <util/generic/cast.h> 
+#include <util/generic/cast.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
@@ -19,43 +19,43 @@ namespace NMonitoring {
     struct TDynamicCounters;
     struct ICountableConsumer;
 
- 
+
     struct TCountableBase: public TAtomicRefCount<TCountableBase> {
-        // Private means that the object must not be serialized unless the consumer 
-        // has explicitly specified this by setting its Visibility to Private. 
-        // 
-        // Works only for the methods that accept ICountableConsumer 
-        enum class EVisibility: ui8 { 
-            Unspecified, 
-            Public, 
-            Private, 
-        }; 
- 
+        // Private means that the object must not be serialized unless the consumer
+        // has explicitly specified this by setting its Visibility to Private.
+        //
+        // Works only for the methods that accept ICountableConsumer
+        enum class EVisibility: ui8 {
+            Unspecified,
+            Public,
+            Private,
+        };
+
         virtual ~TCountableBase() {
         }
 
         virtual void Accept(
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const = 0;
- 
-        virtual EVisibility Visibility() const { 
-            return Visibility_; 
-        } 
- 
-    protected: 
-        EVisibility Visibility_{EVisibility::Unspecified}; 
+
+        virtual EVisibility Visibility() const {
+            return Visibility_;
+        }
+
+    protected:
+        EVisibility Visibility_{EVisibility::Unspecified};
     };
 
-    inline bool IsVisible(TCountableBase::EVisibility myLevel, TCountableBase::EVisibility consumerLevel) { 
-        if (myLevel == TCountableBase::EVisibility::Private 
-            && consumerLevel != TCountableBase::EVisibility::Private) { 
- 
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
+    inline bool IsVisible(TCountableBase::EVisibility myLevel, TCountableBase::EVisibility consumerLevel) {
+        if (myLevel == TCountableBase::EVisibility::Private
+            && consumerLevel != TCountableBase::EVisibility::Private) {
+
+            return false;
+        }
+
+        return true;
+    }
+
     struct ICountableConsumer {
         virtual ~ICountableConsumer() {
         }
@@ -75,10 +75,10 @@ namespace NMonitoring {
         virtual void OnGroupEnd(
             const TString& labelName, const TString& labelValue,
             const TDynamicCounters* group) = 0;
- 
-        virtual TCountableBase::EVisibility Visibility() const { 
-            return TCountableBase::EVisibility::Unspecified; 
-        } 
+
+        virtual TCountableBase::EVisibility Visibility() const {
+            return TCountableBase::EVisibility::Unspecified;
+        }
     };
 
 #ifdef _MSC_VER
@@ -87,10 +87,10 @@ namespace NMonitoring {
 #endif                          // _MSC_VER
 
     struct TCounterForPtr: public TDeprecatedCounter, public TCountableBase {
-        TCounterForPtr(bool derivative = false, EVisibility vis = EVisibility::Public) 
+        TCounterForPtr(bool derivative = false, EVisibility vis = EVisibility::Public)
             : TDeprecatedCounter(0ULL, derivative)
         {
-            Visibility_ = vis; 
+            Visibility_ = vis;
         }
 
         TCounterForPtr(const TCounterForPtr&) = delete;
@@ -99,15 +99,15 @@ namespace NMonitoring {
         void Accept(
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const override {
-            if (IsVisible(Visibility(), consumer.Visibility())) { 
-                consumer.OnCounter(labelName, labelValue, this); 
-            } 
+            if (IsVisible(Visibility(), consumer.Visibility())) {
+                consumer.OnCounter(labelName, labelValue, this);
+            }
         }
 
-        TCountableBase::EVisibility Visibility() const override { 
-            return Visibility_; 
-        } 
- 
+        TCountableBase::EVisibility Visibility() const override {
+            return Visibility_;
+        }
+
         using TDeprecatedCounter::operator++;
         using TDeprecatedCounter::operator--;
         using TDeprecatedCounter::operator+=;
@@ -116,25 +116,25 @@ namespace NMonitoring {
         using TDeprecatedCounter::operator!;
     };
 
-    struct TExpiringCounter: public TCounterForPtr { 
-        explicit TExpiringCounter(bool derivative = false, EVisibility vis = EVisibility::Public) 
-            : TCounterForPtr{derivative} 
-        { 
-            Visibility_ = vis; 
-        } 
- 
-        void Reset() { 
+    struct TExpiringCounter: public TCounterForPtr {
+        explicit TExpiringCounter(bool derivative = false, EVisibility vis = EVisibility::Public)
+            : TCounterForPtr{derivative}
+        {
+            Visibility_ = vis;
+        }
+
+        void Reset() {
             TDeprecatedCounter::operator=(0);
-        } 
-    }; 
- 
+        }
+    };
+
     struct THistogramCounter: public TCountableBase {
         explicit THistogramCounter(
             IHistogramCollectorPtr collector, bool derivative = true, EVisibility vis = EVisibility::Public)
             : Collector_(std::move(collector))
             , Derivative_(derivative)
         {
-            Visibility_ = vis; 
+            Visibility_ = vis;
         }
 
         void Collect(i64 value) {
@@ -157,9 +157,9 @@ namespace NMonitoring {
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const override
         {
-            if (IsVisible(Visibility(), consumer.Visibility())) { 
+            if (IsVisible(Visibility(), consumer.Visibility())) {
                 consumer.OnHistogram(labelName, labelValue, Collector_->Snapshot(), Derivative_);
-            } 
+            }
         }
 
         void Reset() {
@@ -190,7 +190,7 @@ namespace NMonitoring {
     typedef TIntrusivePtr<TDynamicCounters> TDynamicCounterPtr;
     struct TDynamicCounters: public TCountableBase {
     public:
-        using TCounterPtr = TIntrusivePtr<TCounterForPtr>; 
+        using TCounterPtr = TIntrusivePtr<TCounterForPtr>;
         using TOnLookupPtr = void (*)(const char *methodName, const TString &name, const TString &value);
 
     private:
@@ -225,14 +225,14 @@ namespace NMonitoring {
         };
 
         using TCounters = TMap<TChildId, TCountablePtr>;
-        using TLabels = TVector<TChildId>; 
- 
-        /// XXX: hack for deferred removal of expired counters. Remove once Output* functions are not used for serialization 
-        mutable TCounters Counters; 
+        using TLabels = TVector<TChildId>;
+
+        /// XXX: hack for deferred removal of expired counters. Remove once Output* functions are not used for serialization
+        mutable TCounters Counters;
         mutable TAtomic ExpiringCount = 0;
 
     public:
-        TDynamicCounters(TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
+        TDynamicCounters(TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
         TDynamicCounters(const TDynamicCounters *origin)
             : LookupCounter(origin->LookupCounter)
@@ -270,56 +270,56 @@ namespace NMonitoring {
             return items;
         }
 
-        TCounterPtr GetCounter( 
-            const TString& value, 
-            bool derivative = false, 
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
-        TCounterPtr GetNamedCounter( 
-            const TString& name, 
-            const TString& value, 
-            bool derivative = false, 
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
+        TCounterPtr GetCounter(
+            const TString& value,
+            bool derivative = false,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
-        THistogramPtr GetHistogram( 
-            const TString& value, 
-            IHistogramCollectorPtr collector, 
-            bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
-        THistogramPtr GetNamedHistogram( 
-            const TString& name, 
-            const TString& value, 
-            IHistogramCollectorPtr collector, 
-            bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
-        // These counters will be automatically removed from the registry 
-        // when last reference to the counter expires. 
-        TCounterPtr GetExpiringCounter( 
-            const TString& value, 
-            bool derivative = false, 
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
-        TCounterPtr GetExpiringNamedCounter( 
-            const TString& name, 
-            const TString& value, 
-            bool derivative = false, 
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
+        TCounterPtr GetNamedCounter(
+            const TString& name,
+            const TString& value,
+            bool derivative = false,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
-        THistogramPtr GetExpiringHistogram( 
-            const TString& value, 
-            IHistogramCollectorPtr collector, 
+        THistogramPtr GetHistogram(
+            const TString& value,
+            IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
-        THistogramPtr GetExpiringNamedHistogram( 
-            const TString& name, 
-            const TString& value, 
-            IHistogramCollectorPtr collector, 
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
+        THistogramPtr GetNamedHistogram(
+            const TString& name,
+            const TString& value,
+            IHistogramCollectorPtr collector,
             bool derivative = true,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public); 
- 
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
+        // These counters will be automatically removed from the registry
+        // when last reference to the counter expires.
+        TCounterPtr GetExpiringCounter(
+            const TString& value,
+            bool derivative = false,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
+        TCounterPtr GetExpiringNamedCounter(
+            const TString& name,
+            const TString& value,
+            bool derivative = false,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
+        THistogramPtr GetExpiringHistogram(
+            const TString& value,
+            IHistogramCollectorPtr collector,
+            bool derivative = true,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
+        THistogramPtr GetExpiringNamedHistogram(
+            const TString& name,
+            const TString& value,
+            IHistogramCollectorPtr collector,
+            bool derivative = true,
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
+
         TCounterPtr FindCounter(const TString& value) const;
         TCounterPtr FindNamedCounter(const TString& name, const TString& value) const;
 
@@ -339,14 +339,14 @@ namespace NMonitoring {
         // Recursively reset all/deriv counters to 0.
         void ResetCounters(bool derivOnly = false);
 
-        void RegisterSubgroup(const TString& name, 
-            const TString& value, 
-            TIntrusivePtr<TDynamicCounters> subgroup); 
- 
+        void RegisterSubgroup(const TString& name,
+            const TString& value,
+            TIntrusivePtr<TDynamicCounters> subgroup);
+
         void OutputHtml(IOutputStream& os) const;
         void EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const;
- 
-        // mostly for debugging purposes -- use accept with encoder instead 
+
+        // mostly for debugging purposes -- use accept with encoder instead
         void OutputPlainText(IOutputStream& os, const TString& indent = "") const;
 
         void Accept(
@@ -361,8 +361,8 @@ namespace NMonitoring {
             return counters;
         }
 
-        void RegisterCountable(const TString& name, const TString& value, TCountablePtr countable); 
-        void RemoveExpired() const; 
+        void RegisterCountable(const TString& name, const TString& value, TCountablePtr countable);
+        void RemoveExpired() const;
 
         template <bool expiring, class TCounterType, class... TArgs>
         TCountablePtr GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args);

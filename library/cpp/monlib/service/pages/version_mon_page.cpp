@@ -6,7 +6,7 @@
 
 using namespace NMonitoring;
 
-void TVersionMonPage::OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) { 
+void TVersionMonPage::OutputText(IOutputStream& out, NMonitoring::IMonHttpRequest&) {
     const char* version = GetProgramSvnVersion();
     out << version;
     if (!TString(version).EndsWith("\n"))

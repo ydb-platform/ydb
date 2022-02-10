@@ -15,9 +15,9 @@ namespace NMonitoring {
                 case EMetricType::IGAUGE:
                     return NProto::IGAUGE;
                 case EMetricType::HIST:
-                    return NProto::HISTOGRAM; 
+                    return NProto::HISTOGRAM;
                 case EMetricType::HIST_RATE:
-                    return NProto::HIST_RATE; 
+                    return NProto::HIST_RATE;
                 case EMetricType::DSUMMARY:
                     return NProto::DSUMMARY;
                 case EMetricType::LOGHIST:

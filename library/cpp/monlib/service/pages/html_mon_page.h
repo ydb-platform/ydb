@@ -12,12 +12,12 @@ namespace NMonitoring {
         {
         }
 
-        void Output(NMonitoring::IMonHttpRequest& request) override; 
+        void Output(NMonitoring::IMonHttpRequest& request) override;
 
-        void NotFound(NMonitoring::IMonHttpRequest& request) const; 
-        void NoContent(NMonitoring::IMonHttpRequest& request) const; 
+        void NotFound(NMonitoring::IMonHttpRequest& request) const;
+        void NoContent(NMonitoring::IMonHttpRequest& request) const;
 
-        virtual void OutputContent(NMonitoring::IMonHttpRequest& request) = 0; 
+        virtual void OutputContent(NMonitoring::IMonHttpRequest& request) = 0;
 
         bool OutputTableSorterJsCss;
     };

@@ -198,7 +198,7 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, TString topic, con
 
 void TPersQueueCacheL2::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx)
 {
-    const auto& params = ev->Get()->Request.GetParams(); 
+    const auto& params = ev->Get()->Request.GetParams();
     if (params.Has("submit")) {
         TString strParam = params.Get("newCacheLimit");
         if (strParam.size()) {

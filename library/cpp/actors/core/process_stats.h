@@ -5,10 +5,10 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NMonitoring { 
+namespace NMonitoring {
     class TMetricRegistry;
-} 
- 
+}
+
 namespace NActors {
     struct TProcStat {
         ui64 Rss;

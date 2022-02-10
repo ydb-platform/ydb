@@ -73,7 +73,7 @@ public:
     }
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams()); 
+        const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (params.Has("path")) {
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());

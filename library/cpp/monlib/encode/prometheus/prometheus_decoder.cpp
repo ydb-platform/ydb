@@ -46,24 +46,24 @@ namespace NMonitoring {
             return sb;
         }
 
-        template <typename T, typename U> 
-        bool TryStaticCast(U val, T& out) { 
-            static_assert(std::is_arithmetic_v<U>); 
+        template <typename T, typename U>
+        bool TryStaticCast(U val, T& out) {
+            static_assert(std::is_arithmetic_v<U>);
             if constexpr (std::is_floating_point_v<T> || std::is_floating_point_v<U>) {
                 if (val > MaxFloor<T>() || val < -MaxFloor<T>()) {
-                    return false; 
-                } 
- 
-            } else { 
-                if (val > Max<T>() || val < Min<T>()) { 
-                    return false; 
-                } 
-            } 
- 
-            out = static_cast<T>(val); 
-            return true; 
-        } 
- 
+                    return false;
+                }
+
+            } else {
+                if (val > Max<T>() || val < Min<T>()) {
+                    return false;
+                }
+            }
+
+            out = static_cast<T>(val);
+            return true;
+        }
+
         ///////////////////////////////////////////////////////////////////////
         // THistogramBuilder
         ///////////////////////////////////////////////////////////////////////
@@ -298,9 +298,9 @@ namespace NMonitoring {
                                 HistogramBuilder_.SetName(baseName);
                             }
 
-                            TBucketValue bucketVal; 
-                            Y_PARSER_ENSURE(TryStaticCast(value, bucketVal), "Cannot convert " << value << " to bucket value type"); 
-                            HistogramBuilder_.AddBucket(bound, bucketVal); 
+                            TBucketValue bucketVal;
+                            Y_PARSER_ENSURE(TryStaticCast(value, bucketVal), "Cannot convert " << value << " to bucket value type");
+                            HistogramBuilder_.AddBucket(bound, bucketVal);
                             HistogramBuilder_.SetTime(time);
                             HistogramBuilder_.SetLabels(std::move(labels));
                         } else if (NPrometheus::IsCount(name)) {
@@ -398,7 +398,7 @@ namespace NMonitoring {
                 CurrentByte_ = Data_[CurrentPos_++];
             }
 
-            Y_FORCE_INLINE bool IsSpace(char ch) { 
+            Y_FORCE_INLINE bool IsSpace(char ch) {
                 return ch == ' ' || ch == '\t';
             }
 
@@ -414,7 +414,7 @@ namespace NMonitoring {
             }
 
             void SkipSpaces() {
-                while (HasRemaining() && IsSpace(CurrentByte_)) { 
+                while (HasRemaining() && IsSpace(CurrentByte_)) {
                     ReadNextByteUnsafe();
                 }
             }
@@ -428,7 +428,7 @@ namespace NMonitoring {
             TStringBuf ReadToken() {
                 Y_VERIFY_DEBUG(CurrentPos_ > 0);
                 size_t begin = CurrentPos_ - 1; // read first byte again
-                while (HasRemaining() && !IsSpace(CurrentByte_) && CurrentByte_ != '\n') { 
+                while (HasRemaining() && !IsSpace(CurrentByte_) && CurrentByte_ != '\n') {
                     ReadNextByteUnsafe();
                 }
                 return TokenFromPos(begin);
@@ -529,11 +529,11 @@ namespace NMonitoring {
             }
 
             void ConsumeCounter(TStringBuf name, const TLabelsMap& labels, TInstant time, double value) {
-                i64 intValue{0}; 
-                // not nan 
-                if (value == value) { 
-                    Y_PARSER_ENSURE(TryStaticCast(value, intValue), "value " << value << " is out of range"); 
-                } 
+                i64 intValue{0};
+                // not nan
+                if (value == value) {
+                    Y_PARSER_ENSURE(TryStaticCast(value, intValue), "value " << value << " is out of range");
+                }
 
                 // see https://st.yandex-team.ru/SOLOMON-4142 for more details
                 // why we convert Prometheus COUNTER into Solomon RATE

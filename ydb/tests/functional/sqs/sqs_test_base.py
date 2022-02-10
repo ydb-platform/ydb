@@ -11,7 +11,7 @@ import socket
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
 
 import ydb.tests.library.common.yatest_common as yatest_common
-
+ 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -35,12 +35,12 @@ IS_FIFO_PARAMS = {
     'ids': ['fifo', 'std'],
 }
 
-POLLING_PARAMS = {
-    'argnames': 'polling_wait_timeout',
-    'argvalues': [0, 1],
-    'ids': ['short_polling', 'long_polling'],
-}
-
+POLLING_PARAMS = { 
+    'argnames': 'polling_wait_timeout', 
+    'argvalues': [0, 1], 
+    'ids': ['short_polling', 'long_polling'], 
+} 
+ 
 STOP_NODE_PARAMS = {
     'argnames': 'stop_node',
     'argvalues': [True, False],
@@ -182,15 +182,15 @@ class KikimrSqsTestBase(object):
         max_queue_name_length = 80 - len('.fifo')
         if len(self.queue_name) > max_queue_name_length:
             self.queue_name = self.queue_name[:max_queue_name_length]
-        self._msg_body_template = self._username + '-{}'
-        self._setup_user(self._username)
+        self._msg_body_template = self._username + '-{}' 
+        self._setup_user(self._username) 
         self._sqs_apis = []
         for node in self.cluster_nodes:
             self._sqs_apis.append(
                 SqsHttpApi(
                     'localhost',
                     node.sqs_port,
-                    self._username,
+                    self._username, 
                     raise_on_error=True,
                     timeout=None
                 )
@@ -312,7 +312,7 @@ class KikimrSqsTestBase(object):
             'user',
             '-u', 'metauser',
             '-n', _username,
-        ] + self._sqs_server_opts
+        ] + self._sqs_server_opts 
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:
@@ -325,17 +325,17 @@ class KikimrSqsTestBase(object):
                 return
         raise RuntimeError("Failed to create SQS user")
 
-    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None):
+    def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None): 
         api = SqsHttpApi(self.cluster.nodes[1].host,
                          self.cluster_nodes[0].sqs_port,
                          user_name,
-                         raise_on_error=raise_on_error,
-                         timeout=None,
-                         security_token=security_token,
-                         force_private=force_private,
-                         iam_token=iam_token,
-                         folder_id=folder_id
-                         )
+                         raise_on_error=raise_on_error, 
+                         timeout=None, 
+                         security_token=security_token, 
+                         force_private=force_private, 
+                         iam_token=iam_token, 
+                         folder_id=folder_id 
+                         ) 
         return api
 
     def _make_kikimr_driver(self, node_index=0):
@@ -386,8 +386,8 @@ class KikimrSqsTestBase(object):
         if attributes is None:
             attributes = dict()
         logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
-        assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
-        assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
+        assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation' 
+        assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode' 
         while retries:
             retries -= 1
             try:
@@ -397,11 +397,11 @@ class KikimrSqsTestBase(object):
                     cmd = [
                         get_sqs_client_path(),
                         'create',  # create queue command
-                        '-u', self._username,
-                        '--shards', str(shards) if shards is not None else '2',
+                        '-u', self._username, 
+                        '--shards', str(shards) if shards is not None else '2', 
                         '--partitions', '1',
                         '--queue-name', queue_name,
-                    ] + self._sqs_server_opts
+                    ] + self._sqs_server_opts 
                     execute = yatest_common.execute(cmd)
                     self.queue_url = execute.std_out
                     self.queue_url = self.queue_url.strip()
@@ -626,29 +626,29 @@ class KikimrSqsTestBase(object):
                 logging.debug('Connection error: trying to enable tablets on node {} in 1 second'.format(node_index))
                 time.sleep(1)  # wait node to start
 
-    def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name):
+    def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name): 
         table_path = '{}/{}'.format(self.sqs_root, user_name)
-        if queue_name is not None:
-            table_path += '/{}'.format(queue_name)
-        if queue_version is not None and queue_version != 0:
-            table_path += '/v{}'.format(queue_version)
-        if shard is not None:
-            table_path += '/{}'.format(shard)
-
-        return table_path + '/{}'.format(table_name)
-
-    def _get_queue_version_number(self, user_name, queue_name):
+        if queue_name is not None: 
+            table_path += '/{}'.format(queue_name) 
+        if queue_version is not None and queue_version != 0: 
+            table_path += '/v{}'.format(queue_version) 
+        if shard is not None: 
+            table_path += '/{}'.format(shard) 
+ 
+        return table_path + '/{}'.format(table_name) 
+ 
+    def _get_queue_version_number(self, user_name, queue_name): 
         table_path = '{}/.Queues'.format(self.sqs_root)
         data_result_sets = self._execute_yql_query('SELECT Version FROM `{}` WHERE Account=\'{}\' AND QueueName=\'{}\''.format(table_path, user_name, queue_name))
-        assert_that(len(data_result_sets), equal_to(1))
-        assert_that(len(data_result_sets[0].rows), equal_to(1))
-
-        version = data_result_sets[0].rows[0]['Version']
-        if version is None:
-            return 0
-        else:
-            return int(version)
-
+        assert_that(len(data_result_sets), equal_to(1)) 
+        assert_that(len(data_result_sets[0].rows), equal_to(1)) 
+ 
+        version = data_result_sets[0].rows[0]['Version'] 
+        if version is None: 
+            return 0 
+        else: 
+            return int(version) 
+ 
     def _get_queue_master_tablet_id(self, user_name_param=None, queue_name_param=None):
         user_name = user_name_param if user_name_param else self._username
         queue_name = queue_name_param if queue_name_param else self.queue_name
@@ -696,12 +696,12 @@ class KikimrSqsTestBase(object):
             queue_name = self.queue_name
         is_fifo = queue_name.endswith('.fifo')
 
-        queue_version = self._get_queue_version_number(self._username, queue_name)
-
+        queue_version = self._get_queue_version_number(self._username, queue_name) 
+ 
         if is_fifo:
-            self._check_fifo_queue_is_empty(queue_name, queue_version)
+            self._check_fifo_queue_is_empty(queue_name, queue_version) 
         else:
-            self._check_std_queue_is_empty(queue_name, queue_version)
+            self._check_std_queue_is_empty(queue_name, queue_version) 
 
     def _get_table_lines_count(self, table_path):
         data_result_sets = self._execute_yql_query('SELECT COUNT(*) AS count FROM `{}`;'.format(table_path))
@@ -710,15 +710,15 @@ class KikimrSqsTestBase(object):
         logging.debug('Received count result for table {}: {}'.format(table_path, data_result_sets[0].rows[0]))
         return data_result_sets[0].rows[0]['count']
 
-    def _check_std_queue_is_empty(self, queue_name, queue_version):
+    def _check_std_queue_is_empty(self, queue_name, queue_version): 
         shards = self._get_queue_shards_count(self._username, queue_name, queue_version)
         assert_that(shards, not_(equal_to(0)))
         for shard in range(shards):
-            self._check_std_queue_shard_is_empty(queue_name, queue_version, shard)
+            self._check_std_queue_shard_is_empty(queue_name, queue_version, shard) 
 
-    def _check_std_queue_shard_is_empty(self, queue_name, queue_version, shard):
+    def _check_std_queue_shard_is_empty(self, queue_name, queue_version, shard): 
         def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name)
+            return self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name) 
 
         def get_lines_count(table_name):
             return self._get_table_lines_count(get_table_path(table_name))
@@ -728,9 +728,9 @@ class KikimrSqsTestBase(object):
         assert_that(get_lines_count('Messages'), equal_to(0))
         assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
 
-    def _check_fifo_queue_is_empty(self, queue_name, queue_version):
+    def _check_fifo_queue_is_empty(self, queue_name, queue_version): 
         def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, None, table_name)
+            return self._smart_make_table_path(self._username, queue_name, queue_version, None, table_name) 
 
         def get_lines_count(table_name):
             return self._get_table_lines_count(get_table_path(table_name))

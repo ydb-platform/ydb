@@ -209,8 +209,8 @@ protected:
         config.Opts->AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
         config.Opts->AddLongOption("pq-file", "PersQueue config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("pqcd-file", "PersQueue cluster discovery config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("pqcd-file", "PersQueue cluster discovery config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("auth-file", "authorization configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH");
@@ -422,8 +422,8 @@ protected:
         OPTION("dyn-nodes-file", DynamicNameserviceConfig);
         OPTION("cms-file", CmsConfig);
         OPTION("pq-file", PQConfig);
-        OPTION("pqcd-file", PQClusterDiscoveryConfig);
-        OPTION("netclassifier-file", NetClassifierConfig);
+        OPTION("pqcd-file", PQClusterDiscoveryConfig); 
+        OPTION("netclassifier-file", NetClassifierConfig); 
         OPTION("auth-file", AuthConfig);
         OPTION_MERGE("auth-token-file", AuthConfig);
         OPTION("key-file", KeyConfig);

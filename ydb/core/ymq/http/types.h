@@ -14,10 +14,10 @@ struct TSqsHttpResponse {
     TString ContentType;
     int     StatusCode = 0;
 
-    TString FolderId;
-    TString ResourceId;
+    TString FolderId; 
+    TString ResourceId; 
     bool    IsFifo = false;
-
+ 
     TSqsHttpResponse() = default;
     TSqsHttpResponse(const TString& body, int status, const TString& contentType = XML_CONTENT_TYPE);
 };

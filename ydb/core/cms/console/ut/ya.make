@@ -34,7 +34,7 @@ SRCS(
     immediate_controls_configurator_ut.cpp
     log_settings_configurator_ut.cpp
     modifications_validator_ut.cpp
-    net_classifier_updater_ut.cpp
+    net_classifier_updater_ut.cpp 
 )
 
 END()

@@ -72,7 +72,7 @@ private:
     TUserInfoPtr MutableUser(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
     void RemoveUser(const TString& userName);
     std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
-                                                        const TString& customName, const TString& folderId, const ui64 version,
+                                                        const TString& customName, const TString& folderId, const ui64 version, 
                                                         const ui64 shardsCount, const TInstant createdTimestamp);
 
     void AnswerNoUserToRequests();
@@ -91,16 +91,16 @@ private:
     TUserInfoPtr GetUserOrWait(TAutoPtr<TEvent>& ev);
 
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev);
-    void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev);
+    void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev); 
     void InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev);
     void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev);
-    void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev);
+    void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev); 
 
     void InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev, const TUserInfoPtr& userInfo);
-    void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev, const TUserInfoPtr& userInfo);
+    void InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev, const TUserInfoPtr& userInfo); 
     void InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev, const TUserInfoPtr& userInfo);
     void InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr&& ev, const TUserInfoPtr& userInfo);
-    void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev, const TUserInfoPtr& userInfo);
+    void InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev, const TUserInfoPtr& userInfo); 
 
     template <class TMultimap>
     size_t MoveUserRequests(const TUserInfoPtr& userInfo, TMultimap& map); // returns moved requests count
@@ -128,7 +128,7 @@ private:
     void AnswerCountQueuesRequests(const TUserInfoPtr& user);
 
     void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const;
-
+ 
     void MakeAndRegisterYcEventsProcessor();
 
 private:
@@ -156,8 +156,8 @@ private:
     THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetConfiguration::TPtr> GetConfigurationRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetQueueId::TPtr> GetQueueIdRequests_; // user name -> request
-    THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // user name -> request
-    THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // user name -> request
+    THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // user name -> request 
+    THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // user name -> request 
 
 
     struct TYcSearchEventsConfig {

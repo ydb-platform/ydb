@@ -41,7 +41,7 @@ const TString INFLY_INVALIDATION_REASON_DELETED = "MessageDeleted";
 TQueueLeader::TQueueLeader(TString userName, TString queueName, TString folderId, TString rootUrl, TIntrusivePtr<TQueueCounters> counters, TIntrusivePtr<TUserCounters> userCounters, const TActorId& schemeCache, const TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions>& quoterResourcesForUser)
     : UserName_(std::move(userName))
     , QueueName_(std::move(queueName))
-    , FolderId_(std::move(folderId))
+    , FolderId_(std::move(folderId)) 
     , RootUrl_(std::move(rootUrl))
     , SchemeCache_(schemeCache)
     , Counters_(std::move(counters))
@@ -260,13 +260,13 @@ void TQueueLeader::HandleExecuteWhileWorking(TSqsEvents::TEvExecute::TPtr& ev) {
 void TQueueLeader::Prepare(TSqsEvents::TEvExecute::TPtr& ev) {
     const TSqsEvents::TEvExecute& req = *ev->Get();
     RLOG_SQS_REQ_DEBUG(req.RequestId, "Preparing query(idx=" << req.QueryIdx << ")");
-
+ 
     TExecutorBuilder(SelfId(), req.RequestId)
         .User(UserName_)
         .Queue(QueueName_)
         .Shard(req.Shard)
-        .QueueVersion(QueueVersion_)
-        .Fifo(IsFifoQueue_)
+        .QueueVersion(QueueVersion_) 
+        .Fifo(IsFifoQueue_) 
         .Mode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE)
         .QueryId(req.QueryIdx)
         .RetryOnTimeout(req.RetryOnTimeout)
@@ -337,8 +337,8 @@ void TQueueLeader::ExecuteRequest(TSqsEvents::TEvExecute::TPtr& ev, const TStrin
         .User(UserName_)
         .Queue(QueueName_)
         .Shard(req.Shard)
-        .QueueVersion(QueueVersion_)
-        .Fifo(IsFifoQueue_)
+        .QueueVersion(QueueVersion_) 
+        .Fifo(IsFifoQueue_) 
         .QueryId(req.QueryIdx)
         .Bin(compiled)
         .RetryOnTimeout(req.RetryOnTimeout)
@@ -556,7 +556,7 @@ void TQueueLeader::OnFifoGroupLocked(const TString& requestId, const TSqsEvents:
             auto& msg = reqInfo.LockedFifoMessages.back();
             msg.RandomId = offsets[i]["RandomId"];
             msg.Offset = offsets[i]["Head"];
-            msg.GroupId = offsets[i]["GroupId"];
+            msg.GroupId = offsets[i]["GroupId"]; 
         }
 
         if (truncated) {
@@ -579,15 +579,15 @@ void TQueueLeader::OnFifoGroupLocked(const TString& requestId, const TSqsEvents:
 }
 
 void TQueueLeader::ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqInfo) {
-    ui32 maxReceiveCount = 0; // not set
+    ui32 maxReceiveCount = 0; // not set 
     if (Cfg().GetEnableDeadLetterQueues() && DlqInfo_) {
-        const auto& dlqInfo(*DlqInfo_);
-        if (dlqInfo.DlqName && dlqInfo.QueueId) {
-            // dlq is set and resolved
-            maxReceiveCount = dlqInfo.MaxReceiveCount;
-        }
-    }
-
+        const auto& dlqInfo(*DlqInfo_); 
+        if (dlqInfo.DlqName && dlqInfo.QueueId) { 
+            // dlq is set and resolved 
+            maxReceiveCount = dlqInfo.MaxReceiveCount; 
+        } 
+    } 
+ 
     TExecutorBuilder builder(SelfId(), reqInfo.Event->Get()->RequestId);
     builder
         .User(UserName_)
@@ -600,46 +600,46 @@ void TQueueLeader::ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqIn
 
     NClient::TWriteValue params = builder.ParamsValue();
     params["NOW"] = ui64(TActivationContext::Now().MilliSeconds());
-    ui64 index = 0;
-
-    THashSet<TString> usedGroups; // mitigates extremely rare bug with duplicated groups during locking
+    ui64 index = 0; 
+ 
+    THashSet<TString> usedGroups; // mitigates extremely rare bug with duplicated groups during locking 
     for (const auto& msg : reqInfo.LockedFifoMessages) {
-        if (usedGroups.insert(msg.GroupId).second) {
-            auto key = params["KEYS"].AddListItem();
+        if (usedGroups.insert(msg.GroupId).second) { 
+            auto key = params["KEYS"].AddListItem(); 
 
-            key["RandomId"] = msg.RandomId;
-            key["Offset"]   = msg.Offset;
-
-            if (maxReceiveCount) {
-                key["GroupId"].Bytes(msg.GroupId);
-                key["Index"] = index++;
-            }
-        }
+            key["RandomId"] = msg.RandomId; 
+            key["Offset"]   = msg.Offset; 
+ 
+            if (maxReceiveCount) { 
+                key["GroupId"].Bytes(msg.GroupId); 
+                key["Index"] = index++; 
+            } 
+        } 
     }
 
-    if (maxReceiveCount) {
-        // perform heavy read and move transaction (DLQ)
-        Y_VERIFY(DlqInfo_);
-
+    if (maxReceiveCount) { 
+        // perform heavy read and move transaction (DLQ) 
+        Y_VERIFY(DlqInfo_); 
+ 
         const TQueuePath currentQueuePath = { Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_ };
         const TQueuePath deadLetterQueuePath = { Cfg().GetRoot(), UserName_, DlqInfo_->QueueId, DlqInfo_->QueueVersion };
-
-        const TString transactionText = Sprintf(GetFifoQueryById(READ_OR_REDRIVE_MESSAGE_ID),
-                                                currentQueuePath.GetVersionedQueuePath().c_str(),
-                                                0,
-                                                deadLetterQueuePath.GetVersionedQueuePath().c_str());
-        builder
-            .Text(transactionText)
-            .Params()
-                .Uint32("MAX_RECEIVE_COUNT", maxReceiveCount)
-                .Uint64("RANDOM_ID",  RandomNumber<ui64>());
-    } else {
-        builder
-            .QueryId(READ_MESSAGE_ID);
-    }
-
-    const bool usedDLQ = maxReceiveCount > 0;
-
+ 
+        const TString transactionText = Sprintf(GetFifoQueryById(READ_OR_REDRIVE_MESSAGE_ID), 
+                                                currentQueuePath.GetVersionedQueuePath().c_str(), 
+                                                0, 
+                                                deadLetterQueuePath.GetVersionedQueuePath().c_str()); 
+        builder 
+            .Text(transactionText) 
+            .Params() 
+                .Uint32("MAX_RECEIVE_COUNT", maxReceiveCount) 
+                .Uint64("RANDOM_ID",  RandomNumber<ui64>()); 
+    } else { 
+        builder 
+            .QueryId(READ_MESSAGE_ID); 
+    } 
+ 
+    const bool usedDLQ = maxReceiveCount > 0; 
+ 
     builder.OnExecuted([this, requestId = reqInfo.Event->Get()->RequestId, usedDLQ] (const TSqsEvents::TEvExecuted::TRecord& ev) {
         OnFifoMessagesRead(requestId, ev, usedDLQ);
     });
@@ -657,24 +657,24 @@ void TQueueLeader::OnFifoMessagesRead(const TString& requestId, const TSqsEvents
         const TValue value(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
         const TValue list(value["result"]);
 
-        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
-            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
+        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) { 
+            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount); 
 
             const i64 newMessagesCount = value["newMessagesCount"];
             Y_VERIFY(newMessagesCount >= 0);
             auto& shardInfo = Shards_[0];
             shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
-        }
-
+        } 
+ 
         reqInfo.Answer->Messages.resize(list.Size());
         for (size_t i = 0; i < list.Size(); ++i) {
-            const TValue& data = list[i]["SourceDataFieldsRead"];
-            const TValue& msg  = list[i]["SourceMessageFieldsRead"];
+            const TValue& data = list[i]["SourceDataFieldsRead"]; 
+            const TValue& msg  = list[i]["SourceMessageFieldsRead"]; 
             const ui64 receiveTimestamp = msg["FirstReceiveTimestamp"];
             auto& msgAnswer = reqInfo.Answer->Messages[i];
 
             msgAnswer.FirstReceiveTimestamp = (receiveTimestamp ? TInstant::MilliSeconds(receiveTimestamp) : reqInfo.LockSendTs);
-            msgAnswer.ReceiveCount = ui32(msg["ReceiveCount"]) + 1; // since the query returns old receive count value
+            msgAnswer.ReceiveCount = ui32(msg["ReceiveCount"]) + 1; // since the query returns old receive count value 
             msgAnswer.MessageId = data["MessageId"];
             msgAnswer.MessageDeduplicationId = data["DedupId"];
             msgAnswer.MessageGroupId = msg["GroupId"];
@@ -701,15 +701,15 @@ void TQueueLeader::OnFifoMessagesRead(const TString& requestId, const TSqsEvents
             }
         }
     } else {
-        const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(ev.GetStatus());
-        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) {
-            // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info
-            DlqInfo_.Clear();
-            reqInfo.Answer->Failed = false;
-            reqInfo.Answer->Messages.clear();
-        } else {
-            reqInfo.Answer->Failed = true;
-        }
+        const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(ev.GetStatus()); 
+        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) { 
+            // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info 
+            DlqInfo_.Clear(); 
+            reqInfo.Answer->Failed = false; 
+            reqInfo.Answer->Messages.clear(); 
+        } else { 
+            reqInfo.Answer->Failed = true; 
+        } 
     }
 
     Reply(reqInfo);
@@ -756,17 +756,17 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
         bool deleted = true;
         bool deadlineChanged = true;
         const bool exists = (*messageRecord)["Exists"];
-        const auto wasDeadLetterValue = (*messageRecord)["IsDeadLetter"];
-        const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false;
-
+        const auto wasDeadLetterValue = (*messageRecord)["IsDeadLetter"]; 
+        const bool wasDeadLetter = wasDeadLetterValue.HaveValue() ? bool(wasDeadLetterValue) : false; 
+ 
         const bool valid = (*messageRecord)["Valid"];
-        if (exists && !wasDeadLetter) {
+        if (exists && !wasDeadLetter) { 
             const ui64 visibilityDeadlineMs = (*messageRecord)["VisibilityDeadline"];
-            const ui32 receiveCount = (*messageRecord)["ReceiveCount"];
+            const ui32 receiveCount = (*messageRecord)["ReceiveCount"]; 
             const TInstant visibilityDeadline = TInstant::MilliSeconds(visibilityDeadlineMs);
-            // Update actual visibility deadline and receive count even if this message won't be given to user in this request.
+            // Update actual visibility deadline and receive count even if this message won't be given to user in this request. 
             // It prevents such synchronization errors later.
-            reqInfo.ReceiveCandidates.SetVisibilityDeadlineAndReceiveCount(offset, visibilityDeadline, receiveCount);
+            reqInfo.ReceiveCandidates.SetVisibilityDeadlineAndReceiveCount(offset, visibilityDeadline, receiveCount); 
 
             if (valid && reqInfo.ReceiveCandidates.Has(offset)) { // there may be concurrent successful delete message request (purge)
                 reqInfo.Answer->Messages.emplace_back();
@@ -807,8 +807,8 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
                     deleted = false; // Success, not invalidated
                 } else {
                     RLOG_SQS_REQ_WARN(requestId, "Attempted to receive message that was deleted. Shard: " << reqInfo.GetCurrentShard() << ". Offset: " << offset);
-                    deleted = true;
-                }
+                    deleted = true; 
+                } 
             } // else there was concurrent delete (purge) by this leader, => OK
         }
         const bool invalidated = deleted || deadlineChanged;
@@ -819,8 +819,8 @@ void TQueueLeader::OnLoadStdMessageResult(const TString& requestId, const ui64 o
             MarkInflyReloading(reqInfo.GetCurrentShard(), 1, reason);
         }
     } else {
-        reqInfo.LoadError = !ignoreMessageLoadingErrors;
-        // there may be other successful loads
+        reqInfo.LoadError = !ignoreMessageLoadingErrors; 
+        // there may be other successful loads 
     }
 
     if (reqInfo.LoadAnswersLeft == 0) {
@@ -838,21 +838,21 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
     Y_VERIFY(batchIt != batchingState.BatchesExecuting.end());
     auto batch = batchIt->second;
     auto status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus(reply.GetStatus());
-    bool ignoreMessageLoadingErrors = false;
+    bool ignoreMessageLoadingErrors = false; 
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         using NKikimr::NClient::TValue;
         const TValue value(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
         const TValue list(value["result"]);
         Y_VERIFY(list.Size() == batch->Size());
 
-        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) {
-            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount);
+        if (const ui64 movedMessagesCount = value["movedMessagesCount"]) { 
+            ADD_COUNTER(Counters_, MessagesMovedToDLQ, movedMessagesCount); 
 
             const i64 newMessagesCount = value["newMessagesCount"];
             Y_VERIFY(newMessagesCount >= 0);
             shardInfo.MessagesCount = static_cast<ui64>(newMessagesCount);
-        }
-
+        } 
+ 
         THashMap<ui64, const TLoadBatchEntry*> offset2entry;
         offset2entry.reserve(batch->Entries.size());
         for (const TLoadBatchEntry& entry : batch->Entries) {
@@ -867,13 +867,13 @@ void TQueueLeader::OnLoadStdMessagesBatchExecuted(ui64 shard, ui64 batchId, cons
             OnLoadStdMessageResult(entry->second->RequestId, offset, reply, &msg, ignoreMessageLoadingErrors);
         }
     } else {
-        const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(reply.GetStatus());
-        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) {
-            // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info
-            DlqInfo_.Clear();
-            ignoreMessageLoadingErrors = true;
-        }
-
+        const auto errStatus = NKikimr::NTxProxy::TResultStatus::EStatus(reply.GetStatus()); 
+        if (usedDLQ && !NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(errStatus)) { 
+            // it's possible that DLQ was removed, hence it'd be wise to refresh corresponding info 
+            DlqInfo_.Clear(); 
+            ignoreMessageLoadingErrors = true; 
+        } 
+ 
         const TString* prevRequestId = nullptr;
         for (size_t i = 0; i < batch->Size(); ++i) {
             const TLoadBatchEntry& entry = batch->Entries[i];
@@ -1269,10 +1269,10 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
             ShardsCount_ = data["Shards"];
             PartitionsCount_ = data["Partitions"];
             QueueId_ = data["QueueId"];
-            if (data["Version"].HaveValue()) {
-                QueueVersion_ = ui64(data["Version"]);
-            }
-            IsFifoQueue_ = bool(data["FifoQueue"]);
+            if (data["Version"].HaveValue()) { 
+                QueueVersion_ = ui64(data["Version"]); 
+            } 
+            IsFifoQueue_ = bool(data["FifoQueue"]); 
             Shards_.resize(ShardsCount_);
             const auto& cfg = Cfg();
             if (IsFifoQueue_) {
@@ -1362,8 +1362,8 @@ void TQueueLeader::AskQueueAttributes() {
         .Queue(QueueName_)
         .QueueLeader(SelfId())
         .QueryId(INTERNAL_GET_QUEUE_ATTRIBUTES_ID)
-        .QueueVersion(QueueVersion_)
-        .Fifo(IsFifoQueue_)
+        .QueueVersion(QueueVersion_) 
+        .Fifo(IsFifoQueue_) 
         .RetryOnTimeout()
         .OnExecuted([this](const TSqsEvents::TEvExecuted::TRecord& ev) { OnQueueAttributes(ev); })
         .Counters(Counters_)
@@ -1392,22 +1392,22 @@ void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev)
             Counters_->ShowDetailedCounters(TInstant::MilliSeconds(ms));
         }
 
-        // update dead letter queue info
-        const auto& dlqNameVal(attrs["DlqName"]);
-        const auto& maxReceiveCountVal(attrs["MaxReceiveCount"]);
-        if (dlqNameVal.HaveValue() && maxReceiveCountVal.HaveValue()) {
-            TTargetDlqInfo info;
-            info.DlqName = TString(dlqNameVal);
-            info.MaxReceiveCount = ui64(maxReceiveCountVal);
-            if (info.DlqName && info.MaxReceiveCount) {
-                DlqInfo_ = info;
-                // now we have to discover queue id and version
+        // update dead letter queue info 
+        const auto& dlqNameVal(attrs["DlqName"]); 
+        const auto& maxReceiveCountVal(attrs["MaxReceiveCount"]); 
+        if (dlqNameVal.HaveValue() && maxReceiveCountVal.HaveValue()) { 
+            TTargetDlqInfo info; 
+            info.DlqName = TString(dlqNameVal); 
+            info.MaxReceiveCount = ui64(maxReceiveCountVal); 
+            if (info.DlqName && info.MaxReceiveCount) { 
+                DlqInfo_ = info; 
+                // now we have to discover queue id and version 
                 Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId("DLQ", UserName_, info.DlqName, FolderId_));
-            } else {
-                DlqInfo_.Clear();
-            }
-        }
-
+            } else { 
+                DlqInfo_.Clear(); 
+            } 
+        } 
+ 
         QueueAttributes_ = attributes;
         AttributesUpdateTime_ = TActivationContext::Now();
         for (auto& req : GetConfigurationRequests_) {
@@ -1423,26 +1423,26 @@ void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev)
 }
 
 void TQueueLeader::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
-    if (!DlqInfo_) {
-        return;
-    }
-
-    if (ev->Get()->Failed) {
+    if (!DlqInfo_) { 
+        return; 
+    } 
+ 
+    if (ev->Get()->Failed) { 
         LOG_SQS_DEBUG("Dlq discovering failed");
-    } else {
-        if (ev->Get()->Exists) {
-            DlqInfo_->QueueId = ev->Get()->QueueId;
-            DlqInfo_->QueueVersion = ev->Get()->Version;
-            DlqInfo_->ShardsCount = ev->Get()->ShardsCount;
-
+    } else { 
+        if (ev->Get()->Exists) { 
+            DlqInfo_->QueueId = ev->Get()->QueueId; 
+            DlqInfo_->QueueVersion = ev->Get()->Version; 
+            DlqInfo_->ShardsCount = ev->Get()->ShardsCount; 
+ 
             LOG_SQS_DEBUG("Discovered DLQ: name: " << DlqInfo_->DlqName << ", maxReceiveCount: " << DlqInfo_->MaxReceiveCount << ", queueId: " << DlqInfo_->QueueId << ", version: " << DlqInfo_->QueueVersion << ", shards count: " << DlqInfo_->ShardsCount);
-            return;
-        }
-    }
-
-    DlqInfo_.Clear(); // something is off
-}
-
+            return; 
+        } 
+    } 
+ 
+    DlqInfo_.Clear(); // something is off 
+} 
+ 
 void TQueueLeader::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     ev->Get()->Call();
 }
@@ -1457,11 +1457,11 @@ void TQueueLeader::StartGatheringMetrics() {
         if (IsDlqQueue_) {
             LOG_SQS_INFO("Stopped periodic message counting for queue " << TLogQueueName(UserName_, QueueName_)
                                                                         << ". Latest dlq notification was at " << LatestDlqNotificationTs_);
-        }
-
+        } 
+ 
         IsDlqQueue_ = false;
-    }
-
+    } 
+ 
     for (ui64 shard = 0; shard < ShardsCount_; ++shard) {
         if (IsFifoQueue_ || IsDlqQueue_) {
             RequestMessagesCountMetrics(shard);
@@ -1746,7 +1746,7 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
                 DelayStatistics_.AddDelayedMessage(delayDeadline, now);
             }
             const ui64 offset = message["Offset"];
-            const ui32 receiveCount = message["ReceiveCount"];
+            const ui32 receiveCount = message["ReceiveCount"]; 
             const TInstant maxVisibilityDeadline = TInstant::MilliSeconds(Max(visibilityDeadlineMs, delayDeadlineMs));
             LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", VisibilityDeadline: " << maxVisibilityDeadline << ", ReceiveCount: " << receiveCount << " }");
             shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], maxVisibilityDeadline, receiveCount));
@@ -1866,7 +1866,7 @@ void TQueueLeader::OnAddedMessagesToInfly(ui64 shard, const TSqsEvents::TEvExecu
             const ui64 delayDeadlineMs = delayDeadlineValue.HaveValue() ? ui64(delayDeadlineValue) : 0;
             const TInstant delayDeadline = TInstant::MilliSeconds(delayDeadlineMs);
             const ui64 offset = message["Offset"];
-            const ui32 receiveCount = 0; // as in transaction
+            const ui32 receiveCount = 0; // as in transaction 
             LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", DelayDeadline: " << delayDeadline << ", ReceiveCount: " << receiveCount << " }");
             shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], delayDeadline, receiveCount));
         }
@@ -2118,17 +2118,17 @@ void TQueueLeader::HandleGetRuntimeQueueAttributesWhileWorking(TSqsEvents::TEvGe
 
 void TQueueLeader::HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr&) {
     LatestDlqNotificationTs_ = TActivationContext::Now();
-
+ 
     if (!IsFifoQueue_ && !IsDlqQueue_) {
-        // we need to start the process only once
+        // we need to start the process only once 
         IsDlqQueue_ = true;
         LOG_SQS_INFO("Started periodic message counting for queue " << TLogQueueName(UserName_, QueueName_)
                                                                     << ". Latest dlq notification was at " << LatestDlqNotificationTs_);
-
+ 
         StartGatheringMetrics();
-    }
-}
-
+    } 
+} 
+ 
 void TQueueLeader::ProcessGetRuntimeQueueAttributes(TGetRuntimeQueueAttributesRequestProcessing& reqInfo) {
     if (reqInfo.ShardProcessFlags.empty()) {
         Y_VERIFY(ShardsCount_ > 0);
@@ -2521,7 +2521,7 @@ void TQueueLeader::TLoadBatchingState::AddRequest(TReceiveMessageBatchRequestPro
 
 void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
     RLOG_SQS_DEBUG(TLogQueueName(leader->UserName_, leader->QueueName_, Shard) << " Executing load batch. BatchId: " << BatchId << ". Size: " << Size());
-
+ 
     TExecutorBuilder builder(SelfId(), RequestId_);
     const auto now = TActivationContext::Now();
     builder
@@ -2538,63 +2538,63 @@ void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
             .Uint64("READ_ID", RandomNumber<ui64>())
             .Uint64("SHARD", Shard);
 
-    ui32 maxReceiveCount = 0; // not set
+    ui32 maxReceiveCount = 0; // not set 
     if (Cfg().GetEnableDeadLetterQueues() && leader->DlqInfo_) {
         const auto& dlqInfo(*leader->DlqInfo_);
-        if (dlqInfo.DlqName && dlqInfo.QueueId) {
-            // dlq is set and resolved
-            maxReceiveCount = dlqInfo.MaxReceiveCount;
-        }
-    }
-
+        if (dlqInfo.DlqName && dlqInfo.QueueId) { 
+            // dlq is set and resolved 
+            maxReceiveCount = dlqInfo.MaxReceiveCount; 
+        } 
+    } 
+ 
     NClient::TWriteValue params = builder.ParamsValue();
     const TString* prevRequestId = nullptr;
-    size_t deadLettersCounter = 0;
-    THashSet<ui64> offsets; // check for duplicates
+    size_t deadLettersCounter = 0; 
+    THashSet<ui64> offsets; // check for duplicates 
     for (const TLoadBatchEntry& entry : Entries) {
-        Y_VERIFY(offsets.insert(entry.Offset).second);
-
+        Y_VERIFY(offsets.insert(entry.Offset).second); 
+ 
         auto item = params["KEYS"].AddListItem();
         item["RandomId"] = entry.RandomId;
         item["Offset"] = entry.Offset;
         item["CurrentVisibilityDeadline"] = ui64(entry.CurrentVisibilityDeadline.MilliSeconds());
         item["VisibilityDeadline"] = ui64((now + entry.VisibilityTimeout).MilliSeconds());
-        if (maxReceiveCount && entry.ReceiveCount >= maxReceiveCount) {
-            item["DlqIndex"] = ui64(deadLettersCounter);
-            ++deadLettersCounter;
-            item["IsDeadLetter"] = true;
-        } else {
-            item["DlqIndex"] = ui64(0);
-            item["IsDeadLetter"] = false;
-        }
-
+        if (maxReceiveCount && entry.ReceiveCount >= maxReceiveCount) { 
+            item["DlqIndex"] = ui64(deadLettersCounter); 
+            ++deadLettersCounter; 
+            item["IsDeadLetter"] = true; 
+        } else { 
+            item["DlqIndex"] = ui64(0); 
+            item["IsDeadLetter"] = false; 
+        } 
+ 
         if (!prevRequestId || *prevRequestId != entry.RequestId) {
             prevRequestId = &entry.RequestId;
             RLOG_SQS_REQ_DEBUG(entry.RequestId, "Send batch transaction to database. BatchId: " << BatchId);
         }
     }
 
-    if (deadLettersCounter) {
-        // perform heavy read and move transaction (DLQ)
+    if (deadLettersCounter) { 
+        // perform heavy read and move transaction (DLQ) 
         Y_VERIFY(leader->DlqInfo_);
         const auto& dlqInfo(*leader->DlqInfo_);
-
+ 
         const TQueuePath currentQueuePath = { Cfg().GetRoot(), leader->UserName_, leader->QueueName_, leader->QueueVersion_ };
         const TQueuePath deadLetterQueuePath = { Cfg().GetRoot(), leader->UserName_, dlqInfo.QueueId, dlqInfo.QueueVersion };
-
-        const TString transactionText = Sprintf(GetStdQueryById(LOAD_OR_REDRIVE_MESSAGE_ID),
-                                                currentQueuePath.GetVersionedQueuePath().c_str(), Shard,
-                                                deadLetterQueuePath.GetVersionedQueuePath().c_str(), Shard % dlqInfo.ShardsCount); // TODO: shard inserts aren't balanced
-
-        builder.Text(transactionText)
-            .Params()
-                .Uint64("DEAD_LETTERS_COUNT", deadLettersCounter);
-    } else {
-        // perform simple read transaction
-        builder.QueryId(LOAD_MESSAGES_ID);
-    }
-
-    const bool usedDLQ = deadLettersCounter;
+ 
+        const TString transactionText = Sprintf(GetStdQueryById(LOAD_OR_REDRIVE_MESSAGE_ID), 
+                                                currentQueuePath.GetVersionedQueuePath().c_str(), Shard, 
+                                                deadLetterQueuePath.GetVersionedQueuePath().c_str(), Shard % dlqInfo.ShardsCount); // TODO: shard inserts aren't balanced 
+ 
+        builder.Text(transactionText) 
+            .Params() 
+                .Uint64("DEAD_LETTERS_COUNT", deadLettersCounter); 
+    } else { 
+        // perform simple read transaction 
+        builder.QueryId(LOAD_MESSAGES_ID); 
+    } 
+ 
+    const bool usedDLQ = deadLettersCounter; 
     builder.OnExecuted([leader, shard = Shard, batchId = BatchId, usedDLQ] (const TSqsEvents::TEvExecuted::TRecord& ev) {
         leader->OnLoadStdMessagesBatchExecuted(shard, batchId, usedDLQ, ev);
     });

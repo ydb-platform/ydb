@@ -53,9 +53,9 @@ union TBasicKikimrServicesMask {
         bool EnableSecurityServices:1;
         bool EnableTabletInfo:1;
         bool EnableQuoterService:1;
-        bool EnablePersQueueClusterDiscovery:1;
-        bool EnableNetClassifier:1;
-        bool EnablePersQueueClusterTracker:1;
+        bool EnablePersQueueClusterDiscovery:1; 
+        bool EnableNetClassifier:1; 
+        bool EnablePersQueueClusterTracker:1; 
         bool EnableSysViewService:1;
         bool EnableMeteringWriter:1;
         bool EnableSchemeBoardMonitoring:1;

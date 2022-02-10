@@ -10,9 +10,9 @@ static const TVector<TColumn> AttributesColumns = {
     TColumn("MaximumMessageSize",        NScheme::NTypeIds::Uint64),
     TColumn("MessageRetentionPeriod",    NScheme::NTypeIds::Uint64),
     TColumn("ReceiveMessageWaitTime",    NScheme::NTypeIds::Uint64),
-    TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64),
-    TColumn("DlqName",                   NScheme::NTypeIds::Utf8),
-    TColumn("DlqArn",                    NScheme::NTypeIds::Utf8),
+    TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64), 
+    TColumn("DlqName",                   NScheme::NTypeIds::Utf8), 
+    TColumn("DlqArn",                    NScheme::NTypeIds::Utf8), 
     TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64),
     TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)};
 
@@ -36,7 +36,7 @@ static const TVector<TColumn> DataColumns = {
     TColumn("Attributes",                NScheme::NTypeIds::String),
     TColumn("Data",                      NScheme::NTypeIds::String),
     TColumn("MessageId",                 NScheme::NTypeIds::String),
-    TColumn("SenderId",                  NScheme::NTypeIds::String),
+    TColumn("SenderId",                  NScheme::NTypeIds::String), 
 };
 
 static const TVector<TColumn> MessagesColumns = {

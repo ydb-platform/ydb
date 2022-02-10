@@ -9,7 +9,7 @@ import pytest
 from hamcrest import assert_that, equal_to, not_none, greater_than, has_item, has_items, raises, is_not, not_, empty, instance_of
 
 from sqs_requests_client import SqsMessageAttribute, SqsSendMessageParams, SqsChangeMessageVisibilityParams
-
+ 
 from sqs_matchers import ReadResponseMatcher, extract_message_ids
 from sqs_test_base import to_bytes
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
@@ -644,10 +644,10 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(
             self._sqs_api.delete_message(self.queue_url, handle), not_none()
         )
-        # check double deletion
-        assert_that(
-            self._sqs_api.delete_message(self.queue_url, handle), not_none()
-        )
+        # check double deletion 
+        assert_that( 
+            self._sqs_api.delete_message(self.queue_url, handle), not_none() 
+        ) 
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
@@ -849,13 +849,13 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         if is_fifo:
             self.queue_name = self.queue_name + '.fifo'
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
-
-        # assert empty response when no attribute names are provided
-        attributes = self._sqs_api.get_queue_attributes(queue_url, attributes=[])
-        assert_that(attributes, equal_to({}))
-
-        # check common case
-        attributes = self._sqs_api.get_queue_attributes(queue_url, attributes=['All'])
+ 
+        # assert empty response when no attribute names are provided 
+        attributes = self._sqs_api.get_queue_attributes(queue_url, attributes=[]) 
+        assert_that(attributes, equal_to({})) 
+ 
+        # check common case 
+        attributes = self._sqs_api.get_queue_attributes(queue_url, attributes=['All']) 
         if is_fifo:
             assert_that(attributes, has_item('FifoQueue'))
             assert_that(attributes, has_item('ContentBasedDeduplication'))
@@ -876,7 +876,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         ))
         assert_that(attributes['ReceiveMessageWaitTimeSeconds'], equal_to('0'))
         if is_fifo:
-            assert_that(attributes['ContentBasedDeduplication'], equal_to('false'))
+            assert_that(attributes['ContentBasedDeduplication'], equal_to('false')) 
 
         self._sqs_api.set_queue_attributes(queue_url, {'ReceiveMessageWaitTimeSeconds': '10', 'MaximumMessageSize': '111111'})
         attributes = self._sqs_api.get_queue_attributes(queue_url)
@@ -886,7 +886,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         if is_fifo:
             self._sqs_api.set_queue_attributes(queue_url, {'ContentBasedDeduplication': 'true'})
             attributes = self._sqs_api.get_queue_attributes(queue_url)
-            assert_that(attributes['ContentBasedDeduplication'], equal_to('true'))
+            assert_that(attributes['ContentBasedDeduplication'], equal_to('true')) 
 
     def test_set_very_big_visibility_timeout(self):
         queue_url = self._create_queue_and_assert(self.queue_name)
@@ -896,7 +896,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
 
         assert_that(
             call_with_very_big_visibility_timeout,
-            raises(RuntimeError, pattern='InvalidAttributeValue')
+            raises(RuntimeError, pattern='InvalidAttributeValue') 
         )
 
     def test_wrong_attribute_name(self):

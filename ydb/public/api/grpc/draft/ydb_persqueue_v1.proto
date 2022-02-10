@@ -1,5 +1,5 @@
 syntax = "proto3";
-option cc_enable_arenas = true;
+option cc_enable_arenas = true; 
 
 package Ydb.PersQueue.V1;
 
@@ -103,9 +103,9 @@ service PersQueueService {
      * Remove read rule command.
      */
     rpc RemoveReadRule(RemoveReadRuleRequest) returns (RemoveReadRuleResponse);
-}
+} 
 
-service ClusterDiscoveryService {
-    // Get PQ clusters which are eligible for the specified Write or Read Sessions
-    rpc DiscoverClusters(Ydb.PersQueue.ClusterDiscovery.DiscoverClustersRequest) returns (Ydb.PersQueue.ClusterDiscovery.DiscoverClustersResponse);
-}
+service ClusterDiscoveryService { 
+    // Get PQ clusters which are eligible for the specified Write or Read Sessions 
+    rpc DiscoverClusters(Ydb.PersQueue.ClusterDiscovery.DiscoverClustersRequest) returns (Ydb.PersQueue.ClusterDiscovery.DiscoverClustersResponse); 
+} 

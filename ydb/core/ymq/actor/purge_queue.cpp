@@ -21,7 +21,7 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutablePurgeQueue()->SetRequestId(RequestId_);
-
+ 
         CopySecurityToken(Request());
     }
 
@@ -121,11 +121,11 @@ private:
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutablePurgeQueue();
             req.MutableAuth()->SetUserName(UserName_);
-
+ 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();
-            }
-
+            } 
+ 
             req.SetQueueName(entry.GetQueueName());
             req.SetId(entry.GetId());
         }

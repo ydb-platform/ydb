@@ -4,8 +4,8 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
-#include <algorithm>
-
+#include <algorithm> 
+ 
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -71,24 +71,24 @@ void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdat
     DatacenterClassifier = ev->Get()->Classifier;
 }
 
-void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
-    Y_VERIFY(ev->Get()->ClustersList);
+void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) { 
+    Y_VERIFY(ev->Get()->ClustersList); 
 
-    Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
-
-    const auto& clusters = ev->Get()->ClustersList->Clusters;
-
-    LocalCluster = {};
-
-    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; });
-    if (it != end(clusters)) {
-        LocalCluster = it->Name;
-    }
-
-    Clusters.resize(clusters.size());
-    for (size_t i = 0; i < clusters.size(); ++i) {
-        Clusters[i] = clusters[i].Name;
-    }
+    Y_VERIFY(ev->Get()->ClustersList->Clusters.size()); 
+ 
+    const auto& clusters = ev->Get()->ClustersList->Clusters; 
+ 
+    LocalCluster = {}; 
+ 
+    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; }); 
+    if (it != end(clusters)) { 
+        LocalCluster = it->Name; 
+    } 
+ 
+    Clusters.resize(clusters.size()); 
+    for (size_t i = 0; i < clusters.size(); ++i) { 
+        Clusters[i] = clusters[i].Name; 
+    } 
     TopicsHandler->UpdateClusters(Clusters, LocalCluster);
 }
 

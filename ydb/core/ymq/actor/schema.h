@@ -21,21 +21,21 @@ namespace NKikimr::NSQS {
 extern const TString QUOTER_KESUS_NAME;
 extern const TString RPS_QUOTA_NAME;
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
-    MakeExecuteEvent(const TString& query);
-
-THolder<TEvTxUserProxy::TEvProposeTransaction>
-    MakeCreateTableEvent(const TString& root,
-                         const TTable& table,
-                         size_t queueShardsCount = 0);
-
-THolder<TEvTxUserProxy::TEvProposeTransaction>
-    MakeDeleteTableEvent(const TString& root,
-                         const TTable& table);
-
-THolder<TEvTxUserProxy::TEvProposeTransaction>
-    MakeRemoveDirectoryEvent(const TString& root, const TString& name);
-
+THolder<TEvTxUserProxy::TEvProposeTransaction> 
+    MakeExecuteEvent(const TString& query); 
+ 
+THolder<TEvTxUserProxy::TEvProposeTransaction> 
+    MakeCreateTableEvent(const TString& root, 
+                         const TTable& table, 
+                         size_t queueShardsCount = 0); 
+ 
+THolder<TEvTxUserProxy::TEvProposeTransaction> 
+    MakeDeleteTableEvent(const TString& root, 
+                         const TTable& table); 
+ 
+THolder<TEvTxUserProxy::TEvProposeTransaction> 
+    MakeRemoveDirectoryEvent(const TString& root, const TString& name); 
+ 
 // Create actor that calls AddQuoterResource and handles pipe errors and retries
 TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);
 TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);
@@ -94,7 +94,7 @@ private:
     };
 
     const TString Root_;
-    const TString UserName_;
+    const TString UserName_; 
     const TActorId Sender_;
     int SI_;
     const TString RequestId_;
@@ -148,32 +148,32 @@ private:
     TIntrusivePtr<TUserCounters> UserCounters_;
 };
 
-class TAtomicCounterActor
+class TAtomicCounterActor 
     : public TActorBootstrapped<TAtomicCounterActor>
-{
-public:
+{ 
+public: 
      TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId);
-    ~TAtomicCounterActor();
-
+    ~TAtomicCounterActor(); 
+ 
     void Bootstrap();
-
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_ACTOR;
-    }
-
-private:
+    } 
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-
-private:
+ 
+private: 
     const TActorId Sender_;
-    const TString RootPath_;
-    const TString RequestId_;
-};
-
+    const TString RootPath_; 
+    const TString RequestId_; 
+}; 
+ 
 } // namespace NKikimr::NSQS

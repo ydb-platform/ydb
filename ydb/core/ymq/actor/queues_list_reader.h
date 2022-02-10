@@ -31,8 +31,8 @@ private:
     void NextRequest();
     void OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& record);
 
-    void Success();
-    void Fail();
+    void Success(); 
+    void Fail(); 
 
 private:
     TString CompiledQuery;

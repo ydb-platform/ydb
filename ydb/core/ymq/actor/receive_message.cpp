@@ -31,7 +31,7 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableReceiveMessage()->SetRequestId(RequestId_);
-
+ 
         CopySecurityToken(Request());
     }
 
@@ -185,8 +185,8 @@ private:
                 item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
                 if (message.SenderId) {
                     item->SetSenderId(message.SenderId);
-                }
-
+                } 
+ 
                 if (message.MessageAttributes) {
                     TMessageAttributeList attrs;
                     if (attrs.ParseFromString(message.MessageAttributes)) {

@@ -20,7 +20,7 @@
 
 #include <util/generic/guid.h>
 #include <util/generic/hash.h>
-#include <util/generic/set.h>
+#include <util/generic/set.h> 
 #include <util/generic/hash_set.h>
 #include <util/network/init.h>
 #include <util/string/ascii.h>
@@ -52,7 +52,7 @@ const TString CREDENTIAL_PARAM = "credential";
 constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
 
 const TSet<TString> ModifyPermissionsActions = {"GrantPermissions", "RevokePermissions", "SetPermissions"};
-
+ 
 bool IsPrivateTokenHeader(TStringBuf headerName) {
     for (const TStringBuf h : PRIVATE_TOKENS_HEADERS) {
         if (AsciiEqualsIgnoreCase(h, headerName)) {
@@ -71,14 +71,14 @@ public:
     }
 
     void DoSendReply(const TSqsResponse& resp) override {
-        auto response = ResponseToAmazonXmlFormat(resp);
+        auto response = ResponseToAmazonXmlFormat(resp); 
         LogRequest(resp, response);
-
-        response.FolderId = resp.GetFolderId();
-        response.IsFifo = resp.GetIsFifo();
-        response.ResourceId = resp.GetResourceId();
-
-        Request_->SendResponse(response);
+ 
+        response.FolderId = resp.GetFolderId(); 
+        response.IsFifo = resp.GetIsFifo(); 
+        response.ResourceId = resp.GetResourceId(); 
+ 
+        Request_->SendResponse(response); 
     }
 
 
@@ -154,23 +154,23 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
     }
 
     if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_) {
-        // Send request attributes to the metering actor
-        auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
-
-        auto& requestAttributes = reportRequestAttributes->Data;
-
-        requestAttributes.HttpStatusCode = response.StatusCode;
-        requestAttributes.IsFifo = response.IsFifo;
-        requestAttributes.FolderId = response.FolderId;
-        requestAttributes.RequestSizeInBytes = RequestSizeInBytes_;
-        requestAttributes.ResponseSizeInBytes = response.Body.size();
-        requestAttributes.SourceAddress = SourceAddress_;
-        requestAttributes.ResourceId = response.ResourceId;
-        requestAttributes.Action = Action_;
-
-        Parent_->ActorSystem_->Send(MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
-    }
-
+        // Send request attributes to the metering actor 
+        auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>(); 
+ 
+        auto& requestAttributes = reportRequestAttributes->Data; 
+ 
+        requestAttributes.HttpStatusCode = response.StatusCode; 
+        requestAttributes.IsFifo = response.IsFifo; 
+        requestAttributes.FolderId = response.FolderId; 
+        requestAttributes.RequestSizeInBytes = RequestSizeInBytes_; 
+        requestAttributes.ResponseSizeInBytes = response.Body.size(); 
+        requestAttributes.SourceAddress = SourceAddress_; 
+        requestAttributes.ResourceId = response.ResourceId; 
+        requestAttributes.Action = Action_; 
+ 
+        Parent_->ActorSystem_->Send(MakeSqsMeteringServiceID(), reportRequestAttributes.Release()); 
+    } 
+ 
     httpResponse.OutTo(replyParams.Output);
 }
 
@@ -222,12 +222,12 @@ bool THttpRequest::DoReply(const TReplyParams& p) {
         return true;
     }
 
-    try {
-        ParseHeaders(p.Input);
+    try { 
+        ParseHeaders(p.Input); 
 
-        if (SetupPing(p)) {
-            return false;
-        }
+        if (SetupPing(p)) { 
+            return false; 
+        } 
 
         ParseRequest(p.Input);
 
@@ -240,7 +240,7 @@ bool THttpRequest::DoReply(const TReplyParams& p) {
                        << "] IP [" << SourceAddress_ << "]"
         );
 
-        if (!Parent_->Config.GetYandexCloudMode() && UserName_.empty()) {
+        if (!Parent_->Config.GetYandexCloudMode() && UserName_.empty()) { 
             WriteResponse(p, MakeErrorXmlResponse(NErrors::MISSING_PARAMETER, Parent_->AggregatedUserCounters_.Get(), "No user name was provided."));
             return true;
         }
@@ -277,24 +277,24 @@ TString THttpRequest::GetRequestPathPart(TStringBuf path, size_t partIdx) const 
 
     TVector<TStringBuf> items;
     StringSplitter(path).Split('/').AddTo(&items);
-    if (items.size() > partIdx) {
-        return TString(items[partIdx]);
+    if (items.size() > partIdx) { 
+        return TString(items[partIdx]); 
     }
     return TString();
 }
 
 TString THttpRequest::ExtractQueueNameFromPath(const TStringBuf path) {
-    return GetRequestPathPart(path, 2);
-}
-
+    return GetRequestPathPart(path, 2); 
+} 
+ 
 TString THttpRequest::ExtractAccountNameFromPath(const TStringBuf path) {
-    return GetRequestPathPart(path, 1);
-}
-
+    return GetRequestPathPart(path, 1); 
+} 
+ 
 void THttpRequest::ExtractQueueAndAccountNames(const TStringBuf path) {
-    if (Action_ == EAction::ModifyPermissions)
-        return;
-
+    if (Action_ == EAction::ModifyPermissions) 
+        return; 
+ 
     if (Action_ == EAction::GetQueueUrl || Action_ == EAction::CreateQueue) {
         if (!QueryParams_.QueueName) {
             throw TSQSException(NErrors::MISSING_PARAMETER) << "No queue name was provided.";
@@ -302,9 +302,9 @@ void THttpRequest::ExtractQueueAndAccountNames(const TStringBuf path) {
 
         QueueName_ = *QueryParams_.QueueName;
     } else {
-        const auto pathAndQuery = QueryParams_.QueueUrl ? GetPathAndQuery(*QueryParams_.QueueUrl) : GetPathAndQuery(path);
-        QueueName_ = ExtractQueueNameFromPath(pathAndQuery);
-        AccountName_ = ExtractAccountNameFromPath(pathAndQuery);
+        const auto pathAndQuery = QueryParams_.QueueUrl ? GetPathAndQuery(*QueryParams_.QueueUrl) : GetPathAndQuery(path); 
+        QueueName_ = ExtractQueueNameFromPath(pathAndQuery); 
+        AccountName_ = ExtractAccountNameFromPath(pathAndQuery); 
 
         if (IsProxyAction(Action_)) {
             if (QueryParams_.QueueUrl && *QueryParams_.QueueUrl) {
@@ -346,10 +346,10 @@ void THttpRequest::ParseHeaders(const THttpInput& input) {
     for (const auto& header : input.Headers()) {
         if (AsciiEqualsIgnoreCase(header.Name(), AUTHORIZATION_HEADER)) {
             ParseAuthorization(header.Value());
-        } else if (AsciiEqualsIgnoreCase(header.Name(), SECURITY_TOKEN_HEADER)) {
-            SecurityToken_ = header.Value();
-        } else if (AsciiEqualsIgnoreCase(header.Name(), IAM_TOKEN_HEADER)) {
-            IamToken_ = header.Value();
+        } else if (AsciiEqualsIgnoreCase(header.Name(), SECURITY_TOKEN_HEADER)) { 
+            SecurityToken_ = header.Value(); 
+        } else if (AsciiEqualsIgnoreCase(header.Name(), IAM_TOKEN_HEADER)) { 
+            IamToken_ = header.Value(); 
         } else if (AsciiEqualsIgnoreCase(header.Name(), FORWARDED_IP_HEADER)) {
             SourceAddress_ = header.Value();
         } else if (AsciiEqualsIgnoreCase(header.Name(), REQUEST_ID_HEADER)) {
@@ -392,20 +392,20 @@ void THttpRequest::ParsePrivateRequestPathPrefix(const TStringBuf& path) {
     }
 }
 
-ui64 THttpRequest::CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const {
-    ui64 requestSize = input.FirstLine().size();
-    for (const auto& header : input.Headers()) {
-        requestSize += header.Name().size() + header.Value().size();
-    }
-    if (input.Trailers()) {
-        for (const auto& header : *input.Trailers()) {
-            requestSize += header.Name().size() + header.Value().size();
-        }
-    }
-    requestSize += contentLength;
-    return requestSize;
-}
-
+ui64 THttpRequest::CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const { 
+    ui64 requestSize = input.FirstLine().size(); 
+    for (const auto& header : input.Headers()) { 
+        requestSize += header.Name().size() + header.Value().size(); 
+    } 
+    if (input.Trailers()) { 
+        for (const auto& header : *input.Trailers()) { 
+            requestSize += header.Name().size() + header.Value().size(); 
+        } 
+    } 
+    requestSize += contentLength; 
+    return requestSize; 
+} 
+ 
 void THttpRequest::ParseRequest(THttpInput& input) {
     if (Parent_->HttpCounters_ && UserName_) {
         UserCounters_ = Parent_->HttpCounters_->GetUserCounters(UserName_);
@@ -433,9 +433,9 @@ void THttpRequest::ParseRequest(THttpInput& input) {
     RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_, "Incoming http request: " << input.FirstLine());
 
     ParsePrivateRequestPathPrefix(parsed.Path);
-
-    RequestSizeInBytes_ = CalculateRequestSizeInBytes(input, contentLength);
-
+ 
+    RequestSizeInBytes_ = CalculateRequestSizeInBytes(input, contentLength); 
+ 
     if (HttpMethod == "POST") {
         ParseCgiParameters(TCgiParameters(TStringBuf(InputData->Data(), contentLength)));
     } else if (HttpMethod == "GET") {
@@ -445,52 +445,52 @@ void THttpRequest::ParseRequest(THttpInput& input) {
     }
 
     if (QueryParams_.Action) {
-        if (IsIn(ModifyPermissionsActions, *QueryParams_.Action)) {
-            Action_ = EAction::ModifyPermissions;
-        } else {
-            Action_ = ActionFromString(*QueryParams_.Action);
-        }
-
+        if (IsIn(ModifyPermissionsActions, *QueryParams_.Action)) { 
+            Action_ = EAction::ModifyPermissions; 
+        } else { 
+            Action_ = ActionFromString(*QueryParams_.Action); 
+        } 
+ 
         THttpActionCounters* counters = GetActionCounters();
         INC_COUNTER(counters, Requests);
     } else {
         throw TSQSException(NErrors::MISSING_ACTION) << "Action param was not found.";
     }
 
-    if (QueryParams_.FolderId) {
-        FolderId_ = *QueryParams_.FolderId;
-    }
-
-    ExtractQueueAndAccountNames(parsed.Path);
-
-    if (Parent_->Config.GetYandexCloudMode() && !IamToken_ && !FolderId_) {
-        AwsSignature_.Reset(new TAwsRequestSignV4(input, parsed, InputData));
-    }
+    if (QueryParams_.FolderId) { 
+        FolderId_ = *QueryParams_.FolderId; 
+    } 
+ 
+    ExtractQueueAndAccountNames(parsed.Path); 
+ 
+    if (Parent_->Config.GetYandexCloudMode() && !IamToken_ && !FolderId_) { 
+        AwsSignature_.Reset(new TAwsRequestSignV4(input, parsed, InputData)); 
+    } 
 }
 
-#define HANDLE_SETUP_ACTION_CASE(NAME)                                           \
-    case EAction::NAME: {                                                        \
-        Y_CAT(Setup, NAME)(requestHolder->Y_CAT(Mutable, NAME)());               \
-        CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \
-        break;                                                                   \
+#define HANDLE_SETUP_ACTION_CASE(NAME)                                           \ 
+    case EAction::NAME: {                                                        \ 
+        Y_CAT(Setup, NAME)(requestHolder->Y_CAT(Mutable, NAME)());               \ 
+        CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \ 
+        break;                                                                   \ 
     }
-
-#define HANDLE_SETUP_PRIVATE_ACTION_CASE(NAME)                                   \
-    case EAction::NAME: {                                                        \
-        if (!IsPrivateRequest_) {                                                \
+ 
+#define HANDLE_SETUP_PRIVATE_ACTION_CASE(NAME)                                   \ 
+    case EAction::NAME: {                                                        \ 
+        if (!IsPrivateRequest_) {                                                \ 
             RLOG_SQS_BASE_ERROR(*Parent_->ActorSystem_,                              \
-                            "Attempt to call "                                   \
-                            Y_STRINGIZE(NAME)                                    \
-                            " action without private url path");                 \
-            throw TSQSException(NErrors::INVALID_ACTION);                        \
-        }                                                                        \
-        Y_CAT(SetupPrivate, NAME)(requestHolder->Y_CAT(Mutable, NAME)());        \
-        CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \
-        break;                                                                   \
+                            "Attempt to call "                                   \ 
+                            Y_STRINGIZE(NAME)                                    \ 
+                            " action without private url path");                 \ 
+            throw TSQSException(NErrors::INVALID_ACTION);                        \ 
+        }                                                                        \ 
+        Y_CAT(SetupPrivate, NAME)(requestHolder->Y_CAT(Mutable, NAME)());        \ 
+        CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \ 
+        break;                                                                   \ 
     }
 
 bool THttpRequest::SetupRequest() {
-    auto requestHolder = MakeHolder<TSqsRequest>();
+    auto requestHolder = MakeHolder<TSqsRequest>(); 
     requestHolder->SetRequestId(RequestId_);
 
     // Validate batches
@@ -514,29 +514,29 @@ bool THttpRequest::SetupRequest() {
     }
 
     switch (Action_) {
-        HANDLE_SETUP_ACTION_CASE(ChangeMessageVisibility);
-        HANDLE_SETUP_ACTION_CASE(ChangeMessageVisibilityBatch);
-        HANDLE_SETUP_ACTION_CASE(CreateQueue);
-        HANDLE_SETUP_ACTION_CASE(CreateUser);
-        HANDLE_SETUP_ACTION_CASE(GetQueueAttributes);
-        HANDLE_SETUP_ACTION_CASE(GetQueueUrl);
-        HANDLE_SETUP_ACTION_CASE(DeleteMessage);
-        HANDLE_SETUP_ACTION_CASE(DeleteMessageBatch);
-        HANDLE_SETUP_ACTION_CASE(DeleteQueue);
-        HANDLE_SETUP_ACTION_CASE(DeleteUser);
-        HANDLE_SETUP_ACTION_CASE(ListPermissions);
-        HANDLE_SETUP_ACTION_CASE(ListDeadLetterSourceQueues);
-        HANDLE_SETUP_ACTION_CASE(ListQueues);
-        HANDLE_SETUP_ACTION_CASE(ListUsers);
-        HANDLE_SETUP_ACTION_CASE(ModifyPermissions);
-        HANDLE_SETUP_ACTION_CASE(PurgeQueue);
-        HANDLE_SETUP_ACTION_CASE(ReceiveMessage);
-        HANDLE_SETUP_ACTION_CASE(SendMessage);
-        HANDLE_SETUP_ACTION_CASE(SendMessageBatch);
-        HANDLE_SETUP_ACTION_CASE(SetQueueAttributes);
+        HANDLE_SETUP_ACTION_CASE(ChangeMessageVisibility); 
+        HANDLE_SETUP_ACTION_CASE(ChangeMessageVisibilityBatch); 
+        HANDLE_SETUP_ACTION_CASE(CreateQueue); 
+        HANDLE_SETUP_ACTION_CASE(CreateUser); 
+        HANDLE_SETUP_ACTION_CASE(GetQueueAttributes); 
+        HANDLE_SETUP_ACTION_CASE(GetQueueUrl); 
+        HANDLE_SETUP_ACTION_CASE(DeleteMessage); 
+        HANDLE_SETUP_ACTION_CASE(DeleteMessageBatch); 
+        HANDLE_SETUP_ACTION_CASE(DeleteQueue); 
+        HANDLE_SETUP_ACTION_CASE(DeleteUser); 
+        HANDLE_SETUP_ACTION_CASE(ListPermissions); 
+        HANDLE_SETUP_ACTION_CASE(ListDeadLetterSourceQueues); 
+        HANDLE_SETUP_ACTION_CASE(ListQueues); 
+        HANDLE_SETUP_ACTION_CASE(ListUsers); 
+        HANDLE_SETUP_ACTION_CASE(ModifyPermissions); 
+        HANDLE_SETUP_ACTION_CASE(PurgeQueue); 
+        HANDLE_SETUP_ACTION_CASE(ReceiveMessage); 
+        HANDLE_SETUP_ACTION_CASE(SendMessage); 
+        HANDLE_SETUP_ACTION_CASE(SendMessageBatch); 
+        HANDLE_SETUP_ACTION_CASE(SetQueueAttributes); 
 
         HANDLE_SETUP_PRIVATE_ACTION_CASE(DeleteQueueBatch);
-        HANDLE_SETUP_PRIVATE_ACTION_CASE(CountQueues);
+        HANDLE_SETUP_PRIVATE_ACTION_CASE(CountQueues); 
         HANDLE_SETUP_PRIVATE_ACTION_CASE(PurgeQueueBatch);
         HANDLE_SETUP_PRIVATE_ACTION_CASE(GetQueueAttributesBatch);
 
@@ -547,7 +547,7 @@ bool THttpRequest::SetupRequest() {
     }
 
     RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_, "Create proxy action actor for request " << SecureShortUtf8DebugString(*requestHolder));
-
+ 
     const bool enableQueueLeader = Parent_->Config.HasEnableQueueMaster()
         ? Parent_->Config.GetEnableQueueMaster()
         : Parent_->Config.GetEnableQueueLeader();
@@ -656,16 +656,16 @@ void THttpRequest::SetupDeleteQueue(TDeleteQueueRequest* const req) {
 }
 
 void THttpRequest::SetupListPermissions(TListPermissionsRequest* const req) {
-    if (QueryParams_.Path) {
-        req->SetPath(*QueryParams_.Path);
-    }
-}
-
-void THttpRequest::SetupListDeadLetterSourceQueues(TListDeadLetterSourceQueuesRequest* const req) {
-    req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
-}
-
+    if (QueryParams_.Path) { 
+        req->SetPath(*QueryParams_.Path); 
+    } 
+} 
+ 
+void THttpRequest::SetupListDeadLetterSourceQueues(TListDeadLetterSourceQueuesRequest* const req) { 
+    req->SetQueueName(QueueName_); 
+    req->MutableAuth()->SetUserName(UserName_); 
+} 
+ 
 void THttpRequest::SetupPrivateDeleteQueueBatch(TDeleteQueueBatchRequest* const req) {
     for (const auto& entry : QueryParams_.BatchEntries) {
         auto* protoEntry = req->AddEntries();
@@ -680,10 +680,10 @@ void THttpRequest::SetupPrivateDeleteQueueBatch(TDeleteQueueBatchRequest* const 
     req->MutableAuth()->SetUserName(UserName_);
 }
 
-void THttpRequest::SetupPrivateCountQueues(TCountQueuesRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
-}
-
+void THttpRequest::SetupPrivateCountQueues(TCountQueuesRequest* const req) { 
+    req->MutableAuth()->SetUserName(UserName_); 
+} 
+ 
 void THttpRequest::SetupPrivatePurgeQueueBatch(TPurgeQueueBatchRequest* const req) {
     for (const auto& entry : QueryParams_.BatchEntries) {
         auto* protoEntry = req->AddEntries();
@@ -753,43 +753,43 @@ void THttpRequest::SetupListUsers(TListUsersRequest* const req) {
     }
 }
 
-template<typename TModifyPermissionsAction>
-static void SetupModifyPermissionsAction(const TParameters& queryParams, TModifyPermissionsAction& action) {
-    if (queryParams.Subject) {
-        action.SetSubject(*queryParams.Subject);
-    }
-
-    for (const auto& [index, entry] : queryParams.BatchEntries) {
-        if (entry.Action) {
-            *action.MutablePermissionNames()->Add() = *entry.Action;
-        }
-    }
-}
-
+template<typename TModifyPermissionsAction> 
+static void SetupModifyPermissionsAction(const TParameters& queryParams, TModifyPermissionsAction& action) { 
+    if (queryParams.Subject) { 
+        action.SetSubject(*queryParams.Subject); 
+    } 
+ 
+    for (const auto& [index, entry] : queryParams.BatchEntries) { 
+        if (entry.Action) { 
+            *action.MutablePermissionNames()->Add() = *entry.Action; 
+        } 
+    } 
+} 
+ 
 void THttpRequest::SetupModifyPermissions(TModifyPermissionsRequest* const req) {
-    auto it = ModifyPermissionsActions.begin();
-    if (*QueryParams_.Action == *it++) {
-        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableGrant());
-    } else if (*QueryParams_.Action == *it++)   {
-        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableRevoke());
-    } else if (*QueryParams_.Action == *it) {
-        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableSet());
-    }
-
-    Y_VERIFY(it != ModifyPermissionsActions.end());
-
-    if (QueryParams_.Path) {
-        req->SetResource(*QueryParams_.Path);
-    }
-
-    if (QueryParams_.Clear) {
-        bool clear = false;
-        if (TryFromString(*QueryParams_.Clear, clear)) {
-            req->SetClearACL(clear);
-        }
-    }
-}
-
+    auto it = ModifyPermissionsActions.begin(); 
+    if (*QueryParams_.Action == *it++) { 
+        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableGrant()); 
+    } else if (*QueryParams_.Action == *it++)   { 
+        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableRevoke()); 
+    } else if (*QueryParams_.Action == *it) { 
+        SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableSet()); 
+    } 
+ 
+    Y_VERIFY(it != ModifyPermissionsActions.end()); 
+ 
+    if (QueryParams_.Path) { 
+        req->SetResource(*QueryParams_.Path); 
+    } 
+ 
+    if (QueryParams_.Clear) { 
+        bool clear = false; 
+        if (TryFromString(*QueryParams_.Clear, clear)) { 
+            req->SetClearACL(clear); 
+        } 
+    } 
+} 
+ 
 void THttpRequest::SetupPurgeQueue(TPurgeQueueRequest* const req) {
     req->SetQueueName(QueueName_);
     req->MutableAuth()->SetUserName(UserName_);

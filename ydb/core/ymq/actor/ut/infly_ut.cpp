@@ -8,20 +8,20 @@ Y_UNIT_TEST_SUITE(InflyTest) {
     Y_UNIT_TEST(AddMessage) {
         TIntrusivePtr<TInflyMessages> infly = MakeIntrusive<TInflyMessages>();
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(42)), 0);
-        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0));
+        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 1);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(42)), 1);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(43)), 0);
 
-        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0));
+        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 2);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(1)), 2);
     }
 
     Y_UNIT_TEST(DeleteMessage) {
         TIntrusivePtr<TInflyMessages> infly = MakeIntrusive<TInflyMessages>();
-        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0));
-        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0));
+        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 2);
         UNIT_ASSERT(!infly->Delete(5));
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 2);
@@ -35,9 +35,9 @@ Y_UNIT_TEST_SUITE(InflyTest) {
 
     Y_UNIT_TEST(ChangeMesageVisibility) {
         TIntrusivePtr<TInflyMessages> infly = MakeIntrusive<TInflyMessages>();
-        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0));
-        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0));
-        infly->Add(MakeHolder<TInflyMessage>(5ull, 0ull, TInstant::Seconds(150), 0));
+        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(42), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(12), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(5ull, 0ull, TInstant::Seconds(150), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 3);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(50)), 1);
 
@@ -82,11 +82,11 @@ Y_UNIT_TEST_SUITE(InflyTest) {
 
     Y_UNIT_TEST(ReceiveMessages) {
         TIntrusivePtr<TInflyMessages> infly = MakeIntrusive<TInflyMessages>();
-        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(1), 0));
-        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(2), 0));
-        infly->Add(MakeHolder<TInflyMessage>(3ull, 0ull, TInstant::Seconds(3), 0));
-        infly->Add(MakeHolder<TInflyMessage>(4ull, 0ull, TInstant::Seconds(4), 0));
-        infly->Add(MakeHolder<TInflyMessage>(5ull, 0ull, TInstant::Seconds(5), 0));
+        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(1), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(2), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(3ull, 0ull, TInstant::Seconds(3), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(4ull, 0ull, TInstant::Seconds(4), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(5ull, 0ull, TInstant::Seconds(5), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 5);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(50)), 0);
         {
@@ -123,9 +123,9 @@ Y_UNIT_TEST_SUITE(InflyTest) {
 
     Y_UNIT_TEST(DeleteReceivedMessage) {
         TIntrusivePtr<TInflyMessages> infly = MakeIntrusive<TInflyMessages>();
-        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(1), 0));
-        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(2), 0));
-        infly->Add(MakeHolder<TInflyMessage>(3ull, 0ull, TInstant::Seconds(3), 0));
+        infly->Add(MakeHolder<TInflyMessage>(1ull, 0ull, TInstant::Seconds(1), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(2ull, 0ull, TInstant::Seconds(2), 0)); 
+        infly->Add(MakeHolder<TInflyMessage>(3ull, 0ull, TInstant::Seconds(3), 0)); 
         UNIT_ASSERT_VALUES_EQUAL(infly->GetCapacity(), 3);
         UNIT_ASSERT_VALUES_EQUAL(infly->GetInflyCount(TInstant::Seconds(2)), 2);
         {

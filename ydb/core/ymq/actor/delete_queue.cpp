@@ -1,7 +1,7 @@
 #include "action.h"
 #include "common_batch_actor.h"
 #include "error.h"
-#include "queue_schema.h"
+#include "queue_schema.h" 
 
 #include <util/string/join.h>
 
@@ -18,8 +18,8 @@ public:
         Response_.MutableDeleteQueue()->SetRequestId(RequestId_);
 
         CopySecurityToken(Request());
-   }
-
+   } 
+ 
 private:
     bool DoValidate() override {
         if (!GetQueueName()) {
@@ -38,9 +38,9 @@ private:
         Become(&TThis::StateFunc);
 
         SchemaActor_ = Register(
-            new TDeleteQueueSchemaActorV2(
+            new TDeleteQueueSchemaActorV2( 
                 TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName()), SelfId(), RequestId_, UserCounters_)
-        );
+        ); 
     }
 
     TString DoGetQueueName() const override {
@@ -101,11 +101,11 @@ private:
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutableDeleteQueue();
             req.MutableAuth()->SetUserName(UserName_);
-
+ 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();
-            }
-
+            } 
+ 
             req.SetQueueName(entry.GetQueueName());
             req.SetId(entry.GetId());
         }

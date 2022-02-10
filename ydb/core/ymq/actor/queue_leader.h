@@ -153,13 +153,13 @@ private:
     // const info
     TString UserName_;
     TString QueueName_;
-    TString FolderId_;
+    TString FolderId_; 
     TString RootUrl_;
     ui64 ShardsCount_ = 0;
     ui64 PartitionsCount_ = 0;
-    bool IsFifoQueue_ = false;
+    bool IsFifoQueue_ = false; 
     TString QueueId_;
-    ui64 QueueVersion_ = 0;
+    ui64 QueueVersion_ = 0; 
     TActorId SchemeCache_;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     TLocalRateLimiterResource SendMessageQuoterResource_;
@@ -177,20 +177,20 @@ private:
     TIntrusivePtr<TUserCounters> UserCounters_;
     size_t MetricsQueriesInfly_ = 0;
 
-    // dead letter queue params
-    struct TTargetDlqInfo {
-        // from attributes
-        TString DlqName;
-        ui64 MaxReceiveCount = 0;
-        // discovered via service
-        TString QueueId; // unique name or resource id in cloud
-        ui64 QueueVersion = 0;
-        ui64 ShardsCount = 0;
-    };
-    TMaybe<TTargetDlqInfo> DlqInfo_;
+    // dead letter queue params 
+    struct TTargetDlqInfo { 
+        // from attributes 
+        TString DlqName; 
+        ui64 MaxReceiveCount = 0; 
+        // discovered via service 
+        TString QueueId; // unique name or resource id in cloud 
+        ui64 QueueVersion = 0; 
+        ui64 ShardsCount = 0; 
+    }; 
+    TMaybe<TTargetDlqInfo> DlqInfo_; 
     bool IsDlqQueue_ = false;
-    TInstant LatestDlqNotificationTs_ = TInstant::Zero();
-
+    TInstant LatestDlqNotificationTs_ = TInstant::Zero(); 
+ 
     // shards
     enum class EQueryState {
         Empty,
@@ -294,7 +294,7 @@ private:
             : RequestId(requestId)
             , RandomId(msg->GetRandomId())
             , Offset(msg->GetOffset())
-            , ReceiveCount(msg->GetReceiveCount())
+            , ReceiveCount(msg->GetReceiveCount()) 
             , CurrentVisibilityDeadline(msg->GetVisibilityDeadline())
             , VisibilityTimeout(visibilityTimeout)
         {
@@ -303,7 +303,7 @@ private:
         TString RequestId;
         ui64 RandomId = 0;
         ui64 Offset = 0;
-        ui32 ReceiveCount = 0;
+        ui32 ReceiveCount = 0; 
         TInstant CurrentVisibilityDeadline;
         TDuration VisibilityTimeout;
     };
@@ -455,7 +455,7 @@ private:
         struct TLockedFifoMessage {
             ui64 RandomId = 0;
             ui64 Offset = 0;
-            TString GroupId;
+            TString GroupId; 
         };
         std::vector<TLockedFifoMessage> LockedFifoMessages;
     };

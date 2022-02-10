@@ -20,24 +20,24 @@ namespace NKikimr::NSQS {
 struct TAttributeInfo {
     bool NeedRuntimeAttributes = false;
     bool NeedAttributesTable = false;
-    bool NeedArn = false;
+    bool NeedArn = false; 
     bool FifoOnly = false;
 };
 
 static const std::map<TString, TAttributeInfo> AttributesInfo = {
-    { "ApproximateNumberOfMessages",           {  true, false, false, false } },
-    { "ApproximateNumberOfMessagesDelayed",    {  true, false, false, false } },
-    { "ApproximateNumberOfMessagesNotVisible", {  true, false, false, false } },
-    { "CreatedTimestamp",                      {  true, false, false, false } },
-    { "DelaySeconds",                          { false,  true, false, false } },
-    { "MaximumMessageSize",                    { false,  true, false, false } },
-    { "MessageRetentionPeriod",                { false,  true, false, false } },
-    { "ReceiveMessageWaitTimeSeconds",         { false,  true, false, false } },
-    { "RedrivePolicy",                         { false,  true, false, false } },
-    { "VisibilityTimeout",                     { false,  true, false, false } },
-    { "FifoQueue",                             { false,  true, false,  true } },
-    { "ContentBasedDeduplication",             { false,  true, false,  true } },
-    { "QueueArn",                              { false, false,  true, false } },
+    { "ApproximateNumberOfMessages",           {  true, false, false, false } }, 
+    { "ApproximateNumberOfMessagesDelayed",    {  true, false, false, false } }, 
+    { "ApproximateNumberOfMessagesNotVisible", {  true, false, false, false } }, 
+    { "CreatedTimestamp",                      {  true, false, false, false } }, 
+    { "DelaySeconds",                          { false,  true, false, false } }, 
+    { "MaximumMessageSize",                    { false,  true, false, false } }, 
+    { "MessageRetentionPeriod",                { false,  true, false, false } }, 
+    { "ReceiveMessageWaitTimeSeconds",         { false,  true, false, false } }, 
+    { "RedrivePolicy",                         { false,  true, false, false } }, 
+    { "VisibilityTimeout",                     { false,  true, false, false } }, 
+    { "FifoQueue",                             { false,  true, false,  true } }, 
+    { "ContentBasedDeduplication",             { false,  true, false,  true } }, 
+    { "QueueArn",                              { false, false,  true, false } }, 
 };
 
 class TGetQueueAttributesActor
@@ -49,16 +49,16 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableGetQueueAttributes()->SetRequestId(RequestId_);
-
+ 
         CopySecurityToken(Request());
     }
 
 private:
     bool ExpandNames() {
         if (!Request().NamesSize()) {
-            return false;
-        }
-
+            return false; 
+        } 
+ 
         bool all = false;
         for (const auto& name : Request().names()) {
             if (name == "All") {
@@ -75,10 +75,10 @@ private:
                 if (info->second.NeedRuntimeAttributes) {
                     NeedRuntimeAttributes_ = true;
                 }
-                if (info->second.NeedArn) {
-                    NeedArn_ = true;
-                }
-
+                if (info->second.NeedArn) { 
+                    NeedArn_ = true; 
+                } 
+ 
                 AttributesSet_.insert(name);
             }
         }
@@ -92,7 +92,7 @@ private:
             }
             NeedRuntimeAttributes_ = true;
             NeedAttributesTable_ = true;
-            NeedArn_ = true;
+            NeedArn_ = true; 
         }
         return true;
     }
@@ -102,10 +102,10 @@ private:
         return IsIn(AttributesSet_, name);
     }
 
-    TString MakeQueueArn(const TString& prefix, const TString& region, const TString& account, const TString& queueName) const {
-        return Join(":", prefix, region, account, queueName);
-    }
-
+    TString MakeQueueArn(const TString& prefix, const TString& region, const TString& account, const TString& queueName) const { 
+        return Join(":", prefix, region, account, queueName); 
+    } 
+ 
     bool DoValidate() override {
         if (!GetQueueName()) {
             MakeError(Response_.MutableGetQueueAttributes(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
@@ -120,11 +120,11 @@ private:
     }
 
     void ReplyIfReady() {
-        if (WaitCount_ == 0) {
+        if (WaitCount_ == 0) { 
             SendReplyAndDie();
-        }
-    }
-
+        } 
+    } 
+ 
     void DoAction() override {
         Become(&TThis::StateFunc);
 
@@ -132,7 +132,7 @@ private:
             SendReplyAndDie();
             return;
         }
-
+ 
         if (NeedAttributesTable_) {
             TExecutorBuilder builder(SelfId(), RequestId_);
             builder
@@ -150,17 +150,17 @@ private:
             Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
             ++WaitCount_;
         }
-
-        if (NeedArn_) {
-            if (IsCloud()) {
+ 
+        if (NeedArn_) { 
+            if (IsCloud()) { 
                 Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueFolderIdAndCustomName(RequestId_, UserName_, GetQueueName()));
-                ++WaitCount_;
-            } else {
-                auto* result = Response_.MutableGetQueueAttributes();
+                ++WaitCount_; 
+            } else { 
+                auto* result = Response_.MutableGetQueueAttributes(); 
                 result->SetQueueArn(MakeQueueArn(yaSqsArnPrefix, Cfg().GetYandexCloudServiceRegion(), UserName_, GetQueueName()));
-            }
-        }
-
+            } 
+        } 
+ 
         ReplyIfReady();
     }
 
@@ -207,16 +207,16 @@ private:
             if (HasAttributeName("VisibilityTimeout")) {
                 result->SetVisibilityTimeout(TDuration::MilliSeconds(ui64(attrs["VisibilityTimeout"])).Seconds());
             }
-            if (HasAttributeName("RedrivePolicy")) {
-                const TValue& dlqArn(attrs["DlqArn"]);
-                if (dlqArn.HaveValue() && !TString(dlqArn).empty()) {
-                    // the attributes can't be set separately, so we check only one
-                    TRedrivePolicy redrivePolicy;
-                    redrivePolicy.TargetArn = TString(dlqArn);
-                    redrivePolicy.MaxReceiveCount = ui64(attrs["MaxReceiveCount"]);
-                    result->SetRedrivePolicy(redrivePolicy.ToJson());
-                }
-            }
+            if (HasAttributeName("RedrivePolicy")) { 
+                const TValue& dlqArn(attrs["DlqArn"]); 
+                if (dlqArn.HaveValue() && !TString(dlqArn).empty()) { 
+                    // the attributes can't be set separately, so we check only one 
+                    TRedrivePolicy redrivePolicy; 
+                    redrivePolicy.TargetArn = TString(dlqArn); 
+                    redrivePolicy.MaxReceiveCount = ui64(attrs["MaxReceiveCount"]); 
+                    result->SetRedrivePolicy(redrivePolicy.ToJson()); 
+                } 
+            } 
         } else {
             RLOG_SQS_ERROR("Get queue attributes query failed");
             MakeError(result, NErrors::INTERNAL_FAILURE);
@@ -253,23 +253,23 @@ private:
 
         --WaitCount_;
         ReplyIfReady();
-    }
-
+    } 
+ 
     void HandleQueueFolderIdAndCustomName(TSqsEvents::TEvQueueFolderIdAndCustomName::TPtr& ev) {
-        auto* result = Response_.MutableGetQueueAttributes();
-
-        if (ev->Get()->Failed || !ev->Get()->Exists) {
+        auto* result = Response_.MutableGetQueueAttributes(); 
+ 
+        if (ev->Get()->Failed || !ev->Get()->Exists) { 
             RLOG_SQS_DEBUG("Get queue folder id and custom name failed. Failed: " << ev->Get()->Failed << ". Exists: " << ev->Get()->Exists);
-            MakeError(result, NErrors::INTERNAL_FAILURE);
+            MakeError(result, NErrors::INTERNAL_FAILURE); 
             SendReplyAndDie();
-            return;
+            return; 
         }
-
-        if (NeedArn_) {
+ 
+        if (NeedArn_) { 
             result->SetQueueArn(MakeQueueArn(cloudArnPrefix, Cfg().GetYandexCloudServiceRegion(), ev->Get()->QueueFolderId, ev->Get()->QueueCustomName));
-        }
-
-        --WaitCount_;
+        } 
+ 
+        --WaitCount_; 
         ReplyIfReady();
     }
 
@@ -281,7 +281,7 @@ private:
     THashSet<TString> AttributesSet_;
     bool NeedRuntimeAttributes_ = false;
     bool NeedAttributesTable_ = false;
-    bool NeedArn_ = false;
+    bool NeedArn_ = false; 
     size_t WaitCount_ = 0;
 };
 
@@ -306,11 +306,11 @@ private:
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutableGetQueueAttributes();
             req.MutableAuth()->SetUserName(UserName_);
-
+ 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();
-            }
-
+            } 
+ 
             req.SetQueueName(entry.GetQueueName());
             req.SetId(entry.GetId());
             *req.MutableNames() = Request().GetNames();

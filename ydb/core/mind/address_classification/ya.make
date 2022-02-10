@@ -1,18 +1,18 @@
-LIBRARY()
-
-OWNER(
-    radix
-    g:kikimr
-)
-
-SRCS(
-    counters.cpp
-    net_classifier.cpp
-)
-
-GENERATE_ENUM_SERIALIZATION(net_classifier.h)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER( 
+    radix 
+    g:kikimr 
+) 
+ 
+SRCS( 
+    counters.cpp 
+    net_classifier.cpp 
+) 
+ 
+GENERATE_ENUM_SERIALIZATION(net_classifier.h) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters
     ydb/core/base
@@ -20,9 +20,9 @@ PEERDIR(
     ydb/core/mon
     ydb/core/protos
     ydb/core/util
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

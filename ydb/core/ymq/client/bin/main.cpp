@@ -6,7 +6,7 @@
 
 #include <util/stream/file.h>
 #include <util/stream/output.h>
-#include <util/system/env.h>
+#include <util/system/env.h> 
 #include <util/system/user.h>
 
 #include <google/protobuf/text_format.h>
@@ -114,7 +114,7 @@ static int HandleCreate(int argc, const char* argv[]) {
     TString queue;
     ui64    shards = 0;
     ui64    partitions = 0;
-    ui64    retentionSeconds = 0;
+    ui64    retentionSeconds = 0; 
     bool    enableOutOfOrderExecution = false;
     bool    disableOutOfOrderExecution = false;
     bool    contentBasedDeduplication = false;
@@ -186,13 +186,13 @@ static int HandleCreate(int argc, const char* argv[]) {
         req.SetEnableOutOfOrderTransactionsExecution(false);
     }
     opts.SetCredentials(req);
-
-    if (retentionSeconds) {
-        auto* newAttribute = req.mutable_attributes()->Add();
-        newAttribute->SetName("MessageRetentionPeriod");
-        newAttribute->SetValue(ToString(retentionSeconds));
-    }
-
+ 
+    if (retentionSeconds) { 
+        auto* newAttribute = req.mutable_attributes()->Add(); 
+        newAttribute->SetName("MessageRetentionPeriod"); 
+        newAttribute->SetValue(ToString(retentionSeconds)); 
+    } 
+ 
     if (enableAutosplit) {
         req.SetEnableAutosplit(true); // explicitly
     } else if (disableAutosplit) {
@@ -235,7 +235,7 @@ static int HandleDelete(int argc, const char* argv[]) {
     req.MutableAuth()->SetUserName(opts.User);
     req.SetQueueName(queue);
     opts.SetCredentials(req);
-
+ 
     auto resp = TQueueClient(TClientOptions().SetHost(opts.Host).SetPort(opts.Port)).DeleteQueue(req);
 
     if (resp.HasError()) {
@@ -511,13 +511,13 @@ static int HandleUser(int argc, const char* argv[]) {
     return 0;
 }
 
-static int HandlePermissions(int argc, const char* argv[]) {
-    TString resource;
-    TString grantRequest;
-    TString revokeRequest;
-    TString setRequest;
-    bool clearACL;
-
+static int HandlePermissions(int argc, const char* argv[]) { 
+    TString resource; 
+    TString grantRequest; 
+    TString revokeRequest; 
+    TString setRequest; 
+    bool clearACL; 
+ 
     TSqsOptions opts(false);
     opts.AddLongOption('q', "resource", "resource path")
         .Required()
@@ -535,95 +535,95 @@ static int HandlePermissions(int argc, const char* argv[]) {
         .Optional()
         .NoArgument()
         .SetFlag(&clearACL);
-
+ 
     TOptsParseResult res(&opts, argc, argv);
-
+ 
     TQueueClient client(TClientOptions().SetHost(opts.Host).SetPort(opts.Port));
-
-    TModifyPermissionsRequest req;
-
-    auto parseActionsAndSubject = [](auto& action, TStringBuf request) {
-        auto subject = request.NextTok(':');
-        if (!subject || !request) {
-            return false;
-        }
-        while (auto actionName = request.NextTok(',')) {
-            *action.MutablePermissionNames()->Add() = TString(actionName);
-        }
-        action.SetSubject(TString(subject));
-        return true;
-    };
-
-    bool valid = true;
-    if (grantRequest) {
-        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableGrant(), grantRequest);
-    }
-    if (revokeRequest) {
-        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableRevoke(), revokeRequest);
-    }
-    if (setRequest) {
-        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableSet(), setRequest);
-    }
-
-    req.SetResource(resource);
-
-    if (!valid || !(grantRequest || revokeRequest || setRequest || clearACL)) {
-        Cerr << "Modify permissions command is invalid. Usage example: --grant username@staff:CreateQueue,SendMessage" << Endl;
-        return 1;
-    }
-
+ 
+    TModifyPermissionsRequest req; 
+ 
+    auto parseActionsAndSubject = [](auto& action, TStringBuf request) { 
+        auto subject = request.NextTok(':'); 
+        if (!subject || !request) { 
+            return false; 
+        } 
+        while (auto actionName = request.NextTok(',')) { 
+            *action.MutablePermissionNames()->Add() = TString(actionName); 
+        } 
+        action.SetSubject(TString(subject)); 
+        return true; 
+    }; 
+ 
+    bool valid = true; 
+    if (grantRequest) { 
+        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableGrant(), grantRequest); 
+    } 
+    if (revokeRequest) { 
+        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableRevoke(), revokeRequest); 
+    } 
+    if (setRequest) { 
+        valid &= parseActionsAndSubject(*req.MutableActions()->Add()->MutableSet(), setRequest); 
+    } 
+ 
+    req.SetResource(resource); 
+ 
+    if (!valid || !(grantRequest || revokeRequest || setRequest || clearACL)) { 
+        Cerr << "Modify permissions command is invalid. Usage example: --grant username@staff:CreateQueue,SendMessage" << Endl; 
+        return 1; 
+    } 
+ 
     opts.SetCredentials(req);
-
-    if (clearACL) {
-        req.SetClearACL(true);
-    }
-
-    auto resp = client.ModifyPermissions(req);
-    if (resp.HasError()) {
-        Cerr << "Got error for resource : "
-             << resource << " : "
-             << resp.GetError().GetMessage() << Endl;
-        return 1;
-    } else {
-        Cerr << "OK"
-             << Endl;
-    }
-
-    return 0;
-}
-
-static int HandleListPermissions(int argc, const char* argv[]) {
-    TString path;
-
+ 
+    if (clearACL) { 
+        req.SetClearACL(true); 
+    } 
+ 
+    auto resp = client.ModifyPermissions(req); 
+    if (resp.HasError()) { 
+        Cerr << "Got error for resource : " 
+             << resource << " : " 
+             << resp.GetError().GetMessage() << Endl; 
+        return 1; 
+    } else { 
+        Cerr << "OK" 
+             << Endl; 
+    } 
+ 
+    return 0; 
+} 
+ 
+static int HandleListPermissions(int argc, const char* argv[]) { 
+    TString path; 
+ 
     TSqsOptions opts(false);
     opts.AddLongOption('P', "path", "path to node")
         .Required()
         .StoreResult(&path);
-
+ 
     TOptsParseResult res(&opts, argc, argv);
-
+ 
     TQueueClient client(TClientOptions().SetHost(opts.Host).SetPort(opts.Port));
-
-    TListPermissionsRequest req;
-
-    req.SetPath(path);
+ 
+    TListPermissionsRequest req; 
+ 
+    req.SetPath(path); 
     opts.SetCredentials(req);
-
-    auto resp = client.ListPermissions(req);
-    if (resp.HasError()) {
-        Cerr << "Got error for path : "
-             << path << " : "
-             << resp.GetError().GetMessage() << Endl;
-        return 1;
-    } else {
-        Cout << resp.Utf8DebugString() << Endl;
-    }
-
-    return 0;
-}
-
-
-
+ 
+    auto resp = client.ListPermissions(req); 
+    if (resp.HasError()) { 
+        Cerr << "Got error for path : " 
+             << path << " : " 
+             << resp.GetError().GetMessage() << Endl; 
+        return 1; 
+    } else { 
+        Cout << resp.Utf8DebugString() << Endl; 
+    } 
+ 
+    return 0; 
+} 
+ 
+ 
+ 
 static int HandleGetQueueAttributes(int argc, const char* argv[]) {
     TString queueName;
 

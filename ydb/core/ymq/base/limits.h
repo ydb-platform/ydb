@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 #include <util/system/defaults.h>
 
 namespace NKikimr::NSQS {
@@ -25,10 +25,10 @@ namespace TLimits {
     static constexpr size_t VisibilityTimeout = 30;
 
     static constexpr TDuration MaxVisibilityTimeout = TDuration::Hours(12);
-
-    static constexpr size_t MinMaxReceiveCount = 1;
-
-    static constexpr size_t MaxMaxReceiveCount = 1000;
+ 
+    static constexpr size_t MinMaxReceiveCount = 1; 
+ 
+    static constexpr size_t MaxMaxReceiveCount = 1000; 
 };
 
 } // namespace NKikimr::NSQS

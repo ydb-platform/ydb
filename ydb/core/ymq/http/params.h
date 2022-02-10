@@ -10,21 +10,21 @@ namespace NKikimr::NSQS {
 
 struct TParameters {
     TMaybe<TString> Action;
-    TMaybe<TString> Clear;
+    TMaybe<TString> Clear; 
     TMaybe<ui64> DelaySeconds;
-    TMaybe<TString> FolderId;
+    TMaybe<TString> FolderId; 
     TMaybe<TString> Id;
     TMaybe<ui32> MaxNumberOfMessages;
     TMaybe<TString> MessageBody;
     TMaybe<TString> MessageDeduplicationId;
     TMaybe<TString> MessageGroupId;
-    TMaybe<TString> Path;
+    TMaybe<TString> Path; 
     TMaybe<TString> QueueName;
     TMaybe<TString> QueueNamePrefix;
     TMaybe<TString> QueueUrl;
     TMaybe<TString> ReceiptHandle;
     TMaybe<TString> ReceiveRequestAttemptId;
-    TMaybe<TString> Subject;
+    TMaybe<TString> Subject; 
     TMaybe<TString> UserName;
     TMaybe<TString> UserNamePrefix;
     TMaybe<TString> Version;

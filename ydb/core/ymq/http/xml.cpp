@@ -69,10 +69,10 @@ static bool MaybeErrorResponse(const T& resp, TStringBuilder& builder) {
     return false;
 }
 
-static TString BoolToString(const bool b) {
-    return TString(b ? "true" : "false");
-}
-
+static TString BoolToString(const bool b) { 
+    return TString(b ? "true" : "false"); 
+} 
+ 
 void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStringBuilder& xmlBuilder) {
     if (rec.HasApproximateNumberOfMessages()) {
         XML_ELEM("Attribute") {
@@ -95,7 +95,7 @@ void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStrin
     if (rec.HasContentBasedDeduplication()) {
         XML_ELEM("Attribute") {
             XML_ELEM_CONT("Name", "ContentBasedDeduplication");
-            XML_ELEM_CONT("Value", BoolToString(rec.GetContentBasedDeduplication()));
+            XML_ELEM_CONT("Value", BoolToString(rec.GetContentBasedDeduplication())); 
         }
     }
     if (rec.HasCreatedTimestamp()) {
@@ -113,7 +113,7 @@ void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStrin
     if (rec.HasFifoQueue()) {
         XML_ELEM("Attribute") {
             XML_ELEM_CONT("Name", "FifoQueue");
-            XML_ELEM_CONT("Value", BoolToString(rec.GetFifoQueue()));
+            XML_ELEM_CONT("Value", BoolToString(rec.GetFifoQueue())); 
         }
     }
     if (rec.HasMaximumMessageSize()) {
@@ -140,18 +140,18 @@ void WriteQueueAttributesToXml(const TGetQueueAttributesResponse& rec, TXmlStrin
             XML_ELEM_CONT("Value", ToString(rec.GetVisibilityTimeout()));
         }
     }
-    if (rec.HasRedrivePolicy()) {
-        XML_ELEM("Attribute") {
-            XML_ELEM_CONT("Name", "RedrivePolicy");
-            XML_ELEM_CONT("Value", ToString(rec.GetRedrivePolicy()));
-        }
-    }
-    if (rec.HasQueueArn()) {
-        XML_ELEM("Attribute") {
-            XML_ELEM_CONT("Name", "QueueArn");
-            XML_ELEM_CONT("Value", ToString(rec.GetQueueArn()));
-        }
-    }
+    if (rec.HasRedrivePolicy()) { 
+        XML_ELEM("Attribute") { 
+            XML_ELEM_CONT("Name", "RedrivePolicy"); 
+            XML_ELEM_CONT("Value", ToString(rec.GetRedrivePolicy())); 
+        } 
+    } 
+    if (rec.HasQueueArn()) { 
+        XML_ELEM("Attribute") { 
+            XML_ELEM_CONT("Name", "QueueArn"); 
+            XML_ELEM_CONT("Value", ToString(rec.GetQueueArn())); 
+        } 
+    } 
 }
 
 TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
@@ -409,24 +409,24 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::kCountQueues: {
+        case TSqsResponse::kCountQueues: { 
             HANDLE_ERROR(CountQueues);
-            XML_BUILDER() {
-                XML_DOC() {
-                    XML_ELEM("CountQueuesResponse") {
-                        XML_ELEM("CountQueuesResult") {
-                            XML_ELEM_CONT("Count", ::ToString(resp.GetCountQueues().GetCount()));
-                        }
-                        XML_ELEM("ResponseMetadata") {
-                            XML_ELEM_CONT("RequestId", resp.GetCountQueues().GetRequestId());
-                        }
-                    }
-                }
-            }
-            result << XML_RESULT();
-            break;
-        }
-
+            XML_BUILDER() { 
+                XML_DOC() { 
+                    XML_ELEM("CountQueuesResponse") { 
+                        XML_ELEM("CountQueuesResult") { 
+                            XML_ELEM_CONT("Count", ::ToString(resp.GetCountQueues().GetCount())); 
+                        } 
+                        XML_ELEM("ResponseMetadata") { 
+                            XML_ELEM_CONT("RequestId", resp.GetCountQueues().GetRequestId()); 
+                        } 
+                    } 
+                } 
+            } 
+            result << XML_RESULT(); 
+            break; 
+        } 
+ 
         case TSqsResponse::kListUsers: {
             HANDLE_ERROR(ListUsers);
             XML_BUILDER() {
@@ -535,9 +535,9 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
                                     if (message.HasSentTimestamp()) {
                                         ATTRIBUTE("SentTimestamp", message.GetSentTimestamp());
                                     }
-                                    if (message.HasSenderId()) {
-                                        ATTRIBUTE("SenderId", message.GetSenderId());
-                                    }
+                                    if (message.HasSenderId()) { 
+                                        ATTRIBUTE("SenderId", message.GetSenderId()); 
+                                    } 
 
                                     // message attributes
                                     for (const auto& attr : message.messageattributes()) {
@@ -679,83 +679,83 @@ TSqsHttpResponse ResponseToAmazonXmlFormat(const TSqsResponse& resp) {
             break;
         }
 
-        case TSqsResponse::kModifyPermissions: {
+        case TSqsResponse::kModifyPermissions: { 
             HANDLE_ERROR(ModifyPermissions);
-            XML_BUILDER() {
-                XML_DOC() {
-                    XML_ELEM("ModifyPermissionsResponse") {
-                        XML_ELEM("ResponseMetadata") {
-                            XML_ELEM_CONT("RequestId", resp.GetModifyPermissions().GetRequestId());
-                        }
-                    }
-                }
-            }
-            result << XML_RESULT();
-            break;
-        }
-
-        case TSqsResponse::kListPermissions: {
+            XML_BUILDER() { 
+                XML_DOC() { 
+                    XML_ELEM("ModifyPermissionsResponse") { 
+                        XML_ELEM("ResponseMetadata") { 
+                            XML_ELEM_CONT("RequestId", resp.GetModifyPermissions().GetRequestId()); 
+                        } 
+                    } 
+                } 
+            } 
+            result << XML_RESULT(); 
+            break; 
+        } 
+ 
+        case TSqsResponse::kListPermissions: { 
             HANDLE_ERROR(ListPermissions);
 
-            const auto& listPermissions = resp.GetListPermissions();
-
+            const auto& listPermissions = resp.GetListPermissions(); 
+ 
 #define SERIALIZE_PERMISSIONS(resource, permission)                     \
-    for (size_t i = 0; i < listPermissions.Y_CAT(Get, Y_CAT(resource, Permissions))().Y_CAT(Y_CAT(permission, s), Size)(); ++i) {     \
-        XML_ELEM_IMPL("Ya" Y_STRINGIZE(permission), Y_CAT(__LINE__, a)) {                                                             \
-            const auto& permissions = listPermissions.Y_CAT(Get, Y_CAT(resource, Permissions))().Y_CAT(Get, Y_CAT(permission, s))(i); \
-            XML_ELEM_CONT_IMPL("Subject", permissions.GetSubject(),  Y_CAT(__LINE__, b));                                             \
-            for (size_t j = 0; j < permissions.PermissionNamesSize(); ++j) {                                                          \
-                XML_ELEM_CONT_IMPL("Permission", permissions.GetPermissionNames(j), Y_CAT(__LINE__, c));                              \
-            }                                                                                                                         \
-        }                                                                                                                             \
-    }
-
-#define SERIALIZE_PERMISSIONS_FOR_RESOURCE(resource)       \
-    SERIALIZE_PERMISSIONS(resource, EffectivePermission);  \
-    SERIALIZE_PERMISSIONS(resource, Permission);           \
-    XML_ELEM_CONT("ResourceType", Y_STRINGIZE(resource));
-
-            XML_BUILDER() {
-                XML_DOC() {
-                    XML_ELEM("ListPermissionsResponse") {
-                        XML_ELEM("YaListPermissionsResult") {
-                            if (listPermissions.HasQueuePermissions()) {
-                                SERIALIZE_PERMISSIONS_FOR_RESOURCE(Queue);
-                            } else if (listPermissions.HasAccountPermissions()) {
-                                SERIALIZE_PERMISSIONS_FOR_RESOURCE(Account);
-                            }
-                            XML_ELEM("ResponseMetadata") {
-                                XML_ELEM_CONT("RequestId", listPermissions.GetRequestId());
-                            }
-                        }
-                    }
-                }
-            }
-            result << XML_RESULT();
-            break;
-        }
-#undef SERIALIZE_PERMISSIONS_FOR_RESOURCE
-#undef SERIALIZE_PERMISSIONS
-        case TSqsResponse::kListDeadLetterSourceQueues: {
+    for (size_t i = 0; i < listPermissions.Y_CAT(Get, Y_CAT(resource, Permissions))().Y_CAT(Y_CAT(permission, s), Size)(); ++i) {     \ 
+        XML_ELEM_IMPL("Ya" Y_STRINGIZE(permission), Y_CAT(__LINE__, a)) {                                                             \ 
+            const auto& permissions = listPermissions.Y_CAT(Get, Y_CAT(resource, Permissions))().Y_CAT(Get, Y_CAT(permission, s))(i); \ 
+            XML_ELEM_CONT_IMPL("Subject", permissions.GetSubject(),  Y_CAT(__LINE__, b));                                             \ 
+            for (size_t j = 0; j < permissions.PermissionNamesSize(); ++j) {                                                          \ 
+                XML_ELEM_CONT_IMPL("Permission", permissions.GetPermissionNames(j), Y_CAT(__LINE__, c));                              \ 
+            }                                                                                                                         \ 
+        }                                                                                                                             \ 
+    } 
+ 
+#define SERIALIZE_PERMISSIONS_FOR_RESOURCE(resource)       \ 
+    SERIALIZE_PERMISSIONS(resource, EffectivePermission);  \ 
+    SERIALIZE_PERMISSIONS(resource, Permission);           \ 
+    XML_ELEM_CONT("ResourceType", Y_STRINGIZE(resource)); 
+ 
+            XML_BUILDER() { 
+                XML_DOC() { 
+                    XML_ELEM("ListPermissionsResponse") { 
+                        XML_ELEM("YaListPermissionsResult") { 
+                            if (listPermissions.HasQueuePermissions()) { 
+                                SERIALIZE_PERMISSIONS_FOR_RESOURCE(Queue); 
+                            } else if (listPermissions.HasAccountPermissions()) { 
+                                SERIALIZE_PERMISSIONS_FOR_RESOURCE(Account); 
+                            } 
+                            XML_ELEM("ResponseMetadata") { 
+                                XML_ELEM_CONT("RequestId", listPermissions.GetRequestId()); 
+                            } 
+                        } 
+                    } 
+                } 
+            } 
+            result << XML_RESULT(); 
+            break; 
+        } 
+#undef SERIALIZE_PERMISSIONS_FOR_RESOURCE 
+#undef SERIALIZE_PERMISSIONS 
+        case TSqsResponse::kListDeadLetterSourceQueues: { 
             HANDLE_ERROR(ListDeadLetterSourceQueues);
-            XML_BUILDER() {
-                XML_DOC() {
-                    XML_ELEM("ListDeadLetterSourceQueuesResponse") {
-                        XML_ELEM("ListDeadLetterSourceQueuesResult") {
-                            for (const auto& item : resp.GetListDeadLetterSourceQueues().queues()) {
-                                XML_ELEM_CONT("QueueUrl", item.GetQueueUrl());
-                            }
-                        }
-                        XML_ELEM("ResponseMetadata") {
-                            XML_ELEM_CONT("RequestId", resp.GetListDeadLetterSourceQueues().GetRequestId());
-                        }
-                    }
-                }
-            }
-            result << XML_RESULT();
-            break;
-        }
-
+            XML_BUILDER() { 
+                XML_DOC() { 
+                    XML_ELEM("ListDeadLetterSourceQueuesResponse") { 
+                        XML_ELEM("ListDeadLetterSourceQueuesResult") { 
+                            for (const auto& item : resp.GetListDeadLetterSourceQueues().queues()) { 
+                                XML_ELEM_CONT("QueueUrl", item.GetQueueUrl()); 
+                            } 
+                        } 
+                        XML_ELEM("ResponseMetadata") { 
+                            XML_ELEM_CONT("RequestId", resp.GetListDeadLetterSourceQueues().GetRequestId()); 
+                        } 
+                    } 
+                } 
+            } 
+            result << XML_RESULT(); 
+            break; 
+        } 
+ 
         case TSqsResponse::RESPONSE_NOT_SET: {
             return MakeErrorXmlResponse(NErrors::INTERNAL_FAILURE, nullptr, "Not implemented.");
         }

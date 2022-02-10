@@ -1,7 +1,7 @@
 #include "aclib.h"
 #include <util/stream/str.h>
 #include <util/string/vector.h>
-#include <algorithm>
+#include <algorithm> 
 #include <util/string/split.h>
 #include <library/cpp/protobuf/util/is_equal.h>
 
@@ -325,7 +325,7 @@ std::pair<ui32, ui32> TACL::ClearAccess() {
 
 std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
     std::pair<ui32, ui32> modified = {};
-    auto* ACL = MutableACE();
+    auto* ACL = MutableACE(); 
     auto matchACE = [&filter](const NACLibProto::TACE& ace) {
         if (filter.HasAccessType() && ace.GetAccessType() != filter.GetAccessType()) {
             return false;
@@ -340,10 +340,10 @@ std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
             return false;
         }
         return true;
-    };
-
+    }; 
+ 
     auto newEnd = std::remove_if(ACL->begin(), ACL->end(), std::move(matchACE));
-    while (newEnd != ACL->end()) {
+    while (newEnd != ACL->end()) { 
         switch (static_cast<NACLib::EAccessType>(ACL->rbegin()->GetAccessType())) {
         case NACLib::EAccessType::Allow:
             modified |= std::pair<ui32, ui32>(ACL->rbegin()->GetAccessRight(), NACLib::EAccessRights::NoAccess);
@@ -352,7 +352,7 @@ std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
             modified |= std::pair<ui32, ui32>(NACLib::EAccessRights::NoAccess, ACL->rbegin()->GetAccessRight());
             break;
         }
-        ACL->RemoveLast();
+        ACL->RemoveLast(); 
     }
     return modified;
 }

@@ -336,20 +336,20 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TNetClassifierInitializer : public IKikimrServicesInitializer {
-public:
-    TNetClassifierInitializer(const TKikimrRunConfig& runConfig);
+class TNetClassifierInitializer : public IKikimrServicesInitializer { 
+public: 
+    TNetClassifierInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TPersQueueClusterTrackerInitializer : public IKikimrServicesInitializer {
-public:
-    TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig);
+}; 
+ 
+class TPersQueueClusterTrackerInitializer : public IKikimrServicesInitializer { 
+public: 
+    TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+}; 
+ 
 class TPersQueueLibSharedInstanceInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig);

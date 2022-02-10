@@ -9,7 +9,7 @@
 #include "log.h"
 #include "proxy_actor.h"
 #include "serviceid.h"
-#include "schema.h"
+#include "schema.h" 
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -25,9 +25,9 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <util/folder/path.h>
+#include <util/folder/path.h> 
 #include <util/generic/guid.h>
-#include <util/generic/is_in.h>
+#include <util/generic/is_in.h> 
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
@@ -66,27 +66,27 @@ public:
         return true;
     }
 
-    static constexpr bool CreateMissingAccount() {
-        return false;
-    }
+    static constexpr bool CreateMissingAccount() { 
+        return false; 
+    } 
 
     static constexpr bool NeedUserSpecified() {
         return true;
     }
 
     void DoCloudBootstrap() {
-        if (!SecurityToken_) {
-            // TODO: use access service
+        if (!SecurityToken_) { 
+            // TODO: use access service 
             MakeError(MutableErrorDesc(), NErrors::INVALID_CLIENT_TOKEN_ID, "Failed to parse cloud id.");
             SendReplyAndDie();
-            return;
-        }
-
-        TStringBuf tokenBuf(SecurityToken_);
-        UserName_ = TString(tokenBuf.NextTok(':'));
-        FolderId_ = TString(tokenBuf);
-    }
-
+            return; 
+        } 
+ 
+        TStringBuf tokenBuf(SecurityToken_); 
+        UserName_ = TString(tokenBuf.NextTok(':')); 
+        FolderId_ = TString(tokenBuf); 
+    } 
+ 
     void DoBootstrap() {
         ui64 configurationFlags = 0;
         if (TDerived::NeedQueueAttributes()) {
@@ -102,67 +102,67 @@ public:
                 GetQueueName(),
                 configurationFlags)
         );
-    }
+    } 
 
     void CreateAccountOnTheFly() const {
-        // TODO: move to separate actor
+        // TODO: move to separate actor 
         this->Register(
             new TCreateUserSchemaActor(Cfg().GetRoot(), UserName_, this->SelfId(), RequestId_, UserCounters_)
-        );
-    }
-
+        ); 
+    } 
+ 
     void HandleAccountCreated(TSqsEvents::TEvUserCreated::TPtr& ev) {
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
-        if (ev->Get()->Success) {
+        if (ev->Get()->Success) { 
             INC_COUNTER(detailedCounters, CreateAccountOnTheFly_Success);
-        } else {
+        } else { 
             RLOG_SQS_ERROR("Failed to create cloud account on the fly. Account name: " << UserName_);
-            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
+            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE); 
             INC_COUNTER(detailedCounters, CreateAccountOnTheFly_Errors);
             SendReplyAndDie();
-            return;
-        }
-
+            return; 
+        } 
+ 
         DoBootstrap();
-    }
-
+    } 
+ 
     void Bootstrap(const NActors::TActorContext&) {
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
         StartTs_ = TActivationContext::Now();
-
+ 
         const auto& cfg = Cfg();
-
+ 
         this->Become(&TActionActor::InitialState);
-
+ 
         // Set timeout
         if (cfg.GetRequestTimeoutMs()) {
             this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(REQUEST_TIMEOUT_WAKEUP_TAG), TimeoutCookie_.Get());
         }
 
-        if (IsCloud()) {
+        if (IsCloud()) { 
             DoCloudBootstrap();
-
-            if (TDerived::CreateMissingAccount()) {
+ 
+            if (TDerived::CreateMissingAccount()) { 
                 CreateAccountOnTheFly();
-
-                return;
-            }
-        }
-
+ 
+                return; 
+            } 
+        } 
+ 
         DoBootstrap();
     }
 
 protected:
-    template<typename TReq>
-    void CopySecurityToken(const TReq& request) {
-        SecurityToken_ = ExtractSecurityToken<TReq, TCredentials>(request);
-    }
-
-    template<typename TReq>
-    void CopyAccountName(const TReq& request) {
-        UserName_ = request.GetAuth().GetUserName();
-    }
-
+    template<typename TReq> 
+    void CopySecurityToken(const TReq& request) { 
+        SecurityToken_ = ExtractSecurityToken<TReq, TCredentials>(request); 
+    } 
+ 
+    template<typename TReq> 
+    void CopyAccountName(const TReq& request) { 
+        UserName_ = request.GetAuth().GetUserName(); 
+    } 
+ 
     virtual void DoAction() = 0;
 
     virtual TError* MutableErrorDesc() = 0;
@@ -180,11 +180,11 @@ protected:
         return true;
     }
 
-    virtual bool IsFifoQueue() const {
-        Y_VERIFY(IsFifo_);
-        return *IsFifo_;
-    }
-
+    virtual bool IsFifoQueue() const { 
+        Y_VERIFY(IsFifo_); 
+        return *IsFifo_; 
+    } 
+ 
     virtual void DoStart() { }
 
     virtual void DoFinish() { }
@@ -289,13 +289,13 @@ protected:
             PrintSlowRequestWarning();
         }
         Finish();
-
+ 
         if (Cfg().GetYandexCloudMode()) {
-            Response_.SetFolderId(FolderId_);
-            Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false);
-            Response_.SetResourceId(GetQueueName());
-        }
-
+            Response_.SetFolderId(FolderId_); 
+            Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false); 
+            Response_.SetResourceId(GetQueueName()); 
+        } 
+ 
         Cb_->DoSendReply(Response_);
         PassAway();
     }
@@ -317,11 +317,11 @@ protected:
         Start();
         if (Validate()) {
             DoAction();
-        } else {
+        } else { 
             SendReplyAndDie();
-        }
-    }
-
+        } 
+    } 
+ 
     // Duration of request
     virtual TDuration GetRequestDuration() const {
         return FinishTs_ - StartTs_;
@@ -337,10 +337,10 @@ protected:
         return GetRequestDuration() - GetRequestWaitDuration();
     }
 
-    virtual TString GetCustomACLPath() const {
-        return GetQueuePath().GetQueuePath();
-    }
-
+    virtual TString GetCustomACLPath() const { 
+        return GetQueuePath().GetQueuePath(); 
+    } 
+ 
     virtual bool IsRequestSlow() const {
         return GetRequestWorkingDuration() >= TDuration::MilliSeconds(Cfg().GetSlowRequestTimeMs());
     }
@@ -349,57 +349,57 @@ protected:
         RLOG_SQS_INFO("Request [" << UserName_ << "] [" << GetQueueName() << "] [" << Action_ << "] is slow. Working duration: " << GetRequestWorkingDuration().MilliSeconds() << "ms");
     }
 
-    TString SanitizeNodePath(const TString& path) const {
-        TStringBuf sanitizedPath(path);
-        // just skip SQS root path if there's such a prefix
+    TString SanitizeNodePath(const TString& path) const { 
+        TStringBuf sanitizedPath(path); 
+        // just skip SQS root path if there's such a prefix 
         if (sanitizedPath.SkipPrefix(TStringBuf(Cfg().GetRoot()))) { // always skip SQS root prefix
-            return TString(sanitizedPath);
-        } else {
-            Y_VERIFY(false); // should never be applied in any other way
-        }
-
-        return {};
-    }
-
-    TString MakeAbsolutePath(const TString& relativePath) const {
-        TStringBuilder fullPath;
+            return TString(sanitizedPath); 
+        } else { 
+            Y_VERIFY(false); // should never be applied in any other way 
+        } 
+ 
+        return {}; 
+    } 
+ 
+    TString MakeAbsolutePath(const TString& relativePath) const { 
+        TStringBuilder fullPath; 
         fullPath << Cfg().GetRoot();
-        if (!relativePath.StartsWith("/")) {
-            fullPath << "/";
-        }
-        fullPath << relativePath;
-
-        return TString(fullPath);
-    }
-
-    size_t CalculatePathDepth(const TString& path) const {
-        const TString sanitizedResource = TFsPath(path).Fix().GetPath();
-        size_t count = 0;
-        for (size_t i = 0, sz = sanitizedResource.size(); i < sz; ++i) {
-            if (sanitizedResource[i] == '/') {
-                ++count;
-            }
-        }
-
-        return count;
-    }
-
-    bool IsCloud() const {
+        if (!relativePath.StartsWith("/")) { 
+            fullPath << "/"; 
+        } 
+        fullPath << relativePath; 
+ 
+        return TString(fullPath); 
+    } 
+ 
+    size_t CalculatePathDepth(const TString& path) const { 
+        const TString sanitizedResource = TFsPath(path).Fix().GetPath(); 
+        size_t count = 0; 
+        for (size_t i = 0, sz = sanitizedResource.size(); i < sz; ++i) { 
+            if (sanitizedResource[i] == '/') { 
+                ++count; 
+            } 
+        } 
+ 
+        return count; 
+    } 
+ 
+    bool IsCloud() const { 
         return Cfg().GetYandexCloudMode();
-    }
-
-    bool IsInternalResource(const TString& path) const {
-        return CalculatePathDepth(SanitizeNodePath(path)) > 2;
-    }
-
-    bool IsForbiddenPath(const TString& path) const {
-        return path.Contains("..") || path.Contains("//") || IsInternalResource(path);
-    }
+    } 
+ 
+    bool IsInternalResource(const TString& path) const { 
+        return CalculatePathDepth(SanitizeNodePath(path)) > 2; 
+    } 
+ 
+    bool IsForbiddenPath(const TString& path) const { 
+        return path.Contains("..") || path.Contains("//") || IsInternalResource(path); 
+    } 
     struct TActionCountersPack {
         TActionCounters* CoreCounters = nullptr;
         TActionCounters* YmqCounters = nullptr;
     };
-
+ 
     TCountersCouple<TActionCounters*> GetActionCounters() const {
         TCountersCouple<TActionCounters*> result{nullptr, nullptr};
         if (IsActionForQueue(Action_) && QueueCounters_) {
@@ -424,16 +424,16 @@ protected:
     }
 
     void RequestSchemeCache(const TString& path) {
-        auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-
-        entry.Path = SplitPath(path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        schemeCacheRequest->ResultSet.emplace_back(entry);
-
+        auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
+ 
+        entry.Path = SplitPath(path); 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
+        schemeCacheRequest->ResultSet.emplace_back(entry); 
+ 
         this->Send(SchemeCache_, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
-    }
-
+    } 
+ 
 private:
     STATEFN(InitialState) {
         switch (ev->GetTypeRewrite()) {
@@ -444,13 +444,13 @@ private:
     }
 
     STATEFN(WaitAuthCheckMessages) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
             hFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParserResponse);
             hFunc(TEvWakeup, HandleWakeup);
-        }
-    }
-
+        } 
+    } 
+ 
     STATEFN(WaitQuotaState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvClearance, HandleQuota);
@@ -458,42 +458,42 @@ private:
         }
     }
 
-    TString GetActionACLSourcePath() const {
+    TString GetActionACLSourcePath() const { 
         const EACLSourceType aclSourceType = GetActionACLSourceType(ToString(Action_));
-        switch (aclSourceType) {
-            case EACLSourceType::Unknown: {
-                return {};
-            }
-            case EACLSourceType::RootDir: {
-                return GetQueuePath().GetRootPath();
-            }
-            case EACLSourceType::AccountDir: {
-                return GetQueuePath().GetUserPath();
-            }
-            case EACLSourceType::QueueDir: {
-                return GetQueuePath().GetQueuePath();
-            }
-            case EACLSourceType::Custom: {
-                return GetCustomACLPath();
-            }
-        }
-
-        return {};
-    }
-
+        switch (aclSourceType) { 
+            case EACLSourceType::Unknown: { 
+                return {}; 
+            } 
+            case EACLSourceType::RootDir: { 
+                return GetQueuePath().GetRootPath(); 
+            } 
+            case EACLSourceType::AccountDir: { 
+                return GetQueuePath().GetUserPath(); 
+            } 
+            case EACLSourceType::QueueDir: { 
+                return GetQueuePath().GetQueuePath(); 
+            } 
+            case EACLSourceType::Custom: { 
+                return GetCustomACLPath(); 
+            } 
+        } 
+ 
+        return {}; 
+    } 
+ 
     void RequestTicketParser() {
         this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
-    }
-
-    bool IsACLProtectedAccount(const TString& accountName) const {
-        if (accountName) {
-            // temporary O(N) solution since the list contains up to 100 items
+    } 
+ 
+    bool IsACLProtectedAccount(const TString& accountName) const { 
+        if (accountName) { 
+            // temporary O(N) solution since the list contains up to 100 items 
             return !IsIn(Cfg().GetAccountsWithoutMandatoryAuth(), accountName);
-        }
-
-        return true;
-    }
-
+        } 
+ 
+        return true; 
+    } 
+ 
     void HandleConfiguration(TSqsEvents::TEvConfiguration::TPtr& ev) {
         const TDuration confDuration = TActivationContext::Now() - StartTs_;
         RLOG_SQS_DEBUG("Get configuration duration: " << confDuration.MilliSeconds() << "ms");
@@ -502,17 +502,17 @@ private:
         UserExists_ = ev->Get()->UserExists;
         QueueExists_ = ev->Get()->QueueExists;
         Shards_   = ev->Get()->Shards;
-        IsFifo_ = ev->Get()->Fifo;
+        IsFifo_ = ev->Get()->Fifo; 
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
-        SchemeCache_ = ev->Get()->SchemeCache;
+        SchemeCache_ = ev->Get()->SchemeCache; 
         SqsCoreCounters_ = std::move(ev->Get()->SqsCoreCounters);
         QueueCounters_ = std::move(ev->Get()->QueueCounters);
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
 
-        Y_VERIFY(SchemeCache_);
-
+        Y_VERIFY(SchemeCache_); 
+ 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
                         << ", Fail: " << ev->Get()->Fail);
@@ -548,15 +548,15 @@ private:
 
         bool isACLProtectedAccount = Cfg().GetForceAccessControl();
         if (!IsCloud() && (SecurityToken_ || (Cfg().GetForceAccessControl() && (isACLProtectedAccount = IsACLProtectedAccount(UserName_))))) {
-            this->Become(&TActionActor::WaitAuthCheckMessages);
-            const auto& actionACLSourcePath = GetActionACLSourcePath();
-            if (!actionACLSourcePath || IsForbiddenPath(actionACLSourcePath)) {
+            this->Become(&TActionActor::WaitAuthCheckMessages); 
+            const auto& actionACLSourcePath = GetActionACLSourcePath(); 
+            if (!actionACLSourcePath || IsForbiddenPath(actionACLSourcePath)) { 
                 RLOG_SQS_ERROR("Bad ACL source path " << actionACLSourcePath << " for " << Action_ << " action");
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED); 
                 SendReplyAndDie();
-                return;
-            }
-
+                return; 
+            } 
+ 
             if (!SecurityToken_) {
                 MakeError(MutableErrorDesc(), NErrors::INVALID_CLIENT_TOKEN_ID, "No security token was provided.");
                 SendReplyAndDie();
@@ -569,69 +569,69 @@ private:
             if (!isACLProtectedAccount) { // !IsCloud && !SecurityToken_ && account is in AccountsWithoutMandatoryAuth setting.
                 INC_COUNTER(UserCounters_, UnauthenticatedAccess); // if !ForceAccessControl, this counter is not initialized.
             }
-            // old habits
+            // old habits 
             DoGetQuotaAndProcess();
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
-        const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
-
-        Y_VERIFY(navigate->ResultSet.size() == 1);
-
-        if (navigate->ErrorCount > 0) {
-            const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
+        TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get(); 
+        const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get(); 
+ 
+        Y_VERIFY(navigate->ResultSet.size() == 1); 
+ 
+        if (navigate->ErrorCount > 0) { 
+            const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status; 
             RLOG_SQS_ERROR("Failed to read ACL for " << GetActionACLSourcePath() << ". Scheme cache error: " << status);
-
-            if (status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
-            } else {
-                MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
-            }
-
+ 
+            if (status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) { 
+                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED); 
+            } else { 
+                MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE); 
+            } 
+ 
             SendReplyAndDie();
-            return;
+            return; 
         }
-
-        SecurityObject_ = navigate->ResultSet.front().SecurityObject;
-
+ 
+        SecurityObject_ = navigate->ResultSet.front().SecurityObject; 
+ 
         OnAuthCheckMessage();
-    }
-
+    } 
+ 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (!result.Error.empty()) {
+        if (!result.Error.empty()) { 
             RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
-            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED); 
             SendReplyAndDie();
-            return;
-        } else {
-            UserToken_ = ev->Get()->Token;
-            Y_VERIFY(UserToken_);
-        }
-
+            return; 
+        } else { 
+            UserToken_ = ev->Get()->Token; 
+            Y_VERIFY(UserToken_); 
+        } 
+ 
         OnAuthCheckMessage();
     }
 
     void OnAuthCheckMessage() {
-        --SecurityCheckRequestsToWaitFor_;
-
-        if (SecurityCheckRequestsToWaitFor_ == 0) {
+        --SecurityCheckRequestsToWaitFor_; 
+ 
+        if (SecurityCheckRequestsToWaitFor_ == 0) { 
             const TString& actionName = ToString(Action_);
             const ui32 requiredAccess = GetActionRequiredAccess(actionName);
-            UserSID_ = UserToken_->GetUserSID();
-            if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
+            UserSID_ = UserToken_->GetUserSID(); 
+            if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) { 
                 if (Action_ == EAction::ModifyPermissions) {
-                    // do not spam for other actions
+                    // do not spam for other actions 
                     RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
-                }
+                } 
                 MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
                           actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
                 SendReplyAndDie();
-                return;
-            }
-
+                return; 
+            } 
+ 
             DoGetQuotaAndProcess();
         }
     }
@@ -662,9 +662,9 @@ private:
                     deadline));
         } else {
             DoRoutine();
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleQuota(TEvQuota::TEvClearance::TPtr& ev) {
         const TDuration quotaWaitDuration = TActivationContext::Now() - QuotaRequestTs_;
         switch (ev->Get()->Result) {
@@ -743,16 +743,16 @@ protected:
     THolder<IReplyCallback> Cb_;
     TString  RootUrl_;
     TString  UserName_;
-    TString  SecurityToken_;
-    TString  FolderId_;
-    size_t SecurityCheckRequestsToWaitFor_ = 2;
-    TIntrusivePtr<TSecurityObject> SecurityObject_;
-    TIntrusivePtr<NACLib::TUserToken> UserToken_;
-    TString  UserSID_; // identifies the client who sent this request
+    TString  SecurityToken_; 
+    TString  FolderId_; 
+    size_t SecurityCheckRequestsToWaitFor_ = 2; 
+    TIntrusivePtr<TSecurityObject> SecurityObject_; 
+    TIntrusivePtr<NACLib::TUserToken> UserToken_; 
+    TString  UserSID_; // identifies the client who sent this request 
     bool UserExists_ = false;
     bool QueueExists_ = false;
     ui64     Shards_;
-    TMaybe<bool> IsFifo_;
+    TMaybe<bool> IsFifo_; 
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them

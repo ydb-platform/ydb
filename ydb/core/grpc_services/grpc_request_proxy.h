@@ -100,7 +100,7 @@ protected:
     void Handle(TEvExportToS3Request::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);

@@ -36,7 +36,7 @@ void TPathSplitTraitsUnix::DoParsePart(const TStringBuf part0) {
     TStringBuf next(part0);
     TStringBuf part;
 
-    while (TStringBuf(next).TrySplit('/', part, next)) {
+    while (TStringBuf(next).TrySplit('/', part, next)) { 
         AppendComponent(part);
     }
 

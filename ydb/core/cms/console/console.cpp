@@ -3,8 +3,8 @@
 #include "console_tenants_manager.h"
 #include "http.h"
 
-#include "net_classifier_updater.h"
-
+#include "net_classifier_updater.h" 
+ 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
@@ -33,10 +33,10 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
                                          AppData()->FeatureFlags);
     ctx.RegisterWithSameMailbox(TenantsManager);
 
-    if (AppData(ctx)->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl()) {
-        NetClassifierUpdaterId = ctx.Register(NNetClassifierUpdater::MakeNetClassifierUpdaterActor(SelfId()));
-    }
-
+    if (AppData(ctx)->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl()) { 
+        NetClassifierUpdaterId = ctx.Register(NNetClassifierUpdater::MakeNetClassifierUpdaterActor(SelfId())); 
+    } 
+ 
     TxProcessor->ProcessTx(CreateTxInitScheme(), ctx);
 }
 
@@ -109,11 +109,11 @@ void TConsole::Cleanup(const TActorContext &ctx)
         TenantsManager = nullptr;
     }
 
-    if (NetClassifierUpdaterId) {
-        Send(NetClassifierUpdaterId, new TEvents::TEvPoisonPill);
-        NetClassifierUpdaterId = {};
-    }
-
+    if (NetClassifierUpdaterId) { 
+        Send(NetClassifierUpdaterId, new TEvents::TEvPoisonPill); 
+        NetClassifierUpdaterId = {}; 
+    } 
+ 
     TxProcessor->Clear();
 }
 
@@ -145,12 +145,12 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
 void TConsole::ClearState()
 {
     Config.Clear();
-    if (ConfigsManager) {
+    if (ConfigsManager) { 
         ConfigsManager->ClearState();
-    }
-    if (TenantsManager) {
+    } 
+    if (TenantsManager) { 
         TenantsManager->ClearState();
-    }
+    } 
 
     Counters->ResetCounters();
 }

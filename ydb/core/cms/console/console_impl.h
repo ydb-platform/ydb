@@ -162,9 +162,9 @@ private:
     TTxProcessor::TPtr TxProcessor;
     TDynamicCounterPtr Counters;
 
-    TConfigsManager* ConfigsManager;
-    TTenantsManager* TenantsManager;
-
+    TConfigsManager* ConfigsManager; 
+    TTenantsManager* TenantsManager; 
+ 
     TActorId NetClassifierUpdaterId;
 };
 

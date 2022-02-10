@@ -16,11 +16,11 @@ static inline TStringBuf StripLeft(const TStringBuf& s) noexcept {
 TParsedHttpRequest::TParsedHttpRequest(const TStringBuf& str) {
     TStringBuf tmp;
 
-    if (!StripLeft(str).TrySplit(' ', Method, tmp)) {
+    if (!StripLeft(str).TrySplit(' ', Method, tmp)) { 
         ythrow yexception() << "bad request(" << ToString(str).Quote() << ")";
     }
 
-    if (!StripLeft(tmp).TrySplit(' ', Request, Proto)) {
+    if (!StripLeft(tmp).TrySplit(' ', Request, Proto)) { 
         ythrow yexception() << "bad request(" << ToString(str).Quote() << ")";
     }
 

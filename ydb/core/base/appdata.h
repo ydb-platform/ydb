@@ -131,13 +131,13 @@ struct TAppData {
 
     THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;
     THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
-
+ 
     NKikimrStream::TStreamingConfig StreamingConfig;
     NKikimrPQ::TPQConfig PQConfig;
-    NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
-    NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
-    NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
-    NKikimrConfig::TSqsConfig SqsConfig;
+    NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig; 
+    NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig; 
+    NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig; 
+    NKikimrConfig::TSqsConfig SqsConfig; 
     NKikimrProto::TAuthConfig AuthConfig;
     NKikimrProto::TKeyConfig KeyConfig;
     NKikimrProto::TKeyConfig PDiskKeyConfig;

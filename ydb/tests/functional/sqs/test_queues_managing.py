@@ -7,7 +7,7 @@ import pytest
 from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
 
 from sqs_matchers import ReadResponseMatcher
-
+ 
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
 from sqs_test_base import to_bytes
 from ydb import issues as ydb_issues
@@ -269,19 +269,19 @@ class QueuesManagingTest(KikimrSqsTestBase):
             created_queue_url, 10, ReadResponseMatcher().with_message_ids([msg_id, ])
         )
 
-    def test_ya_count_queues(self):
-        assert_that(self._sqs_api.private_count_queues(), equal_to('0'))
-        q_url = self._create_queue_and_assert('new_q')
-        self._create_queue_and_assert('new_q_2')
-
+    def test_ya_count_queues(self): 
+        assert_that(self._sqs_api.private_count_queues(), equal_to('0')) 
+        q_url = self._create_queue_and_assert('new_q') 
+        self._create_queue_and_assert('new_q_2') 
+ 
         time.sleep(2.1)
-        assert_that(self._sqs_api.private_count_queues(), equal_to('2'))
-
-        self._sqs_api.delete_queue(q_url)
-
+        assert_that(self._sqs_api.private_count_queues(), equal_to('2')) 
+ 
+        self._sqs_api.delete_queue(q_url) 
+ 
         time.sleep(2.1)
-        assert_that(self._sqs_api.private_count_queues(), equal_to('1'))
-
+        assert_that(self._sqs_api.private_count_queues(), equal_to('1')) 
+ 
     def test_queues_count_over_limit(self):
         urls = []
         for i in range(10):

@@ -147,55 +147,55 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(effectiveAnimalFilesACL.CheckAccess(EAccessRights::UpdateRow, catToken) == true);
         UNIT_ASSERT(effectiveAnimalFilesACL.CheckAccess(EAccessRights::UpdateRow, dogToken) == true);
     }
-
-    Y_UNIT_TEST(TestDiffACL) {
-        TUserToken jamesToken(James, TVector<TSID>());
-        TUserToken catToken(Cat, TVector<TSID>());
+ 
+    Y_UNIT_TEST(TestDiffACL) { 
+        TUserToken jamesToken(James, TVector<TSID>()); 
+        TUserToken catToken(Cat, TVector<TSID>()); 
         TUserToken dogToken(Dog, TVector<TSID>());
-
-        TSecurityObject objACL(James, true /* container */);
-        TDiffACL addAccessDiff;
-        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer);
-        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, Cat, EInheritanceType::InheritContainer);
-        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
-        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::AlterSchema, Cat, EInheritanceType::InheritContainer);
+ 
+        TSecurityObject objACL(James, true /* container */); 
+        TDiffACL addAccessDiff; 
+        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer); 
+        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, Cat, EInheritanceType::InheritContainer); 
+        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer); 
+        addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::AlterSchema, Cat, EInheritanceType::InheritContainer); 
         addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::CreateQueue, Dog, EInheritanceType::InheritContainer);
         addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, Dog, EInheritanceType::InheritContainer);
         addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, Dog, EInheritanceType::InheritContainer);
         addAccessDiff.AddAccess(EAccessType::Allow, EAccessRights::AlterSchema, Dog, EInheritanceType::InheritContainer);
-
-        objACL.ApplyDiff(addAccessDiff);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false);
-
-        TDiffACL removeAccessDiff;
-        removeAccessDiff.RemoveAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer);
-        objACL.ApplyDiff(removeAccessDiff);
-
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == true);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == false);
-
-        TDiffACL removeAccessDiff2;
-        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer);
-        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, Cat, EInheritanceType::InheritContainer);
-        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
-        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::AlterSchema, Cat, EInheritanceType::InheritContainer);
-        objACL.ApplyDiff(removeAccessDiff2);
-
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false);
-        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false);
+ 
+        objACL.ApplyDiff(addAccessDiff); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false); 
+ 
+        TDiffACL removeAccessDiff; 
+        removeAccessDiff.RemoveAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer); 
+        objACL.ApplyDiff(removeAccessDiff); 
+ 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == true); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == false); 
+ 
+        TDiffACL removeAccessDiff2; 
+        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer); 
+        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::UpdateRow, Cat, EInheritanceType::InheritContainer); 
+        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer); 
+        removeAccessDiff2.RemoveAccess(EAccessType::Allow, EAccessRights::AlterSchema, Cat, EInheritanceType::InheritContainer); 
+        objACL.ApplyDiff(removeAccessDiff2); 
+ 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::ReadAttributes, catToken) == false); 
+        UNIT_ASSERT(objACL.CheckAccess(EAccessRights::WriteAttributes, catToken) == false); 
 
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::CreateQueue, dogToken) == true);
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, dogToken) == true);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::UpdateRow, dogToken) == false);
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::SelectRow, dogToken) == false);
         UNIT_ASSERT(objACL.CheckAccess(EAccessRights::AlterSchema, dogToken) == false);
-    }
+    } 
 
     Y_UNIT_TEST(TestInhertACL) {
         TSecurityObject objParent(James, true /* container */);

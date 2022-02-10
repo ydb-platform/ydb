@@ -7,11 +7,11 @@ OWNER(
 )
 
 SRCS(
-    cluster_tracker.cpp
-    blob.cpp
+    cluster_tracker.cpp 
+    blob.cpp 
     event_helpers.cpp
-    header.cpp
-    percentile_counter.cpp
+    header.cpp 
+    percentile_counter.cpp 
     pq.cpp
     pq_database.cpp
     pq_impl.cpp
@@ -23,7 +23,7 @@ SRCS(
     pq_l2_cache.cpp
     read_balancer.cpp
     read_speed_limiter.cpp
-    subscriber.cpp
+    subscriber.cpp 
     type_codecs_defs.cpp
     user_info.cpp
     write_meta.cpp

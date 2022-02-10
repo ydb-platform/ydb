@@ -513,7 +513,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["pq"] = &hasPQ;
         bool hasPQv1 = false;
         names["pqv1"] = &hasPQv1;
-        bool hasPQCD = false;
+        bool hasPQCD = false; 
         names["pqcd"] = &hasPQCD;
         bool hasS3Internal = false;
         names["s3_internal"] = &hasS3Internal;
@@ -541,7 +541,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["auth"] = &hasAuth;
 
         std::unordered_set<TString> enabled;
-        for (const auto& name : services) {
+        for (const auto& name : services) { 
             enabled.insert(name);
         }
         for (const auto& name : grpcConfig.GetServicesEnabled()) {
@@ -677,8 +677,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         }
 
-        if (hasPQCD) {
-            // the service has its own flag since it should be capable of using custom grpc port
+        if (hasPQCD) { 
+            // the service has its own flag since it should be capable of using custom grpc port 
             const auto& pqcdConfig = AppData->PQClusterDiscoveryConfig;
             TMaybe<ui64> inflightLimit = Nothing();
             if (pqcdConfig.HasRequestInflightLimit() && pqcdConfig.GetRequestInflightLimit() > 0) {
@@ -687,8 +687,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(
                     ActorSystem.Get(), Counters, grpcRequestProxyId, inflightLimit
             ));
-        }
-
+        } 
+ 
         if (hasCms) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
@@ -870,33 +870,33 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->LocalScopeId = runConfig.ScopeId;
 
     // setup streaming config
-    if (runConfig.AppConfig.GetGRpcConfig().HasStreamingConfig()) {
+    if (runConfig.AppConfig.GetGRpcConfig().HasStreamingConfig()) { 
         AppData->StreamingConfig.CopyFrom(runConfig.AppConfig.GetGRpcConfig().GetStreamingConfig());
-    }
+    } 
 
-    if (runConfig.AppConfig.HasPQConfig()) {
+    if (runConfig.AppConfig.HasPQConfig()) { 
         AppData->PQConfig.CopyFrom(runConfig.AppConfig.GetPQConfig());
-    }
+    } 
 
-    if (runConfig.AppConfig.HasPQClusterDiscoveryConfig()) {
-        AppData->PQClusterDiscoveryConfig.CopyFrom(runConfig.AppConfig.GetPQClusterDiscoveryConfig());
-    }
-
-    if (runConfig.AppConfig.HasNetClassifierConfig()) {
-        AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
-    }
-
-    if (runConfig.AppConfig.HasSqsConfig()) {
-        AppData->SqsConfig.CopyFrom(runConfig.AppConfig.GetSqsConfig());
-    }
-
-    if (runConfig.AppConfig.HasAuthConfig()) {
+    if (runConfig.AppConfig.HasPQClusterDiscoveryConfig()) { 
+        AppData->PQClusterDiscoveryConfig.CopyFrom(runConfig.AppConfig.GetPQClusterDiscoveryConfig()); 
+    } 
+ 
+    if (runConfig.AppConfig.HasNetClassifierConfig()) { 
+        AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig()); 
+    } 
+ 
+    if (runConfig.AppConfig.HasSqsConfig()) { 
+        AppData->SqsConfig.CopyFrom(runConfig.AppConfig.GetSqsConfig()); 
+    } 
+ 
+    if (runConfig.AppConfig.HasAuthConfig()) { 
         AppData->AuthConfig.CopyFrom(runConfig.AppConfig.GetAuthConfig());
-    }
+    } 
 
-    if (runConfig.AppConfig.HasKeyConfig()) {
+    if (runConfig.AppConfig.HasKeyConfig()) { 
         AppData->KeyConfig.CopyFrom(runConfig.AppConfig.GetKeyConfig());
-    }
+    } 
 
     if (runConfig.AppConfig.HasPDiskKeyConfig()) {
         AppData->PDiskKeyConfig.CopyFrom(runConfig.AppConfig.GetPDiskKeyConfig());
@@ -1103,12 +1103,12 @@ void TKikimrRunner::InitializeActorSystem(
         }
     }
 
-    if (servicesMask.EnableSqs && AppData->SqsConfig.GetEnableSqs()) {
-        if (AppData->SqsConfig.GetHttpServerConfig().GetPort()) {
-
-            SqsHttp.Reset(new NSQS::TAsyncHttpServer(AppData->SqsConfig));
+    if (servicesMask.EnableSqs && AppData->SqsConfig.GetEnableSqs()) { 
+        if (AppData->SqsConfig.GetHttpServerConfig().GetPort()) { 
+ 
+            SqsHttp.Reset(new NSQS::TAsyncHttpServer(AppData->SqsConfig)); 
             SqsHttp->Initialize(ActorSystem.Get(),
-                                GetServiceCounters(AppData->Counters, "sqs"),
+                                GetServiceCounters(AppData->Counters, "sqs"), 
                                 GetServiceCounters(AppData->Counters, "ymq_public"),
                                 AppData->UserPoolId);
         }
@@ -1253,12 +1253,12 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnablePersQueueL2Cache) {
         sil->AddServiceInitializer(new TPersQueueL2CacheInitializer(runConfig));
     }
-    if (serviceMask.EnableNetClassifier) {
-        sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
-    }
-    if (serviceMask.EnablePersQueueClusterTracker) {
-        sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
-    }
+    if (serviceMask.EnableNetClassifier) { 
+        sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig)); 
+    } 
+    if (serviceMask.EnablePersQueueClusterTracker) { 
+        sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig)); 
+    } 
 
     sil->AddServiceInitializer(new TPersQueueLibSharedInstanceInitializer(runConfig));
 

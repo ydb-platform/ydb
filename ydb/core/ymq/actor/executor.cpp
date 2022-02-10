@@ -4,7 +4,7 @@
 
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
-
+ 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/base/debug_info.h>
@@ -109,10 +109,10 @@ void TExecutorBuilder::SendToQueueLeader() {
     TActivationContext::Send(new IEventHandle(QueueLeaderActor_, Parent_, ev.Release()));
 }
 
-const char* TExecutorBuilder::GetQueryById(size_t idx) {
-    const char* query = IsFifoQueue_ ? GetFifoQueryById(idx) : GetStdQueryById(idx);
-    Y_VERIFY(query);
-    return query;
+const char* TExecutorBuilder::GetQueryById(size_t idx) { 
+    const char* query = IsFifoQueue_ ? GetFifoQueryById(idx) : GetStdQueryById(idx); 
+    Y_VERIFY(query); 
+    return query; 
 }
 
 TMiniKqlExecutionActor::TMiniKqlExecutionActor(
@@ -274,19 +274,19 @@ void TMiniKqlExecutionActor::HandleCompile(TMiniKQLCompileServiceEvents::TEvComp
     ProceedWithExecution();
 }
 
-template<typename TKikimrResultRecord>
-bool TMiniKqlExecutionActor::ShouldRetryOnFail(const TKikimrResultRecord& record) const {
-    const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus());
-    return NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(status) ||
-           RetryOnTimeout_ && record.GetStatusCode() == NKikimrIssues::TStatusIds::TIMEOUT ||
+template<typename TKikimrResultRecord> 
+bool TMiniKqlExecutionActor::ShouldRetryOnFail(const TKikimrResultRecord& record) const { 
+    const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus()); 
+    return NTxProxy::TResultStatus::IsSoftErrorWithoutSideEffects(status) || 
+           RetryOnTimeout_ && record.GetStatusCode() == NKikimrIssues::TStatusIds::TIMEOUT || 
            (record.HasSchemeShardStatus() && record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusMultipleModifications); // very rare case in queue creation
-}
-
+} 
+ 
 void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
     const TDuration executionDuration = TActivationContext::Now() - StartExecutionTs_;
     auto& response = *ev->Get();
-    auto& record = response.Record;
-    const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus());
+    auto& record = response.Record; 
+    const auto status = NKikimr::NTxProxy::TResultStatus::EStatus(record.GetStatus()); 
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " HandleResponse " << record);
     RLOG_SQS_DEBUG(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Attempt " << AttemptNumber_ << " execution duration: " << executionDuration.MilliSeconds() << "ms");
     if (Counters_) {
@@ -314,7 +314,7 @@ void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
         && status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress
         && status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready) {
         failed = true;
-        retryableError = ShouldRetryOnFail(record);
+        retryableError = ShouldRetryOnFail(record); 
         if (retryableError) {
             RLOG_SQS_WARN(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Retryable error in mkql execution result: " << response.Record);
         } else {

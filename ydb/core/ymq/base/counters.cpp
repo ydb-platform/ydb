@@ -298,8 +298,8 @@ static_assert(AbsDiffLessThanCounter(HttpUserCountersDescriptor.SizeOfCounters()
                                      sizeof(NKikimrConfig::TSqsConfig*) +
                                      sizeof(TIntrusivePtr<THttpUserCounters>), sizeof(THttpUserCounters)));
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup) {
-    return GetServiceCounters(countersRoot, "sqs")->GetSubgroup("subsystem", subgroup);
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup) { 
+    return GetServiceCounters(countersRoot, "sqs")->GetSubgroup("subsystem", subgroup); 
 }
 TIntrusivePtr<NMonitoring::TDynamicCounters> GetYmqPublicCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot) {
     // Remove subgroup and don't have subsystem (is this correct - ?)
@@ -605,7 +605,7 @@ void TQueueCounters::InitCounters(bool forLeaderNode) {
         );
 
         INIT_COUNTER(QueueCounters.SqsCounters, MessagesMovedToDLQ, ELifetime::Expiring, EValueType::Derivative, ELaziness::OnStart);
-
+ 
         INIT_COUNTERS_COUPLE(
                 QueueCounters,
                 SendMessage_DeduplicationCount, deduplicated_count_per_second,
@@ -881,63 +881,63 @@ void THttpActionCounters::SetAggregatedParent(THttpActionCounters* parent) {
     HttpActionCountersDescriptor.SetAggregatedParent(this, parent);
 }
 
-static const TString& StringifyGrpcStatus(int grpcStatus) {
-    if (grpcStatus < 0 || grpcStatus > TCloudAuthCounters::GRPC_STATUSES_COUNT - 2) {
-        grpcStatus = TCloudAuthCounters::GRPC_STATUSES_COUNT - 1;
-    }
-
-    static const TString statusStrings[] = {
-        "Ok",
-        "Cancelled",
-        "Unknown",
-        "InvalidArgument",
-        "DeadlineExceeded",
-        "NotFound",
-        "AlreadyExists",
-        "PermissionDenied",
-        "ResourceExhausted",
-        "FailedPrecondition",
-        "Aborted",
-        "OutOfRange",
-        "Unimplemented",
-        "Internal",
-        "Unavailable",
-        "DataLoss",
-        "Unauthenticated",
-        "Misc",
-    };
-
-    static_assert(Y_ARRAY_SIZE(statusStrings) == TCloudAuthCounters::GRPC_STATUSES_COUNT);
-
-    return statusStrings[grpcStatus];
-}
-
-void TCloudAuthCounters::IncCounter(const NCloudAuth::EActionType actionType, const NCloudAuth::ECredentialType credentialType, int grpcStatus) {
-    if (grpcStatus < 0 || grpcStatus > GRPC_STATUSES_COUNT - 2) {
-        grpcStatus = GRPC_STATUSES_COUNT - 1;
-    }
-
-    ++*CloudAuthCounters[actionType][credentialType][grpcStatus];
-}
-
-void TCloudAuthCounters::InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters) {
-    for (size_t actionType = 0; actionType < NCloudAuth::EActionType::ActionTypesCount; ++actionType) {
-        const auto actionTypeStr = ToString(static_cast<NCloudAuth::EActionType>(actionType));
-        const auto actionCounters = cloudAuthCounters->GetSubgroup("action_type", actionTypeStr);
-        for (size_t credentialType = 0; credentialType < NCloudAuth::ECredentialType::CredentialTypesCount; ++credentialType) {
-            const auto credentialTypeStr = ToString(static_cast<NCloudAuth::ECredentialType>(credentialType));
-            const auto actionAndCredentialCounters = actionCounters->GetSubgroup("credential_type", credentialTypeStr);
-            for (size_t grpcStatus = 0; grpcStatus < GRPC_STATUSES_COUNT; ++grpcStatus) {
+static const TString& StringifyGrpcStatus(int grpcStatus) { 
+    if (grpcStatus < 0 || grpcStatus > TCloudAuthCounters::GRPC_STATUSES_COUNT - 2) { 
+        grpcStatus = TCloudAuthCounters::GRPC_STATUSES_COUNT - 1; 
+    } 
+ 
+    static const TString statusStrings[] = { 
+        "Ok", 
+        "Cancelled", 
+        "Unknown", 
+        "InvalidArgument", 
+        "DeadlineExceeded", 
+        "NotFound", 
+        "AlreadyExists", 
+        "PermissionDenied", 
+        "ResourceExhausted", 
+        "FailedPrecondition", 
+        "Aborted", 
+        "OutOfRange", 
+        "Unimplemented", 
+        "Internal", 
+        "Unavailable", 
+        "DataLoss", 
+        "Unauthenticated", 
+        "Misc", 
+    }; 
+ 
+    static_assert(Y_ARRAY_SIZE(statusStrings) == TCloudAuthCounters::GRPC_STATUSES_COUNT); 
+ 
+    return statusStrings[grpcStatus]; 
+} 
+ 
+void TCloudAuthCounters::IncCounter(const NCloudAuth::EActionType actionType, const NCloudAuth::ECredentialType credentialType, int grpcStatus) { 
+    if (grpcStatus < 0 || grpcStatus > GRPC_STATUSES_COUNT - 2) { 
+        grpcStatus = GRPC_STATUSES_COUNT - 1; 
+    } 
+ 
+    ++*CloudAuthCounters[actionType][credentialType][grpcStatus]; 
+} 
+ 
+void TCloudAuthCounters::InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters) { 
+    for (size_t actionType = 0; actionType < NCloudAuth::EActionType::ActionTypesCount; ++actionType) { 
+        const auto actionTypeStr = ToString(static_cast<NCloudAuth::EActionType>(actionType)); 
+        const auto actionCounters = cloudAuthCounters->GetSubgroup("action_type", actionTypeStr); 
+        for (size_t credentialType = 0; credentialType < NCloudAuth::ECredentialType::CredentialTypesCount; ++credentialType) { 
+            const auto credentialTypeStr = ToString(static_cast<NCloudAuth::ECredentialType>(credentialType)); 
+            const auto actionAndCredentialCounters = actionCounters->GetSubgroup("credential_type", credentialTypeStr); 
+            for (size_t grpcStatus = 0; grpcStatus < GRPC_STATUSES_COUNT; ++grpcStatus) { 
                 INIT_COUNTER_WITH_NAME(actionAndCredentialCounters, CloudAuthCounters[actionType][credentialType][grpcStatus], StringifyGrpcStatus(grpcStatus), ELifetime::Persistent, EValueType::Derivative, Lazy(*Cfg));
-            }
-        }
-    }
+            } 
+        } 
+    } 
 
     INIT_HISTOGRAM_COUNTER(cloudAuthCounters, AuthenticateDuration, ELifetime::Persistent, DurationBucketsMs, Lazy(*Cfg));
     INIT_HISTOGRAM_COUNTER(cloudAuthCounters, AuthorizeDuration, ELifetime::Persistent, DurationBucketsMs, Lazy(*Cfg));
     INIT_HISTOGRAM_COUNTER(cloudAuthCounters, GetFolderIdDuration, ELifetime::Persistent, DurationBucketsMs, Lazy(*Cfg));
-}
-
+} 
+ 
 void TMeteringCounters::InitCounters(const TVector<TString>& classifierLabels) {
     const TString classifierRequestsLabel("ClassifierRequests_");
     const TString idleClassifierRequestsLabel("IdleClassifierRequests_");

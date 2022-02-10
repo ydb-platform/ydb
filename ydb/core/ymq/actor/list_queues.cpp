@@ -1,7 +1,7 @@
 #include "action.h"
 #include "error.h"
 #include "log.h"
-#include "params.h"
+#include "params.h" 
 #include "serviceid.h"
 #include "executor.h"
 
@@ -28,7 +28,7 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableListQueues()->SetRequestId(RequestId_);
-
+ 
         CopySecurityToken(Request());
     }
 
@@ -50,19 +50,19 @@ private:
     }
 
     void DoAction() override {
-        Become(&TThis::StateFunc);
-
+        Become(&TThis::StateFunc); 
+ 
         if (!UserExists_) {
             if (!IsCloud()) {
                 MakeError(Response_.MutableListQueues(), NErrors::OPT_IN_REQUIRED, "The specified account does not exist.");
             } // else respond with an empty list for inexistent account
             SendReplyAndDie();
-            return;
-        }
-
+            return; 
+        } 
+ 
         DiscoverQueues();
-    }
-
+    } 
+ 
     TString DoGetQueueName() const override {
         return TString();
     }
@@ -86,16 +86,16 @@ private:
 
             for (size_t i = 0; i < queues.Size(); ++i) {
                 const TString name((TString(queues[i]["QueueName"])));
-                const TString customQueueName((TString(queues[i]["CustomQueueName"])));
+                const TString customQueueName((TString(queues[i]["CustomQueueName"]))); 
 
-                if (prefix.empty() || AsciiHasPrefix((IsCloud() ? customQueueName : name), prefix)) {
+                if (prefix.empty() || AsciiHasPrefix((IsCloud() ? customQueueName : name), prefix)) { 
                     auto* item = result->AddQueues();
                     item->SetQueueName(name);
-                    if (IsCloud()) {
-                        item->SetQueueUrl(MakeQueueUrl(TString::Join(name, '/', customQueueName)));
-                    } else {
-                        item->SetQueueUrl(MakeQueueUrl(name));
-                    }
+                    if (IsCloud()) { 
+                        item->SetQueueUrl(MakeQueueUrl(TString::Join(name, '/', customQueueName))); 
+                    } else { 
+                        item->SetQueueUrl(MakeQueueUrl(name)); 
+                    } 
                 }
             }
         } else {

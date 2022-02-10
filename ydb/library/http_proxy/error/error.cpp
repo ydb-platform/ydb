@@ -191,12 +191,12 @@ extern const TErrorClass INVALID_ATTRIBUTE_NAME = {
     "The specified attribute doesn't exist."
 };
 
-extern const TErrorClass INVALID_ATTRIBUTE_VALUE = {
-    "InvalidAttributeValue",
-    400,
-    "The specified attribute value is invalid."
-};
-
+extern const TErrorClass INVALID_ATTRIBUTE_VALUE = { 
+    "InvalidAttributeValue", 
+    400, 
+    "The specified attribute value is invalid." 
+}; 
+ 
 extern const TErrorClass LEADER_RESOLVING_ERROR = {
     "InternalFailure",
     500,

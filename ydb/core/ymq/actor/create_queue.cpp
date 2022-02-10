@@ -1,12 +1,12 @@
 #include "action.h"
 #include "error.h"
 #include "log.h"
-#include "queue_schema.h"
+#include "queue_schema.h" 
 
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/queue_id.h>
-
+ 
 #include <util/string/join.h>
 #include <util/string/type.h>
 
@@ -20,22 +20,22 @@ public:
         return false;
     }
 
-    static constexpr bool CreateMissingAccount() {
-        return true;
-    }
-
+    static constexpr bool CreateMissingAccount() { 
+        return true; 
+    } 
+ 
     TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CreateQueue, std::move(cb))
     {
         CopyAccountName(Request()); // will be replaced during bootstrap for cloud mode
         Response_.MutableCreateQueue()->SetRequestId(RequestId_);
-
+ 
         CopySecurityToken(Request());
     }
-protected:
-    bool IsFifoQueue() const override {
+protected: 
+    bool IsFifoQueue() const override { 
         return AsciiHasSuffixIgnoreCase(Request().GetQueueName(), ".fifo"); // works for cloud too, since the custom name should end with '.fifo'
-    }
+    } 
 
 private:
     bool DoValidate() override {
@@ -104,19 +104,19 @@ private:
             new TCreateQueueSchemaActorV2(TQueuePath(cfg.GetRoot(), accountName, queueName),
                                           Request(), SelfId(), RequestId_, customQueueName, FolderId_, IsCloud(),
                                           cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_)
-        );
-    }
-
+        ); 
+    } 
+ 
     void DoAction() override {
         Become(&TThis::StateFunc);
 
-        if (IsCloud()) {
+        if (IsCloud()) { 
             Register(new TAtomicCounterActor(SelfId(), Cfg().GetRoot(), RequestId_));
-        } else {
-            static const TString emptyCustomQueueName = "";
-
+        } else { 
+            static const TString emptyCustomQueueName = ""; 
+ 
             StartQueueCreation(Request().GetQueueName(), UserName_, emptyCustomQueueName);
-        }
+        } 
     }
 
     TString DoGetQueueName() const override {
@@ -132,25 +132,25 @@ private:
     }
 
     void HandleAtomicCounterIncrement(TSqsEvents::TEvAtomicCounterIncrementResult::TPtr& ev) {
-        auto event = ev->Get();
+        auto event = ev->Get(); 
         auto* result = Response_.MutableCreateQueue();
-
-        if (event->Success) {
+ 
+        if (event->Success) { 
             const ui16 serviceId = Cfg().GetYandexCloudServiceId();
-            const TString cloudId = UserName_; // should decode from creds
-            ResourceId_ = MakeQueueId(serviceId, event->NewValue, UserName_);
+            const TString cloudId = UserName_; // should decode from creds 
+            ResourceId_ = MakeQueueId(serviceId, event->NewValue, UserName_); 
             RLOG_SQS_DEBUG("Created resource id: " << MakeQueueId(serviceId, event->NewValue, UserName_)
-                                 << " for service id: " << serviceId
-                                 << " unique num: " << event->NewValue
-                                 << " account name: " << UserName_);
-
+                                 << " for service id: " << serviceId 
+                                 << " unique num: " << event->NewValue 
+                                 << " account name: " << UserName_); 
+ 
             StartQueueCreation(ResourceId_, cloudId, Request().GetQueueName());
-        } else {
-            MakeError(result, NErrors::INTERNAL_FAILURE);
+        } else { 
+            MakeError(result, NErrors::INTERNAL_FAILURE); 
             SendReplyAndDie();
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleQueueCreated(TSqsEvents::TEvQueueCreated::TPtr& ev) {
         SchemaActor_ = TActorId();
         auto event  = ev->Get();
@@ -168,14 +168,14 @@ private:
         case EQueueState::Active:
             if (event->Success) {
                 const TString& name = Request().GetQueueName();
-                if (IsCloud()) {
-                    const auto finalResourceId = event->AlreadyExists ? event->ExistingQueueResourceId : ResourceId_;
-                    result->SetQueueName(finalResourceId);
-                    result->SetQueueUrl(MakeQueueUrl(TString::Join(finalResourceId, '/', name)));
-                } else {
-                    result->SetQueueName(name);
-                    result->SetQueueUrl(MakeQueueUrl(name));
-                }
+                if (IsCloud()) { 
+                    const auto finalResourceId = event->AlreadyExists ? event->ExistingQueueResourceId : ResourceId_; 
+                    result->SetQueueName(finalResourceId); 
+                    result->SetQueueUrl(MakeQueueUrl(TString::Join(finalResourceId, '/', name))); 
+                } else { 
+                    result->SetQueueName(name); 
+                    result->SetQueueUrl(MakeQueueUrl(name)); 
+                } 
             } else {
                 MakeError(result, *ev->Get()->ErrorClass, errMsg);
             }
@@ -202,7 +202,7 @@ private:
     }
 
 private:
-    TString ResourceId_;
+    TString ResourceId_; 
     TActorId SchemaActor_;
 };
 

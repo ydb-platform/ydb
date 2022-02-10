@@ -112,28 +112,28 @@ get_queue_attributes_entry =
         (("Id"       % { CurrentParams_->Id = value; }) |
          ("QueueUrl" % { CurrentParams_->QueueUrl = value; }));
 
-permissions_entry =
-    "Permission" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; CurrentParams_->Action = value; });
-
+permissions_entry = 
+    "Permission" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; CurrentParams_->Action = value; }); 
+ 
 main := |*
     ('Action')                  { CurrentParams_->Action = value; };
-    ('Clear')                   { CurrentParams_->Clear = value; };
+    ('Clear')                   { CurrentParams_->Clear = value; }; 
     ('DelaySeconds')            { CurrentParams_->DelaySeconds = ParseAndValidate(value, TStringBuf("DelaySeconds")); };
-    ('folderId')                { CurrentParams_->FolderId = value; };
+    ('folderId')                { CurrentParams_->FolderId = value; }; 
     ('MaxNumberOfMessages')     { CurrentParams_->MaxNumberOfMessages = ParseAndValidate(value, TStringBuf("MaxNumberOfMessages")); };
     ('MessageBody')             { CurrentParams_->MessageBody = value; };
     ('MessageDeduplicationId')  { CurrentParams_->MessageDeduplicationId = ValidateAlphaNumAndPunctuation128ForAssign(value, TStringBuf("MessageDeduplicationId")); };
     ('MessageGroupId')          { CurrentParams_->MessageGroupId = ValidateAlphaNumAndPunctuation128ForAssign(value, TStringBuf("MessageGroupId")); };
-    ('Path')                    { CurrentParams_->Path = value; };
+    ('Path')                    { CurrentParams_->Path = value; }; 
     ('QueueName')               { CurrentParams_->QueueName = value; };
     ('QueueNamePrefix')         { CurrentParams_->QueueNamePrefix = value; };
     ('QueueUrl')                { CurrentParams_->QueueUrl = value; };
     ('ReceiptHandle')           { CurrentParams_->ReceiptHandle = value; };
     ('ReceiveRequestAttemptId') { CurrentParams_->ReceiveRequestAttemptId = ValidateAlphaNumAndPunctuation128ForAssign(value, TStringBuf("ReceiveRequestAttemptId")); };
-    ('Subject')                 { CurrentParams_->Subject = value; };
+    ('Subject')                 { CurrentParams_->Subject = value; }; 
     ('UserName')                { CurrentParams_->UserName = value; };
     ('UserNamePrefix')          { CurrentParams_->UserNamePrefix = value; };
-    ('Version')                 { CurrentParams_->Version = value; };
+    ('Version')                 { CurrentParams_->Version = value; }; 
     ('VisibilityTimeout')       { CurrentParams_->VisibilityTimeout = ParseAndValidate(value, TStringBuf("VisibilityTimeout")); };
     ('WaitTimeSeconds')         { CurrentParams_->WaitTimeSeconds = ParseAndValidate(value, TStringBuf("WaitTimeSeconds")); };
 
@@ -142,7 +142,7 @@ main := |*
     change_visibility_entry;
     delete_message_entry;
     message_attribute;
-    permissions_entry;
+    permissions_entry; 
     send_message_entry;
     delete_queue_entry;
     purge_queue_entry;

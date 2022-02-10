@@ -28,23 +28,23 @@ def to_bytes(v):
     return v.encode('utf-8')
 
 
-def auth_string(user):
+def auth_string(user): 
     return "AWS4-HMAC-SHA256 Credential={user}/{date}/yandex/sqs/aws4_request".format(
-        user=user, date=DEFAULT_DATE
+        user=user, date=DEFAULT_DATE 
     )
 
 
-def auth_headers(user, security_token=None, iam_token=None):
-    headers = {
-        'X-Amz-Date': '{}T104419Z'.format(DEFAULT_DATE),
-        'Authorization': auth_string(user)
+def auth_headers(user, security_token=None, iam_token=None): 
+    headers = { 
+        'X-Amz-Date': '{}T104419Z'.format(DEFAULT_DATE), 
+        'Authorization': auth_string(user) 
     }
-    if security_token is not None:
-        headers['X-Amz-Security-Token'] = security_token
-    if iam_token is not None:
-        headers['X-YaCloud-SubjectToken'] = iam_token
-
-    return headers
+    if security_token is not None: 
+        headers['X-Amz-Security-Token'] = security_token 
+    if iam_token is not None: 
+        headers['X-YaCloud-SubjectToken'] = iam_token 
+ 
+    return headers 
 
 SQS_ATTRIBUTE_TYPES = {'String': 'StringValue', 'Number': 'StringValue', 'Binary': 'BinaryValue'}
 
@@ -79,38 +79,38 @@ class SqsChangeMessageVisibilityParams(object):
 
 
 class SqsHttpApi(object):
-    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None):
-        self.__auth_headers = auth_headers(user, security_token, iam_token)
+    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None): 
+        self.__auth_headers = auth_headers(user, security_token, iam_token) 
         if not server.startswith('http'):
             server = 'http://' + server
         self.__request = requests.Request(
             'POST',
             "{}:{}".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=auth_headers(user, security_token, iam_token) 
         )
         self.__private_request = requests.Request(
             'POST',
             "{}:{}/private".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=auth_headers(user, security_token, iam_token) 
         )
         self.__session = requests.Session()
         self.__raise_on_error = raise_on_error
         self.__user = user
         self.__timeout = timeout
-        self.__security_token = security_token
-        assert(isinstance(force_private, bool))
-        self.__force_private = force_private
-        self.__folder_id = folder_id
+        self.__security_token = security_token 
+        assert(isinstance(force_private, bool)) 
+        self.__force_private = force_private 
+        self.__folder_id = folder_id 
 
     def execute_request(self, action, extract_result_method, default=None, private=False, **params):
         if params is None:
             params = {}
         params['Action'] = action
-
-        if self.__folder_id is not None:
-            params['folderId'] = self.__folder_id
-
-        if self.__force_private or private:
+ 
+        if self.__folder_id is not None: 
+            params['folderId'] = self.__folder_id 
+ 
+        if self.__force_private or private: 
             request = self.__private_request
         else:
             request = self.__request
@@ -141,7 +141,7 @@ class SqsHttpApi(object):
                 response.status_code, response.reason, response.text
             ))
             # Assert that no internal info will be given to user
-            assert response.text.find('.cpp:') == -1, 'No internal info should be given to user'
+            assert response.text.find('.cpp:') == -1, 'No internal info should be given to user' 
             if self.__raise_on_error:
                 raise RuntimeError(
                     "Request {} failed with status {} and text {}".format(
@@ -165,13 +165,13 @@ class SqsHttpApi(object):
             UserName=username
         )
 
-    def delete_user(self, username):
-        return self.execute_request(
-            action='DeleteUser',
-            extract_result_method=lambda x: x['DeleteUserResponse']['ResponseMetadata'],
-            UserName=username
-        )
-
+    def delete_user(self, username): 
+        return self.execute_request( 
+            action='DeleteUser', 
+            extract_result_method=lambda x: x['DeleteUserResponse']['ResponseMetadata'], 
+            UserName=username 
+        ) 
+ 
     def list_users(self):
         return self.execute_request(
             action='ListUsers',
@@ -191,13 +191,13 @@ class SqsHttpApi(object):
                 extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(),
             )
 
-    def private_count_queues(self):
-        return self.execute_request(
-            action='CountQueues',
-            private=True,
-            extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
-        )
-
+    def private_count_queues(self): 
+        return self.execute_request( 
+            action='CountQueues', 
+            private=True, 
+            extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'], 
+        ) 
+ 
     def create_queue(self, queue_name, is_fifo=False, attributes=None):
         # if is_fifo and not queue_name.endswith('.fifo'):
         #     return None
@@ -265,13 +265,13 @@ class SqsHttpApi(object):
             QueueName=queue_name
         )
 
-    def list_dead_letter_source_queues(self, queue_url):
-        return self.execute_request(
-            action='ListDeadLetterSourceQueues',
-            extract_result_method=lambda x: wrap_in_list(x['ListDeadLetterSourceQueuesResponse']['ListDeadLetterSourceQueuesResult']['QueueUrl']),
-            QueueUrl=queue_url
-        )
-
+    def list_dead_letter_source_queues(self, queue_url): 
+        return self.execute_request( 
+            action='ListDeadLetterSourceQueues', 
+            extract_result_method=lambda x: wrap_in_list(x['ListDeadLetterSourceQueuesResponse']['ListDeadLetterSourceQueuesResult']['QueueUrl']), 
+            QueueUrl=queue_url 
+        ) 
+ 
     def get_queue_attributes(self, queue_url, attributes=['All']):
         params = {}
         for i in six.moves.range(len(attributes)):
@@ -283,9 +283,9 @@ class SqsHttpApi(object):
             **params
         )
         result = {}
-        if attrib_list is None:
-            return result
-
+        if attrib_list is None: 
+            return result 
+ 
         for attr in wrap_in_list(attrib_list):
             result[attr['Name']] = attr['Value']
         return result
@@ -313,30 +313,30 @@ class SqsHttpApi(object):
 
         return result_list
 
-    def modify_permissions(self, action, subject, path, permissions):
-        args = {
-            'Path': path,
-            'Subject': subject
-        }
-        for i, permission in enumerate(permissions):
-            args['Permission.' + str(i)] = permission
-
-        return self.execute_request(
-            action=action + 'Permissions',
-            extract_result_method=lambda x: x['ModifyPermissionsResponse']['ResponseMetadata']['RequestId'],
-            **args
-        )
-
-    def list_permissions(self, path):
-        args = {
-            'Path': path,
-        }
-        return self.execute_request(
-            action='ListPermissions',
-            extract_result_method=lambda x: x['ListPermissionsResponse']['YaListPermissionsResult'],
-            **args
-        )
-
+    def modify_permissions(self, action, subject, path, permissions): 
+        args = { 
+            'Path': path, 
+            'Subject': subject 
+        } 
+        for i, permission in enumerate(permissions): 
+            args['Permission.' + str(i)] = permission 
+ 
+        return self.execute_request( 
+            action=action + 'Permissions', 
+            extract_result_method=lambda x: x['ModifyPermissionsResponse']['ResponseMetadata']['RequestId'], 
+            **args 
+        ) 
+ 
+    def list_permissions(self, path): 
+        args = { 
+            'Path': path, 
+        } 
+        return self.execute_request( 
+            action='ListPermissions', 
+            extract_result_method=lambda x: x['ListPermissionsResponse']['YaListPermissionsResult'], 
+            **args 
+        ) 
+ 
     def set_queue_attributes(self, queue_url, attributes):
         params = {}
         i = 1

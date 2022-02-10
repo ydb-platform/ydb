@@ -1,19 +1,19 @@
-LIBRARY()
-
-OWNER(
-    radix
+LIBRARY() 
+ 
+OWNER( 
+    radix 
     g:kikimr
     g:logbroker
-)
-
-SRCS(
-    cluster_discovery_service.cpp
-    cluster_discovery_worker.cpp
-    counters.cpp
-    grpc_service.cpp
-)
-
-PEERDIR(
+) 
+ 
+SRCS( 
+    cluster_discovery_service.cpp 
+    cluster_discovery_worker.cpp 
+    counters.cpp 
+    grpc_service.cpp 
+) 
+ 
+PEERDIR( 
     ydb/core/base
     ydb/core/client/server
     ydb/core/grpc_services
@@ -26,9 +26,9 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/services/persqueue_cluster_discovery/cluster_ordering
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

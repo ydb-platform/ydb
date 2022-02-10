@@ -6,25 +6,25 @@ OWNER(
 LIBRARY()
 
 SRCS(
-    acl.cpp
+    acl.cpp 
     action.cpp
     counters.cpp
     debug_info.cpp
-    dlq_helpers.cpp
+    dlq_helpers.cpp 
     helpers.cpp
     probes.cpp
-    queue_attributes.cpp
-    queue_id.cpp
+    queue_attributes.cpp 
+    queue_id.cpp 
     secure_protobuf_printer.cpp
     events_writer_iface.h
 )
 
 GENERATE_ENUM_SERIALIZATION(query_id.h)
 
-GENERATE_ENUM_SERIALIZATION(cloud_enums.h)
+GENERATE_ENUM_SERIALIZATION(cloud_enums.h) 
 
 PEERDIR(
-    contrib/libs/openssl
+    contrib/libs/openssl 
     library/cpp/cgiparam
     library/cpp/ipmath
     library/cpp/lwtrace

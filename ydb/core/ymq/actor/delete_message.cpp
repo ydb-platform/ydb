@@ -103,18 +103,18 @@ private:
 
     void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) {
         switch (answer.Status) {
-            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: {
+            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: { 
                 INC_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second);
-                break;
-            }
-            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound: {
-                // ignore missing handle just like proper SQS does
-                break;
-            }
-            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed: {
-                MakeError(resp, NErrors::INTERNAL_FAILURE);
-                break;
-            }
+                break; 
+            } 
+            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound: { 
+                // ignore missing handle just like proper SQS does 
+                break; 
+            } 
+            case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed: { 
+                MakeError(resp, NErrors::INTERNAL_FAILURE); 
+                break; 
+            } 
         }
     }
 

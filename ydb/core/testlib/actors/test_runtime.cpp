@@ -126,7 +126,7 @@ namespace NActors {
             nodeAppData->PollerThreads = node->Poller;
             nodeAppData->StreamingConfig.SetEnableOutputStreams(true);
             nodeAppData->PQConfig = app0->PQConfig;
-            nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
+            nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig); 
             nodeAppData->StaticBlobStorageConfig->CopyFrom(*app0->StaticBlobStorageConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
             nodeAppData->FeatureFlags = app0->FeatureFlags;

@@ -226,7 +226,7 @@ public:
     }
 
     bool IsGroupByColumn(const TString& column) const override {
-        Y_UNUSED(column);
+        Y_UNUSED(column); 
         return false;
     }
 
@@ -272,7 +272,7 @@ public:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         if (UseAllColumns) {
             return true;
         }
@@ -720,15 +720,15 @@ public:
         return true;
     }
 
-    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) override {
-        Y_UNUSED(ctx);
+    bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) override { 
+        Y_UNUSED(ctx); 
         TTableHints merged = contextHints;
         MergeHints(merged, hints);
         Table.Options = BuildInputOptions(pos, merged);
         return true;
     }
 
-    bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override {
+    bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override { 
         return Table.Keys->SetViewName(ctx, pos, view);
     }
 
@@ -788,7 +788,7 @@ public:
         return true;
     }
 
-    bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override {
+    bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override { 
         Y_UNUSED(ctx);
         ViewPos = pos;
         View = view;
@@ -1337,7 +1337,7 @@ public:
         return Source.Get();
     }
 
-    TWriteSettings GetWriteSettings() const override {
+    TWriteSettings GetWriteSettings() const override { 
         return Settings;
     }
 
@@ -1411,7 +1411,7 @@ public:
         , Source(std::move(source))
         , GroupByExpr(groupByExpr)
         , GroupBy(groupBy)
-        , AssumeSorted(assumeSorted)
+        , AssumeSorted(assumeSorted) 
         , CompactGroupBy(compactGroupBy)
         , OrderBy(orderBy)
         , Having(having)
@@ -1419,7 +1419,7 @@ public:
         , Terms(terms)
         , Without(without)
         , Distinct(distinct)
-        , HoppingWindowSpec(hoppingWindowSpec)
+        , HoppingWindowSpec(hoppingWindowSpec) 
         , SelectStream(selectStream)
         , Settings(settings)
     {
@@ -2321,7 +2321,7 @@ public:
 
 private:
     TNodePtr BuildColumnsTerms(TContext& ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         TNodePtr terms;
         Y_VERIFY_DEBUG(Terms.size() == 1);
         if (Columns.All) {
@@ -2404,7 +2404,7 @@ public:
     }
 
     bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         hint = 0;
         if (GroupByColumns.empty()) {
             for (const auto& groupByNode: GroupBy) {
@@ -2658,7 +2658,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         Y_FAIL("Unexpected call");
     }
 

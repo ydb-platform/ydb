@@ -19,7 +19,7 @@ namespace NSQLTranslationV1 {
 namespace {
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     if (prefixPath.empty()) {
         return path.Build();
     }

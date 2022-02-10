@@ -20,7 +20,7 @@ enum TypeIds {
     Yson = 0x1201;
     Json = 0x1202;
     Uuid = 0x1203;
-    JsonDocument = 0x1204;
+    JsonDocument = 0x1204; 
     Date = 0x0030;
     Datetime = 0x0031;
     Timestamp = 0x0032;
@@ -29,5 +29,5 @@ enum TypeIds {
     TzDatetime = 0x0035;
     TzTimestamp = 0x0036;
     Decimal = 0x1301;
-    DyNumber = 0x1302;
+    DyNumber = 0x1302; 
 }

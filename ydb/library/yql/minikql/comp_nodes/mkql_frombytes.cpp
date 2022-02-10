@@ -7,7 +7,7 @@
 #include <ydb/library/yql/utils/swap_bytes.h>
 
 #include <ydb/library/binary_json/read.h>
-
+ 
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
@@ -97,14 +97,14 @@ public:
 
             return NUdf::TUnboxedValuePod();
         }
-
-        case NUdf::EDataSlot::JsonDocument: {
-            if (!NBinaryJson::IsValidBinaryJson(TStringBuf(data.AsStringRef()))) {
-                return NUdf::TUnboxedValuePod();
-            }
-            return data.Release();
-        }
-
+ 
+        case NUdf::EDataSlot::JsonDocument: { 
+            if (!NBinaryJson::IsValidBinaryJson(TStringBuf(data.AsStringRef()))) { 
+                return NUdf::TUnboxedValuePod(); 
+            } 
+            return data.Release(); 
+        } 
+ 
         default:
             if (IsValidValue(SchemeType, data)) {
                 return data.Release();

@@ -187,7 +187,7 @@ public:
     }
 
     bool IsGroupByColumn(const TString& column) const override {
-        Y_UNUSED(column);
+        Y_UNUSED(column); 
         return false;
     }
 
@@ -227,7 +227,7 @@ public:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         if (UseAllColumns) {
             return true;
         }
@@ -596,7 +596,7 @@ public:
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
-        Y_UNUSED(pos);
+        Y_UNUSED(pos); 
         TString modeName;
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
@@ -1066,7 +1066,7 @@ public:
         , Terms(terms)
         , Without(without)
         , Distinct(distinct)
-        , HoppingWindowSpec(hoppingWindowSpec)
+        , HoppingWindowSpec(hoppingWindowSpec) 
         , Stream(stream)
         , Settings(settings)
     {
@@ -1835,7 +1835,7 @@ public:
 
 private:
     TNodePtr BuildColumnsTerms(TContext& ctx) {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         TNodePtr terms;
         Y_VERIFY_DEBUG(Terms.size() == 1);
         if (Columns.All) {
@@ -1913,7 +1913,7 @@ public:
     }
 
     bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         hint = 0;
         if (GroupByColumns.empty()) {
             for (const auto& groupByNode: GroupBy) {
@@ -2121,7 +2121,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         Y_FAIL("Unexpected call");
     }
 

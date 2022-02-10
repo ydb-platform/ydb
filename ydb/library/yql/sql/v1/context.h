@@ -236,7 +236,7 @@ namespace NSQLTranslationV1 {
         bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;
-        TMaybe<bool> JsonQueryReturnsJsonDocument;
+        TMaybe<bool> JsonQueryReturnsJsonDocument; 
         TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
         TMaybe<bool> AnsiRankForNullableKeys = true;
         TMaybe<bool> AnsiOrderByLimitInUnionAll = true;

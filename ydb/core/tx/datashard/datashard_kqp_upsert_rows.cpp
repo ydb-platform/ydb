@@ -229,5 +229,5 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
         std::move(upsertColumns), ctx.Env);
 }
 
-} // namespace NMiniKQL
+} // namespace NMiniKQL 
 } // namespace NKikimr

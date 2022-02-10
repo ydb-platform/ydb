@@ -1052,7 +1052,7 @@ public:
         TypesCtx->RandomProvider = TAppData::RandomProvider;
         TypesCtx->Modules = ModuleResolver;
         TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
-        TypesCtx->JsonQueryReturnsJsonDocument = true;
+        TypesCtx->JsonQueryReturnsJsonDocument = true; 
 
         // Result provider
         auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };

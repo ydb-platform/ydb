@@ -444,103 +444,103 @@ ids {
   code: YQL_NOT_ALLOWED_IN_DISCOVERY
   severity: S_ERROR
 }
+ids { 
+  code: JSONPATH_PARSE_ERROR 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_EXPECTED_OBJECT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_MEMBER_NOT_FOUND 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_EXPECTED_ARRAY 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_ARRAY_INDEX 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_ARRAY_INDEX_RANGE 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_LAST_OUTSIDE_OF_ARRAY_SUBSCRIPT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_UNDEFINED_VARIABLE 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_DIVISION_BY_ZERO 
+  severity: S_ERROR 
+} 
 ids {
-  code: JSONPATH_PARSE_ERROR
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_EXPECTED_OBJECT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_MEMBER_NOT_FOUND
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_EXPECTED_ARRAY
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_ARRAY_INDEX
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_ARRAY_INDEX_RANGE
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_LAST_OUTSIDE_OF_ARRAY_SUBSCRIPT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_UNDEFINED_VARIABLE
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_DIVISION_BY_ZERO
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_BINARY_OPERATION_RESULT_INFINITY
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_LOGICAL_OPERATION_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_FILTER_OBJECT_OUTSIDE_OF_FILTER
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_DOUBLE_METHOD_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_NUMBER_STRING
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INFINITE_NUMBER_STRING
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_TYPE_CHECK_ERROR
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_IS_UNKNOWN_ARGUMENT
-  severity: S_ERROR
-}
-ids {
-  code: JSONPATH_INVALID_STARTS_WITH_ARGUMENT
-  severity: S_ERROR
-}
-ids {
+  code: JSONPATH_BINARY_OPERATION_RESULT_INFINITY 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_LOGICAL_OPERATION_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_FILTER_OBJECT_OUTSIDE_OF_FILTER 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_DOUBLE_METHOD_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_NUMBER_STRING 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INFINITE_NUMBER_STRING 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_TYPE_CHECK_ERROR 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_IS_UNKNOWN_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
+  code: JSONPATH_INVALID_STARTS_WITH_ARGUMENT 
+  severity: S_ERROR 
+} 
+ids { 
   code: YQL_EMPTY_WINDOW_FRAME
   severity: S_WARNING
 }
@@ -580,10 +580,10 @@ ids {
   code: YQL_OPERATION_WILL_RETURN_NULL
   severity: S_WARNING
 }
-ids {
-  code: YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED
-  severity: S_WARNING
-}
+ids { 
+  code: YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_DEPRECATED_LIST_FLATMAP_OPTIONAL
   severity: S_WARNING

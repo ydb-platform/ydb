@@ -638,64 +638,64 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 }
 
 TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
-    const TKikimrTablesData& tablesData)
-{
+    const TKikimrTablesData& tablesData) 
+{ 
     if (!EnsureArgsCount(*node, 2, ctx)) {
-        return TStatus::Error;
-    }
-
+        return TStatus::Error; 
+    } 
+ 
     auto table = ResolveTable(node->Child(TKqlDeleteRowsBase::idx_Table), ctx, cluster, tablesData);
     if (!table.second) {
         return TStatus::Error;
     }
 
-    const TTypeAnnotationNode* itemType = nullptr;
-    bool isStream = false;
-
+    const TTypeAnnotationNode* itemType = nullptr; 
+    bool isStream = false; 
+ 
     auto* input = node->Child(TKqlDeleteRowsBase::idx_Input);
 
     if (TKqpDeleteRows::Match(node.Get())) {
         if (!EnsureStreamType(*input, ctx)) {
-            return TStatus::Error;
-        }
+            return TStatus::Error; 
+        } 
         itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-        isStream = true;
-    } else {
+        isStream = true; 
+    } else { 
         YQL_ENSURE(TKqlDeleteRows::Match(node.Get()) || TKqlDeleteRowsIndex::Match(node.Get()));
         if (!EnsureListType(*input, ctx)) {
-            return TStatus::Error;
-        }
+            return TStatus::Error; 
+        } 
         itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        isStream = false;
-    }
-
+        isStream = false; 
+    } 
+ 
     if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
-        return TStatus::Error;
-    }
-
-    auto rowType = itemType->Cast<TStructExprType>();
+        return TStatus::Error; 
+    } 
+ 
+    auto rowType = itemType->Cast<TStructExprType>(); 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
-        if (!rowType->FindItem(keyColumnName)) {
+        if (!rowType->FindItem(keyColumnName)) { 
             ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Missing key column in input type: " << keyColumnName));
-            return TStatus::Error;
-        }
-    }
-
+            return TStatus::Error; 
+        } 
+    } 
+ 
     if (rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
         return TStatus::Error;
-    }
-
-    auto effectType = MakeKqpEffectType(ctx);
-    if (isStream) {
+    } 
+ 
+    auto effectType = MakeKqpEffectType(ctx); 
+    if (isStream) { 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));
-    } else {
+    } else { 
         node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
-    }
-    return TStatus::Ok;
-}
-
+    } 
+    return TStatus::Ok; 
+} 
+ 
 TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1092,8 +1092,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
-            }
-
+            } 
+ 
             if (TKqpTxResultBinding::Match(input.Get())) {
                 return AnnotateKqpTxResultBinding(input, ctx);
             }

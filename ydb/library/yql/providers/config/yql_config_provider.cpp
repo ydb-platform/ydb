@@ -718,15 +718,15 @@ namespace {
                     .emplace(
                         TUserDataKey::File(TStringBuf("/home/geodata6.bin")),
                         TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}}).first->second.Usage.Set(EUserDataBlockUsage::Path);
-            }
-            else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
-                if (args.size() != 0) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
-                    return false;
-                }
-
-                Types.JsonQueryReturnsJsonDocument = (name == "DisableJsonQueryReturnsJsonDocument");
-            }
+            } 
+            else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") { 
+                if (args.size() != 0) { 
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size())); 
+                    return false; 
+                } 
+ 
+                Types.JsonQueryReturnsJsonDocument = (name == "DisableJsonQueryReturnsJsonDocument"); 
+            } 
             else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -745,7 +745,7 @@ namespace {
                     return false;
                 }
             }
-            else {
+            else { 
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
             }

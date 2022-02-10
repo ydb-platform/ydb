@@ -48,7 +48,7 @@ using NALPDefault::SQLv1LexerTokens;
     TMutex SanitizerSQLTranslationMutex;
 #endif
 
-using namespace NSQLv1Generated;
+using namespace NSQLv1Generated; 
 
 static TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -947,8 +947,8 @@ private:
     TMaybe<TExprOrIdent> InAtomExpr(const TRule_in_atom_expr& node, const TTrailingQuestions& tail);
 
     TNodePtr JsonInputArg(const TRule_json_common_args& node);
-    TNodePtr JsonPathSpecification(const TRule_jsonpath_spec& node);
-    TNodePtr JsonReturningTypeRule(const TRule_type_name_simple& node);
+    TNodePtr JsonPathSpecification(const TRule_jsonpath_spec& node); 
+    TNodePtr JsonReturningTypeRule(const TRule_type_name_simple& node); 
     TNodePtr JsonValueCaseHandler(const TRule_json_case_handler& node, EJsonValueHandlerMode& mode);
     void AddJsonValueCaseHandlers(const TRule_json_value& node, TVector<TNodePtr>& children);
     void AddJsonVariable(const TRule_json_variable& node, TVector<TNodePtr>& children);
@@ -959,13 +959,13 @@ private:
     void AddJsonExistsHandler(const TRule_json_exists& node, TVector<TNodePtr>& children);
     TNodePtr JsonExistsExpr(const TRule_json_exists& node);
     EJsonQueryWrap JsonQueryWrapper(const TRule_json_query& node);
-    EJsonQueryHandler JsonQueryHandler(const TRule_json_query_handler& node);
+    EJsonQueryHandler JsonQueryHandler(const TRule_json_query_handler& node); 
     TNodePtr JsonQueryExpr(const TRule_json_query& node);
     TNodePtr JsonApiExpr(const TRule_json_api_expr& node);
-
-    template<typename TUnaryCasualExprRule>
+ 
+    template<typename TUnaryCasualExprRule> 
     TNodePtr UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail);
-
+ 
     template<typename TUnarySubExprRule>
     TNodePtr UnaryExpr(const TUnarySubExprRule& node, const TTrailingQuestions& tail);
 
@@ -1721,8 +1721,8 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             result.Source = ret;
             return true;
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
 
     MergeHints(hints, tableHints);
@@ -2479,8 +2479,8 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
             }
             return GetNamedNode(bindName);
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
 }
 
@@ -3057,8 +3057,8 @@ TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& nod
 
         break;
     }
-    default:
-        Y_FAIL("You should change implementation according to grammar changes");
+    default: 
+        Y_FAIL("You should change implementation according to grammar changes"); 
     }
     if (hasErrors) {
         return Nothing();
@@ -3643,7 +3643,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     value = 0;
     const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
     for (const char& cur: digString) {
-        const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)];
+        const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)]; 
         if (curDigit >= base) {
             ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << strOrig << ", char: '" << cur <<
                 "' is out of base: " << base;
@@ -3756,71 +3756,71 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
 
 template<typename TUnarySubExprType>
 TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node, const TTrailingQuestions& tail) {
-    if constexpr (std::is_same_v<TUnarySubExprType, TRule_unary_subexpr>) {
-        if (node.Alt_case() == TRule_unary_subexpr::kAltUnarySubexpr1) {
+    if constexpr (std::is_same_v<TUnarySubExprType, TRule_unary_subexpr>) { 
+        if (node.Alt_case() == TRule_unary_subexpr::kAltUnarySubexpr1) { 
             return UnaryCasualExpr(node.GetAlt_unary_subexpr1().GetRule_unary_casual_subexpr1(), tail);
         } else if (tail.Count) {
             UnexpectedQuestionToken(tail);
             return {};
-        } else {
-            return JsonApiExpr(node.GetAlt_unary_subexpr2().GetRule_json_api_expr1());
-        }
-    } else {
-        if (node.Alt_case() == TRule_in_unary_subexpr::kAltInUnarySubexpr1) {
+        } else { 
+            return JsonApiExpr(node.GetAlt_unary_subexpr2().GetRule_json_api_expr1()); 
+        } 
+    } else { 
+        if (node.Alt_case() == TRule_in_unary_subexpr::kAltInUnarySubexpr1) { 
             return UnaryCasualExpr(node.GetAlt_in_unary_subexpr1().GetRule_in_unary_casual_subexpr1(), tail);
         } else if (tail.Count) {
             UnexpectedQuestionToken(tail);
             return {};
-        } else {
+        } else { 
             return JsonApiExpr(node.GetAlt_in_unary_subexpr2().GetRule_json_api_expr1());
-        }
-    }
-}
+        } 
+    } 
+} 
 
-TNodePtr TSqlExpression::JsonPathSpecification(const TRule_jsonpath_spec& node) {
-    /*
+TNodePtr TSqlExpression::JsonPathSpecification(const TRule_jsonpath_spec& node) { 
+    /* 
         jsonpath_spec: STRING_VALUE;
-    */
+    */ 
     TString value = Token(node.GetToken1());
     TPosition pos = Ctx.Pos();
-
+ 
     auto parsed = StringContent(Ctx, pos, value);
     if (!parsed) {
-        return nullptr;
-    }
+        return nullptr; 
+    } 
     return new TCallNodeImpl(pos, "Utf8", {BuildQuotedAtom(pos, parsed->Content, parsed->Flags)});
-}
-
-TNodePtr TSqlExpression::JsonReturningTypeRule(const TRule_type_name_simple& node) {
-    /*
-        (RETURNING type_name_simple)?
-    */
+} 
+ 
+TNodePtr TSqlExpression::JsonReturningTypeRule(const TRule_type_name_simple& node) { 
+    /* 
+        (RETURNING type_name_simple)? 
+    */ 
     return TypeSimple(node, /* onlyDataAllowed */ true);
-}
-
+} 
+ 
 TNodePtr TSqlExpression::JsonInputArg(const TRule_json_common_args& node) {
     /*
         json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
     */
     TNodePtr jsonExpr = Build(node.GetRule_expr1());
-    if (!jsonExpr || jsonExpr->IsNull()) {
-        jsonExpr = new TCallNodeImpl(Ctx.Pos(), "Nothing", {
-            new TCallNodeImpl(Ctx.Pos(), "OptionalType", {BuildDataType(Ctx.Pos(), "Json")})
-        });
-    }
-
-    return jsonExpr;
-}
-
+    if (!jsonExpr || jsonExpr->IsNull()) { 
+        jsonExpr = new TCallNodeImpl(Ctx.Pos(), "Nothing", { 
+            new TCallNodeImpl(Ctx.Pos(), "OptionalType", {BuildDataType(Ctx.Pos(), "Json")}) 
+        }); 
+    } 
+ 
+    return jsonExpr; 
+} 
+ 
 void TSqlExpression::AddJsonVariable(const TRule_json_variable& node, TVector<TNodePtr>& children) {
-    /*
-        json_variable: expr AS json_variable_name;
-    */
-    TNodePtr expr;
-    TString rawName;
-    TPosition namePos = Ctx.Pos();
-    ui32 nameFlags = 0;
-
+    /* 
+        json_variable: expr AS json_variable_name; 
+    */ 
+    TNodePtr expr; 
+    TString rawName; 
+    TPosition namePos = Ctx.Pos(); 
+    ui32 nameFlags = 0; 
+ 
     expr = Build(node.GetRule_expr1());
     const auto& nameRule = node.GetRule_json_variable_name3();
     switch (nameRule.GetAltCase()) {
@@ -3834,165 +3834,165 @@ void TSqlExpression::AddJsonVariable(const TRule_json_variable& node, TVector<TN
             auto parsed = StringContentOrIdContent(Ctx, namePos, token.GetValue());
             if (!parsed) {
                 return;
-            }
+            } 
             rawName = parsed->Content;
             nameFlags = parsed->Flags;
             break;
-        }
+        } 
         default:
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-
-    TNodePtr nameExpr = BuildQuotedAtom(namePos, rawName, nameFlags);
-    children.push_back(BuildTuple(namePos, {nameExpr, expr}));
-}
-
+    } 
+ 
+    TNodePtr nameExpr = BuildQuotedAtom(namePos, rawName, nameFlags); 
+    children.push_back(BuildTuple(namePos, {nameExpr, expr})); 
+} 
+ 
 void TSqlExpression::AddJsonVariables(const TRule_json_variables& node, TVector<TNodePtr>& children) {
-    /*
-        json_variables: json_variable (COMMA json_variable)*;
-    */
+    /* 
+        json_variables: json_variable (COMMA json_variable)*; 
+    */ 
     AddJsonVariable(node.GetRule_json_variable1(), children);
-    for (size_t i = 0; i < node.Block2Size(); i++) {
-            AddJsonVariable(node.GetBlock2(i).GetRule_json_variable2(), children);
-    }
-}
-
+    for (size_t i = 0; i < node.Block2Size(); i++) { 
+            AddJsonVariable(node.GetBlock2(i).GetRule_json_variable2(), children); 
+    } 
+} 
+ 
 TNodePtr TSqlExpression::JsonVariables(const TRule_json_common_args& node) {
-    /*
+    /* 
         json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
-    */
-    TVector<TNodePtr> variables;
-    TPosition pos = Ctx.Pos();
-    if (node.HasBlock4()) {
-        const auto& block = node.GetBlock4();
-        pos = GetPos(block.GetToken1());
+    */ 
+    TVector<TNodePtr> variables; 
+    TPosition pos = Ctx.Pos(); 
+    if (node.HasBlock4()) { 
+        const auto& block = node.GetBlock4(); 
+        pos = GetPos(block.GetToken1()); 
         AddJsonVariables(block.GetRule_json_variables2(), variables);
-    }
-    return new TCallNodeImpl(pos, "JsonVariables", variables);
-}
-
+    } 
+    return new TCallNodeImpl(pos, "JsonVariables", variables); 
+} 
+ 
 void TSqlExpression::AddJsonCommonArgs(const TRule_json_common_args& node, TVector<TNodePtr>& children) {
-    /*
-        json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
-    */
-    TNodePtr jsonExpr = JsonInputArg(node);
-    TNodePtr jsonPath = JsonPathSpecification(node.GetRule_jsonpath_spec3());
-    TNodePtr variables = JsonVariables(node);
-
-    children.push_back(jsonExpr);
-    children.push_back(jsonPath);
-    children.push_back(variables);
-}
-
+    /* 
+        json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?; 
+    */ 
+    TNodePtr jsonExpr = JsonInputArg(node); 
+    TNodePtr jsonPath = JsonPathSpecification(node.GetRule_jsonpath_spec3()); 
+    TNodePtr variables = JsonVariables(node); 
+ 
+    children.push_back(jsonExpr); 
+    children.push_back(jsonPath); 
+    children.push_back(variables); 
+} 
+ 
 TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& node, EJsonValueHandlerMode& mode) {
-    /*
-        json_case_handler: ERROR | NULL | (DEFAULT expr);
-    */
-
+    /* 
+        json_case_handler: ERROR | NULL | (DEFAULT expr); 
+    */ 
+ 
     switch (node.GetAltCase()) {
         case TRule_json_case_handler::kAltJsonCaseHandler1: {
             const auto pos = GetPos(node.GetAlt_json_case_handler1().GetToken1());
             mode = EJsonValueHandlerMode::Error;
             return new TCallNodeImpl(pos, "Null", {});
-        }
+        } 
         case TRule_json_case_handler::kAltJsonCaseHandler2: {
             const auto pos = GetPos(node.GetAlt_json_case_handler2().GetToken1());
             mode = EJsonValueHandlerMode::DefaultValue;
             return new TCallNodeImpl(pos, "Null", {});
-        }
+        } 
         case TRule_json_case_handler::kAltJsonCaseHandler3:
             mode = EJsonValueHandlerMode::DefaultValue;
             return Build(node.GetAlt_json_case_handler3().GetBlock1().GetRule_expr2());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-}
-
+    } 
+} 
+ 
 void TSqlExpression::AddJsonValueCaseHandlers(const TRule_json_value& node, TVector<TNodePtr>& children) {
-    /*
-        json_case_handler*
-    */
-    if (node.Block5Size() > 2) {
-        Ctx.Error() << "Only 1 ON EMPTY and/or 1 ON ERROR clause is expected";
-        Ctx.IncrementMonCounter("sql_errors", "JsonValueTooManyHandleClauses");
-        return;
-    }
-
-    TNodePtr onEmpty;
-    EJsonValueHandlerMode onEmptyMode = EJsonValueHandlerMode::DefaultValue;
-    TNodePtr onError;
-    EJsonValueHandlerMode onErrorMode = EJsonValueHandlerMode::DefaultValue;
-    for (size_t i = 0; i < node.Block5Size(); i++) {
-        const auto block = node.GetBlock5(i);
-        const bool isEmptyClause = to_lower(block.GetToken3().GetValue()) == "empty";
-
-        if (isEmptyClause && onEmpty != nullptr) {
-            Ctx.Error() << "Only 1 ON EMPTY clause is expected";
-            Ctx.IncrementMonCounter("sql_errors", "JsonValueMultipleOnEmptyClauses");
-            return;
-        }
-
-        if (!isEmptyClause && onError != nullptr) {
-            Ctx.Error() << "Only 1 ON ERROR clause is expected";
-            Ctx.IncrementMonCounter("sql_errors", "JsonValueMultipleOnErrorClauses");
-            return;
-        }
-
-        if (isEmptyClause && onError != nullptr) {
-            Ctx.Error() << "ON EMPTY clause must be before ON ERROR clause";
-            Ctx.IncrementMonCounter("sql_errors", "JsonValueOnEmptyAfterOnError");
-            return;
-        }
-
-        EJsonValueHandlerMode currentMode;
+    /* 
+        json_case_handler* 
+    */ 
+    if (node.Block5Size() > 2) { 
+        Ctx.Error() << "Only 1 ON EMPTY and/or 1 ON ERROR clause is expected"; 
+        Ctx.IncrementMonCounter("sql_errors", "JsonValueTooManyHandleClauses"); 
+        return; 
+    } 
+ 
+    TNodePtr onEmpty; 
+    EJsonValueHandlerMode onEmptyMode = EJsonValueHandlerMode::DefaultValue; 
+    TNodePtr onError; 
+    EJsonValueHandlerMode onErrorMode = EJsonValueHandlerMode::DefaultValue; 
+    for (size_t i = 0; i < node.Block5Size(); i++) { 
+        const auto block = node.GetBlock5(i); 
+        const bool isEmptyClause = to_lower(block.GetToken3().GetValue()) == "empty"; 
+ 
+        if (isEmptyClause && onEmpty != nullptr) { 
+            Ctx.Error() << "Only 1 ON EMPTY clause is expected"; 
+            Ctx.IncrementMonCounter("sql_errors", "JsonValueMultipleOnEmptyClauses"); 
+            return; 
+        } 
+ 
+        if (!isEmptyClause && onError != nullptr) { 
+            Ctx.Error() << "Only 1 ON ERROR clause is expected"; 
+            Ctx.IncrementMonCounter("sql_errors", "JsonValueMultipleOnErrorClauses"); 
+            return; 
+        } 
+ 
+        if (isEmptyClause && onError != nullptr) { 
+            Ctx.Error() << "ON EMPTY clause must be before ON ERROR clause"; 
+            Ctx.IncrementMonCounter("sql_errors", "JsonValueOnEmptyAfterOnError"); 
+            return; 
+        } 
+ 
+        EJsonValueHandlerMode currentMode; 
         TNodePtr currentHandler = JsonValueCaseHandler(block.GetRule_json_case_handler1(), currentMode);
-
-        if (isEmptyClause) {
-            onEmpty = currentHandler;
-            onEmptyMode = currentMode;
-        } else {
-            onError = currentHandler;
-            onErrorMode = currentMode;
-        }
-    }
-
-    if (onEmpty == nullptr) {
-        onEmpty = new TCallNodeImpl(Ctx.Pos(), "Null", {});
-    }
-
-    if (onError == nullptr) {
-        onError = new TCallNodeImpl(Ctx.Pos(), "Null", {});
-    }
-
-    children.push_back(BuildQuotedAtom(Ctx.Pos(), ToString(onEmptyMode), TNodeFlags::Default));
-    children.push_back(onEmpty);
-    children.push_back(BuildQuotedAtom(Ctx.Pos(), ToString(onErrorMode), TNodeFlags::Default));
-    children.push_back(onError);
-}
-
+ 
+        if (isEmptyClause) { 
+            onEmpty = currentHandler; 
+            onEmptyMode = currentMode; 
+        } else { 
+            onError = currentHandler; 
+            onErrorMode = currentMode; 
+        } 
+    } 
+ 
+    if (onEmpty == nullptr) { 
+        onEmpty = new TCallNodeImpl(Ctx.Pos(), "Null", {}); 
+    } 
+ 
+    if (onError == nullptr) { 
+        onError = new TCallNodeImpl(Ctx.Pos(), "Null", {}); 
+    } 
+ 
+    children.push_back(BuildQuotedAtom(Ctx.Pos(), ToString(onEmptyMode), TNodeFlags::Default)); 
+    children.push_back(onEmpty); 
+    children.push_back(BuildQuotedAtom(Ctx.Pos(), ToString(onErrorMode), TNodeFlags::Default)); 
+    children.push_back(onError); 
+} 
+ 
 TNodePtr TSqlExpression::JsonValueExpr(const TRule_json_value& node) {
-    /*
-        json_value: JSON_VALUE LPAREN
-            json_common_args
-            (RETURNING type_name_simple)?
+    /* 
+        json_value: JSON_VALUE LPAREN 
+            json_common_args 
+            (RETURNING type_name_simple)? 
             (json_case_handler ON (EMPTY | ERROR))*
-        RPAREN;
-    */
-    TVector<TNodePtr> children;
+        RPAREN; 
+    */ 
+    TVector<TNodePtr> children; 
     AddJsonCommonArgs(node.GetRule_json_common_args3(), children);
-    AddJsonValueCaseHandlers(node, children);
-
-    if (node.HasBlock4()) {
-        auto returningType = JsonReturningTypeRule(node.GetBlock4().GetRule_type_name_simple2());
+    AddJsonValueCaseHandlers(node, children); 
+ 
+    if (node.HasBlock4()) { 
+        auto returningType = JsonReturningTypeRule(node.GetBlock4().GetRule_type_name_simple2()); 
         if (!returningType) {
             return {};
         }
-        children.push_back(returningType);
-    }
-
-    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonValue", children);
-}
-
+        children.push_back(returningType); 
+    } 
+ 
+    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonValue", children); 
+} 
+ 
 void TSqlExpression::AddJsonExistsHandler(const TRule_json_exists& node, TVector<TNodePtr>& children) {
     /*
         json_exists: JSON_EXISTS LPAREN
@@ -4001,154 +4001,154 @@ void TSqlExpression::AddJsonExistsHandler(const TRule_json_exists& node, TVector
         RPAREN;
     */
     auto buildJustBool = [&](const TPosition& pos, bool value) {
-        return new TCallNodeImpl(pos, "Just", {BuildLiteralBool(pos, value)});
-    };
-
-    if (!node.HasBlock4()) {
+        return new TCallNodeImpl(pos, "Just", {BuildLiteralBool(pos, value)}); 
+    }; 
+ 
+    if (!node.HasBlock4()) { 
         children.push_back(buildJustBool(Ctx.Pos(), false));
-        return;
-    }
-
-    const auto& handlerRule = node.GetBlock4().GetRule_json_exists_handler1();
-    const auto& token = handlerRule.GetToken1();
-    const auto pos = GetPos(token);
-    const auto mode = to_lower(token.GetValue());
-    if (mode == "unknown") {
-        const auto nothingNode = new TCallNodeImpl(pos, "Nothing", {
-            new TCallNodeImpl(pos, "OptionalType", {BuildDataType(pos, "Bool")})
-        });
-        children.push_back(nothingNode);
-    } else if (mode != "error") {
+        return; 
+    } 
+ 
+    const auto& handlerRule = node.GetBlock4().GetRule_json_exists_handler1(); 
+    const auto& token = handlerRule.GetToken1(); 
+    const auto pos = GetPos(token); 
+    const auto mode = to_lower(token.GetValue()); 
+    if (mode == "unknown") { 
+        const auto nothingNode = new TCallNodeImpl(pos, "Nothing", { 
+            new TCallNodeImpl(pos, "OptionalType", {BuildDataType(pos, "Bool")}) 
+        }); 
+        children.push_back(nothingNode); 
+    } else if (mode != "error") { 
         children.push_back(buildJustBool(pos, FromString<bool>(mode)));
-    }
-}
-
+    } 
+} 
+ 
 TNodePtr TSqlExpression::JsonExistsExpr(const TRule_json_exists& node) {
-    /*
-        json_exists: JSON_EXISTS LPAREN
-            json_common_args
-            json_exists_handler?
-        RPAREN;
-    */
-    TVector<TNodePtr> children;
+    /* 
+        json_exists: JSON_EXISTS LPAREN 
+            json_common_args 
+            json_exists_handler? 
+        RPAREN; 
+    */ 
+    TVector<TNodePtr> children; 
     AddJsonCommonArgs(node.GetRule_json_common_args3(), children);
-
-    AddJsonExistsHandler(node, children);
-
-    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonExists", children);
-}
-
+ 
+    AddJsonExistsHandler(node, children); 
+ 
+    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonExists", children); 
+} 
+ 
 EJsonQueryWrap TSqlExpression::JsonQueryWrapper(const TRule_json_query& node) {
-    /*
+    /* 
         json_query: JSON_QUERY LPAREN
             json_common_args
             (json_query_wrapper WRAPPER)?
             (json_query_handler ON EMPTY)?
             (json_query_handler ON ERROR)?
         RPAREN;
-    */
-    // default behaviour - no wrapping
-    if (!node.HasBlock4()) {
-        return EJsonQueryWrap::NoWrap;
-    }
-
-    // WITHOUT ARRAY? - no wrapping
-    const auto& wrapperRule = node.GetBlock4().GetRule_json_query_wrapper1();
-    if (wrapperRule.GetAltCase() == TRule_json_query_wrapper::kAltJsonQueryWrapper1) {
-        return EJsonQueryWrap::NoWrap;
-    }
-
-    // WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY? - wrapping depends on 2nd token. Default is UNCONDITIONAL
-    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2().GetBlock1();
-    if (!withWrapperRule.HasBlock2()) {
-        return EJsonQueryWrap::Wrap;
-    }
-
-    const auto& token = withWrapperRule.GetBlock2().GetToken1();
-    if (to_lower(token.GetValue()) == "conditional") {
-        return EJsonQueryWrap::ConditionalWrap;
-    } else {
-        return EJsonQueryWrap::Wrap;
-    }
-}
-
-EJsonQueryHandler TSqlExpression::JsonQueryHandler(const TRule_json_query_handler& node) {
-    /*
-        json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT);
-    */
-    switch (node.GetAltCase()) {
-        case TRule_json_query_handler::kAltJsonQueryHandler1:
-            return EJsonQueryHandler::Error;
-        case TRule_json_query_handler::kAltJsonQueryHandler2:
-            return EJsonQueryHandler::Null;
-        case TRule_json_query_handler::kAltJsonQueryHandler3:
-            return EJsonQueryHandler::EmptyArray;
-        case TRule_json_query_handler::kAltJsonQueryHandler4:
-            return EJsonQueryHandler::EmptyObject;
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
-    }
-}
-
+    */ 
+    // default behaviour - no wrapping 
+    if (!node.HasBlock4()) { 
+        return EJsonQueryWrap::NoWrap; 
+    } 
+ 
+    // WITHOUT ARRAY? - no wrapping 
+    const auto& wrapperRule = node.GetBlock4().GetRule_json_query_wrapper1(); 
+    if (wrapperRule.GetAltCase() == TRule_json_query_wrapper::kAltJsonQueryWrapper1) { 
+        return EJsonQueryWrap::NoWrap; 
+    } 
+ 
+    // WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY? - wrapping depends on 2nd token. Default is UNCONDITIONAL 
+    const auto& withWrapperRule = wrapperRule.GetAlt_json_query_wrapper2().GetBlock1(); 
+    if (!withWrapperRule.HasBlock2()) { 
+        return EJsonQueryWrap::Wrap; 
+    } 
+ 
+    const auto& token = withWrapperRule.GetBlock2().GetToken1(); 
+    if (to_lower(token.GetValue()) == "conditional") { 
+        return EJsonQueryWrap::ConditionalWrap; 
+    } else { 
+        return EJsonQueryWrap::Wrap; 
+    } 
+} 
+ 
+EJsonQueryHandler TSqlExpression::JsonQueryHandler(const TRule_json_query_handler& node) { 
+    /* 
+        json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT); 
+    */ 
+    switch (node.GetAltCase()) { 
+        case TRule_json_query_handler::kAltJsonQueryHandler1: 
+            return EJsonQueryHandler::Error; 
+        case TRule_json_query_handler::kAltJsonQueryHandler2: 
+            return EJsonQueryHandler::Null; 
+        case TRule_json_query_handler::kAltJsonQueryHandler3: 
+            return EJsonQueryHandler::EmptyArray; 
+        case TRule_json_query_handler::kAltJsonQueryHandler4: 
+            return EJsonQueryHandler::EmptyObject; 
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
+    } 
+} 
+ 
 TNodePtr TSqlExpression::JsonQueryExpr(const TRule_json_query& node) {
-    /*
-        json_query: JSON_QUERY LPAREN
-            json_common_args
+    /* 
+        json_query: JSON_QUERY LPAREN 
+            json_common_args 
             (json_query_wrapper WRAPPER)?
-            (json_query_handler ON EMPTY)?
-            (json_query_handler ON ERROR)?
-        RPAREN;
-    */
-
-    TVector<TNodePtr> children;
+            (json_query_handler ON EMPTY)? 
+            (json_query_handler ON ERROR)? 
+        RPAREN; 
+    */ 
+ 
+    TVector<TNodePtr> children; 
     AddJsonCommonArgs(node.GetRule_json_common_args3(), children);
-
-    auto addChild = [&](TPosition pos, const TString& content) {
-        children.push_back(BuildQuotedAtom(pos, content, TNodeFlags::Default));
-    };
-
-    const auto wrapMode = JsonQueryWrapper(node);
-    addChild(Ctx.Pos(), ToString(wrapMode));
-
-    auto onEmpty = EJsonQueryHandler::Null;
-    if (node.HasBlock5()) {
-        if (wrapMode != EJsonQueryWrap::NoWrap) {
-            Ctx.Error() << "ON EMPTY is prohibited because WRAPPER clause is specified";
-            Ctx.IncrementMonCounter("sql_errors", "JsonQueryOnEmptyWithWrapper");
-            return nullptr;
-        }
-        onEmpty = JsonQueryHandler(node.GetBlock5().GetRule_json_query_handler1());
-    }
-    addChild(Ctx.Pos(), ToString(onEmpty));
-
-    auto onError = EJsonQueryHandler::Null;
-    if (node.HasBlock6()) {
-        onError = JsonQueryHandler(node.GetBlock6().GetRule_json_query_handler1());
-    }
-    addChild(Ctx.Pos(), ToString(onError));
-
-    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonQuery", children);
-}
-
+ 
+    auto addChild = [&](TPosition pos, const TString& content) { 
+        children.push_back(BuildQuotedAtom(pos, content, TNodeFlags::Default)); 
+    }; 
+ 
+    const auto wrapMode = JsonQueryWrapper(node); 
+    addChild(Ctx.Pos(), ToString(wrapMode)); 
+ 
+    auto onEmpty = EJsonQueryHandler::Null; 
+    if (node.HasBlock5()) { 
+        if (wrapMode != EJsonQueryWrap::NoWrap) { 
+            Ctx.Error() << "ON EMPTY is prohibited because WRAPPER clause is specified"; 
+            Ctx.IncrementMonCounter("sql_errors", "JsonQueryOnEmptyWithWrapper"); 
+            return nullptr; 
+        } 
+        onEmpty = JsonQueryHandler(node.GetBlock5().GetRule_json_query_handler1()); 
+    } 
+    addChild(Ctx.Pos(), ToString(onEmpty)); 
+ 
+    auto onError = EJsonQueryHandler::Null; 
+    if (node.HasBlock6()) { 
+        onError = JsonQueryHandler(node.GetBlock6().GetRule_json_query_handler1()); 
+    } 
+    addChild(Ctx.Pos(), ToString(onError)); 
+ 
+    return new TCallNodeImpl(GetPos(node.GetToken1()), "JsonQuery", children); 
+} 
+ 
 TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
-    /*
-        json_api_expr: json_value | json_exists | json_query;
-    */
-    TPosition pos = Ctx.Pos();
-    TNodePtr result = nullptr;
+    /* 
+        json_api_expr: json_value | json_exists | json_query; 
+    */ 
+    TPosition pos = Ctx.Pos(); 
+    TNodePtr result = nullptr; 
     switch (node.GetAltCase()) {
         case TRule_json_api_expr::kAltJsonApiExpr1: {
             const auto& jsonValue = node.GetAlt_json_api_expr1().GetRule_json_value1();
             pos = GetPos(jsonValue.GetToken1());
             result = JsonValueExpr(jsonValue);
             break;
-        }
+        } 
         case TRule_json_api_expr::kAltJsonApiExpr2: {
             const auto& jsonExists = node.GetAlt_json_api_expr2().GetRule_json_exists1();
             pos = GetPos(jsonExists.GetToken1());
             result = JsonExistsExpr(jsonExists);
             break;
-        }
+        } 
         case TRule_json_api_expr::kAltJsonApiExpr3: {
             const auto& jsonQuery = node.GetAlt_json_api_expr3().GetRule_json_query1();
             pos = GetPos(jsonQuery.GetToken1());
@@ -4157,19 +4157,19 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
         }
         default:
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-
-    return result;
-}
-
-template<typename TUnaryCasualExprRule>
+    } 
+ 
+    return result; 
+} 
+ 
+template<typename TUnaryCasualExprRule> 
 TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail) {
-    // unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
+    // unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix; 
     // OR
     // in_unary_casual_subexpr: (id_expr_in | in_atom_expr) unary_subexpr_suffix;
-    // where
-    // unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | id)))* (COLLATE id)?;
-
+    // where 
+    // unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | id)))* (COLLATE id)?; 
+ 
     const auto& suffix = node.GetRule_unary_subexpr_suffix2();
     const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
     TString name;
@@ -4177,9 +4177,9 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     bool typePossible = false;
     auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
-        case TUnaryCasualExprRule::TBlock1::kAlt1: {
+        case TUnaryCasualExprRule::TBlock1::kAlt1: { 
             auto& alt = block.GetAlt1();
-            if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
+            if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) { 
                 name = Id(alt.GetRule_id_expr1(), *this);
                 typePossible = !IsQuotedId(alt.GetRule_id_expr1(), *this);
             } else {
@@ -4188,10 +4188,10 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             }
             break;
         }
-        case TUnaryCasualExprRule::TBlock1::kAlt2: {
-            auto& alt = block.GetAlt2();
+        case TUnaryCasualExprRule::TBlock1::kAlt2: { 
+            auto& alt = block.GetAlt2(); 
             TMaybe<TExprOrIdent> exprOrId;
-            if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
+            if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) { 
                 exprOrId = AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             } else {
                 exprOrId = InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
@@ -4208,8 +4208,8 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             }
             break;
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
 
     bool onlyDots = true;
@@ -4352,8 +4352,8 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                     ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
                     break;
                 }
-                default:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                default: 
+                    Y_FAIL("You should change implementation according to grammar changes"); 
             }
 
             if (lastExpr) {
@@ -4638,8 +4638,8 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
                     }
                     break;
                 }
-                default:
-                    Y_FAIL("Unsigned number: you should change implementation according to grammar changes");
+                default: 
+                    Y_FAIL("Unsigned number: you should change implementation according to grammar changes"); 
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -4711,7 +4711,7 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
             TPosition pos(Ctx.Pos());
             TString name;
             switch (alt.GetBlock3().Alt_case()) {
-            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
+            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1: 
                 name = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), *this);
                 break;
             case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
@@ -4724,8 +4724,8 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
                 }
                 break;
             }
-            default:
-                Y_FAIL("You should change implementation according to grammar changes");
+            default: 
+                Y_FAIL("You should change implementation according to grammar changes"); 
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -4752,13 +4752,13 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
         case TRule_in_atom_expr::kAltInAtomExpr9:
             result.Expr = BitCastRule(node.GetAlt_in_atom_expr9().GetRule_bitcast_expr1());
             break;
-        case TRule_in_atom_expr::kAltInAtomExpr10:
+        case TRule_in_atom_expr::kAltInAtomExpr10: 
             result.Expr = ListLiteral(node.GetAlt_in_atom_expr10().GetRule_list_literal1());
             break;
-        case TRule_in_atom_expr::kAltInAtomExpr11:
+        case TRule_in_atom_expr::kAltInAtomExpr11: 
             result.Expr = DictLiteral(node.GetAlt_in_atom_expr11().GetRule_dict_literal1());
             break;
-        case TRule_in_atom_expr::kAltInAtomExpr12:
+        case TRule_in_atom_expr::kAltInAtomExpr12: 
             result.Expr = StructLiteral(node.GetAlt_in_atom_expr12().GetRule_struct_literal1());
             break;
         default:
@@ -4902,8 +4902,8 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             auto expr = UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2(), tail);
             return expr ? expr->ApplyUnaryOp(Ctx, pos, opName) : expr;
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
     return nullptr;
 }
@@ -5323,8 +5323,8 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
                 Ctx.IncrementMonCounter("sql_binary_operations", "BitXor");
                 break;
             }
-            default:
-                Y_FAIL("You should change implementation according to grammar changes");
+            default: 
+                Y_FAIL("You should change implementation according to grammar changes"); 
         }
 
         partialResult = BuildBinaryOp(Ctx, Ctx.Pos(), opName, partialResult, SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{}));
@@ -7259,8 +7259,8 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             }
             break;
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
     return true;
 }
@@ -7611,8 +7611,8 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
                 placement, res.SelectOpOrderBy, res.SelectOpAssumeOrderBy);
             break;
         }
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
 
     return res;
@@ -7941,8 +7941,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt6:
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
-        default:
-            Y_FAIL("You should change implementation according to grammar changes");
+        default: 
+            Y_FAIL("You should change implementation according to grammar changes"); 
     }
 
     TVector<TString> modeStrings;
@@ -8086,7 +8086,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
     ESQLWriteColumnMode mode, const TPosition& pos) {
-    Y_UNUSED(node);
+    Y_UNUSED(node); 
     auto serviceName = table.Service;
     const bool isMapReduce = serviceName == YtProviderName;
     const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName;
@@ -9523,12 +9523,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
             Ctx.IncrementMonCounter("sql_pragma", "RegexUseRe2");
-        } else if (normalizedPragma == "jsonqueryreturnsjsondocument") {
-            Ctx.JsonQueryReturnsJsonDocument = true;
-            Ctx.IncrementMonCounter("sql_pragma", "JsonQueryReturnsJsonDocument");
-        } else if (normalizedPragma == "disablejsonqueryreturnsjsondocument") {
-            Ctx.JsonQueryReturnsJsonDocument = false;
-            Ctx.IncrementMonCounter("sql_pragma", "DisableJsonQueryReturnsJsonDocument");
+        } else if (normalizedPragma == "jsonqueryreturnsjsondocument") { 
+            Ctx.JsonQueryReturnsJsonDocument = true; 
+            Ctx.IncrementMonCounter("sql_pragma", "JsonQueryReturnsJsonDocument"); 
+        } else if (normalizedPragma == "disablejsonqueryreturnsjsondocument") { 
+            Ctx.JsonQueryReturnsJsonDocument = false; 
+            Ctx.IncrementMonCounter("sql_pragma", "DisableJsonQueryReturnsJsonDocument"); 
         } else if (normalizedPragma == "orderedcolumns") {
             Ctx.OrderedColumns = true;
             Ctx.IncrementMonCounter("sql_pragma", "OrderedColumns");

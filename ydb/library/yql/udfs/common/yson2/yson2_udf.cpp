@@ -7,13 +7,13 @@
 #include <ydb/library/yql/minikql/dom/convert.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_type_printer.h>
-
+ 
 #include <library/cpp/yson_pull/exceptions.h>
 
 #include <util/string/split.h>
 
 using namespace NYql::NUdf;
-using namespace NYql::NDom;
+using namespace NYql::NDom; 
 using namespace NYsonPull;
 
 namespace {
@@ -96,109 +96,109 @@ public:
 };
 
 using TConverterPtr = TUnboxedValuePod (*)(TUnboxedValuePod, const IValueBuilder*, const TSourcePosition& pos);
-
-template <TConverterPtr Converter>
+ 
+template <TConverterPtr Converter> 
 class TLazyConveterT : public TManagedBoxedValue {
-public:
+public: 
     TLazyConveterT(TUnboxedValue&& original, const IValueBuilder* valueBuilder, const TSourcePosition& pos)
         : Original(std::move(original)), ValueBuilder(valueBuilder), Pos_(pos)
     {}
 private:
-    template <bool NoSwap>
-    class TIterator: public TManagedBoxedValue {
-    public:
+    template <bool NoSwap> 
+    class TIterator: public TManagedBoxedValue { 
+    public: 
         TIterator(TUnboxedValue&& original, const IValueBuilder* valueBuilder, const TSourcePosition& pos)
             : Original(std::move(original)), ValueBuilder(valueBuilder), Pos_(pos)
-        {}
-
-    private:
-        bool Skip() final {
-            return Original.Skip();
-        }
-
-        bool Next(TUnboxedValue& value) final {
-            if (Original.Next(value)) {
-                if constexpr (!NoSwap) {
+        {} 
+ 
+    private: 
+        bool Skip() final { 
+            return Original.Skip(); 
+        } 
+ 
+        bool Next(TUnboxedValue& value) final { 
+            if (Original.Next(value)) { 
+                if constexpr (!NoSwap) { 
                     value = Converter(value.Release(), ValueBuilder, Pos_);
-                }
-                return true;
-            }
-            return false;
-        }
-
-        bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) final {
-            if (Original.NextPair(key, payload)) {
-                if constexpr (NoSwap) {
+                } 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
+        bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) final { 
+            if (Original.NextPair(key, payload)) { 
+                if constexpr (NoSwap) { 
                     payload = Converter(payload.Release(), ValueBuilder, Pos_);
-                } else {
+                } else { 
                     key = Converter(key.Release(), ValueBuilder, Pos_);
-                }
-                return true;
-            }
-            return false;
-        }
-
-        const TUnboxedValue Original;
+                } 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
+        const TUnboxedValue Original; 
         const IValueBuilder *const ValueBuilder;
         const TSourcePosition Pos_;
-    };
-
-    ui64 GetDictLength() const final {
-        return Original.GetDictLength();
-    }
-
-    ui64 GetListLength() const final {
-        return Original.GetListLength();
-    }
-
-    bool HasFastListLength() const final {
-        return Original.HasFastListLength();
-    }
-
-    bool HasDictItems() const final {
-        return Original.HasDictItems();
-    }
-
-    bool HasListItems() const final {
-        return Original.HasListItems();
-    }
-
-    TUnboxedValue GetListIterator() const final {
+    }; 
+ 
+    ui64 GetDictLength() const final { 
+        return Original.GetDictLength(); 
+    } 
+ 
+    ui64 GetListLength() const final { 
+        return Original.GetListLength(); 
+    } 
+ 
+    bool HasFastListLength() const final { 
+        return Original.HasFastListLength(); 
+    } 
+ 
+    bool HasDictItems() const final { 
+        return Original.HasDictItems(); 
+    } 
+ 
+    bool HasListItems() const final { 
+        return Original.HasListItems(); 
+    } 
+ 
+    TUnboxedValue GetListIterator() const final { 
         return TUnboxedValuePod(new TIterator<false>(Original.GetListIterator(), ValueBuilder, Pos_));
-    }
-
-    TUnboxedValue GetDictIterator() const final {
+    } 
+ 
+    TUnboxedValue GetDictIterator() const final { 
         return TUnboxedValuePod(new TIterator<true>(Original.GetDictIterator(), ValueBuilder, Pos_));
-    }
-
-    TUnboxedValue GetKeysIterator() const final {
+    } 
+ 
+    TUnboxedValue GetKeysIterator() const final { 
         return TUnboxedValuePod(new TIterator<true>(Original.GetKeysIterator(), ValueBuilder, Pos_));
-    }
-
+    } 
+ 
     TUnboxedValue GetPayloadsIterator() const override {
         return TUnboxedValuePod(new TIterator<false>(Original.GetPayloadsIterator(), ValueBuilder, Pos_));
-    }
-
-    bool Contains(const TUnboxedValuePod& key) const final {
-        return Original.Contains(key);
-    }
-
-    TUnboxedValue Lookup(const TUnboxedValuePod& key) const final {
-        if (auto lookup = Original.Lookup(key)) {
+    } 
+ 
+    bool Contains(const TUnboxedValuePod& key) const final { 
+        return Original.Contains(key); 
+    } 
+ 
+    TUnboxedValue Lookup(const TUnboxedValuePod& key) const final { 
+        if (auto lookup = Original.Lookup(key)) { 
             return Converter(lookup.Release().GetOptionalValue(), ValueBuilder, Pos_).MakeOptional();
-        }
-        return {};
-    }
-
-    bool IsSortedDict() const final {
-        return Original.IsSortedDict();
-    }
-
-    const TUnboxedValue Original;
+        } 
+        return {}; 
+    } 
+ 
+    bool IsSortedDict() const final { 
+        return Original.IsSortedDict(); 
+    } 
+ 
+    const TUnboxedValue Original; 
     const IValueBuilder *const ValueBuilder;
     const TSourcePosition Pos_;
-};
-
+}; 
+ 
 template<bool Strict, bool AutoConvert, TConverterPtr Converter = nullptr>
 TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (!x) {

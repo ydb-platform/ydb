@@ -140,11 +140,11 @@ inline THashType GetValueHash<EDataSlot::Json>(const TUnboxedValuePod&) {
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::JsonDocument>(const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't hashable.");
-}
-
-template <>
+inline THashType GetValueHash<EDataSlot::JsonDocument>(const TUnboxedValuePod&) { 
+    Y_FAIL("JsonDocument isn't hashable."); 
+} 
+ 
+template <> 
 inline THashType GetValueHash<EDataSlot::Date>(const TUnboxedValuePod& value) {
     return GetIntegerHash<ui16>(value);
 }
@@ -331,11 +331,11 @@ inline int CompareValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxe
 }
 
 template <>
-inline int CompareValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't comparable.");
-}
-
-template <>
+inline int CompareValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
+    Y_FAIL("JsonDocument isn't comparable."); 
+} 
+ 
+template <> 
 inline int CompareValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
     return CompareIntegers<ui16>(lhs, rhs);
 }
@@ -501,11 +501,11 @@ inline bool EquateValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxe
 }
 
 template <>
-inline bool EquateValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't comparable.");
-}
-
-template <>
+inline bool EquateValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
+    Y_FAIL("JsonDocument isn't comparable."); 
+} 
+ 
+template <> 
 inline bool EquateValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
     return EquateIntegers<ui16>(lhs, rhs);
 }

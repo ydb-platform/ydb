@@ -83,7 +83,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         YQL_ENSURE(Values.size() == ColumnsHint.size());
 
         auto structObj = Y("AsStruct");
@@ -119,7 +119,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
+        Y_UNUSED(src); 
         bool hasError = false;
         for (const auto& row: Values) {
             if (ColumnsHint.empty()) {
@@ -143,7 +143,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         auto tuple = Y();
         for (const auto& row: Values) {
             auto rowValues = Y("AsStruct"); // ordered struct

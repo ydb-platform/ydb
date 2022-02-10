@@ -261,7 +261,7 @@ void INode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode:
 }
 
 INode::TPtr INode::WindowSpecFunc(const TPtr& type) const {
-    Y_UNUSED(type);
+    Y_UNUSED(type); 
     return {};
 }
 
@@ -566,7 +566,7 @@ TString TCallNode::GetCallExplain() const {
     if (derivedName != OpName) {
         sb << ", converted to " << OpName << "()";
     }
-    return std::move(sb);
+    return std::move(sb); 
 }
 
 void TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
@@ -576,18 +576,18 @@ void TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<IN
 }
 
 bool TCallNode::ValidateArguments(TContext& ctx) const {
-    const auto argsCount = static_cast<i32>(Args.size());
-    if (MinArgs >= 0 && MaxArgs == MinArgs && argsCount != MinArgs) {
+    const auto argsCount = static_cast<i32>(Args.size()); 
+    if (MinArgs >= 0 && MaxArgs == MinArgs && argsCount != MinArgs) { 
         ctx.Error(Pos) << GetCallExplain() << " requires exactly " << MinArgs << " arguments, given: " << Args.size();
         return false;
     }
 
-    if (MinArgs >= 0 && argsCount < MinArgs) {
+    if (MinArgs >= 0 && argsCount < MinArgs) { 
         ctx.Error(Pos) << GetCallExplain() << " requires at least " << MinArgs << " arguments, given: " << Args.size();
         return false;
     }
 
-    if (MaxArgs >= 0 && argsCount > MaxArgs) {
+    if (MaxArgs >= 0 && argsCount > MaxArgs) { 
         ctx.Error(Pos) << GetCallExplain() << " requires at most " << MaxArgs << " arguments, given: " << Args.size();
         return false;
     }
@@ -1411,11 +1411,11 @@ TString ISource::MakeLocalName(const TString& name) {
     TStringBuilder str;
     str << name << iter->second;
     ++iter->second;
-    return std::move(str);
+    return std::move(str); 
 }
 
 bool ISource::AddAggregation(TContext& ctx, TAggregationPtr aggr) {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     YQL_ENSURE(aggr);
     Aggregations.push_back(aggr);
     return true;
@@ -1430,8 +1430,8 @@ void ISource::AddWindowSpecs(TWinSpecs winSpecs) {
 }
 
 bool ISource::AddFuncOverWindow(TContext& ctx, TNodePtr expr) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(expr);
+    Y_UNUSED(ctx); 
+    Y_UNUSED(expr); 
     return false;
 }
 
@@ -1617,8 +1617,8 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
 }
 
 bool ISource::CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const {
-    Y_UNUSED(columns);
-    Y_UNUSED(hint);
+    Y_UNUSED(columns); 
+    Y_UNUSED(hint); 
     ctx.Error() << "Source not support grouping hint";
     return false;
 }
@@ -1982,8 +1982,8 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
 }
 
 TNodePtr ISource::BuildSort(TContext& ctx, const TString& label) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(label);
+    Y_UNUSED(ctx); 
+    Y_UNUSED(label); 
     return nullptr;
 }
 
@@ -2386,7 +2386,7 @@ TNodePtr TLiteralNumberNode<T>::DoClone() const {
 
 template<typename T>
 bool TLiteralNumberNode<T>::DoInit(TContext& ctx, ISource* src) {
-    Y_UNUSED(src);
+    Y_UNUSED(src); 
     T val;
     if (!TryFromString(Value, val)) {
         ctx.Error(Pos) << "Failed to parse " << Value << " as integer literal of " << Type << " type: value out of range for " << Type;
@@ -2701,13 +2701,13 @@ TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString &name) :
 }
 
 bool TArgPlaceholderNode::DoInit(TContext& ctx, ISource* src) {
-    Y_UNUSED(src);
+    Y_UNUSED(src); 
     ctx.Error(Pos) << Name << " can't be used as a part of expression.";
     return false;
 }
 
 TAstNode* TArgPlaceholderNode::Translate(TContext& ctx) const {
-    Y_UNUSED(ctx);
+    Y_UNUSED(ctx); 
     return nullptr;
 }
 
@@ -3282,7 +3282,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        Y_UNUSED(src);
+        Y_UNUSED(src); 
         if (!Node->Init(ctx, FakeSource.Get())) {
             return false;
         }

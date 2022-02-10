@@ -231,30 +231,30 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
-        } else if (fromSlot == EDataSlot::Json && to == "JsonNode") {
-            node = ctx.Builder(node->Pos())
-                .Callable("Apply")
-                    .Callable(0, "Udf")
-                        .Atom(0, "Json2.Parse", TNodeFlags::Default)
-                        .Callable(1, "Void")
-                        .Seal()
-                        .Callable(2, "TupleType")
-                            .Callable(0, "TupleType")
-                                .Callable(0, "DataType")
-                                    .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default)
-                                .Seal()
-                            .Seal()
-                            .Callable(1, "StructType")
-                            .Seal()
-                            .Callable(2, "TupleType")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Add(1, std::move(node))
-                .Seal()
-                .Build();
-
-            return IGraphTransformer::TStatus::Repeat;
+        } else if (fromSlot == EDataSlot::Json && to == "JsonNode") { 
+            node = ctx.Builder(node->Pos()) 
+                .Callable("Apply") 
+                    .Callable(0, "Udf") 
+                        .Atom(0, "Json2.Parse", TNodeFlags::Default) 
+                        .Callable(1, "Void") 
+                        .Seal() 
+                        .Callable(2, "TupleType") 
+                            .Callable(0, "TupleType") 
+                                .Callable(0, "DataType") 
+                                    .Atom(0, sourceType.Cast<TDataExprType>()->GetName(), TNodeFlags::Default) 
+                                .Seal() 
+                            .Seal() 
+                            .Callable(1, "StructType") 
+                            .Seal() 
+                            .Callable(2, "TupleType") 
+                            .Seal() 
+                        .Seal() 
+                    .Seal() 
+                    .Add(1, std::move(node)) 
+                .Seal() 
+                .Build(); 
+ 
+            return IGraphTransformer::TStatus::Repeat; 
         }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Data && sourceType.GetKind() == ETypeAnnotationKind::Data) {
         const auto from = sourceType.Cast<TDataExprType>()->GetSlot();

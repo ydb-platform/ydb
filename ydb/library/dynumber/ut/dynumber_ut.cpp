@@ -1,31 +1,31 @@
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/dynumber/cast.h>
+ 
+#include <library/cpp/testing/unittest/registar.h> 
+ 
+#include <util/stream/format.h> 
+#include <util/stream/str.h> 
+ 
+using namespace NKikimr::NDyNumber; 
+ 
+namespace { 
+    void TestDyNumber(TStringBuf test) { 
+        UNIT_ASSERT(IsValidDyNumberString(test)); 
 
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <util/stream/format.h>
-#include <util/stream/str.h>
-
-using namespace NKikimr::NDyNumber;
-
-namespace {
-    void TestDyNumber(TStringBuf test) {
-        UNIT_ASSERT(IsValidDyNumberString(test));
-
-        const auto dyNumber = ParseDyNumberString(test);
-        UNIT_ASSERT(dyNumber.Defined());
-        UNIT_ASSERT(IsValidDyNumber(*dyNumber));
-
-        const auto restoredTest = DyNumberToString(*dyNumber);
-        UNIT_ASSERT(restoredTest.Defined());
-        UNIT_ASSERT(IsValidDyNumberString(*restoredTest));
-
-        const auto dyNumberAfterString = ParseDyNumberString(*restoredTest);
-        UNIT_ASSERT(dyNumberAfterString.Defined());
-        UNIT_ASSERT(IsValidDyNumber(*dyNumberAfterString));
-
-        UNIT_ASSERT_EQUAL(*dyNumber, *dyNumberAfterString);
-    }
+        const auto dyNumber = ParseDyNumberString(test); 
+        UNIT_ASSERT(dyNumber.Defined()); 
+        UNIT_ASSERT(IsValidDyNumber(*dyNumber)); 
+ 
+        const auto restoredTest = DyNumberToString(*dyNumber); 
+        UNIT_ASSERT(restoredTest.Defined()); 
+        UNIT_ASSERT(IsValidDyNumberString(*restoredTest)); 
+ 
+        const auto dyNumberAfterString = ParseDyNumberString(*restoredTest); 
+        UNIT_ASSERT(dyNumberAfterString.Defined()); 
+        UNIT_ASSERT(IsValidDyNumber(*dyNumberAfterString)); 
+ 
+        UNIT_ASSERT_EQUAL(*dyNumber, *dyNumberAfterString); 
+    } 
 
     template <typename T>
     void TestCast(TStringBuf test, TMaybe<T> value) {
@@ -45,30 +45,30 @@ namespace {
             UNIT_ASSERT_C(!casted && !value, "Casted: " << casted << ", value: " << value);
         }
     }
-}
-
-Y_UNIT_TEST_SUITE(TDyNumberTests) {
-    Y_UNIT_TEST(ParseAndRestore) {
-        TestDyNumber("0");
-        TestDyNumber(".0");
-        TestDyNumber("1");
-        TestDyNumber("18");
-        TestDyNumber("181");
-        TestDyNumber("1817");
-        TestDyNumber("-1");
-        TestDyNumber("-18");
-        TestDyNumber("-181");
-        TestDyNumber("-1817");
-        TestDyNumber(".023");
-        TestDyNumber("0.93");
-        TestDyNumber("724.1");
-        TestDyNumber("1E-130");
-        TestDyNumber("9.9999999999999999999999999999999999999E+125");
-        TestDyNumber("9.9999999999999999999999999999999999999000E+125");
-        TestDyNumber("-1E-130");
-        TestDyNumber("-9.9999999999999999999999999999999999999E+125");
-        TestDyNumber("-9.9999999999999999999999999999999999999000E+125");
-    }
+} 
+ 
+Y_UNIT_TEST_SUITE(TDyNumberTests) { 
+    Y_UNIT_TEST(ParseAndRestore) { 
+        TestDyNumber("0"); 
+        TestDyNumber(".0"); 
+        TestDyNumber("1"); 
+        TestDyNumber("18"); 
+        TestDyNumber("181"); 
+        TestDyNumber("1817"); 
+        TestDyNumber("-1"); 
+        TestDyNumber("-18"); 
+        TestDyNumber("-181"); 
+        TestDyNumber("-1817"); 
+        TestDyNumber(".023"); 
+        TestDyNumber("0.93"); 
+        TestDyNumber("724.1"); 
+        TestDyNumber("1E-130"); 
+        TestDyNumber("9.9999999999999999999999999999999999999E+125"); 
+        TestDyNumber("9.9999999999999999999999999999999999999000E+125"); 
+        TestDyNumber("-1E-130"); 
+        TestDyNumber("-9.9999999999999999999999999999999999999E+125"); 
+        TestDyNumber("-9.9999999999999999999999999999999999999000E+125"); 
+    } 
 
     Y_UNIT_TEST(Cast) {
         TestCast<int>("0", 0);
@@ -176,4 +176,4 @@ Y_UNIT_TEST_SUITE(TDyNumberTests) {
         TestCast<double>("1E-130", 1E-130);
         TestCast<double>("-1E-130", -1E-130);
     }
-}
+} 

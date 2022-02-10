@@ -12,7 +12,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
-
+ 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 
@@ -225,26 +225,26 @@ private:
                 c = TCell(v.data(), v.size());
                 break;
             }
-        case NScheme::NTypeIds::JsonDocument : {
-            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-            if (!binaryJson.Defined()) {
-                err = "Invalid JSON for JsonDocument provided";
-                return false;
-            }
-            const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
-            c = TCell(binaryJsonInPool.data(), binaryJsonInPool.size());
-            break;
-        }
-        case NScheme::NTypeIds::DyNumber : {
-            const auto dyNumber = NDyNumber::ParseDyNumberString(val.Gettext_value());
-            if (!dyNumber.Defined()) {
-                err = "Invalid DyNumber string representation";
-                return false;
-            }
-            const auto dyNumberInPool = valueDataPool.AppendString(TStringBuf(*dyNumber));
-            c = TCell(dyNumberInPool.data(), dyNumberInPool.size());
-            break;
-        }
+        case NScheme::NTypeIds::JsonDocument : { 
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value()); 
+            if (!binaryJson.Defined()) { 
+                err = "Invalid JSON for JsonDocument provided"; 
+                return false; 
+            } 
+            const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size())); 
+            c = TCell(binaryJsonInPool.data(), binaryJsonInPool.size()); 
+            break; 
+        } 
+        case NScheme::NTypeIds::DyNumber : { 
+            const auto dyNumber = NDyNumber::ParseDyNumberString(val.Gettext_value()); 
+            if (!dyNumber.Defined()) { 
+                err = "Invalid DyNumber string representation"; 
+                return false; 
+            } 
+            const auto dyNumberInPool = valueDataPool.AppendString(TStringBuf(*dyNumber)); 
+            c = TCell(dyNumberInPool.data(), dyNumberInPool.size()); 
+            break; 
+        } 
         case NScheme::NTypeIds::Yson :
         case NScheme::NTypeIds::String : {
                 TString v = val.Getbytes_value();

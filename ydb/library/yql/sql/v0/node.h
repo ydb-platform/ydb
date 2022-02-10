@@ -361,7 +361,7 @@ namespace NSQLTranslationV0 {
     protected:
         void DoUpdateState() const override;
         bool DoInit(TContext& ctx, ISource* src) override;
-        TPtr WindowSpecFunc(const TNodePtr& type) const override;
+        TPtr WindowSpecFunc(const TNodePtr& type) const override; 
     public:
         TWinAggrEmulation(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     protected:

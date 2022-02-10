@@ -320,21 +320,21 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpDeleteRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpDeleteRows deleteRows(&node);
-
+    compiler->AddCallable(TKqpDeleteRows::CallableName(), 
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) { 
+            TKqpDeleteRows deleteRows(&node); 
+ 
             const auto& tableMeta = ctx.GetTableMeta(deleteRows.Table());
 
             auto rowsType = deleteRows.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>();
             ValidateColumnsType(rowsType, tableMeta);
 
-            const auto tableId = MakeTableId(deleteRows.Table());
-            const auto rows = MkqlBuildExpr(deleteRows.Input().Ref(), buildCtx);
-
-            return ctx.PgmBuilder().KqpDeleteRows(tableId, rows);
-        });
-
+            const auto tableId = MakeTableId(deleteRows.Table()); 
+            const auto rows = MkqlBuildExpr(deleteRows.Input().Ref(), buildCtx); 
+ 
+            return ctx.PgmBuilder().KqpDeleteRows(tableId, rows); 
+        }); 
+ 
     compiler->AddCallable(TKqpEffects::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             std::vector<TRuntimeNode> args;

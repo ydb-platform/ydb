@@ -105,9 +105,9 @@ namespace {
         {"Utf8", EPrimitiveType::Utf8},
         {"Yson", EPrimitiveType::Yson},
         {"Json", EPrimitiveType::Json},
-        {"Uuid", EPrimitiveType::Uuid},
-        {"JsonDocument", EPrimitiveType::JsonDocument},
-        {"DyNumber", EPrimitiveType::DyNumber},
+        {"Uuid", EPrimitiveType::Uuid}, 
+        {"JsonDocument", EPrimitiveType::JsonDocument}, 
+        {"DyNumber", EPrimitiveType::DyNumber}, 
     };
 
     TString GetAllTypesString() {

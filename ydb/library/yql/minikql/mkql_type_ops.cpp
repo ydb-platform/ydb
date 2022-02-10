@@ -12,7 +12,7 @@
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
-
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <library/cpp/yson/parser.h>
@@ -140,9 +140,9 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
     case NUdf::EDataSlot::Uuid:
         return bool(value) && value.AsStringRef().Size() == 16;
     case NUdf::EDataSlot::DyNumber:
-        return NDyNumber::IsValidDyNumber(value.AsStringRef());
-    case NUdf::EDataSlot::JsonDocument:
-        return bool(value) && NKikimr::NBinaryJson::IsValidBinaryJson(value.AsStringRef());
+        return NDyNumber::IsValidDyNumber(value.AsStringRef()); 
+    case NUdf::EDataSlot::JsonDocument: 
+        return bool(value) && NKikimr::NBinaryJson::IsValidBinaryJson(value.AsStringRef()); 
     }
     MKQL_ENSURE(false, "Incorrect data slot: " << (ui32)type);
 }
@@ -481,15 +481,15 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
     }
 
     case NUdf::EDataSlot::DyNumber: {
-        out << NDyNumber::DyNumberToString(value.AsStringRef());
+        out << NDyNumber::DyNumberToString(value.AsStringRef()); 
         break;
     }
 
-    case NUdf::EDataSlot::JsonDocument: {
-        out << NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef());
-        break;
-    }
-
+    case NUdf::EDataSlot::JsonDocument: { 
+        out << NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef()); 
+        break; 
+    } 
+ 
     case NUdf::EDataSlot::Decimal:
     default:
         THROW yexception() << "Incorrect data slot: " << (ui32)type;
@@ -1612,13 +1612,13 @@ bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     case NUdf::EDataSlot::Yson:
         return NDom::IsValidYson(buf);
     case NUdf::EDataSlot::Json:
-    case NUdf::EDataSlot::JsonDocument:
+    case NUdf::EDataSlot::JsonDocument: 
         return NDom::IsValidJson(buf);
     case NUdf::EDataSlot::Uuid:
         return IsValidUuid(buf);
 
     case NUdf::EDataSlot::DyNumber:
-        return NDyNumber::IsValidDyNumberString(buf);
+        return NDyNumber::IsValidDyNumberString(buf); 
 
     case NUdf::EDataSlot::Date:
     case NUdf::EDataSlot::Datetime:
@@ -1726,24 +1726,24 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
     case NUdf::EDataSlot::TzTimestamp:
         return ParseTzTimestamp(buf);
 
-    case NUdf::EDataSlot::DyNumber: {
-        auto dyNumber = NDyNumber::ParseDyNumberString(buf);
-        if (!dyNumber.Defined()) {
-            // DyNumber parse error happened, return NULL
-            return NUdf::TUnboxedValuePod();
-        }
-        return MakeString(*dyNumber);
-    }
+    case NUdf::EDataSlot::DyNumber: { 
+        auto dyNumber = NDyNumber::ParseDyNumberString(buf); 
+        if (!dyNumber.Defined()) { 
+            // DyNumber parse error happened, return NULL 
+            return NUdf::TUnboxedValuePod(); 
+        } 
+        return MakeString(*dyNumber); 
+    } 
 
-    case NUdf::EDataSlot::JsonDocument: {
-        auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(buf);
-        if (!binaryJson.Defined()) {
-            // JSON parse error happened, return NULL
-            return NUdf::TUnboxedValuePod();
-        }
-        return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
-    }
-
+    case NUdf::EDataSlot::JsonDocument: { 
+        auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(buf); 
+        if (!binaryJson.Defined()) { 
+            // JSON parse error happened, return NULL 
+            return NUdf::TUnboxedValuePod(); 
+        } 
+        return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size())); 
+    } 
+ 
     case NUdf::EDataSlot::Decimal:
     default:
         break;
@@ -1819,7 +1819,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
             Y_FAIL("TODO");
-
+ 
         default:
             ;
         }
@@ -1928,7 +1928,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Decimal:
     case NUdf::EDataSlot::Uuid:
     case NUdf::EDataSlot::DyNumber:
-    case NUdf::EDataSlot::JsonDocument:
+    case NUdf::EDataSlot::JsonDocument: 
         Y_FAIL("TODO");
     }
 

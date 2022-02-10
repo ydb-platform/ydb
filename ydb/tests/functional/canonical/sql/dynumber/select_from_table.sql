@@ -1,3 +1,3 @@
---!syntax_v1
-
-SELECT * FROM InputDyNumber;
+--!syntax_v1 
+ 
+SELECT * FROM InputDyNumber; 

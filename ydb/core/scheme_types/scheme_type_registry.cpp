@@ -29,13 +29,13 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TUtf8>();
     RegisterType<TYson>();
     RegisterType<TJson>();
-    RegisterType<TJsonDocument>();
+    RegisterType<TJsonDocument>(); 
     RegisterType<TDecimal>();
     RegisterType<TDate>();
     RegisterType<TDatetime>();
     RegisterType<TTimestamp>();
     RegisterType<TInterval>();
-    RegisterType<TDyNumber>();
+    RegisterType<TDyNumber>(); 
 }
 
 void TTypeRegistry::CalculateMetadataEtag() {

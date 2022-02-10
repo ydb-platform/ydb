@@ -6,7 +6,7 @@
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
-
+ 
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
@@ -268,17 +268,17 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
             res.set_high_128(value.GetHi128());
             break;
         }
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
-            const auto json = NBinaryJson::SerializeToJson(value.GetBytes());
-            res.set_text_value(json);
-            break;
-        }
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
-            const auto number = NDyNumber::DyNumberToString(value.GetBytes());
-            Y_ENSURE(number.Defined(), "Invalid DyNumber binary representation");
-            res.set_text_value(*number);
-            break;
-        }
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
+            const auto json = NBinaryJson::SerializeToJson(value.GetBytes()); 
+            res.set_text_value(json); 
+            break; 
+        } 
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: { 
+            const auto number = NDyNumber::DyNumberToString(value.GetBytes()); 
+            Y_ENSURE(number.Defined(), "Invalid DyNumber binary representation"); 
+            res.set_text_value(*number); 
+            break; 
+        } 
         default:
             const auto& stringRef = value.GetBytes();
             res.set_bytes_value(stringRef.data(), stringRef.size());
@@ -406,24 +406,24 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             res.SetLow128(value.low_128());
             res.SetHi128(value.high_128());
             break;
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
-            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value()); 
             if (!binaryJson.Defined()) {
                 throw yexception() << "Invalid JsonDocument value";
             }
-            res.SetBytes(binaryJson->Data(), binaryJson->Size());
-            break;
-        }
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+            res.SetBytes(binaryJson->Data(), binaryJson->Size()); 
+            break; 
+        } 
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: { 
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber");
-            const auto dyNumber = NDyNumber::ParseDyNumberString(value.text_value());
+            const auto dyNumber = NDyNumber::ParseDyNumberString(value.text_value()); 
             if (!dyNumber.Defined()) {
                 throw yexception() << "Invalid DyNumber value";
             }
-            res.SetBytes(dyNumber->Data(), dyNumber->Size());
-            break;
-        }
+            res.SetBytes(dyNumber->Data(), dyNumber->Size()); 
+            break; 
+        } 
         case NUdf::TDataType<char*>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "String");
             const auto& stringRef = value.bytes_value();

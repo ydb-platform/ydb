@@ -323,8 +323,8 @@ Y_UNIT_TEST_SUITE(Scheme) {
             case NScheme::NTypeIds::Utf8:
             case NScheme::NTypeIds::Yson:
             case NScheme::NTypeIds::Json:
-            case NScheme::NTypeIds::JsonDocument:
-            case NScheme::NTypeIds::DyNumber:
+            case NScheme::NTypeIds::JsonDocument: 
+            case NScheme::NTypeIds::DyNumber: 
                 GetValueHash(typeId, TCell(charArr, 30));
                 CompareTypedCells(TCell(charArr, 30), TCell(charArr, 30), typeId);
                 break;

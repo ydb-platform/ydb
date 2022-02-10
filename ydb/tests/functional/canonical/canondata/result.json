@@ -19,78 +19,78 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dt.sql-result_sets_/dt.sql.results"
         }
     },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_from_table.sql-plan]": {
-        "plan": {
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_from_table.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_from_table.sql-plan_/dynumber_insert_from_table.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_from_table.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_from_table.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_from_table.sql-result_sets_/dynumber_insert_from_table.sql.results"
-        },
-        "table_data_ResultTableDyNumber": {
+        }, 
+        "table_data_ResultTableDyNumber": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_from_table.sql-result_sets_/dynumber_insert_from_table.sql_ResultTableDyNumber.results"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_literal.sql-plan]": {
-        "plan": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_literal.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_literal.sql-plan_/dynumber_insert_literal.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_literal.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_literal.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_literal.sql-result_sets_/dynumber_insert_literal.sql.results"
-        },
-        "table_data_ResultLiteralDyNumber": {
+        }, 
+        "table_data_ResultLiteralDyNumber": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_literal.sql-result_sets_/dynumber_insert_literal.sql_ResultLiteralDyNumber.results"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_params.sql-plan]": {
-        "plan": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_params.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_params.sql-plan_/dynumber_insert_params.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_params.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/insert_params.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_params.sql-result_sets_/dynumber_insert_params.sql.results"
-        },
-        "table_data_ResultParamsDyNumber": {
+        }, 
+        "table_data_ResultParamsDyNumber": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_insert_params.sql-result_sets_/dynumber_insert_params.sql_ResultParamsDyNumber.results"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_from_table.sql-plan]": {
-        "plan": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_from_table.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_from_table.sql-plan_/dynumber_select_from_table.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_from_table.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_from_table.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_from_table.sql-result_sets_/dynumber_select_from_table.sql.results"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_literal.sql-plan]": {
-        "plan": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_literal.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_literal.sql-plan_/dynumber_select_literal.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_literal.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_literal.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_literal.sql-result_sets_/dynumber_select_literal.sql.results"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_params.sql-plan]": {
-        "plan": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_params.sql-plan]": { 
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-plan_/dynumber_select_params.sql.plan"
-        }
-    },
-    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_params.sql-result_sets]": {
-        "result_sets": {
+        } 
+    }, 
+    "test_sql.TestCanonicalFolder1.test_case[dynumber/select_params.sql-result_sets]": { 
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-result_sets_/dynumber_select_params.sql.results"
         },
         "result_sets_scan_query": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-result_sets_/dynumber_select_params.sql_scan_query.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[explain.script-script]": {
         "script": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_explain.script-script_/explain.script.results"
@@ -378,87 +378,87 @@
         }
     },
     "test_sql.TestCanonicalFolder1.test_case[json/insert_from_table.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_from_table.sql-plan_/json_insert_from_table.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/insert_from_table.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_from_table.sql-result_sets_/json_insert_from_table.sql.results"
-        },
-        "table_data_ResultTableJD": {
+        }, 
+        "table_data_ResultTableJD": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_from_table.sql-result_sets_/json_insert_from_table.sql_ResultTableJD.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/insert_literal.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_literal.sql-plan_/json_insert_literal.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/insert_literal.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_literal.sql-result_sets_/json_insert_literal.sql.results"
-        },
-        "table_data_ResultLiteralJD": {
+        }, 
+        "table_data_ResultLiteralJD": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_literal.sql-result_sets_/json_insert_literal.sql_ResultLiteralJD.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/insert_params.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_params.sql-plan_/json_insert_params.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/insert_params.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_params.sql-result_sets_/json_insert_params.sql.results"
-        },
-        "table_data_ResultParamsJD": {
+        }, 
+        "table_data_ResultParamsJD": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_insert_params.sql-result_sets_/json_insert_params.sql_ResultParamsJD.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/json_query.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_json_query.sql-plan_/json_json_query.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/json_query.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_json_query.sql-result_sets_/json_json_query.sql.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_from_table.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_from_table.sql-plan_/json_select_from_table.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_from_table.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_from_table.sql-result_sets_/json_select_from_table.sql.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_literal.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_literal.sql-plan_/json_select_literal.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_literal.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_literal.sql-result_sets_/json_select_literal.sql.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_params.sql-plan]": {
-        "plan": {
+        "plan": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_params.sql-plan_/json_select_params.sql.plan"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[json/select_params.sql-result_sets]": {
-        "result_sets": {
+        "result_sets": { 
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_params.sql-result_sets_/json_select_params.sql.results"
         },
         "result_sets_scan_query": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_params.sql-result_sets_/json_select_params.sql_scan_query.results"
-        }
-    },
+        } 
+    }, 
     "test_sql.TestCanonicalFolder1.test_case[order_by/order_by_pk.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_order_by_order_by_pk.sql-plan_/order_by_order_by_pk.sql.plan"

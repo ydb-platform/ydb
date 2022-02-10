@@ -76,8 +76,8 @@ message Type {
         YSON           = 0x1201;
         JSON           = 0x1202;
         UUID           = 0x1203;
-        JSON_DOCUMENT  = 0x1204;
-        DYNUMBER       = 0x1302;
+        JSON_DOCUMENT  = 0x1204; 
+        DYNUMBER       = 0x1302; 
     }
 
     oneof type {

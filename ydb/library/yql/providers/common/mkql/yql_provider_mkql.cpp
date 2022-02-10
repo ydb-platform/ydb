@@ -890,15 +890,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Json>(node.Head().Content());
     });
 
-    AddCallable("JsonDocument", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        // NOTE: ValueFromString returns TUnboxedValuePod. This type does not free string inside it during destruction.
-        // To get smart pointer-like behaviour we convert TUnboxedValuePod to TUnboxedValue. Without this conversion there
-        // will be a memory leak.
-        NUdf::TUnboxedValue jsonDocument = ValueFromString(NUdf::EDataSlot::JsonDocument, node.Head().Content());
-        MKQL_ENSURE(bool(jsonDocument), "Invalid JsonDocument literal");
-        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::JsonDocument>(jsonDocument.AsStringRef());
-    });
-
+    AddCallable("JsonDocument", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        // NOTE: ValueFromString returns TUnboxedValuePod. This type does not free string inside it during destruction. 
+        // To get smart pointer-like behaviour we convert TUnboxedValuePod to TUnboxedValue. Without this conversion there 
+        // will be a memory leak. 
+        NUdf::TUnboxedValue jsonDocument = ValueFromString(NUdf::EDataSlot::JsonDocument, node.Head().Content()); 
+        MKQL_ENSURE(bool(jsonDocument), "Invalid JsonDocument literal"); 
+        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::JsonDocument>(jsonDocument.AsStringRef()); 
+    }); 
+ 
     AddCallable("Uuid", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>(node.Head().Content());
     });

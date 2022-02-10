@@ -1,27 +1,27 @@
-#include "json.h"
-#include "node.h"
-
+#include "json.h" 
+#include "node.h" 
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-
-#include <util/stream/input.h>
-#include <util/stream/str.h>
-#include <util/generic/stack.h>
-#include <util/system/yassert.h>
-#include <util/system/compiler.h>
-
-#include <cmath>
+ 
+#include <util/stream/input.h> 
+#include <util/stream/str.h> 
+#include <util/generic/stack.h> 
+#include <util/system/yassert.h> 
+#include <util/system/compiler.h> 
+ 
+#include <cmath> 
 #include <ctype.h>
-
-namespace NYql::NDom {
-
-using namespace NUdf;
-using namespace NJson;
-
-namespace {
-
+ 
+namespace NYql::NDom { 
+ 
+using namespace NUdf; 
+using namespace NJson; 
+ 
+namespace { 
+ 
 size_t AsciiSize(const TStringBuf& str) {
     size_t s = 0U;
     while (s < str.size() && isascii(str[s]))
@@ -64,113 +64,113 @@ TString DecodeUtf(const TStringBuf& str, size_t from)
 }
 
 template<bool DecodeUtf8>
-class TDomCallbacks : public TJsonCallbacks {
-public:
-    TDomCallbacks(const IValueBuilder* valueBuilder, bool throwException)
-        : TJsonCallbacks(throwException)
-        , ValueBuilder(valueBuilder)
-    {
-        Result.push({});
-    }
-
-    bool OnNull() override {
-        return PushToCurrentCollection(MakeEntity());
-    }
-
-    bool OnBoolean(bool value) override {
-        return PushToCurrentCollection(MakeBool(value));
-    }
-
-    bool OnInteger(long long value) override {
-        return PushToCurrentCollection(MakeInt64(static_cast<i64>(value)));
-    }
-
-    bool OnUInteger(unsigned long long value) override {
-        return PushToCurrentCollection(MakeUint64(static_cast<ui64>(value)));
-    }
-
-    bool OnDouble(double value) override {
-        if (Y_UNLIKELY(std::isinf(value))) {
-            ythrow yexception() << "JSON number is infinite";
-        }
-
-        return PushToCurrentCollection(MakeDouble(value));
-    }
-
-    bool OnString(const TStringBuf& value) override {
+class TDomCallbacks : public TJsonCallbacks { 
+public: 
+    TDomCallbacks(const IValueBuilder* valueBuilder, bool throwException) 
+        : TJsonCallbacks(throwException) 
+        , ValueBuilder(valueBuilder) 
+    { 
+        Result.push({}); 
+    } 
+ 
+    bool OnNull() override { 
+        return PushToCurrentCollection(MakeEntity()); 
+    } 
+ 
+    bool OnBoolean(bool value) override { 
+        return PushToCurrentCollection(MakeBool(value)); 
+    } 
+ 
+    bool OnInteger(long long value) override { 
+        return PushToCurrentCollection(MakeInt64(static_cast<i64>(value))); 
+    } 
+ 
+    bool OnUInteger(unsigned long long value) override { 
+        return PushToCurrentCollection(MakeUint64(static_cast<ui64>(value))); 
+    } 
+ 
+    bool OnDouble(double value) override { 
+        if (Y_UNLIKELY(std::isinf(value))) { 
+            ythrow yexception() << "JSON number is infinite"; 
+        } 
+ 
+        return PushToCurrentCollection(MakeDouble(value)); 
+    } 
+ 
+    bool OnString(const TStringBuf& value) override { 
         if constexpr (DecodeUtf8) {
             if (const auto from = AsciiSize(value); from < value.size()) {
                 return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder));
             }
         }
-        return PushToCurrentCollection(MakeString(value, ValueBuilder));
-    }
-
-    bool OnOpenMap() override {
-        return OnCollectionOpen();
-    }
-
-    bool OnMapKey(const TStringBuf& value) override {
-        return OnString(value);
-    }
-
-    bool OnCloseMap() override {
+        return PushToCurrentCollection(MakeString(value, ValueBuilder)); 
+    } 
+ 
+    bool OnOpenMap() override { 
+        return OnCollectionOpen(); 
+    } 
+ 
+    bool OnMapKey(const TStringBuf& value) override { 
+        return OnString(value); 
+    } 
+ 
+    bool OnCloseMap() override { 
         Y_VERIFY_DEBUG(!Result.empty());
-        auto& items = Result.top();
+        auto& items = Result.top(); 
         Y_VERIFY_DEBUG(items.size() % 2 == 0);
-
-        TSmallVec<TPair, TStdAllocatorForUdf<TPair>> pairs;
-        for (size_t i = 0; i < items.size(); i += 2) {
-            pairs.emplace_back(std::move(items[i]), std::move(items[i + 1]));
-        }
-
-        Result.pop();
-        return PushToCurrentCollection(MakeDict(pairs.data(), pairs.size()));
-    }
-
-    bool OnOpenArray() override {
-        return OnCollectionOpen();
-    }
-
-    bool OnCloseArray() override {
-        Y_VERIFY_DEBUG(!Result.empty());
-        auto& items = Result.top();
-        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder);
-        Result.pop();
-        return PushToCurrentCollection(std::move(list));
-    }
-
-    bool OnEnd() override {
-        return IsResultSingle();
-    }
-
-    TUnboxedValue GetResult() && {
-        Y_VERIFY_DEBUG(IsResultSingle());
-        return std::move(Result.top()[0]);
-    }
-
-private:
-    bool OnCollectionOpen() {
+ 
+        TSmallVec<TPair, TStdAllocatorForUdf<TPair>> pairs; 
+        for (size_t i = 0; i < items.size(); i += 2) { 
+            pairs.emplace_back(std::move(items[i]), std::move(items[i + 1])); 
+        } 
+ 
+        Result.pop(); 
+        return PushToCurrentCollection(MakeDict(pairs.data(), pairs.size())); 
+    } 
+ 
+    bool OnOpenArray() override { 
+        return OnCollectionOpen(); 
+    } 
+ 
+    bool OnCloseArray() override { 
+        Y_VERIFY_DEBUG(!Result.empty()); 
+        auto& items = Result.top(); 
+        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder); 
+        Result.pop(); 
+        return PushToCurrentCollection(std::move(list)); 
+    } 
+ 
+    bool OnEnd() override { 
+        return IsResultSingle(); 
+    } 
+ 
+    TUnboxedValue GetResult() && { 
+        Y_VERIFY_DEBUG(IsResultSingle()); 
+        return std::move(Result.top()[0]); 
+    } 
+ 
+private: 
+    bool OnCollectionOpen() { 
         Result.emplace();
-        return true;
-    }
-
-    bool PushToCurrentCollection(TUnboxedValue&& value) {
-        Y_VERIFY_DEBUG(!Result.empty());
+        return true; 
+    } 
+ 
+    bool PushToCurrentCollection(TUnboxedValue&& value) { 
+        Y_VERIFY_DEBUG(!Result.empty()); 
         Result.top().emplace_back(std::move(value));
-        return true;
-    }
-
-    bool IsResultSingle() {
-        return Result.size() == 1 && Result.top().size() == 1;
-    }
-
-    const IValueBuilder* ValueBuilder;
-
-    using TUnboxedValues = TSmallVec<TUnboxedValue, TStdAllocatorForUdf<TUnboxedValue>>;
+        return true; 
+    } 
+ 
+    bool IsResultSingle() { 
+        return Result.size() == 1 && Result.top().size() == 1; 
+    } 
+ 
+    const IValueBuilder* ValueBuilder; 
+ 
+    using TUnboxedValues = TSmallVec<TUnboxedValue, TStdAllocatorForUdf<TUnboxedValue>>; 
     std::stack<TUnboxedValues, TSmallVec<TUnboxedValues, TStdAllocatorForUdf<TUnboxedValues>>> Result;
-};
-
+}; 
+ 
 class TTestCallbacks : public TJsonCallbacks {
 public:
     TTestCallbacks()
@@ -289,17 +289,17 @@ void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
         case ENodeType::Dict:
             return WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
         case ENodeType::Attr:
-            writer.OpenMap();
+            writer.OpenMap(); 
             writer.WriteKey("$attributes");
             WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
             writer.WriteKey("$value");
             WriteValue<SkipMapEntity, EncodeUtf8>(value.GetVariantItem().Release(), writer);
-            writer.CloseMap();
-    }
-}
-
-}
-
+            writer.CloseMap(); 
+    } 
+} 
+ 
+} 
+ 
 bool IsValidJson(const TStringBuf json) {
     TMemoryInput input(json.data(), json.size());
     TTestCallbacks callbacks;
@@ -307,7 +307,7 @@ bool IsValidJson(const TStringBuf json) {
 }
 
 TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool dencodeUtf8) {
-    TMemoryInput input(json.data(), json.size());
+    TMemoryInput input(json.data(), json.size()); 
     if (dencodeUtf8) {
         TDomCallbacks<true> callbacks(valueBuilder, /* throwException */ true);
         if (!ReadJson(&input, &callbacks)) {
@@ -320,12 +320,12 @@ TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueB
             UdfTerminate("Internal error: parser error occurred but corresponding callback was not called");
         }
         return std::move(callbacks).GetResult();
-    }
-}
-
+    } 
+} 
+ 
 TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, bool encodeUtf8) {
-    TStringStream output;
-    TJsonWriter writer(&output, /* formatOutput */ false);
+    TStringStream output; 
+    TJsonWriter writer(&output, /* formatOutput */ false); 
     if (skipMapEntity)
         if (encodeUtf8)
             WriteValue<true, true>(dom, writer);
@@ -336,8 +336,8 @@ TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, b
             WriteValue<false, true>(dom, writer);
         else
             WriteValue<false, false>(dom, writer);
-    writer.Flush();
-    return output.Str();
-}
-
+    writer.Flush(); 
+    return output.Str(); 
+} 
+ 
 }

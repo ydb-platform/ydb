@@ -918,7 +918,7 @@ TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::Utf8:
-        case NUdf::EDataSlot::JsonDocument:
+        case NUdf::EDataSlot::JsonDocument: 
             // Reuse entire packed value length for strings
             props.Set(EProps::UseTopLength);
             break;

@@ -147,37 +147,37 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     return true;
 }
 
-bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect)
-{
-    if (IsDqPureExpr(node.Input())) {
+bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, 
+    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect) 
+{ 
+    if (IsDqPureExpr(node.Input())) { 
         stageInput = BuildPrecomputeStage(node.Input(), ctx);
 
-        effect = Build<TKqpDeleteRows>(ctx, node.Pos())
-            .Table(node.Table())
+        effect = Build<TKqpDeleteRows>(ctx, node.Pos()) 
+            .Table(node.Table()) 
             .Input<TCoIterator>()
                 .List(inputArg)
                 .Build()
-            .Done();
-        return true;
-    }
-
-    if (!EnsureDqUnion(node.Input(), ctx)) {
-        return false;
-    }
-
-    auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
-
-    auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto input = dqUnion.Output().Stage().Program().Body();
-
+            .Done(); 
+        return true; 
+    } 
+ 
+    if (!EnsureDqUnion(node.Input(), ctx)) { 
+        return false; 
+    } 
+ 
+    auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path()); 
+ 
+    auto dqUnion = node.Input().Cast<TDqCnUnionAll>(); 
+    auto input = dqUnion.Output().Stage().Program().Body(); 
+ 
     if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input)) {
-        stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
-            .Output()
-                .Stage(dqUnion.Output().Stage())
-                .Index(dqUnion.Output().Index())
-                .Build()
-            .Done();
+        stageInput = Build<TKqpCnMapShard>(ctx, node.Pos()) 
+            .Output() 
+                .Stage(dqUnion.Output().Stage()) 
+                .Index(dqUnion.Output().Index()) 
+                .Build() 
+            .Done(); 
 
         effect = Build<TKqpDeleteRows>(ctx, node.Pos())
             .Table(node.Table())
@@ -185,10 +185,10 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Input(inputArg)
                 .Build()
             .Done();
-    } else {
+    } else { 
         stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos())
-            .Connection(dqUnion)
-            .Done();
+            .Connection(dqUnion) 
+            .Done(); 
 
         effect = Build<TKqpDeleteRows>(ctx, node.Pos())
             .Table(node.Table())
@@ -196,11 +196,11 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .List(inputArg)
                 .Build()
             .Done();
-    }
-
-    return true;
-}
-
+    } 
+ 
+    return true; 
+} 
+ 
 bool BuildEffects(TPositionHandle pos, const TVector<TKqlTableEffect>& effects,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TVector<TExprBase>& builtEffects)
 {
@@ -223,12 +223,12 @@ bool BuildEffects(TPositionHandle pos, const TVector<TKqlTableEffect>& effects,
             }
         }
 
-        if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) {
-            if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
-                return false;
-            }
-        }
-
+        if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) { 
+            if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) { 
+                return false; 
+            } 
+        } 
+ 
         YQL_ENSURE(newEffect);
         newEffects.push_back(newEffect.Cast());
 

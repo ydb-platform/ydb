@@ -222,16 +222,16 @@ TRuntimeNode TKqpProgramBuilder::KqpUpsertRows(const TTableId& tableId, const TR
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TKqpProgramBuilder::KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows) {
-    auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag));
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
-    builder.Add(rows);
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
+TRuntimeNode TKqpProgramBuilder::KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows) { 
+    auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag)); 
+ 
+    TCallableBuilder builder(Env, __func__, returnType); 
+    builder.Add(BuildTableIdLiteral(tableId, *this)); 
+    builder.Add(rows); 
+ 
+    return TRuntimeNode(builder.Build(), false); 
+} 
+ 
 TRuntimeNode TKqpProgramBuilder::KqpEffects(const TArrayRef<const TRuntimeNode>& effects) {
     auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag));
     TCallableBuilder builder(Env, __func__, returnType);

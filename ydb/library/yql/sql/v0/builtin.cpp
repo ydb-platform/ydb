@@ -310,8 +310,8 @@ public:
                     ctx.Warning(Pos, TIssuesIds::YQL_DEPRECATED_INTERVAL_CONSTANT) << "Time prefix 'T' at end of interval constant";
                 }
                 break;
-            default:
-                Y_FAIL("Unexpected data slot");
+            default: 
+                Y_FAIL("Unexpected data slot"); 
             }
 
             if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {
@@ -1584,9 +1584,9 @@ class THoppingTime final: public TAstListNode {
 public:
     THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
         : TAstListNode(pos)
-    {
-        Y_UNUSED(args);
-    }
+    { 
+        Y_UNUSED(args); 
+    } 
 
 private:
     TNodePtr DoClone() const override {

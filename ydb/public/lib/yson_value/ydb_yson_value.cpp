@@ -76,12 +76,12 @@ static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYso
         case EPrimitiveType::Json:
             writer.OnStringScalar(parser.GetJson());
             break;
-        case EPrimitiveType::JsonDocument:
-            writer.OnStringScalar(parser.GetJsonDocument());
-            break;
-        case EPrimitiveType::DyNumber:
-            writer.OnStringScalar(parser.GetDyNumber());
-            break;
+        case EPrimitiveType::JsonDocument: 
+            writer.OnStringScalar(parser.GetJsonDocument()); 
+            break; 
+        case EPrimitiveType::DyNumber: 
+            writer.OnStringScalar(parser.GetDyNumber()); 
+            break; 
         default:
             ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type);
     }

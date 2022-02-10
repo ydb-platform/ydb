@@ -23,7 +23,7 @@ namespace NNames {
     DECLARE_TYPED_TYPE_NAME(Utf8);
     DECLARE_TYPED_TYPE_NAME(Yson);
     DECLARE_TYPED_TYPE_NAME(Json);
-    DECLARE_TYPED_TYPE_NAME(JsonDocument);
+    DECLARE_TYPED_TYPE_NAME(JsonDocument); 
 
     DECLARE_TYPED_TYPE_NAME(Decimal);
 
@@ -31,8 +31,8 @@ namespace NNames {
     DECLARE_TYPED_TYPE_NAME(Datetime);
     DECLARE_TYPED_TYPE_NAME(Timestamp);
     DECLARE_TYPED_TYPE_NAME(Interval);
-
-    DECLARE_TYPED_TYPE_NAME(DyNumber);
+ 
+    DECLARE_TYPED_TYPE_NAME(DyNumber); 
 }
 
 void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) {

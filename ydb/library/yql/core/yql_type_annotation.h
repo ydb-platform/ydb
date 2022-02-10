@@ -219,7 +219,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
     TString DqFallbackPolicy = "";
     bool StrictTableProps = true;
-    bool JsonQueryReturnsJsonDocument = false;
+    bool JsonQueryReturnsJsonDocument = false; 
     ui32 FolderSubDirsLimit = 1000;
 
     // compatibility with v0 or raw s-expression code

@@ -1466,7 +1466,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                      DATA = "test",
                      COMPRESSION = "off"
                 ),
-                FAMILY Family2
+                FAMILY Family2 ()
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

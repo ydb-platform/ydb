@@ -70,7 +70,6 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_keyword::kAltKeyword1:
@@ -89,8 +88,6 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
             return GetIdentifier(ctx, node.GetAlt_keyword7().GetRule_keyword_window_uncompat1());
         case TRule_keyword::kAltKeyword8:
             return GetIdentifier(ctx, node.GetAlt_keyword8().GetRule_keyword_hint_uncompat1());
-        case TRule_keyword::kAltKeyword9:
-            return GetIdentifier(ctx, node.GetAlt_keyword9().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -144,7 +141,6 @@ static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    // //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_schema::kAltIdSchema1:
@@ -194,7 +190,6 @@ static TString Id(const TRule_id_table& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_table::kAltIdTable1:
@@ -211,8 +206,6 @@ static TString Id(const TRule_id_table& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_table6().GetRule_keyword_window_uncompat1());
         case TRule_id_table::kAltIdTable7:
             return GetKeyword(ctx, node.GetAlt_id_table7().GetRule_keyword_hint_uncompat1());
-        case TRule_id_table::kAltIdTable8:
-            return GetKeyword(ctx, node.GetAlt_id_table8().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -252,7 +245,6 @@ static TString Id(const TRule_id_expr& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_expr::kAltIdExpr1:
@@ -267,8 +259,6 @@ static TString Id(const TRule_id_expr& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_expr5().GetRule_keyword_window_uncompat1());
         case TRule_id_expr::kAltIdExpr6:
             return GetKeyword(ctx, node.GetAlt_id_expr6().GetRule_keyword_hint_uncompat1());
-        case TRule_id_expr::kAltIdExpr7:
-            return GetKeyword(ctx, node.GetAlt_id_expr7().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -294,7 +284,6 @@ static TString Id(const TRule_id_expr_in& node, TTranslation& ctx) {
     // //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_expr_in::kAltIdExprIn1:
@@ -307,8 +296,6 @@ static TString Id(const TRule_id_expr_in& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_expr_in4().GetRule_keyword_window_uncompat1());
         case TRule_id_expr_in::kAltIdExprIn5:
             return GetKeyword(ctx, node.GetAlt_id_expr_in5().GetRule_keyword_hint_uncompat1());
-        case TRule_id_expr_in::kAltIdExprIn6:
-            return GetKeyword(ctx, node.GetAlt_id_expr_in6().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -325,7 +312,6 @@ static TString Id(const TRule_id_window& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     // //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_window::kAltIdWindow1:
@@ -344,8 +330,6 @@ static TString Id(const TRule_id_window& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_window7().GetRule_keyword_in_uncompat1());
         case TRule_id_window::kAltIdWindow8:
             return GetKeyword(ctx, node.GetAlt_id_window8().GetRule_keyword_hint_uncompat1());
-        case TRule_id_window::kAltIdWindow9:
-            return GetKeyword(ctx, node.GetAlt_id_window9().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -362,7 +346,6 @@ static TString Id(const TRule_id_without& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_without::kAltIdWithout1:
@@ -379,8 +362,6 @@ static TString Id(const TRule_id_without& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_without6().GetRule_keyword_window_uncompat1());
         case TRule_id_without::kAltIdWithout7:
             return GetKeyword(ctx, node.GetAlt_id_without7().GetRule_keyword_hint_uncompat1());
-        case TRule_id_without::kAltIdWithout8:
-            return GetKeyword(ctx, node.GetAlt_id_without8().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -397,7 +378,6 @@ static TString Id(const TRule_id_hint& node, TTranslation& ctx) {
     //  | keyword_in_uncompat
     //  | keyword_window_uncompat
     // //  | keyword_hint_uncompat
-    //  | keyword_schema_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_hint::kAltIdHint1:
@@ -416,8 +396,6 @@ static TString Id(const TRule_id_hint& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_hint7().GetRule_keyword_in_uncompat1());
         case TRule_id_hint::kAltIdHint8:
             return GetKeyword(ctx, node.GetAlt_id_hint8().GetRule_keyword_window_uncompat1());
-        case TRule_id_hint::kAltIdHint9:
-            return GetKeyword(ctx, node.GetAlt_id_hint9().GetRule_keyword_schema_uncompat1());
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -1822,12 +1800,16 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
 }
 
 bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family) {
-    if (!FillFamilySettingsEntry(settingsNode.GetRule_family_settings_entry2(), family)) {
-        return false;
-    }
-    for (auto& block : settingsNode.GetBlock3()) {
-        if (!FillFamilySettingsEntry(block.GetRule_family_settings_entry2(), family)) {
+    // family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
+    if (settingsNode.HasBlock2()) {
+        auto& settings = settingsNode.GetBlock2();
+        if (!FillFamilySettingsEntry(settings.GetRule_family_settings_entry1(), family)) {
             return false;
+        }
+        for (auto& block : settings.GetBlock2()) {
+            if (!FillFamilySettingsEntry(block.GetRule_family_settings_entry2(), family)) {
+                return false;
+            }
         }
     }
     return true;
@@ -1940,10 +1922,8 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             // family_entry
             auto& family_entry = node.GetAlt_create_table_entry4().GetRule_family_entry1();
             TFamilyEntry family(IdEx(family_entry.GetRule_an_id2(), *this));
-            if (family_entry.HasBlock3()) {
-                if (!FillFamilySettings(family_entry.GetBlock3().GetRule_family_settings1(), family)) {
-                    return false;
-                }
+            if (!FillFamilySettings(family_entry.GetRule_family_settings3(), family)) {
+                return false;
             }
             params.ColumnFamilies.push_back(family);
             break;
@@ -8990,10 +8970,8 @@ bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node
 
 bool TSqlQuery::AlterTableAddFamily(const TRule_family_entry& node, TAlterTableParameters& params) {
     TFamilyEntry family(IdEx(node.GetRule_an_id2(), *this));
-    if (node.HasBlock3()) {
-        if (!FillFamilySettings(node.GetBlock3().GetRule_family_settings1(), family)) {
-            return false;
-        }
+    if (!FillFamilySettings(node.GetRule_family_settings3(), family)) {
+        return false;
     }
     params.AddColumnFamilies.push_back(family);
     return true;

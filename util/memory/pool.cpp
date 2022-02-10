@@ -11,11 +11,11 @@ TMemoryPool::IGrowPolicy* TMemoryPool::TExpGrow::Instance() noexcept {
 
 void TMemoryPool::AddChunk(size_t hint) {
     const size_t dataLen = Max(BlockSize_, hint);
-    size_t allocSize = dataLen + sizeof(TChunk); 
-    if (Options_.RoundUpToNextPowerOfTwo) { 
-        allocSize = FastClp2(allocSize); 
-    } 
-    TBlock nb = Alloc_->Allocate(allocSize); 
+    size_t allocSize = dataLen + sizeof(TChunk);
+    if (Options_.RoundUpToNextPowerOfTwo) {
+        allocSize = FastClp2(allocSize);
+    }
+    TBlock nb = Alloc_->Allocate(allocSize);
 
     // Add previous chunk's stats
     if (Current_ != &Empty_) {

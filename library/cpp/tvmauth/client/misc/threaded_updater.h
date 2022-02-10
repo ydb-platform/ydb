@@ -20,12 +20,12 @@ namespace NTvmAuth::NInternal {
 namespace NTvmAuth {
     class TThreadedUpdaterBase: public TAsyncUpdaterBase {
     public:
-        TThreadedUpdaterBase(TDuration workerAwakingPeriod, 
-                             TLoggerPtr logger, 
-                             const TString& url, 
-                             ui16 port, 
-                             TDuration socketTimeout, 
-                             TDuration connectTimeout); 
+        TThreadedUpdaterBase(TDuration workerAwakingPeriod,
+                             TLoggerPtr logger,
+                             const TString& url,
+                             ui16 port,
+                             TDuration socketTimeout,
+                             TDuration connectTimeout);
         virtual ~TThreadedUpdaterBase();
 
     protected:
@@ -65,8 +65,8 @@ namespace NTvmAuth {
         mutable THolder<TKeepAliveHttpClient> HttpClient_;
 
         const ui32 TvmPort_;
-        const TDuration TvmSocketTimeout_; 
-        const TDuration TvmConnectTimeout_; 
+        const TDuration TvmSocketTimeout_;
+        const TDuration TvmConnectTimeout_;
 
         mutable TAutoEvent Event_;
         mutable TAutoEvent Started_;

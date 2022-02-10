@@ -68,9 +68,9 @@ public:
     TSelf operator+(difference_type n) const {
         return TSelf(Iter + n, Mapper);
     }
-    TSelf operator-(difference_type n) const { 
-        return TSelf(Iter - n, Mapper); 
-    } 
+    TSelf operator-(difference_type n) const {
+        return TSelf(Iter - n, Mapper);
+    }
     difference_type operator-(const TSelf& other) const {
         return Iter - other.Iter;
     }

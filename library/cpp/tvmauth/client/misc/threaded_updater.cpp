@@ -10,15 +10,15 @@ namespace NTvmAuth {
     TThreadedUpdaterBase::TThreadedUpdaterBase(TDuration workerAwakingPeriod,
                                                TLoggerPtr logger,
                                                const TString& url,
-                                               ui16 port, 
-                                               TDuration socketTimeout, 
-                                               TDuration connectTimeout) 
+                                               ui16 port,
+                                               TDuration socketTimeout,
+                                               TDuration connectTimeout)
         : WorkerAwakingPeriod_(workerAwakingPeriod)
         , Logger_(std::move(logger))
         , TvmUrl_(url)
         , TvmPort_(port)
-        , TvmSocketTimeout_(socketTimeout) 
-        , TvmConnectTimeout_(connectTimeout) 
+        , TvmSocketTimeout_(socketTimeout)
+        , TvmConnectTimeout_(connectTimeout)
         , IsStopped_(true)
     {
         Y_ENSURE_EX(Logger_, TNonRetriableException() << "Logger is required");
@@ -55,7 +55,7 @@ namespace NTvmAuth {
 
     TKeepAliveHttpClient& TThreadedUpdaterBase::GetClient() const {
         if (!HttpClient_) {
-            HttpClient_ = MakeHolder<TKeepAliveHttpClient>(TvmUrl_, TvmPort_, TvmSocketTimeout_, TvmConnectTimeout_); 
+            HttpClient_ = MakeHolder<TKeepAliveHttpClient>(TvmUrl_, TvmPort_, TvmSocketTimeout_, TvmConnectTimeout_);
         }
 
         return *HttpClient_;

@@ -18,7 +18,7 @@ namespace NTvmAuth::NTvmTool {
     protected: // for tests
         TClientStatus::ECode GetState() const;
 
-        TThreadedUpdater(const TString& host, ui16 port, TDuration socketTimeout, TDuration connectTimeout, TLoggerPtr logger); 
+        TThreadedUpdater(const TString& host, ui16 port, TDuration socketTimeout, TDuration connectTimeout, TLoggerPtr logger);
 
         void Init(const TClientSettings& settings);
         void UpdateState();

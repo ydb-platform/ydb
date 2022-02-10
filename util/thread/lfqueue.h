@@ -77,7 +77,7 @@ class TLockFreeQueue: public TNonCopyable {
 
     void TryToFreeAsyncMemory() {
         TAtomic keepCounter = AtomicAdd(FreeingTaskCounter, 0);
-        TRootNode* current = AtomicGet(FreePtr); 
+        TRootNode* current = AtomicGet(FreePtr);
         if (current == nullptr)
             return;
         if (AtomicAdd(FreememCounter, 0) == 1) {
@@ -89,8 +89,8 @@ class TLockFreeQueue: public TNonCopyable {
             if (AtomicCas(&FreePtr, (TRootNode*)nullptr, current)) {
                 // free list
                 while (current) {
-                    TRootNode* p = AtomicGet(current->NextFree); 
-                    EraseList(AtomicGet(current->ToDelete)); 
+                    TRootNode* p = AtomicGet(current->NextFree);
+                    EraseList(AtomicGet(current->ToDelete));
                     delete current;
                     current = p;
                 }
@@ -106,10 +106,10 @@ class TLockFreeQueue: public TNonCopyable {
         AtomicAdd(FreememCounter, -1);
     }
     void AsyncDel(TRootNode* toDelete, TListNode* lst) {
-        AtomicSet(toDelete->ToDelete, lst); 
+        AtomicSet(toDelete->ToDelete, lst);
         for (;;) {
-            AtomicSet(toDelete->NextFree, AtomicGet(FreePtr)); 
-            if (AtomicCas(&FreePtr, toDelete, AtomicGet(toDelete->NextFree))) 
+            AtomicSet(toDelete->NextFree, AtomicGet(FreePtr));
+            if (AtomicCas(&FreePtr, toDelete, AtomicGet(toDelete->NextFree)))
                 break;
         }
     }
@@ -174,11 +174,11 @@ class TLockFreeQueue: public TNonCopyable {
     void EnqueueImpl(TListNode* head, TListNode* tail) {
         TRootNode* newRoot = new TRootNode;
         AsyncRef();
-        AtomicSet(newRoot->PushQueue, head); 
+        AtomicSet(newRoot->PushQueue, head);
         for (;;) {
-            TRootNode* curRoot = AtomicGet(JobQueue); 
+            TRootNode* curRoot = AtomicGet(JobQueue);
             AtomicSet(tail->Next, AtomicGet(curRoot->PushQueue));
-            AtomicSet(newRoot->PopQueue, AtomicGet(curRoot->PopQueue)); 
+            AtomicSet(newRoot->PopQueue, AtomicGet(curRoot->PopQueue));
             newRoot->CopyCounter(curRoot);
 
             for (TListNode* node = head;; node = AtomicGet(node->Next)) {
@@ -276,18 +276,18 @@ public:
         TListInvertor listInvertor;
         AsyncRef();
         for (;;) {
-            TRootNode* curRoot = AtomicGet(JobQueue); 
-            TListNode* tail = AtomicGet(curRoot->PopQueue); 
+            TRootNode* curRoot = AtomicGet(JobQueue);
+            TListNode* tail = AtomicGet(curRoot->PopQueue);
             if (tail) {
                 // has elems to pop
                 if (!newRoot)
                     newRoot = new TRootNode;
 
-                AtomicSet(newRoot->PushQueue, AtomicGet(curRoot->PushQueue)); 
+                AtomicSet(newRoot->PushQueue, AtomicGet(curRoot->PushQueue));
                 AtomicSet(newRoot->PopQueue, AtomicGet(tail->Next));
                 newRoot->CopyCounter(curRoot);
                 newRoot->DecCount(tail->Data);
-                Y_ASSERT(AtomicGet(curRoot->PopQueue) == tail); 
+                Y_ASSERT(AtomicGet(curRoot->PopQueue) == tail);
                 if (AtomicCas(&JobQueue, newRoot, curRoot)) {
                     *data = std::move(tail->Data);
                     AtomicSet(tail->Next, nullptr);
@@ -296,7 +296,7 @@ public:
                 }
                 continue;
             }
-            if (AtomicGet(curRoot->PushQueue) == nullptr) { 
+            if (AtomicGet(curRoot->PushQueue) == nullptr) {
                 delete newRoot;
                 AsyncUnref();
                 return false; // no elems to pop
@@ -304,17 +304,17 @@ public:
 
             if (!newRoot)
                 newRoot = new TRootNode;
-            AtomicSet(newRoot->PushQueue, nullptr); 
-            listInvertor.DoCopy(AtomicGet(curRoot->PushQueue)); 
+            AtomicSet(newRoot->PushQueue, nullptr);
+            listInvertor.DoCopy(AtomicGet(curRoot->PushQueue));
             AtomicSet(newRoot->PopQueue, listInvertor.Copy);
             newRoot->CopyCounter(curRoot);
-            Y_ASSERT(AtomicGet(curRoot->PopQueue) == nullptr); 
+            Y_ASSERT(AtomicGet(curRoot->PopQueue) == nullptr);
             if (AtomicCas(&JobQueue, newRoot, curRoot)) {
                 newRoot = nullptr;
                 listInvertor.CopyWasUsed();
-                AsyncDel(curRoot, AtomicGet(curRoot->PushQueue)); 
+                AsyncDel(curRoot, AtomicGet(curRoot->PushQueue));
             } else {
-                AtomicSet(newRoot->PopQueue, nullptr); 
+                AtomicSet(newRoot->PopQueue, nullptr);
             }
         }
     }
@@ -345,14 +345,14 @@ public:
     }
     bool IsEmpty() {
         AsyncRef();
-        TRootNode* curRoot = AtomicGet(JobQueue); 
-        bool res = AtomicGet(curRoot->PushQueue) == nullptr && AtomicGet(curRoot->PopQueue) == nullptr; 
+        TRootNode* curRoot = AtomicGet(JobQueue);
+        bool res = AtomicGet(curRoot->PushQueue) == nullptr && AtomicGet(curRoot->PopQueue) == nullptr;
         AsyncUnref();
         return res;
     }
     TCounter GetCounter() {
         AsyncRef();
-        TRootNode* curRoot = AtomicGet(JobQueue); 
+        TRootNode* curRoot = AtomicGet(JobQueue);
         TCounter res = *(TCounter*)curRoot;
         AsyncUnref();
         return res;

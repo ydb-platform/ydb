@@ -127,7 +127,7 @@ static bool FillMemoryOnAllocation = true;
 static bool TransparentHugePages = false; // force MADV_HUGEPAGE for large allocs
 static bool MapHugeTLB = false;           // force MAP_HUGETLB for small allocs
 static bool EnableDefrag = true;
- 
+
 // Buffers that are larger than this size will not be filled with 0xcf
 #ifndef DBG_FILL_MAX_SIZE
 #define DBG_FILL_MAX_SIZE 0x01000000000000ULL
@@ -379,9 +379,9 @@ static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
     char* largeBlock = AllocWithMMapLinuxImpl(sz, mode);
-    if (TransparentHugePages) { 
-        madvise(largeBlock, sz, MADV_HUGEPAGE); 
-    } 
+    if (TransparentHugePages) {
+        madvise(largeBlock, sz, MADV_HUGEPAGE);
+    }
 #endif
 #endif
     Y_ASSERT_NOBT(largeBlock);
@@ -1823,10 +1823,10 @@ static bool LFAlloc_SetParam(const char* param, const char* value) {
         return true;
     }
 #endif
-    if (!strcmp(param, "TransparentHugePages")) { 
-        TransparentHugePages = !strcmp(value, "true"); 
-        return true; 
-    } 
+    if (!strcmp(param, "TransparentHugePages")) {
+        TransparentHugePages = !strcmp(value, "true");
+        return true;
+    }
     if (!strcmp(param, "MapHugeTLB")) {
         MapHugeTLB = !strcmp(value, "true");
         return true;

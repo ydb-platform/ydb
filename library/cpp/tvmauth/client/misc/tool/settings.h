@@ -6,7 +6,7 @@
 
 #include <library/cpp/tvmauth/checked_user_ticket.h>
 
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 
 namespace NTvmAuth::NTvmTool {
@@ -53,16 +53,16 @@ namespace NTvmAuth::NTvmTool {
             return *this;
         }
 
-        TClientSettings& SetSocketTimeout(TDuration socketTimeout) { 
-            SocketTimeout_ = socketTimeout; 
-            return *this; 
-        } 
- 
-        TClientSettings& SetConnectTimeout(TDuration connectTimeout) { 
-            ConnectTimeout_ = connectTimeout; 
-            return *this; 
-        } 
- 
+        TClientSettings& SetSocketTimeout(TDuration socketTimeout) {
+            SocketTimeout_ = socketTimeout;
+            return *this;
+        }
+
+        TClientSettings& SetConnectTimeout(TDuration connectTimeout) {
+            ConnectTimeout_ = connectTimeout;
+            return *this;
+        }
+
         /*!
          * Look at comment for ctor
          * @param token
@@ -103,14 +103,14 @@ namespace NTvmAuth::NTvmTool {
             return Port_;
         }
 
-        TDuration GetSocketTimeout() const { 
-            return SocketTimeout_; 
-        } 
- 
-        TDuration GetConnectTimeout() const { 
-            return ConnectTimeout_; 
-        } 
- 
+        TDuration GetSocketTimeout() const {
+            return SocketTimeout_;
+        }
+
+        TDuration GetConnectTimeout() const {
+            return ConnectTimeout_;
+        }
+
         const TString& GetAuthToken() const {
             Y_ENSURE_EX(AuthToken_, TBrokenTvmClientSettings()
                                         << "Auth token cannot be empty. "
@@ -129,8 +129,8 @@ namespace NTvmAuth::NTvmTool {
         TAlias SelfAias_;
         TString Hostname_;
         ui16 Port_;
-        TDuration SocketTimeout_; 
-        TDuration ConnectTimeout_; 
+        TDuration SocketTimeout_;
+        TDuration ConnectTimeout_;
         TString AuthToken_;
         TMaybe<EBlackboxEnv> BbEnv_;
     };

@@ -5291,14 +5291,14 @@
                     "default": true
                 }
             ]
-        }, 
-        "sedem": { 
-            "tools": { 
+        },
+        "sedem": {
+            "tools": {
                 "sedem": {
                     "bottle": "sedem",
                     "executable": "sedem"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -7744,17 +7744,17 @@
                     "aws"
                 ]
             }
-        }, 
-        "sedem": { 
-            "formula": { 
+        },
+        "sedem": {
+            "formula": {
                 "sandbox_id": 1194502495,
-                "match": "SEDEM archive" 
-            }, 
-            "executable": { 
+                "match": "SEDEM archive"
+            },
+            "executable": {
                 "sedem": [
                     "sedem"
                 ]
-            } 
+            }
         },
         "jstyle_bundle": {
             "formula": {

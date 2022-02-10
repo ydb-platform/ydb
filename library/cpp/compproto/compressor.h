@@ -28,9 +28,9 @@ namespace NCompProto {
 #else
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
-            SAFE_MODE = 1, 
+            SAFE_MODE = 1,
 #else
-            SAFE_MODE = 0, 
+            SAFE_MODE = 0,
 #endif
 #else
             SAFE_MODE = 0,

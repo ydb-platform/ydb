@@ -374,34 +374,34 @@ RESOURCE_FILES(
     #botocore/data/dynamodbstreams/2012-08-10/service-2.json
     #botocore/data/ebs/2019-11-02/paginators-1.json
     #botocore/data/ebs/2019-11-02/service-2.json
-    botocore/data/ec2-instance-connect/2018-04-02/paginators-1.json 
-    botocore/data/ec2-instance-connect/2018-04-02/service-2.json 
-    botocore/data/ec2/2014-09-01/paginators-1.json 
-    botocore/data/ec2/2014-09-01/service-2.json 
-    botocore/data/ec2/2014-09-01/waiters-2.json 
-    botocore/data/ec2/2014-10-01/paginators-1.json 
-    botocore/data/ec2/2014-10-01/service-2.json 
-    botocore/data/ec2/2014-10-01/waiters-2.json 
-    botocore/data/ec2/2015-03-01/paginators-1.json 
-    botocore/data/ec2/2015-03-01/service-2.json 
-    botocore/data/ec2/2015-03-01/waiters-2.json 
-    botocore/data/ec2/2015-04-15/paginators-1.json 
-    botocore/data/ec2/2015-04-15/service-2.json 
-    botocore/data/ec2/2015-04-15/waiters-2.json 
-    botocore/data/ec2/2015-10-01/paginators-1.json 
-    botocore/data/ec2/2015-10-01/service-2.json 
-    botocore/data/ec2/2015-10-01/waiters-2.json 
-    botocore/data/ec2/2016-04-01/paginators-1.json 
-    botocore/data/ec2/2016-04-01/service-2.json 
-    botocore/data/ec2/2016-04-01/waiters-2.json 
-    botocore/data/ec2/2016-09-15/examples-1.json 
-    botocore/data/ec2/2016-09-15/paginators-1.json 
-    botocore/data/ec2/2016-09-15/service-2.json 
-    botocore/data/ec2/2016-09-15/waiters-2.json 
-    botocore/data/ec2/2016-11-15/examples-1.json 
-    botocore/data/ec2/2016-11-15/paginators-1.json 
-    botocore/data/ec2/2016-11-15/service-2.json 
-    botocore/data/ec2/2016-11-15/waiters-2.json 
+    botocore/data/ec2-instance-connect/2018-04-02/paginators-1.json
+    botocore/data/ec2-instance-connect/2018-04-02/service-2.json
+    botocore/data/ec2/2014-09-01/paginators-1.json
+    botocore/data/ec2/2014-09-01/service-2.json
+    botocore/data/ec2/2014-09-01/waiters-2.json
+    botocore/data/ec2/2014-10-01/paginators-1.json
+    botocore/data/ec2/2014-10-01/service-2.json
+    botocore/data/ec2/2014-10-01/waiters-2.json
+    botocore/data/ec2/2015-03-01/paginators-1.json
+    botocore/data/ec2/2015-03-01/service-2.json
+    botocore/data/ec2/2015-03-01/waiters-2.json
+    botocore/data/ec2/2015-04-15/paginators-1.json
+    botocore/data/ec2/2015-04-15/service-2.json
+    botocore/data/ec2/2015-04-15/waiters-2.json
+    botocore/data/ec2/2015-10-01/paginators-1.json
+    botocore/data/ec2/2015-10-01/service-2.json
+    botocore/data/ec2/2015-10-01/waiters-2.json
+    botocore/data/ec2/2016-04-01/paginators-1.json
+    botocore/data/ec2/2016-04-01/service-2.json
+    botocore/data/ec2/2016-04-01/waiters-2.json
+    botocore/data/ec2/2016-09-15/examples-1.json
+    botocore/data/ec2/2016-09-15/paginators-1.json
+    botocore/data/ec2/2016-09-15/service-2.json
+    botocore/data/ec2/2016-09-15/waiters-2.json
+    botocore/data/ec2/2016-11-15/examples-1.json
+    botocore/data/ec2/2016-11-15/paginators-1.json
+    botocore/data/ec2/2016-11-15/service-2.json
+    botocore/data/ec2/2016-11-15/waiters-2.json
     #botocore/data/ecr-public/2020-10-30/paginators-1.json
     #botocore/data/ecr-public/2020-10-30/service-2.json
     #botocore/data/ecr/2015-09-21/examples-1.json
@@ -760,16 +760,16 @@ RESOURCE_FILES(
     #botocore/data/resourcegroupstaggingapi/2017-01-26/service-2.json
     #botocore/data/robomaker/2018-06-29/paginators-1.json
     #botocore/data/robomaker/2018-06-29/service-2.json
-    botocore/data/route53/2013-04-01/examples-1.json 
-    botocore/data/route53/2013-04-01/paginators-1.json 
-    botocore/data/route53/2013-04-01/service-2.json 
-    botocore/data/route53/2013-04-01/waiters-2.json 
-    botocore/data/route53domains/2014-05-15/examples-1.json 
-    botocore/data/route53domains/2014-05-15/paginators-1.json 
-    botocore/data/route53domains/2014-05-15/service-2.json 
-    botocore/data/route53resolver/2018-04-01/paginators-1.json 
-    botocore/data/route53resolver/2018-04-01/paginators-1.sdk-extras.json 
-    botocore/data/route53resolver/2018-04-01/service-2.json 
+    botocore/data/route53/2013-04-01/examples-1.json
+    botocore/data/route53/2013-04-01/paginators-1.json
+    botocore/data/route53/2013-04-01/service-2.json
+    botocore/data/route53/2013-04-01/waiters-2.json
+    botocore/data/route53domains/2014-05-15/examples-1.json
+    botocore/data/route53domains/2014-05-15/paginators-1.json
+    botocore/data/route53domains/2014-05-15/service-2.json
+    botocore/data/route53resolver/2018-04-01/paginators-1.json
+    botocore/data/route53resolver/2018-04-01/paginators-1.sdk-extras.json
+    botocore/data/route53resolver/2018-04-01/service-2.json
     botocore/data/s3/2006-03-01/examples-1.json
     botocore/data/s3/2006-03-01/paginators-1.json
     botocore/data/s3/2006-03-01/service-2.json
@@ -863,9 +863,9 @@ RESOURCE_FILES(
     #botocore/data/storagegateway/2013-06-30/examples-1.json
     #botocore/data/storagegateway/2013-06-30/paginators-1.json
     #botocore/data/storagegateway/2013-06-30/service-2.json
-    botocore/data/sts/2011-06-15/examples-1.json 
-    botocore/data/sts/2011-06-15/paginators-1.json 
-    botocore/data/sts/2011-06-15/service-2.json 
+    botocore/data/sts/2011-06-15/examples-1.json
+    botocore/data/sts/2011-06-15/paginators-1.json
+    botocore/data/sts/2011-06-15/service-2.json
     #botocore/data/support/2013-04-15/examples-1.json
     #botocore/data/support/2013-04-15/paginators-1.json
     #botocore/data/support/2013-04-15/service-2.json

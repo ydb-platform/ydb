@@ -744,8 +744,8 @@ RECURSE(
     pip
     pkginfo
     platformdirs
-    plotly
-    plotly/_plotly_utils
+    plotly 
+    plotly/_plotly_utils 
     pluggy
     plugincode
     plumbum

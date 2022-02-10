@@ -96,7 +96,7 @@ ALLOW .* -> vendor/github.com/google/licensecheck
 ALLOW .* -> vendor/github.com/armon/go-radix
 
 # CONTRIB-1972 stomp protocol
-ALLOW .* -> vendor/github.com/go-stomp/stomp
+ALLOW .* -> vendor/github.com/go-stomp/stomp 
 
 # CONTRIB-1946 htmp tag selecting / parsing
 ALLOW .* -> vendor/github.com/andybalholm/cascadia
@@ -253,7 +253,7 @@ ALLOW .* -> vendor/github.com/jackc/pgx/v4
 ALLOW .* -> vendor/github.com/jackc/pgconn
 ALLOW .* -> vendor/github.com/jackc/pgtype
 ALLOW .* -> vendor/github.com/jackc/pgerrcode
-ALLOW .* -> vendor/github.com/jackc/pgproto3/v2
+ALLOW .* -> vendor/github.com/jackc/pgproto3/v2 
 ALLOW .* -> vendor/github.com/jackc/pgio
 ALLOW .* -> vendor/github.com/jackc/pglogrepl
 
@@ -631,10 +631,10 @@ ALLOW .* -> vendor/github.com/dave/dst
 # CONTRIB-1874 Parse and demux MPEG Transport Streams
 ALLOW .* -> vendor/github.com/asticode/go-astits
 
-# CONTRIB-1896 Fast, portable, non-Turing complete expression evaluation with gradual typing
+# CONTRIB-1896 Fast, portable, non-Turing complete expression evaluation with gradual typing 
 ALLOW .* -> vendor/github.com/google/cel-go
 
-# CONTRIB-1654 Hard to misuse extensible crypto library
+# CONTRIB-1654 Hard to misuse extensible crypto library 
 ALLOW .* -> vendor/github.com/google/tink/go
 
 # CONTRIB-1907 Parser of the Graphviz DOT language
@@ -649,9 +649,9 @@ ALLOW .* -> vendor/golang.yandex/hasql
 # CONTRIB-1974 Optimized Sha256
 ALLOW .* -> vendor/github.com/minio/sha256-simd
 
-# CONTRIB-1979 command line editor with history
-ALLOW .* -> vendor/github.com/peterh/liner
-
+# CONTRIB-1979 command line editor with history 
+ALLOW .* -> vendor/github.com/peterh/liner 
+ 
 # CONTRIB-1999 strongSwan vici client library
 ALLOW .* -> vendor/github.com/strongswan/govici/vici
 
@@ -739,9 +739,9 @@ ALLOW .* -> vendor/github.com/vektah/gqlparser/v2
 DENY .* -> vendor/github.com/google/go-jsonnet/c-bindings
 ALLOW .* -> vendor/github.com/google/go-jsonnet
 
-# CONTRIB-2152 JMESPath is a query language for JSON
-ALLOW .* -> vendor/github.com/jmespath/go-jmespath
-
+# CONTRIB-2152 JMESPath is a query language for JSON 
+ALLOW .* -> vendor/github.com/jmespath/go-jmespath 
+ 
 # CONTRIB-2156 library that communicates directly with a TPM device on Linux or Windows machines
 ALLOW .* -> vendor/github.com/google/go-tpm/tpm2
 ALLOW .* -> vendor/github.com/google/go-tpm/tpmutil

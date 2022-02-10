@@ -239,4 +239,4 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), "=value/of/empty&key/for/empty=");
         UNIT_ASSERT_VALUES_EQUAL(c.QuotedPrint(""), "=value%2Fof%2Fempty&key%2Ffor%2Fempty=");
     }
-}
+} 

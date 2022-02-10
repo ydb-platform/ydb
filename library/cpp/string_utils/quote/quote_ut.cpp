@@ -4,11 +4,11 @@
 
 Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
     Y_UNIT_TEST(ReturnsEndOfTo) {
-        char r[10];
-        const char* returned = CGIEscape(r, "123");
-        UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned);
-        UNIT_ASSERT_VALUES_EQUAL('\0', *returned);
-    }
+        char r[10]; 
+        const char* returned = CGIEscape(r, "123"); 
+        UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned); 
+        UNIT_ASSERT_VALUES_EQUAL('\0', *returned); 
+    } 
 
     Y_UNIT_TEST(NotZeroTerminated) {
         char r[] = {'1', '2', '3', '4'};
@@ -45,8 +45,8 @@ Y_UNIT_TEST_SUITE(TCGIEscapeTest) {
             TString("&param=!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+&param_param=!@%23$%25^%26*%28%29%7B%7D%5B%5D%22+"));
     }
 
-}
-
+} 
+ 
 Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
     Y_UNIT_TEST(StringBuf) {
         char tmp[100];
@@ -287,33 +287,33 @@ Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
 
 Y_UNIT_TEST_SUITE(TQuoteTest) {
     Y_UNIT_TEST(ReturnsEndOfTo) {
-        char r[10];
-        const char* returned = Quote(r, "123");
-        UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned);
-        UNIT_ASSERT_VALUES_EQUAL('\0', *returned);
-    }
-
+        char r[10]; 
+        const char* returned = Quote(r, "123"); 
+        UNIT_ASSERT_VALUES_EQUAL(r + strlen("123"), returned); 
+        UNIT_ASSERT_VALUES_EQUAL('\0', *returned); 
+    } 
+ 
     Y_UNIT_TEST(SlashIsSafeByDefault) {
-        char r[100];
-        Quote(r, "/path;tail/path,tail/");
-        UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", r);
+        char r[100]; 
+        Quote(r, "/path;tail/path,tail/"); 
+        UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", r); 
         TString s("/path;tail/path,tail/");
-        Quote(s);
-        UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", s.c_str());
-    }
-
+        Quote(s); 
+        UNIT_ASSERT_VALUES_EQUAL("/path%3Btail/path%2Ctail/", s.c_str()); 
+    } 
+ 
     Y_UNIT_TEST(SafeColons) {
-        char r[100];
-        Quote(r, "/path;tail/path,tail/", ";,");
-        UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", r);
+        char r[100]; 
+        Quote(r, "/path;tail/path,tail/", ";,"); 
+        UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", r); 
         TString s("/path;tail/path,tail/");
-        Quote(s, ";,");
-        UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", s.c_str());
-    }
+        Quote(s, ";,"); 
+        UNIT_ASSERT_VALUES_EQUAL("%2Fpath;tail%2Fpath,tail%2F", s.c_str()); 
+    } 
 
     Y_UNIT_TEST(StringBuf) {
         char r[100];
         char* end = Quote(r, "abc\0/path", "");
         UNIT_ASSERT_VALUES_EQUAL("abc\0%2Fpath", TStringBuf(r, end));
     }
-}
+} 

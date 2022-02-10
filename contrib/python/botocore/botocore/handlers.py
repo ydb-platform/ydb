@@ -737,27 +737,27 @@ def decode_list_object_v2(parsed, context, **kwargs):
     )
 
 
-def decode_list_object_v1ext(parsed, context, **kwargs): 
-    # From the documentation: If you specify encoding-type request parameter, 
-    # Amazon S3 includes this element in the response, and returns encoded key 
-    # name values in the following response elements: 
-    # Delimiter, Prefix, ContinuationToken, Key, and StartAfter. 
-    _decode_list_object( 
-        top_level_keys=['Delimiter', 'Prefix', 'StartAfter'], 
-        nested_keys=[('Contents', 'Key'), ('CommonPrefixes', 'Prefix')], 
-        parsed=parsed, 
-        context=context 
-    ) 
-    # lowercase metadata keys 
-    if 'Contents' in parsed: 
-        for o in parsed['Contents']: 
-            if 'Metadata' in o: 
-                lcmeta = {} 
-                for k in o['Metadata']: 
-                    lcmeta[k.lower()] = o['Metadata'][k] 
-                o['Metadata'] = lcmeta 
- 
- 
+def decode_list_object_v1ext(parsed, context, **kwargs):
+    # From the documentation: If you specify encoding-type request parameter,
+    # Amazon S3 includes this element in the response, and returns encoded key
+    # name values in the following response elements:
+    # Delimiter, Prefix, ContinuationToken, Key, and StartAfter.
+    _decode_list_object(
+        top_level_keys=['Delimiter', 'Prefix', 'StartAfter'],
+        nested_keys=[('Contents', 'Key'), ('CommonPrefixes', 'Prefix')],
+        parsed=parsed,
+        context=context
+    )
+    # lowercase metadata keys
+    if 'Contents' in parsed:
+        for o in parsed['Contents']:
+            if 'Metadata' in o:
+                lcmeta = {}
+                for k in o['Metadata']:
+                    lcmeta[k.lower()] = o['Metadata'][k]
+                o['Metadata'] = lcmeta
+
+
 def decode_list_object_versions(parsed, context, **kwargs):
     # From the documentation: If you specify encoding-type request parameter,
     # Amazon S3 includes this element in the response, and returns encoded key
@@ -1038,7 +1038,7 @@ BUILTIN_HANDLERS = [
     ('before-parameter-build.glacier', inject_account_id),
     ('after-call.s3.ListObjects', decode_list_object),
     ('after-call.s3.ListObjectsV2', decode_list_object_v2),
-    ('after-call.s3.ListObjectsV1Ext', decode_list_object_v1ext), 
+    ('after-call.s3.ListObjectsV1Ext', decode_list_object_v1ext),
     ('after-call.s3.ListObjectVersions', decode_list_object_versions),
 
     # Cloudsearchdomain search operation will be sent by HTTP POST

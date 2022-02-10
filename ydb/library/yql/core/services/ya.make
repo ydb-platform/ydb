@@ -1,12 +1,12 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     spuchin
     g:yql
     g:yql_ydb_core
 )
- 
-SRCS( 
+
+SRCS(
     yql_eval_expr.cpp
     yql_eval_expr.h
     yql_eval_params.cpp
@@ -15,11 +15,11 @@ SRCS(
     yql_out_transformers.h
     yql_plan.cpp
     yql_plan.h
-    yql_transform_pipeline.cpp 
+    yql_transform_pipeline.cpp
     yql_transform_pipeline.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/yson
     ydb/library/yql/ast/serialize
@@ -35,8 +35,8 @@ PEERDIR(
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/result/expr_nodes
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

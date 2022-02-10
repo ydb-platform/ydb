@@ -31,7 +31,7 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
 
         if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
             auto shuffle = maybeCnShuffle.Cast();
-            auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage()); 
+            auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
             if (stageSettings.IsExternalFunction) {
                 partitionsCount = stageSettings.MaxTransformConcurrency();
             } else {
@@ -40,7 +40,7 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
             }
         } else if (auto maybeCnMap = input.Maybe<NNodes::TDqCnMap>()) {
             auto cnMap = maybeCnMap.Cast();
-            auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage()); 
+            auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
             partitionsCount = originStageInfo.Tasks.size();
         }
     }
@@ -53,11 +53,11 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
     }
 }
 
-template <typename TGraph> 
-void BuildUnionAllChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex, 
+template <typename TGraph>
+void BuildUnionAllChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, bool enableSpilling,
     const TChannelLogFunc& logFunc)
-{ 
+{
     YQL_ENSURE(stageInfo.Tasks.size() == 1, "Multiple tasks on union all input. StageId: " << stageInfo.Id);
     auto& targetTask = graph.GetTask(stageInfo.Tasks[0]);
 
@@ -82,30 +82,30 @@ void BuildUnionAllChannels(TGraph& graph, const typename TGraph::TStageInfoType&
     }
 }
 
-template <typename TGraph> 
-void BuildUnionAllChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex, 
-    const TChannelLogFunc& logFunc) 
-{ 
+template <typename TGraph>
+void BuildUnionAllChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
+    const TChannelLogFunc& logFunc)
+{
     auto& stageInfo = graph.GetStageInfo(stage);
 
-    auto dqUnion = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnUnionAll>(); 
-    auto& inputStageInfo = graph.GetStageInfo(dqUnion.Output().Stage()); 
-    auto outputIndex = FromString<ui32>(dqUnion.Output().Index().Value()); 
- 
+    auto dqUnion = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnUnionAll>();
+    auto& inputStageInfo = graph.GetStageInfo(dqUnion.Output().Stage());
+    auto outputIndex = FromString<ui32>(dqUnion.Output().Index().Value());
+
     BuildUnionAllChannels(graph, stageInfo, inputIndex, inputStageInfo, outputIndex, false, logFunc);
-} 
- 
-template <typename TGraph, typename TKeyColumns> 
+}
+
+template <typename TGraph, typename TKeyColumns>
 void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
-    const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TKeyColumns& keyColumns, 
+    const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TKeyColumns& keyColumns,
     bool enableSpilling, const TChannelLogFunc& logFunc)
-{ 
-    for (auto& originTaskId : inputStageInfo.Tasks) { 
+{
+    for (auto& originTaskId : inputStageInfo.Tasks) {
         auto& originTask = graph.GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIndex];
         taskOutput.Type = TTaskOutputType::HashPartition;
-        for (const auto& keyColumn : keyColumns) { 
-            taskOutput.KeyColumns.push_back(keyColumn); 
+        for (const auto& keyColumn : keyColumns) {
+            taskOutput.KeyColumns.push_back(keyColumn);
         }
 
         taskOutput.PartitionsCount = stageInfo.Tasks.size();
@@ -129,33 +129,33 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
     }
 }
 
-template <typename TGraph> 
+template <typename TGraph>
 void BuildHashShuffleChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
-    const TChannelLogFunc& logFunc) 
-{ 
+    const TChannelLogFunc& logFunc)
+{
     auto& stageInfo = graph.GetStageInfo(stage);
     auto shuffle = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnHashShuffle>();
-    auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage()); 
-    auto outputIndex = FromString<ui32>(shuffle.Output().Index().Value()); 
+    auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
+    auto outputIndex = FromString<ui32>(shuffle.Output().Index().Value());
 
-    TVector<TString> keyColumns; 
-    for (const auto& keyColumn : shuffle.KeyColumns()) { 
-        keyColumns.push_back(TString(keyColumn)); 
-    } 
+    TVector<TString> keyColumns;
+    for (const auto& keyColumn : shuffle.KeyColumns()) {
+        keyColumns.push_back(TString(keyColumn));
+    }
 
     BuildHashShuffleChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, keyColumns, false, logFunc);
-} 
- 
-template <typename TGraph> 
-void BuildMapChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex, 
+}
+
+template <typename TGraph>
+void BuildMapChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, bool enableSpilling,
     const TChannelLogFunc& logFunc)
-{ 
-    auto& originTasks = inputStageInfo.Tasks; 
+{
+    auto& originTasks = inputStageInfo.Tasks;
     auto& targetTasks = stageInfo.Tasks;
 
     YQL_ENSURE(originTasks.size() == targetTasks.size(),
-        "" << originTasks.size() << " != " << targetTasks.size()); 
+        "" << originTasks.size() << " != " << targetTasks.size());
 
     for (size_t i = 0; i < originTasks.size(); ++i) {
         auto originTaskId = originTasks[i];
@@ -182,27 +182,27 @@ void BuildMapChannels(TGraph& graph, const typename TGraph::TStageInfoType& stag
     }
 }
 
-template <typename TGraph> 
-void BuildMapChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex, 
-    const TChannelLogFunc& logFunc) 
-{ 
+template <typename TGraph>
+void BuildMapChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
+    const TChannelLogFunc& logFunc)
+{
     auto& stageInfo = graph.GetStageInfo(stage);
-    auto cnMap = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnMap>(); 
+    auto cnMap = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnMap>();
 
-    auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage()); 
-    auto outputIndex = FromString<ui32>(cnMap.Output().Index().Value()); 
+    auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
+    auto outputIndex = FromString<ui32>(cnMap.Output().Index().Value());
 
     BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
-} 
+}
 
-template <typename TGraph> 
-void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex, 
+template <typename TGraph>
+void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, bool enableSpilling,
     const TChannelLogFunc& logFunc)
-{ 
-    YQL_ENSURE(inputStageInfo.Tasks.size() == 1); 
- 
-    auto originTaskId = inputStageInfo.Tasks[0]; 
+{
+    YQL_ENSURE(inputStageInfo.Tasks.size() == 1);
+
+    auto originTaskId = inputStageInfo.Tasks[0];
     auto& targetTasks = stageInfo.Tasks;
 
     for (size_t i = 0; i < targetTasks.size(); ++i) {
@@ -229,19 +229,19 @@ void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType
     }
 }
 
-template <typename TGraph> 
-void BuildBroadcastChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex, 
-    const TChannelLogFunc& logFunc) 
-{ 
-    auto& stageInfo = graph.GetStageInfo(stage); 
-    auto cnBroadcast = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnBroadcast>(); 
- 
-    auto& originStageInfo = graph.GetStageInfo(cnBroadcast.Output().Stage()); 
-    auto outputIndex = FromString<ui32>(cnBroadcast.Output().Index().Value()); 
- 
+template <typename TGraph>
+void BuildBroadcastChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
+    const TChannelLogFunc& logFunc)
+{
+    auto& stageInfo = graph.GetStageInfo(stage);
+    auto cnBroadcast = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnBroadcast>();
+
+    auto& originStageInfo = graph.GetStageInfo(cnBroadcast.Output().Stage());
+    auto outputIndex = FromString<ui32>(cnBroadcast.Output().Index().Value());
+
     BuildBroadcastChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false, logFunc);
 }
- 
+
 template <typename TGraph>
 void BuildMergeChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TVector<TSortColumn>& sortColumns,
@@ -271,7 +271,7 @@ void BuildMergeChannels(TGraph& graph, const typename TGraph::TStageInfoType& st
 
         logFunc(channel.Id, originTaskId, targetTask.Id, "Merge/Map", !channel.InMemory);
     }
-} 
+}
 
 template <typename TGraph>
 void BuildMergeChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,

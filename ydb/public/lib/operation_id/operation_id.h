@@ -9,7 +9,7 @@
 namespace NKikimr {
 namespace NOperationId {
 
-class TOperationId : public Ydb::TOperationId { 
+class TOperationId : public Ydb::TOperationId {
 public:
     TOperationId();
     explicit TOperationId(const TString& string, bool allowEmpty = false);
@@ -20,9 +20,9 @@ private:
      THashMap<TString, TVector<const TString*>> Index_;
 };
 
-TString ProtoToString(const Ydb::TOperationId& proto); 
-void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value); 
-void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const char* value, size_t size); 
+TString ProtoToString(const Ydb::TOperationId& proto);
+void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value);
+void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const char* value, size_t size);
 Ydb::TOperationId::EKind ParseKind(const TStringBuf value);
 
 } // namespace NOperationId

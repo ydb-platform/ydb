@@ -226,7 +226,7 @@ namespace NActors {
             DispatchedEventsLimit = limit;
         }
         TDuration SetReschedulingDelay(TDuration delay);
-        void SetLogBackend(const TAutoPtr<TLogBackend> logBackend); 
+        void SetLogBackend(const TAutoPtr<TLogBackend> logBackend);
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
         TInstant GetCurrentTime() const;
@@ -466,7 +466,7 @@ namespace NActors {
 
         const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
         void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
- 
+
         void SetUseRealInterconnect() {
             UseRealInterconnect = true;
         }
@@ -529,7 +529,7 @@ namespace NActors {
         TActorId CurrentRecipient;
         ui64 DispatcherRandomSeed;
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
-        TAutoPtr<TLogBackend> LogBackend; 
+        TAutoPtr<TLogBackend> LogBackend;
         bool NeedMonitoring;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -626,7 +626,7 @@ namespace NActors {
         TSet<TActorId> ScheduleWhiteList;
         THashMap<TActorId, TActorId> ScheduleWhiteListParent;
         THashMap<TActorId, TString> ActorNames;
-        TDispatchContext* CurrentDispatchContext; 
+        TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
 
         static ui32 NextNodeId;

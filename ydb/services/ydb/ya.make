@@ -14,9 +14,9 @@ SRCS(
     ydb_logstore.cpp
     ydb_operation.cpp
     ydb_s3_internal.cpp
-    ydb_scheme.cpp 
-    ydb_scripting.cpp 
-    ydb_table.cpp 
+    ydb_scheme.cpp
+    ydb_scripting.cpp
+    ydb_table.cpp
     ydb_long_tx.cpp
 )
 

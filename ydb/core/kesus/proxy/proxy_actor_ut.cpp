@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
         auto edge = ctx.Runtime->AllocateEdgeActor(1);
         ctx.SendFromEdge(42, edge, new TEvKesus::TEvCreateSemaphore("", "Sem2", 2), cookie);
         ctx.RebootTablet();
-        ctx.ExpectProxyError(edge, cookie, Ydb::StatusIds::UNAVAILABLE); 
+        ctx.ExpectProxyError(edge, cookie, Ydb::StatusIds::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(TestAttachSession) {
@@ -38,23 +38,23 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
         auto req2 = ctx.Runtime->AllocateEdgeActor(1);
         auto req2cookie = ctx.SendAttachSession(42, req2, 1, 0, "", 222);
         UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(req2, req2cookie), 1);
-        ctx.ExpectProxyError(req1, req1cookie, Ydb::StatusIds::BAD_SESSION); 
+        ctx.ExpectProxyError(req1, req1cookie, Ydb::StatusIds::BAD_SESSION);
 
         // Reattach session 1 from a different proxy
         auto req3 = ctx.Runtime->AllocateEdgeActor(1);
         auto req3cookie = ctx.SendAttachSession(43, req3, 1, 0, "", 333);
         UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(req3, req3cookie), 1);
-        ctx.ExpectProxyError(req2, req2cookie, Ydb::StatusIds::BAD_SESSION); 
+        ctx.ExpectProxyError(req2, req2cookie, Ydb::StatusIds::BAD_SESSION);
 
         // Test out of sequence on the owner proxy
         auto req4 = ctx.Runtime->AllocateEdgeActor(1);
         auto req4cookie = ctx.SendAttachSession(43, req4, 1, 0, "", 42);
-        ctx.ExpectAttachSessionResult(req4, req4cookie, Ydb::StatusIds::BAD_SESSION); 
+        ctx.ExpectAttachSessionResult(req4, req4cookie, Ydb::StatusIds::BAD_SESSION);
 
         // Test out of sequence on the non-owner proxy
         auto req5 = ctx.Runtime->AllocateEdgeActor(1);
         auto req5cookie = ctx.SendAttachSession(42, req5, 1, 0, "", 42);
-        ctx.ExpectAttachSessionResult(req5, req5cookie, Ydb::StatusIds::BAD_SESSION); 
+        ctx.ExpectAttachSessionResult(req5, req5cookie, Ydb::StatusIds::BAD_SESSION);
     }
 }
 

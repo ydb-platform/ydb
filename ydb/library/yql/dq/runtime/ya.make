@@ -20,19 +20,19 @@ PEERDIR(
 
 SRCS(
     dq_arrow_helpers.cpp
-    dq_columns_resolve.cpp 
-    dq_compute.cpp 
+    dq_columns_resolve.cpp
+    dq_compute.cpp
     dq_input_channel.cpp
     dq_input_producer.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
     dq_source.cpp
     dq_sink.cpp
-    dq_tasks_runner.cpp 
-    dq_transport.cpp 
+    dq_tasks_runner.cpp
+    dq_transport.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h) 
+GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
 
 YQL_LAST_ABI_VERSION()
 

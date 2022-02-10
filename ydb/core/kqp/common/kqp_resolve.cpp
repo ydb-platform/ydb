@@ -1,7 +1,7 @@
-#include "kqp_resolve.h" 
- 
+#include "kqp_resolve.h"
+
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
- 
+
 // #define DBG_TRACE
 
 #ifdef DBG_TRACE
@@ -9,43 +9,43 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #endif
 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NMiniKQL; 
-using namespace NYql; 
-using namespace NYql::NNodes; 
- 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NUdf::TDataTypeId>& keyColumnTypes, 
-    const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues) 
-{ 
-    TVector<TCell> key(keyColumnTypes.size()); 
-    for (ui32 i = 0; i < key.size(); ++i) { 
-        auto columnValue = value.GetElement(keyColumnIndices[i]); 
-        key[i] = NMiniKQL::MakeCell(keyColumnTypes[i], columnValue, typeEnv, copyValues); 
-    } 
- 
-    return key; 
-} 
- 
-TTableId MakeTableId(const TKqpTable& node) { 
-    auto nodePathId = TKikimrPathId::Parse(node.PathId()); 
- 
-    TTableId tableId; 
-    tableId.PathId = TPathId(nodePathId.OwnerId(), nodePathId.TableId()); 
-    tableId.SysViewInfo = node.SysView(); 
-    tableId.SchemaVersion = FromString<ui64>(node.Version()); 
-    return tableId; 
-} 
- 
-TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table) { 
-    TTableId tableId; 
-    tableId.PathId = TPathId(table.GetOwnerId(), table.GetTableId()); 
-    tableId.SysViewInfo = table.GetSysView(); 
-    tableId.SchemaVersion = table.GetVersion(); 
-    return tableId; 
-} 
- 
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NMiniKQL;
+using namespace NYql;
+using namespace NYql::NNodes;
+
+TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+    const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues)
+{
+    TVector<TCell> key(keyColumnTypes.size());
+    for (ui32 i = 0; i < key.size(); ++i) {
+        auto columnValue = value.GetElement(keyColumnIndices[i]);
+        key[i] = NMiniKQL::MakeCell(keyColumnTypes[i], columnValue, typeEnv, copyValues);
+    }
+
+    return key;
+}
+
+TTableId MakeTableId(const TKqpTable& node) {
+    auto nodePathId = TKikimrPathId::Parse(node.PathId());
+
+    TTableId tableId;
+    tableId.PathId = TPathId(nodePathId.OwnerId(), nodePathId.TableId());
+    tableId.SysViewInfo = node.SysView();
+    tableId.SchemaVersion = FromString<ui64>(node.Version());
+    return tableId;
+}
+
+TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table) {
+    TTableId tableId;
+    tableId.PathId = TPathId(table.GetOwnerId(), table.GetTableId());
+    tableId.SysViewInfo = table.GetSysView();
+    tableId.SchemaVersion = table.GetVersion();
+    return tableId;
+}
+
 TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
     const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes)
 {
@@ -186,4 +186,4 @@ TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
 
 #undef DBG_TRACE
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

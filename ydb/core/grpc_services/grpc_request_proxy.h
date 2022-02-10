@@ -86,7 +86,7 @@ protected:
     void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
@@ -114,7 +114,7 @@ protected:
     void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSelfCheckRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx);

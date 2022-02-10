@@ -1,6 +1,6 @@
 #include "grpc_request_proxy.h"
 
-#include "rpc_scheme_base.h" 
+#include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "operation_helpers.h"
 #include "table_settings.h"
@@ -11,7 +11,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
- 
+
 #include <util/generic/hash_set.h>
 
 #define TXLOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
@@ -26,7 +26,7 @@ namespace NGRpcService {
 
 using namespace NActors;
 using namespace NConsole;
-using namespace Ydb; 
+using namespace Ydb;
 
 static bool CheckAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
     bool isDatabase = true; // first entry is always database
@@ -77,9 +77,9 @@ static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Ta
     return {StatusIds::SUCCESS, ""};
 }
 
-class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest> { 
-    using TBase = TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest>; 
- 
+class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest> {
+    using TBase = TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest>;
+
     void PassAway() override {
         if (SSPipeClient) {
             NTabletPipe::CloseClient(SelfId(), SSPipeClient);
@@ -130,11 +130,11 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
 
 public:
     TAlterTableRPC(IRequestOpCtx* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         const auto& req = GetProtoRequest();
         if (!Request_->GetInternalToken().empty()) {
             UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetInternalToken());
@@ -424,7 +424,7 @@ private:
 
         StatusIds::StatusCode code = StatusIds::SUCCESS;
         TString error;
- 
+
         if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));

@@ -782,15 +782,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[23000u;]])");
         }
     }
- 
-    Y_UNIT_TEST(PushdownFilter) { 
+
+    Y_UNIT_TEST(PushdownFilter) {
         static bool enableLog = false;
 
         auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false)
                 .SetEnableOlapSchemaOperations(true);
- 
+
             if (enableLog) {
                 Cerr << "Run test:" << Endl;
                 Cerr << "viaSettings is " << (viaSettings.has_value() ? "" : "not ") << "present.";
@@ -814,22 +814,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
 
             TKikimrRunner kikimr(settings);
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG); 
- 
-            auto client = kikimr.GetTableClient(); 
- 
-            CreateTestOlapTable(kikimr); 
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 10); 
- 
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+            auto client = kikimr.GetTableClient();
+
+            CreateTestOlapTable(kikimr);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 10);
+
             TStreamExecScanQuerySettings scanSettings;
             scanSettings.Explain(true);
 
-            { 
+            {
                 TString query = TString(R"(
-                    --!syntax_v1 
-                    SELECT * FROM `/Root/olapStore/olapTable` WHERE resource_id = "5"u; 
+                    --!syntax_v1
+                    SELECT * FROM `/Root/olapStore/olapTable` WHERE resource_id = "5"u;
                 )");
- 
+
                 if (viaPragma.has_value()) {
                     TString pragma = TString(R"(
                         PRAGMA Kikimr.KqpPushOlapProcess = "<ENABLE_PUSH>";
@@ -840,9 +840,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                 auto it = client.StreamExecuteScanQuery(query).GetValueSync();
 
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-                TString result = StreamResultToYson(it); 
- 
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+
                 CompareYson(result, R"([[
                     [0];
                     ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
@@ -863,9 +863,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
 
                 UNIT_ASSERT(pushdown.IsDefined());
-            } 
-        }; 
- 
+            }
+        };
+
         TVector<std::tuple<std::optional<bool>, std::optional<bool>, bool>> testData = {
             {std::nullopt, std::nullopt, false},
             {false, std::nullopt, false},
@@ -880,7 +880,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (auto &data: testData) {
             doTest(std::get<0>(data), std::get<1>(data), std::get<2>(data));
         }
-    } 
+    }
 
     Y_UNIT_TEST(PKDescScan) {
         auto settings = TKikimrSettings()

@@ -1,26 +1,26 @@
-#include "kqp_tasks_runner.h" 
- 
-#include "kqp_runtime_impl.h" 
- 
+#include "kqp_tasks_runner.h"
+
+#include "kqp_runtime_impl.h"
+
 #include <ydb/core/kqp/common/kqp_resolve.h>
- 
+
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
- 
-#include <util/generic/vector.h> 
- 
-namespace NKikimr { 
+
+#include <util/generic/vector.h>
+
+namespace NKikimr {
 
 namespace NMiniKQL {
 class TKqpScanComputeContext;
 } // namespace NMiniKQL
 
-namespace NKqp { 
- 
-using namespace NMiniKQL; 
-using namespace NYql; 
+namespace NKqp {
+
+using namespace NMiniKQL;
+using namespace NYql;
 using namespace NDq;
- 
+
 IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const TType* type,
     NUdf::IApplyContext* applyCtx, const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
 {
@@ -30,40 +30,40 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
             TVector<ui32> keyColumnIndices;
             GetColumnsInfo(type, outputDesc.GetRangePartition().GetKeyColumns(), keyColumnTypes, keyColumnIndices);
             YQL_ENSURE(!keyColumnTypes.empty());
- 
+
             TVector<TKqpRangePartition> partitions;
             partitions.reserve(outputDesc.GetRangePartition().PartitionsSize());
- 
+
             for (auto& partitionDesc : outputDesc.GetRangePartition().GetPartitions()) {
                 TKqpRangePartition partition;
                 partition.ChannelId = partitionDesc.GetChannelId();
                 partition.Range.EndKeyPrefix = TSerializedCellVec(partitionDesc.GetEndKeyPrefix());
                 partition.Range.IsInclusive = partitionDesc.GetIsInclusive();
                 partition.Range.IsPoint = partitionDesc.GetIsPoint();
- 
+
                 partitions.emplace_back(std::move(partition));
-            } 
- 
+            }
+
             return CreateOutputRangePartitionConsumer(std::move(outputs), std::move(partitions),
                 std::move(keyColumnTypes), std::move(keyColumnIndices), typeEnv);
         }
- 
+
         case NDqProto::TTaskOutput::kEffects: {
             return CreateKqpApplyEffectsConsumer(applyCtx);
-        } 
+        }
 
         default: {
             return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs));
         }
-    } 
+    }
 }
- 
+
 TIntrusivePtr<IDqTaskRunner> CreateKqpTaskRunner(const TDqTaskRunnerContext& execCtx,
     const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
 {
     return MakeDqTaskRunner(execCtx, settings, logFunc);
-} 
- 
+}
+
 
 TKqpTasksRunner::TKqpTasksRunner(const google::protobuf::RepeatedPtrField<NDqProto::TDqTask>& tasks,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
@@ -225,4 +225,4 @@ TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(const google::protobuf::Repe
 }
 
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

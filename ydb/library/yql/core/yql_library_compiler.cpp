@@ -192,21 +192,21 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
-        if (data.first.IsFile() && data.second.Usage.Test(EUserDataBlockUsage::Library)) { 
+        if (data.first.IsFile() && data.second.Usage.Test(EUserDataBlockUsage::Library)) {
             TString libraryData;
             const TString& alias = data.first.Alias();
-            if (data.second.Type == EUserDataType::PATH) { 
-                libraryData = Load(data.second.Data); 
-            } else if (data.second.Type == EUserDataType::RAW_INLINE_DATA) { 
-                libraryData = data.second.Data; 
-            } 
- 
-            if (!libraryData.empty()) { 
+            if (data.second.Type == EUserDataType::PATH) {
+                libraryData = Load(data.second.Data);
+            } else if (data.second.Type == EUserDataType::RAW_INLINE_DATA) {
+                libraryData = data.second.Data;
+            }
+
+            if (!libraryData.empty()) {
                 if (CompileLibrary(alias, libraryData, ctx, libs[alias], optimize))
                     modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
-                else 
-                    return false; 
-            } 
+                else
+                    return false;
+            }
         }
     }
 

@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprNode::TPtr exprRoot;
         bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
-        return result; 
+        return result;
     }
 
     Y_UNIT_TEST(TestNoReturn1) {
@@ -229,80 +229,80 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
             ")\n";
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
- 
+
     Y_UNIT_TEST(TestDeclareNonTop) {
-        const auto s = R"( 
-            ( 
-            (let $1 (block '( 
-                (declare $param (DataType 'Uint32)) 
-                (return $param) 
-            ))) 
-            (return $1) 
-            ) 
-        )"; 
-        UNIT_ASSERT(false == ParseAndCompile(s)); 
-    } 
- 
+        const auto s = R"(
+            (
+            (let $1 (block '(
+                (declare $param (DataType 'Uint32))
+                (return $param)
+            )))
+            (return $1)
+            )
+        )";
+        UNIT_ASSERT(false == ParseAndCompile(s));
+    }
+
     Y_UNIT_TEST(TestDeclareHideLet) {
-        const auto s = R"( 
-            ( 
-            (let $name (Uint32 '10)) 
-            (declare $name (DataType 'Uint32)) 
-            (return $name) 
-            ) 
-        )"; 
-        UNIT_ASSERT(false == ParseAndCompile(s)); 
-    } 
- 
+        const auto s = R"(
+            (
+            (let $name (Uint32 '10))
+            (declare $name (DataType 'Uint32))
+            (return $name)
+            )
+        )";
+        UNIT_ASSERT(false == ParseAndCompile(s));
+    }
+
     Y_UNIT_TEST(TestDeclareBadName) {
-        const auto s = R"( 
-            ( 
-            (declare $15 (DataType 'Uint32)) 
-            (return $15) 
-            ) 
-        )"; 
-        UNIT_ASSERT(false == ParseAndCompile(s)); 
-    } 
- 
+        const auto s = R"(
+            (
+            (declare $15 (DataType 'Uint32))
+            (return $15)
+            )
+        )";
+        UNIT_ASSERT(false == ParseAndCompile(s));
+    }
+
     Y_UNIT_TEST(TestLetHideDeclare) {
-        const auto s = R"( 
-            ( 
-            (declare $name (DataType 'Uint32)) 
-            (let $name (Uint32 '10)) 
-            (return $name) 
-            ) 
-        )"; 
- 
-        TAstParseResult astRes = ParseAstWithCheck(s); 
-        TExprContext exprCtx; 
-        TExprNode::TPtr exprRoot; 
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "Uint32"); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "10"); 
-    } 
- 
+        const auto s = R"(
+            (
+            (declare $name (DataType 'Uint32))
+            (let $name (Uint32 '10))
+            (return $name)
+            )
+        )";
+
+        TAstParseResult astRes = ParseAstWithCheck(s);
+        TExprContext exprCtx;
+        TExprNode::TPtr exprRoot;
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "10");
+    }
+
     Y_UNIT_TEST(TestDeclare) {
-        const auto s = R"( 
-            ( 
-            (declare $param (DataType 'Uint32)) 
-            (return $param) 
-            ) 
-        )"; 
- 
-        TAstParseResult astRes = ParseAstWithCheck(s); 
-        TExprContext exprCtx; 
-        TExprNode::TPtr exprRoot; 
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "$param"); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Callable); 
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "DataType"); 
-    } 
+        const auto s = R"(
+            (
+            (declare $param (DataType 'Uint32))
+            (return $param)
+            )
+        )";
+
+        TAstParseResult astRes = ParseAstWithCheck(s);
+        TExprContext exprCtx;
+        TExprNode::TPtr exprRoot;
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "$param");
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Callable);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "DataType");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TCompareExprTrees) {
@@ -888,7 +888,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
 }
 
 Y_UNIT_TEST_SUITE(TConvertToAst) {
-    static TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = true) { 
+    static TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = true) {
         const auto astRes = ParseAst(program);
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx;
@@ -903,12 +903,12 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         TExprNode::TPtr exprRoot2;
         auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, nullptr);
         exprCtx2.IssueManager.GetIssues().PrintTo(Cout);
-        UNIT_ASSERT(compileOk); 
+        UNIT_ASSERT(compileOk);
         UNIT_ASSERT(exprRoot2);
         const TExprNode* node = exprRoot.Get();
         const TExprNode* node2 = exprRoot2.Get();
-        bool equal = CompareExprTrees(node, node2); 
-        UNIT_ASSERT(equal == expectEqualExprs); 
+        bool equal = CompareExprTrees(node, node2);
+        UNIT_ASSERT(equal == expectEqualExprs);
 
         return convRes.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     }
@@ -1158,61 +1158,61 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
     }
 
     Y_UNIT_TEST(Parameters) {
-        const auto program = R"( 
-        ( 
-        (let $nameType (OptionalType (DataType 'String))) 
-        (let $1 (Read! world (DataSource '"kikimr" '"local_ut") (Key '('table (String '"tmp/table"))) (Void) '())) 
-        (let $2 (DataSink 'result)) 
-        (let $5 (Write! (Left! $1) $2 (Key) (FlatMap (Filter (Right! $1) 
-            (lambda '($9) (Coalesce (And 
-                (== (Member $9 '"Group") (Parameter '"$Group" (DataType 'Uint32))) 
-                (== (Member $9 '"Name") (Parameter '"$Name" $nameType))) (Bool 'false)))) 
-            (lambda '($10) (AsList $10))) '('('type) '('autoref)))) 
-        (let $6 (Read! (Commit! $5 $2) (DataSource '"kikimr" '"local_ut") 
-            (Key '('table (String '"tmp/table"))) (Void) '())) 
-        (let $7 (DataSink 'result)) 
-        (let $8 (Write! (Left! $6) $7 (Key) (FlatMap (Filter (Right! $6) 
-            (lambda '($11) (Coalesce (And 
-                (== (Member $11 '"Group") (+ (Parameter '"$Group" (DataType 'Uint32)) (Int32 '"1"))) 
-                (== (Member $11 '"Name") (Coalesce (Parameter '"$Name" $nameType) 
-                    (String '"Empty")))) (Bool 'false)))) 
-            (lambda '($12) (AsList $12))) '('('type) '('autoref)))) 
-        (return (Commit! $8 $7)) 
-        ) 
-        )"; 
- 
-        const auto disassembled = CompileAndDisassemble(program); 
-        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))")); 
-        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))")); 
-    } 
- 
+        const auto program = R"(
+        (
+        (let $nameType (OptionalType (DataType 'String)))
+        (let $1 (Read! world (DataSource '"kikimr" '"local_ut") (Key '('table (String '"tmp/table"))) (Void) '()))
+        (let $2 (DataSink 'result))
+        (let $5 (Write! (Left! $1) $2 (Key) (FlatMap (Filter (Right! $1)
+            (lambda '($9) (Coalesce (And
+                (== (Member $9 '"Group") (Parameter '"$Group" (DataType 'Uint32)))
+                (== (Member $9 '"Name") (Parameter '"$Name" $nameType))) (Bool 'false))))
+            (lambda '($10) (AsList $10))) '('('type) '('autoref))))
+        (let $6 (Read! (Commit! $5 $2) (DataSource '"kikimr" '"local_ut")
+            (Key '('table (String '"tmp/table"))) (Void) '()))
+        (let $7 (DataSink 'result))
+        (let $8 (Write! (Left! $6) $7 (Key) (FlatMap (Filter (Right! $6)
+            (lambda '($11) (Coalesce (And
+                (== (Member $11 '"Group") (+ (Parameter '"$Group" (DataType 'Uint32)) (Int32 '"1")))
+                (== (Member $11 '"Name") (Coalesce (Parameter '"$Name" $nameType)
+                    (String '"Empty")))) (Bool 'false))))
+            (lambda '($12) (AsList $12))) '('('type) '('autoref))))
+        (return (Commit! $8 $7))
+        )
+        )";
+
+        const auto disassembled = CompileAndDisassemble(program);
+        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
+        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
+    }
+
     Y_UNIT_TEST(ParametersDifferentTypes) {
-        const auto program = R"( 
-        ( 
-        (let $1 (Read! world (DataSource '"kikimr" '"local_ut") (Key '('table (String '"tmp/table"))) (Void) '())) 
-        (let $2 (DataSink 'result)) 
-        (let $5 (Write! (Left! $1) $2 (Key) (FlatMap (Filter (Right! $1) 
-            (lambda '($9) (Coalesce (And 
-                (== (Member $9 '"Group") (Parameter '"$Group" (DataType 'Uint32))) 
-                (== (Member $9 '"Name") (Parameter '"$Name" (OptionalType (DataType 'String))))) (Bool 'false)))) 
-            (lambda '($10) (AsList $10))) '('('type) '('autoref)))) 
-        (let $6 (Read! (Commit! $5 $2) (DataSource '"kikimr" '"local_ut") 
-            (Key '('table (String '"tmp/table"))) (Void) '())) 
-        (let $7 (DataSink 'result)) 
-        (let $8 (Write! (Left! $6) $7 (Key) (FlatMap (Filter (Right! $6) 
-            (lambda '($11) (Coalesce (And 
-                (== (Member $11 '"Group") (+ (Parameter '"$Group" (DataType 'Uint32)) (Int32 '"1"))) 
-                (== (Member $11 '"Name") (Coalesce (Parameter '"$Name" (OptionalType (DataType 'Int32))) 
-                    (String '"Empty")))) (Bool 'false)))) 
-            (lambda '($12) (AsList $12))) '('('type) '('autoref)))) 
-        (return (Commit! $8 $7)) 
-        ) 
-        )"; 
- 
-        const auto disassembled = CompileAndDisassemble(program, false); 
-        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))")); 
-        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))")); 
-    } 
+        const auto program = R"(
+        (
+        (let $1 (Read! world (DataSource '"kikimr" '"local_ut") (Key '('table (String '"tmp/table"))) (Void) '()))
+        (let $2 (DataSink 'result))
+        (let $5 (Write! (Left! $1) $2 (Key) (FlatMap (Filter (Right! $1)
+            (lambda '($9) (Coalesce (And
+                (== (Member $9 '"Group") (Parameter '"$Group" (DataType 'Uint32)))
+                (== (Member $9 '"Name") (Parameter '"$Name" (OptionalType (DataType 'String))))) (Bool 'false))))
+            (lambda '($10) (AsList $10))) '('('type) '('autoref))))
+        (let $6 (Read! (Commit! $5 $2) (DataSource '"kikimr" '"local_ut")
+            (Key '('table (String '"tmp/table"))) (Void) '()))
+        (let $7 (DataSink 'result))
+        (let $8 (Write! (Left! $6) $7 (Key) (FlatMap (Filter (Right! $6)
+            (lambda '($11) (Coalesce (And
+                (== (Member $11 '"Group") (+ (Parameter '"$Group" (DataType 'Uint32)) (Int32 '"1")))
+                (== (Member $11 '"Name") (Coalesce (Parameter '"$Name" (OptionalType (DataType 'Int32)))
+                    (String '"Empty")))) (Bool 'false))))
+            (lambda '($12) (AsList $12))) '('('type) '('autoref))))
+        (return (Commit! $8 $7))
+        )
+        )";
+
+        const auto disassembled = CompileAndDisassemble(program, false);
+        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
+        UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
+    }
 }
 
 } // namespace NYql

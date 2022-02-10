@@ -25,8 +25,8 @@ SRCS(
     ydb_import_ut.cpp
     ydb_ut.cpp
     ydb_s3_internal_ut.cpp
-    ydb_scripting_ut.cpp 
-    ydb_table_ut.cpp 
+    ydb_scripting_ut.cpp
+    ydb_table_ut.cpp
     ydb_table_split_ut.cpp
     ydb_stats_ut.cpp
     ydb_long_tx_ut.cpp

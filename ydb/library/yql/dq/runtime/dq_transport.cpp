@@ -1,4 +1,4 @@
-#include "dq_transport.h" 
+#include "dq_transport.h"
 #include "dq_arrow_helpers.h"
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
@@ -27,7 +27,7 @@ NDqProto::TData SerializeValuePickleV1(const TType* type, const NUdf::TUnboxedVa
     TStringBuf packResult = packer.Pack(value);
 
     NDqProto::TData data;
-    data.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0); 
+    data.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
     data.SetRaw(packResult.data(), packResult.size());
     data.SetRows(1);
 

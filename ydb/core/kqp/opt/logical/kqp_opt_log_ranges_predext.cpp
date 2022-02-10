@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -133,5 +133,5 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt
 

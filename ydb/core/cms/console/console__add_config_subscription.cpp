@@ -14,7 +14,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code, 
+    bool Error(Ydb::StatusIds::StatusCode code,
                const TString &error,
                const TActorContext &ctx)
     {
@@ -40,7 +40,7 @@ public:
         Response = new TEvConsole::TEvAddConfigSubscriptionResponse;
 
         TSubscription::TPtr subscription = new TSubscription(rec.GetSubscription());
-        Ydb::StatusIds::StatusCode code; 
+        Ydb::StatusIds::StatusCode code;
         TString error;
         if (!Self->MakeNewSubscriptionChecks(subscription, code, error))
             return Error(code, error, ctx);
@@ -60,7 +60,7 @@ public:
 
         subscription->Id = Self->NextSubscriptionId++;
         subscription->Cookie = RandomNumber<ui64>();
-        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
         Response->Record.SetSubscriptionId(subscription->Id);
 
         Self->PendingSubscriptionModifications.AddedSubscriptions.push_back(subscription);

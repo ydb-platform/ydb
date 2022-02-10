@@ -169,7 +169,7 @@ void CheckGetItems(TTenantTestRuntime &runtime,
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<TResponseEvent>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS); 
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
 
     for (auto &item : reply->Record.GetConfigItems()) {
         auto it = items.find(item.GetId().GetId());
@@ -393,7 +393,7 @@ void CheckGetNodeConfig(TTenantTestRuntime &runtime, ui32 nodeId, const TString 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetNodeConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS); 
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     CheckEqualsIgnoringVersion(reply->Record.GetConfig(), config);
 }
 
@@ -428,7 +428,7 @@ void IncGeneration(NKikimrConsole::TConfigItem &item, Ts&... args)
     IncGeneration(args...);
 }
 
-ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, 
+ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                 ui32 nodeId, const TString &host, const TString &tenant,
                                 const TString &nodeType, ui64 tabletId, TActorId serviceId,
                                 TVector<ui32> kinds, ui64 id = 0)
@@ -452,11 +452,11 @@ ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     ui64 res = reply->Record.GetSubscriptionId();
-    UNIT_ASSERT(code != Ydb::StatusIds::SUCCESS || res); 
+    UNIT_ASSERT(code != Ydb::StatusIds::SUCCESS || res);
     return res;
 }
 
-ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, 
+ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                      ui32 nodeId, const TString &host, const TString &tenant,
                                      const TString &nodeType, ui64 tabletId, TActorId serviceId,
                                      TVector<ui32> kinds, ui64 id = 0)
@@ -480,11 +480,11 @@ ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     ui64 res = reply->Record.GetSubscriptionId();
-    UNIT_ASSERT(code != Ydb::StatusIds::SUCCESS || res); 
+    UNIT_ASSERT(code != Ydb::StatusIds::SUCCESS || res);
     return res;
 }
 
-void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, 
+void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                 ui64 id, ui32 nodeId = 0, const TString &host = "", const TString &tenant = "",
                                 const TString &nodeType = "", ui64 tabletId = 0, TActorId serviceId = {},
                                 TVector<ui32> kinds = {})
@@ -497,7 +497,7 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
     auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetConfigSubscriptionResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
-    if (code == Ydb::StatusIds::SUCCESS) { 
+    if (code == Ydb::StatusIds::SUCCESS) {
         THashSet<ui32> k(kinds.begin(), kinds.end());
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetId(), id);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetSubscriber().GetTabletId(), tabletId);
@@ -514,7 +514,7 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
     }
 }
 
-void CheckRemoveConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, ui64 id) 
+void CheckRemoveConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, ui64 id)
 {
     auto *event = new TEvConsole::TEvRemoveConfigSubscriptionRequest;
     event->Record.SetSubscriptionId(id);
@@ -525,7 +525,7 @@ void CheckRemoveConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
-void CheckRemoveConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, 
+void CheckRemoveConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                     ui64 tabletId, TActorId serviceId)
 {
     auto *event = new TEvConsole::TEvRemoveConfigSubscriptionsRequest;
@@ -913,28 +913,28 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         tmp2.MutableConfig()->MutableLogConfig();
 
         // OK.
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1));
         AssignIds(id1, ITEM_DOMAIN_TENANT_POOL_1);
         // Error: action has Id specified.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1));
         // Error: config doesn't match kind.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(tmp2));
         // Error: order conflict with existing item.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(tmp1));
         // Error: order conflict between new items.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_DOMAIN_LOG_1),
                        MakeAddAction(ITEM_DOMAIN_LOG_1));
         // OK.
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_2));
         AssignIds(id2, ITEM_DOMAIN_TENANT_POOL_2);
         // Add several items. Order of ids should match items order.
-        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1),
                                   MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_HOST12_LOG_1));
@@ -964,7 +964,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1),
                                   MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1));
@@ -972,50 +972,50 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                   ITEM_DOMAIN_TENANT_POOL_1);
         // Error: kind mismatch.
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableTenantPoolConfig();
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         ITEM_DOMAIN_LOG_1.MutableConfig()->ClearTenantPoolConfig();
         // Error: generation mismatch
         ITEM_DOMAIN_LOG_1.MutableId()->SetGeneration(2);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         ITEM_DOMAIN_LOG_1.MutableId()->SetGeneration(1);
         // Error: wrong id.
         ITEM_DOMAIN_LOG_1.MutableId()->SetId(987654321);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         ITEM_DOMAIN_LOG_1.MutableId()->SetId(id1[0]);
         // Error: cannot change kind
         ITEM_DOMAIN_TENANT_POOL_2.MutableId()->CopyFrom(ITEM_DOMAIN_LOG_1.GetId());
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_TENANT_POOL_2));
         ITEM_DOMAIN_TENANT_POOL_2.ClearId();
         // Error: double modification of the same item.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         // Error: order confilict with existing item.
         ITEM_DOMAIN_LOG_1.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         // Error: order confilict with another modification.
         ITEM_DOMAIN_LOG_1.SetOrder(3);
         ITEM_DOMAIN_LOG_2.SetOrder(3);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         // Error: order conflict with added item.
         ITEM_DOMAIN_TENANT_POOL_1.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_TENANT_POOL_1),
                        MakeAddAction(ITEM_DOMAIN_TENANT_POOL_2));
         // OK to modify order.
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_TENANT_POOL_1));
         IncGeneration(ITEM_DOMAIN_TENANT_POOL_1);
         // OK to modify order and add with the previous value.
         ITEM_DOMAIN_TENANT_POOL_1.SetOrder(3);
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeModifyAction(ITEM_DOMAIN_TENANT_POOL_1),
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_2));
         AssignIds(id2, ITEM_DOMAIN_TENANT_POOL_2);
@@ -1023,31 +1023,31 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         // OK to switch orders.
         ITEM_DOMAIN_LOG_1.SetOrder(2);
         ITEM_DOMAIN_LOG_2.SetOrder(1);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
         // OK to modify scope.
         ITEM_DOMAIN_LOG_1.MutableUsageScope()->MutableNodeFilter()->AddNodes(1);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         IncGeneration(ITEM_DOMAIN_LOG_1);
         // Error: order conflict.
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableNodeFilter()->AddNodes(1);
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableNodeFilter()->AddNodes(2);
         ITEM_DOMAIN_LOG_2.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         // OK to switch order back because of different scope.
         ITEM_DOMAIN_LOG_2.ClearUsageScope();
         ITEM_DOMAIN_LOG_2.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_2);
         // OK to use disjoint scopes.
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableNodeFilter()->AddNodes(2);
         ITEM_DOMAIN_LOG_2.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_2);
         // Error: order conflicts in intersecting scopes.
@@ -1057,14 +1057,14 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         ITEM_DOMAIN_LOG_2.ClearUsageScope();
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableHostFilter()->AddHosts("host2");
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableHostFilter()->AddHosts("host3");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         // OK
         ITEM_DOMAIN_LOG_2.ClearUsageScope();
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableHostFilter()->AddHosts("host3");
         ITEM_DOMAIN_LOG_2.MutableUsageScope()->MutableHostFilter()->AddHosts("host4");
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
@@ -1079,51 +1079,51 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1),
                                   MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1));
         AssignIds(id1, ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                   ITEM_DOMAIN_TENANT_POOL_1);
         // OK remove
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_1));
         // Error: wrong id
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_1));
         // Error: wrong generation
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_2.GetId().GetId(),
                                         ITEM_DOMAIN_LOG_2.GetId().GetGeneration() + 1));
         // OK to modify order
         ITEM_DOMAIN_LOG_2.SetOrder(1);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_2);
         // Error: conflicting order.
         ITEM_DOMAIN_LOG_1.ClearId();
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_DOMAIN_LOG_1));
         // OK to add item with conflicting order if conflict is removed
         // at the same time.
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeRemoveAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_DOMAIN_LOG_1));
         AssignIds(id2, ITEM_DOMAIN_LOG_1);
         // Add item back.
         ITEM_DOMAIN_LOG_2.ClearId();
         ITEM_DOMAIN_LOG_2.SetOrder(2);
-        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_2));
         AssignIds(id3, ITEM_DOMAIN_LOG_2);
         // Error: conflicting order.
         ITEM_DOMAIN_LOG_2.SetOrder(1);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
 
         // OK to add item with conflicting order if conflict is removed
         // at the same time.
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_1),
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_2);
@@ -1167,121 +1167,121 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         // NODE ITEMS
         // Error: order conflict.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_NODE12_LOG_1),
                        MakeAddAction(ITEM_NODE23_LOG_1));
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_NODE23_LOG_1),
                        MakeAddAction(ITEM_NODE34_LOG_1));
         // OK
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_NODE12_LOG_1),
                                   MakeAddAction(ITEM_NODE34_LOG_1));
         AssignIds(id1, ITEM_NODE12_LOG_1, ITEM_NODE34_LOG_1);
         // Error: order conflict.
         ITEM_NODE12_LOG_1.MutableUsageScope()->MutableNodeFilter()->AddNodes(3);
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_NODE12_LOG_1));
         // OK
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_NODE34_LOG_1),
                        MakeModifyAction(ITEM_NODE12_LOG_1));
         IncGeneration(ITEM_NODE12_LOG_1);
 
         // HOST ITEMS
         // Error: order conflict.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_HOST12_LOG_1),
                        MakeAddAction(ITEM_HOST23_LOG_1));
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_HOST23_LOG_1),
                        MakeAddAction(ITEM_HOST34_LOG_1));
         // OK
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_HOST12_LOG_1),
                                   MakeAddAction(ITEM_HOST34_LOG_1));
         AssignIds(id2, ITEM_HOST12_LOG_1, ITEM_HOST34_LOG_1);
         // Error: order conflict.
         ITEM_HOST12_LOG_1.MutableUsageScope()->MutableHostFilter()->AddHosts("host3");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_HOST12_LOG_1));
         // OK
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_HOST34_LOG_1),
                        MakeModifyAction(ITEM_HOST12_LOG_1));
         IncGeneration(ITEM_HOST12_LOG_1);
 
         // TENANT ITEMS
         // Error: order conflict.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_TENANT1_LOG_1),
                        MakeAddAction(ITEM_TENANT1_LOG_1));
         // OK
-        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_TENANT1_LOG_1),
                                   MakeAddAction(ITEM_TENANT2_LOG_1));
         AssignIds(id3, ITEM_TENANT1_LOG_1, ITEM_TENANT2_LOG_1);
         // Error: order conflict.
         ITEM_TENANT2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant("tenant1");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_TENANT2_LOG_1));
         // Error: order conflict.
         ITEM_TENANT2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant("tenant1");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_TENANT2_LOG_1));
         // OK
         ITEM_TENANT1_LOG_1.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT1_LOG_1),
                        MakeModifyAction(ITEM_TENANT2_LOG_1));
         IncGeneration(ITEM_TENANT1_LOG_1, ITEM_TENANT2_LOG_1);
         // OK
         ITEM_TENANT1_LOG_1.SetOrder(1);
         ITEM_TENANT2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant("tenant2");
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT1_LOG_1),
                        MakeModifyAction(ITEM_TENANT2_LOG_1));
         IncGeneration(ITEM_TENANT1_LOG_1, ITEM_TENANT2_LOG_1);
 
         // NODE TYPE ITEMS
         // Error: order conflict.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_TYPE1_LOG_1),
                        MakeAddAction(ITEM_TYPE1_LOG_1));
         // OK
-        auto id4 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id4 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_TYPE1_LOG_1),
                                   MakeAddAction(ITEM_TYPE2_LOG_1));
         AssignIds(id4, ITEM_TYPE1_LOG_1, ITEM_TYPE2_LOG_1);
         // Error: order conflict.
         ITEM_TYPE2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("type1");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         // Error: order conflict.
         ITEM_TYPE2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("type1");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         // OK
         ITEM_TYPE1_LOG_1.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TYPE1_LOG_1),
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         IncGeneration(ITEM_TYPE1_LOG_1, ITEM_TYPE2_LOG_1);
         // OK
         ITEM_TYPE1_LOG_1.SetOrder(1);
         ITEM_TYPE2_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("type2");
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TYPE1_LOG_1),
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         IncGeneration(ITEM_TYPE1_LOG_1, ITEM_TYPE2_LOG_1);
 
         // TENANT AND NODE TYPE ITEMS
         // Error: order conflict.
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_TENANT1_TYPE1_LOG_1),
                        MakeAddAction(ITEM_TENANT1_TYPE1_LOG_1));
         // OK
-        auto id5 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id5 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_TENANT1_TYPE1_LOG_1),
                                   MakeAddAction(ITEM_TENANT1_TYPE2_LOG_1),
                                   MakeAddAction(ITEM_TENANT2_TYPE1_LOG_1),
@@ -1290,17 +1290,17 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                   ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE2_LOG_1);
         // Error: order conflict
         ITEM_TENANT1_TYPE1_LOG_1.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("type2");
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeModifyAction(ITEM_TENANT1_TYPE1_LOG_1));
         // OK
         ITEM_TENANT1_TYPE2_LOG_1.SetOrder(2);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT1_TYPE1_LOG_1),
                        MakeModifyAction(ITEM_TENANT1_TYPE2_LOG_1));
         IncGeneration(ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE2_LOG_1);
         // OK
         ITEM_TENANT1_TYPE2_LOG_1.SetOrder(1);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_TENANT1_TYPE1_LOG_1),
                        MakeModifyAction(ITEM_TENANT1_TYPE2_LOG_1));
         IncGeneration(ITEM_TENANT1_TYPE2_LOG_1);
@@ -1318,7 +1318,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1),
                                   MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1),
@@ -1341,7 +1341,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         ITEM_NODE23_LOG_1.SetOrder(2);
         ITEM_HOST23_LOG_1.SetOrder(2);
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_NODE12_LOG_1), MakeAddAction(ITEM_NODE23_LOG_1),
                                   MakeAddAction(ITEM_NODE34_LOG_1), MakeAddAction(ITEM_HOST12_LOG_1),
                                   MakeAddAction(ITEM_HOST23_LOG_1), MakeAddAction(ITEM_HOST34_LOG_1),
@@ -1727,7 +1727,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         ITEM_NODE23_LOG_1.SetOrder(2);
         ITEM_HOST23_LOG_1.SetOrder(2);
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1), MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_NODE12_LOG_1), MakeAddAction(ITEM_NODE23_LOG_1),
                                   MakeAddAction(ITEM_NODE34_LOG_1), MakeAddAction(ITEM_HOST12_LOG_1),
@@ -1814,7 +1814,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         ITEM_DOMAIN_TENANT_POOL_1.MutableConfig()->MutableTenantPoolConfig();
 
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1), MakeAddAction(ITEM_DOMAIN_LOG_2),
                                   MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1), MakeAddAction(ITEM_DOMAIN_TENANT_POOL_2),
                                   MakeAddAction(ITEM_NODE12_LOG_1), MakeAddAction(ITEM_NODE23_LOG_1),
@@ -1881,7 +1881,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         InitializeTestConfigItems();
 
         ITEM_DOMAIN_LOG_1.SetOrder(0);
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1));
         AssignIds(id1, ITEM_DOMAIN_LOG_1);
         ITEM_DOMAIN_LOG_1.SetOrder(10);
@@ -1889,7 +1889,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_LOG_1);
 
         ITEM_DOMAIN_LOG_2.SetOrder(0);
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_2));
         AssignIds(id2, ITEM_DOMAIN_LOG_2);
         ITEM_DOMAIN_LOG_2.SetOrder(20);
@@ -1897,7 +1897,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
 
         ITEM_DOMAIN_LOG_1.SetOrder(0);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1));
         ITEM_DOMAIN_LOG_1.SetOrder(30);
         IncGeneration(ITEM_DOMAIN_LOG_1);
@@ -1906,7 +1906,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         ITEM_DOMAIN_LOG_1.SetOrder(0);
         ITEM_DOMAIN_LOG_2.SetOrder(0);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_1), MakeModifyAction(ITEM_DOMAIN_LOG_2));
         ITEM_DOMAIN_LOG_1.SetOrder(10);
         ITEM_DOMAIN_LOG_2.SetOrder(20);
@@ -1915,7 +1915,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
 
         ITEM_DOMAIN_LOG_2.SetOrder(0);
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_1), MakeModifyAction(ITEM_DOMAIN_LOG_2));
         ITEM_DOMAIN_LOG_2.SetOrder(10);
         IncGeneration(ITEM_DOMAIN_LOG_2);
@@ -1925,7 +1925,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         ITEM_DOMAIN_LOG_1.SetOrder(0);
         ITEM_DOMAIN_LOG_1.ClearId();
         ITEM_DOMAIN_LOG_2.SetOrder(0);
-        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1), MakeModifyAction(ITEM_DOMAIN_LOG_2));
         AssignIds(id3, ITEM_DOMAIN_LOG_1);
         ITEM_DOMAIN_LOG_1.SetOrder(10);
@@ -1943,7 +1943,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig();
         ITEM_DOMAIN_TENANT_POOL_1.ClearKind();
         ITEM_DOMAIN_TENANT_POOL_1.MutableConfig()->MutableTenantPoolConfig();
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1), MakeAddAction(ITEM_DOMAIN_TENANT_POOL_1));
         AssignIds(id1, ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_TENANT_POOL_1);
         ITEM_DOMAIN_LOG_1.SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
@@ -1955,7 +1955,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         ITEM_DOMAIN_LOG_2.ClearKind();
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig();
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableTenantPoolConfig();
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_DOMAIN_LOG_2));
     }
 
@@ -1967,7 +1967,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig();
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableTenantPoolConfig();
         ITEM_DOMAIN_LOG_1.SetCookie("cookie3");
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1, true));
         AssignIds(id1, ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_TENANT_POOL_1);
         ITEM_DOMAIN_LOG_1.SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
@@ -1979,7 +1979,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
         ITEM_NODE12_LOG_1.ClearKind();
         ITEM_NODE12_LOG_1.MutableConfig()->MutableLogConfig();
-        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id2 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_NODE12_LOG_1, true));
         AssignIds(id2, ITEM_NODE12_LOG_1);
         ITEM_NODE12_LOG_1.SetKind(NKikimrConsole::TConfigItem::LogConfigItem);
@@ -1990,7 +1990,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         // Cannot split empty config.
         ITEM_DOMAIN_LOG_2.ClearKind();
         ITEM_DOMAIN_LOG_2.ClearConfig();
-        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckConfigure(runtime, Ydb::StatusIds::BAD_REQUEST,
                        MakeAddAction(ITEM_DOMAIN_LOG_2, true));
     }
 
@@ -2457,11 +2457,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         // OK subscription for tablet
         ui32 nodeId = runtime.GetNodeId(0);
-        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2, 3}});
         // OK subscription for service
-        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
@@ -2471,34 +2471,34 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         runtime.DispatchEvents(options);
 
         // OK subscription for service
-        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               3, "host3", "tenant-3", "type3",
                                               0, TActorId(nodeId, "service"), {{1, 1, 2}});
 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1,
                                    1, "host1", "tenant-1", "type1",
                                    1, TActorId(), {{1, 2, 3}});
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2,
                                    2, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    3, "host3", "tenant-3", "type3",
                                    0, TActorId(nodeId, "service"), {{1, 2}});
 
         // non-zero subscription id
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
                                    1, TActorId(), {{1, 2, 3}}, 1);
         // no subscriber
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
                                    0, TActorId(), {{1, 2, 3}});
         // wrong service id
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
                                    0, TActorId(1, 0, 0, 0), {{1, 2, 3}});
         // no kinds
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
                                    1, TActorId(), {});
     }
@@ -2508,36 +2508,36 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         // OK subscription for tablet
         ui32 nodeId = runtime.GetNodeId(0);
-        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2, 3}});
         // OK subscription for tablet
-        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2, 3}});
         // OK subscription for service
-        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
-        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2); 
-        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2); 
+        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2);
+        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
 
         runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
         TDispatchOptions options;
         options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
         runtime.DispatchEvents(options);
 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1,
                                    1, "host1", "tenant-1", "type1",
                                    1, TActorId(), {{1, 2, 3}});
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2); 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    2, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
-        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1); 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id1); 
+        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1);
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id1);
     }
 
     Y_UNIT_TEST(TestRemoveConfigSubscriptions) {
@@ -2545,29 +2545,29 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         // OK subscription for tablet
         ui32 nodeId = runtime.GetNodeId(0);
-        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2, 3}});
         // OK subscription for tablet
-        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2, 3}});
         // OK subscription for service
-        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{4, 5, 6}});
         // OK subscription for service
-        ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               3, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        1, TActorId());
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        1, TActorId());
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        2, TActorId());
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        0, TActorId());
 
         runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
@@ -2575,20 +2575,20 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
         runtime.DispatchEvents(options);
 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id1); 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2); 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id1);
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    2, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id4, 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id4,
                                    3, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        0, TActorId(nodeId, "service"));
 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id3); 
-        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id4); 
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id3);
+        CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id4);
     }
 
     Y_UNIT_TEST(TestListConfigSubscriptions) {
@@ -2596,19 +2596,19 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         // OK subscription for tablet
         ui32 nodeId = runtime.GetNodeId(0);
-        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{1, 2}});
         // OK subscription for tablet
-        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
                                               1, TActorId(), {{3, 4}});
         // OK subscription for service
-        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{4, 5}});
         // OK subscription for service
-        ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
                                               0, TActorId(nodeId, "service"), {{6, 7}});
 
@@ -2642,10 +2642,10 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId + 1, "service"));
 
         // Remove 1 2
-        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                        1, TActorId());
         // Remove 3
-        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3); 
+        CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3);
 
         // Empty list
         CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId());
@@ -2663,10 +2663,10 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
         ui32 nodeId = runtime.GetNodeId(0);
-        ui64 id1 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id1 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
                                                    1, TActorId(), {{1, 2, 3}});
-        ui64 id2 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id2 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
                                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
 
@@ -2677,18 +2677,18 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                      id2, 2, "host2", "tenant-2", "type2",
                                      0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6}));
 
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    1, "host1", "tenant-1", "type1",
                                    1, TActorId(), {{1, 2}});
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    2, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId, "service"), {{4, 5}});
 
-        ui64 id5 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id5 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
                                                    1, TActorId(), {{1, 2, 3}});
         UNIT_ASSERT_VALUES_EQUAL(id1, id5);
-        ui64 id6 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id6 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
                                                    0, TActorId(nodeId, "service"), {{4, 5, 6}});
         UNIT_ASSERT_VALUES_EQUAL(id2, id6);
@@ -2705,11 +2705,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                      id2, 2, "host2", "tenant-2", "type2",
                                      0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6}));
 
-        ui64 id7 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id7 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
                                                    1, TActorId(), {{1, 2}});
         UNIT_ASSERT(id1 != id7);
-        ui64 id8 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 
+        ui64 id8 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
                                                    0, TActorId(nodeId, "service"), {{4, 5}});
         UNIT_ASSERT(id2 != id8);
@@ -2736,13 +2736,13 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
-        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, 
+        auto id1 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_1),
                                   MakeAddAction(ITEM_DOMAIN_LOG_2));
         AssignIds(id1, ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
 
         // New subscription should cause notification.
-        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, 
+        CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));

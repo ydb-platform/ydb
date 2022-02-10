@@ -1,48 +1,48 @@
 #include "rpc_kqp_base.h"
- 
+
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
+namespace NKikimr {
+namespace NGRpcService {
+
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {
     const auto& kqpStats = kqpResponse.GetQueryStats();
 
     uint64_t totalCpuTimeUs = 0;
     uint64_t totalDurationUs = 0;
 
-    for (auto& exec : kqpStats.GetExecutions()) { 
+    for (auto& exec : kqpStats.GetExecutions()) {
         auto durationUs = exec.GetDurationUs();
         auto cpuTimeUs = exec.GetCpuTimeUs();
 
         totalDurationUs += durationUs;
         totalCpuTimeUs += cpuTimeUs;
 
-        auto& toPhase = *queryStats.add_query_phases(); 
+        auto& toPhase = *queryStats.add_query_phases();
         toPhase.set_duration_us(durationUs);
         toPhase.set_cpu_time_us(cpuTimeUs);
- 
-        for (auto& table : exec.GetTables()) { 
-            auto& toTable = *toPhase.add_table_access(); 
-            toTable.set_name(table.GetTablePath()); 
- 
-            if (table.GetReadRows() > 0) { 
-                toTable.mutable_reads()->set_rows(table.GetReadRows()); 
-                toTable.mutable_reads()->set_bytes(table.GetReadBytes()); 
-            } 
- 
-            if (table.GetWriteRows() > 0) { 
-                toTable.mutable_updates()->set_rows(table.GetWriteRows()); 
-                toTable.mutable_updates()->set_bytes(table.GetWriteBytes()); 
-            } 
- 
-            if (table.GetEraseRows() > 0) { 
-                toTable.mutable_deletes()->set_rows(table.GetEraseRows()); 
-            } 
- 
-            toTable.set_partitions_count(table.GetAffectedPartitions()); 
-        } 
- 
+
+        for (auto& table : exec.GetTables()) {
+            auto& toTable = *toPhase.add_table_access();
+            toTable.set_name(table.GetTablePath());
+
+            if (table.GetReadRows() > 0) {
+                toTable.mutable_reads()->set_rows(table.GetReadRows());
+                toTable.mutable_reads()->set_bytes(table.GetReadBytes());
+            }
+
+            if (table.GetWriteRows() > 0) {
+                toTable.mutable_updates()->set_rows(table.GetWriteRows());
+                toTable.mutable_updates()->set_bytes(table.GetWriteBytes());
+            }
+
+            if (table.GetEraseRows() > 0) {
+                toTable.mutable_deletes()->set_rows(table.GetEraseRows());
+            }
+
+            toTable.set_partitions_count(table.GetAffectedPartitions());
+        }
+
         std::sort(toPhase.mutable_table_access()->begin(), toPhase.mutable_table_access()->end(),
             [](const Ydb::TableStats::TableAccessStats& a, const Ydb::TableStats::TableAccessStats& b) {
                 return a.name() < b.name();
@@ -52,22 +52,22 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
         if (exec.HasExtra() && exec.GetExtra().UnpackTo(&executionExtraStats)) {
             toPhase.set_affected_shards(executionExtraStats.GetAffectedShards());
         }
-    } 
- 
-    if (kqpStats.HasCompilation()) { 
-        auto& compilation = kqpStats.GetCompilation(); 
-        auto& toCompilation = *queryStats.mutable_compilation(); 
-        toCompilation.set_from_cache(compilation.GetFromCache()); 
-        toCompilation.set_duration_us(compilation.GetDurationUs()); 
-        toCompilation.set_cpu_time_us(compilation.GetCpuTimeUs()); 
-    } 
- 
-    queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs()); 
+    }
+
+    if (kqpStats.HasCompilation()) {
+        auto& compilation = kqpStats.GetCompilation();
+        auto& toCompilation = *queryStats.mutable_compilation();
+        toCompilation.set_from_cache(compilation.GetFromCache());
+        toCompilation.set_duration_us(compilation.GetDurationUs());
+        toCompilation.set_cpu_time_us(compilation.GetCpuTimeUs());
+    }
+
+    queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
     queryStats.set_total_cpu_time_us(totalCpuTimeUs);
     queryStats.set_total_duration_us(totalDurationUs);
 
     queryStats.set_query_plan(kqpResponse.GetQueryPlan());
-} 
- 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+}
+
+} // namespace NGRpcService
+} // namespace NKikimr

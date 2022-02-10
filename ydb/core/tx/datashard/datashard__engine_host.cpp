@@ -15,31 +15,31 @@
 
 #include <library/cpp/actors/core/log.h>
 
-#include <util/generic/cast.h> 
- 
+#include <util/generic/cast.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
 using namespace NMiniKQL;
 using namespace NTabletFlatExecutor;
 
-namespace { 
- 
+namespace {
+
 NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
                               const TVector<NScheme::TTypeId>& inType,
                               const THolderFactory& holderFactory) {
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems);
- 
-    for (ui32 i = 0; i < inRow.size(); ++i) { 
+
+    for (ui32 i = 0; i < inRow.size(); ++i) {
         rowItems[i] = GetCellValue(inRow[i], inType[i]);
-    } 
- 
+    }
+
     return std::move(row);
-} 
- 
-} // namespace 
- 
+}
+
+} // namespace
+
 ///
 struct ItemInfo {
     ui32 ColumnId;
@@ -80,20 +80,20 @@ struct TRowResultInfo {
     }
 
     NUdf::TUnboxedValue CreateResult(TVector<TCell>&& inRow, const THolderFactory& holderFactory) const {
-        if (inRow.empty()) { 
+        if (inRow.empty()) {
             return NUdf::TUnboxedValuePod();
-        } 
+        }
 
-        Y_VERIFY(inRow.size() >= ItemInfos.size()); 
+        Y_VERIFY(inRow.size() >= ItemInfos.size());
 
-        // reorder columns 
+        // reorder columns
         TVector<TCell> outRow(Reserve(ItemInfos.size()));
         TVector<NScheme::TTypeId> outTypes(Reserve(ItemInfos.size()));
-        for (ui32 i = 0; i < ItemInfos.size(); ++i) { 
-            ui32 colId = ItemInfos[i].ColumnId; 
-            outRow.emplace_back(std::move(inRow[colId])); 
+        for (ui32 i = 0; i < ItemInfos.size(); ++i) {
+            ui32 colId = ItemInfos[i].ColumnId;
+            outRow.emplace_back(std::move(inRow[colId]));
             outTypes.emplace_back(ItemInfos[i].SchemeType);
-        } 
+        }
 
         return CreateRow(outRow, outTypes, holderFactory);
     }
@@ -105,7 +105,7 @@ struct TRangeResultInfo {
     TStructType* RowType;
     TSmallVec<ItemInfo> ItemInfos;
     mutable ui64 Bytes = 0;
-    TDefaultListRepresentation Rows; 
+    TDefaultListRepresentation Rows;
     TString FirstKey;
 
     // optimisation: reuse vectors
@@ -165,19 +165,19 @@ struct TRangeResultInfo {
             TmpTypes.push_back(ItemInfos[i].SchemeType);
         }
 
-        Bytes += 8; // per row overhead 
+        Bytes += 8; // per row overhead
         Rows = Rows.Append(CreateRow(TmpRow, TmpTypes, holderFactory));
- 
-        if (!FirstKey) { 
+
+        if (!FirstKey) {
             FirstKey = Serialize(TmpRow, TmpTypes);
-        } 
+        }
     }
 
     NUdf::TUnboxedValue CreateResult(const THolderFactory& holderFactory) {
         NUdf::TUnboxedValue* resultItems = nullptr;
         auto result = holderFactory.CreateDirectArrayHolder(4, resultItems);
 
-        resultItems[0] = holderFactory.CreateDirectListHolder(std::move(Rows)); 
+        resultItems[0] = holderFactory.CreateDirectListHolder(std::move(Rows));
         resultItems[1] = NUdf::TUnboxedValuePod(false);
         resultItems[2] = MakeString(FirstKey);
         resultItems[3] = NUdf::TUnboxedValuePod(Bytes);
@@ -209,7 +209,7 @@ public:
 
     NUdf::TUnboxedValue SelectRow(const TArrayRef<const TCell>& row, TStructLiteral* columnIds,
         TOptionalType* returnType, const TReadTarget& readTarget, const THolderFactory& holderFactory) const
-    { 
+    {
         Y_UNUSED(readTarget);
 
         TRowResultInfo result(columnIds, Columns, returnType);
@@ -360,20 +360,20 @@ public:
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
-        const THolderFactory& holderFactory) override 
+        const THolderFactory& holderFactory) override
     {
-        if (TSysTables::IsSystemTable(tableId)) { 
+        if (TSysTables::IsSystemTable(tableId)) {
             return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
-        } 
+        }
 
         Self->SysLocksTable().SetLock(tableId, row, LockTxId);
 
         Self->SetTableAccessTime(tableId, Now);
-        return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory); 
+        return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
 
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
-        TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType, 
+        TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
     {
@@ -382,7 +382,7 @@ public:
         Self->SysLocksTable().SetLock(tableId, range, LockTxId);
 
         Self->SetTableAccessTime(tableId, Now);
-        return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget, 
+        return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
     }
 
@@ -473,7 +473,7 @@ public:
     }
 
     ui64 LocalTableId(const TTableId &tableId) const override {
-        return Self->GetLocalTableId(tableId); 
+        return Self->GetLocalTableId(tableId);
     }
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const override {
@@ -510,55 +510,55 @@ private:
 
 TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
                        std::pair<ui64, ui64> stepTxId)
-    : StepTxId(stepTxId) 
-    , LockTxId(0) 
+    : StepTxId(stepTxId)
+    , LockTxId(0)
 {
-    auto now = TAppData::TimeProvider->Now(); 
+    auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, now);
 
-    EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry, 
+    EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
- 
+
     ui64 tabletId = self->TabletID();
-    TraceMessage = Sprintf("Shard %" PRIu64 ", txid %" PRIu64, tabletId, stepTxId.second); 
+    TraceMessage = Sprintf("Shard %" PRIu64 ", txid %" PRIu64, tabletId, stepTxId.second);
     const TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
-    EngineSettings->LogErrorWriter = [actorSystem, this](const TString& message) { 
-        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, TraceMessage 
-            << ", engine error: " << message); 
-    }; 
- 
+    EngineSettings->LogErrorWriter = [actorSystem, this](const TString& message) {
+        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, TraceMessage
+            << ", engine error: " << message);
+    };
+
     if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, stepTxId.second)) {
-        EngineSettings->BacktraceWriter = 
-            [actorSystem, this](const char * operation, ui32 line, const TBackTrace* backtrace) 
-            { 
-                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "%s, %s (%" PRIu32 ")\n%s", 
+        EngineSettings->BacktraceWriter =
+            [actorSystem, this](const char * operation, ui32 line, const TBackTrace* backtrace)
+            {
+                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "%s, %s (%" PRIu32 ")\n%s",
                     TraceMessage.data(), operation, line, backtrace ? backtrace->PrintToString().data() : "");
-            }; 
+            };
     }
- 
-    KqpLogFunc = [actorSystem, this](const TStringBuf& message) { 
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, TraceMessage 
-            << ": " << message); 
-    }; 
- 
+
+    KqpLogFunc = [actorSystem, this](const TStringBuf& message) {
+        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, TraceMessage
+            << ": " << message);
+    };
+
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, EngineHostCounters, now);
-    ComputeCtx->Database = &txc.DB; 
- 
-    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>(); 
-    kqpApplyCtx->Host = EngineHost.Get(); 
- 
-    KqpApplyCtx.Reset(kqpApplyCtx.Release()); 
- 
+    ComputeCtx->Database = &txc.DB;
+
+    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
+    kqpApplyCtx->Host = EngineHost.Get();
+
+    KqpApplyCtx.Reset(kqpApplyCtx.Release());
+
     KqpAlloc = MakeHolder<TScopedAlloc>(TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
 
-    KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry; 
-    KqpExecCtx.ComputeCtx = ComputeCtx.Get(); 
-    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get()); 
-    KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get(); 
-    KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get(); 
-    KqpExecCtx.ApplyCtx = KqpApplyCtx.Get(); 
+    KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
+    KqpExecCtx.ComputeCtx = ComputeCtx.Get();
+    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get());
+    KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
+    KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
+    KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
     KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
 }
@@ -607,7 +607,7 @@ void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range
     Info.Loaded = true;
 }
 
-TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const { 
+TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     Y_VERIFY(EngineHost);
 
     TSizes outSizes;
@@ -618,17 +618,17 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
             continue;
 
         readKeys.emplace_back(validKey.Key.get());
-        if (needsTotalKeysSize || validKey.NeedSizeCalculation()) { 
+        if (needsTotalKeysSize || validKey.NeedSizeCalculation()) {
             ui64 size = EngineHost->CalculateResultSize(*validKey.Key);
- 
-            if (needsTotalKeysSize) { 
-                outSizes.TotalKeysSize += size; 
-            } 
- 
+
+            if (needsTotalKeysSize) {
+                outSizes.TotalKeysSize += size;
+            }
+
             if (validKey.IsResultPart) {
                 outSizes.ReplySize += size;
             }
- 
+
             for (ui64 shard : validKey.TargetShards) {
                 outSizes.OutReadSetSize[shard] += size;
             }
@@ -671,23 +671,23 @@ TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
 }
 
 IEngineFlat * TEngineBay::GetEngine() {
-    if (!Engine) { 
-        Engine = CreateEngineFlat(*EngineSettings); 
-        Engine->SetStepTxId(StepTxId); 
-    } 
- 
-    return Engine.Get(); 
-} 
- 
-void TEngineBay::SetLockTxId(ui64 lockTxId) { 
-    LockTxId = lockTxId; 
-    if (ComputeCtx) { 
-        ComputeCtx->SetLockTxId(lockTxId); 
-    } 
-} 
- 
+    if (!Engine) {
+        Engine = CreateEngineFlat(*EngineSettings);
+        Engine->SetStepTxId(StepTxId);
+    }
+
+    return Engine.Get();
+}
+
+void TEngineBay::SetLockTxId(ui64 lockTxId) {
+    LockTxId = lockTxId;
+    if (ComputeCtx) {
+        ComputeCtx->SetLockTxId(lockTxId);
+    }
+}
+
 NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx) {
-    if (!KqpTasksRunner) { 
+    if (!KqpTasksRunner) {
         NYql::NDq::TDqTaskRunnerSettings settings;
 
         if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
@@ -705,15 +705,15 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
 
         KqpAlloc->SetLimit(10_MB);
         KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc);
-    } 
- 
-    return *KqpTasksRunner; 
-} 
- 
+    }
+
+    return *KqpTasksRunner;
+}
+
 TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {
-    Y_VERIFY(ComputeCtx); 
-    return *ComputeCtx; 
-} 
- 
+    Y_VERIFY(ComputeCtx);
+    return *ComputeCtx;
+}
+
 } // NDataShard
 } // NKikimr

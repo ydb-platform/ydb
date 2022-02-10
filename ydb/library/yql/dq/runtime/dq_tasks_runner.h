@@ -154,7 +154,7 @@ public:
     virtual void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
         const TDqTaskRunnerParameterProvider& parameterProvider = {}) = 0;
-    virtual ERunStatus Run() = 0; 
+    virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;
 

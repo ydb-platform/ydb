@@ -690,7 +690,7 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
 }
- 
+
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);

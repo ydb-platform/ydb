@@ -24,7 +24,7 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     CommitWritesRequest = TxGroup->GetCounter("Propose/CommitWritesRequest", true);
     MakeRequestProxyNotReady = TxGroup->GetCounter("Propose/MakeRequestProxyNotReady", true);
     TxNotImplemented = TxGroup->GetCounter("Propose/TxNotImplemented", true);
-    KqpRequest = TxGroup->GetCounter("Propose/KqpRequest", true); 
+    KqpRequest = TxGroup->GetCounter("Propose/KqpRequest", true);
 
     DataReqInFly = TxGroup->GetCounter("InFly/DataTx", false);
     SchemeReqInFly = TxGroup->GetCounter("InFly/SchemeOp", false);
@@ -79,8 +79,8 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
 
     PlanClientTxResultComplete = DataReqGroup->GetCounter("Plan/TxResult/Complete", true);
     PlanClientTxResultAborted = DataReqGroup->GetCounter("Plan/TxResult/Aborted", true);
-    PlanClientTxResultResultUnavailable = DataReqGroup->GetCounter("Plan/TxResult/ResultUnavailable", true); 
-    PlanClientTxResultCancelled = DataReqGroup->GetCounter("Plan/TxResult/Cancelled", true); 
+    PlanClientTxResultResultUnavailable = DataReqGroup->GetCounter("Plan/TxResult/ResultUnavailable", true);
+    PlanClientTxResultCancelled = DataReqGroup->GetCounter("Plan/TxResult/Cancelled", true);
     PlanClientTxResultExecError = DataReqGroup->GetCounter("Plan/TxResult/ExecError", true);
 
     ClientTxStatusAccepted = DataReqGroup->GetCounter("ClientTx/Status/Accepted", true);
@@ -115,9 +115,9 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     TxResultFatal = DataReqGroup->GetCounter("TxResult/Fatal", true);
     TxResultShardOverloaded = DataReqGroup->GetCounter("TxResult/Overloaded", true);
     TxResultShardTryLater = DataReqGroup->GetCounter("TxResult/TryLater", true);
-    TxResultExecError = DataReqGroup->GetCounter("TxResult/ExecError", true); 
-    TxResultResultUnavailable = DataReqGroup->GetCounter("TxResult/ResultUnavailable", true); 
-    TxResultCancelled = DataReqGroup->GetCounter("TxResult/Cancelled", true); 
+    TxResultExecError = DataReqGroup->GetCounter("TxResult/ExecError", true);
+    TxResultResultUnavailable = DataReqGroup->GetCounter("TxResult/ResultUnavailable", true);
+    TxResultCancelled = DataReqGroup->GetCounter("TxResult/Cancelled", true);
 
     MergeResultRequestExecError = DataReqGroup->GetCounter("MergeResult/RequestExecError", true);
     MergeResultRequestExecComplete = DataReqGroup->GetCounter("MergeResult/RequestExecComplete", true);

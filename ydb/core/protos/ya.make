@@ -67,9 +67,9 @@ SRCS(
     issue_id.proto
     kesus.proto
     kqp_query_settings.proto
-    kqp_physical.proto 
-    kqp_stats.proto 
-    kqp.proto 
+    kqp_physical.proto
+    kqp_stats.proto
+    kqp.proto
     local.proto
     long_tx_service.proto
     metrics.proto
@@ -124,7 +124,7 @@ SRCS(
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto
-    ydb_result_set_old.proto 
+    ydb_result_set_old.proto
     ydb_table_impl.proto
     scheme_board.proto
     scheme_board_mon.proto

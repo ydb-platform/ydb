@@ -164,20 +164,20 @@ void TAlignedPagePool::OffloadAlloc(ui64 size) {
         throw TMemoryLimitExceededException();
     }
 
-    if (AllocNotifyCallback) { 
-        if (AllocNotifyCurrentBytes > AllocNotifyBytes) { 
-            AllocNotifyCallback(); 
-            AllocNotifyCurrentBytes = 0; 
-        } 
-    } 
- 
+    if (AllocNotifyCallback) {
+        if (AllocNotifyCurrentBytes > AllocNotifyBytes) {
+            AllocNotifyCallback();
+            AllocNotifyCurrentBytes = 0;
+        }
+    }
+
     ++OffloadedAllocCount;
     OffloadedBytes += size;
     OffloadedActiveBytes += size;
     TotalAllocated += size;
-    if (AllocNotifyCallback) { 
-        AllocNotifyCurrentBytes += size; 
-    } 
+    if (AllocNotifyCallback) {
+        AllocNotifyCurrentBytes += size;
+    }
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) += size;
     }
@@ -212,9 +212,9 @@ void* TAlignedPagePool::GetPage() {
 
     if (const auto ptr = TGlobalPools::Instance().Get(0).GetPage()) {
         TotalAllocated += POOL_PAGE_SIZE;
-        if (AllocNotifyCallback) { 
-            AllocNotifyCurrentBytes += POOL_PAGE_SIZE; 
-        } 
+        if (AllocNotifyCallback) {
+            AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
+        }
         if (Counters.TotalBytesAllocatedCntr) {
             (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE;
         }
@@ -265,22 +265,22 @@ void* TAlignedPagePool::Alloc(size_t size) {
         throw TMemoryLimitExceededException();
     }
 
-    if (AllocNotifyCallback) { 
-        if (AllocNotifyCurrentBytes > AllocNotifyBytes) { 
-            AllocNotifyCallback(); 
-            AllocNotifyCurrentBytes = 0; 
-        } 
-    } 
- 
+    if (AllocNotifyCallback) {
+        if (AllocNotifyCurrentBytes > AllocNotifyBytes) {
+            AllocNotifyCallback();
+            AllocNotifyCurrentBytes = 0;
+        }
+    }
+
     if (size > TAlignedPagePool::POOL_PAGE_SIZE && size <= MaxMidSize) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(TAlignedPagePool::POOL_PAGE_SIZE);
         Y_VERIFY_DEBUG(level >= 1 && level <= MidLevels);
         if (res = TGlobalPools::Instance().Get(level).GetPage()) {
             TotalAllocated += size;
-            if (AllocNotifyCallback) { 
-                AllocNotifyCurrentBytes += size; 
-            } 
+            if (AllocNotifyCallback) {
+                AllocNotifyCurrentBytes += size;
+            }
             if (Counters.TotalBytesAllocatedCntr) {
                 (*Counters.TotalBytesAllocatedCntr) += size;
             }
@@ -298,9 +298,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
         }
         Y_VERIFY((reinterpret_cast<uintptr_t>(res) & PAGE_ADDR_MASK) == reinterpret_cast<uintptr_t>(res), "Got unaligned address");
         TotalAllocated += size;
-        if (AllocNotifyCallback) { 
-            AllocNotifyCurrentBytes += size; 
-        } 
+        if (AllocNotifyCallback) {
+            AllocNotifyCurrentBytes += size;
+        }
         if (Counters.TotalBytesAllocatedCntr) {
             (*Counters.TotalBytesAllocatedCntr) += size;
         }
@@ -319,9 +319,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
                 AllPages.emplace(extraPage);
                 FreePages.emplace(extraPage);
                 TotalAllocated += size + POOL_PAGE_SIZE;
-                if (AllocNotifyCallback) { 
-                    AllocNotifyCurrentBytes += size + POOL_PAGE_SIZE; 
-                } 
+                if (AllocNotifyCallback) {
+                    AllocNotifyCurrentBytes += size + POOL_PAGE_SIZE;
+                }
                 if (Counters.TotalBytesAllocatedCntr) {
                     (*Counters.TotalBytesAllocatedCntr) += size + POOL_PAGE_SIZE;
                 }
@@ -332,9 +332,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
                         << ", " << (0 + POOL_PAGE_SIZE) << ") failed: " << LastSystemErrorText();
                 }
                 TotalAllocated += size;
-                if (AllocNotifyCallback) { 
-                    AllocNotifyCurrentBytes += size; 
-                } 
+                if (AllocNotifyCallback) {
+                    AllocNotifyCurrentBytes += size;
+                }
                 if (Counters.TotalBytesAllocatedCntr) {
                     (*Counters.TotalBytesAllocatedCntr) += size;
                 }
@@ -352,9 +352,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
                     << ", " << (POOL_PAGE_SIZE - off) << ") failed: " << LastSystemErrorText();
             }
             TotalAllocated += size;
-            if (AllocNotifyCallback) { 
-                AllocNotifyCurrentBytes += size; 
-            } 
+            if (AllocNotifyCallback) {
+                AllocNotifyCurrentBytes += size;
+            }
             if (Counters.TotalBytesAllocatedCntr) {
                 (*Counters.TotalBytesAllocatedCntr) += size;
             }
@@ -394,10 +394,10 @@ void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
 }
 
 bool TAlignedPagePool::TryIncreaseLimit(ui64 required) {
-    if (!IncreaseMemoryLimitCallback) { 
+    if (!IncreaseMemoryLimitCallback) {
         return false;
     }
-    IncreaseMemoryLimitCallback(Limit, required); 
+    IncreaseMemoryLimitCallback(Limit, required);
     return Limit >= required;
 }
 

@@ -1,7 +1,7 @@
 #include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
-#include "rpc_scheme_base.h" 
+#include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "table_profiles.h"
 #include "table_settings.h"
@@ -11,28 +11,28 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NSchemeShard;
 using namespace NActors;
 using namespace NConsole;
-using namespace Ydb; 
+using namespace Ydb;
 using namespace Ydb::Table;
 
-class TCreateTableRPC : public TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest> { 
-    using TBase = TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest>; 
- 
+class TCreateTableRPC : public TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest> {
+    using TBase = TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest>;
+
 public:
     TCreateTableRPC(TEvCreateTableRequest* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         SendConfigRequest(ctx);
-        ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig)); 
+        ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig));
         Become(&TCreateTableRPC::StateGetConfig);
     }
 
@@ -41,17 +41,17 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
-            HFunc(TEvents::TEvWakeup, HandleWakeup); 
-            default: TBase::StateFuncBase(ev, ctx); 
+            HFunc(TEvents::TEvWakeup, HandleWakeup);
+            default: TBase::StateFuncBase(ev, ctx);
         }
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            default: TBase::StateWork(ev, ctx); 
-        } 
-    } 
- 
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
         LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
@@ -69,17 +69,17 @@ private:
         Become(&TCreateTableRPC::StateWork);
     }
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) { 
-        switch (ev->Get()->Tag) { 
-            case WakeupTagGetConfig: { 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+        switch (ev->Get()->Tag) {
+            case WakeupTagGetConfig: {
                 LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TCreateTableRPC: cannot get table profiles (timeout)");
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue("Tables profiles config not available.")); 
-                return Reply(StatusIds::UNAVAILABLE, issues, ctx); 
-            } 
-            default: 
-                TBase::HandleWakeup(ev, ctx); 
-        } 
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
+                return Reply(StatusIds::UNAVAILABLE, issues, ctx);
+            }
+            default:
+                TBase::HandleWakeup(ev, ctx);
+        }
     }
 
     void SendConfigRequest(const TActorContext &ctx) {
@@ -136,10 +136,10 @@ private:
         }
 
         tableDesc->SetName(name);
- 
+
         StatusIds::StatusCode code = StatusIds::SUCCESS;
         TString error;
- 
+
         if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));

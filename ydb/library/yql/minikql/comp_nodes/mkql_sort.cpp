@@ -189,7 +189,7 @@ using TComparator = std::function<bool(const TKeyPayloadPairVector::value_type&,
 using TAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator);
 using TAlgorithmInplace = void(*)(TGatherIterator, TGatherIterator, TComparator);
 using TNthAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TKeyPayloadPairVector::iterator, TComparator);
- 
+
 struct TCompareDescr {
     TCompareDescr(TComputationMutables& mutables, std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes)
         : KeySchemeTypes(std::move(keySchemeTypes))
@@ -358,7 +358,7 @@ public:
                 Description.MakeComparator<TKeyPayloadPairVector>(Ascending->GetValue(ctx)));
         }
     }
- 
+
 protected:
     void RegisterDependencies() const override {
         this->DependsOn(List);
@@ -403,13 +403,13 @@ public:
             *inplace++ = std::move(item.second);
         }
         return result;
-    } 
+    }
 
     void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
         AlgorithmInplace(TGatherIterator(keys, items), TGatherIterator(keys, items) + size, comparator);
     }
 
-private: 
+private:
     const TAlgorithm Algorithm;
     const TAlgorithmInplace AlgorithmInplace;
 };
@@ -637,7 +637,7 @@ IComputationNode* WrapAlgo(TAlgorithm algorithm, TAlgorithmInplace algorithmInpl
     const auto key = LocateNode(ctx.NodeLocator, callable, 2);
     const auto ascending = LocateNode(ctx.NodeLocator, callable, 3);
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
- 
+
     return new TAlgoWrapper(algorithm, algorithmInplace, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), list,
         itemArg, key, ascending, stealed);
 }

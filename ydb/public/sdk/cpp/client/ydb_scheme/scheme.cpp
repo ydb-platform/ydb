@@ -1,5 +1,5 @@
 #include "scheme.h"
- 
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
@@ -9,12 +9,12 @@
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYdb { 
-namespace NScheme { 
- 
-using namespace NThreading; 
+namespace NYdb {
+namespace NScheme {
+
+using namespace NThreading;
 using namespace Ydb::Scheme;
- 
+
 static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) {
     switch (entry) {
     case ::Ydb::Scheme::Entry::DIRECTORY:
@@ -41,112 +41,112 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
 }
 
 class TSchemeClient::TImpl : public TClientImplCommon<TSchemeClient::TImpl> {
-public: 
+public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
- 
-    TAsyncStatus MakeDirectory(const TString& path, const TMakeDirectorySettings& settings) { 
-        auto request = MakeOperationRequest<Ydb::Scheme::MakeDirectoryRequest>(settings); 
-        request.set_path(path); 
- 
+
+    TAsyncStatus MakeDirectory(const TString& path, const TMakeDirectorySettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Scheme::MakeDirectoryRequest>(settings);
+        request.set_path(path);
+
         return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
-    } 
- 
-    TAsyncStatus RemoveDirectory(const TString& path, const TRemoveDirectorySettings& settings) { 
-        auto request = MakeOperationRequest<Ydb::Scheme::RemoveDirectoryRequest>(settings); 
-        request.set_path(path); 
- 
+            &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+    }
+
+    TAsyncStatus RemoveDirectory(const TString& path, const TRemoveDirectorySettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Scheme::RemoveDirectoryRequest>(settings);
+        request.set_path(path);
+
         return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
-    } 
- 
-    TAsyncDescribePathResult DescribePath(const TString& path, const TDescribePathSettings& settings) { 
-        auto request = MakeOperationRequest<Ydb::Scheme::DescribePathRequest>(settings); 
-        request.set_path(path); 
- 
-        auto promise = NThreading::NewPromise<TDescribePathResult>(); 
- 
+            &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+    }
+
+    TAsyncDescribePathResult DescribePath(const TString& path, const TDescribePathSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Scheme::DescribePathRequest>(settings);
+        request.set_path(path);
+
+        auto promise = NThreading::NewPromise<TDescribePathResult>();
+
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                TSchemeEntry entry; 
-                if (any) { 
+                TSchemeEntry entry;
+                if (any) {
                     DescribePathResult result;
-                    any->UnpackTo(&result); 
-                    entry.Name = result.self().name(); 
-                    entry.Owner = result.self().owner(); 
+                    any->UnpackTo(&result);
+                    entry.Name = result.self().name();
+                    entry.Owner = result.self().owner();
                     entry.Type = ConvertProtoEntryType(result.self().type());
                     entry.SizeBytes = result.self().size_bytes();
                     PermissionToSchemeEntry(result.self().effective_permissions(), &entry.EffectivePermissions);
                     PermissionToSchemeEntry(result.self().permissions(), &entry.Permissions);
-                } 
- 
-                TDescribePathResult val(std::move(entry), 
+                }
+
+                TDescribePathResult val(std::move(entry),
                     TStatus(std::move(status)));
-                promise.SetValue(std::move(val)); 
-            }; 
- 
+                promise.SetValue(std::move(val));
+            };
+
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
             std::move(request),
-            extractor, 
+            extractor,
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
- 
-        return promise.GetFuture(); 
-    } 
- 
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+
+        return promise.GetFuture();
+    }
+
     TAsyncListDirectoryResult ListDirectory(const TString& path, const TListDirectorySettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Scheme::ListDirectoryRequest>(settings); 
-        request.set_path(path); 
- 
+        auto request = MakeOperationRequest<Ydb::Scheme::ListDirectoryRequest>(settings);
+        request.set_path(path);
+
         auto promise = NThreading::NewPromise<TListDirectoryResult>();
- 
+
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                TSchemeEntry entry; 
-                TVector<TSchemeEntry> children; 
-                if (any) { 
+                TSchemeEntry entry;
+                TVector<TSchemeEntry> children;
+                if (any) {
                     ListDirectoryResult result;
-                    any->UnpackTo(&result); 
-                    entry.Name = result.self().name(); 
-                    entry.Owner = result.self().owner(); 
+                    any->UnpackTo(&result);
+                    entry.Name = result.self().name();
+                    entry.Owner = result.self().owner();
                     entry.Type = ConvertProtoEntryType(result.self().type());
- 
-                    for (const auto& child : result.children()) { 
-                        TSchemeEntry tmp; 
-                        tmp.Name = child.name(); 
-                        tmp.Owner = child.owner(); 
+
+                    for (const auto& child : result.children()) {
+                        TSchemeEntry tmp;
+                        tmp.Name = child.name();
+                        tmp.Owner = child.owner();
                         tmp.Type = ConvertProtoEntryType(child.type());
-                        children.push_back(tmp); 
-                    } 
-                } 
- 
+                        children.push_back(tmp);
+                    }
+                }
+
                 TListDirectoryResult val(std::move(children), std::move(entry),
                     TStatus(std::move(status)));
-                promise.SetValue(std::move(val)); 
-            }; 
- 
+                promise.SetValue(std::move(val));
+            };
+
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, ListDirectoryRequest, ListDirectoryResponse>(
             std::move(request),
-            extractor, 
+            extractor,
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncListDirectory,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
- 
-        return promise.GetFuture(); 
- 
-    } 
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+
+        return promise.GetFuture();
+
+    }
 
     void PermissionsToRequest(const TPermissions& permissions, Permissions* to) {
         to->set_subject(permissions.Subject);
@@ -155,14 +155,14 @@ public:
         }
     }
 
-    TAsyncStatus ModifyPermissions(const TString& path, const TModifyPermissionsSettings& settings) { 
-        auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings); 
+    TAsyncStatus ModifyPermissions(const TString& path, const TModifyPermissionsSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings);
         request.set_path(path);
-        if (settings.ClearAcl_) { 
+        if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
         }
 
-        for (const auto& action : settings.Actions_) { 
+        for (const auto& action : settings.Actions_) {
             auto protoAction = request.add_actions();
             switch (action.first) {
                 case EModifyPermissionsAction::Chown: {
@@ -186,65 +186,65 @@ public:
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, ModifyPermissionsRequest, ModifyPermissionsResponse>(
             std::move(request),
-            &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
+            &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
     }
 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-TDescribePathResult::TDescribePathResult(TSchemeEntry&& entry, TStatus&& status) 
-    : TStatus(std::move(status)) 
-    , Entry_(std::move(entry)) {} 
- 
-TSchemeEntry TDescribePathResult::GetEntry() const { 
-    CheckStatusOk("TDescribePathResult::GetEntry"); 
-    return Entry_; 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDescribePathResult::TDescribePathResult(TSchemeEntry&& entry, TStatus&& status)
+    : TStatus(std::move(status))
+    , Entry_(std::move(entry)) {}
+
+TSchemeEntry TDescribePathResult::GetEntry() const {
+    CheckStatusOk("TDescribePathResult::GetEntry");
+    return Entry_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TListDirectoryResult::TListDirectoryResult(TVector<TSchemeEntry>&& children, TSchemeEntry&& self,
-    TStatus&& status) 
-    : TDescribePathResult(std::move(self), std::move(status)) 
-    , Children_(std::move(children)) {} 
- 
+    TStatus&& status)
+    : TDescribePathResult(std::move(self), std::move(status))
+    , Children_(std::move(children)) {}
+
 TVector<TSchemeEntry> TListDirectoryResult::GetChildren() const {
     CheckStatusOk("TListDirectoryResult::GetChildren");
-    return Children_; 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+    return Children_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSchemeClient::TSchemeClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
-{} 
- 
-TAsyncStatus TSchemeClient::MakeDirectory(const TString& path, const TMakeDirectorySettings& settings) { 
-    return Impl_->MakeDirectory(path, settings); 
-} 
- 
-TAsyncStatus TSchemeClient::RemoveDirectory(const TString &path, const TRemoveDirectorySettings& settings) { 
-    return Impl_->RemoveDirectory(path, settings); 
-} 
- 
-TAsyncDescribePathResult TSchemeClient::DescribePath(const TString& path, const TDescribePathSettings& settings) { 
-    return Impl_->DescribePath(path, settings); 
-} 
- 
-TAsyncListDirectoryResult TSchemeClient::ListDirectory(const TString& path, 
+{}
+
+TAsyncStatus TSchemeClient::MakeDirectory(const TString& path, const TMakeDirectorySettings& settings) {
+    return Impl_->MakeDirectory(path, settings);
+}
+
+TAsyncStatus TSchemeClient::RemoveDirectory(const TString &path, const TRemoveDirectorySettings& settings) {
+    return Impl_->RemoveDirectory(path, settings);
+}
+
+TAsyncDescribePathResult TSchemeClient::DescribePath(const TString& path, const TDescribePathSettings& settings) {
+    return Impl_->DescribePath(path, settings);
+}
+
+TAsyncListDirectoryResult TSchemeClient::ListDirectory(const TString& path,
     const TListDirectorySettings& settings)
-{ 
+{
     return Impl_->ListDirectory(path, settings);
-} 
- 
-TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path, 
+}
+
+TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
     const TModifyPermissionsSettings& data)
 {
     return Impl_->ModifyPermissions(path, data);
 }
 
-} // namespace NScheme 
-} // namespace NYdb 
+} // namespace NScheme
+} // namespace NYdb

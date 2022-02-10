@@ -418,30 +418,30 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
 TExprNode::TPtr FuseCombineByKeyOverFlatmap(TCoCombineByKey combine, TExprContext& ctx) {
     auto flatmap = combine.Input().Cast<TCoFlatMapBase>();
 
-    auto inputType = flatmap.Input().Ref().GetTypeAnn(); 
-    if (inputType->GetKind() == ETypeAnnotationKind::Optional) { 
-        // Optional not supported as CombineByKey input. 
-        return combine.Ptr(); 
-    } 
- 
-    auto flatmapBody = flatmap.Lambda().Body(); 
-    if (!IsJustOrSingleAsList(flatmapBody.Ref())) { 
-        // Only push maps to PreMapLambda. 
-        return combine.Ptr(); 
-    } 
- 
-    auto value = flatmapBody.Maybe<TCoJust>() 
-        ? flatmapBody.Cast<TCoJust>().Input() 
-        : flatmapBody.Cast<TCoAsList>().Arg(0); 
- 
+    auto inputType = flatmap.Input().Ref().GetTypeAnn();
+    if (inputType->GetKind() == ETypeAnnotationKind::Optional) {
+        // Optional not supported as CombineByKey input.
+        return combine.Ptr();
+    }
+
+    auto flatmapBody = flatmap.Lambda().Body();
+    if (!IsJustOrSingleAsList(flatmapBody.Ref())) {
+        // Only push maps to PreMapLambda.
+        return combine.Ptr();
+    }
+
+    auto value = flatmapBody.Maybe<TCoJust>()
+        ? flatmapBody.Cast<TCoJust>().Input()
+        : flatmapBody.Cast<TCoAsList>().Arg(0);
+
     auto ret = Build<TCoCombineByKey>(ctx, combine.Pos())
         .Input(flatmap.Input())
         .PreMapLambda()
             .Args({"item"})
-            .Body<TExprApplier>() 
-                .Apply(combine.PreMapLambda().Body()) 
-                .With(combine.PreMapLambda().Args().Arg(0), value) 
-                .With(flatmap.Lambda().Args().Arg(0), "item") 
+            .Body<TExprApplier>()
+                .Apply(combine.PreMapLambda().Body())
+                .With(combine.PreMapLambda().Args().Arg(0), value)
+                .With(flatmap.Lambda().Args().Arg(0), "item")
                 .Build()
             .Build()
         .KeySelectorLambda(combine.KeySelectorLambda())
@@ -2251,11 +2251,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             auto flatmap = maybeFlatmap.Cast();
 
             TMaybe<THashSet<TStringBuf>> passthroughFields;
-            if (IsPassthroughFlatMap(flatmap, &passthroughFields) 
-                && !IsTablePropsDependent(flatmap.Lambda().Body().Ref()) 
-                // SkipNullMembers doesn't support optional items 
-                && flatmap.Lambda().Args().Arg(0).Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) 
-            { 
+            if (IsPassthroughFlatMap(flatmap, &passthroughFields)
+                && !IsTablePropsDependent(flatmap.Lambda().Body().Ref())
+                // SkipNullMembers doesn't support optional items
+                && flatmap.Lambda().Args().Arg(0).Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional)
+            {
                 bool hasAllMembers = true;
                 if (passthroughFields) {
                     for (const auto& member : skipNullMembers.Members().Cast()) {

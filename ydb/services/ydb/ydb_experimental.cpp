@@ -45,9 +45,9 @@ void TGRpcYdbExperimentalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger
         }, &Ydb::Experimental::V1::ExperimentalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("experimental", #NAME))->Run();
 
-    ADD_REQUEST(ExecuteStreamQuery, ExecuteStreamQueryRequest, ExecuteStreamQueryResponse, { 
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExperimentalStreamQueryRequest(ctx)); 
-    }) 
+    ADD_REQUEST(ExecuteStreamQuery, ExecuteStreamQueryRequest, ExecuteStreamQueryResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExperimentalStreamQueryRequest(ctx));
+    })
 #undef ADD_REQUEST
 }
 

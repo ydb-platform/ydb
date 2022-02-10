@@ -131,8 +131,8 @@ message CreateDatabaseResponse {
 message GetDatabaseStatusRequest {
     // Required. Full path to database's home dir.
     string path = 1;
-    // Operation parameters 
-    Ydb.Operations.OperationParams operation_params = 2; 
+    // Operation parameters
+    Ydb.Operations.OperationParams operation_params = 2;
 }
 
 message GetDatabaseStatusResponse {
@@ -188,7 +188,7 @@ message AlterDatabaseRequest {
     // Externally allocated computational units to deregister.
     repeated AllocatedComputationalUnit computational_units_to_deregister = 6;
     // Operation parameters.
-    Ydb.Operations.OperationParams operation_params = 7; 
+    Ydb.Operations.OperationParams operation_params = 7;
     // Current generation of altered database.
     uint64 generation = 8;
     // Change quotas for schema operations
@@ -207,8 +207,8 @@ message AlterDatabaseResponse {
 
 // List all databases known by CMS.
 message ListDatabasesRequest {
-    // Operation parameters 
-    Ydb.Operations.OperationParams operation_params = 1; 
+    // Operation parameters
+    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 message ListDatabasesResponse {
@@ -249,8 +249,8 @@ message ComputationalUnitDescription {
 }
 
 message DescribeDatabaseOptionsRequest {
-    // Operation parameters 
-    Ydb.Operations.OperationParams operation_params = 1; 
+    // Operation parameters
+    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 message DescribeDatabaseOptionsResponse {

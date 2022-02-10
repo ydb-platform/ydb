@@ -479,7 +479,7 @@ namespace NActors {
         , EventFilterFunc(&TTestActorRuntimeBase::DefaultFilterFunc)
         , ScheduledEventFilterFunc(&TTestActorRuntimeBase::NopFilterFunc)
         , RegistrationObserver(&TTestActorRuntimeBase::DefaultRegistrationObserver)
-        , CurrentDispatchContext(nullptr) 
+        , CurrentDispatchContext(nullptr)
     {
         SetDispatcherRandomSeed(TInstant::Now(), 0);
         EnableActorCallstack();
@@ -775,19 +775,19 @@ namespace NActors {
 
     void TTestActorRuntimeBase::SetLogBackend(const TAutoPtr<TLogBackend> logBackend) {
         Y_VERIFY(!IsInitialized);
-        TGuard<TMutex> guard(Mutex); 
-        LogBackend = logBackend; 
-    } 
- 
+        TGuard<TMutex> guard(Mutex);
+        LogBackend = logBackend;
+    }
+
     void TTestActorRuntimeBase::SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority) {
         TGuard<TMutex> guard(Mutex);
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
             TString explanation;
-            auto status = node->LogSettings->SetLevel(priority, component, explanation); 
-            if (status) { 
-                Y_FAIL("SetLogPriority failed: %s", explanation.c_str()); 
-            } 
+            auto status = node->LogSettings->SetLevel(priority, component, explanation);
+            if (status) {
+                Y_FAIL("SetLogPriority failed: %s", explanation.c_str());
+            }
         }
     }
 
@@ -1050,19 +1050,19 @@ namespace NActors {
 
         struct TDispatchContextSetter {
             TDispatchContextSetter(TTestActorRuntimeBase& runtime, TDispatchContext& lastContext)
-                : Runtime(runtime) 
+                : Runtime(runtime)
             {
-                lastContext.PrevContext = Runtime.CurrentDispatchContext; 
-                Runtime.CurrentDispatchContext = &lastContext; 
+                lastContext.PrevContext = Runtime.CurrentDispatchContext;
+                Runtime.CurrentDispatchContext = &lastContext;
             }
 
             ~TDispatchContextSetter() {
-                Runtime.CurrentDispatchContext = Runtime.CurrentDispatchContext->PrevContext; 
+                Runtime.CurrentDispatchContext = Runtime.CurrentDispatchContext->PrevContext;
             }
 
             TTestActorRuntimeBase& Runtime;
-        } DispatchContextSetter(*this, localContext); 
- 
+        } DispatchContextSetter(*this, localContext);
+
         TInstant dispatchTime = TInstant::MicroSeconds(0);
         TInstant deadline = dispatchTime + DispatchTimeout;
         const TDuration scheduledEventsInspectInterval = TDuration::MilliSeconds(10);
@@ -1781,7 +1781,7 @@ namespace NActors {
             , AdditionalActors(additionalActors)
             , Context(context)
             , HasReply(false)
-            , Runtime(runtime) 
+            , Runtime(runtime)
             , ReplyChecker(createReplyChecker())
         {
             if (IsSync) {
@@ -1835,14 +1835,14 @@ namespace NActors {
                     int count = 100;
                     while (!HasReply && count > 0) {
                         try {
-                            Runtime->DispatchEvents(DelegateeOptions); 
+                            Runtime->DispatchEvents(DelegateeOptions);
                         } catch (TEmptyEventQueueException&) {
                             count--;
                             Cerr << "No reply" << Endl;
                         }
                     }
 
-                    Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::MicroSeconds(1000)); 
+                    Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::MicroSeconds(1000));
                 }
             }
         }
@@ -1877,7 +1877,7 @@ namespace NActors {
         TStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,
             TReplyCheckerCreator createReplyChecker)
             : Context(new TStrandingActorDecoratorContext())
-            , Runtime(runtime) 
+            , Runtime(runtime)
             , CreateReplyChecker(createReplyChecker)
         {
         }

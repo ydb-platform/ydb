@@ -119,7 +119,7 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
 
     using TMod = std::function<void(NKikimrTxDataShard::TEvProposeTransactionResult&)>;
 
-    auto test = [&](auto proposeStatus, auto ydbStatus, auto issue, auto issueMessage, TMod mod = {}) { 
+    auto test = [&](auto proposeStatus, auto ydbStatus, auto issue, auto issueMessage, TMod mod = {}) {
         auto client = Runtime->AllocateEdgeActor();
 
         bool done = false;

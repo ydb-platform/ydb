@@ -7,7 +7,7 @@ namespace NYql {
 
 namespace {
 
-class TCompositeGraphTransformer : public TGraphTransformerBase { 
+class TCompositeGraphTransformer : public TGraphTransformerBase {
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages(stages)
@@ -22,16 +22,16 @@ public:
     }
 
     void Rewind() override {
-        for (auto& stage : Stages) { 
+        for (auto& stage : Stages) {
             stage.GetTransformer().Rewind();
-        } 
- 
+        }
+
         Index = 0;
-        LastIssueScope = Nothing(); 
+        LastIssueScope = Nothing();
         CheckArgumentsCount = 0;
     }
 
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override { 
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
 //#define TRACE_NODES
 #ifdef TRACE_NODES
         static ui64 TransformsCount = 0;
@@ -41,7 +41,7 @@ public:
         }
 #endif
 
-        if (Index >= Stages.size()) { 
+        if (Index >= Stages.size()) {
             if (LastIssueScope) {
                 ctx.IssueManager.LeaveScope();
                 LastIssueScope.Clear();
@@ -72,32 +72,32 @@ public:
         return status;
     }
 
-    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override { 
-        YQL_ENSURE(Index < Stages.size()); 
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
+        YQL_ENSURE(Index < Stages.size());
         return Stages[Index].GetTransformer().GetAsyncFuture(input);
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override { 
-        YQL_ENSURE(Index < Stages.size()); 
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        YQL_ENSURE(Index < Stages.size());
         const auto status = Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx);
         return HandleStatus(status);
     }
 
     TStatistics GetStatistics() const final {
-        if (Statistics.Stages.empty()) { 
-            Statistics.Stages.resize(Stages.size()); 
-        } 
- 
-        YQL_ENSURE(Stages.size() == Statistics.Stages.size()); 
-        for (size_t i = 0; i < Stages.size(); ++i) { 
-            auto& stagePair = Statistics.Stages[i]; 
-            stagePair.first = Stages[i].Name; 
+        if (Statistics.Stages.empty()) {
+            Statistics.Stages.resize(Stages.size());
+        }
+
+        YQL_ENSURE(Stages.size() == Statistics.Stages.size());
+        for (size_t i = 0; i < Stages.size(); ++i) {
+            auto& stagePair = Statistics.Stages[i];
+            stagePair.first = Stages[i].Name;
             stagePair.second =  Stages[i].GetTransformer().GetStatistics();
-        } 
- 
-        return Statistics; 
-    } 
- 
+        }
+
+        return Statistics;
+    }
+
 private:
     virtual TStatus HandleStatus(TStatus status) {
         if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -117,8 +117,8 @@ private:
     }
 
     void UpdateIssueScope(TIssueManager& issueManager) {
-        YQL_ENSURE(Index < Stages.size()); 
-        const auto scopeIssueCode = Stages[Index].IssueCode; 
+        YQL_ENSURE(Index < Stages.size());
+        const auto scopeIssueCode = Stages[Index].IssueCode;
         const auto scopeIssueMessage = Stages[Index].IssueMessage;
         if (LastIssueScope != scopeIssueCode) {
             if (!LastIssueScope.Empty()) {

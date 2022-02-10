@@ -82,7 +82,7 @@ void TTestContext::ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::Stat
 }
 
 void TTestContext::CreateSemaphore(
-    ui64 proxyId, const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status) 
+    ui64 proxyId, const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status)
 {
     ui64 cookie = RandomNumber<ui64>();
     auto edge = Runtime->AllocateEdgeActor(1);
@@ -91,7 +91,7 @@ void TTestContext::CreateSemaphore(
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
 }
 
-void TTestContext::DeleteSemaphore(ui64 proxyId, const TString& name, Ydb::StatusIds::StatusCode status) { 
+void TTestContext::DeleteSemaphore(ui64 proxyId, const TString& name, Ydb::StatusIds::StatusCode status) {
     ui64 cookie = RandomNumber<ui64>();
     auto edge = Runtime->AllocateEdgeActor(1);
     SendFromEdge(proxyId, edge, new TEvKesus::TEvDeleteSemaphore("", name), cookie);
@@ -121,7 +121,7 @@ TTestContext::TSimpleSemaphoreDescription TTestContext::DescribeSemaphore(ui64 p
     request->Record.SetIncludeWaiters(includeWaiters);
     SendFromEdge(proxyId, edge, request, cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS); 
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
     const auto& desc = event->Record.GetSemaphoreDescription();
 
     TSimpleSemaphoreDescription result;
@@ -142,7 +142,7 @@ void TTestContext::VerifySemaphoreNotFound(ui64 proxyId, const TString& name) {
     TActorId edge = Runtime->AllocateEdgeActor(1);
     SendFromEdge(proxyId, edge, new TEvKesus::TEvDescribeSemaphore("", name), cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::NOT_FOUND); 
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::NOT_FOUND);
 }
 
 void TTestContext::VerifySemaphoreParams(ui64 proxyId, const TString& name, ui64 limit, const TString& data, bool ephemeral) {

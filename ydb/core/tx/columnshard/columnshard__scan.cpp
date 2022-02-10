@@ -612,8 +612,8 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     if (!parseResult) {
         return true;
-    } 
- 
+    }
+
     if (!record.RangesSize()) {
         auto range = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit);
         if (range) {

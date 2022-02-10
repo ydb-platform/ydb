@@ -17,7 +17,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code, const TString &error, 
+    bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Cannot set config: " << error);
@@ -48,7 +48,7 @@ public:
                          "Unsupported merge strategy", ctx);
         }
 
-        Ydb::StatusIds::StatusCode code; 
+        Ydb::StatusIds::StatusCode code;
         TString error;
         if (!Self->TenantsManager->CheckTenantsConfig(NewConfig.GetTenantsConfig(), code, error))
             return Error(code, error, ctx);
@@ -64,7 +64,7 @@ public:
         db.Table<Schema::Config>().Key(ConfigKeyConfig)
             .Update(NIceDb::TUpdate<Schema::Config::Value>(config));
 
-        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         return true;
     }

@@ -1,9 +1,9 @@
 #include "kqp_opt_phy_rules.h"
-#include "kqp_opt_phy_impl.h" 
+#include "kqp_opt_phy_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -88,5 +88,5 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt
 

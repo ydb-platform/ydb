@@ -50,7 +50,7 @@ TString TTableRef::ShortName() const {
 }
 
 TString TTableRef::ServiceName(const TContext& ctx) const {
-    auto service = ctx.GetClusterProvider(Cluster); 
+    auto service = ctx.GetClusterProvider(Cluster);
     YQL_ENSURE(service);
     return *service;
 }
@@ -61,7 +61,7 @@ bool TTableRef::Check(TContext& ctx) const {
         return false;
     }
 
-    auto service = ctx.GetClusterProvider(Cluster); 
+    auto service = ctx.GetClusterProvider(Cluster);
     if (!service) {
         ctx.Error() << "Unknown cluster name: " << Cluster;
         return false;
@@ -2122,38 +2122,38 @@ TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs) {
     return new TListOfNamedNodes(pos, std::move(exprs));
 }
 
-const char* const TArgPlaceholderNode::ProcessRows = "$ROWS"; 
-const char* const TArgPlaceholderNode::ProcessRow = "$ROW"; 
- 
+const char* const TArgPlaceholderNode::ProcessRows = "$ROWS";
+const char* const TArgPlaceholderNode::ProcessRow = "$ROW";
+
 TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString &name) :
-    INode(pos), 
-    Name(name) 
-{ 
-} 
- 
-bool TArgPlaceholderNode::DoInit(TContext& ctx, ISource* src) { 
+    INode(pos),
+    Name(name)
+{
+}
+
+bool TArgPlaceholderNode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
-    ctx.Error(Pos) << Name << " can't be used as a part of expression."; 
-    return false; 
-} 
- 
-TAstNode* TArgPlaceholderNode::Translate(TContext& ctx) const { 
+    ctx.Error(Pos) << Name << " can't be used as a part of expression.";
+    return false;
+}
+
+TAstNode* TArgPlaceholderNode::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
-    return nullptr; 
-} 
- 
+    return nullptr;
+}
+
 TString TArgPlaceholderNode::GetName() const {
-    return Name; 
-} 
- 
+    return Name;
+}
+
 TNodePtr TArgPlaceholderNode::DoClone() const {
     return {};
 }
 
 TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name) {
-    return new TArgPlaceholderNode(pos, name); 
-} 
- 
+    return new TArgPlaceholderNode(pos, name);
+}
+
 class TAccessNode: public INode {
 public:
     TAccessNode(TPosition pos, const TVector<TIdPart>& ids, bool isLookup)

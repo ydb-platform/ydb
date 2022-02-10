@@ -28,7 +28,7 @@ sql_stmt_core:
   | commit_stmt
   | update_stmt
   | delete_stmt
-  | rollback_stmt 
+  | rollback_stmt
   | declare_stmt
   | import_stmt
   | export_stmt
@@ -329,8 +329,8 @@ table_hints: WITH (id_or_string | pure_column_list);
 simple_table_ref: ((opt_id_prefix id_or_at) | AT? bind_parameter) table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?; 
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source); 
+delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
+update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -405,8 +405,8 @@ named_nodes_stmt: bind_parameter_list EQUALS (expr | LPAREN select_stmt RPAREN);
 
 commit_stmt: COMMIT;
 
-rollback_stmt: ROLLBACK; 
- 
+rollback_stmt: ROLLBACK;
+
 // Special rules that allow to use certain keywords as identifiers.
 
 id_or_string: IDENTIFIER | STRING | keyword;
@@ -580,7 +580,7 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-  | REVERT 
+  | REVERT
   | RIGHT
   | RLIKE
   | ROLLBACK
@@ -834,7 +834,7 @@ RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
 RETURN: R E T U R N;
-REVERT: R E V E R T; 
+REVERT: R E V E R T;
 RIGHT: R I G H T;
 RLIKE: R L I K E;
 ROLLBACK: R O L L B A C K;

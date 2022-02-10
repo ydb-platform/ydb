@@ -7,7 +7,7 @@
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -281,10 +281,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 }
                 if (canCast) {
                     DBG("------ cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
-                    member = Build<TCoConvert>(ctx, join.Pos()) 
-                        .Input(member) 
-                        .Type().Build(rightDataType->GetName()) 
-                        .Done().Ptr(); 
+                    member = Build<TCoConvert>(ctx, join.Pos())
+                        .Input(member)
+                        .Type().Build(rightDataType->GetName())
+                        .Done().Ptr();
                 } else {
                     DBG("------ can not cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
                     return {};
@@ -435,23 +435,23 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
 
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));
 
-    // SqlIn support (preferred lookup direction) 
+    // SqlIn support (preferred lookup direction)
     if (join.JoinType().Value() == "LeftSemi" && !config->HasOptDisableJoinReverseTableLookupLeftSemi()) {
-        auto flipJoin = FlipLeftSemiJoin(join, ctx); 
+        auto flipJoin = FlipLeftSemiJoin(join, ctx);
         DBG("-- Flip join");
 
-        if (auto indexLookupJoin = KqpJoinToIndexLookupImpl(flipJoin, ctx, kqpCtx)) { 
+        if (auto indexLookupJoin = KqpJoinToIndexLookupImpl(flipJoin, ctx, kqpCtx)) {
             return indexLookupJoin.Cast();
         }
     }
 
-    if (auto indexLookupJoin = KqpJoinToIndexLookupImpl(join, ctx, kqpCtx)) { 
-        return indexLookupJoin.Cast(); 
-    } 
- 
+    if (auto indexLookupJoin = KqpJoinToIndexLookupImpl(join, ctx, kqpCtx)) {
+        return indexLookupJoin.Cast();
+    }
+
     return node;
 }
 
 #undef DBG
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

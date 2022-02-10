@@ -426,8 +426,8 @@ namespace NTypeAnnImpl {
 
     TExtContext::TExtContext(TExprContext& expr, TTypeAnnotationContext& types)
         : TContext(expr)
-        , Types(types) {} 
- 
+        , Types(types) {}
+
     bool TExtContext::LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions) {
         TVector<IUdfResolver::TImport*> imports;
         imports.reserve(Types.UdfImports.size());
@@ -512,8 +512,8 @@ namespace NTypeAnnImpl {
     }
 
     typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TContext& ctx)>
-        TAnnotationFunc; 
- 
+        TAnnotationFunc;
+
     typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExtContext& ctx)>
         TExtendedAnnotationFunc;
 
@@ -5414,16 +5414,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus DictFromKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output); 
+        Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
+            return IGraphTransformer::TStatus::Error;
+        }
         auto typeNode = input->Child(0);
         auto keysListNode = input->Child(1);
 
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
-        } 
+        }
         const auto keyType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         if (!EnsureComputableType(typeNode->Pos(), *keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -5443,22 +5443,22 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
             }
-        } 
+        }
 
         if (totalStatus.Level != IGraphTransformer::TStatus::Ok) {
             input->ChildRef(1) = ctx.Expr.ChangeChildren(*keysListNode, std::move(newChildren));
             return totalStatus;
         }
- 
-        const TDictExprType* dictType = ctx.Expr.MakeType<TDictExprType>(keyType, ctx.Expr.MakeType<TVoidExprType>()); 
-        if (!dictType->Validate(input->Pos(), ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+
+        const TDictExprType* dictType = ctx.Expr.MakeType<TDictExprType>(keyType, ctx.Expr.MakeType<TVoidExprType>());
+        if (!dictType->Validate(input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         input->SetTypeAnn(dictType);
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     template <bool IsStrict>
     IGraphTransformer::TStatus IfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
@@ -6687,7 +6687,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!EnsureMaxArgsCount(*input, 7, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
- 
+
         // (0) function name
         if (!EnsureAtom(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6703,10 +6703,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         // (1) run config value
         if (input->ChildrenSize() > 1) {
             if (!EnsureComputable(*input->Child(1), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error; 
-            } 
-        } 
- 
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         // (2) user type
         const TTypeAnnotationNode* userType = nullptr;
         if (input->ChildrenSize() > 2) {
@@ -11099,24 +11099,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus ParameterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+    IGraphTransformer::TStatus ParameterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!EnsureAtom(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
-        } 
- 
+        }
+
         input->SetTypeAnn(input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -12926,7 +12926,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
         Functions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
         Functions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
-        Functions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>; 
+        Functions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
         Functions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
         Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
         Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
@@ -13083,7 +13083,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["QueuePop"] = &QueuePopWrapper;
         Functions["DependsOn"] = &DependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
-        Functions["Parameter"] = &ParameterWrapper; 
+        Functions["Parameter"] = &ParameterWrapper;
         Functions["WeakField"] = &WeakFieldWrapper;
         Functions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;
@@ -13221,12 +13221,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["QueuePeek"] = &QueuePeekWrapper; ///< Ext for ParseTypeWrapper compatibility
         ExtFunctions["QueueRange"] = &QueueRangeWrapper; ///< Ext for ParseTypeWrapper compatibility
         ExtFunctions["PreserveStream"] = &PreserveStreamWrapper;
-        ExtFunctions["FilePath"] = &FilePathWrapper; 
-        ExtFunctions["FileContent"] = &FileContentWrapper; 
+        ExtFunctions["FilePath"] = &FilePathWrapper;
+        ExtFunctions["FileContent"] = &FileContentWrapper;
         ExtFunctions["FolderPath"] = &FolderPathWrapper;
         ExtFunctions["Files"] = &FilesWrapper;
         ExtFunctions["AuthTokens"] = &AuthTokensWrapper;
-        ExtFunctions["Udf"] = &UdfWrapper; 
+        ExtFunctions["Udf"] = &UdfWrapper;
         ExtFunctions["ScriptUdf"] = &ScriptUdfWrapper;
         ExtFunctions["ParseType"] = &ParseTypeWrapper;
         ExtFunctions["CurrentOperationId"] = &CurrentOperationIdWrapper;
@@ -13241,7 +13241,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
- 
+
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
@@ -13284,13 +13284,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         AllNames.insert("Apply");
     }
 
-    class TIntentDeterminationTransformer : public TSyncTransformerBase { 
+    class TIntentDeterminationTransformer : public TSyncTransformerBase {
     public:
         TIntentDeterminationTransformer(const TTypeAnnotationContext& types)
             : Types(types)
         {}
 
-        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
+        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
             if (ctx.Step.IsDone(TExprStep::Intents)) {
                 return TStatus::Ok;
@@ -13353,7 +13353,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         TMaybe<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             auto& functions = TSyncFunctionsMap::Instance().Functions;
-            auto& extFunctions = TSyncFunctionsMap::Instance().ExtFunctions; 
+            auto& extFunctions = TSyncFunctionsMap::Instance().ExtFunctions;
             auto& columnOrderFunctions = TSyncFunctionsMap::Instance().ColumnOrderFunctions;
             auto name = input->Content();
             IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
@@ -13391,10 +13391,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink commit result"));
                 return TStatus::Error;
-            } 
+            }
             return TStatus::Ok;
-        } 
- 
+        }
+
         IGraphTransformer::TStatus ValidateProviderReadResult(const TExprNode::TPtr& input, TExprContext& ctx) {
             if (!input->GetTypeAnn() ||
                 input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
@@ -13456,8 +13456,8 @@ IGraphTransformer::TStatus ValidateDataSource(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
-    TMaybe<TString> cluster; 
-    if (!(*datasource)->ValidateParameters(*input, ctx, cluster)) { 
+    TMaybe<TString> cluster;
+    if (!(*datasource)->ValidateParameters(*input, ctx, cluster)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -13484,8 +13484,8 @@ IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& input, TExprC
         return IGraphTransformer::TStatus::Error;
     }
 
-    TMaybe<TString> cluster; 
-    if (!(*datasink)->ValidateParameters(*input, ctx, cluster)) { 
+    TMaybe<TString> cluster;
+    if (!(*datasink)->ValidateParameters(*input, ctx, cluster)) {
         return IGraphTransformer::TStatus::Error;
     }
 

@@ -45,7 +45,7 @@ void PrepareKqpTaskParameters(const NKqpProto::TKqpPhyStage& stage, const TStage
         if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {
             dqParams[paramName] = *taskParam;
         } else {
-            auto* paramValue = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName); 
+            auto* paramValue = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
             YQL_ENSURE(paramValue);
             dqParams[paramName] = NDq::TDqDataSerializer::SerializeParam(*paramValue, typeEnv, holderFactory);
         }

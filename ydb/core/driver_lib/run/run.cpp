@@ -118,7 +118,7 @@
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <util/folder/dirut.h> 
+#include <util/folder/dirut.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
@@ -626,7 +626,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
         if (hasExperimental) {
@@ -654,7 +654,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasSchemeService) {
-            server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+            server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
         if (hasOperationService) {
@@ -1268,10 +1268,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
 #endif
 
-    if (serviceMask.EnableKqp) { 
+    if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
-    } 
- 
+    }
+
     if (serviceMask.EnableCms) {
         sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
     }
@@ -1526,30 +1526,30 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry());
     TypeRegistry->CalculateMetadataEtag();
 
-    FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone()); 
-    FormatFactory.Reset(new TFormatFactory); 
- 
-#ifdef KIKIMR_UDF_DYNAMIC_LINK 
+    FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
+    FormatFactory.Reset(new TFormatFactory);
+
+#ifdef KIKIMR_UDF_DYNAMIC_LINK
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();
 
     TVector<TString> udfsPaths;
     if (!udfsDir.empty()) {
-        if (NFs::Exists(udfsDir) && IsDir(udfsDir)) { 
-            NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths); 
-        } else { 
-            Cout << "UDF directory doesn't exist, no UDFs will be loaded. " << Endl; 
-        } 
-    } 
- 
-    NMiniKQL::TUdfModuleRemappings remappings; 
-    for (const auto& udfPath : udfsPaths) { 
-        FunctionRegistry->LoadUdfs(udfPath, remappings, 0); 
-    } 
-#else 
-    Y_UNUSED(runConfig); 
- 
-    NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry); 
-#endif 
+        if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
+            NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
+        } else {
+            Cout << "UDF directory doesn't exist, no UDFs will be loaded. " << Endl;
+        }
+    }
+
+    NMiniKQL::TUdfModuleRemappings remappings;
+    for (const auto& udfPath : udfsPaths) {
+        FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+    }
+#else
+    Y_UNUSED(runConfig);
+
+    NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
+#endif
 
     NKikHouse::RegisterFormat(*FormatFactory);
 }

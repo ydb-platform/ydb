@@ -33,7 +33,7 @@ NKikimrConfig::TAppConfig AppCfg() {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(KqpScanSpilling) { 
+Y_UNIT_TEST_SUITE(KqpScanSpilling) {
 
 Y_UNIT_TEST(SelfJoin) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
@@ -68,7 +68,7 @@ Y_UNIT_TEST(SelfJoin) {
         order by t1.Key
     )";
 
-    auto it = db.StreamExecuteScanQuery(query).GetValueSync(); 
+    auto it = db.StreamExecuteScanQuery(query).GetValueSync();
 
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     CompareYson(R"([

@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             auto query = TStringBuilder()
                 << Q1_(Sprintf(R"(
                     PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
-                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s"; -- not depends on `Kikimr.OptDisableSqlInToJoin` pragma 
+                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s"; -- not depends on `Kikimr.OptDisableSqlInToJoin` pragma
                     DECLARE $in AS List<Struct<k: Uint32, v: String>>;
                     SELECT Group AS g, Amount AS a, Comment
                     FROM `/Root/Test`
@@ -867,7 +867,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Q1_(Sprintf(R"(
                     PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
-                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s"; 
+                    PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s";
                     DECLARE $in AS List<Struct<k: Int32?, v: String>>;
                     SELECT Value
                     FROM `/Root/SecondaryComplexKeys` VIEW Index
@@ -973,42 +973,42 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        AssertTableStats(result, "/Root/KeyValue", { 
-            .ExpectedReads = UseNewEngine ? 0 : 2, 
-            .ExpectedDeletes = UseNewEngine ? 3 : 2, 
-        }); 
+        AssertTableStats(result, "/Root/KeyValue", {
+            .ExpectedReads = UseNewEngine ? 0 : 2,
+            .ExpectedDeletes = UseNewEngine ? 3 : 2,
+        });
     }
- 
-    Y_UNIT_TEST_NEW_ENGINE(InWithCast) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$keys") 
-                .BeginList() 
-                .AddListItem().Uint64(1) 
-                .EndList() 
-                .Build() 
-            .Build(); 
- 
-        NYdb::NTable::TExecDataQuerySettings settings; 
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
- 
-        auto result = session.ExecuteDataQuery(Q1_(R"( 
-            DECLARE $keys AS List<Uint64>; 
-            SELECT * FROM `/Root/TwoShard` WHERE Key IN $keys 
-        )"), TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [[1u];["One"];[-1]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        AssertTableStats(result, "/Root/TwoShard", { 
-            .ExpectedReads = UseNewEngine ? 1 : 6, 
-        }); 
-    } 
+
+    Y_UNIT_TEST_NEW_ENGINE(InWithCast) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$keys")
+                .BeginList()
+                .AddListItem().Uint64(1)
+                .EndList()
+                .Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $keys AS List<Uint64>;
+            SELECT * FROM `/Root/TwoShard` WHERE Key IN $keys
+        )"), TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["One"];[-1]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        AssertTableStats(result, "/Root/TwoShard", {
+            .ExpectedReads = UseNewEngine ? 1 : 6,
+        });
+    }
 }
 
 } // namespace NKqp

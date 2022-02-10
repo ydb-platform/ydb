@@ -1,5 +1,5 @@
-#include "kqp_counters.h" 
- 
+#include "kqp_counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/issue_id.pb.h>
@@ -9,22 +9,22 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/generic/size_literals.h>
- 
+
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYql; 
- 
- 
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYql;
+
+
 NMonitoring::TDynamicCounterPtr TKqpCountersBase::GetQueryReplayCounters() const {
     return QueryReplayGroup;
 }
 
 void TKqpCountersBase::CreateYdbTxKindCounters(TKqpTransactionInfo::EKind kind, const TString& name) {
     auto txKindGroup = YdbGroup->GetSubgroup("tx_kind", name);
- 
+
     auto& ydbTxCounters = YdbTxByKind[kind];
     ydbTxCounters.TotalDuration = txKindGroup->GetNamedHistogram("name",
         "table.transaction.total_duration_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -32,8 +32,8 @@ void TKqpCountersBase::CreateYdbTxKindCounters(TKqpTransactionInfo::EKind kind, 
         "table.transaction.server_duration_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
     ydbTxCounters.ClientDuration = txKindGroup->GetNamedHistogram("name",
         "table.transaction.client_duration_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
-} 
- 
+}
+
 void TKqpCountersBase::UpdateYdbTxCounters(const TKqpTransactionInfo& txInfo,
     THashMap<TKqpTransactionInfo::EKind, TYdbTxByKindCounters>& txCounters)
 {
@@ -49,41 +49,41 @@ void TKqpCountersBase::UpdateYdbTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 void TKqpCountersBase::Init() {
-    /* Requests */ 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXECUTE] = 
-        KqpGroup->GetCounter("Requests/QueryExecute", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXPLAIN] = 
-        KqpGroup->GetCounter("Requests/QueryExplain", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_VALIDATE] = 
-        KqpGroup->GetCounter("Requests/QueryValidate", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_PREPARE] = 
-        KqpGroup->GetCounter("Requests/QueryPrepare", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED] = 
-        KqpGroup->GetCounter("Requests/QueryExecPrepared", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_BEGIN_TX] = 
-        KqpGroup->GetCounter("Requests/QueryBeginTx", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_COMMIT_TX] = 
-        KqpGroup->GetCounter("Requests/QueryCommitTx", true); 
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_ROLLBACK_TX] = 
-        KqpGroup->GetCounter("Requests/QueryRollbackTx", true); 
+    /* Requests */
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXECUTE] =
+        KqpGroup->GetCounter("Requests/QueryExecute", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXPLAIN] =
+        KqpGroup->GetCounter("Requests/QueryExplain", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_VALIDATE] =
+        KqpGroup->GetCounter("Requests/QueryValidate", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_PREPARE] =
+        KqpGroup->GetCounter("Requests/QueryPrepare", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED] =
+        KqpGroup->GetCounter("Requests/QueryExecPrepared", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_BEGIN_TX] =
+        KqpGroup->GetCounter("Requests/QueryBeginTx", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_COMMIT_TX] =
+        KqpGroup->GetCounter("Requests/QueryCommitTx", true);
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_ROLLBACK_TX] =
+        KqpGroup->GetCounter("Requests/QueryRollbackTx", true);
     QueryActionRequests[NKikimrKqp::QUERY_ACTION_PARSE] =
         KqpGroup->GetCounter("Requests/QueryParse", true);
-    OtherQueryRequests = KqpGroup->GetCounter("Requests/QueryOther", true); 
- 
-    CloseSessionRequests = KqpGroup->GetCounter("Requests/CloseSession", true); 
-    CreateSessionRequests = KqpGroup->GetCounter("Requests/CreateSession", true); 
-    PingSessionRequests = KqpGroup->GetCounter("Requests/PingSession", true); 
- 
-    RequestBytes = KqpGroup->GetCounter("Requests/Bytes", true); 
+    OtherQueryRequests = KqpGroup->GetCounter("Requests/QueryOther", true);
+
+    CloseSessionRequests = KqpGroup->GetCounter("Requests/CloseSession", true);
+    CreateSessionRequests = KqpGroup->GetCounter("Requests/CreateSession", true);
+    PingSessionRequests = KqpGroup->GetCounter("Requests/PingSession", true);
+
+    RequestBytes = KqpGroup->GetCounter("Requests/Bytes", true);
     YdbRequestBytes = YdbGroup->GetNamedCounter("name", "table.query.request.bytes", true);
-    QueryBytes = KqpGroup->GetCounter("Requests/QueryBytes", true); 
-    ParametersBytes = KqpGroup->GetCounter("Requests/ParametersBytes", true); 
+    QueryBytes = KqpGroup->GetCounter("Requests/QueryBytes", true);
+    ParametersBytes = KqpGroup->GetCounter("Requests/ParametersBytes", true);
     YdbParametersBytes = YdbGroup->GetNamedCounter("name", "table.query.request.parameters_bytes", true);
- 
-    SqlV0Translations = KqpGroup->GetCounter("Requests/Sql/V0", true); 
-    SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true); 
-    SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true); 
- 
+
+    SqlV0Translations = KqpGroup->GetCounter("Requests/Sql/V0", true);
+    SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true);
+    SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true);
+
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED] =
         KqpGroup->GetCounter("Request/QueryTypeUndefined", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML] =
@@ -120,7 +120,7 @@ void TKqpCountersBase::Init() {
     QueryMaxShardProgramSize = KqpGroup->GetHistogram("Query/MaxShardProgramSize",
         NMonitoring::ExplicitHistogram({1_MB, 9_MB, 29_MB}));
 
-    /* Request latency */ 
+    /* Request latency */
     QueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE] = KqpGroup->GetHistogram(
         "Query/ExecuteLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     QueryLatencies[NKikimrKqp::QUERY_ACTION_EXPLAIN] = KqpGroup->GetHistogram(
@@ -145,61 +145,61 @@ void TKqpCountersBase::Init() {
     YdbResponsesLocksInvalidated = YdbGroup->GetSubgroup("issue_type", "optimistic_locks_invalidation")
         ->GetNamedCounter("name", "api.grpc.response.issues", true);
 
-    /* Response statuses */ 
-    YdbResponses[Ydb::StatusIds::STATUS_CODE_UNSPECIFIED] = KqpGroup->GetCounter("YdbResponses/Unspecified", true); 
-    YdbResponses[Ydb::StatusIds::SUCCESS] = KqpGroup->GetCounter("YdbResponses/Success", true); 
-    YdbResponses[Ydb::StatusIds::BAD_REQUEST] = KqpGroup->GetCounter("YdbResponses/BadRequest", true); 
-    YdbResponses[Ydb::StatusIds::UNAUTHORIZED] = KqpGroup->GetCounter("YdbResponses/Unauthorized", true); 
-    YdbResponses[Ydb::StatusIds::INTERNAL_ERROR] = KqpGroup->GetCounter("YdbResponses/InternalError", true); 
-    YdbResponses[Ydb::StatusIds::ABORTED] = KqpGroup->GetCounter("YdbResponses/Aborted", true); 
-    YdbResponses[Ydb::StatusIds::UNAVAILABLE] = KqpGroup->GetCounter("YdbResponses/Unavailable", true); 
-    YdbResponses[Ydb::StatusIds::OVERLOADED] = KqpGroup->GetCounter("YdbResponses/Overloaded", true); 
-    YdbResponses[Ydb::StatusIds::SCHEME_ERROR] = KqpGroup->GetCounter("YdbResponses/SchemeError", true); 
-    YdbResponses[Ydb::StatusIds::GENERIC_ERROR] = KqpGroup->GetCounter("YdbResponses/GenericError", true); 
-    YdbResponses[Ydb::StatusIds::TIMEOUT] = KqpGroup->GetCounter("YdbResponses/Timeout", true); 
-    YdbResponses[Ydb::StatusIds::BAD_SESSION] = KqpGroup->GetCounter("YdbResponses/BadSession", true); 
-    YdbResponses[Ydb::StatusIds::PRECONDITION_FAILED] = KqpGroup->GetCounter("YdbResponses/PreconditionFailed", true); 
-    YdbResponses[Ydb::StatusIds::ALREADY_EXISTS] = KqpGroup->GetCounter("YdbResponses/AlreadyExists", true); 
-    YdbResponses[Ydb::StatusIds::NOT_FOUND] = KqpGroup->GetCounter("YdbResponses/NotFound", true); 
-    YdbResponses[Ydb::StatusIds::SESSION_EXPIRED] = KqpGroup->GetCounter("YdbResponses/SessionExpired", true); 
-    YdbResponses[Ydb::StatusIds::CANCELLED] = KqpGroup->GetCounter("YdbResponses/Cancelled", true); 
-    YdbResponses[Ydb::StatusIds::UNDETERMINED] = KqpGroup->GetCounter("YdbResponses/Undetermined", true); 
-    YdbResponses[Ydb::StatusIds::UNSUPPORTED] = KqpGroup->GetCounter("YdbResponses/Unsupported", true); 
-    YdbResponses[Ydb::StatusIds::SESSION_BUSY] = KqpGroup->GetCounter("YdbResponses/SessionBusy", true); 
-    OtherYdbResponses = KqpGroup->GetCounter("YdbResponses/Other", true); 
- 
-    ResponseBytes = KqpGroup->GetCounter("Responses/Bytes", true); 
+    /* Response statuses */
+    YdbResponses[Ydb::StatusIds::STATUS_CODE_UNSPECIFIED] = KqpGroup->GetCounter("YdbResponses/Unspecified", true);
+    YdbResponses[Ydb::StatusIds::SUCCESS] = KqpGroup->GetCounter("YdbResponses/Success", true);
+    YdbResponses[Ydb::StatusIds::BAD_REQUEST] = KqpGroup->GetCounter("YdbResponses/BadRequest", true);
+    YdbResponses[Ydb::StatusIds::UNAUTHORIZED] = KqpGroup->GetCounter("YdbResponses/Unauthorized", true);
+    YdbResponses[Ydb::StatusIds::INTERNAL_ERROR] = KqpGroup->GetCounter("YdbResponses/InternalError", true);
+    YdbResponses[Ydb::StatusIds::ABORTED] = KqpGroup->GetCounter("YdbResponses/Aborted", true);
+    YdbResponses[Ydb::StatusIds::UNAVAILABLE] = KqpGroup->GetCounter("YdbResponses/Unavailable", true);
+    YdbResponses[Ydb::StatusIds::OVERLOADED] = KqpGroup->GetCounter("YdbResponses/Overloaded", true);
+    YdbResponses[Ydb::StatusIds::SCHEME_ERROR] = KqpGroup->GetCounter("YdbResponses/SchemeError", true);
+    YdbResponses[Ydb::StatusIds::GENERIC_ERROR] = KqpGroup->GetCounter("YdbResponses/GenericError", true);
+    YdbResponses[Ydb::StatusIds::TIMEOUT] = KqpGroup->GetCounter("YdbResponses/Timeout", true);
+    YdbResponses[Ydb::StatusIds::BAD_SESSION] = KqpGroup->GetCounter("YdbResponses/BadSession", true);
+    YdbResponses[Ydb::StatusIds::PRECONDITION_FAILED] = KqpGroup->GetCounter("YdbResponses/PreconditionFailed", true);
+    YdbResponses[Ydb::StatusIds::ALREADY_EXISTS] = KqpGroup->GetCounter("YdbResponses/AlreadyExists", true);
+    YdbResponses[Ydb::StatusIds::NOT_FOUND] = KqpGroup->GetCounter("YdbResponses/NotFound", true);
+    YdbResponses[Ydb::StatusIds::SESSION_EXPIRED] = KqpGroup->GetCounter("YdbResponses/SessionExpired", true);
+    YdbResponses[Ydb::StatusIds::CANCELLED] = KqpGroup->GetCounter("YdbResponses/Cancelled", true);
+    YdbResponses[Ydb::StatusIds::UNDETERMINED] = KqpGroup->GetCounter("YdbResponses/Undetermined", true);
+    YdbResponses[Ydb::StatusIds::UNSUPPORTED] = KqpGroup->GetCounter("YdbResponses/Unsupported", true);
+    YdbResponses[Ydb::StatusIds::SESSION_BUSY] = KqpGroup->GetCounter("YdbResponses/SessionBusy", true);
+    OtherYdbResponses = KqpGroup->GetCounter("YdbResponses/Other", true);
+
+    ResponseBytes = KqpGroup->GetCounter("Responses/Bytes", true);
     YdbResponseBytes = YdbGroup->GetNamedCounter("name", "table.query.response.bytes", true);
-    QueryResultsBytes = KqpGroup->GetCounter("Responses/QueryResultBytes", true); 
- 
-    /* Workers */ 
+    QueryResultsBytes = KqpGroup->GetCounter("Responses/QueryResultBytes", true);
+
+    /* Workers */
     WorkerLifeSpan = KqpGroup->GetHistogram(
         "Workers/LifeSpanMs", NMonitoring::ExponentialHistogram(20, 2, 1));
     QueriesPerWorker = KqpGroup->GetHistogram(
         "Workers/QueriesPerWorkerQ", NMonitoring::ExponentialHistogram(16, 2, 1));
 
-    WorkersCreated = KqpGroup->GetCounter("Workers/Created", true); 
-    WorkersClosedIdle = KqpGroup->GetCounter("Workers/ClosedIdle", true); 
+    WorkersCreated = KqpGroup->GetCounter("Workers/Created", true);
+    WorkersClosedIdle = KqpGroup->GetCounter("Workers/ClosedIdle", true);
     YdbWorkersClosedIdle = YdbGroup->GetNamedCounter("name", "table.session.closed_by_idle_count", true);
-    WorkersClosedError = KqpGroup->GetCounter("Workers/ClosedError", true); 
-    WorkersClosedRequest = KqpGroup->GetCounter("Workers/ClosedRequest", true); 
-    ActiveWorkers = KqpGroup->GetCounter("Workers/Active", false); 
+    WorkersClosedError = KqpGroup->GetCounter("Workers/ClosedError", true);
+    WorkersClosedRequest = KqpGroup->GetCounter("Workers/ClosedRequest", true);
+    ActiveWorkers = KqpGroup->GetCounter("Workers/Active", false);
     ProxyForwardedRequests = KqpGroup->GetCounter("Proxy/Forwarded", true);
 
     SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
     SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
 
     YdbActiveWorkers = YdbGroup->GetNamedCounter("name", "table.session.active_count", false);
- 
+
     WorkerCleanupLatency = KqpGroup->GetHistogram(
         "Workers/CleanupLatencyMs", NMonitoring::ExponentialHistogram(10, 2, 1));
 
-    /* Transactions */ 
-    TxCreated = KqpGroup->GetCounter("Transactions/Created", true); 
-    TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true); 
-    TxCommited = KqpGroup->GetCounter("Transactions/Commited", true); 
-    TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true); 
- 
+    /* Transactions */
+    TxCreated = KqpGroup->GetCounter("Transactions/Created", true);
+    TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true);
+    TxCommited = KqpGroup->GetCounter("Transactions/Commited", true);
+    TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true);
+
     TxActivePerSession = KqpGroup->GetHistogram(
         "Transactions/TxActivePerSession", NMonitoring::ExponentialHistogram(16, 2, 1));
     TxAbortedPerSession = KqpGroup->GetHistogram(
@@ -214,7 +214,7 @@ void TKqpCountersBase::Init() {
 
     CompileCpuTime = KqpGroup->GetHistogram(
         "Compilation/CPUTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
- 
+
     CreateYdbTxKindCounters(TKqpTransactionInfo::EKind::Pure, "pure");
     CreateYdbTxKindCounters(TKqpTransactionInfo::EKind::ReadOnly, "read_only");
     CreateYdbTxKindCounters(TKqpTransactionInfo::EKind::WriteOnly, "write_only");
@@ -229,18 +229,18 @@ void TKqpCountersBase::Init() {
 
     YdbCompileDuration = YdbGroup->GetNamedHistogram("name",
         "table.query.compilation.latency_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
-} 
- 
+}
+
 void TKqpCountersBase::ReportQueryAction(NKikimrKqp::EQueryAction action) {
-    auto counter = QueryActionRequests.FindPtr(action); 
-    if (counter) { 
-        (*counter)->Inc(); 
-        return; 
-    } 
- 
-    OtherQueryRequests->Inc(); 
-} 
- 
+    auto counter = QueryActionRequests.FindPtr(action);
+    if (counter) {
+        (*counter)->Inc();
+        return;
+    }
+
+    OtherQueryRequests->Inc();
+}
+
 void TKqpCountersBase::ReportQueryType(NKikimrKqp::EQueryType type) {
     auto counter = QueryTypes.FindPtr(type);
     if (counter) {
@@ -321,63 +321,63 @@ void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) {
     QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize));
 }
 
-void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) { 
+void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) {
     *ResponseBytes += responseSize;
     *YdbResponseBytes += responseSize;
 
-    auto ydbCounter = YdbResponses.FindPtr(ydbStatus); 
-    if (ydbCounter) { 
-        (*ydbCounter)->Inc(); 
-    } else { 
-        OtherYdbResponses->Inc(); 
-    } 
-} 
- 
+    auto ydbCounter = YdbResponses.FindPtr(ydbStatus);
+    if (ydbCounter) {
+        (*ydbCounter)->Inc();
+    } else {
+        OtherYdbResponses->Inc();
+    }
+}
+
 void TKqpCountersBase::ReportResultsBytes(ui64 resultsBytes) {
     *QueryResultsBytes += resultsBytes;
 }
 
 TString TKqpCountersBase::GetIssueName(ui32 issueCode) {
-    auto kikimrIssueDescriptor = NKikimrIssues::TIssuesIds::EIssueCode_descriptor(); 
-    if (kikimrIssueDescriptor) { 
-        auto valueDescriptor = kikimrIssueDescriptor->FindValueByNumber(issueCode); 
-        if (valueDescriptor) { 
-            return TStringBuilder() << "KIKIMR:" << valueDescriptor->name(); 
-        } 
-    } 
- 
-    auto yqlIssueDescriptor = NYql::TIssuesIds::EIssueCode_descriptor(); 
-    if (yqlIssueDescriptor) { 
-        auto valueDescriptor = yqlIssueDescriptor->FindValueByNumber(issueCode); 
-        if (valueDescriptor) { 
-            return TStringBuilder() << "YQL:" << valueDescriptor->name(); 
-        } 
-    } 
- 
-    return TStringBuilder() << "CODE:" << ToString(issueCode); 
-} 
- 
+    auto kikimrIssueDescriptor = NKikimrIssues::TIssuesIds::EIssueCode_descriptor();
+    if (kikimrIssueDescriptor) {
+        auto valueDescriptor = kikimrIssueDescriptor->FindValueByNumber(issueCode);
+        if (valueDescriptor) {
+            return TStringBuilder() << "KIKIMR:" << valueDescriptor->name();
+        }
+    }
+
+    auto yqlIssueDescriptor = NYql::TIssuesIds::EIssueCode_descriptor();
+    if (yqlIssueDescriptor) {
+        auto valueDescriptor = yqlIssueDescriptor->FindValueByNumber(issueCode);
+        if (valueDescriptor) {
+            return TStringBuilder() << "YQL:" << valueDescriptor->name();
+        }
+    }
+
+    return TStringBuilder() << "CODE:" << ToString(issueCode);
+}
+
 void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
-    auto issueCounter = IssueCounters.FindPtr(issue.issue_code()); 
-    if (!issueCounter) { 
-        auto counterName = TStringBuilder() << "Issues/" << GetIssueName(issue.issue_code()); 
-        auto counter = KqpGroup->GetCounter(counterName , true); 
- 
-        auto result = IssueCounters.emplace(issue.issue_code(), counter); 
-        issueCounter = &result.first->second; 
-    } 
- 
-    (*issueCounter)->Inc(); 
- 
-    if (issue.issue_code() == TIssuesIds::KIKIMR_LOCKS_INVALIDATED) { 
-        YdbResponsesLocksInvalidated->Inc(); 
-    } 
- 
+    auto issueCounter = IssueCounters.FindPtr(issue.issue_code());
+    if (!issueCounter) {
+        auto counterName = TStringBuilder() << "Issues/" << GetIssueName(issue.issue_code());
+        auto counter = KqpGroup->GetCounter(counterName , true);
+
+        auto result = IssueCounters.emplace(issue.issue_code(), counter);
+        issueCounter = &result.first->second;
+    }
+
+    (*issueCounter)->Inc();
+
+    if (issue.issue_code() == TIssuesIds::KIKIMR_LOCKS_INVALIDATED) {
+        YdbResponsesLocksInvalidated->Inc();
+    }
+
     for (auto& childIssue : issue.issues()) {
-        ReportIssues(childIssue); 
-    } 
-} 
- 
+        ReportIssues(childIssue);
+    }
+}
+
 void TKqpCountersBase::ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration) {
     if (action == NKikimrKqp::QUERY_ACTION_EXECUTE ||
         action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED ||
@@ -387,41 +387,41 @@ void TKqpCountersBase::ReportQueryLatency(NKikimrKqp::EQueryAction action, const
         YdbQueryExecuteLatency->Collect(duration.MilliSeconds());
     }
 
-    auto counter = QueryLatencies.FindPtr(action); 
+    auto counter = QueryLatencies.FindPtr(action);
     if (counter) {
         (*counter)->Collect(duration.MilliSeconds());
-    } 
-} 
- 
+    }
+}
+
 
 void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
-    switch (txInfo.Status) { 
-        case TKqpTransactionInfo::EStatus::Active: 
-            return; 
-        case TKqpTransactionInfo::EStatus::Aborted: 
-            TxAborted->Inc(); 
-            return; 
+    switch (txInfo.Status) {
+        case TKqpTransactionInfo::EStatus::Active:
+            return;
+        case TKqpTransactionInfo::EStatus::Aborted:
+            TxAborted->Inc();
+            return;
         case TKqpTransactionInfo::EStatus::Committed:
-            TxCommited->Inc(); 
-            break; 
-    } 
+            TxCommited->Inc();
+            break;
+    }
     UpdateYdbTxCounters(txInfo, YdbTxByKind);
-} 
- 
+}
+
 void TKqpCountersBase::ReportSqlVersion(ui16 sqlVersion) {
-    switch (sqlVersion) { 
-        case 0: 
-            SqlV0Translations->Inc(); 
-            break; 
-        case 1: 
-            SqlV1Translations->Inc(); 
-            break; 
-        default: 
-            SqlUnknownTranslations->Inc(); 
-            break; 
-    } 
-} 
- 
+    switch (sqlVersion) {
+        case 0:
+            SqlV0Translations->Inc();
+            break;
+        case 1:
+            SqlV1Translations->Inc();
+            break;
+        default:
+            SqlUnknownTranslations->Inc();
+            break;
+    }
+}
+
 void TKqpCountersBase::ReportWorkerCreated() {
     WorkersCreated->Inc();
     ActiveWorkers->Inc();
@@ -876,11 +876,11 @@ void TKqpCounters::ReportQueryMaxShardProgramSize(TKqpDbCountersPtr dbCounters, 
 }
 
 void TKqpCounters::ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize,
-    Ydb::StatusIds::StatusCode ydbStatus) 
+    Ydb::StatusIds::StatusCode ydbStatus)
 {
-    TKqpCountersBase::ReportResponseStatus(responseSize, ydbStatus); 
+    TKqpCountersBase::ReportResponseStatus(responseSize, ydbStatus);
     if (dbCounters) {
-        dbCounters->ReportResponseStatus(responseSize, ydbStatus); 
+        dbCounters->ReportResponseStatus(responseSize, ydbStatus);
     }
 }
 
@@ -1135,4 +1135,4 @@ void TKqpCounters::RemoveDbCounters(const TString& database) {
 }
 
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

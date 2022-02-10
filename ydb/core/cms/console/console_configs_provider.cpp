@@ -771,7 +771,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
     auto &rec = ev->Get()->Record;
 
     auto response = MakeHolder<TEvConsole::TEvGetConfigItemsResponse>();
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
     for (auto &kind : rec.GetItemKinds())
@@ -894,10 +894,10 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr 
     auto resp = MakeHolder<TEvConsole::TEvGetConfigSubscriptionResponse>();
     auto subscription = SubscriptionIndex.GetSubscription(id);
     if (subscription) {
-        resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+        resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
         subscription->Serialize(*resp->Record.MutableSubscription());
     } else {
-        resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND); 
+        resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND);
         resp->Record.MutableSubscription()->SetId(id);
     }
 
@@ -912,7 +912,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
     auto &rec = ev->Get()->Record;
 
     auto response = MakeHolder<TEvConsole::TEvGetNodeConfigItemsResponse>();
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
     for (auto &kind : rec.GetItemKinds())
@@ -935,7 +935,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     auto &rec = ev->Get()->Record;
 
     auto response = MakeHolder<TEvConsole::TEvGetNodeConfigResponse>();
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
     for (auto &kind : rec.GetItemKinds())
@@ -972,7 +972,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPt
     auto &rec = ev->Get()->Record;
 
     auto response = MakeHolder<TEvConsole::TEvListConfigSubscriptionsResponse>();
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     if (rec.HasSubscriber()) {
         TSubscriberId subscriber(rec.GetSubscriber());

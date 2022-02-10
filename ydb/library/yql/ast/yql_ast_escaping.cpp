@@ -107,10 +107,10 @@ static bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* valu
     return (maxlen == -1);
 }
 
-static bool IsValidUtf8Rune(wchar32 value) { 
-    return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff); 
-} 
- 
+static bool IsValidUtf8Rune(wchar32 value) {
+    return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff);
+}
+
 TStringBuf UnescapeResultToString(EUnescapeResult result)
 {
     switch (result) {
@@ -139,11 +139,11 @@ void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
               *e = reinterpret_cast<const ui8*>(atom.end());
     while (p != e) {
         wchar32 rune = 0;
-        size_t rune_len = 0; 
- 
-        if (SafeReadUTF8Char(rune, rune_len, p, e) == RECODE_RESULT::RECODE_OK && IsValidUtf8Rune(rune)) { 
+        size_t rune_len = 0;
+
+        if (SafeReadUTF8Char(rune, rune_len, p, e) == RECODE_RESULT::RECODE_OK && IsValidUtf8Rune(rune)) {
             EscapedPrintUnicode(rune, out);
-            p += rune_len; 
+            p += rune_len;
         } else {
             EscapedPrintChar(*p++, out);
         }
@@ -198,7 +198,7 @@ EUnescapeResult UnescapeArbitraryAtom(
                 case 'U': {
                     wchar32 value = 0;
                     int len = (next == 'u' ? 4 : 8);
-                    if (!TryParseHex(p, e, len, &value) || !IsValidUtf8Rune(value)) { 
+                    if (!TryParseHex(p, e, len, &value) || !IsValidUtf8Rune(value)) {
                         *readBytes = p - atom.begin();
                         return EUnescapeResult::INVALID_UNICODE;
                     }

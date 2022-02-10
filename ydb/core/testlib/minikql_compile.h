@@ -38,13 +38,13 @@ public:
                 result.Table = table;
                 result.TableId.Reset(new NKikimr::TTableId(*data->TableId));
                 result.KeyColumnCount = data->KeyColumnCount;
- 
-                for (auto& column : table.ColumnNames) {
-                    auto columnInfo = data->Columns.FindPtr(column); 
-                    Y_VERIFY(column); 
 
-                    auto insertResult = result.Columns.insert(std::make_pair(column, *columnInfo)); 
-                    Y_VERIFY(insertResult.second); 
+                for (auto& column : table.ColumnNames) {
+                    auto columnInfo = data->Columns.FindPtr(column);
+                    Y_VERIFY(column);
+
+                    auto insertResult = result.Columns.insert(std::make_pair(column, *columnInfo));
+                    Y_VERIFY(insertResult.second);
                 }
             }
 

@@ -717,10 +717,10 @@ key = 4, value = (empty maybe)
 
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
- 
-            NYql::TIssues issues; 
-            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues); 
-            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED)); 
+
+            NYql::TIssues issues;
+            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
+            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
         }
     }
 

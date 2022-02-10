@@ -201,7 +201,7 @@ struct TDomainsInfo : public TThrRefBase {
         static TVector<ui64> MakeCoordinatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
             return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxCoordinatorID(domainUid, uid); });
         }
- 
+
         static TVector<ui64> MakeCoordinatorsIds(ui32 count, ui32 domainUid) {
             return MakeCoordinatorsIds(TransformIntoVectorUids(count), domainUid);
         }
@@ -222,13 +222,13 @@ struct TDomainsInfo : public TThrRefBase {
             return MakeAllocatorsIds(TransformIntoVectorUids(count), domainUid);
         }
 
-        ui32 GetHiveUidByIdx(ui32 idx) const { 
-            if (idx == Max<ui32>()) { 
-                return DefaultHiveUid; 
-            } 
- 
-            return HiveUids.at(idx); 
-        } 
+        ui32 GetHiveUidByIdx(ui32 idx) const {
+            if (idx == Max<ui32>()) {
+                return DefaultHiveUid;
+            }
+
+            return HiveUids.at(idx);
+        }
     };
 
     TMap<ui32, TIntrusivePtr<TDomain>> Domains;

@@ -32,7 +32,7 @@ struct TClientContext {
     TString Location;
     NYdb::TDriver Connection;
     NYdb::NCoordination::TClient Client;
-    NYdb::NScheme::TSchemeClient SchemeClient; 
+    NYdb::NScheme::TSchemeClient SchemeClient;
 
     template <typename Config>
     TClientContext(
@@ -45,12 +45,12 @@ struct TClientContext {
         , SchemeClient(Connection)
     { }
 
-    static TDriverConfig CreateParams( 
+    static TDriverConfig CreateParams(
             const TString& endpoint,
             const TString& token,
             bool secure)
     {
-        TDriverConfig params; 
+        TDriverConfig params;
         params.SetEndpoint(endpoint);
         if (token) {
             params.SetAuthToken(token);

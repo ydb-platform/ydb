@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(spuchin) 
+OWNER(spuchin)
 
 SRCS(
     yql_testlib.cpp

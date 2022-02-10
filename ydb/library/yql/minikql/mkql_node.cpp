@@ -1535,7 +1535,7 @@ TCallable::TCallable(TRuntimeNode result, TCallableType* type, bool validate)
         return;
     }
 
-    MKQL_ENSURE(result.GetStaticType()->IsSameType(*type->GetReturnType()), "incorrect result type for callable: " 
+    MKQL_ENSURE(result.GetStaticType()->IsSameType(*type->GetReturnType()), "incorrect result type for callable: "
         << GetType()->GetName());
     Result.Freeze();
 }

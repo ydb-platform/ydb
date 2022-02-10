@@ -46,7 +46,7 @@ public:
 
     void Exec() {
        while (Cont_.load()) {
-           auto rowSession = new TSession::TImpl("someSessionId", Hostname_, true, 100); 
+           auto rowSession = new TSession::TImpl("someSessionId", Hostname_, true, 100);
            if (Cb_(rowSession)) {
                Processed_++;
            }
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(RequestMigratorTest) {
 
             migrator.SetHost("host1");
 
-            auto session = new TSession::TImpl("someSessionId", "host1", true, 100); 
+            auto session = new TSession::TImpl("someSessionId", "host1", true, 100);
             UNIT_ASSERT(migrator.DoCheckAndMigrate(session, client));
             delete session;
 

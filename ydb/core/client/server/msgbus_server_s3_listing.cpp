@@ -372,19 +372,19 @@ private:
             return ReplyWithError(MSTATUS_ERROR, NTxProxy::TResultStatus::EStatus::AccessDenied, accessCheckError, ctx);
         }
 
-        auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) { 
-            TVector<ui64> shards; 
-            shards.reserve(partitions.size()); 
-            for (auto& partition : partitions) { 
-                shards.push_back(partition.ShardId); 
-            } 
+        auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
+            TVector<ui64> shards;
+            shards.reserve(partitions.size());
+            for (auto& partition : partitions) {
+                shards.push_back(partition.ShardId);
+            }
 
-            return JoinVectorIntoString(shards, ", "); 
-        }; 
- 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(KeyRange->Partitions)); 
- 
-        if (KeyRange->Partitions.size() > 0) { 
+            return JoinVectorIntoString(shards, ", ");
+        };
+
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(KeyRange->Partitions));
+
+        if (KeyRange->Partitions.size() > 0) {
             CurrentShardIdx = 0;
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
@@ -393,7 +393,7 @@ private:
     }
 
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
-        ui64 shardId = KeyRange->Partitions[idx].ShardId; 
+        ui64 shardId = KeyRange->Partitions[idx].ShardId;
 
         THolder<TEvDataShard::TEvS3ListingRequest> ev(new TEvDataShard::TEvS3ListingRequest());
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
@@ -472,7 +472,7 @@ private:
             ContentsRows.emplace_back(shardResponse.GetContentsRows(i));
         }
 
-        if (CurrentShardIdx+1 < KeyRange->Partitions.size() && 
+        if (CurrentShardIdx+1 < KeyRange->Partitions.size() &&
             MaxKeys > ContentsRows.size() + CommonPrefixesRows.size() &&
             shardResponse.GetMoreRows())
         {
@@ -686,11 +686,11 @@ protected:
         ConvertYdbValueToMiniKQLValue(tv.Gettype(), tv.Getvalue(), *params.MutableValue());
     }
 
-    static void ConvertMiniKQLRowsToResultSet(const NKikimrMiniKQL::TType& rowsListType, const NKikimrMiniKQL::TValue& rowsList, Ydb::ResultSet& resultSet) { 
+    static void ConvertMiniKQLRowsToResultSet(const NKikimrMiniKQL::TType& rowsListType, const NKikimrMiniKQL::TValue& rowsList, Ydb::ResultSet& resultSet) {
         TStackVec<NKikimrMiniKQL::TType> columnTypes;
         Y_VERIFY(rowsListType.GetKind() == NKikimrMiniKQL::ETypeKind::List);
         for (const auto& column : rowsListType.GetList().GetItem().GetStruct().GetMember()) {
-            auto columnMeta = resultSet.add_columns(); 
+            auto columnMeta = resultSet.add_columns();
             columnMeta->set_name(column.GetName());
             columnTypes.push_back(column.GetType());
             ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta->mutable_type());

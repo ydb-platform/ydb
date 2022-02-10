@@ -296,10 +296,10 @@ public:
     void SetLoadedInRSFlag(bool val = true) { SetFlag(TTxFlags::LoadedInRS, val); }
     void ResetLoadedInRSFlag() { ResetFlag(TTxFlags::LoadedInRS); }
 
-    bool HasKqpScanTransactionFlag() const { return HasFlag(TTxFlags::KqpScanTransaction); } 
-    void SetKqpScanTransactionFlag(bool val = true) { SetFlag(TTxFlags::KqpScanTransaction, val); } 
-    void ResetKqpScanTransactionFlag() { ResetFlag(TTxFlags::KqpScanTransaction); } 
-    bool IsKqpScanTransaction() const { return HasKqpScanTransactionFlag(); } 
+    bool HasKqpScanTransactionFlag() const { return HasFlag(TTxFlags::KqpScanTransaction); }
+    void SetKqpScanTransactionFlag(bool val = true) { SetFlag(TTxFlags::KqpScanTransaction, val); }
+    void ResetKqpScanTransactionFlag() { ResetFlag(TTxFlags::KqpScanTransaction); }
+    bool IsKqpScanTransaction() const { return HasKqpScanTransactionFlag(); }
 
     bool HasWaitingForStreamClearanceFlag() const { return HasFlag(TTxFlags::WaitingForStreamClearance); }
     void SetWaitingForStreamClearanceFlag(bool val = true) { SetFlag(TTxFlags::WaitingForStreamClearance, val); }

@@ -15,7 +15,7 @@ SRCS(
     print_operation.cpp
     print_utils.cpp
     profile_manager.cpp
-    query_stats.cpp 
+    query_stats.cpp
     recursive_list.cpp
     root.cpp
     tabbed_table.cpp

@@ -121,10 +121,10 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
- 
-private: 
 
-    bool PrintAst = false; 
+private:
+
+    bool PrintAst = false;
     TString QueryType;
     bool Analyze = false;
 };

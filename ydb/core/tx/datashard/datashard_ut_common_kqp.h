@@ -131,7 +131,7 @@ namespace NKqpHelpers {
     {
         auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN); 
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
         request->Record.MutableRequest()->SetKeepSession(false);
         request->Record.MutableRequest()->SetQuery(sql);
         request->Record.MutableRequest()->SetProfile(collectStats);

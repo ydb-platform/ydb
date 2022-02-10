@@ -53,14 +53,14 @@ void TAllocState::KillAllBoxed() {
 #endif
 }
 
-void TAllocState::InvalidateMemInfo() { 
+void TAllocState::InvalidateMemInfo() {
 #ifndef NDEBUG
-    for (auto& pair : ActiveMemInfo) { 
-        pair.first->CheckOnExit(false); 
-    } 
+    for (auto& pair : ActiveMemInfo) {
+        pair.first->CheckOnExit(false);
+    }
 #endif
-} 
- 
+}
+
 size_t TAllocState::GetDeallocatedInPages() const {
     size_t deallocated = 0;
     for (auto x : AllPages) {
@@ -79,15 +79,15 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     auto currPage = (TAllocPageHeader*)state->GetBlock(capacity);
     currPage->Deallocated = 0;
     currPage->Capacity = capacity;
-    currPage->Offset = roundedSize; 
- 
-    auto newPageAvailable = capacity - roundedSize; 
-    auto curPageAvailable = state->CurrentPage->Capacity - state->CurrentPage->Offset; 
- 
-    if (newPageAvailable > curPageAvailable) { 
-        state->CurrentPage = currPage; 
-    } 
- 
+    currPage->Offset = roundedSize;
+
+    auto newPageAvailable = capacity - roundedSize;
+    auto curPageAvailable = state->CurrentPage->Capacity - state->CurrentPage->Offset;
+
+    if (newPageAvailable > curPageAvailable) {
+        state->CurrentPage = currPage;
+    }
+
     void* ret = (char*)currPage + sizeof(TAllocPageHeader);
     currPage->UseCount = 1;
     currPage->Link = nullptr;

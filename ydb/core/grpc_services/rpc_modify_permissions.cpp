@@ -1,6 +1,6 @@
 #include "service_scheme.h"
 
-#include "rpc_scheme_base.h" 
+#include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -12,21 +12,21 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb; 
+using namespace Ydb;
 
 using TEvModifyPermissionsRequest = TGrpcRequestOperationCall<Ydb::Scheme::ModifyPermissionsRequest,
     Ydb::Scheme::ModifyPermissionsResponse>;
 
-class TModifyPermissionsRPC : public TRpcSchemeRequestActor<TModifyPermissionsRPC, TEvModifyPermissionsRequest> { 
-    using TBase = TRpcSchemeRequestActor<TModifyPermissionsRPC, TEvModifyPermissionsRequest>; 
- 
+class TModifyPermissionsRPC : public TRpcSchemeRequestActor<TModifyPermissionsRPC, TEvModifyPermissionsRequest> {
+    using TBase = TRpcSchemeRequestActor<TModifyPermissionsRPC, TEvModifyPermissionsRequest>;
+
 public:
     TModifyPermissionsRPC(IRequestOpCtx* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         try {
             SendRequest(ctx);
         } catch (const std::exception& ex) {

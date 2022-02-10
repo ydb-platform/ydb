@@ -19,8 +19,8 @@
 
 #include <util/thread/factory.h>
 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
+using namespace NYdb;
+using namespace NYdb::NTable;
 
 TSession CreateSession(TDriver driver, const TString& token = "", const TString& discoveryEndpoint = "") {
     NYdb::NTable::TClientSettings settings;
@@ -111,15 +111,15 @@ static void MultiTenantSDK(bool asyncDiscovery) {
     driver.Stop(true);
 }
 
-Y_UNIT_TEST_SUITE(YdbYqlClient) { 
+Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(TestYqlWrongTable) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -154,8 +154,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         auto result = session.ExecuteDataQuery(R"___(
             UPSERT INTO [Root/Test] (Key, Value)
                 VALUES("foo", "bar");
-            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -192,16 +192,16 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
         auto status = session.Close().ExtractValueSync();
         UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
         UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
 
-        auto result = session.ExecuteDataQuery("SELECT 42;", 
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        auto result = session.ExecuteDataQuery("SELECT 42;",
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
     }
@@ -228,10 +228,10 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         const TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto driver = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
 
-        NYdb::NTable::TTableClient client(driver); 
+        NYdb::NTable::TTableClient client(driver);
         int count = 10;
 
         THashSet<TString> sids;
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                     if (res.IsSuccess()) {
                         ok++;
                     } else {
-                        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SESSION_BUSY); 
+                        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SESSION_BUSY);
                         bad++;
                     }
                 }
@@ -568,8 +568,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -592,17 +592,17 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             VALUES(1u, 12u, 13u, 14u);
             UPSERT INTO [Root/Test] (Column1, Column2, Column3, Column4)
             VALUES(2u, 22u, 23u, 24u);
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         auto result = session.ExecuteDataQuery(R"___(
             SELECT Column4, Column2, Column3, Column1 FROM [Root/Test];
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        TVector<TResultSet> resultSets = result.GetResultSets(); 
+        TVector<TResultSet> resultSets = result.GetResultSets();
         UNIT_ASSERT_EQUAL(resultSets.size(), 1);
-        UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 4); 
+        UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 4);
         auto columnMeta = resultSets[0].GetColumnsMeta();
         const TString ref[] = { "Column4", "Column2", "Column3", "Column1" };
         for (size_t i = 0; i < columnMeta.size(); ++i) {
@@ -617,7 +617,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -652,10 +652,10 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
 
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto sessionResponse = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_EQUAL(sessionResponse.IsTransportError(), false);
 
@@ -817,7 +817,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -857,9 +857,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
-        auto scheme = NYdb::NScheme::TSchemeClient(connection); 
+        auto scheme = NYdb::NScheme::TSchemeClient(connection);
         auto session = CreateSession(connection);
         {
             auto status = scheme.MakeDirectory("Root/Foo").ExtractValueSync();
@@ -910,9 +910,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto& tableSettings = server.GetServer().GetSettings().AppConfig.GetTableServiceConfig(); 
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata(); 
- 
+        auto& tableSettings = server.GetServer().GetSettings().AppConfig.GetTableServiceConfig();
+        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
+
         {
             auto session = CreateSession(connection, "root@builtin");
             {
@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
             }
             {
-                auto scheme = NYdb::NScheme::TSchemeClient(connection); 
+                auto scheme = NYdb::NScheme::TSchemeClient(connection);
                 auto status = scheme.ModifyPermissions("Root/Test",
                     NYdb::NScheme::TModifyPermissionsSettings()
                         .AddGrantPermissions(
@@ -944,7 +944,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
             }
             {
-                auto scheme = NYdb::NScheme::TSchemeClient(connection); 
+                auto scheme = NYdb::NScheme::TSchemeClient(connection);
                 auto status = scheme.DescribePath("Root/Test").ExtractValueSync();
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
@@ -968,8 +968,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
-                UNIT_ASSERT_EQUAL(status.GetStatus(), 
-                    useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED); 
+                UNIT_ASSERT_EQUAL(status.GetStatus(),
+                    useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED);
             }
         }
     }
@@ -1205,14 +1205,14 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TString traceId = "CppUtTestQuery";
 
         {
-            NKikimrConfig::TAppConfig appConfig; 
-            auto& logConfig = *appConfig.MutableLogConfig(); 
-            auto& entry = *logConfig.AddEntry(); 
-            entry.SetComponent(NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL)); 
-            entry.SetLevel(NActors::NLog::PRI_DEBUG); 
+            NKikimrConfig::TAppConfig appConfig;
+            auto& logConfig = *appConfig.MutableLogConfig();
+            auto& entry = *logConfig.AddEntry();
+            entry.SetComponent(NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL));
+            entry.SetLevel(NActors::NLog::PRI_DEBUG);
 
             TKikimrWithGrpcAndRootSchema server(appConfig, {}, logBackend);
- 
+
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
@@ -1222,29 +1222,29 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
             TString location = TStringBuilder() << "localhost:" << grpc;
 
-            auto connection = NYdb::TDriver( 
-                TDriverConfig() 
+            auto connection = NYdb::TDriver(
+                TDriverConfig()
                     .SetEndpoint(location));
             auto session = CreateSession(connection);
 
-            auto result = session 
+            auto result = session
                 .ExecuteSchemeQuery(R"___(
                     CREATE TABLE [Root/Test] (
                         Key Uint32,
                         Value String,
                         PRIMARY KEY (Key)
                     );
-                )___", TExecSchemeQuerySettings().TraceId(traceId)).ExtractValueSync(); 
+                )___", TExecSchemeQuerySettings().TraceId(traceId)).ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            result = session 
+            result = session
                 .ExecuteDataQuery(R"___(
                     UPSERT INTO [Root/Test] (Key, Value)
                     VALUES(2u, "Two");
-                )___", 
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), 
-                TExecDataQuerySettings().TraceId(traceId)).ExtractValueSync(); 
+                )___",
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TExecDataQuerySettings().TraceId(traceId)).ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -1338,8 +1338,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
         auto session = CreateSession(connection);
 
@@ -1352,22 +1352,22 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         auto result1 = session.ExecuteDataQuery(R"___(
             INSERT INTO [Root/Test] (Key, Value) VALUES(1u, "One");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result1.GetStatus(), EStatus::SUCCESS);
 
         {
             auto session2 = CreateSession(connection);
             auto result = session2.ExecuteDataQuery(R"___(
                 UPSERT INTO [Root/Test] (Key, Value) VALUES(1u, "Two");
-            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result2 = session.ExecuteDataQuery(R"___(
                 SELECT 42;
-            )___", TTxControl::Tx(*result1.GetTransaction()).CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result2.GetStatus(), EStatus::NOT_FOUND); 
+            )___", TTxControl::Tx(*result1.GetTransaction()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result2.GetStatus(), EStatus::NOT_FOUND);
             auto issueString = result2.GetIssues().ToString();
             TString expected =
 R"___(<main>: Error: Transaction not found: , code: 2015
@@ -1382,10 +1382,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         {
@@ -1406,41 +1406,41 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             SELECT data.Key AS Key, data.Value AS Value FROM (SELECT $Data AS data) FLATTEN BY data;
         )___").ExtractValueSync();
         UNIT_ASSERT_EQUAL(fillQueryResult.GetStatus(), EStatus::SUCCESS);
-        auto query = fillQueryResult.GetQuery(); 
+        auto query = fillQueryResult.GetQuery();
 
         const ui32 BATCH_NUM = 5;
         const ui32 BATCH_ROWS = 100;
         const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
 
         for (ui64 i = 0; i < BATCH_NUM ; ++i) {
-            TParamsBuilder paramsBuilder = client.GetParamsBuilder(); 
+            TParamsBuilder paramsBuilder = client.GetParamsBuilder();
 
-            auto& paramBuilder = paramsBuilder.AddParam("$Data"); 
- 
-            paramBuilder.BeginList(); 
+            auto& paramBuilder = paramsBuilder.AddParam("$Data");
+
+            paramBuilder.BeginList();
             for (ui64 j = 0; j < BATCH_ROWS; ++j) {
                 auto key = i * BATCH_ROWS + j;
                 auto val = TString(BLOB_SIZE, '0' + key % 10);
-                paramBuilder.AddListItem() 
-                    .BeginStruct() 
-                        .AddMember("Key") 
-                            .Uint64(key) 
-                        .AddMember("Value") 
-                            .String(val) 
-                    .EndStruct(); 
+                paramBuilder.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key")
+                            .Uint64(key)
+                        .AddMember("Value")
+                            .String(val)
+                    .EndStruct();
             }
             paramBuilder.EndList();
-            paramBuilder.Build(); 
+            paramBuilder.Build();
 
-            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), 
-                paramsBuilder.Build()).ExtractValueSync(); 
+            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                paramsBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::SUCCESS);
         }
 
         auto result = session.ExecuteDataQuery(R"___(
             SELECT * FROM [Root/Test] WHERE Key != 1;
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::UNDETERMINED); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::UNDETERMINED);
         UNIT_ASSERT(result.GetIssues().ToString().Contains("ExecResultUnavailable"));
         UNIT_ASSERT(result.GetIssues().ToString().Contains("REPLY_SIZE_EXECEEDED"));
     }
@@ -1451,10 +1451,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         auto result = session.ExecuteSchemeQuery(R"___(
@@ -1473,53 +1473,53 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), ref);
     }
 
-    Y_UNIT_TEST(TestBusySession) { 
+    Y_UNIT_TEST(TestBusySession) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
-        TVector<NYdb::NTable::TAsyncDataQueryResult> futures; 
+        TVector<NYdb::NTable::TAsyncDataQueryResult> futures;
 
         for (ui32 i = 0; i < 10; ++i) {
-            auto query = session.ExecuteDataQuery(R"___( 
-                SELECT 1; 
-            )___", TTxControl::BeginTx().CommitTx()); 
-            futures.push_back(query); 
-        } 
- 
-        for (auto& future : futures) { 
-            auto result = future.ExtractValueSync(); 
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SESSION_BUSY); 
-            } 
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestMultipleModifications) { 
-        TKikimrWithGrpcAndRootSchema server; 
-        ui16 grpc = server.GetPort(); 
- 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
-        const ui32 sessionsCount = 10; 
- 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
-                .SetEndpoint(location)); 
-        NYdb::NTable::TTableClient client(connection); 
-        TVector<TSession> sessions; 
-        for (ui32 i = 0; i < sessionsCount; ++i) { 
-            sessions.push_back(client.CreateSession().ExtractValueSync().GetSession()); 
-        } 
- 
-        TVector<NYdb::TAsyncStatus> futures; 
-        for (ui32 i = 0; i < sessionsCount; ++i) { 
-            auto query = sessions[i].ExecuteSchemeQuery(R"___( 
+            auto query = session.ExecuteDataQuery(R"___(
+                SELECT 1;
+            )___", TTxControl::BeginTx().CommitTx());
+            futures.push_back(query);
+        }
+
+        for (auto& future : futures) {
+            auto result = future.ExtractValueSync();
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SESSION_BUSY);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestMultipleModifications) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        const ui32 sessionsCount = 10;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        TVector<TSession> sessions;
+        for (ui32 i = 0; i < sessionsCount; ++i) {
+            sessions.push_back(client.CreateSession().ExtractValueSync().GetSession());
+        }
+
+        TVector<NYdb::TAsyncStatus> futures;
+        for (ui32 i = 0; i < sessionsCount; ++i) {
+            auto query = sessions[i].ExecuteSchemeQuery(R"___(
                 CREATE TABLE [Root/Test] (
                     Key Int,
                     Value String,
@@ -1537,9 +1537,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
 
         // Make sure table exists
-        auto result = sessions[0].ExecuteDataQuery(R"___( 
+        auto result = sessions[0].ExecuteDataQuery(R"___(
             UPSERT INTO [Root/Test] (Key, Value) VALUES (1, "One");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
@@ -1549,10 +1549,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         {
@@ -1568,7 +1568,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         auto result = session.ExecuteDataQuery(R"___(
             UPSERT INTO [Root/Test] (Key, Value) VALUES(1u, "One");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         Cerr << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -1579,20 +1579,20 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         result = session.ExecuteDataQuery(R"___(
             UPSERT INTO [Root/Test] (Key, Value) VALUES(2u, "Two");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
             SELECT * FROM [Root/Test];
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        TResultSet resultSet = result.GetResultSet(0); 
-        TResultSetParser rsParser(resultSet); 
+        TResultSet resultSet = result.GetResultSet(0);
+        TResultSetParser rsParser(resultSet);
         int c = 0;
-        while (rsParser.TryNextRow()) { 
+        while (rsParser.TryNextRow()) {
             c++;
-        } 
+        }
 
         UNIT_ASSERT_VALUES_EQUAL(c, 2);
     }
@@ -1603,10 +1603,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         auto result = session.ExecuteSchemeQuery(R"___(
@@ -1620,12 +1620,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         result = session.ExecuteDataQuery(R"___(
             UPSERT INTO [Root/BadTable1] (Key, Value) VALUES(1u, "One");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
 
         result = session.ExecuteDataQuery(R"___(
             UPSERT INTO [Root/BadTable2] (Key, Value) VALUES(2u, "Two");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
     }
 
@@ -1636,9 +1636,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         auto result = session.PrepareDataQuery(R"___(
@@ -1646,27 +1646,27 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             SELECT $paramName;
             )___").ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        auto query = result.GetQuery(); 
-        auto paramsBuilder = query.GetParamsBuilder(); 
-        paramsBuilder.AddParam("$paramName").String("someString").Build(); 
+        auto query = result.GetQuery();
+        auto paramsBuilder = query.GetParamsBuilder();
+        paramsBuilder.AddParam("$paramName").String("someString").Build();
         auto params = paramsBuilder.Build();
         {
-            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), 
+            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(),
                 params).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            auto resultSets = result.GetResultSets(); 
+            auto resultSets = result.GetResultSets();
             UNIT_ASSERT_EQUAL(resultSets.size(), 1);
             auto& resultSet = resultSets[0];
-            UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1); 
+            UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1);
             auto meta = resultSet.GetColumnsMeta();
             UNIT_ASSERT_EQUAL(meta.size(), 1);
-            TTypeParser parser(meta[0].Type); 
-            UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive); 
-            UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::String); 
- 
-            TResultSetParser rsParser(resultSet); 
-            while (rsParser.TryNextRow()) { 
-                UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetString(), "someString"); 
+            TTypeParser parser(meta[0].Type);
+            UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::String);
+
+            TResultSetParser rsParser(resultSet);
+            while (rsParser.TryNextRow()) {
+                UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetString(), "someString");
             }
         }
         // Test params is not destructed during previous execution
@@ -1697,10 +1697,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         auto result = session.ExecuteSchemeQuery(R"___(
@@ -1714,12 +1714,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         result = session.ExecuteDataQuery(R"___(
             INSERT INTO [Root/Test] (Key, Value) VALUES (1u, "One");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
             INSERT INTO [Root/Test] (Key, Value) VALUES (1u, "Two");
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
     }
 
@@ -1730,9 +1730,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig() 
+            TDriverConfig()
                 .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection); 
+        NYdb::NTable::TTableClient client(connection);
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         auto result = session.ExecuteSchemeQuery(R"___(
@@ -2074,156 +2074,156 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(it.ReadNext().GetValueSync().EOS(), true);
     }
 
-    Y_UNIT_TEST(RetryOperation) { 
-        TKikimrWithGrpcAndRootSchema server; 
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
-        NYdb::NTable::TTableClient client(driver); 
- 
-        auto createFuture = client.RetryOperation([](TSession session) { 
-            return session.ExecuteSchemeQuery(R"___( 
-                CREATE TABLE [Root/Test] ( 
-                    Key Uint64, 
-                    Value String, 
-                    PRIMARY KEY (Key) 
-                ); 
-            )___"); 
-        }); 
- 
-        auto upsertFuture = createFuture.Apply([client](const TAsyncStatus& asyncStatus) mutable { 
-            auto status = asyncStatus.GetValue(); 
-            if (!status.IsSuccess()) { 
-                return NThreading::MakeFuture(status); 
-            } 
- 
-            return client.RetryOperation<TDataQueryResult>([](TSession session) { 
-                return session.ExecuteDataQuery(R"___( 
-                    UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "One"); 
-                )___", TTxControl::BeginTx().CommitTx()); 
-            }, TRetryOperationSettings().MaxRetries(0)); 
-        }); 
- 
-        auto upsertStatus = upsertFuture.GetValueSync(); 
-        UNIT_ASSERT(upsertStatus.IsSuccess()); 
- 
-        TMaybe<TResultSet> selectResult; 
-        auto selectStatus = client.RetryOperationSync([&selectResult] (TSession session) { 
-            auto result = session.ExecuteDataQuery(R"___( 
-                SELECT * FROM [Root/Test]; 
-            )___", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
- 
-            if (result.IsSuccess()) { 
-                selectResult = result.GetResultSet(0); 
-            } 
- 
-            return result; 
-        }, TRetryOperationSettings().MaxRetries(0)); 
- 
-        UNIT_ASSERT(selectStatus.IsSuccess()); 
- 
-        TResultSetParser parser(*selectResult); 
-        UNIT_ASSERT(parser.TryNextRow()); 
+    Y_UNIT_TEST(RetryOperation) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+
+        auto createFuture = client.RetryOperation([](TSession session) {
+            return session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE [Root/Test] (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )___");
+        });
+
+        auto upsertFuture = createFuture.Apply([client](const TAsyncStatus& asyncStatus) mutable {
+            auto status = asyncStatus.GetValue();
+            if (!status.IsSuccess()) {
+                return NThreading::MakeFuture(status);
+            }
+
+            return client.RetryOperation<TDataQueryResult>([](TSession session) {
+                return session.ExecuteDataQuery(R"___(
+                    UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "One");
+                )___", TTxControl::BeginTx().CommitTx());
+            }, TRetryOperationSettings().MaxRetries(0));
+        });
+
+        auto upsertStatus = upsertFuture.GetValueSync();
+        UNIT_ASSERT(upsertStatus.IsSuccess());
+
+        TMaybe<TResultSet> selectResult;
+        auto selectStatus = client.RetryOperationSync([&selectResult] (TSession session) {
+            auto result = session.ExecuteDataQuery(R"___(
+                SELECT * FROM [Root/Test];
+            )___", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            if (result.IsSuccess()) {
+                selectResult = result.GetResultSet(0);
+            }
+
+            return result;
+        }, TRetryOperationSettings().MaxRetries(0));
+
+        UNIT_ASSERT(selectStatus.IsSuccess());
+
+        TResultSetParser parser(*selectResult);
+        UNIT_ASSERT(parser.TryNextRow());
         driver.Stop(true);
-    } 
- 
-    Y_UNIT_TEST(QueryLimits) { 
-        NKikimrConfig::TAppConfig appConfig; 
-        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig(); 
-        tableServiceConfig.SetQueryLimitBytes(200); 
-        tableServiceConfig.SetParametersLimitBytes(100); 
- 
-        TKikimrWithGrpcAndRootSchema server(appConfig); 
- 
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
-        NYdb::NTable::TTableClient client(driver); 
-        auto session = client.CreateSession().ExtractValueSync().GetSession(); 
- 
-        auto result = session.ExecuteSchemeQuery(R"___( 
-            CREATE TABLE [Root/Test] ( 
-                Key Uint64, 
-                Value String, 
-                PRIMARY KEY (Key) 
-            ); 
-        )___").ExtractValueSync(); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        result = session.ExecuteDataQuery(Sprintf(R"___( 
-            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "%s"); 
-        )___", TString(100, '*').c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        result = session.ExecuteDataQuery(Sprintf(R"___( 
-            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "%s"); 
-        )___", TString(200, '*').c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
- 
-        auto params = client.GetParamsBuilder() 
-            .AddParam("$value").String(TString(50, '*')) 
-                .Build() 
-            .Build(); 
- 
-        result = session.ExecuteDataQuery(R"___( 
-            DECLARE $value AS String; 
-            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, $value); 
-        )___", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync(); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        params = client.GetParamsBuilder() 
-            .AddParam("$value").String(TString(100, '*')) 
-                .Build() 
-            .Build(); 
- 
-        result = session.ExecuteDataQuery(R"___( 
-            DECLARE $value AS String; 
-            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, $value); 
-        )___", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync(); 
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-    } 
- 
+    }
+
+    Y_UNIT_TEST(QueryLimits) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+        tableServiceConfig.SetQueryLimitBytes(200);
+        tableServiceConfig.SetParametersLimitBytes(100);
+
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE [Root/Test] (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(Sprintf(R"___(
+            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "%s");
+        )___", TString(100, '*').c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(Sprintf(R"___(
+            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, "%s");
+        )___", TString(200, '*').c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
+        auto params = client.GetParamsBuilder()
+            .AddParam("$value").String(TString(50, '*'))
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(R"___(
+            DECLARE $value AS String;
+            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, $value);
+        )___", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        params = client.GetParamsBuilder()
+            .AddParam("$value").String(TString(100, '*'))
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(R"___(
+            DECLARE $value AS String;
+            UPSERT INTO [Root/Test] (Key, Value) VALUES (1u, $value);
+        )___", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(SessionsServerLimit) {
-        NKikimrConfig::TAppConfig appConfig; 
-        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig(); 
-        tableServiceConfig.SetSessionsLimitPerNode(2); 
- 
-        TKikimrWithGrpcAndRootSchema server(appConfig); 
- 
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
-        NYdb::NTable::TTableClient client(driver); 
-        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        NKikimrConfig::TAppConfig appConfig;
+        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+        tableServiceConfig.SetSessionsLimitPerNode(2);
+
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto sessionResult = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
-        auto session1 = sessionResult.GetSession(); 
- 
-        sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+        auto session1 = sessionResult.GetSession();
+
+        sessionResult = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
-        auto session2 = sessionResult.GetSession(); 
- 
-        sessionResult = client.CreateSession().ExtractValueSync(); 
-        sessionResult.GetIssues().PrintTo(Cerr); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+        auto session2 = sessionResult.GetSession();
+
+        sessionResult = client.CreateSession().ExtractValueSync();
+        sessionResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::OVERLOADED); 
- 
-        auto status = session1.Close().ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(status.IsTransportError(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::OVERLOADED);
+
+        auto status = session1.Close().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(status.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::SUCCESS); 
- 
-        auto result = session2.ExecuteDataQuery(R"___( 
-            SELECT 1; 
-        )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::SUCCESS);
+
+        auto result = session2.ExecuteDataQuery(R"___(
+            SELECT 1;
+        )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        sessionResult = client.CreateSession().ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
- 
-        sessionResult = client.CreateSession().ExtractValueSync(); 
-        sessionResult.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::OVERLOADED); 
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+
+        sessionResult = client.CreateSession().ExtractValueSync();
+        sessionResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::OVERLOADED);
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
-    } 
+    }
 
     Y_UNIT_TEST(SessionsServerLimitWithSessionPool) {
         NKikimrConfig::TAppConfig appConfig;
@@ -4566,48 +4566,48 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             "Warning: Table profile and ReadReplicasSettings are set. They are mutually exclusive. Use either one of them.",
             "Unexpected error message");
     }
- 
-    Y_UNIT_TEST(TableKeyRangesSinglePartition) { 
-        TKikimrWithGrpcAndRootSchema server; 
- 
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
- 
-        NYdb::NTable::TTableClient client(driver); 
-        auto getSessionResult = client.CreateSession().ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, 
-            getSessionResult.GetIssues().ToString()); 
-        auto session = getSessionResult.GetSession(); 
- 
-        { 
-            auto builder = TTableBuilder() 
-                .AddNullableColumn("key", EPrimitiveType::Uint64) 
-                .AddNullableColumn("value", EPrimitiveType::Utf8) 
-                .SetPrimaryKeyColumn("key"); 
- 
-            auto desc = builder.Build(); 
-            auto result = session.CreateTable("Root/Test", std::move(desc)).GetValueSync(); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } 
- 
-        { 
-            auto describeResult = session.DescribeTable("Root/Test").ExtractValueSync(); 
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString()); 
- 
-            auto tableDesc = describeResult.GetTableDescription(); 
-            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetKeyRanges().size(), 0); 
-        } 
- 
-        { 
-            auto describeTableSettings = TDescribeTableSettings() 
-                .WithKeyShardBoundary(true); 
-            auto describeResult = session.DescribeTable("Root/Test", describeTableSettings).ExtractValueSync(); 
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString()); 
- 
-            auto tableDesc = describeResult.GetTableDescription(); 
-            auto& keyRanges = tableDesc.GetKeyRanges(); 
-            UNIT_ASSERT_VALUES_EQUAL(keyRanges.size(), 1); 
-            UNIT_ASSERT(!keyRanges[0].From()); 
-            UNIT_ASSERT(!keyRanges[0].To()); 
-        } 
-    } 
+
+    Y_UNIT_TEST(TableKeyRangesSinglePartition) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS,
+            getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto builder = TTableBuilder()
+                .AddNullableColumn("key", EPrimitiveType::Uint64)
+                .AddNullableColumn("value", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key");
+
+            auto desc = builder.Build();
+            auto result = session.CreateTable("Root/Test", std::move(desc)).GetValueSync();
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto describeResult = session.DescribeTable("Root/Test").ExtractValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            auto tableDesc = describeResult.GetTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetKeyRanges().size(), 0);
+        }
+
+        {
+            auto describeTableSettings = TDescribeTableSettings()
+                .WithKeyShardBoundary(true);
+            auto describeResult = session.DescribeTable("Root/Test", describeTableSettings).ExtractValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            auto tableDesc = describeResult.GetTableDescription();
+            auto& keyRanges = tableDesc.GetKeyRanges();
+            UNIT_ASSERT_VALUES_EQUAL(keyRanges.size(), 1);
+            UNIT_ASSERT(!keyRanges[0].From());
+            UNIT_ASSERT(!keyRanges[0].To());
+        }
+    }
 }

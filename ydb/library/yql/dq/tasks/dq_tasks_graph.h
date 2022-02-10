@@ -9,41 +9,41 @@
 
 namespace NYql::NDq {
 
-struct TStageId { 
-    ui64 TxId = 0; 
-    ui64 StageId = 0; 
- 
-    TStageId(ui64 txId, ui64 stageId) 
-        : TxId(txId) 
-        , StageId(stageId) {} 
- 
-    bool operator==(const TStageId& other) const { 
-        return TxId == other.TxId && StageId == other.StageId; 
-    } 
- 
+struct TStageId {
+    ui64 TxId = 0;
+    ui64 StageId = 0;
+
+    TStageId(ui64 txId, ui64 stageId)
+        : TxId(txId)
+        , StageId(stageId) {}
+
+    bool operator==(const TStageId& other) const {
+        return TxId == other.TxId && StageId == other.StageId;
+    }
+
     bool operator!=(const TStageId& other) const {
-        return !(*this == other); 
-    } 
- 
-    bool operator<(const TStageId&) = delete; 
-    bool operator>(const TStageId&) = delete; 
-    bool operator<=(const TStageId&) = delete; 
-    bool operator>=(const TStageId&) = delete; 
- 
-    ui64 Hash() const noexcept { 
-        auto tuple = std::make_tuple(TxId, StageId); 
-        return THash<decltype(tuple)>()(tuple); 
-    } 
-}; 
- 
+        return !(*this == other);
+    }
+
+    bool operator<(const TStageId&) = delete;
+    bool operator>(const TStageId&) = delete;
+    bool operator<=(const TStageId&) = delete;
+    bool operator>=(const TStageId&) = delete;
+
+    ui64 Hash() const noexcept {
+        auto tuple = std::make_tuple(TxId, StageId);
+        return THash<decltype(tuple)>()(tuple);
+    }
+};
+
 template <class TStageInfoMeta>
 struct TStageInfo : private TMoveOnly {
-    TStageInfo(ui64 txId, const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta) 
-        : Id(txId, stage.Ref().UniqueId()) 
+    TStageInfo(ui64 txId, const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta)
+        : Id(txId, stage.Ref().UniqueId())
         , InputsCount(stage.Inputs().Size())
         , Meta(std::move(meta))
     {
-        auto result = stage.Program().Body(); 
+        auto result = stage.Program().Body();
         auto resultType = result.Ref().GetTypeAnn();
 
         if (resultType->GetKind() == ETypeAnnotationKind::Stream) {
@@ -62,17 +62,17 @@ struct TStageInfo : private TMoveOnly {
         }
     }
 
-    TStageInfo(const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta) 
-        : TStageInfo(0, stage, std::move(meta)) {} 
- 
-    TStageInfo(const TStageId& id, ui32 inputsCount, ui32 outputsCount, TStageInfoMeta&& meta) 
-        : Id(id) 
-        , InputsCount(inputsCount) 
-        , OutputsCount(outputsCount) 
-        , Meta(std::move(meta)) {} 
- 
-    TStageId Id; 
- 
+    TStageInfo(const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta)
+        : TStageInfo(0, stage, std::move(meta)) {}
+
+    TStageInfo(const TStageId& id, ui32 inputsCount, ui32 outputsCount, TStageInfoMeta&& meta)
+        : Id(id)
+        , InputsCount(inputsCount)
+        , OutputsCount(outputsCount)
+        , Meta(std::move(meta)) {}
+
+    TStageId Id;
+
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
 
@@ -135,7 +135,7 @@ struct TTaskOutputType {
         Map,
         HashPartition,
         Broadcast,
-        Effects, 
+        Effects,
         Sink,
         COMMON_TASK_OUTPUT_TYPE_END
     };
@@ -160,9 +160,9 @@ struct TTransform {
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 struct TTask {
-    using TInputType = TTaskInput<TInputMeta>; 
-    using TOutputType = TTaskOutput<TOutputMeta>; 
- 
+    using TInputType = TTaskInput<TInputMeta>;
+    using TOutputType = TTaskOutput<TOutputMeta>;
+
     explicit TTask(const TStageInfo<TStageInfoMeta>& stageInfo)
         : StageId(stageInfo.Id)
         , Inputs(stageInfo.InputsCount)
@@ -170,9 +170,9 @@ struct TTask {
     }
 
     ui64 Id = 0;
-    TStageId StageId; 
-    TVector<TInputType> Inputs; 
-    TVector<TOutputType> Outputs; 
+    TStageId StageId;
+    TVector<TInputType> Inputs;
+    TVector<TOutputType> Outputs;
     NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
@@ -206,39 +206,39 @@ public:
         return Channels;
     }
 
-    const TStageInfoType& GetStageInfo(const TStageId& id) const { 
-        auto stageInfo = StagesInfo.FindPtr(id); 
-        YQL_ENSURE(stageInfo, "no stage #" << id); 
+    const TStageInfoType& GetStageInfo(const TStageId& id) const {
+        auto stageInfo = StagesInfo.FindPtr(id);
+        YQL_ENSURE(stageInfo, "no stage #" << id);
         return *stageInfo;
     }
 
-    TStageInfoType& GetStageInfo(const TStageId& id) { 
-        auto stageInfo = StagesInfo.FindPtr(id); 
-        YQL_ENSURE(stageInfo, "no stage #" << id); 
+    TStageInfoType& GetStageInfo(const TStageId& id) {
+        auto stageInfo = StagesInfo.FindPtr(id);
+        YQL_ENSURE(stageInfo, "no stage #" << id);
         return *stageInfo;
     }
 
-    const TStageInfoType& GetStageInfo(ui64 txId, const NNodes::TDqStageBase& stage) const { 
-        return GetStageInfo(TStageId(txId, stage.Ref().UniqueId())); 
-    } 
- 
-    TStageInfoType& GetStageInfo(ui64 txId, const NNodes::TDqStageBase& stage) { 
-        return GetStageInfo(TStageId(txId, stage.Ref().UniqueId())); 
-    } 
- 
+    const TStageInfoType& GetStageInfo(ui64 txId, const NNodes::TDqStageBase& stage) const {
+        return GetStageInfo(TStageId(txId, stage.Ref().UniqueId()));
+    }
+
+    TStageInfoType& GetStageInfo(ui64 txId, const NNodes::TDqStageBase& stage) {
+        return GetStageInfo(TStageId(txId, stage.Ref().UniqueId()));
+    }
+
     const TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) const {
-        return GetStageInfo(0, stage); 
+        return GetStageInfo(0, stage);
     }
 
     TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) {
-        return GetStageInfo(0, stage); 
+        return GetStageInfo(0, stage);
     }
 
-    const THashMap<TStageId, TStageInfoType>& GetStagesInfo() const { 
+    const THashMap<TStageId, TStageInfoType>& GetStagesInfo() const {
         return StagesInfo;
     }
 
-    THashMap<TStageId, TStageInfoType>& GetStagesInfo() { 
+    THashMap<TStageId, TStageInfoType>& GetStagesInfo() {
         return StagesInfo;
     }
 
@@ -283,21 +283,21 @@ public:
     }
 
 private:
-    THashMap<TStageId, TStageInfoType> StagesInfo; 
+    THashMap<TStageId, TStageInfoType> StagesInfo;
     TVector<TTaskType> Tasks;
     TVector<TChannel> Channels;
 };
 
 } // namespace NYql::NDq
- 
-template<> 
-struct THash<NYql::NDq::TStageId> { 
-    inline size_t operator()(const NYql::NDq::TStageId& id) const { 
-        return id.Hash(); 
-    } 
-}; 
- 
-template<> 
-inline void Out<NYql::NDq::TStageId>(IOutputStream& o, const NYql::NDq::TStageId& id) { 
-    o << '[' << id.TxId << ',' << id.StageId << ']'; 
-} 
+
+template<>
+struct THash<NYql::NDq::TStageId> {
+    inline size_t operator()(const NYql::NDq::TStageId& id) const {
+        return id.Hash();
+    }
+};
+
+template<>
+inline void Out<NYql::NDq::TStageId>(IOutputStream& o, const NYql::NDq::TStageId& id) {
+    o << '[' << id.TxId << ',' << id.StageId << ']';
+}

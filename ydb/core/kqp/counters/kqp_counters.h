@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "kqp_db_counters.h"
 
 #include <library/cpp/actors/helpers/mon_histogram_helper.h>
@@ -11,22 +11,22 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
- 
+
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
- 
+
 #include <util/system/spinlock.h>
- 
-namespace NKikimr { 
-namespace NKqp { 
- 
+
+namespace NKikimr {
+namespace NKqp {
+
 class TKqpCountersBase {
 protected:
     struct TYdbTxByKindCounters {
         NMonitoring::THistogramPtr TotalDuration;
         NMonitoring::THistogramPtr ServerDuration;
         NMonitoring::THistogramPtr ClientDuration;
-    }; 
- 
+    };
+
 protected:
     void CreateYdbTxKindCounters(TKqpTransactionInfo::EKind kind, const TString& name);
     static void UpdateYdbTxCounters(const TKqpTransactionInfo& txInfo,
@@ -34,7 +34,7 @@ protected:
 
     void Init();
 
-    void ReportQueryAction(NKikimrKqp::EQueryAction action); 
+    void ReportQueryAction(NKikimrKqp::EQueryAction action);
     void ReportQueryType(NKikimrKqp::EQueryType type);
 
     void ReportSessionShutdownRequest();
@@ -52,18 +52,18 @@ protected:
     void ReportQueryMaxShardReplySize(ui64 replySize);
     void ReportQueryMaxShardProgramSize(ui64 programSize);
 
-    void ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus); 
+    void ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(ui64 resultsSize);
 
     static TString GetIssueName(ui32 issueCode);
     void ReportIssues(const Ydb::Issue::IssueMessage& issue);
 
-    void ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration); 
+    void ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration);
 
     void ReportTransaction(const TKqpTransactionInfo& txInfo);
 
-    void ReportSqlVersion(ui16 sqlVersion); 
- 
+    void ReportSqlVersion(ui16 sqlVersion);
+
     void ReportWorkerCreated();
     void ReportWorkerFinished(TDuration lifeSpan);
     void ReportWorkerCleanupLatency(TDuration cleanupTime);
@@ -71,7 +71,7 @@ protected:
     void ReportWorkerClosedError();
     void ReportWorkerClosedRequest();
     void ReportQueriesPerWorker(ui32 queryId);
- 
+
     void ReportProxyForwardedRequest();
     void ReportSessionBalancerCV(ui32 value);
 
@@ -98,24 +98,24 @@ protected:
     NMonitoring::TDynamicCounterPtr KqpGroup;
     NMonitoring::TDynamicCounterPtr YdbGroup;
     NMonitoring::TDynamicCounterPtr QueryReplayGroup;
- 
-    // Requests 
+
+    // Requests
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::TDynamicCounters::TCounterPtr> QueryActionRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryRequests; 
-    NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests; 
-    NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests; 
-    NMonitoring::TDynamicCounters::TCounterPtr PingSessionRequests; 
- 
-    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes; 
+    NMonitoring::TDynamicCounters::TCounterPtr OtherQueryRequests;
+    NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests;
+    NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests;
+    NMonitoring::TDynamicCounters::TCounterPtr PingSessionRequests;
+
+    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     NMonitoring::TDynamicCounters::TCounterPtr YdbRequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueryBytes; 
-    NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes; 
+    NMonitoring::TDynamicCounters::TCounterPtr QueryBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes;
     NMonitoring::TDynamicCounters::TCounterPtr YdbParametersBytes;
- 
-    NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations; 
-    NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations; 
-    NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations; 
- 
+
+    NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations;
+    NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
+    NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
+
     THashMap<NKikimrKqp::EQueryType, NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
     NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
 
@@ -128,39 +128,39 @@ protected:
     NMonitoring::THistogramPtr QueryMaxShardReplySize;
     NMonitoring::THistogramPtr QueryMaxShardProgramSize;
 
-    // Request latency 
+    // Request latency
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> QueryLatencies;
     NMonitoring::THistogramPtr YdbQueryExecuteLatency;
- 
-    // Responses 
-    NMonitoring::TDynamicCounters::TCounterPtr OtherResponses; 
+
+    // Responses
+    NMonitoring::TDynamicCounters::TCounterPtr OtherResponses;
     NMonitoring::TDynamicCounters::TCounterPtr YdbResponsesLocksInvalidated;
 
-    THashMap<Ydb::StatusIds::StatusCode, NMonitoring::TDynamicCounters::TCounterPtr> YdbResponses; 
-    NMonitoring::TDynamicCounters::TCounterPtr OtherYdbResponses; 
- 
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes; 
+    THashMap<Ydb::StatusIds::StatusCode, NMonitoring::TDynamicCounters::TCounterPtr> YdbResponses;
+    NMonitoring::TDynamicCounters::TCounterPtr OtherYdbResponses;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
     NMonitoring::TDynamicCounters::TCounterPtr YdbResponseBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes; 
- 
-    THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters; 
- 
-    // Workers 
+    NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes;
+
+    THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters;
+
+    // Workers
     NMonitoring::THistogramPtr WorkerLifeSpan;
     NMonitoring::THistogramPtr QueriesPerWorker;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated; 
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedIdle; 
+    NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedIdle;
     NMonitoring::TDynamicCounters::TCounterPtr YdbWorkersClosedIdle;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError; 
-    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest; 
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers; 
+    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
     NMonitoring::TDynamicCounters::TCounterPtr YdbActiveWorkers;
     NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerCV;
     NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
     NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
 
     NMonitoring::THistogramPtr WorkerCleanupLatency;
- 
+
     // Transactions
     NMonitoring::TDynamicCounters::TCounterPtr TxCreated;
     NMonitoring::TDynamicCounters::TCounterPtr TxAborted;
@@ -250,7 +250,7 @@ public:
     void ReportCloseSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportQueryRequest(TKqpDbCountersPtr dbCounters, const NKikimrKqp::TQueryRequest& request);
 
-    void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus); 
+    void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);
     void ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue);
 
@@ -312,13 +312,13 @@ public:
     // Transactions
     THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters> TxByKind;
 
-    // Compile service 
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize; 
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes; 
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted; 
-    NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize; 
+    // Compile service
+    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize;
+    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
+    NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
     NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors;
- 
+
     // Resource Manager
     NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
     NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
@@ -361,8 +361,8 @@ public:
     TConcurrentRWHashMap<TString, TKqpDbCountersPtr, 256> DbCounters;
     TActorSystem* ActorSystem = nullptr;
     TActorId DbWatcherActorId;
-}; 
- 
+};
+
 struct TKqpRequestCounters : public TThrRefBase {
     using TPtr = TIntrusivePtr<TKqpRequestCounters>;
 
@@ -372,4 +372,4 @@ struct TKqpRequestCounters : public TThrRefBase {
 };
 
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

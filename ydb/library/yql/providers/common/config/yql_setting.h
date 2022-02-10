@@ -109,7 +109,7 @@ public:
     TConfSetting& operator =(const TConfSetting&) = default;
     TConfSetting& operator =(TConfSetting&&) = default;
 
-    TMaybe<TType> Get() const { 
+    TMaybe<TType> Get() const {
         return Value;
     }
 

@@ -35,7 +35,7 @@ namespace {
 static constexpr TDuration MinReattachDelay = TDuration::MilliSeconds(10);
 static constexpr TDuration MaxReattachDelay = TDuration::MilliSeconds(100);
 static constexpr TDuration MaxReattachDuration = TDuration::Seconds(4);
-static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB 
+static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB
 
 class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Data> {
     using TBase = TKqpExecuterBase<TKqpDataExecuter, EExecType::Data>;
@@ -130,18 +130,18 @@ public:
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
         TKqpRequestCounters::TPtr counters)
         : TBase(std::move(request), database, userToken, counters)
-    { 
-        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED); 
+    {
+        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
-        if (Request.AcquireLocksTxId || Request.ValidateLocks || Request.EraseLocks) { 
-            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE); 
-        } 
- 
-        if (Request.Snapshot.IsValid()) { 
-            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE); 
-        } 
-    } 
- 
+        if (Request.AcquireLocksTxId || Request.ValidateLocks || Request.EraseLocks) {
+            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
+        }
+
+        if (Request.Snapshot.IsValid()) {
+            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
+        }
+    }
+
 public:
     STATEFN(WaitResolveState) {
         switch (ev->GetTypeRewrite()) {
@@ -1264,25 +1264,25 @@ private:
                 auto& stage = tx.Body.GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
 
-                if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) { 
-                    TMaybe<TString> error; 
- 
-                    if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) { 
-                        error = TStringBuilder() << "Non-read operations can't be performed on async index table" 
-                            << ": " << stageInfo.Meta.ShardKey->TableId; 
-                    } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) { 
-                        error = TStringBuilder() << "Read operation can be performed on async index table" 
-                            << ": " << stageInfo.Meta.ShardKey->TableId << " only with StaleRO isolation level"; 
-                    } 
- 
-                    if (error) { 
-                        LOG_E(*error); 
-                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, 
-                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error)); 
-                        return; 
-                    } 
-                } 
- 
+                if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+                    TMaybe<TString> error;
+
+                    if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
+                        error = TStringBuilder() << "Non-read operations can't be performed on async index table"
+                            << ": " << stageInfo.Meta.ShardKey->TableId;
+                    } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) {
+                        error = TStringBuilder() << "Read operation can be performed on async index table"
+                            << ": " << stageInfo.Meta.ShardKey->TableId << " only with StaleRO isolation level";
+                    }
+
+                    if (error) {
+                        LOG_E(*error);
+                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
+                        return;
+                    }
+                }
+
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
                 ReadOnlyTx &= !stage.GetIsEffectsStage();
@@ -1437,20 +1437,20 @@ private:
 
         // Single-shard transactions are always immediate
         ImmediateTx = datashardTxs.size() <= 1;
-        switch (Request.IsolationLevel) { 
+        switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
-            case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED: 
-            // StaleRO transactions always execute as immediate 
-            // (legacy behaviour, for compatibility with current execution engine) 
-            case NKikimrKqp::ISOLATION_LEVEL_READ_STALE: 
-                YQL_ENSURE(ReadOnlyTx); 
-                ImmediateTx = true; 
-                break; 
- 
-            default: 
-                break; 
+            case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
+            // StaleRO transactions always execute as immediate
+            // (legacy behaviour, for compatibility with current execution engine)
+            case NKikimrKqp::ISOLATION_LEVEL_READ_STALE:
+                YQL_ENSURE(ReadOnlyTx);
+                ImmediateTx = true;
+                break;
+
+            default:
+                break;
         }
- 
+
         if (ReadOnlyTx && Request.Snapshot.IsValid()) {
             // Snapshot reads are always immediate
             ImmediateTx = true;
@@ -1458,8 +1458,8 @@ private:
 
         UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
         if (datashardTxs.size() > 1) {
-            // Followers only allowed for single shard transactions. 
-            // (legacy behaviour, for compatibility with current execution engine) 
+            // Followers only allowed for single shard transactions.
+            // (legacy behaviour, for compatibility with current execution engine)
             UseFollowers = false;
         }
         if (Request.Snapshot.IsValid()) {
@@ -1544,7 +1544,7 @@ private:
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
-        } 
+        }
 
         // first, start compute tasks
         TVector<ui64> computeTaskIds{Reserve(computeTasks.size())};
@@ -1599,12 +1599,12 @@ private:
             ExecuteDatashardTransaction(shardId, shardTx, lockTxId);
         }
 
-        LOG_I("Total tasks: " << TasksGraph.GetTasks().size() 
+        LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx
             << ", datashardTxs: " << datashardTxs.size()
             << ", immediate: " << ImmediateTx
             << ", useFollowers: " << UseFollowers);
- 
+
         LOG_T("Updating channels after the creation of compute actors");
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : computeTaskIds) {
@@ -1612,7 +1612,7 @@ private:
             CollectTaskChannelsUpdates(task, updates);
         }
         PropagateChannelsUpdates(updates);
-        CheckExecutionComplete(); 
+        CheckExecutionComplete();
     }
 
     void Finalize() {
@@ -1653,16 +1653,16 @@ private:
             Stats.reset();
         }
 
-        auto resultSize = response.ByteSize(); 
-        if (resultSize > (int)ReplySizeLimit) { 
-            TString message = TStringBuilder() << "Query result size limit exceeded. (" 
-                << resultSize << " > " << ReplySizeLimit << ")"; 
- 
-            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message); 
-            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue); 
-            return; 
-        } 
- 
+        auto resultSize = response.ByteSize();
+        if (resultSize > (int)ReplySizeLimit) {
+            TString message = TStringBuilder() << "Query result size limit exceeded. ("
+                << resultSize << " > " << ReplySizeLimit << ")";
+
+            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message);
+            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
+            return;
+        }
+
         LOG_D("Sending response to: " << Target << ", results: " << Results.size());
         Send(Target, ResponseEv.release());
         PassAway();

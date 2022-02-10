@@ -322,9 +322,9 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
 
             upsertOperation();
 
-            return tx.Commit().Apply([](const auto& future) { 
-                return NThreading::MakeFuture<NYdb::TStatus>(future.GetValue()); 
-            }); 
+            return tx.Commit().Apply([](const auto& future) {
+                return NThreading::MakeFuture<NYdb::TStatus>(future.GetValue());
+            });
         }, retrySelectSettings).GetValueSync().IsSuccess() == false);
 
         counters = extractor.Extract();

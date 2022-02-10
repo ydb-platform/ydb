@@ -15,18 +15,18 @@
 namespace NYdb {
 namespace NS3Internal {
 
-TS3ListingResult::TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, ui32 keySuffixSize, TStatus&& status) 
+TS3ListingResult::TS3ListingResult(TResultSet&& commonPrefixes, TResultSet&& contents, ui32 keySuffixSize, TStatus&& status)
     : TStatus(std::move(status))
     , CommonPrefixes(std::move(commonPrefixes))
     , Contents(std::move(contents))
     , KeySuffixSize(keySuffixSize)
 {}
 
-const TResultSet& TS3ListingResult::GetCommonPrefixes() const { 
+const TResultSet& TS3ListingResult::GetCommonPrefixes() const {
     return CommonPrefixes;
 }
 
-const TResultSet& TS3ListingResult::GetContents() const { 
+const TResultSet& TS3ListingResult::GetContents() const {
     return Contents;
 }
 
@@ -73,8 +73,8 @@ public:
                 if (any) {
                     any->UnpackTo(&result);
                 }
-                TResultSet commonPrefixes(result.Getcommon_prefixes()); 
-                TResultSet contents(result.Getcontents()); 
+                TResultSet commonPrefixes(result.Getcommon_prefixes());
+                TResultSet contents(result.Getcontents());
 
                 TS3ListingResult val(std::move(commonPrefixes), std::move(contents), result.Getkey_suffix_size(),
                     TStatus(std::move(status)));
@@ -87,7 +87,7 @@ public:
             &Ydb::S3Internal::V1::S3InternalService::Stub::AsyncS3Listing,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings), 
+            TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
 
         return promise.GetFuture();

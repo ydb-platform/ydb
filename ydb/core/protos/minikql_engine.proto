@@ -13,7 +13,7 @@ enum EResult {
     SnapshotNotExist = 8;
     SnapshotNotReady = 9;
     TooManyRS = 10;
-    ResultTooBig = 11; 
+    ResultTooBig = 11;
     Cancelled = 12;
 };
 

@@ -26,9 +26,9 @@ message TProgram {
         bool HasSort = 2;
         bool HasUdf = 3;
     }
- 
-    uint32 RuntimeVersion = 1; 
-    bytes Raw = 2; 
+
+    uint32 RuntimeVersion = 1;
+    bytes Raw = 2;
     TSettings Settings = 3;
 }
 
@@ -55,7 +55,7 @@ message TChannel {
     TEndpoint SrcEndpoint = 5;
     TEndpoint DstEndpoint = 6;
 
-    bool IsPersistent = 7; 
+    bool IsPersistent = 7;
     bool InMemory = 8;
     ECheckpointingMode CheckpointingMode = 9;
 }
@@ -109,9 +109,9 @@ message TTaskOutputHashPartition {
     uint32 PartitionsCount = 2;
 }
 
-message TTaskOutputEffects { 
+message TTaskOutputEffects {
 }
- 
+
 message TTaskOutputSink {
     string Type = 1;
     google.protobuf.Any Settings = 2;
@@ -124,7 +124,7 @@ message TTaskOutput {
         TTaskOutputRangePartition RangePartition = 11;
         TTaskOutputHashPartition HashPartition = 12;
         TTaskOutputBroadcast Broadcast = 13;
-        TTaskOutputEffects Effects = 14; 
+        TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
     }
 }

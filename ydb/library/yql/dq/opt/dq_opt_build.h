@@ -5,6 +5,6 @@
 
 namespace NYql::NDq {
 
-TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependantConsumers); 
+TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependantConsumers);
 
 } // namespace NYql::NDq

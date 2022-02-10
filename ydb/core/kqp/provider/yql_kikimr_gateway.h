@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "yql_kikimr_query_traits.h"
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
@@ -7,45 +7,45 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
- 
-// TODO: Switch to public protobufs 
+
+// TODO: Switch to public protobufs
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/aclib/aclib.h>
- 
+
 #include <library/cpp/threading/future/future.h>
- 
+
 #include <util/datetime/base.h>
-#include <util/generic/flags.h> 
-#include <util/generic/map.h> 
+#include <util/generic/flags.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/hash.h>
-#include <util/generic/ptr.h> 
-#include <util/string/join.h> 
- 
+#include <util/generic/ptr.h>
+#include <util/string/join.h>
+
 #include <memory>
 
-namespace NYql { 
- 
+namespace NYql {
+
 using NUdf::EDataSlot;
 
 class TKikimrGatewayConfig;
-class TKikimrClusterConfig; 
- 
-using TKikimrParamsMap = TMap<TString, NKikimrMiniKQL::TParams>; 
- 
-struct TKikimrQueryPhaseLimits { 
-    ui32 AffectedShardsLimit = 0; 
-    ui32 ReadsetCountLimit = 0; 
-    ui64 ComputeNodeMemoryLimitBytes = 0; 
-    ui64 TotalReadSizeLimitBytes = 0; 
-}; 
- 
-struct TKikimrQueryLimits { 
-    TKikimrQueryPhaseLimits PhaseLimits; 
-}; 
- 
+class TKikimrClusterConfig;
+
+using TKikimrParamsMap = TMap<TString, NKikimrMiniKQL::TParams>;
+
+struct TKikimrQueryPhaseLimits {
+    ui32 AffectedShardsLimit = 0;
+    ui32 ReadsetCountLimit = 0;
+    ui64 ComputeNodeMemoryLimitBytes = 0;
+    ui64 TotalReadSizeLimitBytes = 0;
+};
+
+struct TKikimrQueryLimits {
+    TKikimrQueryPhaseLimits PhaseLimits;
+};
+
 struct TIndexDescription {
     enum class EType : ui32 {
         GlobalSync = 0,
@@ -177,14 +177,14 @@ struct TTableSettings {
     bool IsSet() const;
 };
 
-struct TKikimrColumnMetadata { 
+struct TKikimrColumnMetadata {
     TString Name;
-    ui32 Id = 0; 
+    ui32 Id = 0;
     TString Type;
     bool NotNull = false;
-    ui32 TypeId = 0; 
+    ui32 TypeId = 0;
     TVector<TString> Families;
- 
+
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, ui32 typeId = 0)
@@ -215,98 +215,98 @@ struct TKikimrColumnMetadata {
         }
     }
 
-    bool IsSameScheme(const TKikimrColumnMetadata& other) const { 
+    bool IsSameScheme(const TKikimrColumnMetadata& other) const {
         return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
-    } 
+    }
 
     void SetNotNull() {
         NotNull = true;
     }
-}; 
- 
-struct TKikimrPathId { 
-    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw) 
-        : Raw(raw) {} 
- 
-    TKikimrPathId(ui64 ownerId, ui64 tableId) 
-        : TKikimrPathId(std::make_pair(ownerId, tableId)) {} 
- 
+};
+
+struct TKikimrPathId {
+    explicit TKikimrPathId(const std::pair<ui64, ui64>& raw)
+        : Raw(raw) {}
+
+    TKikimrPathId(ui64 ownerId, ui64 tableId)
+        : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
+
     TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
         : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
 
-    ui64 OwnerId() const { return Raw.first; } 
-    ui64 TableId() const { return Raw.second; } 
- 
-    TString ToString() const { 
-        return ::ToString(OwnerId()) + ':' + ::ToString(TableId()); 
-    } 
- 
-    bool operator==(const TKikimrPathId& x) const { 
-        return Raw == x.Raw; 
-    } 
- 
-    bool operator!=(const TKikimrPathId& x) const { 
-        return !operator==(x); 
-    } 
- 
-    ui64 Hash() const noexcept { 
-        return THash<decltype(Raw)>()(Raw); 
-    } 
- 
-    static TKikimrPathId Parse(const TStringBuf& str); 
- 
-    std::pair<ui64, ui64> Raw; 
+    ui64 OwnerId() const { return Raw.first; }
+    ui64 TableId() const { return Raw.second; }
+
+    TString ToString() const {
+        return ::ToString(OwnerId()) + ':' + ::ToString(TableId());
+    }
+
+    bool operator==(const TKikimrPathId& x) const {
+        return Raw == x.Raw;
+    }
+
+    bool operator!=(const TKikimrPathId& x) const {
+        return !operator==(x);
+    }
+
+    ui64 Hash() const noexcept {
+        return THash<decltype(Raw)>()(Raw);
+    }
+
+    static TKikimrPathId Parse(const TStringBuf& str);
+
+    std::pair<ui64, ui64> Raw;
 
     void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
         message->SetOwnerId(OwnerId());
         message->SetTableId(TableId());
     }
-}; 
- 
+};
+
 enum class EKikimrTableKind : ui32 {
-    Unspecified = 0, 
+    Unspecified = 0,
     Datashard = 1,
     SysView = 2,
     Olap = 3
-}; 
- 
-struct TKikimrTableMetadata : public TThrRefBase { 
-    bool DoesExist = false; 
+};
+
+struct TKikimrTableMetadata : public TThrRefBase {
+    bool DoesExist = false;
     TString Cluster;
     TString Name;
-    TKikimrPathId PathId; 
-    TString SysView; 
-    ui64 SchemaVersion = 0; 
-    THashMap<TString, TString> Attributes; 
-    EKikimrTableKind Kind = EKikimrTableKind::Unspecified; 
- 
-    ui64 RecordsCount = 0; 
-    ui64 DataSize = 0; 
-    ui64 MemorySize = 0; 
-    ui32 ShardsCount = 0; 
- 
-    TInstant LastAccessTime; 
-    TInstant LastUpdateTime; 
- 
+    TKikimrPathId PathId;
+    TString SysView;
+    ui64 SchemaVersion = 0;
+    THashMap<TString, TString> Attributes;
+    EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
+
+    ui64 RecordsCount = 0;
+    ui64 DataSize = 0;
+    ui64 MemorySize = 0;
+    ui32 ShardsCount = 0;
+
+    TInstant LastAccessTime;
+    TInstant LastUpdateTime;
+
     TMap<TString, TKikimrColumnMetadata> Columns;
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
- 
+
     // Indexes and SecondaryGlobalIndexMetadata must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> SecondaryGlobalIndexMetadata;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
- 
+
     TKikimrTableMetadata(const TString& cluster, const TString& table)
-        : Cluster(cluster) 
-        , Name(table) 
-        , PathId(std::make_pair(0, 0)) {} 
- 
-    TKikimrTableMetadata() 
-        : TKikimrTableMetadata("", "") {} 
- 
+        : Cluster(cluster)
+        , Name(table)
+        , PathId(std::make_pair(0, 0)) {}
+
+    TKikimrTableMetadata()
+        : TKikimrTableMetadata("", "") {}
+
     TKikimrTableMetadata(const NKikimrKqp::TKqpTableMetadataProto* message)
         : DoesExist(message->GetDoesExist())
         , Cluster(message->GetCluster())
@@ -341,27 +341,27 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
     }
 
-    bool IsSameTable(const TKikimrTableMetadata& other) { 
-        if (!DoesExist) { 
-            return false; 
-        } 
- 
-        if (Cluster != other.Cluster || Name != other.Name || Columns.size() != other.Columns.size() || 
+    bool IsSameTable(const TKikimrTableMetadata& other) {
+        if (!DoesExist) {
+            return false;
+        }
+
+        if (Cluster != other.Cluster || Name != other.Name || Columns.size() != other.Columns.size() ||
                 KeyColumnNames != other.KeyColumnNames || Indexes.size() != other.Indexes.size()) {
             return false;
         }
 
         for (auto& [name, column]: Columns) {
-            auto otherColumn = other.Columns.FindPtr(name); 
-            if (!otherColumn) { 
-                return false; 
-            } 
- 
-            if (!column.IsSameScheme(*otherColumn)) { 
-                return false; 
-            } 
-        } 
- 
+            auto otherColumn = other.Columns.FindPtr(name);
+            if (!otherColumn) {
+                return false;
+            }
+
+            if (!column.IsSameScheme(*otherColumn)) {
+                return false;
+            }
+        }
+
         for (size_t i = 0; i < Indexes.size(); i++) {
             if (!Indexes[i].IsSameIndex(other.Indexes[i])) {
                 return false;
@@ -369,7 +369,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
 
         return true;
-    } 
+    }
 
     void ToMessage(NKikimrKqp::TKqpTableMetadataProto* message) const {
         message->SetDoesExist(DoesExist);
@@ -419,8 +419,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
         return {nullptr, TIndexDescription::EIndexState::Invalid};
     }
-}; 
- 
+};
+
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
@@ -458,103 +458,103 @@ struct TDropGroupSettings {
     bool Force = false;
 };
 
-struct TKikimrListPathItem { 
+struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
-        Name = name; 
-        IsDirectory = isDirectory; 
-    } 
- 
+        Name = name;
+        IsDirectory = isDirectory;
+    }
+
     TString Name;
-    bool IsDirectory; 
-}; 
- 
-typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr; 
- 
-class TKikimrClusterMapping { 
-public: 
-    TKikimrClusterMapping(const TKikimrGatewayConfig& config); 
- 
+    bool IsDirectory;
+};
+
+typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
+
+class TKikimrClusterMapping {
+public:
+    TKikimrClusterMapping(const TKikimrGatewayConfig& config);
+
     void GetAllClusterNames(TVector<TString>& names) const;
     const TKikimrClusterConfig& GetClusterConfig(const TString& name) const;
     TMaybe<TString> GetClusterSetting(const TString& cluster, const TString& name) const;
     TString GetDefaultClusterName() const;
-    bool HasCluster(const TString& cluster) const; 
- 
-private: 
+    bool HasCluster(const TString& cluster) const;
+
+private:
     THashMap<TString, TKikimrClusterConfig> Clusters;
     THashMap<TString, THashMap<TString, TString>> ClusterSettings;
     TString DefaultClusterName;
-}; 
- 
-template<typename TResult> 
-class IKikimrAsyncResult : public TThrRefBase { 
-public: 
-    virtual bool HasResult() const = 0; 
+};
+
+template<typename TResult>
+class IKikimrAsyncResult : public TThrRefBase {
+public:
+    virtual bool HasResult() const = 0;
     virtual TResult GetResult() = 0;
-    virtual NThreading::TFuture<bool> Continue() = 0; 
- 
-    virtual ~IKikimrAsyncResult() {} 
-}; 
- 
-template<typename TResult> 
-class TKikimrResultHolder : public IKikimrAsyncResult<TResult> { 
-public: 
+    virtual NThreading::TFuture<bool> Continue() = 0;
+
+    virtual ~IKikimrAsyncResult() {}
+};
+
+template<typename TResult>
+class TKikimrResultHolder : public IKikimrAsyncResult<TResult> {
+public:
     TKikimrResultHolder(TResult&& result)
         : Result(std::move(result)) {}
- 
-    bool HasResult() const override { 
+
+    bool HasResult() const override {
         return Full;
-    } 
- 
+    }
+
     TResult GetResult() override {
         Full = false;
         return std::move(Result);
-    } 
- 
-    NThreading::TFuture<bool> Continue() override { 
-        return NThreading::MakeFuture<bool>(true); 
-    } 
- 
-private: 
-    TResult Result; 
+    }
+
+    NThreading::TFuture<bool> Continue() override {
+        return NThreading::MakeFuture<bool>(true);
+    }
+
+private:
+    TResult Result;
     bool Full = true;
-}; 
- 
-template<typename TResult> 
+};
+
+template<typename TResult>
 static TIntrusivePtr<TKikimrResultHolder<TResult>> MakeKikimrResultHolder(TResult&& result) {
     return MakeIntrusive<TKikimrResultHolder<TResult>>(std::move(result));
-} 
- 
-class IKikimrGateway : public TThrRefBase { 
-public: 
+}
+
+class IKikimrGateway : public TThrRefBase {
+public:
     using TPtr = TIntrusivePtr<IKikimrGateway>;
 
-    struct TGenericResult : public NCommon::TOperationResult { 
-    }; 
- 
-    struct TListPathResult : public TGenericResult { 
+    struct TGenericResult : public NCommon::TOperationResult {
+    };
+
+    struct TListPathResult : public TGenericResult {
         TString Path;
         TVector<TKikimrListPathItem> Items;
-    }; 
- 
-    struct TTableMetadataResult : public TGenericResult { 
-        TKikimrTableMetadataPtr Metadata; 
-    }; 
- 
-    struct TQueryResult : public TGenericResult { 
+    };
+
+    struct TTableMetadataResult : public TGenericResult {
+        TKikimrTableMetadataPtr Metadata;
+    };
+
+    struct TQueryResult : public TGenericResult {
         TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
-        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate. 
-        NKqpProto::TKqpStatsQuery QueryStats; 
+        TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
+        NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
         std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
         std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
-        TString QueryAst; 
-        TString QueryPlan; 
+        TString QueryAst;
+        TString QueryPlan;
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
-        TMaybe<ui16> SqlVersion; 
-    }; 
- 
+        TMaybe<ui16> SqlVersion;
+    };
+
     struct TLoadTableMetadataSettings {
         TLoadTableMetadataSettings& WithTableStats(bool enable) {
             RequestStats_ = enable;
@@ -581,28 +581,28 @@ public:
         virtual ~IKqpTableMetadataLoader() = default;
     };
 
-public: 
-    virtual bool HasCluster(const TString& cluster) = 0; 
+public:
+    virtual bool HasCluster(const TString& cluster) = 0;
     virtual TVector<TString> GetClusters() = 0;
-    virtual TString GetDefaultCluster() = 0; 
+    virtual TString GetDefaultCluster() = 0;
     virtual TMaybe<TKikimrClusterConfig> GetClusterConfig(const TString& cluster) = 0;
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
- 
-    virtual void SetToken(const TString& cluster, const TString& token) = 0; 
- 
+
+    virtual void SetToken(const TString& cluster, const TString& token) = 0;
+
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
- 
-    virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata( 
+
+    virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
- 
-    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0; 
- 
+
+    virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
+
     virtual NThreading::TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
- 
+
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
@@ -617,43 +617,43 @@ public:
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 
-public: 
+public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
- 
+
     static TString CanonizePath(const TString& path);
- 
-    template <typename TIter> 
-    static TString CombinePath(TIter begin, TIter end, bool canonize = true) { 
-        auto path = JoinRange("/", begin, end); 
-        return canonize 
-            ? CanonizePath(path) 
-            : path; 
-    } 
- 
+
+    template <typename TIter>
+    static TString CombinePath(TIter begin, TIter end, bool canonize = true) {
+        auto path = JoinRange("/", begin, end);
+        return canonize
+            ? CanonizePath(path)
+            : path;
+    }
+
     static TVector<TString> SplitPath(const TString& path);
- 
-    static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error); 
- 
+
+    static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
+
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
 
     static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
 
-    static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult); 
-}; 
- 
+    static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
+};
+
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
-Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value); 
- 
+Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
+
 void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
 
-} // namespace NYql 
- 
-template<> 
-struct THash<NYql::TKikimrPathId> { 
-    inline ui64 operator()(const NYql::TKikimrPathId& x) const noexcept { 
-        return x.Hash(); 
-    } 
-}; 
+} // namespace NYql
+
+template<>
+struct THash<NYql::TKikimrPathId> {
+    inline ui64 operator()(const NYql::TKikimrPathId& x) const noexcept {
+        return x.Hash();
+    }
+};

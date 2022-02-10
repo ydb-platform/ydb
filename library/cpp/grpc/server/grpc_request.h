@@ -180,13 +180,13 @@ public:
         return AuthState_;
     }
 
-    void Reply(NProtoBuf::Message* resp, ui32 status) override { 
-        ResponseStatus = status; 
+    void Reply(NProtoBuf::Message* resp, ui32 status) override {
+        ResponseStatus = status;
         WriteDataOk(resp);
     }
 
-    void Reply(grpc::ByteBuffer* resp, ui32 status) override { 
-        ResponseStatus = status; 
+    void Reply(grpc::ByteBuffer* resp, ui32 status) override {
+        ResponseStatus = status;
         WriteByteDataOk(resp);
     }
 
@@ -427,8 +427,8 @@ private:
             ok ? "true" : "false", this->Context.peer().c_str());
         //PrintBackTrace();
         DecRequest();
-        Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus, 
-            TDuration::Seconds(RequestTimer.Passed())); 
+        Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
+            TDuration::Seconds(RequestTimer.Passed()));
         return false;
     }
 
@@ -437,8 +437,8 @@ private:
             ok ? "true" : "false", this->Context.peer().c_str());
         if (!SkipUpdateCountersOnError) {
             DecRequest();
-            Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus, 
-                TDuration::Seconds(RequestTimer.Passed())); 
+            Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
+                TDuration::Seconds(RequestTimer.Passed()));
         }
         return false;
     }
@@ -498,7 +498,7 @@ private:
     TOnNextReply NextReplyCb_;
     ui32 RequestSize = 0;
     ui32 ResponseSize = 0;
-    ui32 ResponseStatus = 0; 
+    ui32 ResponseStatus = 0;
     THPTimer RequestTimer;
     TAuthState AuthState_ = 0;
     bool RequestRegistered_ = false;

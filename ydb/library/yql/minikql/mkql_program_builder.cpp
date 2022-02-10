@@ -728,7 +728,7 @@ TRuntimeNode TProgramBuilder::Discard(TRuntimeNode stream) {
 
 TRuntimeNode TProgramBuilder::Map(TRuntimeNode list, const TUnaryLambda& handler) {
     return BuildMap(__func__, list, handler);
-} 
+}
 
 TRuntimeNode TProgramBuilder::OrderedMap(TRuntimeNode list, const TUnaryLambda& handler) {
     return BuildMap(__func__, list, handler);
@@ -903,14 +903,14 @@ TRuntimeNode TProgramBuilder::Nanvl(TRuntimeNode data, TRuntimeNode dataIfNaN) {
 }
 
 TRuntimeNode TProgramBuilder::FlatMap(TRuntimeNode list, const TUnaryLambda& handler)
-{ 
+{
     return BuildFlatMap(__func__, list, handler);
-} 
+}
 
 TRuntimeNode TProgramBuilder::OrderedFlatMap(TRuntimeNode list, const TUnaryLambda& handler)
-{ 
+{
     return BuildFlatMap(__func__, list, handler);
-} 
+}
 
 TRuntimeNode TProgramBuilder::Filter(TRuntimeNode list, const TUnaryLambda& handler)
 {
@@ -923,7 +923,7 @@ TRuntimeNode TProgramBuilder::Filter(TRuntimeNode list, TRuntimeNode limit, cons
 }
 
 TRuntimeNode TProgramBuilder::OrderedFilter(TRuntimeNode list, const TUnaryLambda& handler)
-{ 
+{
     return BuildFilter(__func__, list, handler);
 }
 
@@ -954,19 +954,19 @@ TRuntimeNode TProgramBuilder::SkipWhileInclusive(TRuntimeNode list, const TUnary
 
 TRuntimeNode TProgramBuilder::BuildListSort(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode ascending,
     const TUnaryLambda& keyExtractor)
-{ 
+{
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsList(), "Expected list.");
- 
+
     const auto itemType = static_cast<const TListType&>(*listType).GetItemType();
- 
-    ThrowIfListOfVoid(itemType); 
- 
+
+    ThrowIfListOfVoid(itemType);
+
     const auto ascendingType = ascending.GetStaticType();
     const auto itemArg = Arg(itemType);
- 
+
     auto key = keyExtractor(itemArg);
- 
+
     if (ascendingType->IsTuple()) {
         const auto ascendingTuple = AS_TYPE(TTupleType, ascendingType);
         if (ascendingTuple->GetElementsCount() == 0) {
@@ -980,13 +980,13 @@ TRuntimeNode TProgramBuilder::BuildListSort(const std::string_view& callableName
     }
 
     TCallableBuilder callableBuilder(Env, callableName, listType);
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(key); 
-    callableBuilder.Add(ascending); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(key);
+    callableBuilder.Add(ascending);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BuildListNth(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode n, TRuntimeNode ascending,
     const TUnaryLambda& keyExtractor)
 {
@@ -1074,7 +1074,7 @@ TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRu
 
 TRuntimeNode TProgramBuilder::BuildTake(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count) {
     const auto listType = flow.GetStaticType();
- 
+
     TType* itemType = nullptr;
     if (listType->IsFlow()) {
         itemType = AS_TYPE(TFlowType, listType)->GetItemType();
@@ -1087,15 +1087,15 @@ TRuntimeNode TProgramBuilder::BuildTake(const std::string_view& callableName, TR
     MKQL_ENSURE(itemType, "Expected flow, list or stream.");
     ThrowIfListOfVoid(itemType);
 
-    MKQL_ENSURE(count.GetStaticType()->IsData(), "Expected data"); 
+    MKQL_ENSURE(count.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(static_cast<const TDataType&>(*count.GetStaticType()).GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
- 
-    TCallableBuilder callableBuilder(Env, callableName, listType); 
+
+    TCallableBuilder callableBuilder(Env, callableName, listType);
     callableBuilder.Add(flow);
-    callableBuilder.Add(count); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(count);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 template<bool IsFilter, bool OnStruct>
 TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list) {
     const auto listType = list.GetStaticType();
@@ -1523,7 +1523,7 @@ TRuntimeNode TProgramBuilder::Take(TRuntimeNode list, TRuntimeNode count) {
 }
 
 TRuntimeNode TProgramBuilder::Sort(TRuntimeNode list, TRuntimeNode ascending, const TUnaryLambda& keyExtractor)
-{ 
+{
     return BuildSort(__func__, list, ascending, keyExtractor);
 }
 
@@ -3188,56 +3188,56 @@ void TProgramBuilder::ThrowIfListOfVoid(TType* type) {
 }
 
 TRuntimeNode TProgramBuilder::BuildFlatMap(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler)
-{ 
+{
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsOptional() || listType->IsStream(), "Expected flow, list, stream or optional");
- 
-    if (listType->IsOptional()) { 
+
+    if (listType->IsOptional()) {
         const auto itemArg = Arg(AS_TYPE(TOptionalType, listType)->GetItemType());
         const auto newList = handler(itemArg);
         const auto type = newList.GetStaticType();
         MKQL_ENSURE(type->IsList() || type->IsOptional() || type->IsStream() || type->IsFlow(), "Expected flow, list, stream or optional");
-        return IfPresent(list, [&](TRuntimeNode item) { 
-            return handler(item); 
+        return IfPresent(list, [&](TRuntimeNode item) {
+            return handler(item);
         }, type->IsOptional() ? NewEmptyOptional(type) : type->IsList() ? NewEmptyList(AS_TYPE(TListType, type)->GetItemType()) : EmptyIterator(type));
-    } 
- 
+    }
+
     const auto itemType = listType->IsFlow() ?
             AS_TYPE(TFlowType, listType)->GetItemType():
             listType->IsList() ?
                 AS_TYPE(TListType, listType)->GetItemType():
                 AS_TYPE(TStreamType, listType)->GetItemType();
- 
-    ThrowIfListOfVoid(itemType); 
+
+    ThrowIfListOfVoid(itemType);
     const auto itemArg = Arg(itemType);
     const auto newList = handler(itemArg);
     const auto type = newList.GetStaticType();
- 
-    TType* retItemType = nullptr; 
-    if (type->IsOptional()) { 
+
+    TType* retItemType = nullptr;
+    if (type->IsOptional()) {
         retItemType = AS_TYPE(TOptionalType, type)->GetItemType();
     } else if (type->IsFlow()) {
         retItemType = AS_TYPE(TFlowType, type)->GetItemType();
-    } else if (type->IsList()) { 
+    } else if (type->IsList()) {
         retItemType = AS_TYPE(TListType, type)->GetItemType();
     } else if (type->IsStream()) {
         retItemType = AS_TYPE(TStreamType, type)->GetItemType();
-    } else { 
+    } else {
         THROW yexception() << "Expected flow, list or stream.";
-    } 
- 
+    }
+
     const auto resultListType = listType->IsFlow() || type->IsFlow() ?
         TFlowType::Create(retItemType, Env):
         listType->IsList() ?
             (TType*)TListType::Create(retItemType, Env):
             (TType*)TStreamType::Create(retItemType, Env);
-    TCallableBuilder callableBuilder(Env, callableName, resultListType); 
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(newList); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    TCallableBuilder callableBuilder(Env, callableName, resultListType);
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(newList);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::MultiMap(TRuntimeNode list, const TExpandLambda& handler)
 {
     if constexpr (RuntimeVersion < 16U) {
@@ -3492,33 +3492,33 @@ TRuntimeNode TProgramBuilder::WideFilter(TRuntimeNode flow, TRuntimeNode limit, 
 }
 
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler, TType* resultType)
-{ 
+{
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected flow, list or stream.");
     const auto outputType = resultType ? resultType : listType;
- 
+
     const auto itemType = listType->IsFlow() ?
         AS_TYPE(TFlowType, listType)->GetItemType():
         listType->IsList() ?
             AS_TYPE(TListType, listType)->GetItemType():
             AS_TYPE(TStreamType, listType)->GetItemType();
-    ThrowIfListOfVoid(itemType); 
- 
+    ThrowIfListOfVoid(itemType);
+
     const auto itemArg = Arg(itemType);
     const auto predicate = handler(itemArg);
- 
-    MKQL_ENSURE(predicate.GetStaticType()->IsData(), "Expected boolean data"); 
- 
-    const auto& detailedPredicateType = static_cast<const TDataType&>(*predicate.GetStaticType()); 
+
+    MKQL_ENSURE(predicate.GetStaticType()->IsData(), "Expected boolean data");
+
+    const auto& detailedPredicateType = static_cast<const TDataType&>(*predicate.GetStaticType());
     MKQL_ENSURE(detailedPredicateType.GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected boolean data");
- 
+
     TCallableBuilder callableBuilder(Env, callableName, outputType);
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(predicate); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(predicate);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode limit, const TUnaryLambda& handler, TType* resultType)
 {
     if constexpr (RuntimeVersion < 4U) {
@@ -3637,43 +3637,43 @@ TRuntimeNode TProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode n, con
 }
 
 TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler)
-{ 
+{
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream() || listType->IsOptional(), "Expected flow, list, stream or optional");
- 
-    if (listType->IsOptional()) { 
+
+    if (listType->IsOptional()) {
         const auto itemArg = Arg(AS_TYPE(TOptionalType, listType)->GetItemType());
         const auto newItem = handler(itemArg);
- 
+
         return IfPresent(list,
             [&](TRuntimeNode item) { return NewOptional(handler(item)); },
             NewEmptyOptional(NewOptionalType(newItem.GetStaticType()))
         );
-    } 
- 
+    }
+
     const auto itemType = listType->IsFlow() ?
         AS_TYPE(TFlowType, listType)->GetItemType():
         listType->IsList() ?
             AS_TYPE(TListType, listType)->GetItemType():
             AS_TYPE(TStreamType, listType)->GetItemType();
- 
-    ThrowIfListOfVoid(itemType); 
- 
+
+    ThrowIfListOfVoid(itemType);
+
     const auto itemArg = Arg(itemType);
     const auto newItem = handler(itemArg);
- 
+
     const auto resultListType = listType->IsFlow() ?
         (TType*)TFlowType::Create(newItem.GetStaticType(), Env):
         listType->IsList() ?
             (TType*)TListType::Create(newItem.GetStaticType(), Env):
             (TType*)TStreamType::Create(newItem.GetStaticType(), Env);
-    TCallableBuilder callableBuilder(Env, callableName, resultListType); 
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(newItem); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    TCallableBuilder callableBuilder(Env, callableName, resultListType);
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(newItem);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args) {
     MKQL_ENSURE(args.size() >= 1U && args.size() <= 3U, "Expected from one to three arguments.");
     std::array<TArgType, 4U> argTypes;
@@ -3818,7 +3818,7 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
         TType* argType = callableType->GetArgumentType(i);
         TRuntimeNode arg = args[i];
         MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType),
-                    "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr() 
+                    "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr()
                                    << " with static " << arg.GetStaticType()->GetKindAsStr());
     }
 
@@ -4480,16 +4480,16 @@ TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
 
     auto itemType = AS_TYPE(TStreamType, stream)->GetItemType();
 
-    TRuntimeNode keyExtractorItemArg = Arg(itemType); 
-    TRuntimeNode keyExtractorResult = keyExtractor(keyExtractorItemArg); 
+    TRuntimeNode keyExtractorItemArg = Arg(itemType);
+    TRuntimeNode keyExtractorResult = keyExtractor(keyExtractorItemArg);
 
-    TRuntimeNode groupSwitchKeyArg = Arg(keyExtractorResult.GetStaticType()); 
-    TRuntimeNode groupSwitchItemArg = Arg(itemType); 
+    TRuntimeNode groupSwitchKeyArg = Arg(keyExtractorResult.GetStaticType());
+    TRuntimeNode groupSwitchItemArg = Arg(itemType);
 
-    TRuntimeNode groupSwitchResult = groupSwitch(groupSwitchKeyArg, groupSwitchItemArg); 
-    MKQL_ENSURE(AS_TYPE(TDataType, groupSwitchResult)->GetSchemeType() == NUdf::TDataType<bool>::Id, 
-        "Expected bool type"); 
- 
+    TRuntimeNode groupSwitchResult = groupSwitch(groupSwitchKeyArg, groupSwitchItemArg);
+    MKQL_ENSURE(AS_TYPE(TDataType, groupSwitchResult)->GetSchemeType() == NUdf::TDataType<bool>::Id,
+        "Expected bool type");
+
     TRuntimeNode handlerItemArg;
     TRuntimeNode handlerResult;
 
@@ -4504,11 +4504,11 @@ TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
 
     TCallableBuilder callableBuilder(Env, __func__, finishType);
     callableBuilder.Add(stream);
-    callableBuilder.Add(keyExtractorResult); 
-    callableBuilder.Add(groupSwitchResult); 
-    callableBuilder.Add(keyExtractorItemArg); 
-    callableBuilder.Add(groupSwitchKeyArg); 
-    callableBuilder.Add(groupSwitchItemArg); 
+    callableBuilder.Add(keyExtractorResult);
+    callableBuilder.Add(groupSwitchResult);
+    callableBuilder.Add(keyExtractorItemArg);
+    callableBuilder.Add(groupSwitchKeyArg);
+    callableBuilder.Add(groupSwitchItemArg);
     if (handler) {
         callableBuilder.Add(handlerResult);
         callableBuilder.Add(handlerItemArg);

@@ -1,21 +1,21 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     spuchin
     g:yql
     g:yql_ydb_core
 )
- 
-SRCS( 
+
+SRCS(
     parser.cpp
     parser.h
     yql_provider_mkql.cpp
-    yql_provider_mkql.h 
+    yql_provider_mkql.h
     yql_type_mkql.cpp
     yql_type_mkql.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/json
     ydb/library/yql/ast
     ydb/library/yql/minikql
@@ -26,8 +26,8 @@ PEERDIR(
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/dq/expr_nodes
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

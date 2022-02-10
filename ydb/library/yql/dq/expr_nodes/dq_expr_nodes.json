@@ -1,57 +1,57 @@
 {
-    "NodeRootType": "TExprBase", 
-    "NodeBuilderBase": "TNodeBuilderBase", 
-    "ListBuilderBase": "TListBuilderBase", 
-    "FreeArgCallableBase": "TFreeArgCallable", 
-    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase", 
-    "Nodes": [ 
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
     {
-        "Name": "TDqJoinKeyTuple", 
-        "Base": "TExprBase", 
-        "Match": {"Type": "Tuple"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "LeftLabel", "Type": "TCoAtom"}, 
-            {"Index": 1, "Name": "LeftColumn", "Type": "TCoAtom"}, 
-            {"Index": 2, "Name": "RightLabel", "Type": "TCoAtom"}, 
-            {"Index": 3, "Name": "RightColumn", "Type": "TCoAtom"} 
-        ] 
-    }, 
-    { 
-        "Name": "TDqJoinKeyTupleList", 
-        "ListBase": "TDqJoinKeyTuple" 
-    }, 
-    { 
-        "Name": "TDqJoinBase", 
-        "Base": "TCallable", 
-        "Match": {"Type": "CallableBase"}, 
-        "Builder": {"Generate": "None"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"}, 
-            {"Index": 2, "Name": "LeftLabel", "Type": "TExprBase", 
-                "NB": "Atom - if left is real table, Void - otherwise"}, 
-            {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}, 
-            {"Index": 3, "Name": "RightLabel", "Type": "TExprBase", 
-                "NB": "Atom - if right is real table, Void - otherwise"}, 
-            {"Index": 4, "Name": "JoinType", "Type": "TCoAtom"}, 
-            {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"} 
-        ] 
-    }, 
-    { 
-        "Name": "TDqJoin", 
-        "Base": "TDqJoinBase", 
-        "Match": {"Type": "Callable", "Name": "DqJoin"} 
-    }, 
-    { 
-        "Name": "TDqPhyMapJoin", 
-        "Base": "TDqJoinBase", 
-        "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"} 
-    }, 
-    { 
-        "Name": "TDqPhyCrossJoin", 
-        "Base": "TDqJoinBase", 
-        "Match": {"Type": "Callable", "Name": "DqPhyCrossJoin"} 
-    }, 
-    { 
+        "Name": "TDqJoinKeyTuple",
+        "Base": "TExprBase",
+        "Match": {"Type": "Tuple"},
+        "Children": [
+            {"Index": 0, "Name": "LeftLabel", "Type": "TCoAtom"},
+            {"Index": 1, "Name": "LeftColumn", "Type": "TCoAtom"},
+            {"Index": 2, "Name": "RightLabel", "Type": "TCoAtom"},
+            {"Index": 3, "Name": "RightColumn", "Type": "TCoAtom"}
+        ]
+    },
+    {
+        "Name": "TDqJoinKeyTupleList",
+        "ListBase": "TDqJoinKeyTuple"
+    },
+    {
+        "Name": "TDqJoinBase",
+        "Base": "TCallable",
+        "Match": {"Type": "CallableBase"},
+        "Builder": {"Generate": "None"},
+        "Children": [
+            {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+            {"Index": 2, "Name": "LeftLabel", "Type": "TExprBase",
+                "NB": "Atom - if left is real table, Void - otherwise"},
+            {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+            {"Index": 3, "Name": "RightLabel", "Type": "TExprBase",
+                "NB": "Atom - if right is real table, Void - otherwise"},
+            {"Index": 4, "Name": "JoinType", "Type": "TCoAtom"},
+            {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
+        ]
+    },
+    {
+        "Name": "TDqJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqJoin"}
+    },
+    {
+        "Name": "TDqPhyMapJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
+    },
+    {
+        "Name": "TDqPhyCrossJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyCrossJoin"}
+    },
+    {
         "Name": "TDqPhyJoinDict",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyJoinDict"}
@@ -81,15 +81,15 @@
     },
     {
         "Name": "TDqStageBase",
-        "Base": "TCallable", 
+        "Base": "TCallable",
         "Match": {"Type": "CallableBase"},
         "Builder": {"Generate": "None"},
-        "Children": [ 
-            {"Index": 0, "Name": "Inputs", "Type": "TExprList"}, 
+        "Children": [
+            {"Index": 0, "Name": "Inputs", "Type": "TExprList"},
             {"Index": 1, "Name": "Program", "Type": "TCoLambda"},
             {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
             {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true}
-        ] 
+        ]
     },
     {
         "Name": "TDqStage",
@@ -102,7 +102,7 @@
         "Match": {"Type": "Callable", "Name": "DqPhyStage"}
     },
     {
-        "Name": "TDqStageList", 
+        "Name": "TDqStageList",
         "ListBase": "TDqStageBase"
     },
     {
@@ -110,60 +110,60 @@
         "ListBase": "TDqPhyStage"
     },
     {
-        "Name": "TDqOutput", 
-        "Base": "TCallable", 
-        "Match": {"Type": "Callable", "Name": "TDqOutput"}, 
-        "Children": [ 
+        "Name": "TDqOutput",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "TDqOutput"},
+        "Children": [
             {"Index": 0, "Name": "Stage", "Type": "TDqStageBase"},
-            {"Index": 1, "Name": "Index", "Type": "TCoAtom"} 
-        ] 
+            {"Index": 1, "Name": "Index", "Type": "TCoAtom"}
+        ]
     },
     {
-        "Name": "TDqConnection", 
-        "Base": "TCallable", 
-        "Definition": "Custom", 
-        "Builder": {"Generate": "None"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "Output", "Type": "TDqOutput"} 
-        ] 
+        "Name": "TDqConnection",
+        "Base": "TCallable",
+        "Definition": "Custom",
+        "Builder": {"Generate": "None"},
+        "Children": [
+            {"Index": 0, "Name": "Output", "Type": "TDqOutput"}
+        ]
     },
     {
         "Name": "TDqCnHashShuffle",
-        "Base": "TDqConnection", 
+        "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
-        "Children": [ 
-            {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"} 
-        ] 
+        "Children": [
+            {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"}
+        ]
     },
     {
-        "Name": "TDqCnBroadcast", 
-        "Base": "TDqConnection", 
-        "Match": {"Type": "Callable", "Name": "DqCnBroadcast"} 
+        "Name": "TDqCnBroadcast",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnBroadcast"}
     },
     {
-        "Name": "TDqCnUnionAll", 
-        "Base": "TDqConnection", 
-        "Match": {"Type": "Callable", "Name": "DqCnUnionAll"} 
+        "Name": "TDqCnUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
     },
     {
-        "Name": "TDqCnMap", 
-        "Base": "TDqConnection", 
-        "Match": {"Type": "Callable", "Name": "DqCnMap"} 
+        "Name": "TDqCnMap",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnMap"}
     },
     {
-        "Name": "TDqCnResult", 
-        "Base": "TDqConnection", 
+        "Name": "TDqCnResult",
+        "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnResult"},
         "Children": [
             {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"}
         ]
     },
     {
-        "Name": "TDqCnValue", 
-        "Base": "TDqConnection", 
-        "Match": {"Type": "Callable", "Name": "DqCnValue"} 
-    }, 
-    { 
+        "Name": "TDqCnValue",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnValue"}
+    },
+    {
         "Name": "TDqSortColumn",
         "Base": "TExprBase",
         "Match": {"Type": "Tuple"},
@@ -228,4 +228,4 @@
         ]
     }
     ]
-} 
+}

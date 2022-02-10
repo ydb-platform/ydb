@@ -22,8 +22,8 @@ TCommandExecuteYqlScript::TCommandExecuteYqlScript()
 void TCommandExecuteYqlScript::Config(TConfig& config) {
     AddExamplesOption(config);
     TYdbOperationCommand::Config(config);
-    config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]") 
-        .RequiredArgument("[String]").StoreResult(&CollectStatsMode); 
+    config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]")
+        .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "[Required] Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
     config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
@@ -81,11 +81,11 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         Script = ReadFromFile(ScriptFile, "script");
     }
     NScripting::TScriptingClient client(CreateDriver(config));
- 
+
     if (Explain) {
         NScripting::TExplainYqlRequestSettings settings;
         settings.Mode(NScripting::ExplainYqlRequestMode::Plan);
- 
+
         auto result = client.ExplainYqlScript(Script, settings).GetValueSync();
 
         ThrowOnError(result);
@@ -114,7 +114,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         PrintResponseHeader(result);
         PrintResponse(result);
     }
- 
+
     return EXIT_SUCCESS;
 }
 
@@ -129,11 +129,11 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
             printer.Print(*resultSetIt);
         }
     } // TResultSetPrinter destructor should be called before printing stats
- 
-    const TMaybe<NTable::TQueryStats>& stats = result.GetStats(); 
-    if (stats.Defined()) { 
-        Cout << Endl << "Statistics:" << Endl << stats->ToString(); 
-    } 
+
+    const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
+    if (stats.Defined()) {
+        Cout << Endl << "Statistics:" << Endl << stats->ToString();
+    }
 }
 
 void TCommandExecuteYqlScript::PrintExplainResult(NScripting::TExplainYqlResult& result) {

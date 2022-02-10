@@ -14,7 +14,7 @@ struct TFunctionTypeInfo
 {
     TCallableType* FunctionType = nullptr;
     const TType* RunConfigType = nullptr;
-    const TType* UserType = nullptr; 
+    const TType* UserType = nullptr;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation;
     NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation;
     TString ModuleIR;
@@ -66,7 +66,7 @@ public:
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::ITypeBuilder& typeBuilder) override;
- 
+
     void SetError(const NUdf::TStringRef& error) override;
     inline bool HasError() const { return !Error_.empty(); }
     inline const TString& GetError() const { return Error_; }
@@ -125,7 +125,7 @@ private:
     NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation_;
     const TType* ReturnType_;
     const TType* RunConfigType_;
-    const TType* UserType_; 
+    const TType* UserType_;
     TVector<TArgInfo> Args_;
     TString Error_;
     ui32 OptionalArgs_ = 0;

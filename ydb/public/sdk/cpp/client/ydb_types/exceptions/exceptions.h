@@ -2,17 +2,17 @@
 
 #include <util/generic/yexception.h>
 
-namespace NYdb { 
+namespace NYdb {
 
-class TYdbException : public yexception { 
+class TYdbException : public yexception {
 public:
     using yexception::yexception;
-    TYdbException(const TString& reason); 
+    TYdbException(const TString& reason);
 };
 
-class TContractViolation : public TYdbException { 
+class TContractViolation : public TYdbException {
 public:
     TContractViolation(const TString& reason);
 };
 
-} // namespace NYdb 
+} // namespace NYdb

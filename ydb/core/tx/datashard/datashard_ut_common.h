@@ -241,11 +241,11 @@ public:
     ui32 SetProgram(TTester& tester) override;
     ui32 GetShardProgram(ui32 idx, TString& outTxBody) override;
     void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete) override;
-    YdbOld::ResultSet GetScanResult() const; 
+    YdbOld::ResultSet GetScanResult() const;
     IEngineFlat::EStatus GetStatus(bool atPropose) override;
 
 private:
-    YdbOld::ResultSet Result; 
+    YdbOld::ResultSet Result;
     IEngineFlat::EStatus Status;
 };
 

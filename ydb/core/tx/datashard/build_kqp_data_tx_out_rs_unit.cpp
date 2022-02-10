@@ -23,8 +23,8 @@ public:
     ~TBuildKqpDataTxOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(TOperation::TPtr op, const TActorContext& ctx) override; 
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
     EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
@@ -32,17 +32,17 @@ private:
 };
 
 TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
-    : TExecutionUnit(EExecutionUnitKind::BuildKqpDataTxOutRS, true, dataShard, pipeline) {} 
+    : TExecutionUnit(EExecutionUnitKind::BuildKqpDataTxOutRS, true, dataShard, pipeline) {}
 
-TBuildKqpDataTxOutRSUnit::~TBuildKqpDataTxOutRSUnit() {} 
+TBuildKqpDataTxOutRSUnit::~TBuildKqpDataTxOutRSUnit() {}
 
 bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, 
-    const TActorContext& ctx) 
-{ 
+EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
+    const TActorContext& ctx)
+{
     TSetupSysLocks guardLocks(op, DataShard);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -58,7 +58,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             case ERestoreDataStatus::Error:
                 Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
-    } 
+    }
 
     const auto& dataTx = tx->GetDataTx();
     ui64 tabletId = DataShard.TabletID();
@@ -119,7 +119,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     } catch (const TNotReadyTabletException&) {
         LOG_C("Unexpected TNotReadyTabletException exception at build out rs");
         return OnTabletNotReady(*tx, *dataTx, txc, ctx);
-    } catch (const yexception& e) { 
+    } catch (const yexception& e) {
         LOG_C("Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID()
             << ": " << e.what());
         if (op->IsReadOnly() || op->IsImmediate()) {
@@ -135,7 +135,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     return EExecutionStatus::Executed;
 }
 
-void TBuildKqpDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {} 
+void TBuildKqpDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
     TTransactionContext& txc, const TActorContext& ctx)

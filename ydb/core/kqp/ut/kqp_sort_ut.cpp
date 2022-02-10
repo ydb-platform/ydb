@@ -6,7 +6,7 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpSort) { 
+Y_UNIT_TEST_SUITE(KqpSort) {
     Y_UNIT_TEST_NEW_ENGINE(ReverseDefault) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -21,12 +21,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
- 
-            CompareYson(R"([ 
-                [[2u];["Tony"];[7200u];["None"]]; 
-                [[1u];["Paul"];[300u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+
+            CompareYson(R"([
+                [[2u];["Tony"];[7200u];["None"]];
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -66,11 +66,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[2u];["Tony"];[7200u];["None"]]; 
-                [[1u];["Paul"];[300u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[2u];["Tony"];[7200u];["None"]];
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -154,11 +154,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[2u];["Tony"];[7200u];["None"]]; 
-                [[1u];["Paul"];[300u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[2u];["Tony"];[7200u];["None"]];
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -197,11 +197,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[2u];["Tony"];[7200u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]]; 
-                [[1u];["Paul"];[300u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[2u];["Tony"];[7200u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]];
+                [[1u];["Paul"];[300u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -243,10 +243,10 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[1u];["Paul"];[300u];["None"]]; 
-                [[1u];["Anna"];[3500u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[1u];["Paul"];[300u];["None"]];
+                [[1u];["Anna"];[3500u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -293,9 +293,9 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[2u];["Tony"];[7200u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[2u];["Tony"];[7200u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -343,9 +343,9 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[1u];["Paul"];[300u];["None"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[1u];["Paul"];[300u];["None"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -389,40 +389,40 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([ 
-                [[803u];["Value3"];[3]]; 
-                [[802u];["Value2"];[1]]; 
-                [[801u];["Value1"];[2]]; 
-                [[703u];["Value3"];[2]]; 
-                [[702u];["Value2"];[3]]; 
-                [[701u];["Value1"];[1]]; 
-                [[603u];["Value3"];[1]]; 
-                [[602u];["Value2"];[2]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [[803u];["Value3"];[3]];
+                [[802u];["Value2"];[1]];
+                [[801u];["Value1"];[2]];
+                [[703u];["Value3"];[2]];
+                [[702u];["Value2"];[3]];
+                [[701u];["Value1"];[1]];
+                [[603u];["Value3"];[1]];
+                [[602u];["Value2"];[2]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
     Y_UNIT_TEST_NEW_ENGINE(TopSortParameter) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            DECLARE $limit AS Uint32; 
-            DECLARE $offset AS Uint32; 
-            DECLARE $minKey AS Uint64; 
- 
-            SELECT * 
+            DECLARE $limit AS Uint32;
+            DECLARE $offset AS Uint32;
+            DECLARE $minKey AS Uint64;
+
+            SELECT *
             FROM `/Root/EightShard`
-            WHERE Key >= $minKey 
-            ORDER BY Data, Key DESC 
-            LIMIT $limit OFFSET $offset; 
-        )"); 
- 
+            WHERE Key >= $minKey
+            ORDER BY Data, Key DESC
+            LIMIT $limit OFFSET $offset;
+        )");
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
@@ -432,55 +432,55 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$limit") 
-                    .Uint32(5) 
-                    .Build() 
-                .AddParam("$offset") 
-                    .Uint32(3) 
-                    .Build() 
-                .AddParam("$minKey") 
-                    .Uint64(300) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            CompareYson(R"([ 
-                [[1];[502u];["Value2"]]; 
-                [[1];[401u];["Value1"]]; 
-                [[1];[303u];["Value3"]]; 
-                [[2];[801u];["Value1"]]; 
-                [[2];[703u];["Value3"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$limit")
+                    .Uint32(5)
+                    .Build()
+                .AddParam("$offset")
+                    .Uint32(3)
+                    .Build()
+                .AddParam("$minKey")
+                    .Uint64(300)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([
+                [[1];[502u];["Value2"]];
+                [[1];[401u];["Value1"]];
+                [[1];[303u];["Value3"]];
+                [[2];[801u];["Value1"]];
+                [[2];[703u];["Value3"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(TopSortExpr) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            DECLARE $limit AS Uint32; 
-            DECLARE $offset AS Uint32; 
-            DECLARE $minKey AS Uint64; 
- 
-            SELECT * 
+            DECLARE $limit AS Uint32;
+            DECLARE $offset AS Uint32;
+            DECLARE $minKey AS Uint64;
+
+            SELECT *
             FROM `/Root/EightShard`
-            WHERE Key >= $minKey 
-            ORDER BY Data, Key DESC 
-            LIMIT $limit + 1 OFFSET $offset - 1; 
-        )"); 
- 
+            WHERE Key >= $minKey
+            ORDER BY Data, Key DESC
+            LIMIT $limit + 1 OFFSET $offset - 1;
+        )");
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
@@ -490,84 +490,84 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$limit") 
-                    .Uint32(4) 
-                    .Build() 
-                .AddParam("$offset") 
-                    .Uint32(4) 
-                    .Build() 
-                .AddParam("$minKey") 
-                    .Uint64(300) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            CompareYson(R"([ 
-                [[1];[502u];["Value2"]]; 
-                [[1];[401u];["Value1"]]; 
-                [[1];[303u];["Value3"]]; 
-                [[2];[801u];["Value1"]]; 
-                [[2];[703u];["Value3"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortExprPk) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        TString query = Q_(R"(
-            DECLARE $limit AS Uint32; 
-            DECLARE $offset AS Uint32; 
-            DECLARE $minKey AS Uint64; 
- 
-            SELECT * 
-            FROM `/Root/EightShard`
-            WHERE Key >= $minKey 
-            ORDER BY Key 
-            LIMIT $limit + 1 OFFSET $offset - 1; 
-        )"); 
- 
+        }
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_C(result.GetAst().Contains("ItemsLimit"), result.GetAst()); 
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$limit") 
-                    .Uint32(4) 
-                    .Build() 
-                .AddParam("$offset") 
-                    .Uint32(4) 
-                    .Build() 
-                .AddParam("$minKey") 
-                    .Uint64(300) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            CompareYson(R"([ 
-                [[1];[401u];["Value1"]]; 
-                [[3];[402u];["Value2"]]; 
-                [[2];[403u];["Value3"]]; 
-                [[2];[501u];["Value1"]]; 
-                [[1];[502u];["Value2"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
+            auto params = db.GetParamsBuilder()
+                .AddParam("$limit")
+                    .Uint32(4)
+                    .Build()
+                .AddParam("$offset")
+                    .Uint32(4)
+                    .Build()
+                .AddParam("$minKey")
+                    .Uint64(300)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([
+                [[1];[502u];["Value2"]];
+                [[1];[401u];["Value1"]];
+                [[1];[303u];["Value3"]];
+                [[2];[801u];["Value1"]];
+                [[2];[703u];["Value3"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TopSortExprPk) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query = Q_(R"(
+            DECLARE $limit AS Uint32;
+            DECLARE $offset AS Uint32;
+            DECLARE $minKey AS Uint64;
+
+            SELECT *
+            FROM `/Root/EightShard`
+            WHERE Key >= $minKey
+            ORDER BY Key
+            LIMIT $limit + 1 OFFSET $offset - 1;
+        )");
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_C(result.GetAst().Contains("ItemsLimit"), result.GetAst());
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$limit")
+                    .Uint32(4)
+                    .Build()
+                .AddParam("$offset")
+                    .Uint32(4)
+                    .Build()
+                .AddParam("$minKey")
+                    .Uint64(300)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([
+                [[1];[401u];["Value1"]];
+                [[3];[402u];["Value2"]];
+                [[2];[403u];["Value3"]];
+                [[2];[501u];["Value1"]];
+                [[1];[502u];["Value2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ComplexPkExclusiveSecondOptionalPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -781,212 +781,212 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(TopSortTableExpr) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            DECLARE $key AS Uint32; 
- 
-            $fetch = ( 
+            DECLARE $key AS Uint32;
+
+            $fetch = (
                 SELECT Value2 + 1 AS ComputedLimit FROM `/Root/TwoShard`
-                WHERE Key = $key 
-            ); 
- 
-            SELECT * 
+                WHERE Key = $key
+            );
+
+            SELECT *
             FROM `/Root/EightShard`
-            ORDER BY Data DESC, Key 
-            LIMIT CAST($fetch AS Uint64) ?? 0; 
-        )"); 
- 
-        { 
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst()); 
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$key") 
-                    .Uint32(3) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            CompareYson(R"([ 
-                [[3];[102u];["Value2"]]; 
-                [[3];[203u];["Value3"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExprOffset) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        TString query = Q_(R"(
-            DECLARE $key AS Uint32; 
- 
-            $fetch = ( 
-                SELECT Value2 + 1 AS Take FROM `/Root/TwoShard`
-                WHERE Key = $key 
-            ); 
- 
-            SELECT * 
-            FROM `/Root/EightShard`
-            ORDER BY Data DESC, Key 
-            LIMIT 2 OFFSET CAST($fetch AS Uint64) ?? 0; 
-        )"); 
- 
-        { 
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst()); 
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$key") 
-                    .Uint32(3) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            CompareYson(R"([ 
-                [[3];[301u];["Value1"]]; 
-                [[3];[402u];["Value2"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(TopSortResults) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto table = db.GetTableBuilder() 
-            .AddNullableColumn("Key", EPrimitiveType::Uint64) 
-            .AddNullableColumn("Value1", EPrimitiveType::Int32) 
-            .AddNullableColumn("Value2", EPrimitiveType::String) 
-            .AddNullableColumn("Value3", EPrimitiveType::Uint32) 
-            .SetPrimaryKeyColumns(TVector<TString>{"Key"}) 
-            .Build(); 
- 
-        auto createSettings = TCreateTableSettings() 
-            .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(10)); 
- 
-        auto tableResult = session.CreateTable("/Root/TopSortTest", std::move(table), 
-            createSettings).ExtractValueSync(); 
-        tableResult.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT(tableResult.IsSuccess()); 
- 
-        const ui32 BatchSize = 200; 
-        const ui32 BatchCount = 5; 
-        for (ui32 i = 0; i < BatchCount; ++i) { 
-            auto paramsBuilder = session.GetParamsBuilder(); 
-            auto& rowsParam = paramsBuilder.AddParam("$rows"); 
- 
-            rowsParam.BeginList(); 
-            for (ui32 j = 0; j < BatchSize; ++j) { 
-                rowsParam.AddListItem() 
-                    .BeginStruct() 
-                    .AddMember("Key").Uint64(RandomNumber<ui64>()) 
-                    .AddMember("Value1").Int32(i) 
-                    .AddMember("Value2").String(CreateGuidAsString()) 
-                    .AddMember("Value3").Uint32(RandomNumber<ui32>()) 
-                    .EndStruct(); 
-            } 
-            rowsParam.EndList(); 
-            rowsParam.Build(); 
- 
-            auto result = session.ExecuteDataQuery(R"( 
-                DECLARE $rows AS 
-                    'List<Struct< 
-                        Key: Uint64, 
-                        Value1: Int32, 
-                        Value2: String, 
-                        Value3: Uint32>>'; 
- 
-                REPLACE INTO [/Root/TopSortTest] 
-                SELECT * FROM AS_TABLE($rows); 
-            )", TTxControl::BeginTx().CommitTx(), paramsBuilder.Build(), 
-                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync(); 
- 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT(result.IsSuccess()); 
-        } 
- 
-        auto queryTemplate = Q_(R"(
-            PRAGMA kikimr.OptDisableTopSort = '%s'; 
- 
-            DECLARE $filter AS Int32; 
-            DECLARE $limit AS Uint64; 
-            DECLARE $offset AS Uint64; 
- 
-            SELECT * FROM [/Root/TopSortTest] 
-            WHERE Value1 != $filter 
-            ORDER BY Value2 DESC, Value3, Key DESC 
-            LIMIT $limit OFFSET $offset; 
+            ORDER BY Data DESC, Key
+            LIMIT CAST($fetch AS Uint64) ?? 0;
         )");
- 
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(3)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([
+                [[3];[102u];["Value2"]];
+                [[3];[203u];["Value3"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TopSortTableExprOffset) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query = Q_(R"(
+            DECLARE $key AS Uint32;
+
+            $fetch = (
+                SELECT Value2 + 1 AS Take FROM `/Root/TwoShard`
+                WHERE Key = $key
+            );
+
+            SELECT *
+            FROM `/Root/EightShard`
+            ORDER BY Data DESC, Key
+            LIMIT 2 OFFSET CAST($fetch AS Uint64) ?? 0;
+        )");
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(3)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([
+                [[3];[301u];["Value1"]];
+                [[3];[402u];["Value2"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TopSortResults) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto table = db.GetTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .AddNullableColumn("Value1", EPrimitiveType::Int32)
+            .AddNullableColumn("Value2", EPrimitiveType::String)
+            .AddNullableColumn("Value3", EPrimitiveType::Uint32)
+            .SetPrimaryKeyColumns(TVector<TString>{"Key"})
+            .Build();
+
+        auto createSettings = TCreateTableSettings()
+            .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(10));
+
+        auto tableResult = session.CreateTable("/Root/TopSortTest", std::move(table),
+            createSettings).ExtractValueSync();
+        tableResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(tableResult.IsSuccess());
+
+        const ui32 BatchSize = 200;
+        const ui32 BatchCount = 5;
+        for (ui32 i = 0; i < BatchCount; ++i) {
+            auto paramsBuilder = session.GetParamsBuilder();
+            auto& rowsParam = paramsBuilder.AddParam("$rows");
+
+            rowsParam.BeginList();
+            for (ui32 j = 0; j < BatchSize; ++j) {
+                rowsParam.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint64(RandomNumber<ui64>())
+                    .AddMember("Value1").Int32(i)
+                    .AddMember("Value2").String(CreateGuidAsString())
+                    .AddMember("Value3").Uint32(RandomNumber<ui32>())
+                    .EndStruct();
+            }
+            rowsParam.EndList();
+            rowsParam.Build();
+
+            auto result = session.ExecuteDataQuery(R"(
+                DECLARE $rows AS
+                    'List<Struct<
+                        Key: Uint64,
+                        Value1: Int32,
+                        Value2: String,
+                        Value3: Uint32>>';
+
+                REPLACE INTO [/Root/TopSortTest]
+                SELECT * FROM AS_TABLE($rows);
+            )", TTxControl::BeginTx().CommitTx(), paramsBuilder.Build(),
+                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        auto queryTemplate = Q_(R"(
+            PRAGMA kikimr.OptDisableTopSort = '%s';
+
+            DECLARE $filter AS Int32;
+            DECLARE $limit AS Uint64;
+            DECLARE $offset AS Uint64;
+
+            SELECT * FROM [/Root/TopSortTest]
+            WHERE Value1 != $filter
+            ORDER BY Value2 DESC, Value3, Key DESC
+            LIMIT $limit OFFSET $offset;
+        )");
+
         auto query = Sprintf(queryTemplate.c_str(), "False");
         auto queryDisabled = Sprintf(queryTemplate.c_str(), "True");
- 
-        const ui32 QueriesCount = 20; 
-        for (ui32 i = 0; i < QueriesCount; ++i) { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$filter") 
-                    .Int32(RandomNumber<ui32>(BatchCount)) 
-                    .Build() 
-                .AddParam("$limit") 
-                    .Uint64(RandomNumber<ui64>(BatchSize * BatchCount)) 
-                    .Build() 
-                .AddParam("$offset") 
-                    .Uint64(RandomNumber<ui64>(BatchSize * BatchCount)) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, 
-                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT(result.IsSuccess()); 
- 
-            auto resultDisabled = session.ExecuteDataQuery(queryDisabled, TTxControl::BeginTx().CommitTx(), params, 
-                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync(); 
-            resultDisabled.GetIssues().PrintTo(Cerr); 
-            UNIT_ASSERT(resultDisabled.IsSuccess()); 
- 
-            CompareYson(FormatResultSetYson(result.GetResultSet(0)), 
-                FormatResultSetYson(resultDisabled.GetResultSet(0))); 
-        } 
-    } 
- 
+
+        const ui32 QueriesCount = 20;
+        for (ui32 i = 0; i < QueriesCount; ++i) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$filter")
+                    .Int32(RandomNumber<ui32>(BatchCount))
+                    .Build()
+                .AddParam("$limit")
+                    .Uint64(RandomNumber<ui64>(BatchSize * BatchCount))
+                    .Build()
+                .AddParam("$offset")
+                    .Uint64(RandomNumber<ui64>(BatchSize * BatchCount))
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params,
+                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+
+            auto resultDisabled = session.ExecuteDataQuery(queryDisabled, TTxControl::BeginTx().CommitTx(), params,
+                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+            resultDisabled.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(resultDisabled.IsSuccess());
+
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)),
+                FormatResultSetYson(resultDisabled.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(TopParameter) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            DECLARE $limit AS Uint64; 
- 
-            SELECT * 
+            DECLARE $limit AS Uint64;
+
+            SELECT *
             FROM `/Root/TwoShard`
             ORDER BY Key
-            LIMIT $limit; 
-        )"); 
- 
+            LIMIT $limit;
+        )");
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
@@ -996,47 +996,47 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$limit") 
-                    .Uint64(2) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-            CompareYson(R"([ 
-                [[1u];["One"];[-1]]; 
-                [[2u];["Two"];[0]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
-        } 
-    } 
- 
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$limit")
+                    .Uint64(2)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];["One"];[-1]];
+                [[2u];["Two"];[0]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(TopParameterFilter) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto query = Q_(R"(
-            DECLARE $limit AS Uint64; 
-            DECLARE $value AS Int32; 
- 
-            SELECT * 
+            DECLARE $limit AS Uint64;
+            DECLARE $value AS Int32;
+
+            SELECT *
             FROM `/Root/TwoShard`
-            WHERE Value2 != $value 
-            LIMIT $limit; 
-        )"); 
- 
-        { 
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            result.GetIssues().PrintTo(Cerr); 
- 
-            Cerr << result.GetAst() << Endl; 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+            WHERE Value2 != $value
+            LIMIT $limit;
+        )");
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            result.GetIssues().PrintTo(Cerr);
+
+            Cerr << result.GetAst() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
@@ -1048,21 +1048,21 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto params = db.GetParamsBuilder() 
-                .AddParam("$limit") 
-                    .Uint64(2) 
-                    .Build() 
-                .AddParam("$value") 
-                    .Int32(0) 
-                    .Build() 
-                .Build(); 
- 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
+        }
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$limit")
+                    .Uint64(2)
+                    .Build()
+                .AddParam("$value")
+                    .Int32(0)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
             auto actual = ReformatYson(FormatResultSetYson(result.GetResultSet(0)));
 
             if (ReformatYson(R"([
@@ -1079,8 +1079,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             ])";
 
             UNIT_ASSERT_NO_DIFF(ReformatYson(expected), actual);
-        } 
-    } 
+        }
+    }
 
     // https://st.yandex-team.ru/KIKIMR-11523
     Y_UNIT_TEST_NEW_ENGINE(PassLimit) {

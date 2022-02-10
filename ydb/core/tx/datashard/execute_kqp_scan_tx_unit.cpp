@@ -1,23 +1,23 @@
-#include "datashard_impl.h" 
-#include "datashard_pipeline.h" 
-#include "execution_unit_ctors.h" 
- 
-namespace NKikimr { 
+#include "datashard_impl.h"
+#include "datashard_pipeline.h"
+#include "execution_unit_ctors.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
-using namespace NKqp; 
-using namespace NMiniKQL; 
- 
-class TExecuteKqpScanTxUnit : public TExecutionUnit { 
-public: 
+
+using namespace NKqp;
+using namespace NMiniKQL;
+
+class TExecuteKqpScanTxUnit : public TExecutionUnit {
+public:
     TExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) { 
+        : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) {
     }
- 
-    ~TExecuteKqpScanTxUnit() override { 
+
+    ~TExecuteKqpScanTxUnit() override {
     }
- 
-    bool IsReadyToExecute(TOperation::TPtr op) const override { 
+
+    bool IsReadyToExecute(TOperation::TPtr op) const override {
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
             return true;
         }
@@ -28,8 +28,8 @@ public:
         }
 
         return !op->HasRuntimeConflicts();
-    } 
- 
+    }
+
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -40,17 +40,17 @@ public:
         op->Abort();
 
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KqpScanTx");
- 
-        return EExecutionStatus::Executed; 
-    } 
- 
+
+        return EExecutionStatus::Executed;
+    }
+
     void Complete(TOperation::TPtr, const TActorContext&) override {
-    } 
-}; 
- 
+    }
+};
+
 THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TExecuteKqpScanTxUnit>(dataShard, pipeline);
-} 
- 
+}
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

@@ -474,8 +474,8 @@ public:
         bool CheckComputationalUnitsQuota(const TUnitsCount &units,
                                           Ydb::StatusIds::StatusCode &code,
                                           TString &error);
-        bool CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode &code, TString &error, ui64 additionalUnits = 0); 
-        bool CheckQuota(Ydb::StatusIds::StatusCode &code, TString &error); 
+        bool CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode &code, TString &error, ui64 additionalUnits = 0);
+        bool CheckQuota(Ydb::StatusIds::StatusCode &code, TString &error);
         void ParseComputationalUnits(const TTenantsConfig &config);
         void RemoveComputationalUnits();
 
@@ -748,9 +748,9 @@ public:
                            const TActorContext &ctx);
     bool CheckTenantSlots(TTenant::TPtr tenant, const NKikimrTenantSlotBroker::TTenantState &state);
     bool HasEnoughPoolIds(ui64 count);
-    bool MakeBasicPoolCheck(const TString &type, ui64 count, Ydb::StatusIds::StatusCode &code, TString &error); 
+    bool MakeBasicPoolCheck(const TString &type, ui64 count, Ydb::StatusIds::StatusCode &code, TString &error);
     bool MakeBasicComputationalUnitCheck(const TString &kind, const TString &zone,
-                                         Ydb::StatusIds::StatusCode &code, 
+                                         Ydb::StatusIds::StatusCode &code,
                                          TString &error);
     // Check we have enough quota to replace computational units
     // of specified tenant with new ones.
@@ -763,14 +763,14 @@ public:
                                       Ydb::StatusIds::StatusCode &code,
                                       TString &error);
     bool CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &config,
-                            Ydb::StatusIds::StatusCode &code, 
+                            Ydb::StatusIds::StatusCode &code,
                             TString &error);
     bool CheckAccess(const TString &token,
                      Ydb::StatusIds::StatusCode &code,
                      TString &error,
                      const TActorContext &ctx);
     Ydb::TOperationId MakeOperationId(const TString &path, ui64 txId, TTenant::EAction action);
-    Ydb::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action); 
+    Ydb::TOperationId MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action);
     TStoragePool::TPtr MakeStoragePool(TTenant::TPtr tenant, const TString &kind, ui64 size);
 
     void CreateSubDomain(TTenant::TPtr tenant, const TActorContext &ctx);

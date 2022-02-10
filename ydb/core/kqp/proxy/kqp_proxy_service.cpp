@@ -1,5 +1,5 @@
 #include "kqp_proxy_service.h"
- 
+
 #include <ydb/core/kqp/kqp_impl.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -17,10 +17,10 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
- 
+
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -28,12 +28,12 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/monlib/service/pages/templates.h>
- 
- 
+
+
 namespace NKikimr::NKqp {
 
-namespace { 
- 
+namespace {
+
 #define KQP_PROXY_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
 #define KQP_PROXY_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
 #define KQP_PROXY_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
@@ -45,72 +45,72 @@ namespace {
 TString MakeKqpProxyBoardPath(const TString& database) {
     return "kqpprx+" + database;
 }
- 
+
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
 static constexpr TDuration DEFAULT_PUBLISH_BATCHING_INTERVAL = TDuration::MilliSeconds(1000);
 static constexpr TDuration DEFAUL_BOARD_LOOKUP_INTERVAL = TDuration::MilliSeconds(5000);
- 
- 
+
+
 std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
     if (auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(ExtractDomain(database))) {
         return domainInfo->DefaultStateStorageGroup;
     }
- 
+
     return std::nullopt;
 }
- 
+
 
 std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
-    if (sessionId.empty()) { 
+    if (sessionId.empty()) {
         return std::nullopt;
-    } 
- 
-    try { 
+    }
+
+    try {
         NOperationId::TOperationId opId(sessionId);
         ui32 nodeId;
         const auto& nodeIds = opId.GetValue("node_id");
         if (nodeIds.size() != 1) {
             return std::nullopt;
-        } 
- 
+        }
+
         if (!TryFromString(*nodeIds[0], nodeId)) {
             return std::nullopt;
-        } 
+        }
 
         return nodeId;
     } catch (...) {
         return std::nullopt;
-    } 
- 
+    }
+
     return std::nullopt;
-} 
- 
-bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) { 
-    switch (queryType) { 
-        case NKikimrKqp::QUERY_TYPE_SQL_DML: 
-        case NKikimrKqp::QUERY_TYPE_SQL_DDL: 
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT: 
+}
+
+bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
+    switch (queryType) {
+        case NKikimrKqp::QUERY_TYPE_SQL_DML:
+        case NKikimrKqp::QUERY_TYPE_SQL_DDL:
+        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCAN: 
-            return true; 
- 
-        default: 
-            break; 
-    } 
- 
-    return false; 
-} 
- 
-TString EncodeSessionId(ui32 nodeId, const TString& id) { 
-    Ydb::TOperationId opId; 
+        case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+            return true;
+
+        default:
+            break;
+    }
+
+    return false;
+}
+
+TString EncodeSessionId(ui32 nodeId, const TString& id) {
+    Ydb::TOperationId opId;
     opId.SetKind(NOperationId::TOperationId::SESSION_YQL);
     NOperationId::AddOptionalValue(opId, "node_id", ToString(nodeId));
     NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
     return NOperationId::ProtoToString(opId);
-} 
- 
+}
+
 
 class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
@@ -217,7 +217,7 @@ public:
 };
 
 
-class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> { 
+class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
             EvReadyToPublishResources = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -237,66 +237,66 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         };
     };
 
-public: 
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_PROXY_ACTOR;
-    } 
- 
-    TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig, 
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig, 
+    }
+
+    TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
-        : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend())) 
-        , LogConfig(logConfig) 
-        , TableServiceConfig(tableServiceConfig) 
+        : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
+        , LogConfig(logConfig)
+        , TableServiceConfig(tableServiceConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
-        , PendingRequests() 
-        , TenantsReady(false) 
-        , Tenants() 
-        , ModuleResolverState() {} 
- 
+        , PendingRequests()
+        , TenantsReady(false)
+        , Tenants()
+        , ModuleResolverState() {}
+
     void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-        ModuleResolverState = MakeIntrusive<TModuleResolverState>(); 
- 
-        if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) { 
-            TStringStream errorStream; 
+        ModuleResolverState = MakeIntrusive<TModuleResolverState>();
+
+        if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
+            TStringStream errorStream;
             ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
- 
+
             KQP_PROXY_LOG_E("Failed to load default YQL libraries: " << errorStream.Str());
             PassAway();
-        } 
- 
-        ModuleResolverState->FreezeGuardHolder = 
-            MakeHolder<NYql::TExprContext::TFreezeGuard>(ModuleResolverState->ExprCtx); 
- 
+        }
+
+        ModuleResolverState->FreezeGuardHolder =
+            MakeHolder<NYql::TExprContext::TFreezeGuard>(ModuleResolverState->ExprCtx);
+
         UpdateYqlLogLevels();
- 
-        // Subscribe for TableService & Logger config changes 
-        ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem; 
-        ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem; 
+
+        // Subscribe for TableService & Logger config changes
+        ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
+        ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest( 
-                {tableServiceConfigKind, logConfigKind}), 
-            IEventHandle::FlagTrackDelivery); 
- 
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                {tableServiceConfigKind, logConfigKind}),
+            IEventHandle::FlagTrackDelivery);
+
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        // Subscribe for tenant changes 
+        // Subscribe for tenant changes
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
- 
+
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpLocalFileSpillingService(cfg, Counters));
             TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
                 MakeKqpLocalFileSpillingServiceID(SelfId().NodeId()), SpillingService);
         }
 
-        // Create compile service 
+        // Create compile service
         CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
             KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory)));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
- 
+
         KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
@@ -307,13 +307,13 @@ public:
              mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
         }
 
-        Become(&TKqpProxyService::MainState); 
+        Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
         PublishResourceUsage();
         AskSelfNodeInfo();
         SendWhiteboardRequest();
-    } 
- 
+    }
+
     void AskSelfNodeInfo() {
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
     }
@@ -421,78 +421,78 @@ public:
             Send(BoardPublishActor, new TEvents::TEvPoison);
         }
         return TActor::PassAway();
-    } 
- 
+    }
+
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
-        const auto &event = ev->Get()->Record; 
- 
-        TenantsReady = true; 
-        Tenants.clear(); 
-        for (auto &slot : event.GetSlots()) { 
-            Tenants.insert(slot.GetAssignedTenant()); 
-        } 
- 
+        const auto &event = ev->Get()->Record;
+
+        TenantsReady = true;
+        Tenants.clear();
+        for (auto &slot : event.GetSlots()) {
+            Tenants.insert(slot.GetAssignedTenant());
+        }
+
         KQP_PROXY_LOG_I("Received tenant pool status, serving tenants: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
         for (auto& [_, sessionInfo] : LocalSessions) {
             if (!sessionInfo.Database.empty() && !Tenants.contains(sessionInfo.Database)) {
-                auto closeSessionEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>(); 
-                closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo.SessionId); 
+                auto closeSessionEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+                closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo.SessionId);
                 Send(sessionInfo.WorkerId, closeSessionEv.Release());
-            } 
-        } 
+            }
+        }
 
         PublishResourceUsage();
-    } 
- 
+    }
+
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         KQP_PROXY_LOG_D("Subscribed for config changes.");
-    } 
- 
+    }
+
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-        auto &event = ev->Get()->Record; 
- 
-        TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig()); 
+        auto &event = ev->Get()->Record;
+
+        TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         KQP_PROXY_LOG_D("Updated table service config.");
- 
-        LogConfig.Swap(event.MutableConfig()->MutableLogConfig()); 
+
+        LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
- 
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         StartCollectPeerProxyData();
         PublishResourceUsage();
-    } 
- 
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        switch (ev->Get()->SourceType) { 
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest: 
+        switch (ev->Get()->SourceType) {
+            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 KQP_PROXY_LOG_C("Failed to deliver subscription request to config dispatcher.");
-                break; 
- 
-            case NConsole::TEvConsole::EvConfigNotificationResponse: 
+                break;
+
+            case NConsole::TEvConsole::EvConfigNotificationResponse:
                 KQP_PROXY_LOG_E("Failed to deliver config notification response.");
-                break; 
- 
+                break;
+
             case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
                 KQP_PROXY_LOG_D("Failed to get system details");
                 break;
 
-            case TKqpEvents::EvQueryRequest: 
-            case TKqpEvents::EvPingSessionRequest: { 
+            case TKqpEvents::EvQueryRequest:
+            case TKqpEvents::EvPingSessionRequest: {
                 KQP_PROXY_LOG_D("Session not found, targetId: " << ev->Sender << " requestId: " << ev->Cookie);
- 
-                ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie); 
+
+                ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
                 RemoveSession("", ev->Sender);
-                break; 
-            } 
- 
-            default: 
+                break;
+            }
+
+            default:
                 KQP_PROXY_LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
-                break; 
-        } 
-    } 
- 
+                break;
+        }
+    }
+
     void Handle(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
         KQP_PROXY_LOG_N("KQP proxy shutdown requested.");
         ShutdownRequested = true;
@@ -507,12 +507,12 @@ public:
     }
 
     void Handle(TEvKqp::TEvCreateSessionRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record; 
-        auto& request = event.GetRequest(); 
-        TKqpRequestInfo requestInfo(event.GetTraceId()); 
- 
-        auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>(); 
- 
+        auto& event = ev->Get()->Record;
+        auto& request = event.GetRequest();
+        TKqpRequestInfo requestInfo(event.GetTraceId());
+
+        auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
+
         TProcessResult<TKqpSessionInfo*> result;
         TKqpDbCountersPtr dbCounters;
 
@@ -520,100 +520,100 @@ public:
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
             CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), result))
-        { 
-            auto& response = *responseEv->Record.MutableResponse(); 
+        {
+            auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
             dbCounters = result.Value->DbCounters;
         } else {
             dbCounters = Counters->GetDbCounters(request.GetDatabase());
-        } 
- 
+        }
+
         LogRequest(request, requestInfo, ev->Sender, dbCounters);
 
         responseEv->Record.SetResourceExhausted(result.ResourceExhausted);
-        responseEv->Record.SetYdbStatus(result.YdbStatus); 
-        responseEv->Record.SetError(result.Error); 
- 
+        responseEv->Record.SetYdbStatus(result.YdbStatus);
+        responseEv->Record.SetError(result.Error);
+
         LogResponse(event.GetTraceId(), responseEv->Record, dbCounters);
         Send(ev->Sender, responseEv.Release(), 0, ev->Cookie);
-    } 
- 
+    }
+
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record; 
-        auto& request = *event.MutableRequest(); 
-        TString traceId = event.GetTraceId(); 
-        TKqpRequestInfo requestInfo(traceId); 
+        auto& event = ev->Get()->Record;
+        auto& request = *event.MutableRequest();
+        TString traceId = event.GetTraceId();
+        TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
- 
+
         auto dbCounters = GetDbCountersForSession(request.GetSessionId());
 
-        auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes(); 
-        if (queryLimitBytes && IsSqlQuery(request.GetType())) { 
-            auto querySizeBytes = request.GetQuery().size(); 
-            if (querySizeBytes > queryLimitBytes) { 
+        auto queryLimitBytes = TableServiceConfig.GetQueryLimitBytes();
+        if (queryLimitBytes && IsSqlQuery(request.GetType())) {
+            auto querySizeBytes = request.GetQuery().size();
+            if (querySizeBytes > queryLimitBytes) {
                 TString error = TStringBuilder() << "Query text size exceeds limit (" << querySizeBytes << "b > " << queryLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId); 
+                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
                 }
                 LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
-                return; 
-            } 
-        } 
- 
-        auto paramsLimitBytes = TableServiceConfig.GetParametersLimitBytes(); 
-        if (paramsLimitBytes) { 
-            auto paramsBytes = request.GetParameters().ByteSizeLong(); 
-            if (paramsBytes > paramsLimitBytes) { 
+                return;
+            }
+        }
+
+        auto paramsLimitBytes = TableServiceConfig.GetParametersLimitBytes();
+        if (paramsLimitBytes) {
+            auto paramsBytes = request.GetParameters().ByteSizeLong();
+            if (paramsBytes > paramsLimitBytes) {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
                 }
                 LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
 
                 TString error = TStringBuilder() << "Parameters size exceeds limit (" << paramsBytes << "b > " << paramsLimitBytes << "b)";
-                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId); 
-                return; 
-            } 
-        } 
- 
+                ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
+                return;
+            }
+        }
+
         TActorId targetId;
-        if (!request.GetSessionId().empty()) { 
+        if (!request.GetSessionId().empty()) {
             TProcessResult<TActorId> result;
             if (!TryGetSessionTargetActor(request.GetSessionId(), requestInfo, result)) {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
                 }
                 LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
-                ReplyProcessError(result.YdbStatus, result.Error, requestId); 
-                return; 
-            } 
- 
-            targetId = result.Value; 
+                ReplyProcessError(result.YdbStatus, result.Error, requestId);
+                return;
+            }
+
+            targetId = result.Value;
 
             LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
-        } else { 
-            TString cluster = request.GetCluster(); 
-            if (cluster.empty()) { 
-                cluster = TString(DefaultKikimrClusterName); 
-            } 
- 
+        } else {
+            TString cluster = request.GetCluster();
+            if (cluster.empty()) {
+                cluster = TString(DefaultKikimrClusterName);
+            }
+
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, cluster, false, request.GetDatabase(), result)) {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
                 }
                 LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
-                ReplyProcessError(result.YdbStatus, result.Error, requestId); 
-                return; 
-            } 
- 
+                ReplyProcessError(result.YdbStatus, result.Error, requestId);
+                return;
+            }
+
             targetId = result.Value->WorkerId;
             request.SetSessionId(result.Value->SessionId);
             dbCounters = result.Value->DbCounters;
 
             LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
-        } 
- 
+        }
+
         TString sessionId = request.GetSessionId();
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         // We add extra milliseconds to the user-specified timeout, so it means we give additional priority for worker replies,
@@ -624,46 +624,46 @@ public:
         StartQueryTimeout(requestId, timeoutMs);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
         KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "Sent request to target, requestId: " << requestId << ", targetId: " << targetId);
-    } 
- 
+    }
+
     void Handle(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record; 
-        auto& request = event.GetRequest(); 
- 
-        TKqpRequestInfo requestInfo(event.GetTraceId()); 
- 
-        TString sessionId = request.GetSessionId(); 
+        auto& event = ev->Get()->Record;
+        auto& request = event.GetRequest();
+
+        TKqpRequestInfo requestInfo(event.GetTraceId());
+
+        TString sessionId = request.GetSessionId();
         auto dbCounters = GetDbCountersForSession(sessionId);
 
         LogRequest(request, requestInfo, ev->Sender, dbCounters);
 
-        if (!sessionId.empty()) { 
+        if (!sessionId.empty()) {
             TProcessResult<TActorId> result;
             if (TryGetSessionTargetActor(sessionId, requestInfo, result)) {
                 Send(result.Value, ev->Release().Release());
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     void Handle(TEvKqp::TEvPingSessionRequest::TPtr& ev) {
-        auto& event = ev->Get()->Record; 
-        auto& request = event.GetRequest(); 
- 
-        auto traceId = event.GetTraceId(); 
-        TKqpRequestInfo requestInfo(traceId); 
+        auto& event = ev->Get()->Record;
+        auto& request = event.GetRequest();
+
+        auto traceId = event.GetTraceId();
+        TKqpRequestInfo requestInfo(traceId);
         auto sessionId = request.GetSessionId();
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
- 
+
         auto dbCounters = GetDbCountersForSession(sessionId);
 
         LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
 
         TProcessResult<TActorId> result;
         if (!TryGetSessionTargetActor(sessionId, requestInfo, result)) {
-            ReplyProcessError(result.YdbStatus, result.Error, requestId); 
-            return; 
-        } 
- 
+            ReplyProcessError(result.YdbStatus, result.Error, requestId);
+            return;
+        }
+
         TDuration timeout = DEFAULT_KEEP_ALIVE_TIMEOUT;
         if (request.GetTimeoutMs() > 0) {
             timeout = TDuration::MilliSeconds(Min(timeout.MilliSeconds(), (ui64)request.GetTimeoutMs()));
@@ -672,29 +672,29 @@ public:
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         StartQueryTimeout(requestId, timeout);
         Send(result.Value, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
-    } 
- 
-    template<typename TEvent> 
+    }
+
+    template<typename TEvent>
     void ForwardEvent(TEvent ev) {
-        ui64 requestId = ev->Cookie; 
- 
+        ui64 requestId = ev->Cookie;
+
         StopQueryTimeout(requestId);
-        auto proxyRequest = PendingRequests.FindPtr(requestId); 
-        if (!proxyRequest) { 
+        auto proxyRequest = PendingRequests.FindPtr(requestId);
+        if (!proxyRequest) {
             KQP_PROXY_LOG_E("Unknown sender for proxy response, requestId: " << requestId);
-            return; 
-        } 
- 
+            return;
+        }
+
         LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters);
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
-        TKqpRequestInfo requestInfo(proxyRequest->TraceId); 
+        TKqpRequestInfo requestInfo(proxyRequest->TraceId);
         KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId());
- 
+
         PendingRequests.Erase(requestId);
-    } 
- 
+    }
+
     void LookupPeerProxyData() {
         if (!SelfDataCenterId || BoardLookupActor || Tenants.empty()) {
             return;
@@ -947,24 +947,24 @@ public:
 
         TString message = TStringBuilder() << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
         KQP_PROXY_LOG_D("Reply timeout: requestId " <<  requestId << " sessionId" << reqInfo->SessionId);
-        ReplyProcessError(Ydb::StatusIds::TIMEOUT, message, requestId); 
+        ReplyProcessError(Ydb::StatusIds::TIMEOUT, message, requestId);
     }
 
     void Handle(TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
-        const auto &event = ev->Get()->Record; 
-        if (event.GetStatus() == Ydb::StatusIds::SUCCESS && event.GetResponse().GetClosed()) { 
-            auto sessionId = event.GetResponse().GetSessionId(); 
+        const auto &event = ev->Get()->Record;
+        if (event.GetStatus() == Ydb::StatusIds::SUCCESS && event.GetResponse().GetClosed()) {
+            auto sessionId = event.GetResponse().GetSessionId();
             TActorId workerId = ev->Sender;
- 
+
             RemoveSession(sessionId, workerId);
- 
+
             KQP_PROXY_LOG_D("Session closed, sessionId: " << event.GetResponse().GetSessionId()
                 << ", workerId: " << workerId << ", local sessions count: " << LocalSessions.size());
-        } 
-    } 
- 
+        }
+    }
+
     STATEFN(MainState) {
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
@@ -985,101 +985,101 @@ public:
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-        default: 
+        default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-        } 
-    } 
- 
-private: 
+        }
+    }
+
+private:
     void LogResponse(const TKqpRequestInfo& requestInfo,
         const NKikimrKqp::TEvProcessResponse& event, TKqpDbCountersPtr dbCounters)
-    { 
-        auto status = event.GetYdbStatus(); 
-        if (status != Ydb::StatusIds::SUCCESS) { 
-            KQP_PROXY_LOG_W(requestInfo << event.GetError()); 
-        } 
- 
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), status); 
-    } 
- 
+    {
+        auto status = event.GetYdbStatus();
+        if (status != Ydb::StatusIds::SUCCESS) {
+            KQP_PROXY_LOG_W(requestInfo << event.GetError());
+        }
+
+        Counters->ReportResponseStatus(dbCounters, event.ByteSize(), status);
+    }
+
     void LogResponse(const TKqpRequestInfo& requestInfo,
         const TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& holder,
         TKqpDbCountersPtr dbCounters)
-    { 
-        Y_UNUSED(requestInfo); 
+    {
+        Y_UNUSED(requestInfo);
         const auto& event = holder.GetRef();
- 
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
-            event.GetYdbStatus()); 
 
-        for (auto& issue : event.GetResponse().GetQueryIssues()) { 
+        Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
+            event.GetYdbStatus());
+
+        for (auto& issue : event.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(dbCounters, issue);
-        } 
- 
+        }
+
         ui64 resultsBytes = 0;
-        for (auto& result : event.GetResponse().GetResults()) { 
+        for (auto& result : event.GetResponse().GetResults()) {
             resultsBytes += result.ByteSize();
-        } 
+        }
         Counters->ReportResultsBytes(dbCounters, resultsBytes);
-    } 
- 
+    }
+
     void LogResponse(const TKqpRequestInfo& requestInfo,
         const NKikimrKqp::TEvCreateSessionResponse& event, TKqpDbCountersPtr dbCounters)
-    { 
-        Y_UNUSED(requestInfo); 
+    {
+        Y_UNUSED(requestInfo);
 
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
-            event.GetYdbStatus()); 
-    } 
- 
+            event.GetYdbStatus());
+    }
+
     void LogResponse(const TKqpRequestInfo& requestInfo,
         const NKikimrKqp::TEvPingSessionResponse& event, TKqpDbCountersPtr dbCounters)
-    { 
-        Y_UNUSED(requestInfo); 
+    {
+        Y_UNUSED(requestInfo);
 
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
-    } 
- 
+    }
+
     void LogRequest(const NKikimrKqp::TCloseSessionRequest& request,
         const TKqpRequestInfo& requestInfo, const TActorId& sender,
         TKqpDbCountersPtr dbCounters)
-    { 
+    {
         KQP_PROXY_LOG_D(requestInfo << "Received close session request, sender: " << sender << ", SessionId: " << request.GetSessionId());
         Counters->ReportCloseSession(dbCounters, request.ByteSize());
-    } 
- 
+    }
+
     void LogRequest(const NKikimrKqp::TQueryRequest& request,
         const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
         TKqpDbCountersPtr dbCounters)
-    { 
+    {
         KQP_PROXY_LOG_D(requestInfo << "Received new query request, sender: " << sender << ", RequestId: " << requestId
-            << ", Query: \"" << request.GetQuery().substr(0, 10000) << "\""); 
+            << ", Query: \"" << request.GetQuery().substr(0, 10000) << "\"");
         Counters->ReportQueryRequest(dbCounters, request);
-    } 
- 
+    }
+
     void LogRequest(const NKikimrKqp::TCreateSessionRequest& request,
         const TKqpRequestInfo& requestInfo, const TActorId& sender,
         TKqpDbCountersPtr dbCounters)
-    { 
+    {
         KQP_PROXY_LOG_D(requestInfo << "Received create session request, sender: " << sender);
         Counters->ReportCreateSession(dbCounters, request.ByteSize());
-    } 
- 
+    }
+
     void LogRequest(const NKikimrKqp::TPingSessionRequest& request,
         const TKqpRequestInfo& requestInfo, const TActorId& sender, ui64 requestId,
         TKqpDbCountersPtr dbCounters)
-    { 
+    {
         KQP_PROXY_LOG_D(requestInfo << "Received ping session request, sender: " << sender << " selfID: " << SelfId() << ", RequestId: " << requestId);
         Counters->ReportPingSession(dbCounters, request.ByteSize());
-    } 
- 
-    bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId) 
-    { 
-        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message); 
+    }
+
+    bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)
+    {
+        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
         return Send(SelfId(), response.Release(), 0, requestId);
-    } 
- 
+    }
+
     bool CheckRequestDeadline(const TKqpRequestInfo& requestInfo, const TInstant deadline, TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!deadline) {
@@ -1102,33 +1102,33 @@ private:
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
         const TString& cluster, bool longSession, const TString& database, TProcessResult<TKqpSessionInfo*>& result)
-    { 
-        if (!database.empty()) { 
-            if (!TenantsReady) { 
-                TString error = TStringBuilder() << "Node isn't ready to serve database requests."; 
- 
+    {
+        if (!database.empty()) {
+            if (!TenantsReady) {
+                TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
+
                 KQP_PROXY_LOG_E(requestInfo << error);
- 
-                result.YdbStatus = Ydb::StatusIds::UNAVAILABLE; 
-                result.Error = error; 
-                return false; 
-            } 
- 
+
+                result.YdbStatus = Ydb::StatusIds::UNAVAILABLE;
+                result.Error = error;
+                return false;
+            }
+
             /*
              * TODO: disabled due to SLYDB-42. Remove (or rework) it after KIKIMR-9650 & KIKIMR-9652
             if (!Tenants.contains(database)) {
-                TString error = TStringBuilder() << "Unexpected node for database: " << database; 
- 
-                LOG_ERROR_S(ctx, NKikimrServices::KQP_PROXY, requestInfo << error 
-                    << ", known databases: " << JoinRange(", ", Tenants.begin(), Tenants.end())); 
- 
-                result.YdbStatus = Ydb::StatusIds::INTERNAL_ERROR; 
-                result.Error = error; 
-                return false; 
-            } 
+                TString error = TStringBuilder() << "Unexpected node for database: " << database;
+
+                LOG_ERROR_S(ctx, NKikimrServices::KQP_PROXY, requestInfo << error
+                    << ", known databases: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
+
+                result.YdbStatus = Ydb::StatusIds::INTERNAL_ERROR;
+                result.Error = error;
+                return false;
+            }
             */
-        } 
- 
+        }
+
         if (ShutdownRequested) {
             TString error = TStringBuilder() << "Cannot create session: system shutdown requested.";
 
@@ -1142,144 +1142,144 @@ private:
             return false;
         }
 
-        auto sessionsLimitPerNode = TableServiceConfig.GetSessionsLimitPerNode(); 
-        if (sessionsLimitPerNode && LocalSessions.size() >= sessionsLimitPerNode) { 
-            TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: " 
-                << sessionsLimitPerNode; 
+        auto sessionsLimitPerNode = TableServiceConfig.GetSessionsLimitPerNode();
+        if (sessionsLimitPerNode && LocalSessions.size() >= sessionsLimitPerNode) {
+            TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
+                << sessionsLimitPerNode;
             KQP_PROXY_LOG_W(requestInfo << error);
- 
-            result.YdbStatus = Ydb::StatusIds::OVERLOADED; 
-            result.Error = error; 
-            return false; 
-        } 
- 
+
+            result.YdbStatus = Ydb::StatusIds::OVERLOADED;
+            result.Error = error;
+            return false;
+        }
+
         auto sessionId = EncodeSessionId(SelfId().NodeId(), CreateGuidAsString());
- 
+
         auto dbCounters = Counters->GetDbCounters(database);
 
         TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, dbCounters);
-        workerSettings.LongSession = longSession; 
- 
+        workerSettings.LongSession = longSession;
+
         IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor()
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions.Create(sessionId, workerId, database, dbCounters);
- 
+
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
             << ", workerId: " << sessionInfo->WorkerId
             << ", database: " << sessionInfo->Database
-            << ", longSession: " << longSession 
-            << ", local sessions count: " << LocalSessions.size()); 
- 
-        result.YdbStatus = Ydb::StatusIds::SUCCESS; 
-        result.Error.clear(); 
-        result.Value = sessionInfo; 
+            << ", longSession: " << longSession
+            << ", local sessions count: " << LocalSessions.size());
+
+        result.YdbStatus = Ydb::StatusIds::SUCCESS;
+        result.Error.clear();
+        result.Value = sessionInfo;
         PublishResourceUsage();
-        return true; 
-    } 
- 
+        return true;
+    }
+
     bool TryGetSessionTargetActor(const TString& sessionId, const TKqpRequestInfo& requestInfo, TProcessResult<TActorId>& result)
-    { 
-        result.YdbStatus = Ydb::StatusIds::SUCCESS; 
-        result.Error.clear(); 
- 
+    {
+        result.YdbStatus = Ydb::StatusIds::SUCCESS;
+        result.Error.clear();
+
         auto nodeId = TryDecodeYdbSessionId(sessionId);
         if (!nodeId) {
-            TString error = TStringBuilder() << "Failed to parse session id: " << sessionId; 
+            TString error = TStringBuilder() << "Failed to parse session id: " << sessionId;
             KQP_PROXY_LOG_W(requestInfo << error);
- 
-            result.YdbStatus = Ydb::StatusIds::BAD_REQUEST; 
-            result.Error = error; 
-            return false; 
-        } 
- 
+
+            result.YdbStatus = Ydb::StatusIds::BAD_REQUEST;
+            result.Error = error;
+            return false;
+        }
+
         if (*nodeId == SelfId().NodeId()) {
             auto localSession = LocalSessions.FindAndPromote(sessionId);
-            if (!localSession) { 
-                TString error = TStringBuilder() << "Session not found: " << sessionId; 
+            if (!localSession) {
+                TString error = TStringBuilder() << "Session not found: " << sessionId;
                 KQP_PROXY_LOG_N(requestInfo << error);
- 
-                result.YdbStatus = Ydb::StatusIds::BAD_SESSION; 
-                result.Error = error; 
-                return false; 
-            } 
- 
-            result.Value = localSession->WorkerId; 
-            return true; 
-        } 
- 
+
+                result.YdbStatus = Ydb::StatusIds::BAD_SESSION;
+                result.Error = error;
+                return false;
+            }
+
+            result.Value = localSession->WorkerId;
+            return true;
+        }
+
         if (!Tenants.empty()) {
             auto counters = Counters->GetDbCounters(*Tenants.begin());
             Counters->ReportProxyForwardedRequest(counters);
         }
 
         result.Value = MakeKqpProxyID(*nodeId);
-        return true; 
-    } 
- 
+        return true;
+    }
+
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
-        if (!sessionId.empty()) { 
+        if (!sessionId.empty()) {
             LocalSessions.Erase(sessionId);
             PublishResourceUsage();
             if (ShutdownRequested) {
                 ShutdownState->Update(LocalSessions.size());
-            } 
+            }
 
             return;
-        } 
- 
+        }
+
         LocalSessions.Erase(workerId);
         PublishResourceUsage();
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions.size());
         }
-    } 
- 
+    }
+
     void UpdateYqlLogLevels() {
-        const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL); 
-        for (auto &entry : LogConfig.GetEntry()) { 
-            if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) { 
-                auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel()); 
+        const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
+        for (auto &entry : LogConfig.GetEntry()) {
+            if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) {
+                auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
                 NYql::NDq::SetYqlLogLevels(yqlPriority);
                 KQP_PROXY_LOG_D("Updated YQL logs priority: " << (ui32)yqlPriority);
-                return; 
-            } 
-        } 
- 
-        // Set log level based on current logger settings 
+                return;
+            }
+        }
+
+        // Set log level based on current logger settings
         ui8 currentLevel = TlsActivationContext->LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
-        auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel); 
- 
+        auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
+
         KQP_PROXY_LOG_D("Updated YQL logs priority to current level: " << (ui32)yqlPriority);
         NYql::NDq::SetYqlLogLevels(yqlPriority);
-    } 
- 
+    }
+
     TKqpDbCountersPtr GetDbCountersForSession(const TString& sessionId) const {
         auto localSession = LocalSessions.FindPtr(sessionId);
         return localSession ? localSession->DbCounters : nullptr;
     }
 
-private: 
-    NYql::NLog::YqlLoggerScope YqlLoggerScope; 
-    NKikimrConfig::TLogConfig LogConfig; 
-    NKikimrConfig::TTableServiceConfig TableServiceConfig; 
-    TKqpSettings::TConstPtr KqpSettings; 
+private:
+    NYql::NLog::YqlLoggerScope YqlLoggerScope;
+    NKikimrConfig::TLogConfig LogConfig;
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    TKqpSettings::TConstPtr KqpSettings;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
- 
+
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;
-    bool TenantsReady; 
+    bool TenantsReady;
     bool ShutdownRequested = false;
-    THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions; 
+    THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
-    THashSet<TString> Tenants; 
- 
+    THashSet<TString> Tenants;
+
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
-    TIntrusivePtr<TModuleResolverState> ModuleResolverState; 
- 
-    TIntrusivePtr<TKqpCounters> Counters; 
+    TIntrusivePtr<TModuleResolverState> ModuleResolverState;
+
+    TIntrusivePtr<TKqpCounters> Counters;
     TLocalSessionsRegistry LocalSessions;
 
     bool ServerWorkerBalancerComplete = false;
@@ -1295,16 +1295,16 @@ private:
     TActorId SpillingService;
     TActorId WhiteBoardService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
-}; 
- 
-} // namespace 
- 
-IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig, 
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig, 
+};
+
+} // namespace
+
+IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
-{ 
+{
     return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), std::move(queryReplayFactory));
-} 
- 
+}
+
 } // namespace NKikimr::NKqp

@@ -2,7 +2,7 @@
 
 #include <util/system/types.h>
 
-namespace NYdb { 
+namespace NYdb {
 
 constexpr size_t TRANSPORT_STATUSES_FIRST = 401000;
 constexpr size_t TRANSPORT_STATUSES_LAST  = 401999;
@@ -10,7 +10,7 @@ constexpr size_t INTERNAL_CLIENT_FIRST = 402000;
 
 enum class EStatus : size_t {
     // Server statuses
-    STATUS_UNDEFINED =    0, 
+    STATUS_UNDEFINED =    0,
     SUCCESS =             400000,
     BAD_REQUEST =         400010,
     UNAUTHORIZED =        400020,
@@ -24,12 +24,12 @@ enum class EStatus : size_t {
     BAD_SESSION =         400100,
     PRECONDITION_FAILED = 400120,
     ALREADY_EXISTS      = 400130,
-    NOT_FOUND =           400140, 
-    SESSION_EXPIRED =     400150, 
-    CANCELLED =           400160, 
-    UNDETERMINED =        400170, 
-    UNSUPPORTED =         400180, 
-    SESSION_BUSY =        400190, 
+    NOT_FOUND =           400140,
+    SESSION_EXPIRED =     400150,
+    CANCELLED =           400160,
+    UNDETERMINED =        400170,
+    UNSUPPORTED =         400180,
+    SESSION_BUSY =        400190,
 
     // Client statuses
     // Cannot connect or unrecoverable network error. (map from gRPC UNAVAILABLE)
@@ -50,4 +50,4 @@ enum class EStatus : size_t {
     CLIENT_LIMITS_REACHED =      INTERNAL_CLIENT_FIRST    + 20
 };
 
-} // namespace NYdb 
+} // namespace NYdb

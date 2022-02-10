@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -41,7 +41,7 @@ TStatus KqpBuildUnionResult(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     for (const auto& queryResult: query.Results()) {
         TExprBase node(queryResult.Value());
 
-        auto result = DqBuildExtendStage(node, ctx); 
+        auto result = DqBuildExtendStage(node, ctx);
         if (result.Raw() != node.Raw()) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of union #" << node.Raw()->UniqueId();
             replaces[node.Raw()] = result.Ptr();
@@ -150,22 +150,22 @@ TStatus KqpDuplicateResults(const TExprNode::TPtr& input, TExprNode::TPtr& outpu
     return TStatus::Ok;
 }
 
-template <typename TFunctor> 
-NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, const NYql::TExprNode::TPtr& input, 
-    NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx, TFunctor func) 
-{ 
-    auto status = func(input, output, ctx); 
- 
-    if (output == input) { 
-        return status; 
-    } 
- 
-    DumpAppliedRule(ruleName, input, output, ctx); 
- 
-    // restart pipeline 
-    return NYql::IGraphTransformer::TStatus(NYql::IGraphTransformer::TStatus::Repeat, true); 
-} 
- 
+template <typename TFunctor>
+NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, const NYql::TExprNode::TPtr& input,
+    NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx, TFunctor func)
+{
+    auto status = func(input, output, ctx);
+
+    if (output == input) {
+        return status;
+    }
+
+    DumpAppliedRule(ruleName, input, output, ctx);
+
+    // restart pipeline
+    return NYql::IGraphTransformer::TStatus(NYql::IGraphTransformer::TStatus::Repeat, true);
+}
+
 } // anonymous namespace
 
 #define PERFORM_GLOBAL_RULE(id, input, output, ctx, ...) \
@@ -177,23 +177,23 @@ NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, cons
 TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer() {
     return CreateFunctorTransformer(
         [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
-            PERFORM_GLOBAL_RULE("ReplicateMultiUsedConnection", input, output, ctx, 
+            PERFORM_GLOBAL_RULE("ReplicateMultiUsedConnection", input, output, ctx,
                 [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     YQL_ENSURE(TKqlQuery::Match(input.Get()));
                     return NDq::DqReplicateStageMultiOutput(input, output, ctx);
                 });
 
-            PERFORM_GLOBAL_RULE("BuildPureExprStages", input, output, ctx, 
+            PERFORM_GLOBAL_RULE("BuildPureExprStages", input, output, ctx,
                 [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     return KqpBuildPureExprStagesResult(input, output, ctx);
                 });
 
-            PERFORM_GLOBAL_RULE("BuildUnion", input, output, ctx, 
+            PERFORM_GLOBAL_RULE("BuildUnion", input, output, ctx,
                 [] (const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     return KqpBuildUnionResult(input, output, ctx);
                 });
 
-            PERFORM_GLOBAL_RULE("ExtractPrecomputeToInputs", input, output, ctx, 
+            PERFORM_GLOBAL_RULE("ExtractPrecomputeToInputs", input, output, ctx,
                 [] (const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     return DqExtractPrecomputeToStageInput(input, output, ctx);
                 });
@@ -211,4 +211,4 @@ TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer() {
 
 #undef PERFORM_GLOBAL_RULE
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

@@ -30,7 +30,7 @@
 
 using namespace NYql;
 using namespace NYql::NCommon;
-using namespace NYql::NDq; 
+using namespace NYql::NDq;
 using namespace NYql::NDqProto;
 using namespace NYql::NNodes;
 

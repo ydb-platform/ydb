@@ -34,7 +34,7 @@ namespace {
 
     template <typename T, typename... Args>
     const T* AddType(TExprContext& ctx, Args&&... args) {
-        Y_VERIFY_DEBUG(!ctx.Frozen); 
+        Y_VERIFY_DEBUG(!ctx.Frozen);
         ctx.TypeNodes.emplace(new T(std::forward<Args>(args)...));
         const auto ins = ctx.TypeSet.emplace(ctx.TypeNodes.top().get());
         return static_cast<const T*>(*ins.first);
@@ -949,14 +949,14 @@ namespace {
         }
 
         if (ctx.ModuleResolver) {
-            auto exportsPtr = ctx.ModuleResolver->GetModule(import); 
-            if (!exportsPtr) { 
+            auto exportsPtr = ctx.ModuleResolver->GetModule(import);
+            if (!exportsPtr) {
                 ctx.AddError(*name, baseMsg << "'" << import << "' does not exist");
                 return nullptr;
             }
 
             const auto& exports = exportsPtr->Symbols();
- 
+
             const auto ex = exports.find(aliasValue);
             if (exports.cend() == ex) {
                 ctx.AddError(*alias, baseMsg << " export '" << aliasValue << "' does not exist");
@@ -1040,48 +1040,48 @@ namespace {
         return true;
     }
 
-    bool CompileDeclare(const TAstNode& node, TContext& ctx) { 
-        if (node.GetChildrenCount() != 3) { 
-            ctx.AddError(node, "Expected list of size 3"); 
-            return false; 
-        } 
- 
-        const auto name = node.GetChild(1); 
-        if (!name->IsAtom()) { 
-            ctx.AddError(*name, "Expected atom"); 
-            return false; 
-        } 
- 
-        TString nameStr = TString(name->GetContent()); 
+    bool CompileDeclare(const TAstNode& node, TContext& ctx) {
+        if (node.GetChildrenCount() != 3) {
+            ctx.AddError(node, "Expected list of size 3");
+            return false;
+        }
+
+        const auto name = node.GetChild(1);
+        if (!name->IsAtom()) {
+            ctx.AddError(*name, "Expected atom");
+            return false;
+        }
+
+        TString nameStr = TString(name->GetContent());
         if (nameStr.size() < 2) {
-            ctx.AddError(*name, "Parameter name should be at least 2 characters long."); 
-            return false; 
-        } 
- 
-        if (nameStr[0] == '$' && std::isdigit(nameStr[1])) { 
-            ctx.AddError(*name, "Parameter name cannot start with digit."); 
-            return false; 
-        } 
- 
+            ctx.AddError(*name, "Parameter name should be at least 2 characters long.");
+            return false;
+        }
+
+        if (nameStr[0] == '$' && std::isdigit(nameStr[1])) {
+            ctx.AddError(*name, "Parameter name cannot start with digit.");
+            return false;
+        }
+
         auto typeExpr = Compile(*node.GetChild(2), ctx);
         if (typeExpr.size() != 1U)
-            return false; 
- 
-        auto parameterExpr = ctx.ProcessNode(node, 
-            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", { 
-                ctx.Expr.NewAtom(node.GetPosition(), nameStr), 
+            return false;
+
+        auto parameterExpr = ctx.ProcessNode(node,
+            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
+                ctx.Expr.NewAtom(node.GetPosition(), nameStr),
                 std::move(typeExpr.front())
-            })); 
- 
+            }));
+
         if (!ctx.Frames.back().Bindings.emplace(nameStr, TExprNode::TListType{std::move(parameterExpr)}).second) {
-            ctx.AddError(node, TStringBuilder() << "Declare statement hides previously defined name: " 
-                << nameStr); 
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
+            ctx.AddError(node, TStringBuilder() << "Declare statement hides previously defined name: "
+                << nameStr);
+            return false;
+        }
+
+        return true;
+    }
+
     bool CompileLibraryDef(const TAstNode& node, TContext& ctx) {
         if (node.GetChildrenCount() != 2 && node.GetChildrenCount() != 3) {
             ctx.AddError(node, "Expected list of size 2 or 3");
@@ -1225,12 +1225,12 @@ namespace {
                 if (!CompileImport(*node, ctx))
                     return {};
             } else if (firstChild->GetContent() == TStringBuf("declare")) {
-                if (!topLevel) { 
-                    ctx.AddError(*firstChild, "Declare statements are only allowed on top level block"); 
+                if (!topLevel) {
+                    ctx.AddError(*firstChild, "Declare statements are only allowed on top level block");
                     return {};
-                } 
- 
-                if (!CompileDeclare(*node, ctx)) 
+                }
+
+                if (!CompileDeclare(*node, ctx))
                     return {};
             } else if (firstChild->GetContent() == TStringBuf("library")) {
                 if (!topLevel) {
@@ -1404,7 +1404,7 @@ namespace {
         std::vector<TFrameContext> Frames;
         TFrameContext* CurrentFrame = nullptr;
         TNodeMap<size_t> LambdaFrames;
-        std::map<TStringBuf, std::pair<const TExprNode*, TAstNode*>> Parameters; 
+        std::map<TStringBuf, std::pair<const TExprNode*, TAstNode*>> Parameters;
 
         struct TCounters {
             size_t References = 0ULL, Neighbors = 0ULL, Order = 0ULL, Frame = 0ULL;
@@ -1513,10 +1513,10 @@ namespace {
 
     TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitNodeContext& ctx, ui32 annotationFlags, TMemoryPool& pool);
 
-    TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TString& topLevelName, ui32 annotationFlags, TMemoryPool& pool, bool useBindings) { 
+    TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TString& topLevelName, ui32 annotationFlags, TMemoryPool& pool, bool useBindings) {
         TAstNode* res = nullptr;
         const auto& name = ctx.FindBinding(&node);
-        if (!name.empty() && name != topLevelName && useBindings) { 
+        if (!name.empty() && name != topLevelName && useBindings) {
             res = TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), name, pool);
         } else {
             switch (node.Type()) {
@@ -1537,7 +1537,7 @@ namespace {
                 {
                     TSmallVec<TAstNode*> values;
                     for (const auto& child : node.Children()) {
-                        values.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings)); 
+                        values.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
                     }
 
                     auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
@@ -1550,35 +1550,35 @@ namespace {
 
             case TExprNode::Callable:
                 {
-                    if (node.Content() == "Parameter") { 
-                        const auto& nameNode = *node.Child(0); 
-                        const auto& typeNode = *node.Child(1); 
-                        Y_UNUSED(typeNode); 
- 
+                    if (node.Content() == "Parameter") {
+                        const auto& nameNode = *node.Child(0);
+                        const auto& typeNode = *node.Child(1);
+                        Y_UNUSED(typeNode);
+
                         res = TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), nameNode.Content(), pool);
- 
-                        auto it = ctx.Parameters.find(nameNode.Content()); 
-                        if (it != ctx.Parameters.end()) { 
-                            break; 
-                        } 
- 
+
+                        auto it = ctx.Parameters.find(nameNode.Content());
+                        if (it != ctx.Parameters.end()) {
+                            break;
+                        }
+
                         auto declareAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("declare"), pool);
-                        auto nameAtom = ctx.RefAtoms 
+                        auto nameAtom = ctx.RefAtoms
                             ? TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(nameNode.Pos()), nameNode.Content(), pool)
                             : TAstNode::NewAtom(ctx.Expr.GetPosition(nameNode.Pos()), nameNode.Content(), pool);
- 
-                        TSmallVec<TAstNode*> children; 
-                        children.push_back(AnnotateAstNode(declareAtom, nullptr, annotationFlags, pool, ctx.RefAtoms)); 
-                        children.push_back(AnnotateAstNode(nameAtom, nullptr, annotationFlags, pool, ctx.RefAtoms)); 
-                        children.push_back(BuildValueNode(typeNode, ctx, topLevelName, annotationFlags, pool, false)); 
+
+                        TSmallVec<TAstNode*> children;
+                        children.push_back(AnnotateAstNode(declareAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
+                        children.push_back(AnnotateAstNode(nameAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
+                        children.push_back(BuildValueNode(typeNode, ctx, topLevelName, annotationFlags, pool, false));
                         auto declareNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
-                        declareNode = AnnotateAstNode(declareNode, &node, annotationFlags, pool, ctx.RefAtoms); 
- 
-                        ctx.Parameters.insert(std::make_pair(nameNode.Content(), 
-                            std::make_pair(&typeNode, declareNode))); 
-                        break; 
-                    } 
- 
+                        declareNode = AnnotateAstNode(declareNode, &node, annotationFlags, pool, ctx.RefAtoms);
+
+                        ctx.Parameters.insert(std::make_pair(nameNode.Content(),
+                            std::make_pair(&typeNode, declareNode)));
+                        break;
+                    }
+
                     TSmallVec<TAstNode*> children;
                     children.push_back(AnnotateAstNode(
                         ctx.RefAtoms ?
@@ -1586,7 +1586,7 @@ namespace {
                             TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool),
                             nullptr, annotationFlags, pool, ctx.RefAtoms));
                     for (const auto& child : node.Children()) {
-                        children.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings)); 
+                        children.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
                     }
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
@@ -1672,7 +1672,7 @@ namespace {
 
             const auto letAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node->Pos()), TStringBuf("let"), pool);
             const auto nameAtom = TAstNode::NewAtom(ctx.Expr.GetPosition(node->Pos()), name, pool);
-            const auto valueNode = BuildValueNode(*node, ctx, name, annotationFlags, pool, true); 
+            const auto valueNode = BuildValueNode(*node, ctx, name, annotationFlags, pool, true);
 
             const auto letNode = TAstNode::NewList(ctx.Expr.GetPosition(node->Pos()), pool,
                 AnnotateAstNode(letAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
@@ -1690,29 +1690,29 @@ namespace {
         }
         const auto returnList = TAstNode::NewList(ctx.Expr.GetPosition(position), returnChildren.data(), returnChildren.size(), pool);
         children.emplace_back(AnnotateAstNode(returnList, 1U == roots.size() ? roots.front() : nullptr, annotationFlags, pool, ctx.RefAtoms));
- 
-        if (!ctx.CurrentFrame->Index && !ctx.Parameters.empty()) { 
-            TSmallVec<TAstNode*> parameterNodes; 
-            parameterNodes.reserve(ctx.Parameters.size()); 
- 
-            for (auto& pair : ctx.Parameters) { 
-                parameterNodes.push_back(pair.second.second); 
-            } 
- 
-            children.insert(children.begin(), parameterNodes.begin(), parameterNodes.end()); 
-        } 
- 
+
+        if (!ctx.CurrentFrame->Index && !ctx.Parameters.empty()) {
+            TSmallVec<TAstNode*> parameterNodes;
+            parameterNodes.reserve(ctx.Parameters.size());
+
+            for (auto& pair : ctx.Parameters) {
+                parameterNodes.push_back(pair.second.second);
+            }
+
+            children.insert(children.begin(), parameterNodes.begin(), parameterNodes.end());
+        }
+
         const auto res = TAstNode::NewList(ctx.Expr.GetPosition(position), children.data(), children.size(), pool);
         return AnnotateAstNode(res, nullptr, annotationFlags, pool, ctx.RefAtoms);
     }
 
-    bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, const TConvertToAstSettings& settings) { 
-        if (settings.NoInlineFunc) { 
-            if (settings.NoInlineFunc(node)) { 
-                return false; 
-            } 
-        } 
- 
+    bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, const TConvertToAstSettings& settings) {
+        if (settings.NoInlineFunc) {
+            if (settings.NoInlineFunc(node)) {
+                return false;
+            }
+        }
+
         switch (node.Type()) {
         case TExprNode::Argument:
             return false;
@@ -1976,7 +1976,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     }
 
     compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)};
-    auto ret = CompileFunction(*cleanRoot, compileCtx, true); 
+    auto ret = CompileFunction(*cleanRoot, compileCtx, true);
     if (1U != ret.size())
         return false;
     exprRoot = std::move(ret.front());
@@ -1984,19 +1984,19 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     return bool(exprRoot);
 }
 
-bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx, 
+bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
     IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion)
-{ 
-    bool hasAnnotations = annotationFlags != TExprAnnotationFlags::None; 
-    ui32 typeAnnotationIndex = Max<ui32>(); 
-    if (annotationFlags & TExprAnnotationFlags::Types) { 
-        bool hasPostions = annotationFlags & TExprAnnotationFlags::Position; 
-        typeAnnotationIndex = hasPostions ? 1 : 0; 
-    } 
- 
+{
+    bool hasAnnotations = annotationFlags != TExprAnnotationFlags::None;
+    ui32 typeAnnotationIndex = Max<ui32>();
+    if (annotationFlags & TExprAnnotationFlags::Types) {
+        bool hasPostions = annotationFlags & TExprAnnotationFlags::Position;
+        typeAnnotationIndex = hasPostions ? 1 : 0;
+    }
+
     return CompileExpr(astRoot, exprRoot, ctx, resolver, hasAnnotations, typeAnnotationIndex, syntaxVersion);
-} 
- 
+}
+
 bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& library, TExprContext& ctx, ui16 syntaxVersion) {
     const TAstNode* cleanRoot = &astRoot;
     TContext compileCtx(ctx);
@@ -2370,12 +2370,12 @@ void CheckArguments(const TExprNode& root) {
     }
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, const TConvertToAstSettings& settings) { 
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, const TConvertToAstSettings& settings) {
 #ifdef _DEBUG
     CheckArguments(root);
 #endif
     TVisitNodeContext ctx(exprContext);
-    ctx.RefAtoms = settings.RefAtoms; 
+    ctx.RefAtoms = settings.RefAtoms;
     ctx.Pool = std::make_unique<TMemoryPool>(4096);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
@@ -2389,7 +2389,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
             const auto name = ctx.FindBinding(node.second);
             if (name.empty()) {
                 const auto& ref = ctx.References[node.second];
-                if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) { 
+                if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) {
                     if (settings.PrintArguments && node.second->IsArgument()) {
                         auto buffer = TStringBuilder() << "$" << ++uniqueNum
                             << "{" << node.second->Content() << ":"
@@ -2413,13 +2413,13 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms) { 
-    TConvertToAstSettings settings; 
-    settings.AnnotationFlags = annotationFlags; 
-    settings.RefAtoms = refAtoms; 
-    return ConvertToAst(root, exprContext, settings); 
-} 
- 
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms) {
+    TConvertToAstSettings settings;
+    settings.AnnotationFlags = annotationFlags;
+    settings.RefAtoms = refAtoms;
+    return ConvertToAst(root, exprContext, settings);
+}
+
 TString TExprNode::Dump() const {
     TNodeSet visited;
     TStringStream out;
@@ -2628,9 +2628,9 @@ TNodeException::TNodeException(const TExprNode* node)
 
 TNodeException::TNodeException(const TPositionHandle& pos)
     : Pos_(pos)
-{ 
-} 
- 
+{
+}
+
 bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx) {
     if (name.empty()) {
         ctx.AddError(TIssue(position,
@@ -2864,7 +2864,7 @@ bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
-    , Frozen(false) 
+    , Frozen(false)
     , PositionSet(
         16,
         [this](TPositionHandle p) { return GetHash(p); },
@@ -2900,36 +2900,36 @@ TPosition TExprContext::GetPosition(TPositionHandle handle) const {
     return Positions[handle.Handle];
 }
 
-TExprContext::~TExprContext() { 
-    UnFreeze(); 
-} 
+TExprContext::~TExprContext() {
+    UnFreeze();
+}
 
-void TExprContext::Freeze() { 
-    for (auto& node : ExprNodes) { 
-        node->MarkFrozen(); 
-    } 
- 
-    Frozen = true; 
-} 
- 
-void TExprContext::UnFreeze() { 
-    if (Frozen) { 
-        for (auto& node : ExprNodes) { 
-            node->MarkFrozen(false); 
-        } 
- 
-        Frozen = false; 
-    } 
-} 
- 
-void TExprContext::Reset() { 
-    YQL_ENSURE(!Frozen); 
- 
-    IssueManager.Reset(); 
-    Step.Reset(); 
-    RepeatTransformCounter = 0; 
-} 
- 
+void TExprContext::Freeze() {
+    for (auto& node : ExprNodes) {
+        node->MarkFrozen();
+    }
+
+    Frozen = true;
+}
+
+void TExprContext::UnFreeze() {
+    if (Frozen) {
+        for (auto& node : ExprNodes) {
+            node->MarkFrozen(false);
+        }
+
+        Frozen = false;
+    }
+}
+
+void TExprContext::Reset() {
+    YQL_ENSURE(!Frozen);
+
+    IssueManager.Reset();
+    Step.Reset();
+    RepeatTransformCounter = 0;
+}
+
 bool TExprContext::IsEqual(TPositionHandle a, TPositionHandle b) const {
     YQL_ENSURE(a.Handle < Positions.size());
     YQL_ENSURE(b.Handle < Positions.size());

@@ -16,8 +16,8 @@ public:
         TCell Value;
     };
 
-    using TPeriodicCallback = std::function<void()>; 
- 
+    using TPeriodicCallback = std::function<void()>;
+
     virtual ~IEngineFlatHost() {}
 
     // Returns shard id of the host.
@@ -43,18 +43,18 @@ public:
 
     // Returns empty optional with type 'returnType' or the filled one.
     virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget, 
-        const THolderFactory& holderFactory) = 0; 
+        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
+        const THolderFactory& holderFactory) = 0;
 
     // Returns struct with type 'returnType' - that should have fields 'List' and 'Truncated'.
     virtual NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
-        TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType, 
+        TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) = 0;
 
     // Updates the single row. Column in commands must be unique.
-    virtual void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
-        const TArrayRef<const TUpdateCommand>& commands) = 0; 
+    virtual void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
+        const TArrayRef<const TUpdateCommand>& commands) = 0;
 
     // Erases the single row.
     virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) = 0;
@@ -67,9 +67,9 @@ public:
 
     // Returns schema version for given tableId
     virtual ui64 GetTableSchemaVersion(const TTableId& tableId) const = 0;
- 
-    // Set callback for periodic execution 
-    virtual void SetPeriodicCallback(TPeriodicCallback&& callback) = 0; 
+
+    // Set callback for periodic execution
+    virtual void SetPeriodicCallback(TPeriodicCallback&& callback) = 0;
 };
 
 }

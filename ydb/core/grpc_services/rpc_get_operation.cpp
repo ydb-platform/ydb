@@ -25,7 +25,7 @@ namespace NGRpcService {
 
 using namespace NActors;
 using namespace NOperationId;
-using namespace Ydb; 
+using namespace Ydb;
 
 class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
                          public TExportConv {

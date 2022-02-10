@@ -182,7 +182,7 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvRegisterProxyResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 "ProxyGeneration must be greater than zero"),
             0, ev->Cookie);
         return;
@@ -193,7 +193,7 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvRegisterProxyResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 "ProxyGeneration is expected to always increase"),
             0, ev->Cookie);
         return;
@@ -223,7 +223,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvUnregisterProxyResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_SESSION, 
+                Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"),
             0, ev->Cookie);
         return;

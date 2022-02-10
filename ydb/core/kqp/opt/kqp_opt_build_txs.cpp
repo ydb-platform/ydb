@@ -9,7 +9,7 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -18,8 +18,8 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers) { 
-    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers); 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers) {
+    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers);
 }
 
 class TKqpBuildTxTransformer : public TSyncTransformerBase {
@@ -402,7 +402,7 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NLog::EComponent::ProviderKqp, NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false), "BuildPhysicalStages") 
+            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config), "Peephole")
             .Build(false);
@@ -461,10 +461,10 @@ public:
                 return TStatus::Error;
             }
 
-            if (!CheckEffectsTx(tx.Cast(), ctx)) { 
-                return TStatus::Error; 
-            } 
- 
+            if (!CheckEffectsTx(tx.Cast(), ctx)) {
+                return TStatus::Error;
+            }
+
             BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
         }
 
@@ -505,37 +505,37 @@ public:
     }
 
 private:
-    bool CheckEffectsTx(TKqpPhysicalTx tx, TExprContext& ctx) const { 
-        TMaybeNode<TExprBase> blackistedNode; 
-        VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) { 
-            if (blackistedNode) { 
-                return false; 
-            } 
- 
-            if (auto maybeCallable = TMaybeNode<TCallable>(exprNode)) { 
-                auto callable = maybeCallable.Cast(); 
- 
+    bool CheckEffectsTx(TKqpPhysicalTx tx, TExprContext& ctx) const {
+        TMaybeNode<TExprBase> blackistedNode;
+        VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) {
+            if (blackistedNode) {
+                return false;
+            }
+
+            if (auto maybeCallable = TMaybeNode<TCallable>(exprNode)) {
+                auto callable = maybeCallable.Cast();
+
                 if (callable.Maybe<TCoUdf>() || callable.Maybe<TCoScriptUdf>() ||
-                    callable.Maybe<TCoUnwrap>() || 
+                    callable.Maybe<TCoUnwrap>() ||
                     callable.Maybe<TCoEnsure>() || callable.Maybe<TKqpEnsure>())
-                { 
-                    blackistedNode = callable; 
-                    return false; 
-                } 
-            } 
- 
-            return true; 
-        }); 
- 
-        if (blackistedNode) { 
-            ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder() 
-                << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName())); 
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
+                {
+                    blackistedNode = callable;
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if (blackistedNode) {
+            ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
+                << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
+            return false;
+        }
+
+        return true;
+    }
+
     std::pair<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeDependencies(const TKqlQuery& query) {
         TNodeOnNodeOwnedMap precomputes;
         TNodeOnNodeOwnedMap dependencies;
@@ -718,4 +718,4 @@ TAutoPtr<IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKq
     return new TKqpBuildTxsTransformer(kqpCtx, buildCtx, std::move(typeAnnTransformer), typesCtx, config);
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

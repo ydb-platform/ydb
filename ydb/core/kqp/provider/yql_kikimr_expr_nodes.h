@@ -1,89 +1,89 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
- 
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
- 
-namespace NYql { 
-namespace NNodes { 
- 
+
+namespace NYql {
+namespace NNodes {
+
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h>
- 
+
 class TKiDataSource : public NGenerated::TKiDataSourceStub<TExprBase, TCallable, TCoAtom> {
-public: 
+public:
     explicit TKiDataSource(const TExprNode* node)
         : TKiDataSourceStub(node) {}
 
     explicit TKiDataSource(const TExprNode::TPtr& node)
-        : TKiDataSourceStub(node) {} 
- 
-    static bool Match(const TExprNode* node) { 
-        if (!TKiDataSourceStub::Match(node)) { 
-            return false; 
-        } 
- 
+        : TKiDataSourceStub(node) {}
+
+    static bool Match(const TExprNode* node) {
+        if (!TKiDataSourceStub::Match(node)) {
+            return false;
+        }
+
         if (node->Child(0)->Content() != KikimrProviderName) {
-            return false; 
-        } 
- 
-        return true; 
-    } 
-}; 
- 
+            return false;
+        }
+
+        return true;
+    }
+};
+
 class TKiDataSink : public NGenerated::TKiDataSinkStub<TExprBase, TCallable, TCoAtom> {
-public: 
+public:
     explicit TKiDataSink(const TExprNode* node)
         : TKiDataSinkStub(node) {}
 
     explicit TKiDataSink(const TExprNode::TPtr& node)
-        : TKiDataSinkStub(node) {} 
- 
-    static bool Match(const TExprNode* node) { 
-        if (!TKiDataSinkStub::Match(node)) { 
-            return false; 
-        } 
- 
+        : TKiDataSinkStub(node) {}
+
+    static bool Match(const TExprNode* node) {
+        if (!TKiDataSinkStub::Match(node)) {
+            return false;
+        }
+
         if (node->Child(0)->Content() != KikimrProviderName) {
-            return false; 
-        } 
- 
-        return true; 
-    } 
-}; 
- 
-class TKiReadTable : public NGenerated::TKiReadTableStub<TExprBase, TKiReadBase, TCoNameValueTupleList> { 
-public: 
+            return false;
+        }
+
+        return true;
+    }
+};
+
+class TKiReadTable : public NGenerated::TKiReadTableStub<TExprBase, TKiReadBase, TCoNameValueTupleList> {
+public:
     explicit TKiReadTable(const TExprNode* node)
         : TKiReadTableStub(node) {}
 
     explicit TKiReadTable(const TExprNode::TPtr& node)
-        : TKiReadTableStub(node) {} 
- 
+        : TKiReadTableStub(node) {}
+
     TString GetTable(TExprContext& ctx) const;
-    TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTablesData& tablesData, 
-        bool withVirtualColumns = false) const; 
-    TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTableDescription& tableData, 
-        bool withVirtualColumns = false) const; 
-}; 
- 
+    TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTablesData& tablesData,
+        bool withVirtualColumns = false) const;
+    TCoAtomList GetSelectColumns(TExprContext& ctx, const TKikimrTableDescription& tableData,
+        bool withVirtualColumns = false) const;
+};
+
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h>
- 
-template<typename TParent> 
-class TNodeBuilder<TParent, TKiColumnRangeTuple> : public NGenerated::TKiColumnRangeTupleBuilder<TParent> 
-{ 
-public: 
+
+template<typename TParent>
+class TNodeBuilder<TParent, TKiColumnRangeTuple> : public NGenerated::TKiColumnRangeTupleBuilder<TParent>
+{
+public:
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
-        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::BuildFuncType buildFunc, 
-        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::GetArgFuncType getArgFunc) 
-        : NGenerated::TKiColumnRangeTupleBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {} 
- 
-    TKiColumnRangeTuple DoBuild() { 
+        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::BuildFuncType buildFunc,
+        typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::GetArgFuncType getArgFunc)
+        : NGenerated::TKiColumnRangeTupleBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
+
+    TKiColumnRangeTuple DoBuild() {
         auto node = this->Ctx.NewList(this->Pos, { this->ColumnHolder.Cast().Ptr(), this->FromHolder.Cast().Ptr(), this->ToHolder.Cast().Ptr() });
-        return TKiColumnRangeTuple(node); 
-    } 
-}; 
- 
-} // namespace NNodes 
-} // namespace NYql 
+        return TKiColumnRangeTuple(node);
+    }
+};
+
+} // namespace NNodes
+} // namespace NYql

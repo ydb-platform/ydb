@@ -16,10 +16,10 @@ namespace NYdb {
 Y_UNIT_TEST_SUITE(BackupToolValuePrintParse) {
 
 void TestResultSetParsedOk(const TString& protoStr, const TString& expect) {
-    Ydb::ResultSet proto; 
+    Ydb::ResultSet proto;
     google::protobuf::TextFormat::ParseFromString(protoStr, &proto);
 
-    TResultSet result(proto); 
+    TResultSet result(proto);
 
     TStringStream got;
     got.Reserve(1 << 10);
@@ -170,7 +170,7 @@ Y_UNIT_TEST(ParseValuesFromFile) {
 
 Y_UNIT_TEST(ResultSetBoolPrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: BOOL }
         }
@@ -187,11 +187,11 @@ Y_UNIT_TEST(ResultSetBoolPrintTest) {
 
 Y_UNIT_TEST(ResultSetInt8PrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: INT8 }
         }
-        columns:{ 
+        columns:{
             name: "Col2"
             type: { type_id: UINT8 }
         }
@@ -214,11 +214,11 @@ Y_UNIT_TEST(ResultSetInt8PrintTest) {
 
 Y_UNIT_TEST(ResultSetInt16PrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: INT16 }
         }
-        columns:{ 
+        columns:{
             name: "Col2"
             type: { type_id: UINT16 }
         }
@@ -243,11 +243,11 @@ Y_UNIT_TEST(ResultSetInt16PrintTest) {
 
 Y_UNIT_TEST(ResultSetInt32PrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col6"
             type: { type_id: INT32 }
         }
-        columns:{ 
+        columns:{
             name: "Col7"
             type: { type_id: UINT32 }
         }
@@ -270,11 +270,11 @@ Y_UNIT_TEST(ResultSetInt32PrintTest) {
 
 Y_UNIT_TEST(ResultSetInt64PrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col8"
             type: { type_id: INT64 }
         }
-        columns:{ 
+        columns:{
             name: "Col9"
             type: { type_id: UINT64 }
         }
@@ -297,11 +297,11 @@ Y_UNIT_TEST(ResultSetInt64PrintTest) {
 
 Y_UNIT_TEST(ResultSetFloatPrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: FLOAT }
         }
-        columns:{ 
+        columns:{
             name: "Col2"
             type: { type_id: DOUBLE }
         }
@@ -335,7 +335,7 @@ Y_UNIT_TEST(ResultSetFloatPrintTest) {
 
 Y_UNIT_TEST(ResultSetIntarvalsPrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: DATE }
         }
@@ -372,11 +372,11 @@ Y_UNIT_TEST(ResultSetStringPrintTest) {
             name: "Col1"
             type: { type_id: STRING }
         }
-        columns:{ 
+        columns:{
             name: "Col2"
             type: { type_id: STRING }
         }
-        columns:{ 
+        columns:{
             name: "Col3"
             type: { type_id: STRING }
         }
@@ -405,11 +405,11 @@ Y_UNIT_TEST(ResultSetStringPrintTest) {
 
 Y_UNIT_TEST(ResultSetUtf8PrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type: { type_id: UTF8 }
         }
-        columns:{ 
+        columns:{
             name: "Col12"
             type: { type_id: UTF8 }
         }
@@ -433,11 +433,11 @@ Y_UNIT_TEST(ResultSetUtf8PrintTest) {
 
 Y_UNIT_TEST(ResultSetVoidPrintTest) {
     TString resultSetStr = R"_(
-        columns:{ 
+        columns:{
             name: "Col1"
             type:{ optional_type:{ item:{ type_id: INT32 } } }
         }
-        columns:{ 
+        columns:{
             name: "Col12"
             type:{ optional_type:{ item:{ type_id: STRING } } }
         }

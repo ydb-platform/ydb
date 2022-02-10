@@ -130,7 +130,7 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
 
     ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
     ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
- 
+
     TVector<ui32> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount()));
     TVector<TCell> fromValues(keyColumnTypes.size()); // padded with NULLs
     TVector<TCell> toValues(toTuple->GetValuesCount());

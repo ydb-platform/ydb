@@ -1,7 +1,7 @@
 #include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
-#include "rpc_scheme_base.h" 
+#include "rpc_scheme_base.h"
 #include "rpc_common.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -14,16 +14,16 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-class TDescribeCoordinationNode : public TRpcSchemeRequestActor<TDescribeCoordinationNode, TEvDescribeCoordinationNode> { 
-    using TBase = TRpcSchemeRequestActor<TDescribeCoordinationNode, TEvDescribeCoordinationNode>; 
+class TDescribeCoordinationNode : public TRpcSchemeRequestActor<TDescribeCoordinationNode, TEvDescribeCoordinationNode> {
+    using TBase = TRpcSchemeRequestActor<TDescribeCoordinationNode, TEvDescribeCoordinationNode>;
 
 public:
     TDescribeCoordinationNode(TEvDescribeCoordinationNode* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         SendProposeRequest(ctx);
         Become(&TDescribeCoordinationNode::StateWork);
     }
@@ -32,7 +32,7 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            default: TBase::StateWork(ev, ctx); 
+            default: TBase::StateWork(ev, ctx);
         }
     }
 
@@ -69,11 +69,11 @@ private:
                 return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
             case NKikimrScheme::StatusAccessDenied: {
-                return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx); 
-            } 
+                return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+            }
             case NKikimrScheme::StatusNotAvailable: {
-                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx); 
-            } 
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
+            }
             default: {
                 return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             }

@@ -11,7 +11,7 @@
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/utils/utf8.h>
- 
+
 namespace NKikimr {
 
 template<typename TOut>
@@ -54,7 +54,7 @@ Y_FORCE_INLINE void ConvertYdbStructTypeToMiniKQLType(const Ydb::StructType& pro
     }
 }
 
-void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output) { 
+void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output) {
     switch (input.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void: {
             output.set_void_type(::google::protobuf::NULL_VALUE);
@@ -129,50 +129,50 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
     }
 }
 
-void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& output) { 
-    switch (input.type_case()) { 
-        case Ydb::Type::kVoidType: 
+void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& output) {
+    switch (input.type_case()) {
+        case Ydb::Type::kVoidType:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Void);
             break;
         case Ydb::Type::kNullType:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Null);
             break;
-        case Ydb::Type::kTypeId: 
+        case Ydb::Type::kTypeId:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            output.MutableData()->SetScheme(input.type_id()); 
+            output.MutableData()->SetScheme(input.type_id());
             break;
         case Ydb::Type::kDecimalType: {
-            // TODO: Decimal parameters 
-            output.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            // TODO: Decimal parameters
+            output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto data = output.MutableData();
             data->SetScheme(NYql::NProto::TypeIds::Decimal);
             data->MutableDecimalParams()->SetPrecision(input.decimal_type().precision());
             data->MutableDecimalParams()->SetScale(input.decimal_type().scale());
-            break; 
+            break;
         }
-        case Ydb::Type::kOptionalType: 
+        case Ydb::Type::kOptionalType:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Optional);
             ConvertYdbTypeToMiniKQLType(input.optional_type().item(), *output.MutableOptional()->MutableItem());
             break;
-        case Ydb::Type::kListType: 
+        case Ydb::Type::kListType:
             output.SetKind(NKikimrMiniKQL::ETypeKind::List);
             ConvertYdbTypeToMiniKQLType(input.list_type().item(), *output.MutableList()->MutableItem());
             break;
-        case Ydb::Type::kTupleType: { 
+        case Ydb::Type::kTupleType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
-            const Ydb::TupleType& protoTupleType = input.tuple_type(); 
+            const Ydb::TupleType& protoTupleType = input.tuple_type();
             ConvertYdbTupleTypeToMiniKQLType(protoTupleType, *output.MutableTuple());
             break;
         }
-        case Ydb::Type::kStructType: { 
+        case Ydb::Type::kStructType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-            const Ydb::StructType& protoStructType = input.struct_type(); 
+            const Ydb::StructType& protoStructType = input.struct_type();
             ConvertYdbStructTypeToMiniKQLType(protoStructType, *output.MutableStruct());
             break;
         }
-        case Ydb::Type::kDictType: { 
+        case Ydb::Type::kDictType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Dict);
-            const Ydb::DictType& protoDictType = input.dict_type(); 
+            const Ydb::DictType& protoDictType = input.dict_type();
             ConvertYdbTypeToMiniKQLType(protoDictType.key(), *output.MutableDict()->MutableKey());
             ConvertYdbTypeToMiniKQLType(protoDictType.payload(), *output.MutableDict()->MutablePayload());
             break;
@@ -206,7 +206,7 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
 
 }
 
-Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::TValue& value, Ydb::Value& res) { 
+Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::TValue& value, Ydb::Value& res) {
     switch (typeId) {
         case NUdf::TDataType<bool>::Id:
             res.set_bool_value(value.GetBool());
@@ -285,168 +285,168 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
     }
 }
 
-Y_FORCE_INLINE void CheckTypeId(i32 id, i32 expected, std::string_view typeName) { 
-    if (id != expected) { 
-        throw yexception() << "Invalid value representation for type: " << typeName; 
-    } 
-} 
- 
-Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& value, NKikimrMiniKQL::TValue& res) { 
+Y_FORCE_INLINE void CheckTypeId(i32 id, i32 expected, std::string_view typeName) {
+    if (id != expected) {
+        throw yexception() << "Invalid value representation for type: " << typeName;
+    }
+}
+
+Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& value, NKikimrMiniKQL::TValue& res) {
     switch (typeId) {
         case NUdf::TDataType<bool>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kBoolValue, "Bool"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kBoolValue, "Bool");
             res.SetBool(value.bool_value());
             break;
         case NUdf::TDataType<ui8>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint8"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint8");
             res.SetUint32(value.uint32_value());
             break;
         case NUdf::TDataType<i8>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int8"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int8");
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<ui16>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint16"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint16");
             res.SetUint32(value.uint32_value());
             break;
         case NUdf::TDataType<i16>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int16"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int16");
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<i32>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int32"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Int32");
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<ui32>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint32"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Uint32");
             res.SetUint32(value.uint32_value());
             break;
         case NUdf::TDataType<i64>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Int64"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Int64");
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<ui64>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Uint64"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Uint64");
             res.SetUint64(value.uint64_value());
             break;
         case NUdf::TDataType<float>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kFloatValue, "Float"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kFloatValue, "Float");
             res.SetFloat(value.float_value());
             break;
         case NUdf::TDataType<double>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kDoubleValue, "Double"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kDoubleValue, "Double");
             res.SetDouble(value.double_value());
             break;
-        case NUdf::TDataType<NUdf::TTzDate>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDate"); 
-            const auto& stringRef = value.text_value(); 
-            res.SetText(stringRef.data(), stringRef.size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDatetime"); 
-            const auto& stringRef = value.text_value(); 
-            res.SetText(stringRef.data(), stringRef.size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp"); 
-            const auto& stringRef = value.text_value(); 
-            res.SetText(stringRef.data(), stringRef.size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TJson>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Json"); 
-            const auto& stringRef = value.text_value(); 
-            if (!NYql::NDom::IsValidJson(stringRef)) { 
-                throw yexception() << "Invalid Json value"; 
-            } 
-            res.SetText(stringRef.data(), stringRef.size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TUtf8>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Utf8"); 
+        case NUdf::TDataType<NUdf::TTzDate>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDate");
             const auto& stringRef = value.text_value();
-            if (!NYql::IsUtf8(stringRef)) { 
-                throw yexception() << "Invalid Utf8 value"; 
-            } 
             res.SetText(stringRef.data(), stringRef.size());
             break;
-        } 
-        case NUdf::TDataType<NUdf::TDate>::Id: 
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date"); 
-            if (value.uint32_value() >= NUdf::MAX_DATE) { 
-                throw yexception() << "Invalid Date value"; 
+        }
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzDatetime");
+            const auto& stringRef = value.text_value();
+            res.SetText(stringRef.data(), stringRef.size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "TzTimestamp");
+            const auto& stringRef = value.text_value();
+            res.SetText(stringRef.data(), stringRef.size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TJson>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Json");
+            const auto& stringRef = value.text_value();
+            if (!NYql::NDom::IsValidJson(stringRef)) {
+                throw yexception() << "Invalid Json value";
+            }
+            res.SetText(stringRef.data(), stringRef.size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TUtf8>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "Utf8");
+            const auto& stringRef = value.text_value();
+            if (!NYql::IsUtf8(stringRef)) {
+                throw yexception() << "Invalid Utf8 value";
+            }
+            res.SetText(stringRef.data(), stringRef.size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TDate>::Id:
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date");
+            if (value.uint32_value() >= NUdf::MAX_DATE) {
+                throw yexception() << "Invalid Date value";
             }
             res.SetUint32(value.uint32_value());
             break;
         case NUdf::TDataType<NUdf::TDatetime>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Datetime"); 
-            if (value.uint32_value() >= NUdf::MAX_DATETIME) { 
-                throw yexception() << "Invalid Datetime value"; 
-            } 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Datetime");
+            if (value.uint32_value() >= NUdf::MAX_DATETIME) {
+                throw yexception() << "Invalid Datetime value";
+            }
             res.SetUint32(value.uint32_value());
             break;
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Timestamp"); 
-            if (value.uint64_value() >= NUdf::MAX_TIMESTAMP) { 
-                throw yexception() << "Invalid Timestamp value"; 
-            } 
+            CheckTypeId(value.value_case(), Ydb::Value::kUint64Value, "Timestamp");
+            if (value.uint64_value() >= NUdf::MAX_TIMESTAMP) {
+                throw yexception() << "Invalid Timestamp value";
+            }
             res.SetUint64(value.uint64_value());
             break;
         case NUdf::TDataType<NUdf::TInterval>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval"); 
-            if ((ui64)std::abs(value.int64_value()) >= NUdf::MAX_TIMESTAMP) { 
-                throw yexception() << "Invalid Interval value"; 
-            } 
+            CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval");
+            if ((ui64)std::abs(value.int64_value()) >= NUdf::MAX_TIMESTAMP) {
+                throw yexception() << "Invalid Interval value";
+            }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TUuid>::Id:
-            CheckTypeId(value.value_case(), Ydb::Value::kLow128, "Uuid"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kLow128, "Uuid");
             res.SetLow128(value.low_128());
             res.SetHi128(value.high_128());
             break;
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) { 
-                throw yexception() << "Invalid JsonDocument value"; 
-            } 
+            if (!binaryJson.Defined()) {
+                throw yexception() << "Invalid JsonDocument value";
+            }
             res.SetBytes(binaryJson->Data(), binaryJson->Size());
             break;
         }
         case NUdf::TDataType<NUdf::TDyNumber>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber"); 
+            CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber");
             const auto dyNumber = NDyNumber::ParseDyNumberString(value.text_value());
-            if (!dyNumber.Defined()) { 
-                throw yexception() << "Invalid DyNumber value"; 
-            } 
+            if (!dyNumber.Defined()) {
+                throw yexception() << "Invalid DyNumber value";
+            }
             res.SetBytes(dyNumber->Data(), dyNumber->Size());
             break;
         }
-        case NUdf::TDataType<char*>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "String"); 
+        case NUdf::TDataType<char*>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "String");
             const auto& stringRef = value.bytes_value();
             res.SetBytes(stringRef.data(), stringRef.size());
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TYson>::Id: { 
-            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "Yson"); 
-            const auto& stringRef = value.bytes_value(); 
-            if (!NYql::NDom::IsValidYson(stringRef)) { 
-                throw yexception() << "Invalid Yson value"; 
-            } 
-            res.SetBytes(stringRef.data(), stringRef.size()); 
-            break; 
-        } 
-        default: 
-            throw yexception() << "Unsupported data type: " << typeId; 
+            break;
+        }
+        case NUdf::TDataType<NUdf::TYson>::Id: {
+            CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "Yson");
+            const auto& stringRef = value.bytes_value();
+            if (!NYql::NDom::IsValidYson(stringRef)) {
+                throw yexception() << "Invalid Yson value";
+            }
+            res.SetBytes(stringRef.data(), stringRef.size());
+            break;
+        }
+        default:
+            throw yexception() << "Unsupported data type: " << typeId;
     }
 }
 
 void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
                                    const NKikimrMiniKQL::TValue& inputValue,
-                                   Ydb::Value& output) { 
+                                   Ydb::Value& output) {
     switch (inputType.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void: {
             break;
@@ -479,7 +479,7 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
                 } else {
                     // Next type is not optional and we have no optional value - Optional<Optional<T>>(Null) case.
                     // Write corresponding number of nested Value messages, and NullFlag to the last one
-                    Ydb::Value* resValue = &output; 
+                    Ydb::Value* resValue = &output;
                     while (optionalCounter--) {
                         resValue = resValue->mutable_nested_value();
                     }
@@ -566,29 +566,29 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
     }
 }
 
-void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType, 
-                                   const Ydb::Value& inputValue, 
+void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
+                                   const Ydb::Value& inputValue,
                                    NKikimrMiniKQL::TValue& output) {
 
-    switch (inputType.type_case()) { 
-        case Ydb::Type::kVoidType: 
+    switch (inputType.type_case()) {
+        case Ydb::Type::kVoidType:
             break;
-        case Ydb::Type::kTypeId: 
-            ConvertData(inputType.type_id(), inputValue, output); 
+        case Ydb::Type::kTypeId:
+            ConvertData(inputType.type_id(), inputValue, output);
             break;
-        case Ydb::Type::kDecimalType: 
+        case Ydb::Type::kDecimalType:
             Y_ENSURE(inputValue.value_case() == Ydb::Value::kLow128);
             output.SetLow128(inputValue.low_128());
             output.SetHi128(inputValue.high_128());
-            if (NYql::NDecimal::IsError(NYql::NDecimal::FromProto(output))) { 
-                throw yexception() << "Invalid decimal value"; 
-            } 
-            break; 
-        case Ydb::Type::kOptionalType: { 
-            switch (inputValue.value_case()) { 
-                case Ydb::Value::kNullFlagValue: 
+            if (NYql::NDecimal::IsError(NYql::NDecimal::FromProto(output))) {
+                throw yexception() << "Invalid decimal value";
+            }
+            break;
+        case Ydb::Type::kOptionalType: {
+            switch (inputValue.value_case()) {
+                case Ydb::Value::kNullFlagValue:
                     break;
-                case Ydb::Value::kNestedValue: 
+                case Ydb::Value::kNestedValue:
                     ConvertYdbValueToMiniKQLValue(inputType.optional_type().item(), inputValue.nested_value(), *output.MutableOptional());
                     break;
                 default:
@@ -596,28 +596,28 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
             }
             break;
         }
-        case Ydb::Type::kListType: { 
-            const Ydb::ListType& protoListType = inputType.list_type(); 
-            const Ydb::Type& protoItemType = protoListType.item(); 
+        case Ydb::Type::kListType: {
+            const Ydb::ListType& protoListType = inputType.list_type();
+            const Ydb::Type& protoItemType = protoListType.item();
             for (const auto& x : inputValue.items()) {
                 ConvertYdbValueToMiniKQLValue(protoItemType, x, *output.MutableList()->Add());
             }
             break;
         }
-        case Ydb::Type::kStructType: { 
-            const Ydb::StructType& protoStructType = inputType.struct_type(); 
+        case Ydb::Type::kStructType: {
+            const Ydb::StructType& protoStructType = inputType.struct_type();
             ui32 membersCount = static_cast<ui32>(protoStructType.membersSize());
             if (membersCount != inputValue.itemsSize()) {
-                throw yexception() << "Number of struct fields and their types mismatched"; 
+                throw yexception() << "Number of struct fields and their types mismatched";
             }
             for (ui32 memberNum = 0; memberNum < membersCount; ++memberNum) {
-                const Ydb::StructMember& protoMember = protoStructType.members(memberNum); 
+                const Ydb::StructMember& protoMember = protoStructType.members(memberNum);
                 ConvertYdbValueToMiniKQLValue(protoMember.type(), inputValue.items(memberNum), *output.MutableStruct()->Add());
             }
             break;
         }
-        case Ydb::Type::kDictType: { 
-            const Ydb::DictType& protoDictType = inputType.dict_type(); 
+        case Ydb::Type::kDictType: {
+            const Ydb::DictType& protoDictType = inputType.dict_type();
             for (const auto& x : inputValue.pairs()) {
                 auto pair = output.MutableDict()->Add();
                 ConvertYdbValueToMiniKQLValue(protoDictType.key(), x.key(), *pair->MutableKey());
@@ -625,14 +625,14 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
             }
             break;
         }
-        case Ydb::Type::kTupleType: { 
-            const Ydb::TupleType& protoTupleType = inputType.tuple_type(); 
+        case Ydb::Type::kTupleType: {
+            const Ydb::TupleType& protoTupleType = inputType.tuple_type();
             ui32 elementsCount = static_cast<ui32>(protoTupleType.elementsSize());
             if (elementsCount != inputValue.itemsSize()) {
-                throw yexception() << "Number of tuple elements and their types mismatched"; 
+                throw yexception() << "Number of tuple elements and their types mismatched";
             }
             for (ui32 elementNum = 0; elementNum < elementsCount; ++elementNum) {
-                const Ydb::Type& elementType = protoTupleType.elements(elementNum); 
+                const Ydb::Type& elementType = protoTupleType.elements(elementNum);
                 ConvertYdbValueToMiniKQLValue(elementType, inputValue.items(elementNum), *output.MutableTuple()->Add());
             }
             break;
@@ -645,7 +645,7 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
                 case Ydb::VariantType::kTupleItems: {
                     Y_ENSURE(protoVariantType.tuple_items().elements_size() >= 0);
                     if (variantIndex >= (ui32)protoVariantType.tuple_items().elements_size()) {
-                        throw yexception() << "Variant index out of type range"; 
+                        throw yexception() << "Variant index out of type range";
                     }
                     const Ydb::Type& nextType = protoVariantType.tuple_items().elements(variantIndex);
                     ConvertYdbValueToMiniKQLValue(nextType, inputValue.nested_value(), *output.MutableOptional());
@@ -654,21 +654,21 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
                 case Ydb::VariantType::kStructItems: {
                     Y_ENSURE(protoVariantType.struct_items().members_size() >= 0);
                     if (variantIndex >= (ui32)protoVariantType.struct_items().members_size()) {
-                        throw yexception() << "Variant index out of type range"; 
+                        throw yexception() << "Variant index out of type range";
                     }
                     const Ydb::Type& nextType = protoVariantType.struct_items().members(variantIndex).type();
                     ConvertYdbValueToMiniKQLValue(nextType, inputValue.nested_value(), *output.MutableOptional());
                     break;
                 }
                 default:
-                    throw yexception() << "Unknown variant type representation: " 
+                    throw yexception() << "Unknown variant type representation: "
                                         << protoVariantType.DebugString();
             }
             break;
         }
 
         default: {
-            throw yexception() << "Unknown protobuf type: " 
+            throw yexception() << "Unknown protobuf type: "
                                 << inputType.DebugString();
         }
     }
@@ -817,42 +817,42 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::S
     }
 }
 
-void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output) { 
-    auto& outputType = *output.MutableType(); 
-    outputType.SetKind(NKikimrMiniKQL::ETypeKind::Struct); 
-    auto& dataMember = *outputType.MutableStruct()->AddMember(); 
-    dataMember.SetName("Data"); 
-    auto& truncatedMember = *outputType.MutableStruct()->AddMember(); 
-    truncatedMember.SetName("Truncated"); 
-    truncatedMember.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    truncatedMember.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id); 
- 
-    auto& dataType = *dataMember.MutableType(); 
-    dataType.SetKind(NKikimrMiniKQL::ETypeKind::List); 
-    auto& itemType = *dataType.MutableList()->MutableItem(); 
-    itemType.SetKind(NKikimrMiniKQL::ETypeKind::Struct); 
-    auto& structType = *itemType.MutableStruct(); 
- 
-    auto& outputValue = *output.MutableValue(); 
-    auto& dataValue = *outputValue.AddStruct(); 
-    auto& truncatedValue = *outputValue.AddStruct(); 
- 
-    for (auto& column : input.columns()) { 
-        auto& columnMember = *structType.AddMember(); 
-        columnMember.SetName(column.name()); 
-        ConvertYdbTypeToMiniKQLType(column.type(), *columnMember.MutableType()); 
-    } 
- 
-    Ydb::Type ydbRowType; 
-    ConvertMiniKQLTypeToYdbType(itemType, ydbRowType); 
- 
-    for (auto& row : input.rows()) { 
-        ConvertYdbValueToMiniKQLValue(ydbRowType, row, *dataValue.AddList()); 
-    } 
- 
-    truncatedValue.SetBool(input.truncated()); 
-} 
- 
+void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output) {
+    auto& outputType = *output.MutableType();
+    outputType.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
+    auto& dataMember = *outputType.MutableStruct()->AddMember();
+    dataMember.SetName("Data");
+    auto& truncatedMember = *outputType.MutableStruct()->AddMember();
+    truncatedMember.SetName("Truncated");
+    truncatedMember.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    truncatedMember.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id);
+
+    auto& dataType = *dataMember.MutableType();
+    dataType.SetKind(NKikimrMiniKQL::ETypeKind::List);
+    auto& itemType = *dataType.MutableList()->MutableItem();
+    itemType.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
+    auto& structType = *itemType.MutableStruct();
+
+    auto& outputValue = *output.MutableValue();
+    auto& dataValue = *outputValue.AddStruct();
+    auto& truncatedValue = *outputValue.AddStruct();
+
+    for (auto& column : input.columns()) {
+        auto& columnMember = *structType.AddMember();
+        columnMember.SetName(column.name());
+        ConvertYdbTypeToMiniKQLType(column.type(), *columnMember.MutableType());
+    }
+
+    Ydb::Type ydbRowType;
+    ConvertMiniKQLTypeToYdbType(itemType, ydbRowType);
+
+    for (auto& row : input.rows()) {
+        ConvertYdbValueToMiniKQLValue(ydbRowType, row, *dataValue.AddList());
+    }
+
+    truncatedValue.SetBool(input.truncated());
+}
+
 TACLAttrs::TACLAttrs(ui32 access, ui32 inheritance)
     : AccessMask(access)
     , InheritanceType(inheritance)

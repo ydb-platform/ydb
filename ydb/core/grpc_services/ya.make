@@ -16,11 +16,11 @@ SRCS(
     resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
-    rpc_begin_transaction.cpp 
+    rpc_begin_transaction.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
-    rpc_commit_transaction.cpp 
+    rpc_commit_transaction.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_export.cpp
@@ -35,11 +35,11 @@ SRCS(
     rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_discovery.cpp
-    rpc_execute_data_query.cpp 
-    rpc_execute_scheme_query.cpp 
-    rpc_execute_yql_script.cpp 
+    rpc_execute_data_query.cpp
+    rpc_execute_scheme_query.cpp
+    rpc_execute_yql_script.cpp
     rpc_explain_yql_script.cpp
-    rpc_explain_data_query.cpp 
+    rpc_explain_data_query.cpp
     rpc_forget_operation.cpp
     rpc_get_operation.cpp
     rpc_get_shard_locations.cpp
@@ -57,16 +57,16 @@ SRCS(
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
-    rpc_prepare_data_query.cpp 
+    rpc_prepare_data_query.cpp
     rpc_rate_limiter_api.cpp
     rpc_read_columns.cpp
     rpc_read_table.cpp
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
-    rpc_rollback_transaction.cpp 
+    rpc_rollback_transaction.cpp
     rpc_s3_listing.cpp
-    rpc_scheme_base.cpp 
-    rpc_stream_execute_scan_query.cpp 
+    rpc_scheme_base.cpp
+    rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     rpc_yq.cpp

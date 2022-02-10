@@ -64,20 +64,20 @@ struct TRpcServices {
         EvGetOperation,
         EvCreateSession,
         EvDeleteSession,
-        EvKeepAlive = EvDeleteSession + 3, 
-        EvReadTable = EvKeepAlive + 3, 
-        EvGrpcStreamIsReady, 
-        EvExplainDataQuery, 
-        EvPrepareDataQuery, 
-        EvExecuteDataQuery, 
-        EvExecuteSchemeQuery, 
+        EvKeepAlive = EvDeleteSession + 3,
+        EvReadTable = EvKeepAlive + 3,
+        EvGrpcStreamIsReady,
+        EvExplainDataQuery,
+        EvPrepareDataQuery,
+        EvExecuteDataQuery,
+        EvExecuteSchemeQuery,
         EvCreateTenant,
         EvAlterTenant,
         EvGetTenantStatus,
         EvListTenants,
         EvRemoveTenant,
-        EvBeginTransaction, 
-        EvCommitTransaction, 
+        EvBeginTransaction,
+        EvCommitTransaction,
         EvRollbackTransaction,
         EvModifyPermissions,
         EvListEndpoints,
@@ -87,18 +87,18 @@ struct TRpcServices {
         EvAlterCoordinationNode,
         EvDropCoordinationNode,
         EvDescribeCoordinationNode,
-        EvCancelOperation, 
-        EvForgetOperation, 
-        EvExecDataQueryAst, 
+        EvCancelOperation,
+        EvForgetOperation,
+        EvExecDataQueryAst,
         EvExecuteYqlScript,
         EvUploadRows,
-        EvS3Listing, 
-        EvExplainDataQueryAst, 
+        EvS3Listing,
+        EvExplainDataQueryAst,
         EvReadColumns,
         EvBiStreamPing,
         EvRefreshTokenRequest, // internal call
-        EvGetShardLocations, 
-        EvExperimentalStreamQuery, 
+        EvGetShardLocations,
+        EvExperimentalStreamQuery,
         EvStreamPQWrite,
         EvStreamPQRead,
         EvPQReadInfo,
@@ -119,7 +119,7 @@ struct TRpcServices {
         EvKikhouseDiscardSnapshot,
         EvExportToS3,
         EvSelfCheck,
-        EvStreamExecuteScanQuery, 
+        EvStreamExecuteScanQuery,
         EvPQDropTopic,
         EvPQCreateTopic,
         EvPQAlterTopic,
@@ -217,9 +217,9 @@ struct TRpcServices {
         {}
         const size_t LeftInQueue;
     };
- 
-    struct TEvCancelOperation : public TEventLocal<TEvCancelOperation, TRpcServices::EvCancelOperation> {}; 
-    struct TEvForgetOperation : public TEventLocal<TEvForgetOperation, TRpcServices::EvForgetOperation> {}; 
+
+    struct TEvCancelOperation : public TEventLocal<TEvCancelOperation, TRpcServices::EvCancelOperation> {};
+    struct TEvForgetOperation : public TEventLocal<TEvForgetOperation, TRpcServices::EvForgetOperation> {};
 };
 
 // Should be specialized for real responses
@@ -658,10 +658,10 @@ public:
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
 
-    const TMaybe<TString> GetRequestType() const { 
+    const TMaybe<TString> GetRequestType() const {
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
-    } 
- 
+    }
+
     TInstant GetDeadline() const override {
         return TInstant::Max();
     }
@@ -912,9 +912,9 @@ public:
 
     const TMaybe<TString> GetRequestType() const override {
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
-    } 
- 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) { 
+    }
+
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) {
         // res->data() pointer is used inside grpc code.
         // So this object should be destroyed during grpc_slice destroying routine
         auto res = new TString;
@@ -929,7 +929,7 @@ public:
                     (void*)(res->data()), res->size(), freeResult, res);
         grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
         auto data = grpc::ByteBuffer(&sl, 1);
-        Ctx_->Reply(&data, status); 
+        Ctx_->Reply(&data, status);
     }
 
     void SetCostInfo(float consumed_units) override {

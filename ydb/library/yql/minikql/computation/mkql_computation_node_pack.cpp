@@ -418,7 +418,7 @@ NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& h
 
 NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength,
     const THolderFactory& holderFactory) const
-{ 
+{
     switch (type->GetKind()) {
     case TType::EKind::Void:
         return NUdf::TUnboxedValuePod::Void();
@@ -538,7 +538,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         auto res = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             auto memberType = structType->GetMemberType(index);
-            itemsPtr[index] = UnpackImpl(memberType, buf, topLength, holderFactory); 
+            itemsPtr[index] = UnpackImpl(memberType, buf, topLength, holderFactory);
         }
         return std::move(res);
     }
@@ -549,7 +549,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         auto res = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             auto elementType = tupleType->GetElementType(index);
-            itemsPtr[index] = UnpackImpl(elementType, buf, topLength, holderFactory); 
+            itemsPtr[index] = UnpackImpl(elementType, buf, topLength, holderFactory);
         }
         return std::move(res);
     }
@@ -562,8 +562,8 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
 
         ui64 len = NDetails::UnpackUInt64(buf);
         for (ui64 i = 0; i < len; ++i) {
-            auto key = UnpackImpl(keyType, buf, topLength, holderFactory); 
-            auto payload = UnpackImpl(payloadType, buf, topLength, holderFactory); 
+            auto key = UnpackImpl(keyType, buf, topLength, holderFactory);
+            auto payload = UnpackImpl(payloadType, buf, topLength, holderFactory);
             dictBuilder->Add(std::move(key), std::move(payload));
         }
         return dictBuilder->Build();
@@ -762,7 +762,7 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     case TType::EKind::List: {
         auto listType = static_cast<const TListType*>(type);
         auto itemType = listType->GetItemType();
-        if (value.HasFastListLength()) { 
+        if (value.HasFastListLength()) {
             auto len = value.GetListLength();
             NDetails::PackUInt64(len, Buffer);
             if (len) {
@@ -774,18 +774,18 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
                     for (NUdf::TUnboxedValue item; iter.Next(item); PackImpl(itemType, item))
                         continue;
                 }
-            } 
-        } else { 
+            }
+        } else {
             TUnboxedValueVector items;
             const auto iter = value.GetListIterator();
             for (NUdf::TUnboxedValue item; iter.Next(item);) {
                 items.emplace_back(std::move(item));
-            } 
- 
-            NDetails::PackUInt64(items.size(), Buffer); 
-            for (const auto& item : items) { 
-                PackImpl(itemType, item); 
-            } 
+            }
+
+            NDetails::PackUInt64(items.size(), Buffer);
+            for (const auto& item : items) {
+                PackImpl(itemType, item);
+            }
         }
         break;
     }

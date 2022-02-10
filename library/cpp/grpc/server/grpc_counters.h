@@ -97,11 +97,11 @@ public:
         *InflyRequestBytes += requestSize;
     }
 
-    void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status, 
-        TDuration requestDuration) override 
-    { 
-        Y_UNUSED(status); 
- 
+    void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status,
+        TDuration requestDuration) override
+    {
+        Y_UNUSED(status);
+
         InflyCounter->Dec();
         *InflyRequestBytes -= requestSize;
         *ResponseBytes += responseSize;

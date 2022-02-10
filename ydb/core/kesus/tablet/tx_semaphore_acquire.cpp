@@ -36,7 +36,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             new TEvKesus::TEvAcquireSemaphorePending(Record.GetProxyGeneration()));
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) { 
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         Events.emplace_back(Sender, Cookie,
             new TEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration(), status, reason));
     }
@@ -51,7 +51,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
             // World has changed by the time we executed
             ReplyError(
-                Ydb::StatusIds::BAD_SESSION, 
+                Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered");
             return true;
         }
@@ -64,7 +64,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         if (!session || session->OwnerProxy != proxy) {
             // Session destroyed or stolen by the time we executed
             ReplyError(
-                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
+                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                 session ? "Session not attached" : "Session does not exist");
             return true;
         }
@@ -73,7 +73,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         if (!semaphore && !Record.GetEphemeral()) {
             // Semaphore does not exist
             ReplyError(
-                Ydb::StatusIds::NOT_FOUND, 
+                Ydb::StatusIds::NOT_FOUND,
                 "Semaphore does not exist");
             return true;
         }
@@ -81,7 +81,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         if (semaphore && semaphore->Ephemeral != Record.GetEphemeral()) {
             // Semaphore ephemeral mode mismatch
             ReplyError(
-                Ydb::StatusIds::PRECONDITION_FAILED, 
+                Ydb::StatusIds::PRECONDITION_FAILED,
                 "Semaphore ephemeral mode mismatch");
             return true;
         }
@@ -89,7 +89,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         if (semaphore && Record.GetCount() > semaphore->Limit) {
             // This acquire will never succeed
             ReplyError(
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 "Cannot acquire more than allowed by the semaphore");
             return true;
         }
@@ -132,7 +132,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             if (Record.GetCount() > owner->Count) {
                 // Increasing count is not allowed
                 ReplyError(
-                    Ydb::StatusIds::BAD_REQUEST, 
+                    Ydb::StatusIds::BAD_REQUEST,
                     "Increasing count is not allowed");
                 return true;
             }
@@ -177,7 +177,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             if (Record.GetCount() > waiter->Count) {
                 // Increasing count is not allowed
                 ReplyError(
-                    Ydb::StatusIds::BAD_REQUEST, 
+                    Ydb::StatusIds::BAD_REQUEST,
                     "Increasing count is not allowed");
                 return true;
             }
@@ -187,7 +187,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
                 Events.emplace_back(proxy->ActorID, cookie,
                     new TEvKesus::TEvAcquireSemaphoreResult(
                         proxy->Generation,
-                        Ydb::StatusIds::ABORTED, 
+                        Ydb::StatusIds::ABORTED,
                         "Operation superseded by another request"));
             });
             if (Record.GetTimeoutMillis() == 0 && !(semaphore->GetFirstOrderId() == waiter->OrderId && semaphore->CanAcquire(Record.GetCount()))) {
@@ -278,7 +278,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvAcquireSemaphoreResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 "Acquire must have count > 0"),
             0, ev->Cookie);
         return;
@@ -288,7 +288,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvAcquireSemaphoreResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_REQUEST, 
+                Ydb::StatusIds::BAD_REQUEST,
                 "Acquire timeout is out of range"),
             0, ev->Cookie);
         return;

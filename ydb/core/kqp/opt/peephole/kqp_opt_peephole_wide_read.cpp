@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -81,4 +81,4 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx) {
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

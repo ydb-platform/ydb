@@ -56,12 +56,12 @@ enum ECumulativeCounters {
     COUNTER_READSET_RECEIVED_COUNT = 30                   [(CounterOpts) = {Name: "ReadsetReceivedCount"}];
     COUNTER_READSET_RECEIVED_SIZE = 31                    [(CounterOpts) = {Name: "ReadsetReceivedSize"}];
     COUNTER_TX_RESULT_SIZE = 32                           [(CounterOpts) = {Name: "TxResultSize"}];
-    COUNTER_LOCKS_REJECTED = 33                           [(CounterOpts) = {Name: "LocksRejected"}]; 
-    COUNTER_LOCKS_ACQUIRED = 34                           [(CounterOpts) = {Name: "LocksAcquired"}]; 
-    COUNTER_LOCKS_EVICTED = 35                            [(CounterOpts) = {Name: "LocksEvicted"}]; 
-    COUNTER_LOCKS_BROKEN = 36                             [(CounterOpts) = {Name: "LocksBroken"}]; 
-    COUNTER_LOCKS_ERASED = 37                             [(CounterOpts) = {Name: "LocksErased"}]; 
-    COUNTER_LOCKS_REMOVED = 38                            [(CounterOpts) = {Name: "LocksRemoved"}]; 
+    COUNTER_LOCKS_REJECTED = 33                           [(CounterOpts) = {Name: "LocksRejected"}];
+    COUNTER_LOCKS_ACQUIRED = 34                           [(CounterOpts) = {Name: "LocksAcquired"}];
+    COUNTER_LOCKS_EVICTED = 35                            [(CounterOpts) = {Name: "LocksEvicted"}];
+    COUNTER_LOCKS_BROKEN = 36                             [(CounterOpts) = {Name: "LocksBroken"}];
+    COUNTER_LOCKS_ERASED = 37                             [(CounterOpts) = {Name: "LocksErased"}];
+    COUNTER_LOCKS_REMOVED = 38                            [(CounterOpts) = {Name: "LocksRemoved"}];
     COUNTER_LOCKS_REJECT_BROKEN = 39                      [(CounterOpts) = {Name: "LocksRejectBroken"}];
     COUNTER_LOCKS_LOST = 40                               [(CounterOpts) = {Name: "LocksLost"}];
     COUNTER_INACTIVE_TX_DATA_RELEASES = 41                [(CounterOpts) = {Name: "InactiveTxDataReleases"}];
@@ -138,34 +138,34 @@ enum EPercentileCounters {
     COUNTER_PLAN_TO_EXECUTE_LATENCY = 3                   [(CounterOpts) = {Name: "PlanToExecuteLatency"}];
     COUNTER_PREPARE_EXEC_LATENCY = 4                      [(CounterOpts) = {Name: "PrepareExecLatency"}];
     COUNTER_TX_PROGRESS_EXEC_LATENCY = 5                  [(CounterOpts) = {Name: "TxProgressExecLatency"}];
- 
-    COUNTER_LOCKS_ACTIVE_PER_SHARD = 6                    [(CounterOpts) = {Name: "LocksActivePerShard", 
+
+    COUNTER_LOCKS_ACTIVE_PER_SHARD = 6                    [(CounterOpts) = {Name: "LocksActivePerShard",
                                                               Ranges: { Value: 0     Name: "0"},
                                                               Ranges: { Value: 1     Name: "1-10"},
-                                                              Ranges: { Value: 10    Name: "10-100"} 
-                                                              Ranges: { Value: 100   Name: "100-500"} 
-                                                              Ranges: { Value: 500   Name: "500-1000"} 
-                                                              Ranges: { Value: 1000  Name: "1000-4000"} 
-                                                              Ranges: { Value: 4000  Name: "4000-8000"} 
-                                                              Ranges: { Value: 8000  Name: "8000-12000"} 
-                                                              Ranges: { Value: 12000 Name: "12000-16000"} 
-                                                              Ranges: { Value: 16000 Name: "16000-Inf"} 
-                                                          }]; 
- 
-    COUNTER_LOCKS_BROKEN_PER_SHARD = 7                    [(CounterOpts) = {Name: "LocksBrokenPerShard", 
+                                                              Ranges: { Value: 10    Name: "10-100"}
+                                                              Ranges: { Value: 100   Name: "100-500"}
+                                                              Ranges: { Value: 500   Name: "500-1000"}
+                                                              Ranges: { Value: 1000  Name: "1000-4000"}
+                                                              Ranges: { Value: 4000  Name: "4000-8000"}
+                                                              Ranges: { Value: 8000  Name: "8000-12000"}
+                                                              Ranges: { Value: 12000 Name: "12000-16000"}
+                                                              Ranges: { Value: 16000 Name: "16000-Inf"}
+                                                          }];
+
+    COUNTER_LOCKS_BROKEN_PER_SHARD = 7                    [(CounterOpts) = {Name: "LocksBrokenPerShard",
                                                               Ranges: { Value: 0     Name: "0"},
                                                               Ranges: { Value: 1     Name: "1-10"},
-                                                              Ranges: { Value: 10    Name: "10-100"} 
-                                                              Ranges: { Value: 100   Name: "100-500"} 
-                                                              Ranges: { Value: 500   Name: "500-1000"} 
-                                                              Ranges: { Value: 1000  Name: "1000-4000"} 
-                                                              Ranges: { Value: 4000  Name: "4000-8000"} 
-                                                              Ranges: { Value: 8000  Name: "8000-12000"} 
-                                                              Ranges: { Value: 12000 Name: "12000-16000"} 
-                                                              Ranges: { Value: 16000 Name: "16000-Inf"} 
-                                                          }]; 
- 
-    COUNTER_LOCKS_LIFETIME = 8                            [(CounterOpts) = {Name: "LocksLifetime"}]; 
+                                                              Ranges: { Value: 10    Name: "10-100"}
+                                                              Ranges: { Value: 100   Name: "100-500"}
+                                                              Ranges: { Value: 500   Name: "500-1000"}
+                                                              Ranges: { Value: 1000  Name: "1000-4000"}
+                                                              Ranges: { Value: 4000  Name: "4000-8000"}
+                                                              Ranges: { Value: 8000  Name: "8000-12000"}
+                                                              Ranges: { Value: 12000 Name: "12000-16000"}
+                                                              Ranges: { Value: 16000 Name: "16000-Inf"}
+                                                          }];
+
+    COUNTER_LOCKS_LIFETIME = 8                            [(CounterOpts) = {Name: "LocksLifetime"}];
 
     COUNTER_PROPOSE_QUEUE_LATENCY = 9                     [(CounterOpts) = {Name: "ProposeQueueLatency"}];
 

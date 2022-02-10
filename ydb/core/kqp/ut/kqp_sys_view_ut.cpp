@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         while (true) {
             auto it = client.StreamExecuteScanQuery(
-                "select NodeId from `/Root/.sys/partition_stats` where Path = '/Root/KeyValue' limit 1" 
+                "select NodeId from `/Root/.sys/partition_stats` where Path = '/Root/KeyValue' limit 1"
             ).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             if (StreamResultToYson(it) == "[[#]]") {
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             [[72057594046644480u];[7u];["/Root/BatchUpload"];[5u]];
             [[72057594046644480u];[8u];["/Root/BatchUpload"];[5u]];
             [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[0u];["/Root/KeyValue"];[6u]]; 
+            [[72057594046644480u];[0u];["/Root/KeyValue"];[6u]];
             [[72057594046644480u];[0u];["/Root/KeyValue2"];[7u]];
             [[72057594046644480u];[0u];["/Root/Test"];[8u]];
             [[72057594046644480u];[0u];["/Root/Join1"];[9u]];
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         )";
 
         TString expectedYson = R"([
-            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]]; 
+            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
             [[72057594046644480u];[8u];[0u];["/Root/Test"]];
             [[72057594046644480u];[9u];[0u];["/Root/Join1"]];
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         )";
 
         TString expectedYson = R"([
-            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]]; 
+            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
             [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
             [[72057594046644480u];[8u];[0u];["/Root/Test"]]
         ])";
@@ -277,30 +277,30 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             auto it = client.StreamExecuteScanQuery(request.Str()).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
- 
-            TSet<ui64> readBytesSet; 
-            for (;;) { 
-                auto streamPart = it.ReadNext().GetValueSync(); 
-                if (!streamPart.IsSuccess()) { 
-                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString()); 
-                    break; 
-                } 
- 
-                if (streamPart.HasResultSet()) { 
-                    auto resultSet = streamPart.ExtractResultSet(); 
- 
-                    NYdb::TResultSetParser parser(resultSet); 
-                    while (parser.TryNextRow()) { 
-                        auto value = parser.ColumnParser("ReadBytes").GetOptionalUint64(); 
-                        UNIT_ASSERT(value); 
-                        readBytesSet.emplace(*value); 
-                    } 
-                } 
-            } 
- 
-            UNIT_ASSERT(readBytesSet.contains(0)); // Pure 
-            UNIT_ASSERT(readBytesSet.contains(79)); // TwoShard 
-            UNIT_ASSERT(readBytesSet.contains(432)); // EightShard 
+
+            TSet<ui64> readBytesSet;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+
+                    NYdb::TResultSetParser parser(resultSet);
+                    while (parser.TryNextRow()) {
+                        auto value = parser.ColumnParser("ReadBytes").GetOptionalUint64();
+                        UNIT_ASSERT(value);
+                        readBytesSet.emplace(*value);
+                    }
+                }
+            }
+
+            UNIT_ASSERT(readBytesSet.contains(0)); // Pure
+            UNIT_ASSERT(readBytesSet.contains(79)); // TwoShard
+            UNIT_ASSERT(readBytesSet.contains(432)); // EightShard
         };
 
         checkTable("`/Root/.sys/top_queries_by_read_bytes_one_minute`");

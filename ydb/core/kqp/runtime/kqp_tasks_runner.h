@@ -1,9 +1,9 @@
-#pragma once 
- 
+#pragma once
+
 #include "kqp_compute.h"
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NKqp {
 
 NYql::NDq::IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NYql::NDqProto::TTaskOutput& outputDesc,
@@ -12,7 +12,7 @@ NYql::NDq::IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NYql::NDqProto::
 
 TIntrusivePtr<NYql::NDq::IDqTaskRunner> CreateKqpTaskRunner(const NYql::NDq::TDqTaskRunnerContext& execCtx,
     const NYql::NDq::TDqTaskRunnerSettings& settings, const NYql::NDq::TLogFunc& logFunc);
- 
+
 
 class TKqpTasksRunner : public TSimpleRefCount<TKqpTasksRunner>, private TNonCopyable {
 public:
@@ -71,4 +71,4 @@ TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(const google::protobuf::Repe
     const NYql::NDq::TLogFunc& logFunc);
 
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

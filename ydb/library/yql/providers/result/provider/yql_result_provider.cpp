@@ -15,7 +15,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
- 
+
 #include <util/string/cast.h>
 
 namespace NYql {
@@ -23,15 +23,15 @@ namespace NYql {
 namespace {
     using namespace NKikimr;
     using namespace NKikimr::NMiniKQL;
-    using namespace NNodes; 
- 
-    class TYsonResultWriter : public IResultWriter 
-    { 
-    public: 
+    using namespace NNodes;
+
+    class TYsonResultWriter : public IResultWriter
+    {
+    public:
         TYsonResultWriter(NYson::EYsonFormat format)
             : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
         {}
- 
+
         void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
             Discard = discard;
             if (!Discard) {
@@ -56,16 +56,16 @@ namespace {
                 Writer->OnKeyedItem("Write");
                 Writer->OnBeginList();
             }
-        } 
- 
-        void Write(const TStringBuf& resultData) override { 
+        }
+
+        void Write(const TStringBuf& resultData) override {
             if (!Discard) {
                 Writer->OnListItem();
                 Writer->OnRaw(resultData);
             }
-        } 
- 
-        void Commit(bool overflow) override { 
+        }
+
+        void Commit(bool overflow) override {
             if (!Discard) {
                 Writer->OnEndList();
                 if (overflow) {
@@ -73,27 +73,27 @@ namespace {
                     Writer->OnBooleanScalar(true);
                 }
                 Writer->OnEndMap();
-            } 
-        } 
- 
+            }
+        }
+
         bool IsDiscard() const override {
             return Discard;
         }
 
-        TStringBuf Str() override { 
-            return PartialStream.Str(); 
-        } 
- 
-        ui64 Size() override { 
-            return PartialStream.Size(); 
-        } 
- 
-    private: 
-        TStringStream PartialStream; 
+        TStringBuf Str() override {
+            return PartialStream.Str();
+        }
+
+        ui64 Size() override {
+            return PartialStream.Size();
+        }
+
+    private:
+        TStringStream PartialStream;
         TAutoPtr<NYson::TYsonWriter> Writer;
         bool Discard = false;
-    }; 
- 
+    };
+
     IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
         bool hasPrefixes = false;
         for (auto& child : columns->Children()) {
@@ -192,7 +192,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    class TResultCallableExecutionTransformer : public TGraphTransformerBase { 
+    class TResultCallableExecutionTransformer : public TGraphTransformerBase {
     public:
         TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
             : Config(config)
@@ -200,7 +200,7 @@ namespace {
             YQL_ENSURE(!Config->Types.AvailablePureResultDataSources.empty());
         }
 
-        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
+        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
 
             TString uniqId = TStringBuilder() << '#' << input->UniqueId();
@@ -219,7 +219,7 @@ namespace {
             }
 
             if (input->Content() == CommitName) {
-                if (ResultWriter) { 
+                if (ResultWriter) {
                     TExprBase commitChild(input->ChildPtr(0));
 
                     bool overflow = commitChild.Maybe<TResPull>() ? PullOverflow : FillOverflow;
@@ -231,7 +231,7 @@ namespace {
                         committedSize += Config->CommittedResults.back().size();
                     }
 
-                    ResultWriter.Reset(); 
+                    ResultWriter.Reset();
                 }
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
@@ -249,13 +249,13 @@ namespace {
             return TStatus::Ok;
         }
 
-        NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final { 
+        NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
             Y_UNUSED(input);
             return DelegatedProvider->GetCallableExecutionTransformer()
                 .GetAsyncFuture(*DelegatedNode);
         }
 
-        TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
+        TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
             auto status = DelegatedProvider->GetCallableExecutionTransformer()
                 .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
@@ -288,10 +288,10 @@ namespace {
                     auto resultYsonString = input.Ref().GetResult().Content();
                     auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
                     YQL_ENSURE(resultNode.IsMap());
-                    auto resultBoolNode = resultNode.AsMap()["Data"]; 
+                    auto resultBoolNode = resultNode.AsMap()["Data"];
                     YQL_ENSURE(resultBoolNode.IsBool());
-                    const bool predicate = resultBoolNode.AsBool(); 
- 
+                    const bool predicate = resultBoolNode.AsBool();
+
                     auto branchStatus = RequireChild(input.Ref(), predicate ? TResIf::idx_Then : TResIf::idx_Else);
                     if (branchStatus.Level != IGraphTransformer::TStatus::Ok) {
                         return branchStatus;
@@ -465,7 +465,7 @@ namespace {
             DelegatedProvider = &provider;
             auto fillSettings = Config->FillSettings;
             auto resultSize = ResultWriter ? ResultWriter->Size() : 0;
- 
+
             ui64 committedSize;
             bool& overflow = GetOverflowFlagAndCommitedSize<TTarget>(committedSize);
 
@@ -569,8 +569,8 @@ namespace {
                 const bool needWriter = input.Content() != TResIf::CallableName()
                     && input.Content() != TResFor::CallableName();
                 if (needWriter) {
-                    ResultWriter->Write(data); 
- 
+                    ResultWriter->Write(data);
+
                     input.SetResult(ctx.NewAtom(input.Pos(), ""));
                     input.SetState(TExprNode::EState::ExecutionComplete);
                 } else {
@@ -602,7 +602,7 @@ namespace {
         ui64 CommittedFillSize = 0;
         bool FillOverflow = false;
 
-        TIntrusivePtr<IResultWriter> ResultWriter; 
+        TIntrusivePtr<IResultWriter> ResultWriter;
     };
 
     template <class TTarget>
@@ -636,229 +636,229 @@ namespace {
         const TIntrusivePtr<TResultProviderConfig> Config;
     };
 
-    class TPhysicalFinalizingTransformer final : public TSyncTransformerBase { 
-    public: 
-        TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config) 
-            : Config(config) {} 
- 
-        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
-            TOptimizeExprSettings settings(&Config->Types); 
-            settings.ProcessedNodes = &PhysicalOptProcessedNodes; 
-            TStatus status = OptimizeExprEx(input, output, 
-                [&](const TExprNode::TPtr& node, TExprContext& ctx, IOptimizationContext& optCtx) -> TExprNode::TPtr { 
-                auto ret = node; 
-                if (auto maybeWrite = TMaybeNode<TResWrite>(node)) { 
-                    auto resWrite = maybeWrite.Cast(); 
-                    bool isRef = false; 
-                    bool isAutoRef = false; 
-                    for (auto child: resWrite.Settings()) { 
-                        if (child.Name().Value() == "ref") { 
-                            isRef = true; 
-                        } 
- 
-                        if (child.Name().Value() == "autoref") { 
-                            isAutoRef = true; 
-                        } 
-                    } 
- 
-                    auto writeInput = resWrite.Data(); 
-                    for (auto& source : Config->Types.DataSources) { 
-                        TSyncMap syncList; 
-                        bool canRef; 
-                        if (source->CanPullResult(writeInput.Ref(), syncList, canRef)) { 
-                            auto newInput = writeInput; 
- 
-                            if (isRef && !canRef) { 
+    class TPhysicalFinalizingTransformer final : public TSyncTransformerBase {
+    public:
+        TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+            : Config(config) {}
+
+        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+            TOptimizeExprSettings settings(&Config->Types);
+            settings.ProcessedNodes = &PhysicalOptProcessedNodes;
+            TStatus status = OptimizeExprEx(input, output,
+                [&](const TExprNode::TPtr& node, TExprContext& ctx, IOptimizationContext& optCtx) -> TExprNode::TPtr {
+                auto ret = node;
+                if (auto maybeWrite = TMaybeNode<TResWrite>(node)) {
+                    auto resWrite = maybeWrite.Cast();
+                    bool isRef = false;
+                    bool isAutoRef = false;
+                    for (auto child: resWrite.Settings()) {
+                        if (child.Name().Value() == "ref") {
+                            isRef = true;
+                        }
+
+                        if (child.Name().Value() == "autoref") {
+                            isAutoRef = true;
+                        }
+                    }
+
+                    auto writeInput = resWrite.Data();
+                    for (auto& source : Config->Types.DataSources) {
+                        TSyncMap syncList;
+                        bool canRef;
+                        if (source->CanPullResult(writeInput.Ref(), syncList, canRef)) {
+                            auto newInput = writeInput;
+
+                            if (isRef && !canRef) {
                                 ctx.AddError(TIssue(ctx.GetPosition(writeInput.Pos()), TStringBuilder() <<
-                                    "RefSelect mode isn't supported by provider: " << source->GetName())); 
-                                return nullptr; 
-                            } 
- 
+                                    "RefSelect mode isn't supported by provider: " << source->GetName()));
+                                return nullptr;
+                            }
+
                             auto fillSettings = Config->FillSettings;
-                            if (!isRef && (!isAutoRef || !canRef)) { 
-                                for (auto setting: resWrite.Settings()) { 
-                                    if (setting.Name().Value() == "take") { 
-                                        auto value = FromString<ui64>(setting.Value().Cast<TCoAtom>().Value()); 
-                                        if (fillSettings.RowsLimitPerWrite) { 
-                                            fillSettings.RowsLimitPerWrite = Min(*fillSettings.RowsLimitPerWrite, value); 
-                                        } else { 
-                                            fillSettings.RowsLimitPerWrite = value; 
-                                        } 
-                                    } 
-                                } 
- 
-                                if (fillSettings.RowsLimitPerWrite) { 
-                                    *fillSettings.RowsLimitPerWrite += 1; 
-                                } 
+                            if (!isRef && (!isAutoRef || !canRef)) {
+                                for (auto setting: resWrite.Settings()) {
+                                    if (setting.Name().Value() == "take") {
+                                        auto value = FromString<ui64>(setting.Value().Cast<TCoAtom>().Value());
+                                        if (fillSettings.RowsLimitPerWrite) {
+                                            fillSettings.RowsLimitPerWrite = Min(*fillSettings.RowsLimitPerWrite, value);
+                                        } else {
+                                            fillSettings.RowsLimitPerWrite = value;
+                                        }
+                                    }
+                                }
+
+                                if (fillSettings.RowsLimitPerWrite) {
+                                    *fillSettings.RowsLimitPerWrite += 1;
+                                }
                             } else {
                                 fillSettings.RowsLimitPerWrite.Clear();
-                            } 
+                            }
                             newInput = TExprBase(source->OptimizePull(newInput.Ptr(), fillSettings, ctx, optCtx));
- 
-                            ret = Build<TResPull>(ctx, resWrite.Pos()) 
-                                .World(ApplySyncListToWorld(resWrite.World().Ptr(), syncList, ctx)) 
-                                .DataSink(resWrite.DataSink()) 
-                                .Key(resWrite.Key()) 
-                                .Data(newInput) 
-                                .Settings(resWrite.Settings()) 
-                                .DelegatedSource() 
-                                    .Value(source->GetName()) 
-                                .Build() 
-                                .Done().Ptr(); 
- 
-                            YQL_CLOG(INFO, ProviderResult) << "ResPull"; 
-                            return ret; 
-                        } 
-                    } 
- 
-                    if (!isRef) { 
-                        auto data = resWrite.Data(); 
+
+                            ret = Build<TResPull>(ctx, resWrite.Pos())
+                                .World(ApplySyncListToWorld(resWrite.World().Ptr(), syncList, ctx))
+                                .DataSink(resWrite.DataSink())
+                                .Key(resWrite.Key())
+                                .Data(newInput)
+                                .Settings(resWrite.Settings())
+                                .DelegatedSource()
+                                    .Value(source->GetName())
+                                .Build()
+                                .Done().Ptr();
+
+                            YQL_CLOG(INFO, ProviderResult) << "ResPull";
+                            return ret;
+                        }
+                    }
+
+                    if (!isRef) {
+                        auto data = resWrite.Data();
                         if (auto unordered = data.Maybe<TCoUnorderedBase>()) {
-                            data = unordered.Cast().Input(); 
-                        } 
- 
-                        if (IsPureIsolatedLambda(writeInput.Ref())) { 
-                            ret = Build<TResFill>(ctx, resWrite.Pos()) 
-                                .World(resWrite.World()) 
-                                .DataSink(resWrite.DataSink()) 
-                                .Key(resWrite.Key()) 
-                                .Data(data) 
-                                .Settings(resWrite.Settings()) 
-                                .DelegatedSource() 
-                                    .Value(Config->Types.GetDefaultDataSource()) 
-                                .Build() 
-                                .Done().Ptr(); 
- 
-                            YQL_CLOG(INFO, ProviderResult) << "ResFill"; 
-                            return ret; 
-                        } 
- 
-                        for (auto& source : Config->Types.DataSources) { 
-                            TSyncMap syncList; 
-                            if (source->CanBuildResult(writeInput.Ref(), syncList)) { 
-                                auto cleanup = source->CleanupWorld(data.Ptr(), ctx); 
-                                if (!cleanup) { 
-                                    return nullptr; 
-                                } 
- 
-                                ret = Build<TResFill>(ctx, resWrite.Pos()) 
-                                    .World(ApplySyncListToWorld(resWrite.World().Ptr(), syncList, ctx)) 
-                                    .DataSink(resWrite.DataSink()) 
-                                    .Key(resWrite.Key()) 
-                                    .Data(cleanup) 
-                                    .Settings(resWrite.Settings()) 
-                                    .DelegatedSource() 
-                                        .Value(source->GetName()) 
-                                    .Build() 
-                                    .Done().Ptr(); 
- 
-                                YQL_CLOG(INFO, ProviderResult) << "ResFill"; 
-                                return ret; 
-                            } 
-                        } 
-                    } 
-                } else if (node->Content() == IfName) { 
-                    TSyncMap syncList; 
-                    auto foundDataSource = FindDataSource(*node->Child(1), syncList); 
-                    if (!foundDataSource.empty()) { 
-                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource); 
-                        Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource); 
-                        auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx); 
-                        if (!cleanup) { 
-                            return nullptr; 
-                        } 
- 
-                        ret = Build<TResIf>(ctx, node->Pos()) 
-                            .World(ApplySyncListToWorld(node->ChildPtr(0), syncList, ctx)) 
-                            .DataSink() 
-                            .Build() 
-                            .Condition(cleanup) 
-                            .Then(node->ChildPtr(2)) 
-                            .Else(node->ChildPtr(3)) 
-                            .DelegatedSource() 
-                                .Value(foundDataSource) 
-                            .Build() 
-                            .Settings() 
-                            .Build() 
-                            .Done().Ptr(); 
- 
-                        YQL_CLOG(INFO, ProviderResult) << "ResIf"; 
-                        return ret; 
-                    } 
-                } else if (node->Content() == ForName) { 
-                    TSyncMap syncList; 
-                    auto foundDataSource = FindDataSource(*node->Child(1), syncList); 
-                    if (!foundDataSource.empty()) { 
-                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource); 
-                        Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource); 
-                        auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx); 
-                        if (!cleanup) { 
-                            return nullptr; 
-                        } 
- 
-                        ret = Build<TResFor>(ctx, node->Pos()) 
-                            .World(ApplySyncListToWorld(node->ChildPtr(0), syncList, ctx)) 
-                            .DataSink() 
-                            .Build() 
-                            .Items(cleanup) 
-                            .Iter(node->ChildPtr(2)) 
-                            .Else(node->ChildPtr(3)) 
-                            .DelegatedSource() 
-                                .Value(foundDataSource) 
-                            .Build() 
-                            .Settings() 
-                            .Build() 
-                            .Total() 
-                                .Value("") 
-                            .Build() 
-                            .Current() 
-                                .Value("") 
-                            .Build() 
-                            .Active<TCoVoid>() 
-                            .Build() 
-                            .Done().Ptr(); 
- 
-                        YQL_CLOG(INFO, ProviderResult) << "ResFor"; 
-                        return ret; 
-                    } 
-                } 
- 
-                return ret; 
-            }, ctx, settings); 
- 
-            return status; 
-        } 
- 
-        void Rewind() final { 
-            PhysicalOptProcessedNodes.clear(); 
-        } 
- 
-    private: 
-        TString FindDataSource(const TExprNode& node, TSyncMap& syncList) const { 
-            syncList.clear(); 
-            TString foundDataSource; 
-            if (IsPureIsolatedLambda(node)) { 
-                foundDataSource = Config->Types.GetDefaultDataSource(); 
-            } 
- 
-            if (foundDataSource.empty()) { 
-                for (auto& source : Config->Types.DataSources) { 
-                    syncList.clear(); 
-                    if (source->CanBuildResult(node, syncList)) { 
+                            data = unordered.Cast().Input();
+                        }
+
+                        if (IsPureIsolatedLambda(writeInput.Ref())) {
+                            ret = Build<TResFill>(ctx, resWrite.Pos())
+                                .World(resWrite.World())
+                                .DataSink(resWrite.DataSink())
+                                .Key(resWrite.Key())
+                                .Data(data)
+                                .Settings(resWrite.Settings())
+                                .DelegatedSource()
+                                    .Value(Config->Types.GetDefaultDataSource())
+                                .Build()
+                                .Done().Ptr();
+
+                            YQL_CLOG(INFO, ProviderResult) << "ResFill";
+                            return ret;
+                        }
+
+                        for (auto& source : Config->Types.DataSources) {
+                            TSyncMap syncList;
+                            if (source->CanBuildResult(writeInput.Ref(), syncList)) {
+                                auto cleanup = source->CleanupWorld(data.Ptr(), ctx);
+                                if (!cleanup) {
+                                    return nullptr;
+                                }
+
+                                ret = Build<TResFill>(ctx, resWrite.Pos())
+                                    .World(ApplySyncListToWorld(resWrite.World().Ptr(), syncList, ctx))
+                                    .DataSink(resWrite.DataSink())
+                                    .Key(resWrite.Key())
+                                    .Data(cleanup)
+                                    .Settings(resWrite.Settings())
+                                    .DelegatedSource()
+                                        .Value(source->GetName())
+                                    .Build()
+                                    .Done().Ptr();
+
+                                YQL_CLOG(INFO, ProviderResult) << "ResFill";
+                                return ret;
+                            }
+                        }
+                    }
+                } else if (node->Content() == IfName) {
+                    TSyncMap syncList;
+                    auto foundDataSource = FindDataSource(*node->Child(1), syncList);
+                    if (!foundDataSource.empty()) {
+                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource);
+                        Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource);
+                        auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx);
+                        if (!cleanup) {
+                            return nullptr;
+                        }
+
+                        ret = Build<TResIf>(ctx, node->Pos())
+                            .World(ApplySyncListToWorld(node->ChildPtr(0), syncList, ctx))
+                            .DataSink()
+                            .Build()
+                            .Condition(cleanup)
+                            .Then(node->ChildPtr(2))
+                            .Else(node->ChildPtr(3))
+                            .DelegatedSource()
+                                .Value(foundDataSource)
+                            .Build()
+                            .Settings()
+                            .Build()
+                            .Done().Ptr();
+
+                        YQL_CLOG(INFO, ProviderResult) << "ResIf";
+                        return ret;
+                    }
+                } else if (node->Content() == ForName) {
+                    TSyncMap syncList;
+                    auto foundDataSource = FindDataSource(*node->Child(1), syncList);
+                    if (!foundDataSource.empty()) {
+                        auto provider = Config->Types.DataSourceMap.FindPtr(foundDataSource);
+                        Y_ENSURE(provider, "DataSource doesn't exist: " << foundDataSource);
+                        auto cleanup = (*provider)->CleanupWorld(node->ChildPtr(1), ctx);
+                        if (!cleanup) {
+                            return nullptr;
+                        }
+
+                        ret = Build<TResFor>(ctx, node->Pos())
+                            .World(ApplySyncListToWorld(node->ChildPtr(0), syncList, ctx))
+                            .DataSink()
+                            .Build()
+                            .Items(cleanup)
+                            .Iter(node->ChildPtr(2))
+                            .Else(node->ChildPtr(3))
+                            .DelegatedSource()
+                                .Value(foundDataSource)
+                            .Build()
+                            .Settings()
+                            .Build()
+                            .Total()
+                                .Value("")
+                            .Build()
+                            .Current()
+                                .Value("")
+                            .Build()
+                            .Active<TCoVoid>()
+                            .Build()
+                            .Done().Ptr();
+
+                        YQL_CLOG(INFO, ProviderResult) << "ResFor";
+                        return ret;
+                    }
+                }
+
+                return ret;
+            }, ctx, settings);
+
+            return status;
+        }
+
+        void Rewind() final {
+            PhysicalOptProcessedNodes.clear();
+        }
+
+    private:
+        TString FindDataSource(const TExprNode& node, TSyncMap& syncList) const {
+            syncList.clear();
+            TString foundDataSource;
+            if (IsPureIsolatedLambda(node)) {
+                foundDataSource = Config->Types.GetDefaultDataSource();
+            }
+
+            if (foundDataSource.empty()) {
+                for (auto& source : Config->Types.DataSources) {
+                    syncList.clear();
+                    if (source->CanBuildResult(node, syncList)) {
                         foundDataSource = TString(source->GetName());
-                        break; 
-                    } 
-                } 
-            } 
- 
-            return foundDataSource; 
-        } 
- 
-    private: 
-        const TIntrusivePtr<TResultProviderConfig> Config; 
-        TProcessedNodesSet PhysicalOptProcessedNodes; 
-    }; 
- 
+                        break;
+                    }
+                }
+            }
+
+            return foundDataSource;
+        }
+
+    private:
+        const TIntrusivePtr<TResultProviderConfig> Config;
+        TProcessedNodesSet PhysicalOptProcessedNodes;
+    };
+
     class TResultProvider : public TDataProviderBase {
     public:
         struct TFunctions {
@@ -887,7 +887,7 @@ namespace {
                 return false;
             }
 
-            cluster = Nothing(); 
+            cluster = Nothing();
             return true;
         }
 
@@ -902,7 +902,7 @@ namespace {
         IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
             Y_UNUSED(instantOnly);
             if (!TypeAnnotationTransformer) {
-                TypeAnnotationTransformer = CreateFunctorTransformer( 
+                TypeAnnotationTransformer = CreateFunctorTransformer(
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)->IGraphTransformer::TStatus {
                     output = input;
 
@@ -1028,23 +1028,23 @@ namespace {
 
                         if (auto right = res.Data().Maybe<TCoRight>()) {
                             auto source = right.Cast().Input();
-                            const TIntrusivePtr<IDataProvider>* provider = nullptr; 
- 
+                            const TIntrusivePtr<IDataProvider>* provider = nullptr;
+
                             if (source.Ref().Type() == TExprNode::Callable || source.Ref().ChildrenSize() >= 2) {
                                 if (source.Ref().Child(1)->IsCallable("DataSource")) {
                                     auto name = source.Ref().Child(1)->Child(0)->Content();
                                     provider = Config->Types.DataSourceMap.FindPtr(name);
                                     Y_ENSURE(provider, "DataSource doesn't exist: " << name);
-                                } 
+                                }
 
                                 if (source.Ref().Child(1)->IsCallable("DataSink")) {
                                     auto name = source.Ref().Child(1)->Child(0)->Content();
                                     provider = Config->Types.DataSinkMap.FindPtr(name);
                                     Y_ENSURE(provider, "DataSink doesn't exist: " << name);
                                 }
-                            } 
- 
-                            if (!provider) { 
+                            }
+
+                            if (!provider) {
                                 ctx.AddError(TIssue(ctx.GetPosition(res.Data().Pos()), "Expected Right! over Datasource or Datasink"));
                                 return IGraphTransformer::TStatus::Error;
                             }
@@ -1243,27 +1243,27 @@ namespace {
                         return IGraphTransformer::TStatus::Ok;
                     }
                     else if (auto maybeCommit = TMaybeNode<TCoCommit>(input)) {
-                        auto commit = maybeCommit.Cast(); 
-                        auto settings = NCommon::ParseCommitSettings(commit, ctx); 
+                        auto commit = maybeCommit.Cast();
+                        auto settings = NCommon::ParseCommitSettings(commit, ctx);
 
-                        if (!settings.EnsureModeEmpty(ctx)) { 
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
-                        if (!settings.EnsureEpochEmpty(ctx)) { 
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
-                        if (!settings.EnsureOtherEmpty(ctx)) { 
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                        if (!settings.EnsureModeEmpty(ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!settings.EnsureEpochEmpty(ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!settings.EnsureOtherEmpty(ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         input->SetTypeAnn(commit.World().Ref().GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok; 
-                    } 
+                        return IGraphTransformer::TStatus::Ok;
+                    }
                     else if (input->Content() == ConfigureName) {
                         if (!EnsureMinArgsCount(*input, 3, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
- 
+
                         if (!EnsureWorldType(*input->Child(0), ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -1341,7 +1341,7 @@ namespace {
 
         IGraphTransformer& GetPhysicalFinalizingTransformer() override {
             if (!PhysicalFinalizingTransformer) {
-                PhysicalFinalizingTransformer = new TPhysicalFinalizingTransformer(Config); 
+                PhysicalFinalizingTransformer = new TPhysicalFinalizingTransformer(Config);
             }
 
             return *PhysicalFinalizingTransformer;
@@ -1417,7 +1417,7 @@ namespace {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(dataSource);
- 
+
                 (*dataSource)->GetPlanFormatter().WritePullDetails(resPull.Cast().Data().Ref(), writer);
             }
         }
@@ -1462,9 +1462,9 @@ namespace {
 }
 
 TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format) {
-    return MakeIntrusive<TYsonResultWriter>(format); 
-} 
- 
+    return MakeIntrusive<TYsonResultWriter>(format);
+}
+
 TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config) {
     return new TResultProvider(config);
 }

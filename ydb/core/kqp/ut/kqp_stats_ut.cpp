@@ -28,9 +28,9 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, R"([[[1];[202u];["Value2"]];[[2];[201u];["Value1"]];[[3];[203u];["Value3"]]])");
 
-    UNIT_ASSERT(res.PlanJson); 
+    UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
-    NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
@@ -47,10 +47,10 @@ Y_UNIT_TEST(JoinNoStats) {
 
     auto res = CollectStreamResult(it);
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, "[[16u]]"); 
+    UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, "[[16u]]");
 
-    UNIT_ASSERT(!res.QueryStats); 
-    UNIT_ASSERT(!res.PlanJson); 
+    UNIT_ASSERT(!res.QueryStats);
+    UNIT_ASSERT(!res.PlanJson);
 }
 
 Y_UNIT_TEST(JoinStatsBasic) {
@@ -68,21 +68,21 @@ Y_UNIT_TEST(JoinStatsBasic) {
 
     UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, "[[16u]]");
 
-    UNIT_ASSERT(res.QueryStats); 
+    UNIT_ASSERT(res.QueryStats);
     UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
-    if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") { 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/KeyValue"); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/EightShard"); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 8); 
+    if (res.QueryStats->query_phases(0).table_access(0).name() == "/Root/KeyValue") {
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/KeyValue");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/EightShard");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 8);
     } else {
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard"); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 8); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/KeyValue"); 
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/KeyValue");
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 1);
     }
- 
-    UNIT_ASSERT(!res.PlanJson); 
+
+    UNIT_ASSERT(!res.PlanJson);
 }
 
 Y_UNIT_TEST(MultiTxStatsFull) {
@@ -102,14 +102,14 @@ Y_UNIT_TEST(MultiTxStatsFull) {
         R"([[[1];[202u];["Value2"]];[[2];[201u];["Value1"]];[[3];[203u];["Value3"]]])"
     );
 
-    UNIT_ASSERT(res.QueryStats); 
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2); 
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).name(), "/Root/EightShard"); 
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).partitions_count(), 2); 
- 
-    UNIT_ASSERT(res.PlanJson); 
+    UNIT_ASSERT(res.QueryStats);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).name(), "/Root/EightShard");
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).partitions_count(), 2);
+
+    UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
-    NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
@@ -130,7 +130,7 @@ Y_UNIT_TEST(DeferredEffects) {
         UPSERT INTO `/Root/TwoShard`
         SELECT Key + 100u AS Key, Value1 FROM `/Root/TwoShard` WHERE Key in (1,2,3,4,5);
     )", TTxControl::BeginTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     // TODO(sk): do proper phase dependency tracking
     //
@@ -158,22 +158,22 @@ Y_UNIT_TEST(DeferredEffects) {
 
         UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES
             ($key, $value);
-    )", TTxControl::Tx(*tx).CommitTx(), std::move(params), settings).ExtractValueSync(); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+    )", TTxControl::Tx(*tx).CommitTx(), std::move(params), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3); 
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3);
 
     result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
         SELECT * FROM `/Root/TwoShard`;
         UPDATE `/Root/TwoShard` SET Value1 = "XXX" WHERE Key in (3,600);
-    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync(); 
+    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 4); 
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 4);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());

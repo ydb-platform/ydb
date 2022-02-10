@@ -156,7 +156,7 @@ class KikimrConfigGenerator(object):
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
         self.__load_udfs = load_udfs
-        self.__udfs_path = udfs_path 
+        self.__udfs_path = udfs_path
         self.__yql_config_path = yql_config_path
         self.__auth_config_path = auth_config_path
         self.__slot_count = slot_count
@@ -339,9 +339,9 @@ class KikimrConfigGenerator(object):
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
             return []
-        udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs") 
+        udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs")
         result = []
-        for dirpath, dnames, fnames in os.walk(udfs_path): 
+        for dirpath, dnames, fnames in os.walk(udfs_path):
             for f in fnames:
                 if f.endswith(".so"):
                     full = os.path.join(dirpath, f)

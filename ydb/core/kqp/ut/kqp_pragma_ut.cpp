@@ -1,74 +1,74 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
- 
+
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
- 
-Y_UNIT_TEST_SUITE(KqpPragma) { 
-    Y_UNIT_TEST(Static) { 
-        TKikimrRunner kikimr; 
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+Y_UNIT_TEST_SUITE(KqpPragma) {
+    Y_UNIT_TEST(Static) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UnwrapReadTableValues = "true"; 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UnwrapReadTableValues = "true";
             SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(Runtime) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            PRAGMA kikimr.IsolationLevel = "ReadCommitted"; 
+            PRAGMA kikimr.IsolationLevel = "ReadCommitted";
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED)); 
-    } 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(Auth) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            PRAGMA kikimr.Auth = "default_kikimr"; 
+            PRAGMA kikimr.Auth = "default_kikimr";
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED)); 
-    } 
- 
-    Y_UNIT_TEST(ResetPerQuery) { 
-        TKikimrRunner kikimr; 
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));
+    }
+
+    Y_UNIT_TEST(ResetPerQuery) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UnwrapReadTableValues = "true"; 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UnwrapReadTableValues = "true";
             SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT(result.IsSuccess()); 
-        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        result = session.ExecuteDataQuery(R"( 
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        result = session.ExecuteDataQuery(R"(
             SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT(result.IsSuccess()); 
-        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 
     Y_UNIT_TEST(OrderedColumns) {
         TKikimrRunner kikimr;
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             [[3u];[2u];[1u]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
-} 
- 
-} // namspace NKqp 
-} // namespace NKikimr 
+}
+
+} // namspace NKqp
+} // namespace NKikimr

@@ -601,8 +601,8 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
         Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
         return;
-    } 
- 
+    }
+
     auto& snapshot = request.GetSnapshot();
 
     auto snapshotKey = TSnapshotKey(PathOwnerId, request.GetLocalPathId(), snapshot.GetStep(), snapshot.GetTxId());

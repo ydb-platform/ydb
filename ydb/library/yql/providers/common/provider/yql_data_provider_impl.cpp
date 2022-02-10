@@ -282,10 +282,10 @@ ITrackableNodeProcessor& TDataProviderBase::GetTrackableNodeProcessor() {
     return NullTrackableNodeProcessor_;
 }
 
-IGraphTransformer& TDataProviderBase::GetPlanInfoTransformer() { 
-    return NullTransformer_; 
-} 
- 
+IGraphTransformer& TDataProviderBase::GetPlanInfoTransformer() {
+    return NullTransformer_;
+}
+
 IDqIntegration* TDataProviderBase::GetDqIntegration() {
     return nullptr;
 }

@@ -102,28 +102,28 @@ public:
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
- 
+
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
         const THolderFactory& holderFactory) override;
- 
+
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
-        TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType, 
+        TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override;
- 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
-        const TArrayRef<const TUpdateCommand>& commands) override; 
+
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
+        const TArrayRef<const TUpdateCommand>& commands) override;
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override;
     bool IsPathErased(const TTableId& tableId) const override;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;
 
-    void SetPeriodicCallback(TPeriodicCallback&& callback) override; 
-    void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} } 
- 
-    TEngineHostCounters& GetCounters() const { return Counters; } 
- 
+    void SetPeriodicCallback(TPeriodicCallback&& callback) override;
+    void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} }
+
+    TEngineHostCounters& GetCounters() const { return Counters; }
+
     virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0;
     virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0;
 
@@ -131,16 +131,16 @@ public:
 
 protected:
     virtual ui64 LocalTableId(const TTableId& tableId) const;
-    void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row, 
-        TSmallVec<TRawTypeValue>& key) const; 
+    void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
+        TSmallVec<TRawTypeValue>& key) const;
     void DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const;
- 
+
 protected:
     NTable::TDatabase& Db;
     const TScheme& Scheme;
     const TEngineHostSettings Settings;
     TEngineHostCounters& Counters;
-    TPeriodicCallback PeriodicCallback; 
+    TPeriodicCallback PeriodicCallback;
 };
 
 class TUnversionedEngineHost : public TEngineHost {
@@ -164,13 +164,13 @@ public:
 };
 
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);
-NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type); 
-NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme, 
+NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type);
+NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme,
     const THolderFactory& holderFactory, const TTableId& tableId, ui64 localTid, const TSmallVec<NTable::TTag>& tags,
-    const TSmallVec<bool>& skipNullKeys, const TTableRange& range, ui64 itemsLimit, ui64 bytesLimit, 
+    const TSmallVec<bool>& skipNullKeys, const TTableRange& range, ui64 itemsLimit, ui64 bytesLimit,
     bool reverse, TEngineHostCounters& counters, const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId);
- 
-void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo, 
-    const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes); 
- 
+
+void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
+    const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes);
+
 }}

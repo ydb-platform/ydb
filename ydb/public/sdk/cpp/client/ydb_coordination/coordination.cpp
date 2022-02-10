@@ -640,7 +640,7 @@ private:
             },
             &TService::Stub::AsyncSession,
             DbDriverState_,
-            TRpcRequestSettings::Make(Settings_), 
+            TRpcRequestSettings::Make(Settings_),
             std::move(connectContext));
 
         if (connectTimeoutContext) {
@@ -1812,46 +1812,46 @@ public:
 
     TAsyncStatus CreateNode(
         Ydb::Coordination::CreateNodeRequest&& request,
-        const TCreateNodeSettings& settings) 
+        const TCreateNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::CreateNodeRequest,
                         Ydb::Coordination::CreateNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncCreateNode, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
+            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncCreateNode,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
     }
 
     TAsyncStatus AlterNode(
         Ydb::Coordination::AlterNodeRequest&& request,
-        const TAlterNodeSettings& settings) 
+        const TAlterNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::AlterNodeRequest,
                         Ydb::Coordination::AlterNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncAlterNode, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
+            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncAlterNode,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
     }
 
     TAsyncStatus DropNode(
         Ydb::Coordination::DropNodeRequest&& request,
-        const TDropNodeSettings& settings) 
+        const TDropNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::DropNodeRequest,
                         Ydb::Coordination::DropNodeResponse>(
             std::move(request),
-            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDropNode, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
+            &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDropNode,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
     }
 
     TAsyncDescribeNodeResult DescribeNode(
         Ydb::Coordination::DescribeNodeRequest&& request,
-        const TDescribeNodeSettings& settings) 
+        const TDescribeNodeSettings& settings)
     {
         auto promise = NewPromise<TDescribeNodeResult>();
 
@@ -1875,8 +1875,8 @@ public:
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
 
         return promise.GetFuture();
     }
@@ -1901,38 +1901,38 @@ TAsyncStatus TClient::CreateNode(
     const TString& path,
     const TCreateNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::CreateNodeRequest>(settings); 
+    auto request = MakeOperationRequest<Ydb::Coordination::CreateNodeRequest>(settings);
     request.set_path(path);
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
-    return Impl_->CreateNode(std::move(request), settings); 
+    return Impl_->CreateNode(std::move(request), settings);
 }
 
 TAsyncStatus TClient::AlterNode(
     const TString& path,
     const TAlterNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::AlterNodeRequest>(settings); 
+    auto request = MakeOperationRequest<Ydb::Coordination::AlterNodeRequest>(settings);
     request.set_path(path);
     ConvertSettingsToProtoConfig(settings, request.mutable_config());
-    return Impl_->AlterNode(std::move(request), settings); 
+    return Impl_->AlterNode(std::move(request), settings);
 }
 
 TAsyncStatus TClient::DropNode(
     const TString& path,
     const TDropNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::DropNodeRequest>(settings); 
+    auto request = MakeOperationRequest<Ydb::Coordination::DropNodeRequest>(settings);
     request.set_path(path);
-    return Impl_->DropNode(std::move(request), settings); 
+    return Impl_->DropNode(std::move(request), settings);
 }
 
 TAsyncDescribeNodeResult TClient::DescribeNode(
     const TString& path,
     const TDescribeNodeSettings& settings)
 {
-    auto request = MakeOperationRequest<Ydb::Coordination::DescribeNodeRequest>(settings); 
+    auto request = MakeOperationRequest<Ydb::Coordination::DescribeNodeRequest>(settings);
     request.set_path(path);
-    return Impl_->DescribeNode(std::move(request), settings); 
+    return Impl_->DescribeNode(std::move(request), settings);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

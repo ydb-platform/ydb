@@ -73,7 +73,7 @@ void TKesusTablet::DoDeleteSemaphore(
                     cookie,
                     new TEvKesus::TEvAcquireSemaphoreResult(
                         proxy->Generation,
-                        Ydb::StatusIds::ABORTED, 
+                        Ydb::StatusIds::ABORTED,
                         "Semaphore destroyed"));
             });
         }

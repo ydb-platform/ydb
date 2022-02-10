@@ -1250,7 +1250,7 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     : Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoid())
-    , UserType_(Env_.GetTypeOfVoid()) 
+    , UserType_(Env_.GetTypeOfVoid())
     , TypeInfoHelper_(typeInfoHelper)
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
@@ -1375,25 +1375,25 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
         NUdf::TDataTypeId typeId)
-{ 
-    UserType_ = TDataType::Create(typeId, Env_); 
-    return *this; 
-} 
- 
+{
+    UserType_ = TDataType::Create(typeId, Env_);
+    return *this;
+}
+
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
-        const NUdf::TType* type) 
-{ 
-    UserType_ = static_cast<const NMiniKQL::TType*>(type); 
-    return *this; 
-} 
- 
+        const NUdf::TType* type)
+{
+    UserType_ = static_cast<const NMiniKQL::TType*>(type);
+    return *this;
+}
+
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
-        const NUdf::ITypeBuilder& typeBuilder) 
-{ 
-    UserType_ = static_cast<TType*>(typeBuilder.Build()); 
-    return *this; 
-} 
- 
+        const NUdf::ITypeBuilder& typeBuilder)
+{
+    UserType_ = static_cast<TType*>(typeBuilder.Build());
+    return *this;
+}
+
 void TFunctionTypeInfoBuilder::SetError(const NUdf::TStringRef& error)
 {
     if (!Error_) {
@@ -1425,7 +1425,7 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     }
 
     funcInfo->RunConfigType = RunConfigType_;
-    funcInfo->UserType = UserType_; 
+    funcInfo->UserType = UserType_;
     funcInfo->Implementation = std::move(Implementation_);
     funcInfo->ModuleIR = std::move(ModuleIR_);
     funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_);

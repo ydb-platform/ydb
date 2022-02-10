@@ -15,10 +15,10 @@
 #include <functional>
 
 using namespace NKikimr;
-namespace NYdb { 
+namespace NYdb {
 
 using namespace Tests;
-using namespace NYdb; 
+using namespace NYdb;
 
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
@@ -68,10 +68,10 @@ public:
             ServerSettings->AddStoragePoolType("hdd1");
             ServerSettings->AddStoragePoolType("hdd2");
         }
-        ServerSettings->SetAppConfig(appConfig); 
+        ServerSettings->SetAppConfig(appConfig);
         ServerSettings->AuthConfig = appConfig.GetAuthConfig();
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
-        ServerSettings->SetKqpSettings(kqpSettings); 
+        ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableAsyncIndexes(true);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
@@ -144,10 +144,10 @@ public:
         return Server_->GetRuntime();
     }
 
-    Tests::TServer& GetServer() { 
-        return *Server_; 
-    } 
- 
+    Tests::TServer& GetServer() {
+        return *Server_;
+    }
+
     TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server_;
     THolder<Tests::TTenants> Tenants_;

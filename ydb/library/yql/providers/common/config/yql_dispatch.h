@@ -75,19 +75,19 @@ TParser<TInstant> GetDefaultParser<TInstant>();
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
-template<typename TType> 
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true>& setting, const TString& cluster) { 
-    return setting.Get(cluster); 
+template<typename TType>
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true>& setting, const TString& cluster) {
+    return setting.Get(cluster);
 }
 
-template<typename TType> 
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false>& setting, const TString& cluster) { 
-    Y_UNUSED(cluster); 
-    return setting.Get(); 
-} 
- 
-} 
- 
+template<typename TType>
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false>& setting, const TString& cluster) {
+    Y_UNUSED(cluster);
+    return setting.Get();
+}
+
+}
+
 namespace NCommon {
 
 class TSettingDispatcher: public TThrRefBase {
@@ -113,9 +113,9 @@ public:
             return Name_ ;
         }
 
-        virtual void Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly) = 0; 
+        virtual void Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly) = 0;
         virtual void FreezeDefault() = 0;
-        virtual void Restore(const TString& cluster) = 0; 
+        virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
 
     protected:
@@ -140,7 +140,7 @@ public:
         {
         }
 
-        void Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly) override { 
+        void Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly) override {
             try {
                 if (value) {
                     TType v = Parser_(*value);
@@ -163,7 +163,7 @@ public:
             Defaul_ = Setting_;
         }
 
-        void Restore(const TString& cluster) override { 
+        void Restore(const TString& cluster) override {
             if (!Defaul_) {
                 ythrow yexception() << "Cannot restore " << Name_.Quote() << " setting without freeze";
             }
@@ -351,7 +351,7 @@ public:
     }
 
     void FreezeDefaults();
-    void Restore(); 
+    void Restore();
 
 protected:
     template <class TActivation>

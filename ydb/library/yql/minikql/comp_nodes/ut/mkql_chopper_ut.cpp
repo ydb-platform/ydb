@@ -43,7 +43,7 @@ TRuntimeNode GroupWithBomb(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
 }
 
 template<bool UseLLVM>
-TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) { 
+TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto keyExtractor = [&](TRuntimeNode item) { return item; };
@@ -83,7 +83,7 @@ TRuntimeNode GroupGetKeysFirst(TSetup<UseLLVM>& setup, TRuntimeNode stream, cons
 }
 
 template<bool UseLLVM>
-TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) { 
+TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto keyExtractor = [&](TRuntimeNode item) { return item; };
@@ -132,8 +132,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) { 
-            Y_UNUSED(key); 
+        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+            Y_UNUSED(key);
             return pb.Equals(item, pb.NewDataLiteral<ui64>(0));
         });
         const auto pgm = StreamToString(setup, stream);
@@ -163,30 +163,30 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0:0|0:01|0:0|0:0|0:0123|");
     }
 
-    Y_UNIT_TEST_LLVM(TestGroupingKeyNotEquals) { 
-        TSetup<LLVM> setup; 
+    Y_UNIT_TEST_LLVM(TestGroupingKeyNotEquals) {
+        TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
-        auto stream = MakeStream(setup); 
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) { 
+
+        auto stream = MakeStream(setup);
+        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
             return pb.NotEquals(item, key);
-        }); 
+        });
         const auto pgm = StreamToString(setup, stream);
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result; 
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*|*11*|*00*00*00*|*11*|*22*|*33*|"); 
-    } 
- 
+        NUdf::TUnboxedValue result;
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*|*11*|*00*00*00*|*11*|*22*|*33*|");
+    }
+
     Y_UNIT_TEST_LLVM(TestGroupingWithEmptyInput) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup, 0);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) { 
-            Y_UNUSED(key); 
+        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+            Y_UNUSED(key);
             return pb.Equals(item, pb.NewDataLiteral<ui64>(0));
         });
         const auto pgm = StreamToString(setup, stream);
@@ -203,8 +203,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto stream = MakeStream(setup);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) { 
-            Y_UNUSED(key); 
+        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+            Y_UNUSED(key);
             Y_UNUSED(item);
             return pb.NewDataLiteral<bool>(false);
         });
@@ -229,8 +229,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         stream = pb.Switch(stream,
                 MakeArrayRef(&switchInput, 1),
                 [&](ui32 /*index*/, TRuntimeNode item1) {
-                    return Group(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) { 
-                        Y_UNUSED(key); 
+                    return Group(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
+                        Y_UNUSED(key);
                         return pb.Equals(item2, pb.NewDataLiteral<ui64>(0));
                     });
                 },
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
 
         auto stream = MakeStream(setup);
 
-        stream = GroupKeys(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) { 
-            Y_UNUSED(key); 
+        stream = GroupKeys(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+            Y_UNUSED(key);
             return pb.Equals(item, pb.NewDataLiteral<ui64>(0));
         });
 
@@ -279,8 +279,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         stream = pb.Switch(stream,
                 MakeArrayRef(&switchInput, 1),
                 [&](ui32 /*index*/, TRuntimeNode item1) {
-                    return GroupKeys(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) { 
-                        Y_UNUSED(key); 
+                    return GroupKeys(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
+                        Y_UNUSED(key);
                         return pb.Equals(item2, pb.NewDataLiteral<ui64>(0));
                     });
                 },

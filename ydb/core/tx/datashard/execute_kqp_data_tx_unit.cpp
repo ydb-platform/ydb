@@ -24,8 +24,8 @@ public:
     ~TExecuteKqpDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(TOperation::TPtr op, const TActorContext& ctx) override; 
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
@@ -34,9 +34,9 @@ private:
 };
 
 TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
-    : TExecutionUnit(EExecutionUnitKind::ExecuteKqpDataTx, true, dataShard, pipeline) {} 
+    : TExecutionUnit(EExecutionUnitKind::ExecuteKqpDataTx, true, dataShard, pipeline) {}
 
-TExecuteKqpDataTxUnit::~TExecuteKqpDataTxUnit() {} 
+TExecuteKqpDataTxUnit::~TExecuteKqpDataTxUnit() {}
 
 bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
@@ -51,9 +51,9 @@ bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
     return !op->HasRuntimeConflicts();
 }
 
-EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, 
-    const TActorContext& ctx) 
-{ 
+EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
+    const TActorContext& ctx)
+{
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
         return EExecutionStatus::Executed;
     }
@@ -61,7 +61,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     // We remember current time now, but will only count it when transaction succeeds
     TDuration waitExecuteLatency = op->GetCurrentElapsed();
     TDuration waitTotalLatency = op->GetTotalElapsed();
- 
+
     if (op->IsImmediate()) {
         // Every time we execute immediate transaction we may choose a new mvcc version
         op->MvccReadWriteVersion.reset();
@@ -82,7 +82,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             case ERestoreDataStatus::Error:
                 Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
-    } 
+    }
 
     ui64 tabletId = DataShard.TabletID();
     const TValidatedDataTx::TPtr& dataTx = tx->GetDataTx();
@@ -107,7 +107,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
- 
+
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
 
         NKqp::NRm::TKqpResourcesRequest req;
@@ -167,13 +167,13 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
             KqpFillTxStats(DataShard, dataTx->GetCounters(), *op->Result());
             KqpFillStats(DataShard, tasksRunner, computeCtx, statsMode, *op->Result());
-        } 
+        }
     } catch (const TMemoryLimitExceededException&) {
         txc.NotEnoughMemory();
 
         LOG_T("Operation " << *op << " at " << tabletId
-            << " exceeded memory limit " << txc.GetMemoryLimit() 
-            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR 
+            << " exceeded memory limit " << txc.GetMemoryLimit()
+            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
             << " more for the next try (" << txc.GetNotEnoughMemoryCount() << ")");
 
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -210,12 +210,12 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
         if (lock.IsError()) {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Lock is not set for " 
-                << *op << " at " << DataShard.TabletID() << " lock " << lock); 
+            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Lock is not set for "
+                << *op << " at " << DataShard.TabletID() << " lock " << lock);
         }
- 
-        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, 
-            lock.PathId); 
+
+        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard,
+            lock.PathId);
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }
@@ -235,7 +235,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
     return EExecutionStatus::Restart;
 }
 
-void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {} 
+void TExecuteKqpDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TExecuteKqpDataTxUnit(dataShard, pipeline));

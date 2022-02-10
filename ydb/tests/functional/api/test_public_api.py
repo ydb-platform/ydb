@@ -266,7 +266,7 @@ class TestCRUDOperations(Base):
 
         assert_that(
             callee, raises(
-                ydb.Error 
+                ydb.Error
             )
         )
 
@@ -586,7 +586,7 @@ SELECT * FROM $InputSource;
         assert_that(
             invalid_callable,
             raises(
-                ydb.BadSession, 
+                ydb.BadSession,
                 "Empty session_id"
             )
         )
@@ -618,7 +618,7 @@ SELECT * FROM $InputSource;
         assert_that(
             invalid_callable,
             raises(
-                ydb.Aborted 
+                ydb.Aborted
             )
         )
 
@@ -926,14 +926,14 @@ actions {
         assert_that(
             callee,
             raises(
-                ydb.BadSession, 
+                ydb.BadSession,
                 'Exceeded maximum allowed number of active transactions'
             )
         )
 
         try:
             callee()
-        except ydb.BadSession as expected_error: 
+        except ydb.BadSession as expected_error:
             assert_that(
                 isinstance(expected_error.message, str),
                 is_(True)
@@ -1564,7 +1564,7 @@ class TestSelectAfterDropWithRepetitions(object):
             assert_that(
                 callee,
                 raises(
-                    ydb.SchemeError, 
+                    ydb.SchemeError,
                 )
             )
 
@@ -1707,7 +1707,7 @@ class TestJsonExample(object):
         assert_that(
             callee,
             raises(
-                ydb.BadRequest 
+                ydb.BadRequest
             )
         )
 

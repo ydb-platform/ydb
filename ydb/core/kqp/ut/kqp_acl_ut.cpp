@@ -11,7 +11,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
     Y_UNIT_TEST(FailNavigate) {
-        TKikimrRunner kikimr("user0@builtin"); 
+        TKikimrRunner kikimr("user0@builtin");
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
     }
 
     Y_UNIT_TEST(FailResolve) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         {
             NYdb::NScheme::TPermissions permissions("user0@builtin",
                 {"ydb.deprecated.describe_schema"}
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
     }
 
     Y_UNIT_TEST(ReadSuccess) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         {
             NYdb::NScheme::TPermissions permissions("user0@builtin",
                 {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
     }
 
     Y_UNIT_TEST(WriteSuccess) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         {
             NYdb::NScheme::TPermissions permissions("user0@builtin",
                 {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}

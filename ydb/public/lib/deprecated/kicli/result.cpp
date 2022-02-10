@@ -66,7 +66,7 @@ NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
     } else
     if (GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
         return static_cast<NMsgBusProxy::EResponseStatus>(GetResult<NKikimrClient::TResponse>().GetStatus());
-    } else 
+    } else
     return NMsgBusProxy::MSTATUS_INTERNALERROR;
 }
 
@@ -90,7 +90,7 @@ TReadTableResult::TReadTableResult(const TResult& result)
     : TResult(result)
 {}
 
-const YdbOld::ResultSet &TReadTableResult::GetResultSet() const { 
+const YdbOld::ResultSet &TReadTableResult::GetResultSet() const {
     if (!Parsed) {
         const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
         const auto& result = response.GetSerializedReadTableResponse();
@@ -99,8 +99,8 @@ const YdbOld::ResultSet &TReadTableResult::GetResultSet() const {
     return Result;
 }
 
-template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value, 
-                                                                const YdbOld::DataType &type) { 
+template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value,
+                                                                const YdbOld::DataType &type) {
     switch (type.id()) {
     case NYql::NProto::Bool:
         return value.bool_value() ? "true" : "false";
@@ -166,12 +166,12 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
     }
 }
 
-template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value, 
-                                                                const YdbOld::Type &type) { 
+template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value,
+                                                                const YdbOld::Type &type) {
     switch (type.type_type_case()) {
-    case YdbOld::Type::kDataType: 
+    case YdbOld::Type::kDataType:
         return ValueToString<TFormatCSV>(value, type.data_type());
-    case YdbOld::Type::kOptionalType: 
+    case YdbOld::Type::kOptionalType:
         if (value.Hasnull_flag_value())
             return "NULL";
         // If we have Value field for optional type then it is always
@@ -179,7 +179,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
         if (value.Hasnested_value())
             return ValueToString<TFormatCSV>(value.nested_value(), type.optional_type().item());
         return ValueToString<TFormatCSV>(value, type.optional_type().item());
-    case YdbOld::Type::kListType: 
+    case YdbOld::Type::kListType:
         {
             TString res = "[";
             const auto &items = value.items();
@@ -192,7 +192,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             res += "]";
             return res;
         }
-    case YdbOld::Type::kTupleType: 
+    case YdbOld::Type::kTupleType:
         {
             TString res = "[";
             const auto &items = value.items();
@@ -205,7 +205,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             res += "]";
             return res;
         }
-    case YdbOld::Type::kStructType: 
+    case YdbOld::Type::kStructType:
         {
             TString res = "{";
             const auto &items = value.items();
@@ -218,7 +218,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             res += "}";
             return res;
         }
-    case YdbOld::Type::kDictType: 
+    case YdbOld::Type::kDictType:
         {
             TString res = "[";
             const auto &pairs = value.pairs();
@@ -233,7 +233,7 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
             res += "]";
             return res;
         }
-    case YdbOld::Type::kVariantType: 
+    case YdbOld::Type::kVariantType:
         return "<VARIANT IS NOT SUPPORTED>";
     default:
         return "";
@@ -299,5 +299,5 @@ TPreparedQuery TPrepareResult::GetQuery() const {
     return TPreparedQuery(*Query, compileResult.GetCompiledProgram());
 }
 
-} 
-} 
+}
+}

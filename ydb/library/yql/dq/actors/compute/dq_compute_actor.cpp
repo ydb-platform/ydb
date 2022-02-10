@@ -1,13 +1,13 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor.h"
- 
+
 #include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NYql {
 namespace NDq {
- 
+
 using namespace NActors;
- 
+
 namespace {
 TDqExecutionSettings ExecutionSettings;
 
@@ -28,10 +28,10 @@ TDqExecutionSettings& GetDqExecutionSettingsForTests() {
 
 class TDqComputeActor : public TDqComputeActorBase<TDqComputeActor> {
     using TBase = TDqComputeActorBase<TDqComputeActor>;
- 
-public: 
+
+public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
- 
+
     TDqComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
@@ -39,10 +39,10 @@ public:
         : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits)
         , TaskRunnerFactory(taskRunnerFactory)
     {}
- 
-    void DoBootstrap() { 
+
+    void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
- 
+
         TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem)) {
             logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
@@ -56,15 +56,15 @@ public:
         PrepareTaskRunner();
 
         ContinueExecute();
-    } 
+    }
 
     void FillExtraStats(NDqProto::TDqComputeActorStats* /* dst */, bool /* last */) {
     }
 
 private:
     const TTaskRunnerFactory TaskRunnerFactory;
-}; 
- 
+};
+
 
 IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
     IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,

@@ -8,7 +8,7 @@
 #include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -228,5 +228,5 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt
 

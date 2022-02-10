@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -123,4 +123,4 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
         });
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

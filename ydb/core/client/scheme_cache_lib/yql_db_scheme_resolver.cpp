@@ -46,23 +46,23 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                     reply.TableId = new TTableId(res.TableId);
                     reply.CacheGeneration = 0;
 
-                    TSet<TString> replyColumns; 
- 
+                    TSet<TString> replyColumns;
+
                     TMap<TString, THashMap<ui32, TSysTables::TTableColumnInfo>::const_iterator> backindex;
                     for (auto it = res.Columns.begin(), eit = res.Columns.end(); it != eit; ++it) {
-                        auto& name = it->second.Name; 
- 
-                        backindex.insert({name, it}); 
- 
-                        if (it->second.KeyOrder >= 0) { 
-                            replyColumns.insert(name); 
+                        auto& name = it->second.Name;
+
+                        backindex.insert({name, it});
+
+                        if (it->second.KeyOrder >= 0) {
+                            replyColumns.insert(name);
                             ++reply.KeyColumnCount;
-                        } 
+                        }
                     }
 
-                    replyColumns.insert(reply.Table.ColumnNames.begin(), reply.Table.ColumnNames.end()); 
- 
-                    for (const auto &column : replyColumns) { 
+                    replyColumns.insert(reply.Table.ColumnNames.begin(), reply.Table.ColumnNames.end());
+
+                    for (const auto &column : replyColumns) {
                         auto systemColumn = GetSystemColumns().find(column);
                         if (systemColumn != GetSystemColumns().end()) {
                             reply.Columns.insert({

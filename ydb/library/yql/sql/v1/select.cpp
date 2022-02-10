@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
- 
+
 #include <library/cpp/charset/ci_string.h>
 
 using namespace NYql;
@@ -252,44 +252,44 @@ TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom) {
     return new TFakeSource(pos, missingFrom);
 }
 
-class TNodeSource: public ISource { 
-public: 
+class TNodeSource: public ISource {
+public:
     TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList)
-        : ISource(pos) 
-        , Node(node) 
+        : ISource(pos)
+        , Node(node)
         , WrapToList(wrapToList)
-    { 
-        YQL_ENSURE(Node); 
+    {
+        YQL_ENSURE(Node);
         FakeSource = BuildFakeSource(pos);
-    } 
- 
-    void AllColumns() final { 
-        UseAllColumns = true; 
-    } 
- 
+    }
+
+    void AllColumns() final {
+        UseAllColumns = true;
+    }
+
     bool ShouldUseSourceAsColumn(const TString& source) const final {
         return source && source != GetLabel();
     }
 
-    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final { 
+    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
         Y_UNUSED(ctx);
-        if (UseAllColumns) { 
-            return true; 
-        } 
- 
-        if (column.IsAsterisk()) { 
-            AllColumns(); 
-        } else { 
+        if (UseAllColumns) {
+            return true;
+        }
+
+        if (column.IsAsterisk()) {
+            AllColumns();
+        } else {
             if (column.GetColumnName()) {
                 Columns.insert(*column.GetColumnName());
             } else {
                 AllColumns();
             }
-        } 
- 
-        return true; 
-    } 
- 
+        }
+
+        return true;
+    }
+
     bool DoInit(TContext& ctx, ISource* src) final {
         if (!Node->Init(ctx, FakeSource.Get())) {
             return false;
@@ -297,40 +297,40 @@ public:
         return ISource::DoInit(ctx, src);
     }
 
-    TNodePtr Build(TContext& ctx) final  { 
+    TNodePtr Build(TContext& ctx) final  {
         auto nodeAst = AstNode(Node);
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);
         }
- 
-        if (UseAllColumns) { 
-            return nodeAst; 
-        } else { 
-            auto members = Y(); 
-            for (auto& column : Columns) { 
-                members = L(members, BuildQuotedAtom(Pos, column)); 
-            } 
- 
+
+        if (UseAllColumns) {
+            return nodeAst;
+        } else {
+            auto members = Y();
+            for (auto& column : Columns) {
+                members = L(members, BuildQuotedAtom(Pos, column));
+            }
+
             return Y(ctx.UseUnordered(*this) ? "OrderedMap" : "Map", nodeAst, BuildLambda(Pos, Y("row"), Y("SelectMembers", "row", Q(members))));
-        } 
-    } 
- 
-    TPtr DoClone() const final { 
+        }
+    }
+
+    TPtr DoClone() const final {
         return new TNodeSource(Pos, SafeClone(Node), WrapToList);
-    } 
- 
-private: 
-    TNodePtr Node; 
+    }
+
+private:
+    TNodePtr Node;
     bool WrapToList;
     TSourcePtr FakeSource;
     TSet<TString> Columns;
-    bool UseAllColumns = false; 
-}; 
- 
+    bool UseAllColumns = false;
+};
+
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList) {
     return new TNodeSource(pos, node, wrapToList);
-} 
- 
+}
+
 class IProxySource: public ISource {
 protected:
     IProxySource(TPosition pos, ISource* src)
@@ -1402,7 +1402,7 @@ public:
         TWinSpecs& winSpecs,
         THoppingWindowSpecPtr hoppingWindowSpec,
         const TVector<TNodePtr>& terms,
-        bool distinct, 
+        bool distinct,
         const TVector<TNodePtr>& without,
         bool selectStream,
         const TWriteSettings& settings
@@ -2463,7 +2463,7 @@ TSourcePtr DoBuildSelectCore(
     TWinSpecs&& winSpecs,
     THoppingWindowSpecPtr hoppingWindowSpec,
     TVector<TNodePtr>&& terms,
-    bool distinct, 
+    bool distinct,
     TVector<TNodePtr>&& without,
     bool selectStream,
     const TWriteSettings& settings

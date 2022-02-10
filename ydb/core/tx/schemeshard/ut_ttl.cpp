@@ -498,14 +498,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             writeRow(tabletId, 1, now, "TTLEnabledTable1");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable1");
-                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Minutes(1));
             WaitForCondErase(runtime);
             {
                 auto result = readTable(tabletId, "TTLEnabledTable1");
-                NKqp::CompareYson(R"([[[[];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[];%false]]])", result);
             }
         }
 
@@ -529,21 +529,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             writeRow(tabletId, 2, now, "TTLEnabledTable2");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable2");
-                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Minutes(1));
             WaitForCondErase(runtime);
             {
                 auto result = readTable(tabletId, "TTLEnabledTable2");
-                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Hours(1));
             WaitForCondErase(runtime);
             {
                 auto result = readTable(tabletId, "TTLEnabledTable2");
-                NKqp::CompareYson(R"([[[[];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[];%false]]])", result);
             }
         }
 
@@ -567,21 +567,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             writeRow(tabletId, 1, now, "TTLEnabledTable3");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable3");
-                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Minutes(1));
             waitForScheduleCondErase();
             {
                 auto result = readTable(tabletId, "TTLEnabledTable3");
-                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Hours(1));
             waitForScheduleCondErase();
             {
                 auto result = readTable(tabletId, "TTLEnabledTable3");
-                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]]];%false]]])", result);
             }
         }
 
@@ -607,14 +607,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             writeRow(tabletId, 2, now + TDuration::Days(1), "TTLEnabledTable4", "Uint64");
             {
                 auto result = readTable(tabletId, "TTLEnabledTable4");
-                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
             }
 
             runtime.AdvanceCurrentTime(TDuration::Minutes(1));
             WaitForCondErase(runtime);
             {
                 auto result = readTable(tabletId, "TTLEnabledTable4");
-                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result); 
+                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
             }
         }
     }

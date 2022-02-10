@@ -10,7 +10,7 @@ namespace NKikimr {
 static void TestConvertTypeToYdb(const TString& input, const TString& expected) {
     NKikimrMiniKQL::TType typeFrom;
     google::protobuf::TextFormat::ParseFromString(input, &typeFrom);
-    Ydb::Type typeTo; 
+    Ydb::Type typeTo;
     ConvertMiniKQLTypeToYdbType(typeFrom, typeTo);
     TString result;
     google::protobuf::TextFormat::PrintToString(typeTo, &result);
@@ -18,7 +18,7 @@ static void TestConvertTypeToYdb(const TString& input, const TString& expected) 
 }
 
 static void TestConvertTypeFromYdb(const TString& input, const TString& expected) {
-    Ydb::Type typeFrom; 
+    Ydb::Type typeFrom;
     google::protobuf::TextFormat::ParseFromString(input, &typeFrom);
     NKikimrMiniKQL::TType typeTo;
     ConvertYdbTypeToMiniKQLType(typeFrom, typeTo);
@@ -32,7 +32,7 @@ static void TestConvertValueToYdb(const TString& inputType, const TString& input
     google::protobuf::TextFormat::ParseFromString(input, &valueFrom);
     NKikimrMiniKQL::TType typeFrom;
     google::protobuf::TextFormat::ParseFromString(inputType, &typeFrom);
-    Ydb::Value valueTo; 
+    Ydb::Value valueTo;
     ConvertMiniKQLValueToYdbValue(typeFrom, valueFrom, valueTo);
     TString result;
     google::protobuf::TextFormat::PrintToString(valueTo, &result);
@@ -40,9 +40,9 @@ static void TestConvertValueToYdb(const TString& inputType, const TString& input
 }
 
 static void TestConvertValueFromYdb(const TString& inputType, const TString& input, const TString& expected) {
-    Ydb::Value valueFrom; 
+    Ydb::Value valueFrom;
     google::protobuf::TextFormat::ParseFromString(input, &valueFrom);
-    Ydb::Type typeFrom; 
+    Ydb::Type typeFrom;
     google::protobuf::TextFormat::ParseFromString(inputType, &typeFrom);
     NKikimrMiniKQL::TValue valueTo;
     ConvertYdbValueToMiniKQLValue(typeFrom, valueFrom, valueTo);

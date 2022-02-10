@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-class TGRpcYdbSchemeService 
+class TGRpcYdbSchemeService
     : public NGrpc::TGrpcServiceBase<Ydb::Scheme::V1::SchemeService>
 {
 public:

@@ -230,26 +230,26 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
     result.GetError().Throw();
     const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
     Y_VERIFY(objects.GetPathDescription().HasTable());
-    const auto& table = objects.GetPathDescription().GetTable(); 
- 
+    const auto& table = objects.GetPathDescription().GetTable();
+
     TMap<ui32, NKikimrSchemeOp::TColumnDescription> columnsMap;
-    for (const auto& column : table.GetColumns()) { 
-        columnsMap[column.GetId()] = column; 
-    } 
- 
-    TVector<TColumn> columns;
-    columns.reserve(table.ColumnsSize()); 
-    for (ui32 keyColumnId : table.GetKeyColumnIds()) { 
-        auto column = columnsMap.FindPtr(keyColumnId); 
-        Y_VERIFY(column); 
-        columns.push_back(TKeyColumn(column->GetName(), TType(column->GetType(), column->GetTypeId()))); 
-        columnsMap.erase(keyColumnId); 
+    for (const auto& column : table.GetColumns()) {
+        columnsMap[column.GetId()] = column;
     }
-    for (const auto& pair : columnsMap) { 
-        auto& column = pair.second; 
-        columns.push_back(TColumn(column.GetName(), TType(column.GetType(), column.GetTypeId()))); 
-    } 
- 
+
+    TVector<TColumn> columns;
+    columns.reserve(table.ColumnsSize());
+    for (ui32 keyColumnId : table.GetKeyColumnIds()) {
+        auto column = columnsMap.FindPtr(keyColumnId);
+        Y_VERIFY(column);
+        columns.push_back(TKeyColumn(column->GetName(), TType(column->GetType(), column->GetTypeId())));
+        columnsMap.erase(keyColumnId);
+    }
+    for (const auto& pair : columnsMap) {
+        auto& column = pair.second;
+        columns.push_back(TColumn(column.GetName(), TType(column.GetType(), column.GetTypeId())));
+    }
+
     return columns;
 }
 

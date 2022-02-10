@@ -2,16 +2,16 @@
 #include "context.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
- 
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
 static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn = {
-    {ESQLWriteColumnMode::InsertInto, EWriteColumnMode::Insert}, 
-    {ESQLWriteColumnMode::InsertOrAbortInto, EWriteColumnMode::InsertOrAbort}, 
-    {ESQLWriteColumnMode::InsertOrIgnoreInto, EWriteColumnMode::InsertOrIgnore}, 
-    {ESQLWriteColumnMode::InsertOrRevertInto, EWriteColumnMode::InsertOrRevert}, 
+    {ESQLWriteColumnMode::InsertInto, EWriteColumnMode::Insert},
+    {ESQLWriteColumnMode::InsertOrAbortInto, EWriteColumnMode::InsertOrAbort},
+    {ESQLWriteColumnMode::InsertOrIgnoreInto, EWriteColumnMode::InsertOrIgnore},
+    {ESQLWriteColumnMode::InsertOrRevertInto, EWriteColumnMode::InsertOrRevert},
     {ESQLWriteColumnMode::UpsertInto, EWriteColumnMode::Upsert},
     {ESQLWriteColumnMode::ReplaceInto, EWriteColumnMode::Replace},
     {ESQLWriteColumnMode::InsertIntoWithTruncate, EWriteColumnMode::Renew},
@@ -85,18 +85,18 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
-        YQL_ENSURE(Values.size() == ColumnsHint.size()); 
- 
+        YQL_ENSURE(Values.size() == ColumnsHint.size());
+
         auto structObj = Y("AsStruct");
-        for (size_t i = 0; i < Values.size(); ++i) { 
+        for (size_t i = 0; i < Values.size(); ++i) {
             TString column = ColumnsHint[i];
-            TNodePtr value = Values[i]; 
- 
+            TNodePtr value = Values[i];
+
             structObj = L(structObj, Q(Y(Q(column), value)));
         }
- 
+
         auto updateRow = BuildLambda(Pos, Y("row"), structObj);
-        return updateRow; 
+        return updateRow;
     }
 
     TNodePtr DoClone() const final {
@@ -123,11 +123,11 @@ public:
         Y_UNUSED(src);
         bool hasError = false;
         for (const auto& row: Values) {
-            if (ColumnsHint.empty()) { 
-                ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns"; 
+            if (ColumnsHint.empty()) {
+                ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns";
                 hasError = true;
                 continue;
-            } 
+            }
             if (ColumnsHint.size() != row.size()) {
                 ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
                 hasError = true;
@@ -145,7 +145,7 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
-        auto tuple = Y(); 
+        auto tuple = Y();
         for (const auto& row: Values) {
             auto rowValues = Y("AsStruct");
             auto column = ColumnsHint.begin();
@@ -153,7 +153,7 @@ public:
                 rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos, *column), value)));
                 ++column;
             }
-            tuple = L(tuple, rowValues); 
+            tuple = L(tuple, rowValues);
         }
         return Y("EnsurePersistable", Q(tuple));
     }
@@ -284,13 +284,13 @@ public:
 
     void ResetUpdate(TSourcePtr update) {
         Update = std::move(update);
-    } 
- 
+    }
+
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!Table.Check(ctx)) {
             return false;
         }
- 
+
         TTableList tableList;
         TNodePtr values;
         auto options = Y();
@@ -302,22 +302,22 @@ public:
         }
 
         ISource* underlyingSrc = src;
- 
+
         if (TableSource) {
             ctx.PushBlockShortcuts();
             if (!TableSource->Init(ctx, src) || !TableSource->InitFilters(ctx)) {
-                return false; 
-            } 
+                return false;
+            }
             options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda(ctx.GroundBlockShortcuts(Pos)))));
-        } 
- 
+        }
+
         bool unordered = false;
         ctx.PushBlockShortcuts();
         if (Values) {
             if (!Values->Init(ctx, TableSource.Get())) {
                 return false;
             }
- 
+
             Values->GetInputTables(tableList);
             underlyingSrc = Values.Get();
             values = Values->Build(ctx);
@@ -331,13 +331,13 @@ public:
         if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }
- 
-        if (Update) { 
+
+        if (Update) {
             if (!Update->Init(ctx, TableSource.Get()) || !Update->InitFilters(ctx)) {
                 return false;
             }
             options = L(options, Q(Y(Q("update"), Update->Build(ctx))));
-        } 
+        }
 
         auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options));
         if (!write->Init(ctx, FakeSource.Get())) {
@@ -349,8 +349,8 @@ public:
             if (unordered && ctx.UseUnordered(Table)) {
                 node = L(node, Y("let", "values", Y("Unordered", "values")));
             }
-        } else { 
-            node = L(node, Y("let", "values", Y("Void"))); 
+        } else {
+            node = L(node, Y("let", "values", Y("Void")));
         }
         node = L(node, Y("let", "world", write));
         node = L(node, Y("return", "world"));
@@ -368,7 +368,7 @@ protected:
     TSourcePtr TableSource;
     EWriteColumnMode Mode;
     TSourcePtr Values;
-    TSourcePtr Update; 
+    TSourcePtr Update;
     TSourcePtr FakeSource;
     TNodePtr Options;
 };
@@ -384,7 +384,7 @@ TNodePtr BuildWriteColumns(TPosition pos, const TTableRef& table, EWriteColumnMo
 
 TNodePtr BuildUpdateColumns(TPosition pos, const TTableRef& table, TSourcePtr values, TSourcePtr source) {
     YQL_ENSURE(values, "Invalid values node");
-    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, table, EWriteColumnMode::Update); 
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, table, EWriteColumnMode::Update);
     writeNode->ResetSource(std::move(source));
     writeNode->ResetUpdate(std::move(values));
     return writeNode;

@@ -15,7 +15,7 @@ namespace {
 
 constexpr bool PrintCallableTimes = false;
 
-class TTypeAnnotationTransformer : public TGraphTransformerBase { 
+class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
     TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types)
         : CallableTransformer(callableTransformer)
@@ -40,7 +40,7 @@ public:
         }
     }
 
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoTransform");
         output = input;
         auto status = TransformNode(input, output, ctx);
@@ -63,7 +63,7 @@ public:
         return status;
     }
 
-    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final { 
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoGetAsyncFuture");
         Y_UNUSED(input);
         TVector<NThreading::TFuture<void>> futures;
@@ -74,7 +74,7 @@ public:
         return WaitExceptionOrAll(futures);
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "TypeAnnotationTransformer::DoApplyAsyncChanges");
         output = input;
         TStatus combinedStatus = TStatus::Ok;
@@ -576,59 +576,59 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
 {
     TVector<TTransformStage> transformers;
     auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN;
-    transformers.push_back(TTransformStage( 
-        CreateFunctorTransformer(&ExpandApply), 
-        "ExpandApply", 
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(&ExpandApply),
+        "ExpandApply",
         issueCode));
-    transformers.push_back(TTransformStage( 
-        CreateFunctorTransformer( 
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
             [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return ValidateProviders(input, output, ctx, typeAnnotationContext);
         }),
-        "ValidateProviders", 
+        "ValidateProviders",
         issueCode));
 
-    transformers.push_back(TTransformStage( 
+    transformers.push_back(TTransformStage(
         CreateConfigureTransformer(typeAnnotationContext),
-        "Configure", 
+        "Configure",
         issueCode));
-    transformers.push_back(TTransformStage( 
+    transformers.push_back(TTransformStage(
         CreateIODiscoveryTransformer(typeAnnotationContext),
-        "IODiscovery", 
+        "IODiscovery",
         issueCode));
     transformers.push_back(TTransformStage(
         CreateEpochsTransformer(typeAnnotationContext),
         "Epochs",
         issueCode));
 
-    transformers.push_back(TTransformStage( 
+    transformers.push_back(TTransformStage(
         CreateIntentDeterminationTransformer(typeAnnotationContext),
-        "IntentDetermination", 
+        "IntentDetermination",
         issueCode));
-    transformers.push_back(TTransformStage( 
+    transformers.push_back(TTransformStage(
         CreateTableMetadataLoader(typeAnnotationContext),
-        "TableMetadataLoader", 
+        "TableMetadataLoader",
         issueCode));
     auto& typeCtx = typeAnnotationContext;
-    transformers.push_back(TTransformStage( 
-        CreateFunctorTransformer( 
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
             [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return RewriteIO(input, output, typeCtx, ctx);
         }),
-        "RewriteIO", 
+        "RewriteIO",
         issueCode));
 
     issueCode = TIssuesIds::CORE_TYPE_ANN;
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(typeAnnotationContext);
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext);
-    transformers.push_back(TTransformStage( 
+    transformers.push_back(TTransformStage(
         typeTransformer,
-        "TypeAnnotation", 
+        "TypeAnnotation",
         issueCode));
     if (wholeProgram) {
-        transformers.push_back(TTransformStage( 
-            CreateFunctorTransformer(&CheckWholeProgramType), 
-            "CheckWholeProgramType", 
+        transformers.push_back(TTransformStage(
+            CreateFunctorTransformer(&CheckWholeProgramType),
+            "CheckWholeProgramType",
             issueCode));
     }
 

@@ -204,9 +204,9 @@ public:
             case ETypeAnnotationKind::Resource:
                 TBase::SaveResourceType(type->Cast<TResourceExprType>()->GetTag());
                 break;
-            case ETypeAnnotationKind::Tagged: 
-                TBase::SaveTaggedType(*type->Cast<TTaggedExprType>()); 
-                break; 
+            case ETypeAnnotationKind::Tagged:
+                TBase::SaveTaggedType(*type->Cast<TTaggedExprType>());
+                break;
             case ETypeAnnotationKind::Error:
                 SaveErrorType(*type->Cast<TErrorExprType>());
                 break;

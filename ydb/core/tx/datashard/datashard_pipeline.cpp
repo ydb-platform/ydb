@@ -1239,9 +1239,9 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetNeedDiagnosticsFlag();
         if (dataTx->IsKqpDataTx())
             tx->SetKqpDataTransactionFlag();
-        if (dataTx->IsKqpScanTx()) { 
-            tx->SetKqpScanTransactionFlag(); 
-            // TODO: support for extracting keys in kqp scan transaction 
+        if (dataTx->IsKqpScanTx()) {
+            tx->SetKqpScanTransactionFlag();
+            // TODO: support for extracting keys in kqp scan transaction
             tx->SetGlobalReaderFlag();
         }
 

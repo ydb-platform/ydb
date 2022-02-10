@@ -15,48 +15,48 @@ namespace NGRpcService {
 using namespace Draft::Dummy;
 
 using TEvInfiniteRequest = TGRpcRequestWrapper<0, InfiniteRequest, InfiniteResponse, true>;
- 
+
 static void HandlePing(NGrpc::IRequestContextBase* ctx) {
     auto req = static_cast<const PingRequest*>(ctx->GetRequest());
     auto resp = google::protobuf::Arena::CreateMessage<PingResponse>(ctx->GetArena());
     if (req->copy()) {
         resp->set_payload(req->payload());
     }
-    ctx->Reply(resp, Ydb::StatusIds::SUCCESS); 
+    ctx->Reply(resp, Ydb::StatusIds::SUCCESS);
 }
 
-class TInfiniteRpc : public TRpcOperationRequestActor<TInfiniteRpc, TEvInfiniteRequest> { 
-    using TBase = TRpcOperationRequestActor<TInfiniteRpc, TEvInfiniteRequest>; 
- 
-public: 
-    TInfiniteRpc(TEvInfiniteRequest* request) 
-        : TBase(request) {} 
- 
-    void Bootstrap(const TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
- 
-        Become(&TInfiniteRpc::StateWork); 
-    } 
- 
-    bool HasCancelOperation() { 
-        return true; 
-    } 
- 
-    void OnCancelOperation(const TActorContext& ctx) { 
-        NYql::TIssues issues; 
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, 
-            "Operation cancelled.")); 
-        Reply(Ydb::StatusIds::CANCELLED, issues, ctx); 
-    } 
- 
-private: 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            default: TBase::StateFuncBase(ev, ctx); 
-        } 
-    } 
-}; 
- 
+class TInfiniteRpc : public TRpcOperationRequestActor<TInfiniteRpc, TEvInfiniteRequest> {
+    using TBase = TRpcOperationRequestActor<TInfiniteRpc, TEvInfiniteRequest>;
+
+public:
+    TInfiniteRpc(TEvInfiniteRequest* request)
+        : TBase(request) {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+
+        Become(&TInfiniteRpc::StateWork);
+    }
+
+    bool HasCancelOperation() {
+        return true;
+    }
+
+    void OnCancelOperation(const TActorContext& ctx) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+            "Operation cancelled."));
+        Reply(Ydb::StatusIds::CANCELLED, issues, ctx);
+    }
+
+private:
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            default: TBase::StateFuncBase(ev, ctx);
+        }
+    }
+};
+
 class TBiStreamPingRequestRPC : public TActorBootstrapped<TBiStreamPingRequestRPC> {
     using TBase = TActorBootstrapped<TBiStreamPingRequestRPC>;
     using IContext = NGRpcServer::IGRpcStreamingContext<
@@ -153,7 +153,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(Ping, PingRequest, PingResponse, {
         HandlePing(ctx);
     })
- 
+
     ADD_REQUEST(Infinite, InfiniteRequest, InfiniteResponse, {
         ActorSystem_->Register(new TInfiniteRpc(new TEvInfiniteRequest(ctx)));
     })

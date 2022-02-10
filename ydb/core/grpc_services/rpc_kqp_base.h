@@ -28,50 +28,50 @@ inline TString DecodePreparedQueryId(const TString& in) {
     return *ids[0];
 }
 
-inline TString GetTransactionModeName(const Ydb::Table::TransactionSettings& settings) { 
-    switch (settings.tx_mode_case()) { 
-        case Ydb::Table::TransactionSettings::kSerializableReadWrite: 
-            return "SerializableReadWrite"; 
-        case Ydb::Table::TransactionSettings::kOnlineReadOnly: 
-            return "OnlineReadOnly"; 
-        case Ydb::Table::TransactionSettings::kStaleReadOnly: 
-            return "StaleReadOnly"; 
-        default: 
-            return "Unknown"; 
-    } 
-} 
- 
+inline TString GetTransactionModeName(const Ydb::Table::TransactionSettings& settings) {
+    switch (settings.tx_mode_case()) {
+        case Ydb::Table::TransactionSettings::kSerializableReadWrite:
+            return "SerializableReadWrite";
+        case Ydb::Table::TransactionSettings::kOnlineReadOnly:
+            return "OnlineReadOnly";
+        case Ydb::Table::TransactionSettings::kStaleReadOnly:
+            return "StaleReadOnly";
+        default:
+            return "Unknown";
+    }
+}
+
 inline NYql::NDqProto::EDqStatsMode GetKqpStatsMode(Ydb::Table::QueryStatsCollection::Mode mode) {
-    switch (mode) { 
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: 
+    switch (mode) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
             return NYql::NDqProto::DQ_STATS_MODE_BASIC;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
-        default: 
+        default:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
-    } 
-} 
- 
-inline bool CheckSession(const TString& sessionId, NYql::TIssues& issues) { 
-    if (sessionId.empty()) { 
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty session id")); 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
-inline bool CheckQuery(const TString& query, NYql::TIssues& issues) { 
-    if (query.empty()) { 
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty query text")); 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
+    }
+}
+
+inline bool CheckSession(const TString& sessionId, NYql::TIssues& issues) {
+    if (sessionId.empty()) {
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty session id"));
+        return false;
+    }
+
+    return true;
+}
+
+inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
+    if (query.empty()) {
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty query text"));
+        return false;
+    }
+
+    return true;
+}
+
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse);
- 
+
 inline void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to) {
     const auto& type = from.GetType();
     TStackVec<NKikimrMiniKQL::TType> columnTypes;
@@ -111,25 +111,25 @@ inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
 }
 
 template <typename TDerived, typename TRequest>
-class TRpcKqpRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> { 
-    using TBase = TRpcOperationRequestActor<TDerived, TRequest>; 
+class TRpcKqpRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> {
+    using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
-public: 
+public:
     TRpcKqpRequestActor(IRequestOpCtx* request)
-        : TBase(request) {} 
- 
-    void OnOperationTimeout(const TActorContext& ctx) { 
-        Y_UNUSED(ctx); 
-    } 
- 
+        : TBase(request) {}
+
+    void OnOperationTimeout(const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+    }
+
 protected:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle); 
-            default: TBase::StateFuncBase(ev, ctx); 
-        } 
-    } 
- 
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
+            default: TBase::StateFuncBase(ev, ctx);
+        }
+    }
+
     template<typename TKqpResponse>
     void AddServerHintsIfAny(const TKqpResponse& kqpResponse) {
         if (kqpResponse.GetWorkerIsClosing()) {
@@ -138,73 +138,73 @@ protected:
     }
 
     template<typename TKqpResponse>
-    void OnGenericQueryResponseError(const TKqpResponse& kqpResponse, const TActorContext& ctx) { 
+    void OnGenericQueryResponseError(const TKqpResponse& kqpResponse, const TActorContext& ctx) {
         RaiseIssuesFromKqp(kqpResponse);
- 
+
         this->Request_->ReplyWithYdbStatus(kqpResponse.GetYdbStatus());
         this->Die(ctx);
     }
 
     template<typename TKqpResponse>
-    void OnQueryResponseErrorWithTxMeta(const TKqpResponse& kqpResponse, const TActorContext& ctx) { 
+    void OnQueryResponseErrorWithTxMeta(const TKqpResponse& kqpResponse, const TActorContext& ctx) {
         RaiseIssuesFromKqp(kqpResponse);
 
         auto queryResult = TRequest::template AllocateResult<typename TDerived::TResult>(this->Request_);
-        if (kqpResponse.GetResponse().HasTxMeta()) { 
-            queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetResponse().GetTxMeta()); 
-        } 
- 
+        if (kqpResponse.GetResponse().HasTxMeta()) {
+            queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetResponse().GetTxMeta());
+        }
+
         this->Request_->SendResult(*queryResult, kqpResponse.GetYdbStatus());
-        this->Die(ctx); 
+        this->Die(ctx);
     }
 
-    void OnQueryResponseError(const NKikimrKqp::TEvCreateSessionResponse& kqpResponse, const TActorContext& ctx) { 
-        if (kqpResponse.HasError()) { 
+    void OnQueryResponseError(const NKikimrKqp::TEvCreateSessionResponse& kqpResponse, const TActorContext& ctx) {
+        if (kqpResponse.HasError()) {
             NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError())); 
-            return this->Reply(kqpResponse.GetYdbStatus(), issues, ctx); 
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
+            return this->Reply(kqpResponse.GetYdbStatus(), issues, ctx);
         } else {
-            return this->Reply(kqpResponse.GetYdbStatus(), ctx); 
+            return this->Reply(kqpResponse.GetYdbStatus(), ctx);
         }
     }
 
-    template<typename TKqpResponse> 
-    void OnKqpError(const TKqpResponse& response, const TActorContext& ctx) { 
-        NYql::TIssues issues; 
-        NYql::IssuesFromMessage(response.GetIssues(), issues); 
- 
-        this->Request_->RaiseIssues(issues); 
+    template<typename TKqpResponse>
+    void OnKqpError(const TKqpResponse& response, const TActorContext& ctx) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(response.GetIssues(), issues);
+
+        this->Request_->RaiseIssues(issues);
         this->Request_->ReplyWithYdbStatus(response.GetStatus());
-        this->Die(ctx); 
-    } 
- 
-    void OnProcessError(const NKikimrKqp::TEvProcessResponse& kqpResponse, const TActorContext& ctx) { 
-        if (kqpResponse.HasError()) { 
-            NYql::TIssues issues; 
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError())); 
-            return this->Reply(kqpResponse.GetYdbStatus(), issues, ctx); 
-        } else { 
-            return this->Reply(kqpResponse.GetYdbStatus(), ctx); 
-        } 
-    } 
- 
-private: 
+        this->Die(ctx);
+    }
+
+    void OnProcessError(const NKikimrKqp::TEvProcessResponse& kqpResponse, const TActorContext& ctx) {
+        if (kqpResponse.HasError()) {
+            NYql::TIssues issues;
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
+            return this->Reply(kqpResponse.GetYdbStatus(), issues, ctx);
+        } else {
+            return this->Reply(kqpResponse.GetYdbStatus(), ctx);
+        }
+    }
+
+private:
     void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         NYql::TIssues issues;
-        if (record.HasError()) { 
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetError())); 
+        if (record.HasError()) {
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetError()));
         }
         return this->Reply(record.GetYdbStatus(), issues, ctx);
     }
- 
+
 private:
     template<typename TKqpResponse>
     void RaiseIssuesFromKqp(const TKqpResponse& kqpResponse) {
-        NYql::TIssues issues; 
-        const auto& issueMessage = kqpResponse.GetResponse().GetQueryIssues(); 
-        NYql::IssuesFromMessage(issueMessage, issues); 
-        this->Request_->RaiseIssues(issues); 
+        NYql::TIssues issues;
+        const auto& issueMessage = kqpResponse.GetResponse().GetQueryIssues();
+        NYql::IssuesFromMessage(issueMessage, issues);
+        this->Request_->RaiseIssues(issues);
     }
 };
 

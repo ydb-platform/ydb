@@ -8,11 +8,11 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-class TGRpcYdbTableService 
+class TGRpcYdbTableService
     : public NGrpc::TGrpcServiceBase<Ydb::Table::V1::TableService>
 {
 public:
-    TGRpcYdbTableService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, 
+    TGRpcYdbTableService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
         NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;

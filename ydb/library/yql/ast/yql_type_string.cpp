@@ -333,13 +333,13 @@ private:
         // skip spaces
         while (!AtEnd() && isspace(Get())) {
             Move();
-        } 
+        }
 
         TokenBegin = Position;
         if (AtEnd()) {
             return TOKEN_EOF;
-        } 
- 
+        }
+
         // clear last readed indentifier
         Identifier = {};
 
@@ -385,8 +385,8 @@ private:
             // otherwise, just return the last character as its ascii value
             return lastChar;
         }
-    } 
- 
+    }
+
     TAstNode* ParseCallableType() {
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
 
@@ -921,29 +921,29 @@ private:
         return MakeResourceType(tag);
     }
 
-    TAstNode* ParseTaggedType() { 
+    TAstNode* ParseTaggedType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
- 
-        auto baseType = ParseType(); 
-        if (!baseType) return nullptr; 
- 
+
+        auto baseType = ParseType();
+        if (!baseType) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN(',', nullptr);
 
         if (Token != TOKEN_IDENTIFIER && Token != TOKEN_ESCAPED_IDENTIFIER) {
             return AddError("Expected tag of type");
         }
- 
+
         TStringBuf tag = Identifier;
         if (tag.empty()) {
             return AddError("Expected non empty tag of type");
-        } 
- 
+        }
+
         GetNextToken(); // eat tag
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
         return MakeTaggedType(baseType, tag);
-    } 
- 
+    }
+
     TAstNode* MakeResourceType(TStringBuf tag) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("ResourceType")),
@@ -995,15 +995,15 @@ private:
     }
 
     TAstNode* MakeTaggedType(TAstNode* baseType, TStringBuf tag) {
-        TAstNode* items[] = { 
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("TaggedType")),
-            baseType, 
-            MakeQuotedAtom(tag) 
-        }; 
- 
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
-    } 
- 
+            baseType,
+            MakeQuotedAtom(tag)
+        };
+
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
     TAstNode* MakeDataType(TStringBuf type) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DataType")),
@@ -1079,7 +1079,7 @@ private:
     }
 
     TAstNode* AddError(const TString& message) {
-        Issues.AddIssue(TIssue(TokenBegin, message)); 
+        Issues.AddIssue(TIssue(TokenBegin, message));
         return nullptr;
     }
 
@@ -1289,12 +1289,12 @@ private:
 
     void Visit(const TTaggedExprType& type) final {
         Out_ << TStringBuf("Tagged<");
-        type.GetBaseType()->Accept(*this); 
+        type.GetBaseType()->Accept(*this);
         Out_ << ',';
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
         Out_ << '>';
-    } 
- 
+    }
+
     void Visit(const TErrorExprType& type) final {
         Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;

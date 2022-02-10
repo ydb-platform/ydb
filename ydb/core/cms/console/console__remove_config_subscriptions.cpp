@@ -22,7 +22,7 @@ public:
         Y_VERIFY(Self->PendingSubscriptionModifications.IsEmpty());
 
         Response = new TEvConsole::TEvRemoveConfigSubscriptionsResponse;
-        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
+        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         TSubscriberId subscriber(rec.GetSubscriber());
         auto &subscriptions = Self->SubscriptionIndex.GetSubscriptions(subscriber);

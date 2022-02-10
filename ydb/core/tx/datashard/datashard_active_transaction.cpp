@@ -1,7 +1,7 @@
 #include "defs.h"
 
 #include "datashard_active_transaction.h"
-#include "datashard_kqp.h" 
+#include "datashard_kqp.h"
 #include "datashard_locks.h"
 #include "datashard_impl.h"
 #include "datashard_failpoints.h"
@@ -26,7 +26,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , TxSize(0)
     , TxCacheUsage(0)
     , IsReleased(false)
-    , IsReadOnly(true) 
+    , IsReadOnly(true)
     , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
     , Cancelled(false)
     , ReceivedAt_(receivedAt)
@@ -41,7 +41,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
-    Y_VERIFY(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(), 
+    Y_VERIFY(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
 
     if (Tx.GetLockTxId())
@@ -63,7 +63,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = "Trying to read from table that doesn't exist";
         }
-    } else if (IsKqpTx()) { 
+    } else if (IsKqpTx()) {
         if (Y_UNLIKELY(!IsKqpDataTx())) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << TabletId()
                 << ", txid: " << StepTxId_.TxId << ", tx: " << Tx.DebugString());
@@ -90,15 +90,15 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             for (auto& task : GetKqpTransaction().GetTasks()) {
                 NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
                 if (!task.GetMeta().UnpackTo(&meta)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed" 
-                        << ", datashard: " << TabletId() 
+                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed"
+                        << ", datashard: " << TabletId()
                         << ", txid: " << StepTxId_.TxId
                         << ", failed to load task meta: " << task.GetMeta().value());
-                    ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR; 
+                    ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
                     ErrStr = "Transaction validation failed: invalid task metadata.";
-                    return; 
-                } 
- 
+                    return;
+                }
+
                 LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << TabletId()
                     << ", task: " << task.GetId() << ", meta: " << meta.ShortDebugString());
 
@@ -168,23 +168,23 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         } catch (const yexception& e) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while validating KQP transaction, datashard: "
                 << TabletId() << ", txid: " << StepTxId_.TxId << ", error: " << e.what());
-            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR; 
+            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
             ErrStr = TStringBuilder() << "Transaction validation failed: " << e.what() << ".";
-            return; 
-        } 
+            return;
+        }
     } else {
         Y_VERIFY(Tx.HasMiniKQL());
-        if (Tx.GetLlvmRuntime()) { 
+        if (Tx.GetLlvmRuntime()) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         "Using LLVM runtime to execute transaction: " << StepTxId_.TxId);
-            EngineBay.SetUseLlvmRuntime(true); 
-        } 
-        if (Tx.HasPerShardKeysSizeLimitBytes()) { 
-            PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes(); 
-        } 
+            EngineBay.SetUseLlvmRuntime(true);
+        }
+        if (Tx.HasPerShardKeysSizeLimitBytes()) {
+            PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes();
+        }
 
-        IsReadOnly = IsReadOnly && Tx.GetReadOnly(); 
- 
+        IsReadOnly = IsReadOnly && Tx.GetReadOnly();
+
         auto engine = EngineBay.GetEngine();
         auto result = engine->AddProgram(TabletId_, Tx.GetMiniKQL(), Tx.GetReadOnly());
 
@@ -200,10 +200,10 @@ TValidatedDataTx::~TValidatedDataTx() {
 }
 
 const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDataTx::GetKqpTasks() const {
-    Y_VERIFY(IsKqpTx()); 
+    Y_VERIFY(IsKqpTx());
     return Tx.GetKqpTransaction().GetTasks();
-} 
- 
+}
+
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
@@ -267,7 +267,7 @@ ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidate
     return ETxOrder::Any;
 }
 
-bool TValidatedDataTx::CanCancel() { 
+bool TValidatedDataTx::CanCancel() {
     if (!IsTxReadOnly()) {
         return false;
     }
@@ -278,18 +278,18 @@ bool TValidatedDataTx::CanCancel() {
         }
     }
 
-    return true; 
-} 
- 
-bool TValidatedDataTx::CheckCancelled() { 
-    if (Cancelled) { 
-        return true; 
-    } 
- 
-    if (!CanCancel()) { 
-        return false; 
-    } 
- 
+    return true;
+}
+
+bool TValidatedDataTx::CheckCancelled() {
+    if (Cancelled) {
+        return true;
+    }
+
+    if (!CanCancel()) {
+        return false;
+    }
+
     TInstant now = AppData()->TimeProvider->Now();
     Cancelled = (now >= Deadline());
 

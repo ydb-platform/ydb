@@ -105,15 +105,15 @@ SRCS(
     datashard_user_table.cpp
     datashard_user_table.h
     datashard_impl.h
-    datashard_kqp_compute.cpp 
-    datashard_kqp_compute.h 
-    datashard_kqp_effects.cpp 
-    datashard_kqp_lookup_table.cpp 
-    datashard_kqp_read_table.cpp 
-    datashard_kqp_upsert_rows.cpp 
+    datashard_kqp_compute.cpp
+    datashard_kqp_compute.h
+    datashard_kqp_effects.cpp
+    datashard_kqp_lookup_table.cpp
+    datashard_kqp_read_table.cpp
+    datashard_kqp_upsert_rows.cpp
     datashard_kqp_delete_rows.cpp
-    datashard_kqp.cpp 
-    datashard_kqp.h 
+    datashard_kqp.cpp
+    datashard_kqp.h
     datashard_repl_apply.cpp
     datashard_repl_offsets.cpp
     datashard_repl_offsets_client.cpp
@@ -134,7 +134,7 @@ SRCS(
     execute_data_tx_unit.cpp
     execute_distributed_erase_tx_unit.cpp
     execute_kqp_data_tx_unit.cpp
-    execute_kqp_scan_tx_unit.cpp 
+    execute_kqp_scan_tx_unit.cpp
     execution_unit.cpp
     execution_unit.h
     execution_unit_ctors.h

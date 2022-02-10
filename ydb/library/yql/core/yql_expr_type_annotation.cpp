@@ -22,9 +22,9 @@
 
 namespace NYql {
 
-using namespace NNodes; 
+using namespace NNodes;
 using namespace NKikimr;
- 
+
 namespace {
 
 constexpr TStringBuf TypeResourceTag = "_Type";
@@ -2438,32 +2438,32 @@ bool EnsureListOrEmptyType(TPositionHandle position, const TTypeAnnotationNode& 
     return true;
 }
 
-bool EnsureListOfVoidType(const TExprNode& node, TExprContext& ctx) { 
+bool EnsureListOfVoidType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
-        YQL_ENSURE(node.Type() == TExprNode::Lambda); 
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected list of void type, but got lambda"));
-        return false; 
-    } 
- 
+        return false;
+    }
+
     return EnsureListOfVoidType(node.Pos(), *node.GetTypeAnn(), ctx);
-} 
- 
+}
+
 bool EnsureListOfVoidType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (!EnsureListType(position, type, ctx)) { 
-        return false; 
-    } 
- 
-    auto listType = type.Cast<TListExprType>(); 
-    YQL_ENSURE(listType); 
- 
-    if (listType->GetItemType()->GetKind() != ETypeAnnotationKind::Void) { 
+    if (!EnsureListType(position, type, ctx)) {
+        return false;
+    }
+
+    auto listType = type.Cast<TListExprType>();
+    YQL_ENSURE(listType);
+
+    if (listType->GetItemType()->GetKind() != ETypeAnnotationKind::Void) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected list of void type, but got: " << type));
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureStreamType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
@@ -2888,9 +2888,9 @@ bool UpdateLambdaAllArgumentsTypes(TExprNode::TPtr& lambda, const std::vector<co
         }
     }
     if (!updateArgs && args.GetTypeAnn()) {
-        return true; 
-    } 
- 
+        return true;
+    }
+
     TNodeOnNodeOwnedMap replaces;
     replaces.reserve(argumentsAnnotations.size());
 
@@ -3082,7 +3082,7 @@ bool EnsureListOrOptionalListType(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream) { 
+bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
@@ -3101,18 +3101,18 @@ bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TE
         return false;
     }
 
-    switch (type.GetKind()) { 
-        case ETypeAnnotationKind::List: 
-        case ETypeAnnotationKind::Stream: 
-            if (isStream) { 
-                *isStream = (type.GetKind() == ETypeAnnotationKind::Stream); 
-            } 
-            return true; 
- 
-        default: 
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Stream:
+            if (isStream) {
+                *isStream = (type.GetKind() == ETypeAnnotationKind::Stream);
+            }
+            return true;
+
+        default:
             ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected list or stream, but got: " << type));
-            return false; 
- 
+            return false;
+
     }
 }
 
@@ -4191,26 +4191,26 @@ bool IsPureIsolatedLambda(const TExprNode& lambdaBody) {
 }
 
 TString GetIntegralAtomValue(ui64 value, bool hasSign) {
-    return (hasSign) ? "-" + ToString(value) : ToString(value); 
-} 
- 
+    return (hasSign) ? "-" + ToString(value) : ToString(value);
+}
+
 bool AllowIntegralConversion(TCoIntegralCtor node, bool negate, EDataSlot toType, TString* atomValue) {
-    bool hasSign; 
-    bool isSigned; 
-    ui64 value; 
+    bool hasSign;
+    bool isSigned;
+    ui64 value;
     ExtractIntegralValue(node.Ref(), negate, hasSign, isSigned, value);
- 
-    bool allow = false; 
- 
+
+    bool allow = false;
+
     if (toType == EDataSlot::Uint8) {
-        allow = !hasSign && value <= Max<ui8>(); 
-    } 
+        allow = !hasSign && value <= Max<ui8>();
+    }
     else if (toType == EDataSlot::Uint16) {
         allow = !hasSign && value <= Max<ui16>();
     }
     else if (toType == EDataSlot::Uint32) {
-        allow = !hasSign && value <= Max<ui32>(); 
-    } 
+        allow = !hasSign && value <= Max<ui32>();
+    }
     else if (toType == EDataSlot::Int8) {
         allow = !hasSign && value <= (ui64)Max<i8>() || hasSign && value <= (ui64)Max<i8>() + 1;
     }
@@ -4218,25 +4218,25 @@ bool AllowIntegralConversion(TCoIntegralCtor node, bool negate, EDataSlot toType
         allow = !hasSign && value <= (ui64)Max<i16>() || hasSign && value <= (ui64)Max<i16>() + 1;
     }
     else if (toType == EDataSlot::Int32) {
-        allow = !hasSign && value <= (ui64)Max<i32>() || hasSign && value <= (ui64)Max<i32>() + 1; 
-    } 
-    else if (toType == EDataSlot::Uint64) {
-        allow = !hasSign; 
-    } 
-    else if (toType == EDataSlot::Int64) {
-        allow = !hasSign && value <= (ui64)Max<i64>() || hasSign && value <= (ui64)Max<i64>() + 1; 
-    } 
-    else if (toType == EDataSlot::Float) {
-        allow = value <= Max<ui32>(); 
+        allow = !hasSign && value <= (ui64)Max<i32>() || hasSign && value <= (ui64)Max<i32>() + 1;
     }
- 
-    if (atomValue) { 
-        *atomValue = GetIntegralAtomValue(value, hasSign && isSigned); 
-    } 
- 
-    return allow; 
-} 
- 
+    else if (toType == EDataSlot::Uint64) {
+        allow = !hasSign;
+    }
+    else if (toType == EDataSlot::Int64) {
+        allow = !hasSign && value <= (ui64)Max<i64>() || hasSign && value <= (ui64)Max<i64>() + 1;
+    }
+    else if (toType == EDataSlot::Float) {
+        allow = value <= Max<ui32>();
+    }
+
+    if (atomValue) {
+        *atomValue = GetIntegralAtomValue(value, hasSign && isSigned);
+    }
+
+    return allow;
+}
+
 void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSign, bool& isSigned, ui64& value) {
     hasSign = false;
     isSigned = false;
@@ -4288,8 +4288,8 @@ void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSi
             auto strValue = hasSign
                 ? atom.Content().Tail(1)
                 : atom.Content();
- 
-            value = ::FromString<ui64>(strValue); 
+
+            value = ::FromString<ui64>(strValue);
         }
     }
     else {
@@ -4586,7 +4586,7 @@ static TString GetStructDiff(const TStructExprType& left, const TStructExprType&
         return res.pop_back(); // remove trailing comma
     }
     return "no diff";
-} 
+}
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
     if (&left == &right) {

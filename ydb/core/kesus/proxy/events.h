@@ -54,7 +54,7 @@ struct TEvKesusProxy {
             : Error(error)
         {}
 
-        TEvProxyError(Ydb::StatusIds::StatusCode status, const TString& reason) { 
+        TEvProxyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
             Error.SetStatus(status);
             Error.AddIssues()->set_message(reason);
         }

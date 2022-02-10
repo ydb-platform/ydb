@@ -1,4 +1,4 @@
-#include "dq_tasks_runner.h" 
+#include "dq_tasks_runner.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -22,102 +22,102 @@ using namespace NYql::NDqProto;
 
 namespace NYql::NDq {
 
-namespace { 
- 
-void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) { 
-    switch (type->GetKind()) { 
-        case TType::EKind::Void: 
-            break; 
-        case TType::EKind::Null: 
-            break; 
-        case TType::EKind::EmptyList: 
-            break; 
-        case TType::EKind::EmptyDict: 
-            break; 
- 
-        case TType::EKind::Data: { 
-            auto dataType = static_cast<const TDataType*>(type); 
-            auto slot = dataType->GetDataSlot(); 
-            YQL_ENSURE(slot); 
-            YQL_ENSURE(IsValidValue(*slot, value), "Error parsing task parameter, malformed value" 
-                << ", parameter: " << paramName 
-                << ", type: " << NUdf::GetDataTypeInfo(*slot).Name 
-                << ", value: " << value); 
-            break; 
-        } 
- 
-        case TType::EKind::Optional: { 
-            auto optionalType = static_cast<const TOptionalType*>(type); 
-            if (value) { 
-                ValidateParamValue(paramName, optionalType->GetItemType(), value.GetOptionalValue()); 
-            } 
-            break; 
-        } 
- 
-        case TType::EKind::List: { 
-            auto listType = static_cast<const TListType*>(type); 
-            auto itemType = listType->GetItemType(); 
-            const auto iter = value.GetListIterator(); 
-            for (NUdf::TUnboxedValue item; iter.Next(item);) { 
-                ValidateParamValue(paramName, itemType, item); 
-            } 
-            break; 
-        } 
- 
-        case TType::EKind::Struct: { 
-            auto structType = static_cast<const TStructType*>(type); 
-            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) { 
-                auto memberType = structType->GetMemberType(index); 
-                ValidateParamValue(paramName, memberType, value.GetElement(index)); 
-            } 
-            break; 
-        } 
- 
-        case TType::EKind::Tuple: { 
-            auto tupleType = static_cast<const TTupleType*>(type); 
-            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) { 
-                auto elementType = tupleType->GetElementType(index); 
-                ValidateParamValue(paramName, elementType, value.GetElement(index)); 
-            } 
-            break; 
-        } 
- 
-        case TType::EKind::Dict:  { 
-            auto dictType = static_cast<const TDictType*>(type); 
-            auto keyType = dictType->GetKeyType(); 
-            auto payloadType = dictType->GetPayloadType(); 
- 
-            const auto iter = value.GetDictIterator(); 
-            for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) { 
-                ValidateParamValue(paramName, keyType, key); 
-                ValidateParamValue(paramName, payloadType, payload); 
-            } 
-            break; 
-        } 
- 
-        case TType::EKind::Variant: { 
-            auto variantType = static_cast<const TVariantType*>(type); 
-            ui32 variantIndex = value.GetVariantIndex(); 
-            TType* innerType = variantType->GetUnderlyingType(); 
-            if (innerType->IsStruct()) { 
-                innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex); 
-            } else { 
-                YQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr()); 
-                innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex); 
-            } 
-            ValidateParamValue(paramName, innerType, value.GetVariantItem()); 
-            break; 
-        } 
- 
-        default: 
-            YQL_ENSURE(false, "Unexpected value type in parameter" 
-                << ", parameter: " << paramName 
-                << ", type: " << type->GetKindAsStr()); 
-    } 
-} 
- 
-} // namespace 
- 
+namespace {
+
+void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
+    switch (type->GetKind()) {
+        case TType::EKind::Void:
+            break;
+        case TType::EKind::Null:
+            break;
+        case TType::EKind::EmptyList:
+            break;
+        case TType::EKind::EmptyDict:
+            break;
+
+        case TType::EKind::Data: {
+            auto dataType = static_cast<const TDataType*>(type);
+            auto slot = dataType->GetDataSlot();
+            YQL_ENSURE(slot);
+            YQL_ENSURE(IsValidValue(*slot, value), "Error parsing task parameter, malformed value"
+                << ", parameter: " << paramName
+                << ", type: " << NUdf::GetDataTypeInfo(*slot).Name
+                << ", value: " << value);
+            break;
+        }
+
+        case TType::EKind::Optional: {
+            auto optionalType = static_cast<const TOptionalType*>(type);
+            if (value) {
+                ValidateParamValue(paramName, optionalType->GetItemType(), value.GetOptionalValue());
+            }
+            break;
+        }
+
+        case TType::EKind::List: {
+            auto listType = static_cast<const TListType*>(type);
+            auto itemType = listType->GetItemType();
+            const auto iter = value.GetListIterator();
+            for (NUdf::TUnboxedValue item; iter.Next(item);) {
+                ValidateParamValue(paramName, itemType, item);
+            }
+            break;
+        }
+
+        case TType::EKind::Struct: {
+            auto structType = static_cast<const TStructType*>(type);
+            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+                auto memberType = structType->GetMemberType(index);
+                ValidateParamValue(paramName, memberType, value.GetElement(index));
+            }
+            break;
+        }
+
+        case TType::EKind::Tuple: {
+            auto tupleType = static_cast<const TTupleType*>(type);
+            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+                auto elementType = tupleType->GetElementType(index);
+                ValidateParamValue(paramName, elementType, value.GetElement(index));
+            }
+            break;
+        }
+
+        case TType::EKind::Dict:  {
+            auto dictType = static_cast<const TDictType*>(type);
+            auto keyType = dictType->GetKeyType();
+            auto payloadType = dictType->GetPayloadType();
+
+            const auto iter = value.GetDictIterator();
+            for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
+                ValidateParamValue(paramName, keyType, key);
+                ValidateParamValue(paramName, payloadType, payload);
+            }
+            break;
+        }
+
+        case TType::EKind::Variant: {
+            auto variantType = static_cast<const TVariantType*>(type);
+            ui32 variantIndex = value.GetVariantIndex();
+            TType* innerType = variantType->GetUnderlyingType();
+            if (innerType->IsStruct()) {
+                innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
+            } else {
+                YQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+                innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
+            }
+            ValidateParamValue(paramName, innerType, value.GetVariantItem());
+            break;
+        }
+
+        default:
+            YQL_ENSURE(false, "Unexpected value type in parameter"
+                << ", parameter: " << paramName
+                << ", type: " << type->GetKindAsStr());
+    }
+}
+
+} // namespace
+
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
@@ -371,8 +371,8 @@ public:
 
                     TDqDataSerializer::DeserializeParam(it->second, type, graphHolderFactory, structMembers[i]);
                 }
- 
-                ValidateParamValue(name, type, structMembers[i]); 
+
+                ValidateParamValue(name, type, structMembers[i]);
             }
 
             paramNode->SetValue(ProgramParsed.CompGraph->GetContext(), std::move(paramsStructValue));
@@ -511,7 +511,7 @@ public:
         }
     }
 
-    ERunStatus Run() final { 
+    ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
 
         RunComputeTime = TDuration::Zero();
@@ -532,7 +532,7 @@ public:
             }
         }
 
-        if (runStatus == ERunStatus::Finished) { 
+        if (runStatus == ERunStatus::Finished) {
             if (Stats) {
                 Stats->FinishTs = TInstant::Now();
             }
@@ -540,7 +540,7 @@ public:
                 StopWaiting(Stats->FinishTs);
             }
 
-            return ERunStatus::Finished; 
+            return ERunStatus::Finished;
         }
 
         if (Y_UNLIKELY(CollectProfileStats)) {
@@ -555,7 +555,7 @@ public:
     }
 
     bool HasEffects() const final {
-        return TaskHasEffects; 
+        return TaskHasEffects;
     }
 
     IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override {
@@ -681,7 +681,7 @@ private:
                 }
             }
         }
- 
+
         return ERunStatus::PendingOutput;
     }
 

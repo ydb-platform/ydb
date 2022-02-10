@@ -272,4 +272,4 @@ private:
 };
 
 } // namespace NClickhouseInternal
-} // namespace NYdb 
+} // namespace NYdb

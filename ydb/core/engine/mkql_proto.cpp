@@ -8,14 +8,14 @@
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
- 
+
 namespace NKikimr {
 
 namespace NMiniKQL {
 
 namespace {
 
-    Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(TType* type, const Ydb::Value& value) { 
+    Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(TType* type, const Ydb::Value& value) {
         auto dataType = static_cast<TDataType*>(type);
         switch (dataType->GetSchemeType()) {
             case NUdf::TDataType<bool>::Id:
@@ -62,7 +62,7 @@ namespace {
 
 }
 
-NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory) { 
+NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory) {
     switch (type->GetKind()) {
     case TType::EKind::Void:
         return NUdf::TUnboxedValuePod::Void();
@@ -77,10 +77,10 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
 
     case TType::EKind::Optional: {
         auto optionalType = static_cast<TOptionalType*>(type);
-        switch (value.value_case()) { 
-            case Ydb::Value::kNestedValue: 
+        switch (value.value_case()) {
+            case Ydb::Value::kNestedValue:
                 return ImportValueFromProto(optionalType->GetItemType(), value.nested_value(), factory).MakeOptional();
-            case Ydb::Value::kNullFlagValue: 
+            case Ydb::Value::kNullFlagValue:
                 return NUdf::TUnboxedValue();
             default:
                 return ImportValueFromProto(optionalType->GetItemType(), value, factory).MakeOptional();
@@ -425,6 +425,6 @@ bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue
     return true;
 }
 
- 
+
 } // namspace NMiniKQL
 } // namspace NKikimr

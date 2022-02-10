@@ -96,7 +96,7 @@ public:
             if (!mkqlTx.GetFlatMKQL()) {
                 return HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::EStatus::NotImplemented, ctx);
             }
- 
+
             if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) {
                 TextProgramForCompilation = mkqlTx.GetProgram().GetText();
                 const bool forceRefresh = (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
@@ -300,8 +300,8 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable: 
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
         return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:

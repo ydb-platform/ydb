@@ -1,10 +1,10 @@
 #include "kqp_opt_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
- 
+
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -40,8 +40,8 @@ bool ValidateJoinInputs(const TExprBase& left, const TExprBase& right, const TPa
 TMaybeNode<TDqJoin> FlipJoin(const TDqJoin& join, TExprContext& ctx) {
     auto joinType = join.JoinType().Value();
 
-    if (joinType == "Inner"sv || joinType == "Full"sv || joinType == "Exclusion"sv || joinType == "Cross"sv) { 
-        // pass 
+    if (joinType == "Inner"sv || joinType == "Full"sv || joinType == "Exclusion"sv || joinType == "Cross"sv) {
+        // pass
     } else if (joinType == "Right"sv) {
         joinType = "Left"sv;
     } else if (joinType == "Left"sv) {
@@ -80,14 +80,14 @@ TMaybeNode<TDqJoin> FlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 } // anonymous namespace
 
-TExprBase KqpBuildJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, 
-    IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage) 
+TExprBase KqpBuildJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TDqJoin>()) { 
+    if (!node.Maybe<TDqJoin>()) {
         return node;
     }
 
-    auto join = node.Cast<TDqJoin>(); 
+    auto join = node.Cast<TDqJoin>();
 
     if (ValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
         // pass
@@ -107,12 +107,12 @@ TExprBase KqpBuildJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptim
         return DqBuildJoinDict(join, ctx);
     }
 
-    // NOTE: We don't want to broadcast table data via readsets for data queries, so we need to create a 
-    // separate stage to receive data from both sides of join. 
-    // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This 
+    // NOTE: We don't want to broadcast table data via readsets for data queries, so we need to create a
+    // separate stage to receive data from both sides of join.
+    // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    bool pushLeftStage = !kqpCtx.IsDataQuery(); 
+    bool pushLeftStage = !kqpCtx.IsDataQuery();
     return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx);
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

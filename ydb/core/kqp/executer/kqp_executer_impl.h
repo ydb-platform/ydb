@@ -497,7 +497,7 @@ protected:
     void InternalError(const TString& message) {
         LOG_E(message);
         TerminateComputeActors(Ydb::StatusIds::INTERNAL_ERROR, message);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction."); 
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(message));
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }

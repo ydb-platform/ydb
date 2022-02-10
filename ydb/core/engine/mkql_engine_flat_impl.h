@@ -6,8 +6,8 @@ namespace NKikimr {
 namespace NMiniKQL {
     typedef THashMap<ui32, TVector<TString>> TIncomingResults;
 
-    struct TBuiltinStrings { 
-        TBuiltinStrings(const TTypeEnvironment& env) 
+    struct TBuiltinStrings {
+        TBuiltinStrings(const TTypeEnvironment& env)
             : Filter(env.InternName(TStringBuf("Filter")))
             , FilterNullMembers(env.InternName(TStringBuf("FilterNullMembers")))
             , SkipNullMembers(env.InternName(TStringBuf("SkipNullMembers")))
@@ -19,21 +19,21 @@ namespace NMiniKQL {
             , Take(env.InternName(TStringBuf("Take")))
             , Length(env.InternName(TStringBuf("Length")))
             , Arg(env.InternName(TStringBuf("Arg")))
-        { 
+        {
             All.reserve(20);
-            All.insert(Filter); 
-            All.insert(FilterNullMembers); 
+            All.insert(Filter);
+            All.insert(FilterNullMembers);
             All.insert(SkipNullMembers);
-            All.insert(FlatMap); 
-            All.insert(Map); 
-            All.insert(Member); 
-            All.insert(ToHashedDict); 
-            All.insert(DictItems); 
-            All.insert(Take); 
-            All.insert(Length); 
-            All.insert(Arg); 
-        } 
- 
+            All.insert(FlatMap);
+            All.insert(Map);
+            All.insert(Member);
+            All.insert(ToHashedDict);
+            All.insert(DictItems);
+            All.insert(Take);
+            All.insert(Length);
+            All.insert(Arg);
+        }
+
         const TInternName Filter;
         const TInternName FilterNullMembers;
         const TInternName SkipNullMembers;
@@ -44,15 +44,15 @@ namespace NMiniKQL {
         const TInternName DictItems;
         const TInternName Take;
         const TInternName Length;
-        const TInternName Arg; 
- 
+        const TInternName Arg;
+
         THashSet<TInternName> All;
-    }; 
- 
+    };
+
     struct TFlatEngineStrings : public TTableStrings {
         TFlatEngineStrings(const TTypeEnvironment& env)
             : TTableStrings(env)
-            , Builtins(env) 
+            , Builtins(env)
             , SetResult(env.InternName(TStringBuf("SetResult")))
             , Abort(env.InternName(TStringBuf("Abort")))
             , StepTxId(env.InternName(TStringBuf("StepTxId")))
@@ -61,25 +61,25 @@ namespace NMiniKQL {
             , Diagnostics(env.InternName(TStringBuf("Diagnostics")))
             , PartialTake(env.InternName(TStringBuf("PartialTake")))
             , PartialSort(env.InternName(TStringBuf("PartialSort")))
-        { 
-            All.insert(SetResult); 
-            All.insert(Abort); 
-            All.insert(StepTxId); 
-            All.insert(AcquireLocks); 
-            All.insert(CombineByKeyMerge); 
+        {
+            All.insert(SetResult);
+            All.insert(Abort);
+            All.insert(StepTxId);
+            All.insert(AcquireLocks);
+            All.insert(CombineByKeyMerge);
             All.insert(Diagnostics);
-        } 
+        }
 
-        TBuiltinStrings Builtins; 
- 
+        TBuiltinStrings Builtins;
+
         const TInternName SetResult;
         const TInternName Abort;
         const TInternName StepTxId;
         const TInternName AcquireLocks;
         const TInternName CombineByKeyMerge;
         const TInternName Diagnostics;
-        const TInternName PartialTake; 
-        const TInternName PartialSort; 
+        const TInternName PartialTake;
+        const TInternName PartialSort;
     };
 
     struct TShardExecData {
@@ -89,7 +89,7 @@ namespace NMiniKQL {
             , Strings(strings)
             , StepTxId(stepTxId)
         {}
- 
+
         const TEngineFlatSettings& Settings;
         const TFlatEngineStrings& Strings;
         const std::pair<ui64, ui64>& StepTxId;
@@ -130,10 +130,10 @@ namespace NMiniKQL {
         THashMap<TString, NUdf::TUnboxedValue>* ResultValues = nullptr;
         const TTypeEnvironment* Env = nullptr;
     };
- 
+
     TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2);
     TStructType* GetDiagnosticsType(const TTypeEnvironment& env);
-    TType* GetActualReturnType(const TCallable& callable, const TTypeEnvironment& env, 
-        const TFlatEngineStrings& strings); 
+    TType* GetActualReturnType(const TCallable& callable, const TTypeEnvironment& env,
+        const TFlatEngineStrings& strings);
 }
 }

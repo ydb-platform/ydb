@@ -1,26 +1,26 @@
-#include "kqp_host_impl.h" 
-#include "kqp_run_physical.h" 
- 
+#include "kqp_host_impl.h"
+#include "kqp_run_physical.h"
+
 #include <ydb/core/kqp/common/kqp_yql.h>
- 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYql; 
-using namespace NYql::NNodes; 
-using namespace NThreading; 
- 
-class TKqpExecutePhysicalDataTransformer : public TKqpExecutePhysicalTransformerBase { 
-public: 
-    TKqpExecutePhysicalDataTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, 
-        TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx) 
-        : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {} 
- 
-protected: 
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYql;
+using namespace NYql::NNodes;
+using namespace NThreading;
+
+class TKqpExecutePhysicalDataTransformer : public TKqpExecutePhysicalTransformerBase {
+public:
+    TKqpExecutePhysicalDataTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
+        TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx)
+        : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
+
+protected:
     TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) final {
-        auto& txState = TxState->Tx(); 
+        auto& txState = TxState->Tx();
         auto request = PrepareRequest();
- 
+
         if (!request.Timeout) {
             ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Query request timeout."));
             return TStatus::Error;
@@ -31,52 +31,52 @@ protected:
             return TStatus::Error;
         }
 
-        if (tx) { 
-            switch (tx->GetType()) { 
-                case NKqpProto::TKqpPhyTx::TYPE_COMPUTE: 
-                case NKqpProto::TKqpPhyTx::TYPE_DATA: 
-                    break; 
-                default: 
-                    YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType()); 
-            } 
- 
-            request.Transactions.emplace_back(*tx, PrepareParameters(*tx)); 
-        } else { 
-            YQL_ENSURE(commit); 
+        if (tx) {
+            switch (tx->GetType()) {
+                case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+                case NKqpProto::TKqpPhyTx::TYPE_DATA:
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
+            }
+
+            request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
+        } else {
+            YQL_ENSURE(commit);
             if (txState.DeferredEffects.Empty() && !txState.Locks.HasLocks()) {
-                return TStatus::Ok; 
-            } 
-        } 
- 
-        if (commit) { 
+                return TStatus::Ok;
+            }
+        }
+
+        if (commit) {
             Y_VERIFY_DEBUG(txState.DeferredEffects.Empty() || !txState.Locks.Broken());
 
             for (const auto& effect : txState.DeferredEffects) {
-                YQL_ENSURE(!effect.Node); 
-                YQL_ENSURE(effect.PhysicalTx.GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA); 
-                request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params)); 
-            } 
- 
+                YQL_ENSURE(!effect.Node);
+                YQL_ENSURE(effect.PhysicalTx.GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
+                request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
+            }
+
             if (!txState.DeferredEffects.Empty()) {
                 request.PerShardKeysSizeLimitBytes = TransformCtx->Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txState.Locks.HasLocks()) { 
+            if (txState.Locks.HasLocks()) {
                 request.ValidateLocks = !(txState.GetSnapshot().IsValid() && txState.DeferredEffects.Empty());
                 request.EraseLocks = true;
 
                 for (auto& [lockId, lock] : txState.Locks.LocksMap) {
                     request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType));
-                } 
-            } 
+                }
+            }
         } else if (ShouldAcquireLocks()) {
             request.AcquireLocksTxId = txState.Locks.GetLockTxId();
-        } 
- 
-        ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {}); 
-        return TStatus::Async; 
-    } 
- 
+        }
+
+        ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {});
+        return TStatus::Async;
+    }
+
     TStatus DoRollback() final {
         auto& txState = TxState->Tx();
 
@@ -98,31 +98,31 @@ protected:
             request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType));
         }
 
-        ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {}); 
+        ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {});
         return TStatus::Async;
     }
 
-    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override { 
-        if (execResult.HasLocks()) { 
-            YQL_ENSURE(!commit); 
- 
+    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
+        if (execResult.HasLocks()) {
+            YQL_ENSURE(!commit);
+
             if (!MergeLocks(execResult.GetLocks().GetType(), execResult.GetLocks().GetValue(), TxState->Tx(), ctx)) {
                 return false;
-            } 
-        } 
- 
-        if (execResult.HasStats()) { 
-            TransformCtx->QueryStats.AddExecutions()->Swap(execResult.MutableStats()); 
-        } 
- 
-        if (commit) { 
+            }
+        }
+
+        if (execResult.HasStats()) {
+            TransformCtx->QueryStats.AddExecutions()->Swap(execResult.MutableStats());
+        }
+
+        if (commit) {
             ClearTx();
-        } 
- 
-        return true; 
-    } 
- 
-private: 
+        }
+
+        return true;
+    }
+
+private:
     IKqpGateway::TExecPhysicalRequest PrepareRequest() {
         IKqpGateway::TExecPhysicalRequest request;
         auto now = Gateway->GetCurrentTime();
@@ -136,7 +136,7 @@ private:
         request.TotalReadSizeLimitBytes = TransformCtx->QueryCtx->Limits.PhaseLimits.TotalReadSizeLimitBytes;
         request.MkqlMemoryLimit = TransformCtx->QueryCtx->Limits.PhaseLimits.ComputeNodeMemoryLimitBytes;
         request.Snapshot = TxState->Tx().GetSnapshot();
-        request.IsolationLevel = *TxState->Tx().EffectiveIsolationLevel; 
+        request.IsolationLevel = *TxState->Tx().EffectiveIsolationLevel;
 
         return request;
     }
@@ -171,23 +171,23 @@ private:
         return true;
     }
 
-    TKqpParamsMap GetParamsRefMap(const TParamValueMap& map) { 
-        TKqpParamsMap paramsMap(TransformState); 
-        for (auto& pair : map) { 
-            auto valueRef = NYql::NDq::TMkqlValueRef(pair.second); 
-            YQL_ENSURE(paramsMap.Values.emplace(std::make_pair(pair.first, valueRef)).second); 
-        } 
- 
-        return paramsMap; 
-    } 
-}; 
- 
-TAutoPtr<IGraphTransformer> CreateKqpExecutePhysicalDataTransformer(TIntrusivePtr<IKqpGateway> gateway, 
-    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState, 
-    TIntrusivePtr<TKqlTransformContext> transformCtx) 
-{ 
-    return new TKqpExecutePhysicalDataTransformer(gateway, cluster, txState, transformCtx); 
-} 
- 
+    TKqpParamsMap GetParamsRefMap(const TParamValueMap& map) {
+        TKqpParamsMap paramsMap(TransformState);
+        for (auto& pair : map) {
+            auto valueRef = NYql::NDq::TMkqlValueRef(pair.second);
+            YQL_ENSURE(paramsMap.Values.emplace(std::make_pair(pair.first, valueRef)).second);
+        }
+
+        return paramsMap;
+    }
+};
+
+TAutoPtr<IGraphTransformer> CreateKqpExecutePhysicalDataTransformer(TIntrusivePtr<IKqpGateway> gateway,
+    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
+    TIntrusivePtr<TKqlTransformContext> transformCtx)
+{
+    return new TKqpExecutePhysicalDataTransformer(gateway, cluster, txState, transformCtx);
+}
+
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

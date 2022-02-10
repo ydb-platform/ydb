@@ -455,7 +455,7 @@ message SessionResponse {
 message CreateNodeRequest {
     string path = 1;
     Config config = 2;
-    Ydb.Operations.OperationParams operation_params = 3; 
+    Ydb.Operations.OperationParams operation_params = 3;
 }
 
 message CreateNodeResponse {
@@ -465,7 +465,7 @@ message CreateNodeResponse {
 message AlterNodeRequest {
     string path = 1;
     Config config = 2;
-    Ydb.Operations.OperationParams operation_params = 3; 
+    Ydb.Operations.OperationParams operation_params = 3;
 }
 
 message AlterNodeResponse {
@@ -474,7 +474,7 @@ message AlterNodeResponse {
 
 message DropNodeRequest {
     string path = 1;
-    Ydb.Operations.OperationParams operation_params = 2; 
+    Ydb.Operations.OperationParams operation_params = 2;
 }
 
 message DropNodeResponse {
@@ -483,7 +483,7 @@ message DropNodeResponse {
 
 message DescribeNodeRequest {
     string path = 1;
-    Ydb.Operations.OperationParams operation_params = 2; 
+    Ydb.Operations.OperationParams operation_params = 2;
 }
 
 message DescribeNodeResponse {

@@ -567,7 +567,7 @@ TKikimr::TKikimr(TKikimr&& kikimr)
 TNodeRegistrant TKikimr::GetNodeRegistrant()
 {
     return TNodeRegistrant(*this);
-} 
+}
 
 TNodeConfigurator TKikimr::GetNodeConfigurator()
 {
@@ -592,7 +592,7 @@ NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, co
         request->Record.SetPath(*path);
     }
     return ExecuteRequest(request.Release());
-} 
+}
 
 NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
                                                     const TString &host,

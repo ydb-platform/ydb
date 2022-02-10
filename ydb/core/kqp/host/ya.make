@@ -1,22 +1,22 @@
-LIBRARY() 
- 
-OWNER( 
-    spuchin 
-    g:kikimr 
-) 
- 
-SRCS( 
-    kqp_host.cpp 
+LIBRARY()
+
+OWNER(
+    spuchin
+    g:kikimr
+)
+
+SRCS(
+    kqp_host.cpp
     kqp_ne_helper.cpp
-    kqp_run_data.cpp 
+    kqp_run_data.cpp
     kqp_explain_prepared.cpp
-    kqp_run_physical.cpp 
-    kqp_run_prepared.cpp 
-    kqp_run_scan.cpp 
-    kqp_runner.cpp 
-) 
- 
-PEERDIR( 
+    kqp_run_physical.cpp
+    kqp_run_prepared.cpp
+    kqp_run_scan.cpp
+    kqp_runner.cpp
+)
+
+PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/opt
@@ -30,8 +30,8 @@ PEERDIR(
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/config
     ydb/library/yql/providers/result/provider
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

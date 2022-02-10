@@ -22,7 +22,7 @@ SRCS(
     ydb_cms_v1.proto
     ydb_rate_limiter_v1.proto
     ydb_scheme_v1.proto
-    ydb_scripting_v1.proto 
+    ydb_scripting_v1.proto
     ydb_table_v1.proto
     yq_v1.proto
 )

@@ -171,8 +171,8 @@ public:
 
     IActor* CreateKqpNode(const NKikimrConfig::TTableServiceConfig& config = {}) {
         auto rm = CreateKqpResourceManagerActor(config.GetResourceManager(), KqpCounters, ResourceBrokerActorId);
-        ResourceManagerActorId = Runtime->Register(rm); 
-        Runtime->EnableScheduleForActor(ResourceManagerActorId, true); 
+        ResourceManagerActorId = Runtime->Register(rm);
+        Runtime->EnableScheduleForActor(ResourceManagerActorId, true);
         WaitForBootstrap();
 
         auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get());
@@ -189,7 +189,7 @@ public:
         ev->Record.SetTxId(txId);
         ActorIdToProto(executer ? executer : requester, ev->Record.MutableExecuterActorId());
         ev->Record.SetStartAllOrFail(true);
-        ev->Record.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN); 
+        ev->Record.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
 
         for (ui64 taskId : taskIds) {
             auto* task = ev->Record.AddTasks();
@@ -263,7 +263,7 @@ private:
     TIntrusivePtr<TKqpCounters> KqpCounters;
     THolder<TMockKqpComputeActorFactory> CompFactory;
     TActorId ResourceBrokerActorId;
-    TActorId ResourceManagerActorId; 
+    TActorId ResourceManagerActorId;
     TActorId KqpNodeActorId;
 };
 UNIT_TEST_SUITE_REGISTRATION(KqpNode);
@@ -308,11 +308,11 @@ void KqpNode::CommonCase() {
     {
         TVector<NKikimrKqp::TKqpNodeResources> snapshot;
         std::atomic<int> ready = 0;
-        GetKqpResourceManager(ResourceManagerActorId.NodeId())->RequestClusterResourcesInfo( 
-            [&](TVector<NKikimrKqp::TKqpNodeResources>&& resources) { 
-                snapshot = std::move(resources); 
-                ready = 1; 
-            }); 
+        GetKqpResourceManager(ResourceManagerActorId.NodeId())->RequestClusterResourcesInfo(
+            [&](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                snapshot = std::move(resources);
+                ready = 1;
+            });
 
         while (ready.load() != 1) {
             Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
@@ -371,7 +371,7 @@ void KqpNode::CommonCase() {
         NKikimr::TActorSystemStub stub;
 
         auto& task4ExtraAlloc = CompFactory->Task2Actor[4].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task4ExtraAlloc(/* txId */ (ui64)2, /* taskId */ 4, /* memory */ 100); 
+        bool allocated = task4ExtraAlloc(/* txId */ (ui64)2, /* taskId */ 4, /* memory */ 100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 4);
@@ -416,7 +416,7 @@ void KqpNode::ExtraAllocation() {
     {
         NKikimr::TActorSystemStub stub;
 
-        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 100); 
+        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
 
@@ -429,7 +429,7 @@ void KqpNode::ExtraAllocation() {
     {
         NKikimr::TActorSystemStub stub;
 
-        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 50'000); 
+        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 50'000);
         UNIT_ASSERT(!allocated);
         DispatchKqpNodePostponedEvents(sender1);
 
@@ -471,7 +471,7 @@ void KqpNode::NotEnoughMemory_Extra() {
     const ui64 taskSize = 1'000 + 2 * 10;
 
     // first request
-    SendStartTasksRequest(sender1, /* txId */ (ui64)1, /* taskIds */ {1, 2}); 
+    SendStartTasksRequest(sender1, /* txId */ (ui64)1, /* taskIds */ {1, 2});
     {
         auto answer = Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
         auto& record = answer->Get()->Record;
@@ -500,7 +500,7 @@ void KqpNode::NotEnoughMemory_Extra() {
         NKikimr::TActorSystemStub stub;
 
         auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 1'000'000); 
+        bool allocated = task1ExtraAlloc((ui64)1, 1, 1'000'000);
         UNIT_ASSERT(!allocated);
     }
 
@@ -521,7 +521,7 @@ void KqpNode::NotEnoughComputeActors() {
 
     TActorId sender1 = Runtime->AllocateEdgeActor();
 
-    SendStartTasksRequest(sender1, /* txId */ (ui64)1, /* taskIds */ {1, 2, 3, 4, 5}); 
+    SendStartTasksRequest(sender1, /* txId */ (ui64)1, /* taskIds */ {1, 2, 3, 4, 5});
     {
         auto answer = Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
         auto& record = answer->Get()->Record;
@@ -586,7 +586,7 @@ void KqpNode::ResourceBrokerNotEnoughResources_Extra() {
         NKikimr::TActorSystemStub stub;
 
         auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 26'000); 
+        bool allocated = task1ExtraAlloc((ui64)1, 1, 26'000);
         UNIT_ASSERT(!allocated);
     }
 
@@ -605,7 +605,7 @@ void KqpNode::ExecuterLost() {
         NKikimr::TActorSystemStub stub;
 
         auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 100); 
+        bool allocated = task1ExtraAlloc((ui64)1, 1, 100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
     }
@@ -645,7 +645,7 @@ void KqpNode::TerminateTx() {
         NKikimr::TActorSystemStub stub;
 
         auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 100); 
+        bool allocated = task1ExtraAlloc((ui64)1, 1, 100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
     }

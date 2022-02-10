@@ -838,7 +838,7 @@ private:
 
         ev->Record.SetReverse(Meta.GetReverse());
         ev->Record.SetItemsLimit(Meta.GetItemsLimit());
- 
+
         if (Meta.HasOlapProgram()) {
             TString programBytes;
             TStringOutput stream(programBytes);

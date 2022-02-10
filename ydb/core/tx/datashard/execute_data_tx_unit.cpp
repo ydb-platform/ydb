@@ -113,8 +113,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();
         if (MaybeRequestMoreTxMemory(consumed, txc)) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID() 
-                << " requested " << txc.GetRequestedMemory() << " more memory"); 
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
+                << " requested " << txc.GetRequestedMemory() << " more memory");
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
             return EExecutionStatus::Restart;
@@ -133,10 +133,10 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             throw;
         }
     } catch (const TMemoryLimitExceededException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID() 
-            << " exceeded memory limit " << txc.GetMemoryLimit() 
-            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR 
-            << " more for the next try"); 
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
+            << " exceeded memory limit " << txc.GetMemoryLimit()
+            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
+            << " more for the next try");
 
         txc.NotEnoughMemory();
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -149,7 +149,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " is not ready for " << *op << " execution"); 
+            << " is not ready for " << *op << " execution");
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
@@ -193,10 +193,10 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         }
     }
 
-    if (tx->GetDataTx()->CanCancel()) { 
-        engine->SetDeadline(tx->GetDataTx()->Deadline()); 
-    } 
- 
+    if (tx->GetDataTx()->CanCancel()) {
+        engine->SetDeadline(tx->GetDataTx()->Deadline());
+    }
+
     IEngineFlat::EResult engineResult = engine->Execute();
     if (engineResult != IEngineFlat::EResult::Ok) {
         TString errorMessage = TStringBuilder() << "Datashard execution error for " << *op << " at "
@@ -208,7 +208,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
                 break;
             case IEngineFlat::EResult::Cancelled:
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
-                Y_VERIFY(tx->GetDataTx()->CanCancel()); 
+                Y_VERIFY(tx->GetDataTx()->CanCancel());
                 break;
             default:
                 if (op->IsReadOnly() || op->IsImmediate()) {

@@ -1,28 +1,28 @@
-LIBRARY() 
- 
-OWNER( 
-    spuchin 
+LIBRARY()
+
+OWNER(
+    spuchin
     g:kikimr
-) 
- 
-SRCS( 
-    kqp_compile_actor.cpp 
-    kqp_compile_request.cpp 
-    kqp_compile_service.cpp 
+)
+
+SRCS(
+    kqp_compile_actor.cpp
+    kqp_compile_request.cpp
+    kqp_compile_service.cpp
     kqp_shutdown_controller.cpp
     kqp_query_replay.h
-    kqp_ic_gateway.cpp 
+    kqp_ic_gateway.cpp
     kqp_ic_gateway_actors.h
     kqp_metadata_loader.cpp
     kqp_metadata_loader.h
-    kqp_impl.h 
-    kqp_response.cpp 
-    kqp_worker_actor.cpp 
+    kqp_impl.h
+    kqp_response.cpp
+    kqp_worker_actor.cpp
     kqp_session_actor.cpp
-    kqp.h 
-) 
- 
-PEERDIR( 
+    kqp.h
+)
+
+PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/actors/core
     library/cpp/actors/helpers
@@ -55,15 +55,15 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/operation_id
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-RESOURCE( 
+RESOURCE(
     ydb/core/kqp/kqp_default_settings.txt kqp_default_settings.txt
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE(
     common

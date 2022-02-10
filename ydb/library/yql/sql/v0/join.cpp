@@ -2,7 +2,7 @@
 #include "context.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
- 
+
 #include <library/cpp/charset/ci_string.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>

@@ -6,6 +6,6 @@ option java_package = "com.yandex.ydb.experimental.v1";
 import "ydb/public/api/protos/ydb_experimental.proto";
 
 service ExperimentalService {
-    rpc ExecuteStreamQuery(Experimental.ExecuteStreamQueryRequest) returns (stream Experimental.ExecuteStreamQueryResponse); 
+    rpc ExecuteStreamQuery(Experimental.ExecuteStreamQueryRequest) returns (stream Experimental.ExecuteStreamQueryResponse);
 }
 

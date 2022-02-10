@@ -10,7 +10,7 @@ ids { code: PATH_NOT_EXIST severity: S_ERROR }
 ids { code: DATABASE_NOT_EXIST severity: S_ERROR }
 ids { code: GENERIC_DATASHARD_ERROR severity: S_ERROR }
 ids { code: GENERIC_RESOLVE_ERROR severity: S_ERROR }
-ids { code: RESOLVE_LOOKUP_ERROR severity: S_ERROR } 
+ids { code: RESOLVE_LOOKUP_ERROR severity: S_ERROR }
 ids { code: GENERIC_TXPROXY_ERROR severity: S_ERROR }
 ids { code: KEY_PARSE_ERROR severity: S_ERROR }
 ids { code: EMPTY_OP_RANGE severity: S_ERROR }
@@ -20,7 +20,7 @@ ids { code: SHARD_NOT_AVAILABLE severity: S_ERROR }
 ids { code: TX_STATE_UNKNOWN severity: S_ERROR }
 ids { code: TX_DECLINED_BY_COORDINATOR severity: S_ERROR }
 ids { code: TX_DECLINED_IMPLICIT_COORDINATOR severity: S_ERROR }
-ids { code: SHARD_PROGRAM_SIZE_EXCEEDED severity: S_ERROR } 
+ids { code: SHARD_PROGRAM_SIZE_EXCEEDED severity: S_ERROR }
 
 ids { code: SCOPE_REQPROXY severity: S_INFO}
 

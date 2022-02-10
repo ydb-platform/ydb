@@ -748,8 +748,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__))
                 (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
                 (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
-                (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2) 
-                    (SetResult 'step (Nth (StepTxId) '0)) (SetResult 'txid (Nth (StepTxId) '1)) )) 
+                (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2)
+                    (SetResult 'step (Nth (StepTxId) '0)) (SetResult 'txid (Nth (StepTxId) '1)) ))
             )
         )___";
 
@@ -763,7 +763,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TValue resOpt2 = value["uint2"];
             UNIT_ASSERT(resOpt1.HaveValue() && ui64(resOpt1) == 10);
             UNIT_ASSERT(resOpt2.HaveValue() && ui64(resOpt2) == 10);
- 
+
             TValue resStep = value["step"];
             UNIT_ASSERT(resStep.HaveValue());
             ui64 stepValue = resStep;
@@ -827,8 +827,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (let select '('uint))
                 (let read1 (SelectRow table row1 select))
                 (let read2 (SelectRow table row2 select))
-                (let cmp1 (IfPresent read1 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false))) 
-                (let cmp2 (IfPresent read2 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false))) 
+                (let cmp1 (IfPresent read1 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false)))
+                (let cmp2 (IfPresent read2 (lambda '(x) (Coalesce (Equal (Member x 'uint) (Uint64 '10)) (Bool 'false))) (Bool 'false)))
                 (return (Extend (Extend
                     (AsList (SetResult 'cmp1 cmp1) (SetResult 'cmp2 cmp2))
                     (ListIf cmp2 (UpdateRow table row1 '('('uint (Uint64 '50))))))
@@ -1156,8 +1156,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
                 (
-                    (let from (Parameter 'FROM (DataType 'Uint64))) 
-                    (let to (Parameter 'TO (DataType 'Uint64))) 
+                    (let from (Parameter 'FROM (DataType 'Uint64)))
+                    (let to (Parameter 'TO (DataType 'Uint64)))
                     (let table '/dc-1/Berkanavt/tables/Simple)
                     (let range '('IncFrom 'IncTo '('key from to)))
                     (let select '('uint 'key))
@@ -1203,8 +1203,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             const TString readQuery = R"___(
                 (
-                    (let from (Parameter 'FROM (DataType 'Uint64))) 
-                    (let to (Parameter 'TO (DataType 'Uint64))) 
+                    (let from (Parameter 'FROM (DataType 'Uint64)))
+                    (let to (Parameter 'TO (DataType 'Uint64)))
                     (let table '/dc-1/Berkanavt/tables/Simple)
                     (let range '('ExcFrom 'IncTo '('key from to)))
                     (let select '('uint 'key))

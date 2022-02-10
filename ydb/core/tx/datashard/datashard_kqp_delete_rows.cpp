@@ -132,36 +132,36 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     auto tableId = NKqp::ParseTableId(tableNode);
     auto localTableId = computeCtx.GetLocalTableId(tableId);
     MKQL_ENSURE_S(localTableId);
-    auto tableKeyTypes = computeCtx.GetKeyColumnsInfo(tableId); 
+    auto tableKeyTypes = computeCtx.GetKeyColumnsInfo(tableId);
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
-    MKQL_ENSURE_S(tableKeyTypes.size() == rowType->GetMembersCount(), "Table key column count mismatch" 
-        << ", expected: " << tableKeyTypes.size() 
-        << ", actual: " << rowType->GetMembersCount()); 
+    MKQL_ENSURE_S(tableKeyTypes.size() == rowType->GetMembersCount(), "Table key column count mismatch"
+        << ", expected: " << tableKeyTypes.size()
+        << ", actual: " << rowType->GetMembersCount());
 
     THashMap<TString, ui32> inputIndex;
     TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
     for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
- 
-        auto memberType = rowType->GetMemberType(i); 
-        auto typeId = memberType->IsOptional() 
-            ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, memberType)->GetItemType())->GetSchemeType() 
-            : AS_TYPE(TDataType, memberType)->GetSchemeType(); 
- 
-        rowTypes[i] = typeId; 
+
+        auto memberType = rowType->GetMemberType(i);
+        auto typeId = memberType->IsOptional()
+            ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, memberType)->GetItemType())->GetSchemeType()
+            : AS_TYPE(TDataType, memberType)->GetSchemeType();
+
+        rowTypes[i] = typeId;
     }
 
     TVector<ui32> keyIndices(tableKeyTypes.size());
     for (ui32 i = 0; i < tableKeyTypes.size(); i++) {
         auto it = inputIndex.find(tableKeyTypes[i].second);
- 
-        MKQL_ENSURE_S(rowTypes[it->second] == tableKeyTypes[i].first, "Key type mismatch" 
-            << ", column: " << tableKeyTypes[i].second 
-            << ", expected: " << tableKeyTypes[i].first 
-            << ", actual: " << rowTypes[it->second]); 
- 
+
+        MKQL_ENSURE_S(rowTypes[it->second] == tableKeyTypes[i].first, "Key type mismatch"
+            << ", column: " << tableKeyTypes[i].second
+            << ", expected: " << tableKeyTypes[i].first
+            << ", actual: " << rowTypes[it->second]);
+
         keyIndices[i] = it->second;
     }
 

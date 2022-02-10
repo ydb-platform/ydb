@@ -1,122 +1,122 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
- 
+
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
- 
+
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
 #include <library/cpp/json/json_reader.h>
 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
- 
-static void CreateSampleTables(TSession session) { 
-    UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
-        CREATE TABLE [/Root/TestNulls] (
-            Key1 Uint32, 
-            Key2 Uint32, 
-            Value String, 
-            PRIMARY KEY (Key1, Key2) 
-        ); 
-    )").GetValueSync().IsSuccess()); 
- 
-    UNIT_ASSERT(session.ExecuteDataQuery(R"( 
-        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES
-            (NULL, NULL, "One"), 
-            (NULL, 100u, "Two"), 
-            (NULL, 200u, "Three"), 
-            (1u,   NULL, "Four"), 
-            (1u,   100u, "Five"), 
-            (1u,   200u, "Six"), 
-            (2u,   NULL, "Seven"), 
-            (2u,   100u, "Eight"), 
-            (2u,   200u, "Nine"), 
-            (3u,   100u, "Ten"), 
-            (3u,   200u, "Eleven"), 
-            (3u,   300u, "Twelve"), 
-            (3u,   400u, "Thirteen"), 
-            (3u,   500u, "Fourteen"); 
-    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess()); 
+namespace NKikimr {
+namespace NKqp {
 
-    UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+static void CreateSampleTables(TSession session) {
+    UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+        CREATE TABLE [/Root/TestNulls] (
+            Key1 Uint32,
+            Key2 Uint32,
+            Value String,
+            PRIMARY KEY (Key1, Key2)
+        );
+    )").GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteDataQuery(R"(
+        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES
+            (NULL, NULL, "One"),
+            (NULL, 100u, "Two"),
+            (NULL, 200u, "Three"),
+            (1u,   NULL, "Four"),
+            (1u,   100u, "Five"),
+            (1u,   200u, "Six"),
+            (2u,   NULL, "Seven"),
+            (2u,   100u, "Eight"),
+            (2u,   200u, "Nine"),
+            (3u,   100u, "Ten"),
+            (3u,   200u, "Eleven"),
+            (3u,   300u, "Twelve"),
+            (3u,   400u, "Thirteen"),
+            (3u,   500u, "Fourteen");
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
         CREATE TABLE [/Root/TestDate] (
-            Key Date, 
-            Value String, 
-            PRIMARY KEY (Key) 
-        ); 
-    )").GetValueSync().IsSuccess()); 
- 
-    UNIT_ASSERT(session.ExecuteDataQuery(R"( 
+            Key Date,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+    )").GetValueSync().IsSuccess());
+
+    UNIT_ASSERT(session.ExecuteDataQuery(R"(
         REPLACE INTO [/Root/TestDate] (Key, Value) VALUES
-            (NULL, "One"), 
-            (Date("2019-05-08"), "Two"), 
-            (Date("2019-07-01"), "Three"); 
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess()); 
- 
-    { 
-        auto builder = TTableBuilder() 
-            .AddNullableColumn("Key", EPrimitiveType::Uint32) 
-            .AddNullableColumn("Value", EPrimitiveType::Utf8) 
-            .AddNullableColumn("ValueInt", EPrimitiveType::Int32) 
-            .SetPrimaryKeyColumn("Key"); 
+            (NULL, "One"),
+            (Date("2019-05-08"), "Two"),
+            (Date("2019-07-01"), "Three");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+
+    {
+        auto builder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::Utf8)
+            .AddNullableColumn("ValueInt", EPrimitiveType::Int32)
+            .SetPrimaryKeyColumn("Key");
 
         UNIT_ASSERT(session.CreateTable("/Root/MultiShardTable",
-            builder.Build(), 
-            TCreateTableSettings() 
-                .PartitioningPolicy( 
-                    TPartitioningPolicy() 
-                        .UniformPartitions(5) 
-                ) 
-            ).GetValueSync().IsSuccess()); 
+            builder.Build(),
+            TCreateTableSettings()
+                .PartitioningPolicy(
+                    TPartitioningPolicy()
+                        .UniformPartitions(5)
+                )
+            ).GetValueSync().IsSuccess());
 
-        UNIT_ASSERT(session.ExecuteDataQuery(R"( 
+        UNIT_ASSERT(session.ExecuteDataQuery(R"(
             REPLACE INTO [/Root/MultiShardTable] (Key, Value) VALUES
-                (1, "One"), 
-                (2, "Two"), 
-                (3, "Three"), 
-                (4, "Four"), 
-                (4294967295, "LastOne"); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess()); 
+                (1, "One"),
+                (2, "Two"),
+                (3, "Three"),
+                (4, "Four"),
+                (4294967295, "LastOne");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
 
-        UNIT_ASSERT(session.ExecuteDataQuery(R"( 
+        UNIT_ASSERT(session.ExecuteDataQuery(R"(
             REPLACE INTO [/Root/MultiShardTable] (Key, ValueInt) VALUES
-                (10, 10); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess()); 
-    } 
+                (10, 10);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
+    }
 
-    { 
-        auto builder = TTableBuilder() 
-            .AddNullableColumn("Key1", EPrimitiveType::Uint32) 
-            .AddNullableColumn("Key2", EPrimitiveType::String) 
-            .AddNullableColumn("ValueInt", EPrimitiveType::Int32) 
-            .SetPrimaryKeyColumns({"Key1", "Key2"}); 
+    {
+        auto builder = TTableBuilder()
+            .AddNullableColumn("Key1", EPrimitiveType::Uint32)
+            .AddNullableColumn("Key2", EPrimitiveType::String)
+            .AddNullableColumn("ValueInt", EPrimitiveType::Int32)
+            .SetPrimaryKeyColumns({"Key1", "Key2"});
 
         UNIT_ASSERT(session.CreateTable("/Root/MultiShardTableCk",
-            builder.Build(), 
-            TCreateTableSettings() 
-                .PartitioningPolicy( 
-                    TPartitioningPolicy() 
-                        .UniformPartitions(5) 
-                ) 
-            ).GetValueSync().IsSuccess()); 
- 
-        UNIT_ASSERT(session.ExecuteDataQuery(R"( 
+            builder.Build(),
+            TCreateTableSettings()
+                .PartitioningPolicy(
+                    TPartitioningPolicy()
+                        .UniformPartitions(5)
+                )
+            ).GetValueSync().IsSuccess());
+
+        UNIT_ASSERT(session.ExecuteDataQuery(R"(
             REPLACE INTO [/Root/MultiShardTableCk] (Key1, Key2, ValueInt) VALUES
-                (1, "One", NULL), 
-                (2, "Two", NULL), 
-                (3, "Three", NULL), 
-                (4, "Four", NULL), 
-                (4294967295, "LastOne", NULL), 
-                (10, "Ten", 10); 
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess()); 
-    } 
-} 
- 
+                (1, "One", NULL),
+                (2, "Two", NULL),
+                (3, "Three", NULL),
+                (4, "Four", NULL),
+                (4294967295, "LastOne", NULL),
+                (10, "Ten", 10);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
+    }
+}
+
 namespace {
 
 void CreateTableWithIntKey(TSession session, ui64 partitions, ui32 rangesPerPartition) {
@@ -342,88 +342,88 @@ void RunPredicateTest(const std::vector<TString>& predicates, bool withNulls) {
 
 } // anonymous namespace end
 
-Y_UNIT_TEST_SUITE(KqpTablePredicate) { 
+Y_UNIT_TEST_SUITE(KqpTablePredicate) {
     Y_UNIT_TEST_NEW_ENGINE(IsNull) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
         auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 IS NULL AND Key2 IS NULL
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
- 
-        CompareYson(R"([[["One"]]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+
+        CompareYson(R"([[["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(IsNullPartial) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT * FROM [/Root/Test]
                 WHERE Group == 1 AND Name IS NULL
             )"),
             TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
- 
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(NullInKey) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Value FROM [/Root/TestNulls] WHERE
                 Key1 <= 1
             ORDER BY Value
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
- 
+
         CompareYson(R"([[["Five"]];[["Four"]];[["Six"]]])", FormatResultSetYson(result.GetResultSet(0)));
-    } 
- 
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(NullInKeySuffix) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT Value FROM [/Root/TestNulls] WHERE Key1 > 1
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([ 
-            [["Seven"]];[["Eight"]];[["Nine"]];[["Ten"]];[["Eleven"]];[["Twelve"]];[["Thirteen"]];[["Fourteen"]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([
+            [["Seven"]];[["Eight"]];[["Nine"]];[["Ten"]];[["Eleven"]];[["Twelve"]];[["Thirteen"]];[["Fourteen"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(NullInPredicate) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key1") 
-                .OptionalUint32(1) 
-                .Build() 
-            .Build(); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key1")
+                .OptionalUint32(1)
+                .Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
@@ -431,24 +431,24 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
                     Key1 = $key1 AND Key2 >= $key2
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(NullInPredicateRow) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key1") 
-                .OptionalUint32(1) 
-                .Build() 
-            .Build(); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key1")
+                .OptionalUint32(1)
+                .Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
@@ -456,61 +456,61 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
                     Key1 = $key1 AND Key2 == $key2
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(AllowNullCompareInIndex) {
-        TKikimrRunner kikimr; 
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key2") 
-                .OptionalUint32(100) 
-                .Build() 
-            .Build(); 
- 
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key2")
+                .OptionalUint32(100)
+                .Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(R"(
                 PRAGMA Kikimr.UseNewEngine = 'false';
                 PRAGMA kikimr.AllowNullCompareInIndex = "true";
- 
+
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
                 SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 = $key1 AND Key2 <= $key2
             )",
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([[["One"]];[["Two"]]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[["One"]];[["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(WhereInSubquery) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$name") 
-                .String("Paul") 
-                .Build() 
-            .Build(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$name")
+                .String("Paul")
+                .Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $name AS String; 
+            DECLARE $name AS String;
             $groups = (SELECT Group FROM `/Root/Test` WHERE Name = $name);
             SELECT * FROM `/Root/TwoShard` WHERE Key in $groups;
         )"), TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([[[1u];["One"];[-1]]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[[1u];["One"];[-1]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 
     Y_UNIT_TEST_NEW_ENGINE(UpdateMulti) {
         TKikimrRunner kikimr;
@@ -623,46 +623,46 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             UPDATE `/Root/MultiShardTable` SET ValueInt = ValueInt + 1 WHERE Key IN
-                (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30, 
-                31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60, 
-                61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90, 
-                91,92,93,94,95,96,97,98,99,100) 
+                (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,
+                31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+                61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,
+                91,92,93,94,95,96,97,98,99,100)
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT Key, ValueInt FROM `/Root/MultiShardTable` ORDER BY Key
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-            CompareYson(R"([[[1u];#];[[2u];#];[[3u];#];[[4u];#];[[10u];[11]];[[4294967295u];#]])", 
-                FormatResultSetYson(result.GetResultSet(0))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            CompareYson(R"([[[1u];#];[[2u];#];[[3u];#];[[4u];#];[[10u];[11]];[[4294967295u];#]])",
+                FormatResultSetYson(result.GetResultSet(0)));
         }
-    } 
+    }
 
     Y_UNIT_TEST_NEW_ENGINE(UpdateWhereInBigLiteralListPrefix) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
             UPDATE `/Root/MultiShardTableCk` SET ValueInt = ValueInt + 1 WHERE Key1 IN
-                (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30, 
-                31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60, 
-                61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90, 
-                91,92,93,94,95,96,97,98,99,100) 
+                (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,
+                31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+                61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,
+                91,92,93,94,95,96,97,98,99,100)
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT Key1, ValueInt FROM `/Root/MultiShardTableCk` ORDER BY Key1;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([[[1u];#];[[2u];#];[[3u];#];[[4u];#];[[10u];[11]];[[4294967295u];#]])",
                 FormatResultSetYson(result.GetResultSet(0)));
@@ -704,22 +704,22 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
-            CompareYson(R"([ 
-                [#;["One"]]; 
-                [#;["Two"]]; 
-                [#;["Three"]]; 
-                [[1u];["qq"]]; 
-                [[1u];["qq"]]; 
-                [[1u];["qq"]]; 
-                [[2u];["qq"]]; 
-                [[2u];["qq"]]; 
-                [[2u];["qq"]]; 
-                [[3u];["Ten"]]; 
-                [[3u];["Eleven"]]; 
-                [[3u];["Twelve"]]; 
-                [[3u];["Thirteen"]]; 
-                [[3u];["Fourteen"]] 
-            ])", FormatResultSetYson(result.GetResultSet(0))); 
+            CompareYson(R"([
+                [#;["One"]];
+                [#;["Two"]];
+                [#;["Three"]];
+                [[1u];["qq"]];
+                [[1u];["qq"]];
+                [[1u];["qq"]];
+                [[2u];["qq"]];
+                [[2u];["qq"]];
+                [[2u];["qq"]];
+                [[3u];["Ten"]];
+                [[3u];["Eleven"]];
+                [[3u];["Twelve"]];
+                [[3u];["Thirteen"]];
+                [[3u];["Fourteen"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -808,78 +808,78 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             }
         }
     }
- 
+
     Y_UNIT_TEST_NEW_ENGINE(DateKeyPredicate) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Value FROM [/Root/TestDate]
-            WHERE Key = Date("2019-07-01") 
+            WHERE Key = Date("2019-07-01")
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT(result.IsSuccess()); 
- 
-        CompareYson(R"([[["Three"]]])", FormatResultSetYson(result.GetResultSet(0))); 
- 
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
-    } 
- 
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(DuplicateKeyPredicateLiteral) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Key FROM [/Root/EightShard] WHERE
-                Key > 200 AND Key >= 301 AND 
-                Key < 600 AND Key <= 501 
-            ORDER BY Key; 
+                Key > 200 AND Key >= 301 AND
+                Key < 600 AND Key <= 501
+            ORDER BY Key;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])", 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])",
                 FormatResultSetYson(result.GetResultSet(0)));
     }
- 
+
     Y_UNIT_TEST_NEW_ENGINE(DuplicateKeyPredicateParam) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key_from_1").Uint64(200).Build() 
-            .AddParam("$key_from_2").Uint64(301).Build() 
-            .AddParam("$key_to_1").Uint64(600).Build() 
-            .AddParam("$key_to_2").Uint64(501).Build() 
-            .Build(); 
- 
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key_from_1").Uint64(200).Build()
+            .AddParam("$key_from_2").Uint64(301).Build()
+            .AddParam("$key_to_1").Uint64(600).Build()
+            .AddParam("$key_to_2").Uint64(501).Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key_from_1 AS Uint64; 
-            DECLARE $key_from_2 AS Uint64; 
-            DECLARE $key_to_1 AS Uint64; 
-            DECLARE $key_to_2 AS Uint64; 
- 
+            DECLARE $key_from_1 AS Uint64;
+            DECLARE $key_from_2 AS Uint64;
+            DECLARE $key_to_1 AS Uint64;
+            DECLARE $key_to_2 AS Uint64;
+
             SELECT Key FROM [/Root/EightShard] WHERE
-                Key > $key_from_1 AND Key >= $key_from_2 AND 
-                Key < $key_to_1 AND Key <= $key_to_2 
-            ORDER BY Key; 
+                Key > $key_from_1 AND Key >= $key_from_2 AND
+                Key < $key_to_1 AND Key <= $key_to_2
+            ORDER BY Key;
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])", 
-            FormatResultSetYson(result.GetResultSet(0))); 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+
     }
 
     Y_UNIT_TEST_NEW_ENGINE(DuplicateKeyPredicateMixed) {
@@ -888,112 +888,112 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto params = db.GetParamsBuilder()
-            .AddParam("$key_from_1").Uint64(200).Build() 
-            .AddParam("$key_to_1").Uint64(600).Build() 
-            .Build(); 
- 
+            .AddParam("$key_from_1").Uint64(200).Build()
+            .AddParam("$key_to_1").Uint64(600).Build()
+            .Build();
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key_from_1 AS Uint64; 
-            DECLARE $key_to_1 AS Uint64; 
- 
+            DECLARE $key_from_1 AS Uint64;
+            DECLARE $key_to_1 AS Uint64;
+
             SELECT Key FROM [/Root/EightShard] WHERE
-                Key > $key_from_1 AND Key >= 301 AND 
-                Key < $key_to_1 AND Key <= 501 
-            ORDER BY Key; 
+                Key > $key_from_1 AND Key >= 301 AND
+                Key < $key_to_1 AND Key <= 501
+            ORDER BY Key;
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])", 
-            FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[301u]];[[302u]];[[303u]];[[401u]];[[402u]];[[403u]];[[501u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(DuplicateCompositeKeyPredicate) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
-                Key2 >= 100 AND Key2 > 200 AND 
-                Key2 <= 600 AND Key2 < 500 
-            ORDER BY Key2; 
+                Key2 >= 100 AND Key2 > 200 AND
+                Key2 <= 600 AND Key2 < 500
+            ORDER BY Key2;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[300u]];[[400u]]])", 
-            FormatResultSetYson(result.GetResultSet(0))); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key_from_1").OptionalUint32(100).Build() 
-            .AddParam("$key_from_2").OptionalUint32(200).Build() 
-            .AddParam("$key_to_1").OptionalUint32(600).Build() 
-            .AddParam("$key_to_2").OptionalUint32(500).Build() 
-            .Build(); 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[300u]];[[400u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key_from_1").OptionalUint32(100).Build()
+            .AddParam("$key_from_2").OptionalUint32(200).Build()
+            .AddParam("$key_to_1").OptionalUint32(600).Build()
+            .AddParam("$key_to_2").OptionalUint32(500).Build()
+            .Build();
+
         result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key_from_1 AS 'Uint32?'; 
-            DECLARE $key_from_2 AS 'Uint32?'; 
-            DECLARE $key_to_1 AS 'Uint32?'; 
-            DECLARE $key_to_2 AS 'Uint32?'; 
- 
+            DECLARE $key_from_1 AS 'Uint32?';
+            DECLARE $key_from_2 AS 'Uint32?';
+            DECLARE $key_to_1 AS 'Uint32?';
+            DECLARE $key_to_2 AS 'Uint32?';
+
             SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
-                Key2 >= $key_from_1 AND Key2 > $key_from_2 AND 
-                Key2 <= $key_to_1 AND Key2 < $key_to_2 
-            ORDER BY Key2; 
+                Key2 >= $key_from_1 AND Key2 > $key_from_2 AND
+                Key2 <= $key_to_1 AND Key2 < $key_to_2
+            ORDER BY Key2;
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[300u]];[[400u]]])", 
-            FormatResultSetYson(result.GetResultSet(0))); 
- 
-        params = db.GetParamsBuilder() 
-            .AddParam("$key_from_2").OptionalUint32(200).Build() 
-            .AddParam("$key_to_2").OptionalUint32(500).Build() 
-            .Build(); 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[300u]];[[400u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+
+        params = db.GetParamsBuilder()
+            .AddParam("$key_from_2").OptionalUint32(200).Build()
+            .AddParam("$key_to_2").OptionalUint32(500).Build()
+            .Build();
+
         result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key_from_2 AS 'Uint32?'; 
-            DECLARE $key_to_2 AS 'Uint32?'; 
- 
+            DECLARE $key_from_2 AS 'Uint32?';
+            DECLARE $key_to_2 AS 'Uint32?';
+
             SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
-                Key2 >= 100 AND Key2 > $key_from_2 AND 
-                Key2 <= 600 AND Key2 < $key_to_2 
-            ORDER BY Key2; 
+                Key2 >= 100 AND Key2 > $key_from_2 AND
+                Key2 <= 600 AND Key2 < $key_to_2
+            ORDER BY Key2;
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        CompareYson(R"([[[300u]];[[400u]]])", 
-            FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
-    Y_UNIT_TEST(ScanKeyPrefix) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto query = R"( 
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[300u]];[[400u]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(ScanKeyPrefix) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = R"(
             PRAGMA Kikimr.UseNewEngine = 'false';
-            DECLARE $key1_from AS Uint32; 
-            DECLARE $name AS String; 
+            DECLARE $key1_from AS Uint32;
+            DECLARE $name AS String;
             SELECT * FROM [/Root/Join2] WHERE Key1 > $key1_from AND Name = $name;
-        )"; 
- 
-        auto result = session.ExplainDataQuery(query).GetValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        NJson::TJsonValue plan; 
-        UNIT_ASSERT(NJson::ReadJsonTree(result.GetPlan(), &plan)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(plan["tables"].GetArray().size(), 1); 
+        )";
+
+        auto result = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(result.GetPlan(), &plan));
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["name"], "/Root/Join2");
-        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["reads"].GetArray().size(), 1); 
-        auto& read = plan["tables"][0]["reads"][0]; 
-        UNIT_ASSERT(!read.Has("lookup_by")); 
-        UNIT_ASSERT_VALUES_EQUAL(read["scan_by"].GetArray().size(), 2); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["reads"].GetArray().size(), 1);
+        auto& read = plan["tables"][0]["reads"][0];
+        UNIT_ASSERT(!read.Has("lookup_by"));
+        UNIT_ASSERT_VALUES_EQUAL(read["scan_by"].GetArray().size(), 2);
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(DeleteNotFullScan) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1041,61 +1041,61 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(LiteralOr) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/EightShard`
-            WHERE Key = 101 OR Key = 302 OR Key = 403 OR Key = 705 
-            ORDER BY Key; 
+            WHERE Key = 101 OR Key = 302 OR Key = 403 OR Key = 705
+            ORDER BY Key;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [[1];[101u];["Value1"]]; 
-            [[2];[302u];["Value2"]]; 
-            [[2];[403u];["Value3"]]])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[101u];["Value1"]];
+            [[2];[302u];["Value2"]];
+            [[2];[403u];["Value3"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 4);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 4);
-    } 
- 
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(LiteralOrCompisite) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Logs`
-            WHERE 
-                App = "apache" AND Ts = 0 OR 
-                App = "nginx" AND Ts = 2 OR 
-                App = "kikimr-db" AND Ts = 4 OR 
-                App = "ydb" AND Ts = 5 
-            ORDER BY App, Ts; 
+            WHERE
+                App = "apache" AND Ts = 0 OR
+                App = "nginx" AND Ts = 2 OR
+                App = "kikimr-db" AND Ts = 4 OR
+                App = "ydb" AND Ts = 5
+            ORDER BY App, Ts;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [["apache"];["front-42"];[" GET /index.html HTTP/1.1"];[0]]; 
-            [["kikimr-db"];["kikimr-db-53"];["Discover"];[4]]; 
-            [["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [["apache"];["front-42"];[" GET /index.html HTTP/1.1"];[0]];
+            [["kikimr-db"];["kikimr-db-53"];["Discover"];[4]];
+            [["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         if (UseNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
@@ -1108,35 +1108,35 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(LiteralOrCompisiteCollision) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        CreateSampleTables(session); 
- 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Logs`
-            WHERE 
-                App = "apache" AND Ts = 0 OR 
-                App = "nginx" AND Ts = 2 OR 
-                App = "nginx" AND Ts = 3 OR 
-                App = "ydb" AND Ts = 5 
-            ORDER BY App, Ts; 
+            WHERE
+                App = "apache" AND Ts = 0 OR
+                App = "nginx" AND Ts = 2 OR
+                App = "nginx" AND Ts = 3 OR
+                App = "ydb" AND Ts = 5
+            ORDER BY App, Ts;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [["apache"];["front-42"];[" GET /index.html HTTP/1.1"];[0]]; 
-            [["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]]; 
-            [["nginx"];["nginx-23"];["GET /cat.jpg HTTP/1.1"];[3]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [["apache"];["front-42"];[" GET /index.html HTTP/1.1"];[0]];
+            [["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]];
+            [["nginx"];["nginx-23"];["GET /cat.jpg HTTP/1.1"];[3]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         if (UseNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
         }
-    } 
+    }
 
     Y_UNIT_TEST(NoFullScanAtScanQuery) {
         TVector<std::tuple<TString, TString, ui64, ui32>> testData = {
@@ -1475,36 +1475,36 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
         }
     }
- 
-    Y_UNIT_TEST_NEW_ENGINE(CastKeyBounds) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto params = db.GetParamsBuilder() 
-            .AddParam("$key_from").Uint64(1).Build() 
-            .AddParam("$key_to").Int32(3).Build() 
-            .Build(); 
- 
-        NYdb::NTable::TExecDataQuerySettings settings; 
-        settings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
- 
-        auto result = session.ExecuteDataQuery(Q1_(R"( 
-            DECLARE $key_from AS Uint64; 
-            DECLARE $key_to AS Int32; 
-            SELECT * FROM `/Root/TwoShard` WHERE Key > $key_from AND Key < $key_to; 
-        )"), TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [[2u];["Two"];[0]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
- 
-        AssertTableStats(result, "/Root/TwoShard", { 
-            .ExpectedReads = 1, 
-        }); 
-    } 
-} 
- 
+
+    Y_UNIT_TEST_NEW_ENGINE(CastKeyBounds) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key_from").Uint64(1).Build()
+            .AddParam("$key_to").Int32(3).Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key_from AS Uint64;
+            DECLARE $key_to AS Int32;
+            SELECT * FROM `/Root/TwoShard` WHERE Key > $key_from AND Key < $key_to;
+        )"), TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2u];["Two"];[0]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        AssertTableStats(result, "/Root/TwoShard", {
+            .ExpectedReads = 1,
+        });
+    }
+}
+
 } // namespace NKqp
-} // namespace NKikimr 
+} // namespace NKikimr

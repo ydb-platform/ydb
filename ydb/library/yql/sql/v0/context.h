@@ -1,8 +1,8 @@
 #pragma once
 
-#include "node.h" 
-#include "sql.h" 
- 
+#include "node.h"
+#include "sql.h"
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_warning.h>
@@ -11,9 +11,9 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/set.h>
-#include <util/generic/stack.h> 
+#include <util/generic/stack.h>
 #include <util/generic/vector.h>
 
 namespace NSQLTranslationV0 {
@@ -78,16 +78,16 @@ namespace NSQLTranslationV0 {
             }
 
             return provider;
-        } 
- 
+        }
+
         TString GetServiceName(const ISource& source) const;
         bool UseUnordered(const ISource& source) const;
         bool UseUnordered(const TTableRef& table) const;
 
         bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
- 
+
         TNodePtr GetPrefixedPath(const TString& cluster, const TDeferredAtom& path);
- 
+
         TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
         TString HasBlockShortcut(const TNodePtr& baseNode);
@@ -120,8 +120,8 @@ namespace NSQLTranslationV0 {
         THolder<TStringOutput> IssueMsgHolder;
         NSQLTranslation::TClusterMapping ClusterMapping;
         TString PathPrefix;
-        THashMap<TString, TString> ProviderPathPrefixes; 
-        THashMap<TString, TString> ClusterPathPrefixes; 
+        THashMap<TString, TString> ProviderPathPrefixes;
+        THashMap<TString, TString> ClusterPathPrefixes;
         bool IntoHeading = true;
 
     public:

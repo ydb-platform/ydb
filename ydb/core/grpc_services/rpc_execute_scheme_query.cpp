@@ -1,100 +1,100 @@
-#include "grpc_request_proxy.h" 
- 
-#include "rpc_calls.h" 
-#include "rpc_kqp_base.h" 
+#include "grpc_request_proxy.h"
+
+#include "rpc_calls.h"
+#include "rpc_kqp_base.h"
 #include "rpc_common.h"
- 
+
 #include <ydb/core/protos/console_config.pb.h>
- 
+
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
-using namespace NActors; 
-using namespace Ydb; 
-using namespace NKqp; 
- 
-class TExecuteSchemeQueryRPC : public TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest> { 
-    using TBase = TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest>; 
- 
-public: 
+
+namespace NKikimr {
+namespace NGRpcService {
+
+using namespace NActors;
+using namespace Ydb;
+using namespace NKqp;
+
+class TExecuteSchemeQueryRPC : public TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest> {
+    using TBase = TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest>;
+
+public:
     TExecuteSchemeQueryRPC(IRequestOpCtx* msg)
-        : TBase(msg) {} 
- 
-    void Bootstrap(const TActorContext &ctx) { 
-        TBase::Bootstrap(ctx); 
- 
-        this->Become(&TExecuteSchemeQueryRPC::StateWork); 
-        Proceed(ctx); 
-    } 
- 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle); 
-            default: TBase::StateWork(ev, ctx); 
-        } 
-    } 
- 
-    void Proceed(const TActorContext &ctx) { 
+        : TBase(msg) {}
+
+    void Bootstrap(const TActorContext &ctx) {
+        TBase::Bootstrap(ctx);
+
+        this->Become(&TExecuteSchemeQueryRPC::StateWork);
+        Proceed(ctx);
+    }
+
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
+    void Proceed(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
-        const auto traceId = Request_->GetTraceId(); 
-        const auto requestType = Request_->GetRequestType(); 
- 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(); 
+        const auto traceId = Request_->GetTraceId();
+        const auto requestType = Request_->GetRequestType();
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
 
-        NYql::TIssues issues; 
-        if (CheckSession(req->session_id(), issues)) { 
-            ev->Record.MutableRequest()->SetSessionId(req->session_id()); 
-        } else { 
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx); 
-        } 
- 
-        if (traceId) { 
-            ev->Record.SetTraceId(traceId.GetRef()); 
-        } 
- 
-        if (requestType) { 
-            ev->Record.SetRequestType(requestType.GetRef()); 
-        } 
- 
-        if (!CheckQuery(req->yql_text(), issues)) { 
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx); 
-        } 
- 
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL); 
-        ev->Record.MutableRequest()->SetQuery(req->yql_text()); 
- 
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); 
-    } 
- 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) { 
-        const auto& record = ev->Get()->Record.GetRef(); 
+        NYql::TIssues issues;
+        if (CheckSession(req->session_id(), issues)) {
+            ev->Record.MutableRequest()->SetSessionId(req->session_id());
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+        }
+
+        if (traceId) {
+            ev->Record.SetTraceId(traceId.GetRef());
+        }
+
+        if (requestType) {
+            ev->Record.SetRequestType(requestType.GetRef());
+        }
+
+        if (!CheckQuery(req->yql_text(), issues)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+        }
+
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+        ev->Record.MutableRequest()->SetQuery(req->yql_text());
+
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    }
+
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record.GetRef();
         AddServerHintsIfAny(record);
 
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
-            const auto& kqpResponse = record.GetResponse(); 
-            const auto& issueMessage = kqpResponse.GetQueryIssues(); 
- 
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx); 
-        } else { 
-            return OnGenericQueryResponseError(record, ctx); 
-        } 
-    } 
-}; 
- 
-void TGRpcRequestProxy::Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TExecuteSchemeQueryRPC(ev->Release().Release())); 
-} 
- 
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            const auto& kqpResponse = record.GetResponse();
+            const auto& issueMessage = kqpResponse.GetQueryIssues();
+
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
+        } else {
+            return OnGenericQueryResponseError(record, ctx);
+        }
+    }
+};
+
+void TGRpcRequestProxy::Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TExecuteSchemeQueryRPC(ev->Release().Release()));
+}
+
 template<>
 IActor* TEvExecuteSchemeQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TExecuteSchemeQueryRPC(msg);
 }
 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+} // namespace NGRpcService
+} // namespace NKikimr

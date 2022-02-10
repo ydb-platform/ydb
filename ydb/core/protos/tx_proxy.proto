@@ -138,13 +138,13 @@ message TMiniKQLTransaction {
         COMPILE = 2;
     };
 
-    message TLimits { 
-        optional uint32 AffectedShardsLimit = 1; 
-        optional uint32 ReadsetCountLimit = 2; 
-        optional uint64 ComputeNodeMemoryLimitBytes = 3; 
-        optional uint64 TotalReadSizeLimitBytes = 4; 
-    }; 
- 
+    message TLimits {
+        optional uint32 AffectedShardsLimit = 1;
+        optional uint32 ReadsetCountLimit = 2;
+        optional uint64 ComputeNodeMemoryLimitBytes = 3;
+        optional uint64 TotalReadSizeLimitBytes = 4;
+    };
+
     optional EMode Mode = 1 [default = COMPILE_AND_EXEC];
     optional TMiniKQLProgram Program = 2;
     optional TMiniKQLParams Params = 3;
@@ -152,10 +152,10 @@ message TMiniKQLTransaction {
     optional bool EvaluateResultType = 50 [default = true];
     optional bool EvaluateResultValue = 51 [default = true];
     optional bool FlatMKQL = 52 [default = true];
-    optional bool LlvmRuntime = 53; 
-    optional uint64 PerShardKeysSizeLimitBytes = 54; 
+    optional bool LlvmRuntime = 53;
+    optional uint64 PerShardKeysSizeLimitBytes = 54;
     optional bool CollectStats = 55;
-    optional TLimits Limits = 56; 
+    optional TLimits Limits = 56;
     optional uint64 SnapshotStep = 9;
     optional uint64 SnapshotTxId = 10;
 };
@@ -191,7 +191,7 @@ message TEvProposeTransaction {
     optional uint64 ExecTimeoutPeriod = 3;
     optional string UserToken = 4; // already built and serialized user's token
     optional bool StreamResponse = 5;
-    optional uint64 CancelAfterMs = 6; 
+    optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
     optional string RequestType = 8;
 }

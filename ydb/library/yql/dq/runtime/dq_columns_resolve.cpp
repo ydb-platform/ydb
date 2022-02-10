@@ -1,4 +1,4 @@
-#include "dq_columns_resolve.h" 
+#include "dq_columns_resolve.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -11,11 +11,11 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
     const auto& structType = static_cast<const TStructType&>(*type);
 
     auto columnIndex = structType.FindMemberIndex(columnName);
-    if (!columnIndex) { 
-        return {}; 
-    } 
+    if (!columnIndex) {
+        return {};
+    }
 
-    auto memberType = structType.GetMemberType(*columnIndex); 
+    auto memberType = structType.GetMemberType(*columnIndex);
 
     if (memberType->GetKind() == TType::EKind::Optional) {
         memberType = static_cast<TOptionalType&>(*memberType).GetItemType();
@@ -29,9 +29,9 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
 
 TColumnInfo GetColumnInfo(const TType* type, TStringBuf columnName) {
     auto columnInfo = FindColumnInfo(type, columnName);
-    YQL_ENSURE(columnInfo); 
- 
-    return *columnInfo; 
+    YQL_ENSURE(columnInfo);
+
+    return *columnInfo;
 }
- 
-} 
+
+}

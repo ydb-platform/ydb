@@ -1566,7 +1566,7 @@ private:
         FileState->Buffer.Reserve(length);
         wasRead = FileState->Input->Load((void*)FileState->Buffer.Data(), length);
         Y_VERIFY(wasRead == length);
-        return ItemPacker.Unpack(TStringBuf(FileState->Buffer.Data(), length), Ctx->HolderFactory); 
+        return ItemPacker.Unpack(TStringBuf(FileState->Buffer.Data(), length), Ctx->HolderFactory);
     }
 
 private:

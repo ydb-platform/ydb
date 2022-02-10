@@ -1,4 +1,4 @@
-#include "ydb_scheme.h" 
+#include "ydb_scheme.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 
@@ -23,11 +23,11 @@ void TGRpcYdbSchemeService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limite
     Limiter_ = limiter;
 }
 
-bool TGRpcYdbSchemeService::IncRequest() { 
+bool TGRpcYdbSchemeService::IncRequest() {
     return Limiter_->Inc();
 }
 
-void TGRpcYdbSchemeService::DecRequest() { 
+void TGRpcYdbSchemeService::DecRequest() {
     Limiter_->Dec();
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }

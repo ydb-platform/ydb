@@ -19,7 +19,7 @@ option java_package = "com.yandex.ydb.table";
 
 // Create new session
 message CreateSessionRequest {
-    Ydb.Operations.OperationParams operation_params = 1; 
+    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 // Create new session
@@ -37,7 +37,7 @@ message CreateSessionResult {
 message DeleteSessionRequest {
     // Session identifier
     string session_id = 1;
-    Ydb.Operations.OperationParams operation_params = 2; 
+    Ydb.Operations.OperationParams operation_params = 2;
 }
 
 message DeleteSessionResponse {
@@ -241,15 +241,15 @@ message TableProfile {
     CachingPolicy caching_policy = 7;
 }
 
-message ColumnMeta { 
-    // Name of column 
-    string name = 1; 
-    // Type of column 
-    Type type = 2; 
+message ColumnMeta {
+    // Name of column
+    string name = 1;
+    // Type of column
+    Type type = 2;
     // Column family name of the column
     string family = 3;
 }
- 
+
 message DateTypeColumnModeSettings {
     // The row will be considered as expired at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
@@ -388,7 +388,7 @@ message ReadReplicasSettings {
         // Set total replicas count between all AZs
         uint64 any_az_read_replicas_count = 2;
     }
- 
+
     // Specify read replicas count for each AZ in cluster
     reserved 3; // cluster_replicas_settings (part of oneof settings)
 }
@@ -399,12 +399,12 @@ message CreateTableRequest {
     // Full path
     string path = 2;
     // Columns (name, type)
-    repeated ColumnMeta columns = 3; 
+    repeated ColumnMeta columns = 3;
     // List of columns used as primary key
     repeated string primary_key = 4;
     // Table profile
     TableProfile profile = 5;
-    Ydb.Operations.OperationParams operation_params = 6; 
+    Ydb.Operations.OperationParams operation_params = 6;
     // List of secondary indexes
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
@@ -444,7 +444,7 @@ message DropTableRequest {
     // Full path
     string path = 2;
     reserved 3;
-    Ydb.Operations.OperationParams operation_params = 4; 
+    Ydb.Operations.OperationParams operation_params = 4;
 }
 
 message DropTableResponse {
@@ -458,10 +458,10 @@ message AlterTableRequest {
     // Full path
     string path = 2;
     // Columns (name, type) to add
-    repeated ColumnMeta add_columns = 3; 
+    repeated ColumnMeta add_columns = 3;
     // Columns to remove
     repeated string drop_columns = 4;
-    Ydb.Operations.OperationParams operation_params = 5; 
+    Ydb.Operations.OperationParams operation_params = 5;
     // Columns to alter
     repeated ColumnMeta alter_columns = 6;
     // Setup or remove time to live settings
@@ -504,7 +504,7 @@ message CopyTableRequest {
     string source_path = 2;
     // Copy to path
     string destination_path = 3;
-    Ydb.Operations.OperationParams operation_params = 4; 
+    Ydb.Operations.OperationParams operation_params = 4;
 }
 
 message CopyTableResponse {
@@ -561,7 +561,7 @@ message DescribeTableRequest {
     string session_id = 1;
     // Full path
     string path = 2;
-    Ydb.Operations.OperationParams operation_params = 4; 
+    Ydb.Operations.OperationParams operation_params = 4;
     // Includes shard key distribution info
     bool include_shard_key_bounds = 5;
     // Includes table statistics
@@ -579,7 +579,7 @@ message DescribeTableResult {
     // Description of scheme object
     Ydb.Scheme.Entry self = 1;
     // List of columns
-    repeated ColumnMeta columns = 2; 
+    repeated ColumnMeta columns = 2;
     // List of primary key columns
     repeated string primary_key = 3;
     // List of key ranges for shard
@@ -606,144 +606,144 @@ message DescribeTableResult {
     ReadReplicasSettings read_replicas_settings = 14;
 }
 
-message Query { 
+message Query {
     // Text of query or id prepared query
-    oneof query { 
+    oneof query {
         // SQL program
-        string yql_text = 1; 
+        string yql_text = 1;
         // Prepared query id
-        string id = 2; 
-    } 
-} 
- 
-message SerializableModeSettings { 
+        string id = 2;
+    }
 }
- 
-message OnlineModeSettings { 
-    bool allow_inconsistent_reads = 1; 
+
+message SerializableModeSettings {
 }
- 
-message StaleModeSettings { 
-} 
- 
-message TransactionSettings { 
-    oneof tx_mode { 
-        SerializableModeSettings serializable_read_write = 1; 
-        OnlineModeSettings online_read_only = 2; 
-        StaleModeSettings stale_read_only = 3; 
-    } 
-} 
- 
-message TransactionControl { 
-    oneof tx_selector { 
-        string tx_id = 1; 
-        TransactionSettings begin_tx = 2; 
-    } 
- 
-    bool commit_tx = 10; 
-} 
- 
-message QueryCachePolicy { 
-    bool keep_in_cache = 1; 
+
+message OnlineModeSettings {
+    bool allow_inconsistent_reads = 1;
 }
- 
-// Collect and return query execution stats 
-message QueryStatsCollection { 
-    enum Mode { 
-        STATS_COLLECTION_UNSPECIFIED = 0; 
-        STATS_COLLECTION_NONE = 1;       // Stats collection is disabled 
-        STATS_COLLECTION_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table 
+
+message StaleModeSettings {
+}
+
+message TransactionSettings {
+    oneof tx_mode {
+        SerializableModeSettings serializable_read_write = 1;
+        OnlineModeSettings online_read_only = 2;
+        StaleModeSettings stale_read_only = 3;
+    }
+}
+
+message TransactionControl {
+    oneof tx_selector {
+        string tx_id = 1;
+        TransactionSettings begin_tx = 2;
+    }
+
+    bool commit_tx = 10;
+}
+
+message QueryCachePolicy {
+    bool keep_in_cache = 1;
+}
+
+// Collect and return query execution stats
+message QueryStatsCollection {
+    enum Mode {
+        STATS_COLLECTION_UNSPECIFIED = 0;
+        STATS_COLLECTION_NONE = 1;       // Stats collection is disabled
+        STATS_COLLECTION_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
         STATS_COLLECTION_FULL = 3;       // Add execution stats and plan on top of STATS_COLLECTION_BASIC
-    } 
-} 
- 
-message ExecuteDataQueryRequest { 
+    }
+}
+
+message ExecuteDataQueryRequest {
     // Session identifier
-    string session_id = 1; 
-    TransactionControl tx_control = 2; 
-    Query query = 3; 
+    string session_id = 1;
+    TransactionControl tx_control = 2;
+    Query query = 3;
     // Map of query parameters (optional)
     map<string, TypedValue> parameters = 4;
-    QueryCachePolicy query_cache_policy = 5; 
-    Ydb.Operations.OperationParams operation_params = 6; 
-    QueryStatsCollection.Mode collect_stats = 7; 
+    QueryCachePolicy query_cache_policy = 5;
+    Ydb.Operations.OperationParams operation_params = 6;
+    QueryStatsCollection.Mode collect_stats = 7;
 }
- 
-message ExecuteDataQueryResponse { 
+
+message ExecuteDataQueryResponse {
     Ydb.Operations.Operation operation = 1;
 }
- 
-message ExecuteSchemeQueryRequest { 
+
+message ExecuteSchemeQueryRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     // SQL text
-    string yql_text = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
 }
- 
-message ExecuteSchemeQueryResponse { 
+
+message ExecuteSchemeQueryResponse {
     Ydb.Operations.Operation operation = 1;
 }
- 
+
 // Holds transaction id
-message TransactionMeta { 
+message TransactionMeta {
     // Transaction identifier
-    string id = 1; 
-} 
- 
+    string id = 1;
+}
+
 // Holds query id and type of parameters
-message QueryMeta { 
+message QueryMeta {
     // Query identifier
-    string id = 1; 
+    string id = 1;
     // Type of parameters
-    map<string, Type> parameters_types = 2; 
-} 
- 
+    map<string, Type> parameters_types = 2;
+}
+
 // One QueryResult can contain multiple tables
 message ExecuteQueryResult {
     // Result rets (for each table)
-    repeated Ydb.ResultSet result_sets = 1; 
+    repeated Ydb.ResultSet result_sets = 1;
     // Transaction metadata
-    TransactionMeta tx_meta = 2; 
+    TransactionMeta tx_meta = 2;
     // Query metadata
-    QueryMeta query_meta = 3; 
+    QueryMeta query_meta = 3;
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
 }
 
 // Explain data query
-message ExplainDataQueryRequest { 
+message ExplainDataQueryRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     // SQL text to explain
-    string yql_text = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
 }
- 
-message ExplainDataQueryResponse { 
+
+message ExplainDataQueryResponse {
     // Holds ExplainQueryResult in case of successful call
     Ydb.Operations.Operation operation = 1;
 }
- 
+
 message ExplainQueryResult {
     string query_ast = 1;
     string query_plan = 2;
 }
 
 // Prepare given program to execute
-message PrepareDataQueryRequest { 
+message PrepareDataQueryRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     // SQL text
-    string yql_text = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
+    string yql_text = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
 }
- 
-message PrepareDataQueryResponse { 
+
+message PrepareDataQueryResponse {
     // Holds PrepareQueryResult in case of successful call
     Ydb.Operations.Operation operation = 1;
 }
- 
+
 message PrepareQueryResult {
     // Query id, used to perform ExecuteDataQuery
     string query_id = 1;
@@ -755,71 +755,71 @@ message PrepareQueryResult {
 message KeepAliveRequest {
     // Session identifier
     string session_id = 1;
-    Ydb.Operations.OperationParams operation_params = 2; 
+    Ydb.Operations.OperationParams operation_params = 2;
 }
 
 message KeepAliveResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message KeepAliveResult { 
-    enum SessionStatus { 
-        SESSION_STATUS_UNSPECIFIED = 0; 
-        SESSION_STATUS_READY = 1; 
-        SESSION_STATUS_BUSY = 2; 
-    } 
- 
-    SessionStatus session_status = 1; 
+message KeepAliveResult {
+    enum SessionStatus {
+        SESSION_STATUS_UNSPECIFIED = 0;
+        SESSION_STATUS_READY = 1;
+        SESSION_STATUS_BUSY = 2;
+    }
+
+    SessionStatus session_status = 1;
 }
- 
+
 // Begin transaction on given session with given settings
-message BeginTransactionRequest { 
+message BeginTransactionRequest {
     // Session identifier
-    string session_id = 1; 
-    TransactionSettings tx_settings = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
+    string session_id = 1;
+    TransactionSettings tx_settings = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
 }
- 
-message BeginTransactionResponse { 
+
+message BeginTransactionResponse {
     // Holds BeginTransactionResult in case of successful call
     Ydb.Operations.Operation operation = 1;
 }
- 
-message BeginTransactionResult { 
-    TransactionMeta tx_meta = 1; 
+
+message BeginTransactionResult {
+    TransactionMeta tx_meta = 1;
 }
- 
+
 // Commit transaction with given session and tx id
-message CommitTransactionRequest { 
+message CommitTransactionRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     // Transaction identifier
-    string tx_id = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
-    QueryStatsCollection.Mode collect_stats = 4; 
+    string tx_id = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
+    QueryStatsCollection.Mode collect_stats = 4;
 }
- 
-message CommitTransactionResponse { 
+
+message CommitTransactionResponse {
     Ydb.Operations.Operation operation = 1;
 }
- 
-message CommitTransactionResult { 
-    Ydb.TableStats.QueryStats query_stats = 1; 
-} 
- 
+
+message CommitTransactionResult {
+    Ydb.TableStats.QueryStats query_stats = 1;
+}
+
 // Rollback transaction with given session and tx id
-message RollbackTransactionRequest { 
+message RollbackTransactionRequest {
     // Session identifier
-    string session_id = 1; 
+    string session_id = 1;
     // Transaction identifier
-    string tx_id = 2; 
-    Ydb.Operations.OperationParams operation_params = 3; 
+    string tx_id = 2;
+    Ydb.Operations.OperationParams operation_params = 3;
 }
- 
-message RollbackTransactionResponse { 
+
+message RollbackTransactionResponse {
     Ydb.Operations.Operation operation = 1;
 }
- 
+
 message StoragePolicyDescription {
     string name = 1;
     map<string, string> labels = 2;
@@ -868,7 +868,7 @@ message TableProfileDescription {
 }
 
 message DescribeTableOptionsRequest {
-    Ydb.Operations.OperationParams operation_params = 1; 
+    Ydb.Operations.OperationParams operation_params = 1;
 }
 
 message DescribeTableOptionsResponse {
@@ -891,7 +891,7 @@ message DescribeTableOptionsResult {
 message KeyRange {
     // Left border
     oneof from_bound {
-        // Specify if we don't want to include given key 
+        // Specify if we don't want to include given key
         TypedValue greater = 1;
         // Specify if we want to include given key
         TypedValue greater_or_equal = 2;
@@ -899,7 +899,7 @@ message KeyRange {
 
     // Right border
     oneof to_bound {
-        // Specify if we don't want to include given key 
+        // Specify if we don't want to include given key
         TypedValue less = 3;
         // Specify if we want to include given key
         TypedValue less_or_equal = 4;
@@ -937,7 +937,7 @@ message ReadTableResponse {
 // Result of read table request
 message ReadTableResult {
     // Result set (same as result of sql request)
-    Ydb.ResultSet result_set = 1; 
+    Ydb.ResultSet result_set = 1;
 }
 
 message BulkUpsertRequest {
@@ -965,36 +965,36 @@ message BulkUpsertResponse {
 message BulkUpsertResult {
 }
 
-message ExecuteScanQueryRequest { 
-    enum Mode { 
-        MODE_UNSPECIFIED = 0; 
+message ExecuteScanQueryRequest {
+    enum Mode {
+        MODE_UNSPECIFIED = 0;
         MODE_EXPLAIN = 1;
-        // MODE_PREPARE = 2; 
-        MODE_EXEC = 3; 
-    } 
- 
-    reserved 1; // session_id 
-    reserved 2; // tx_control 
-    Query query = 3; 
-    map<string, TypedValue> parameters = 4; 
-    reserved 5; // query_cache_policy 
-    Mode mode = 6; 
-    reserved 7; // report_progress 
+        // MODE_PREPARE = 2;
+        MODE_EXEC = 3;
+    }
+
+    reserved 1; // session_id
+    reserved 2; // tx_control
+    Query query = 3;
+    map<string, TypedValue> parameters = 4;
+    reserved 5; // query_cache_policy
+    Mode mode = 6;
+    reserved 7; // report_progress
     QueryStatsCollection.Mode collect_stats = 8;
-} 
- 
-message ExecuteScanQueryPartialResponse { 
-    StatusIds.StatusCode status = 1; 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-    ExecuteScanQueryPartialResult result = 3; 
-} 
- 
-message ExecuteScanQueryPartialResult { 
-    Ydb.ResultSet result_set = 1; 
-    reserved 2; // tx_meta 
-    reserved 3; // query_meta 
-    reserved 4; // query_progress 
-    reserved 5; // query_plan 
+}
+
+message ExecuteScanQueryPartialResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    ExecuteScanQueryPartialResult result = 3;
+}
+
+message ExecuteScanQueryPartialResult {
+    Ydb.ResultSet result_set = 1;
+    reserved 2; // tx_meta
+    reserved 3; // query_meta
+    reserved 4; // query_progress
+    reserved 5; // query_plan
     Ydb.TableStats.QueryStats query_stats = 6;
-} 
- 
+}
+

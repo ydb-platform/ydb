@@ -253,7 +253,7 @@ private:
 
     void HandleLinkFailure() {
         NKikimrKesus::TKesusError error;
-        error.SetStatus(Ydb::StatusIds::UNAVAILABLE); 
+        error.SetStatus(Ydb::StatusIds::UNAVAILABLE);
         error.AddIssues()->set_message("Link failure");
         HandleLinkError(error);
     }
@@ -358,7 +358,7 @@ private:
             return;
         }
 
-        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) { 
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
             Y_FAIL("Unexpected proxy registration error");
         }
 
@@ -544,7 +544,7 @@ private:
                     new TEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
                         record.GetSessionId(),
-                        Ydb::StatusIds::BAD_SESSION, 
+                        Ydb::StatusIds::BAD_SESSION,
                         "Attach request is out of sequence"),
                     0, ev->Cookie);
                 return;
@@ -555,7 +555,7 @@ private:
                     new TEvKesus::TEvAttachSessionResult(
                         ProxyGeneration,
                         record.GetSessionId(),
-                        Ydb::StatusIds::SESSION_EXPIRED, 
+                        Ydb::StatusIds::SESSION_EXPIRED,
                         "Session is already being destroyed"),
                     0, ev->Cookie);
                 return;
@@ -564,7 +564,7 @@ private:
                 KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << data->Owner);
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
-                        Ydb::StatusIds::BAD_SESSION, 
+                        Ydb::StatusIds::BAD_SESSION,
                         "Session stolen by another local client"),
                     0, data->OwnerCookie);
             }
@@ -600,7 +600,7 @@ private:
             return;
         }
 
-        bool isError = record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS; 
+        bool isError = record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS;
         if (auto* data = FindSession(ev->Cookie)) {
             if (!data->SessionId) {
                 // New session and we finally know its id
@@ -649,7 +649,7 @@ private:
         KPROXY_LOG_TRACE_S("Received TEvProxyExpired with ProxyGeneration=" << ProxyGeneration);
 
         NKikimrKesus::TKesusError error;
-        error.SetStatus(Ydb::StatusIds::BAD_SESSION); 
+        error.SetStatus(Ydb::StatusIds::BAD_SESSION);
         error.AddIssues()->set_message("Proxy session expired");
         HandleSessionError(error);
 
@@ -668,7 +668,7 @@ private:
                 KPROXY_LOG_TRACE_S("Sending SESSION_EXPIRED to " << data->Owner);
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
-                        Ydb::StatusIds::SESSION_EXPIRED, 
+                        Ydb::StatusIds::SESSION_EXPIRED,
                         "Session has expired"),
                     0, data->OwnerCookie);
             }
@@ -688,7 +688,7 @@ private:
                 KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << data->Owner);
                 Send(data->Owner,
                     new TEvKesusProxy::TEvProxyError(
-                        Ydb::StatusIds::BAD_SESSION, 
+                        Ydb::StatusIds::BAD_SESSION,
                         "Session stolen by another remote client"),
                     0, data->OwnerCookie);
             }
@@ -723,7 +723,7 @@ private:
         KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << ev->Sender);
         Send(ev->Sender,
             new TEvKesusProxy::TEvProxyError(
-                Ydb::StatusIds::BAD_SESSION, 
+                Ydb::StatusIds::BAD_SESSION,
                 "Session is not attached"),
             0, ev->Cookie);
     }
@@ -769,7 +769,7 @@ private:
         KPROXY_LOG_TRACE_S("Sending BAD_SESSION to " << sender);
         Send(sender,
             new TEvKesusProxy::TEvProxyError(
-                Ydb::StatusIds::BAD_SESSION, 
+                Ydb::StatusIds::BAD_SESSION,
                 "Session is not attached"),
             0, cookie);
     }

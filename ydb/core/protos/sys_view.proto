@@ -71,16 +71,16 @@ message TEvGetPartitionStatsResult {
     optional bool Overloaded = 4;
 }
 
-message TQueryDataStats { 
-    optional uint64 ReadRows = 1; 
-    optional uint64 ReadBytes = 2; 
-    optional uint64 UpdateRows = 3; 
-    optional uint64 UpdateBytes = 4; 
-    optional uint64 DeleteRows = 5; 
+message TQueryDataStats {
+    optional uint64 ReadRows = 1;
+    optional uint64 ReadBytes = 2;
+    optional uint64 UpdateRows = 3;
+    optional uint64 UpdateBytes = 4;
+    optional uint64 DeleteRows = 5;
     optional uint64 DeleteBytes = 6; // deprecated
     optional uint64 PartitionCount = 7;
 }
- 
+
 message TStatsAggr {
     optional uint64 Min = 1;
     optional uint64 Max = 2;
@@ -93,7 +93,7 @@ message TQueryStats {
     optional uint64 QueryTextHash = 2;
     optional uint64 DurationMs = 3;
     optional uint64 EndTimeMs = 4;
-    optional TQueryDataStats Stats = 5; 
+    optional TQueryDataStats Stats = 5;
     optional string UserSID = 6;
     optional uint64 ParametersSize = 7;
     optional uint64 CompileDurationMs = 8;

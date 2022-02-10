@@ -15,7 +15,7 @@
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
-namespace NKikimr::NKqp::NOpt { 
+namespace NKikimr::NKqp::NOpt {
 
 namespace {
 
@@ -25,58 +25,58 @@ using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
 
-class TKqpPeepholeTransformer : public TOptimizeTransformerBase { 
-public: 
-    TKqpPeepholeTransformer() 
-        : TOptimizeTransformerBase(nullptr, NLog::EComponent::ProviderKqp, {}) 
-    { 
-#define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name) 
-        AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate)); 
-        AddHandler(0, &TDqPhyMapJoin::Match, HNDL(RewriteMapJoin)); 
-        AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin)); 
-        AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin)); 
-        AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin)); 
-        AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable)); 
-#undef HNDL 
-    } 
+class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeTransformer()
+        : TOptimizeTransformerBase(nullptr, NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
+        AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate));
+        AddHandler(0, &TDqPhyMapJoin::Match, HNDL(RewriteMapJoin));
+        AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
+        AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
+#undef HNDL
+    }
 
-protected: 
-    TMaybeNode<TExprBase> RewriteReplicate(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = DqPeepholeRewriteReplicate(node, ctx); 
-        DumpAppliedRule("RewriteReplicate", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
+protected:
+    TMaybeNode<TExprBase> RewriteReplicate(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteReplicate(node, ctx);
+        DumpAppliedRule("RewriteReplicate", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 
-    TMaybeNode<TExprBase> RewriteMapJoin(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = DqPeepholeRewriteMapJoin(node, ctx); 
-        DumpAppliedRule("RewriteMapJoin", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
+    TMaybeNode<TExprBase> RewriteMapJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteMapJoin(node, ctx);
+        DumpAppliedRule("RewriteMapJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 
-    TMaybeNode<TExprBase> RewriteCrossJoin(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = DqPeepholeRewriteCrossJoin(node, ctx); 
-        DumpAppliedRule("RewriteCrossJoin", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
+    TMaybeNode<TExprBase> RewriteCrossJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteCrossJoin(node, ctx);
+        DumpAppliedRule("RewriteCrossJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 
-    TMaybeNode<TExprBase> RewriteDictJoin(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx); 
-        DumpAppliedRule("RewriteDictJoin", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
+    TMaybeNode<TExprBase> RewriteDictJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx);
+        DumpAppliedRule("RewriteDictJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 
-    TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = DqPeepholeRewritePureJoin(node, ctx); 
-        DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
+    TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewritePureJoin(node, ctx);
+        DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 
-    TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) { 
-        TExprBase output = KqpBuildWideReadTable(node, ctx); 
-        DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx); 
-        return output; 
-    } 
-}; 
+    TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildWideReadTable(node, ctx);
+        DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+};
 
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     TKqpPeepholePipelineConfigurator(TKikimrConfiguration::TPtr config)
@@ -90,8 +90,8 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
- 
-        pipeline->Add(new TKqpPeepholeTransformer(), "KqpPeephole"); 
+
+        pipeline->Add(new TKqpPeepholeTransformer(), "KqpPeephole");
     }
 
 private:
@@ -99,7 +99,7 @@ private:
 };
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config, 
+    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
     bool allowNonDeterministicFunctions, bool withFinalStageRules)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config);
@@ -115,8 +115,8 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
         return status;
     }
 
-    if (!allowNonDeterministicFunctions && hasNonDeterministicFunctions) { 
-        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Unexpected non-deterministic functions in KQP program")); 
+    if (!allowNonDeterministicFunctions && hasNonDeterministicFunctions) {
+        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Unexpected non-deterministic functions in KQP program"));
         return TStatus::Error;
     }
 
@@ -149,10 +149,10 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
             .Done();
 
-        bool allowNonDeterministicFunctions = !stage.Program().Body().Maybe<TKqpEffects>(); 
- 
+        bool allowNonDeterministicFunctions = !stage.Program().Body().Maybe<TKqpEffects>();
+
         TExprNode::TPtr newProgram;
-        auto status = PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer, typesCtx, config, 
+        auto status = PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer, typesCtx, config,
             allowNonDeterministicFunctions, withFinalStageRules);
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
@@ -380,4 +380,4 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     return status;
 }
 
-} // namespace NKikimr::NKqp::NOpt 
+} // namespace NKikimr::NKqp::NOpt

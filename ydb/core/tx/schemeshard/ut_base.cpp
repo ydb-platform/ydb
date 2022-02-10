@@ -2527,7 +2527,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "key1"       Type: "Uint32"}
                             Columns { Name: "key2"       Type: "Utf8"}
                             Columns { Name: "key3"       Type: "Uint64"}
-                            Columns { Name: "key4"       Type: "Int32"} 
+                            Columns { Name: "key4"       Type: "Int32"}
                             Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key1", "key2", "key3", "key4"]
                             SplitBoundary { KeyPrefix {
@@ -2537,7 +2537,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Tuple { Optional { Uint32 : 200 } }
                                 Tuple { }                  # NULL
                                 Tuple { Optional { Uint64 : 100500 } }
-                                Tuple { Optional { Int32 : -100500 } } 
+                                Tuple { Optional { Int32 : -100500 } }
                             }}
                             SplitBoundary { KeyPrefix {
                                 Tuple { Optional { Uint32 : 200 } }

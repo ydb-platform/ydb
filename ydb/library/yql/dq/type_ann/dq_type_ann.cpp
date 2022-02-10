@@ -16,7 +16,7 @@ using TStatus = NYql::IGraphTransformer::TStatus;
 namespace {
 
 const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext& ctx) {
-    auto stageResultTuple = output.Stage().Ref().GetTypeAnn()->Cast<TTupleExprType>(); 
+    auto stageResultTuple = output.Stage().Ref().GetTypeAnn()->Cast<TTupleExprType>();
 
     ui32 resultIndex;
     if (!TryFromString(output.Index().Value(), resultIndex)) {
@@ -112,14 +112,14 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     }
 
     if (!UpdateLambdaAllArgumentsTypes(programLambda, argTypes, ctx)) {
-        return TStatus::Error; 
-    } 
+        return TStatus::Error;
+    }
 
     auto* resultType = programLambda->GetTypeAnn();
     if (!resultType) {
         return TStatus::Repeat;
-    } 
- 
+    }
+
     TVector<const TTypeAnnotationNode*> resultTypesTuple;
 
     if (resultType->GetKind() == ETypeAnnotationKind::Void) {
@@ -159,145 +159,145 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> 
+THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>
 ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) {
-    THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result; 
-    for (auto member : rowType.GetItems()) { 
-        TStringBuf label, column; 
-        if (member->GetName().Contains('.')) { 
-            SplitTableName(member->GetName(), label, column); 
-        } else { 
-            column = member->GetName(); 
-        } 
-        if (label.empty() && tableLabel.empty()) { 
-            ctx.AddError(TIssue(TStringBuilder() << "Invalid join input type " << FormatType(&rowType))); 
-            result.clear(); 
-            return result; 
-        } 
+    THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result;
+    for (auto member : rowType.GetItems()) {
+        TStringBuf label, column;
+        if (member->GetName().Contains('.')) {
+            SplitTableName(member->GetName(), label, column);
+        } else {
+            column = member->GetName();
+        }
+        if (label.empty() && tableLabel.empty()) {
+            ctx.AddError(TIssue(TStringBuilder() << "Invalid join input type " << FormatType(&rowType)));
+            result.clear();
+            return result;
+        }
         auto memberType = member->GetItemType();
         if (optional && !memberType->IsOptionalOrNull()) {
             memberType = ctx.MakeType<TOptionalExprType>(memberType);
         }
-        if (!tableLabel.empty()) { 
+        if (!tableLabel.empty()) {
             result[tableLabel][member->GetName()] = memberType;
-        } else { 
+        } else {
             result[label][column] = memberType;
-        } 
-    } 
-    return result; 
-} 
- 
+        }
+    }
+    return result;
+}
+
 template <bool IsMapJoin>
-const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType, 
-    const TStringBuf& leftLabel, const TStructExprType& rightRowType, const TStringBuf& rightLabel, 
-    const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx) 
-{ 
-    // check left 
+const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType,
+    const TStringBuf& leftLabel, const TStructExprType& rightRowType, const TStringBuf& rightLabel,
+    const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
+{
+    // check left
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
     auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
     if (leftType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse left join input type: ";
         leftRowType.Out(str);
         ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
-        return nullptr; 
-    } 
- 
-    // check right 
+        return nullptr;
+    }
+
+    // check right
     bool isRightOptional = IsRightJoinSideOptional(joinType);
     auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
     if (rightType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse right join input type: ";
         rightRowType.Out(str);
         ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
-        return nullptr; 
-    } 
- 
+        return nullptr;
+    }
+
     if constexpr (IsMapJoin) {
         if (joinType.StartsWith("Right") || joinType == "Cross") {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Unsupported map join type: " << joinType));
             return nullptr;
         }
-    } 
- 
-    // check join keys 
-    if (joinKeys.Empty() && joinType != "Cross") { 
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "No join keys")); 
-        return nullptr; 
-    } 
- 
-    for (const auto& key : joinKeys) { 
-        auto leftKeyLabel = key.LeftLabel().Value(); 
-        auto leftKeyColumn = key.LeftColumn().Value(); 
-        auto rightKeyLabel = key.RightLabel().Value(); 
-        auto rightKeyColumn = key.RightColumn().Value(); 
- 
-        if (leftLabel && leftLabel != leftKeyLabel) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for left table")); 
-            return nullptr; 
-        } 
-        if (rightLabel && rightLabel != rightKeyLabel) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for right table")); 
-            return nullptr; 
-        } 
- 
-        auto maybeLeftKeyType = leftType[leftKeyLabel].FindPtr(leftKeyColumn); 
-        if (!maybeLeftKeyType) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
-                << "Left key " << leftKeyLabel << "." << leftKeyColumn << " not found")); 
-            return nullptr; 
-        } 
- 
-        auto maybeRightKeyType = rightType[rightKeyLabel].FindPtr(rightKeyColumn); 
-        if (!maybeRightKeyType) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
-                << "Right key " << rightKeyLabel << "." << rightKeyColumn << " not found")); 
-            return nullptr; 
-        } 
- 
-        auto comparable = CanCompare<true>(*maybeLeftKeyType, *maybeRightKeyType); 
-        if (comparable != ECompareOptions::Comparable && comparable != ECompareOptions::Optional) { 
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
-                << "Not comparable keys: " << leftKeyLabel << "." << leftKeyColumn 
-                << " and " << rightKeyLabel << "." << rightKeyColumn << ", " 
-                << FormatType(*maybeLeftKeyType) << " != " << FormatType(*maybeRightKeyType))); 
-            return nullptr; 
-        } 
-    } 
- 
-    auto addAllMembersFrom = [&ctx](const THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>& type, 
+    }
+
+    // check join keys
+    if (joinKeys.Empty() && joinType != "Cross") {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), "No join keys"));
+        return nullptr;
+    }
+
+    for (const auto& key : joinKeys) {
+        auto leftKeyLabel = key.LeftLabel().Value();
+        auto leftKeyColumn = key.LeftColumn().Value();
+        auto rightKeyLabel = key.RightLabel().Value();
+        auto rightKeyColumn = key.RightColumn().Value();
+
+        if (leftLabel && leftLabel != leftKeyLabel) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for left table"));
+            return nullptr;
+        }
+        if (rightLabel && rightLabel != rightKeyLabel) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for right table"));
+            return nullptr;
+        }
+
+        auto maybeLeftKeyType = leftType[leftKeyLabel].FindPtr(leftKeyColumn);
+        if (!maybeLeftKeyType) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Left key " << leftKeyLabel << "." << leftKeyColumn << " not found"));
+            return nullptr;
+        }
+
+        auto maybeRightKeyType = rightType[rightKeyLabel].FindPtr(rightKeyColumn);
+        if (!maybeRightKeyType) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Right key " << rightKeyLabel << "." << rightKeyColumn << " not found"));
+            return nullptr;
+        }
+
+        auto comparable = CanCompare<true>(*maybeLeftKeyType, *maybeRightKeyType);
+        if (comparable != ECompareOptions::Comparable && comparable != ECompareOptions::Optional) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Not comparable keys: " << leftKeyLabel << "." << leftKeyColumn
+                << " and " << rightKeyLabel << "." << rightKeyColumn << ", "
+                << FormatType(*maybeLeftKeyType) << " != " << FormatType(*maybeRightKeyType)));
+            return nullptr;
+        }
+    }
+
+    auto addAllMembersFrom = [&ctx](const THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>& type,
         TVector<const TItemExprType*>* result, bool makeOptional = false)
-    { 
-        for (const auto& it : type) { 
-            for (const auto& it2 : it.second) { 
-                auto memberName = FullColumnName(it.first, it2.first); 
+    {
+        for (const auto& it : type) {
+            for (const auto& it2 : it.second) {
+                auto memberName = FullColumnName(it.first, it2.first);
                 if (makeOptional && it2.second->GetKind() != ETypeAnnotationKind::Optional) {
                     result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second)));
                 } else {
                     result->emplace_back(ctx.MakeType<TItemExprType>(memberName, it2.second));
                 }
-            } 
-        } 
-    }; 
- 
-    TVector<const TItemExprType*> resultStructItems; 
+            }
+        }
+    };
+
+    TVector<const TItemExprType*> resultStructItems;
     if (joinType != "RightOnly" && joinType != "RightSemi") {
         addAllMembersFrom(leftType, &resultStructItems, joinType == "Right");
     }
     if (joinType != "LeftOnly" && joinType != "LeftSemi") {
         addAllMembersFrom(rightType, &resultStructItems, joinType == "Left");
-    } 
- 
-    auto rowType = ctx.MakeType<TStructExprType>(resultStructItems); 
-    return rowType; 
-} 
- 
+    }
+
+    auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
+    return rowType;
+}
+
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
     if (!EnsureArgsCount(*input, 6, ctx)) {
         return nullptr;
     }
- 
+
     if (!input->Child(TDqJoin::idx_LeftLabel)->IsCallable("Void")) {
         if (!EnsureAtom(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
             return nullptr;
@@ -334,44 +334,44 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     auto leftInputType = join.LeftInput().Ref().GetTypeAnn();
     auto rightInputType = join.RightInput().Ref().GetTypeAnn();
 
-    if (stream) { 
+    if (stream) {
         if (!EnsureNewSeqType<false, false, true>(join.Pos(), *leftInputType, ctx)) {
-            return nullptr; 
-        } 
+            return nullptr;
+        }
         if (!EnsureNewSeqType<false, false, true>(join.Pos(), *rightInputType, ctx)) {
-            return nullptr; 
-        } 
-    } else { 
+            return nullptr;
+        }
+    } else {
         if (!EnsureNewSeqType<false, true, false>(join.Pos(), *leftInputType, ctx)) {
-            return nullptr; 
-        } 
+            return nullptr;
+        }
         if (!EnsureNewSeqType<false, true, false>(join.Pos(), *rightInputType, ctx)) {
-            return nullptr; 
-        } 
-    } 
- 
-    auto leftInputItemType = GetSeqItemType(leftInputType); 
+            return nullptr;
+        }
+    }
+
+    auto leftInputItemType = GetSeqItemType(leftInputType);
     if (!EnsureStructType(join.Pos(), *leftInputItemType, ctx)) {
-        return nullptr; 
-    } 
-    auto leftStructType = leftInputItemType->Cast<TStructExprType>(); 
+        return nullptr;
+    }
+    auto leftStructType = leftInputItemType->Cast<TStructExprType>();
     auto leftTableLabel = join.LeftLabel().Maybe<TCoAtom>()
         ? join.LeftLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
- 
-    auto rightInputItemType = GetSeqItemType(rightInputType); 
+
+    auto rightInputItemType = GetSeqItemType(rightInputType);
     if (!EnsureStructType(join.Pos(), *rightInputItemType, ctx)) {
-        return nullptr; 
-    } 
-    auto rightStructType = rightInputItemType->Cast<TStructExprType>(); 
+        return nullptr;
+    }
+    auto rightStructType = rightInputItemType->Cast<TStructExprType>();
     auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
- 
+
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
         rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
-} 
- 
+}
+
 TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 1, ctx)) {
         return TStatus::Error;
@@ -814,8 +814,8 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqCnValue::Match(input.Get())) {
                 return AnnotateDqCnValue(input, ctx);
-            } 
- 
+            }
+
             if (TDqCnMerge::Match(input.Get())) {
                 return AnnotateDqCnMerge(input, ctx);
             }
@@ -826,20 +826,20 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqJoin::Match(input.Get())) {
                 return AnnotateDqJoin(input, ctx);
-            } 
- 
+            }
+
             if (TDqPhyMapJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
-            } 
- 
+            }
+
             if (TDqPhyJoinDict::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }
 
             if (TDqPhyCrossJoin::Match(input.Get())) {
                 return AnnotateDqCrossJoin(input, ctx);
-            } 
- 
+            }
+
             if (TDqSource::Match(input.Get())) {
                 return AnnotateDqSource(input, ctx);
             }

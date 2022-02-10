@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
@@ -12,19 +12,19 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
- 
+
 namespace NYql {
 namespace NDq {
- 
+
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvState, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
- 
+
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {};
- 
+
     struct TEvChannelsInfo : public NActors::TEventPB<TEvChannelsInfo, NDqProto::TEvChannelsInfo,
         TDqComputeEvents::EvChannelsInfo> {};
- 
+
     struct TEvChannelData : public NActors::TEventPB<TEvChannelData, NDqProto::TEvComputeChannelData,
         TDqComputeEvents::EvChannelData> {};
 
@@ -186,8 +186,8 @@ struct TEvDqCompute {
         const TIssues Issues;
         const ui64 Generation;
     };
-}; 
- 
+};
+
 struct TDqExecutionSettings {
     struct TFlowControl {
         ui64 MaxOutputChunkSize = 2_MB;
@@ -232,7 +232,7 @@ struct TComputeRuntimeSettings {
     std::function<void(bool success, const TString& reason)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;
 };
- 
+
 using TAllocateMemoryCallback = std::function<bool(const TTxId& txId, ui64 taskId, ui64 memory)>;
 using TFreeMemoryCallback = std::function<void(const TTxId& txId, ui64 taskId, ui64 memory)>;
 

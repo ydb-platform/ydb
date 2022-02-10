@@ -92,8 +92,8 @@ namespace NDataShard {
             // All input RS for operation were loaded from
             // local database
             LoadedInRS = 1ULL << 32,
-            // Operation is using new execution engine in scan mode 
-            KqpScanTransaction = 1ULL << 33, 
+            // Operation is using new execution engine in scan mode
+            KqpScanTransaction = 1ULL << 33,
             // Operation is waiting for stream clearance
             WaitingForStreamClearance = 1ULL << 34,
             // Operation is interested in interconnect disconnects
@@ -121,7 +121,7 @@ namespace NDataShard {
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
-                | GlobalWriter | KqpDataTransaction | KqpScanTransaction 
+                | GlobalWriter | KqpDataTransaction | KqpScanTransaction
                 | BlockingImmediateOps | BlockingImmediateWrites,
         };
     };
@@ -534,35 +534,35 @@ struct TEvDataShard {
             Record.SetTxResult(txResult.data(), txResult.size());
         }
 
-        void SetExecutionError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) { 
-            switch (error) { 
-                case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED: 
-                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE); 
-                    break; 
-                case NKikimrTxDataShard::TError::EXECUTION_CANCELLED: 
-                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED); 
-                    break; 
-                default: 
-                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR); 
-                    break; 
-            } 
- 
-            AddError(error, message); 
-        } 
- 
-        void SetProcessError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) { 
-            switch (error) { 
-                case NKikimrTxDataShard::TError::PROGRAM_ERROR: 
-                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR); 
-                    break; 
-                default: 
-                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
-                    break; 
-            } 
- 
-            AddError(error, message); 
-        } 
- 
+        void SetExecutionError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
+            switch (error) {
+                case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED:
+                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE);
+                    break;
+                case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
+                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
+                    break;
+                default:
+                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
+                    break;
+            }
+
+            AddError(error, message);
+        }
+
+        void SetProcessError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
+            switch (error) {
+                case NKikimrTxDataShard::TError::PROGRAM_ERROR:
+                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
+                    break;
+                default:
+                    Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                    break;
+            }
+
+            AddError(error, message);
+        }
+
         void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
             Record.SetStep(stepOrderId.first);
             Record.SetOrderId(stepOrderId.second);

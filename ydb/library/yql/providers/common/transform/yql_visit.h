@@ -21,7 +21,7 @@ public:
     {
     }
 
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final; 
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
     bool CanParse(const TExprNode& node) const {
         return Handlers.contains(node.Content());

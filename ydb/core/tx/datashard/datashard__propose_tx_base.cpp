@@ -1,5 +1,5 @@
 #include "datashard_txs.h"
-#include "datashard_failpoints.h" 
+#include "datashard_failpoints.h"
 #include "operation.h"
 
 #include <ydb/core/util/pb.h>
@@ -145,8 +145,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
         Y_FAIL();
-    } catch (const TMemoryLimitExceededException &ex) { 
-        Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException"); 
+    } catch (const TMemoryLimitExceededException &ex) {
+        Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
     } catch (const std::exception &e) {
         Y_FAIL("there must be no leaked exceptions: %s", e.what());
     } catch (...) {

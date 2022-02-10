@@ -32,13 +32,13 @@ constexpr ui32 MAX_RETRIES_COUNT = 3;
 class TKqpShardsResolver : public TActorBootstrapped<TKqpShardsResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_SHARDS_RESOLVER; 
+        return NKikimrServices::TActivity::KQP_SHARDS_RESOLVER;
     }
 
 public:
-    TKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds, float failRatio) 
-        : Owner(owner) 
-        , TxId(txId) 
+    TKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds, float failRatio)
+        : Owner(owner)
+        , TxId(txId)
         , ShardIds(std::move(shardIds))
         , MaxFailedShards(ShardIds.size() * failRatio) {}
 
@@ -64,7 +64,7 @@ private:
             cFunc(TEvents::TSystem::Poison, PassAway);
             default: {
                 LOG_C("Unexpected event: " << ev->GetTypeRewrite());
-                ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event while resolving shards"); 
+                ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event while resolving shards");
             }
         }
     }
@@ -79,7 +79,7 @@ private:
 
             if (Result.size() + FailedTablets == ShardIds.size()) {
                 LOG_D("Done, success: " << Result.size() << ", failed: " << FailedTablets);
-                ReplyAndDie(); 
+                ReplyAndDie();
                 return;
             }
 
@@ -91,14 +91,14 @@ private:
             ++FailedTablets;
             if (FailedTablets > MaxFailedShards) {
                 LOG_W("Too many failed requests: " << FailedTablets << " (" << ShardIds.size() << ")");
-                ReplyErrorAndDie(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder() 
-                    << "Too many unresolved shards: " << FailedTablets); 
+                ReplyErrorAndDie(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder()
+                    << "Too many unresolved shards: " << FailedTablets);
                 return;
             }
 
             if (FailedTablets + Result.size() == ShardIds.size()) {
                 LOG_D("Done, success: " << Result.size() << ", failed: " << FailedTablets);
-                ReplyAndDie(); 
+                ReplyAndDie();
                 return;
             }
 
@@ -121,24 +121,24 @@ private:
         return resolveFlags;
     }
 
-    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TString&& message) { 
-        auto replyEv = MakeHolder<TEvKqpExecuter::TEvShardsResolveStatus>(); 
-        replyEv->Status = status; 
-        replyEv->Issues.AddIssue(TIssue(message)); 
-        Send(Owner, replyEv.Release()); 
-        PassAway(); 
-    } 
- 
-    void ReplyAndDie() { 
-        auto replyEv = MakeHolder<TEvKqpExecuter::TEvShardsResolveStatus>(); 
-        replyEv->ShardNodes = std::move(Result); 
-        replyEv->Unresolved = FailedTablets; 
-        Send(Owner, replyEv.Release()); 
-        PassAway(); 
-    } 
- 
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TString&& message) {
+        auto replyEv = MakeHolder<TEvKqpExecuter::TEvShardsResolveStatus>();
+        replyEv->Status = status;
+        replyEv->Issues.AddIssue(TIssue(message));
+        Send(Owner, replyEv.Release());
+        PassAway();
+    }
+
+    void ReplyAndDie() {
+        auto replyEv = MakeHolder<TEvKqpExecuter::TEvShardsResolveStatus>();
+        replyEv->ShardNodes = std::move(Result);
+        replyEv->Unresolved = FailedTablets;
+        Send(Owner, replyEv.Release());
+        PassAway();
+    }
+
 private:
-    const TActorId Owner; 
+    const TActorId Owner;
     const ui64 TxId;
     const TSet<ui64> ShardIds;
     const ui32 MaxFailedShards;
@@ -154,8 +154,8 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds, float failRatio) { 
-    return new TKqpShardsResolver(owner, txId, std::move(shardIds), failRatio); 
+IActor* CreateKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds, float failRatio) {
+    return new TKqpShardsResolver(owner, txId, std::move(shardIds), failRatio);
 }
 
 } // namespace NKikimr::NKqp

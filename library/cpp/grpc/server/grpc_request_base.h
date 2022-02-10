@@ -58,11 +58,11 @@ public:
 
     //! Send common response (The request shoult be created for protobuf response type)
     //! Implementation can swap protobuf message
-    virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0; 
+    virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
     //! Send serialised response (The request shoult be created for bytes response type)
     //! Implementation can swap ByteBuffer
-    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0) = 0; 
+    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0) = 0;
 
     //! Send grpc UNAUTHENTICATED status
     virtual void ReplyUnauthenticated(const TString& in) = 0;

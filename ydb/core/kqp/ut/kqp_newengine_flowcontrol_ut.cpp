@@ -72,7 +72,7 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     NYql::NDq::GetDqExecutionSettingsForTests().FlowControl.InFlightBytesOvercommit = 1.0f;
 
     auto settings = NExperimental::TExecuteStreamQuerySettings()
-        .ProfileMode(NExperimental::EStreamQueryProfileMode::Full); 
+        .ProfileMode(NExperimental::EStreamQueryProfileMode::Full);
 
     auto result = db.ExecuteStreamQuery(R"(
             $r = (select * from `/Root/FourShard` where Key > 201);

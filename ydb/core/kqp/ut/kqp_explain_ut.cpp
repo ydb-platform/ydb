@@ -58,12 +58,12 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
+        UNIT_ASSERT(res.PlanJson);
 
-        Cerr << *res.PlanJson; 
- 
+        Cerr << *res.PlanJson;
+
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
@@ -85,11 +85,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
@@ -128,11 +128,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto read = FindPlanNodeByKv(plan, "Node Type", "Aggregate-Filter-TableFullScan");
         UNIT_ASSERT(read.IsDefined());
@@ -171,10 +171,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
+        UNIT_ASSERT(res.PlanJson);
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto join = FindPlanNodeByKv(
             plan,
@@ -200,11 +200,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
         UNIT_ASSERT(node.IsDefined());
@@ -229,11 +229,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto read = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
         auto& operators = read.GetMapSafe().at("Operators").GetArraySafe();
@@ -256,11 +256,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-TableRangesScan");
         UNIT_ASSERT(scanSort.IsDefined());
@@ -278,11 +278,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto limit = FindPlanNodeByKv(plan, "Limit", "10");
         UNIT_ASSERT(limit.IsDefined());
@@ -313,11 +313,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Aggregate-Sort");
         UNIT_ASSERT(join1.IsDefined());
@@ -337,11 +337,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto constExpr = FindPlanNodeByKv(plan, "Node Type", "ConstantExpr");
         UNIT_ASSERT(constExpr.IsDefined());
@@ -364,11 +364,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         bool containCte = false;
         auto& plans = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans");
@@ -400,11 +400,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        UNIT_ASSERT(res.PlanJson); 
-        Cerr << *res.PlanJson; 
+        UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         NJson::TJsonValue plan;
-        NJson::ReadJsonTree(*res.PlanJson, &plan, true); 
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
         auto unionNode = FindPlanNodeByKv(plan, "Node Type", "Sort-Union");
         UNIT_ASSERT_EQUAL(unionNode.GetMap().at("Plans").GetArraySafe().size(), 4);

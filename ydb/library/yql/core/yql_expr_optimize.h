@@ -21,7 +21,7 @@ struct TOptimizeExprSettings {
     TProcessedNodesSet* ProcessedNodes = nullptr;
     bool VisitStarted = false;
     IGraphTransformer* CustomInstantTypeTransformer = nullptr;
-    bool VisitLambdas = true; 
+    bool VisitLambdas = true;
     TTypeAnnotationContext* Types;
     bool VisitTuples = false;
 };
@@ -36,28 +36,28 @@ IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TP
     TExprContext& ctx, const TOptimizeExprSettings& settings);
 
 
-class IOptimizationContext { 
-public: 
+class IOptimizationContext {
+public:
     virtual ~IOptimizationContext() = default;
     virtual void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) = 0;
-}; 
- 
+};
+
 typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, IOptimizationContext&)> TCallableOptimizerEx;
- 
+
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings);
- 
+
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
 
 typedef std::function<bool (const TExprNode::TPtr&)> TExprVisitPtrFunc;
 typedef std::function<bool (const TExprNode&)> TExprVisitRefFunc;
- 
+
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
-void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc); 
-void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes); 
+void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
+void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func);
- 
+
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
@@ -68,7 +68,7 @@ TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& f
 
 TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate);
 TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate);
- 
+
 std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& secondRoot, const TExprVisitPtrFunc& predicate);
 bool HaveSharedNodes(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& secondRoot, const TExprVisitPtrFunc& predicate);
 

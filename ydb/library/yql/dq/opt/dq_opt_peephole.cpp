@@ -1,17 +1,17 @@
-#include "dq_opt_peephole.h" 
- 
+#include "dq_opt_peephole.h"
+
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
- 
+
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/size_literals.h>
 
-namespace NYql::NDq { 
- 
-using namespace NYql::NNodes; 
- 
+namespace NYql::NDq {
+
+using namespace NYql::NNodes;
+
 namespace {
 
 inline std::string_view GetTableLabel(const TExprBase& node) {
@@ -122,37 +122,37 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
 
 } // anonymous namespace end
 
-/** 
- * Rewrites a `KqpMapJoin` to the `MapJoinCore`. 
- * 
- * Restrictions: 
- *  - Don't select join strategy, always use `MapJoin` 
- *  - Explicitly convert right input to the dict 
+/**
+ * Rewrites a `KqpMapJoin` to the `MapJoinCore`.
+ *
+ * Restrictions:
+ *  - Don't select join strategy, always use `MapJoin`
+ *  - Explicitly convert right input to the dict
  *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda
  *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
- */ 
-TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) { 
-    if (!node.Maybe<TDqPhyMapJoin>()) { 
-        return node; 
-    } 
+ */
+TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyMapJoin>()) {
+        return node;
+    }
     const auto mapJoin = node.Cast<TDqPhyMapJoin>();
     const auto pos = mapJoin.Pos();
- 
+
     const auto leftTableLabel = GetTableLabel(mapJoin.LeftLabel());
     const auto rightTableLabel = GetTableLabel(mapJoin.RightLabel());
- 
+
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, mapJoin, leftTableLabel, rightTableLabel);
     const auto keyWidth = leftKeyColumnNodes.size();
- 
+
     const auto makeRenames = [&ctx, pos](TStringBuf label, const TStructExprType& type) {
-        TExprNode::TListType renames; 
+        TExprNode::TListType renames;
         for (const auto& member : type.GetItems()) {
             renames.emplace_back(ctx.NewAtom(pos, member->GetName()));
             renames.emplace_back(ctx.NewAtom(pos, GetColumnName(label, member)));
-        } 
-        return renames; 
-    }; 
- 
+        }
+        return renames;
+    };
+
     const auto itemTypeLeft = GetSeqItemType(mapJoin.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
     const auto itemTypeRight = GetSeqItemType(mapJoin.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
 
@@ -164,8 +164,8 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         rightPayloads.reserve(rightRenames.size() >> 1U);
         for (auto it = rightRenames.cbegin(); rightRenames.cend() != it; ++++it)
             rightPayloads.emplace_back(*it);
-    } 
- 
+    }
+
     TTypeAnnotationNode::TListType keyTypes(keyWidth);
     for (auto i = 0U; i < keyTypes.size(); ++i) {
         const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content());
@@ -178,7 +178,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
 
     auto leftInput = ctx.NewCallable(mapJoin.LeftInput().Pos(), "ToFlow", {mapJoin.LeftInput().Ptr()});
     auto rightInput = ctx.NewCallable(mapJoin.RightInput().Pos(), "ToFlow", {mapJoin.RightInput().Ptr()});
- 
+
     if (keyTypes.empty()) {
         const auto type = mapJoin.Ref().GetTypeAnn();
         if (mapJoin.JoinType().Value() == "Inner" || mapJoin.JoinType().Value() == "LeftSemi")
@@ -234,91 +234,91 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
                 .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
                 .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
                 .Build()
-            .Build() 
-        .Done(); 
-} 
- 
-TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) { 
-    if (!node.Maybe<TDqPhyCrossJoin>()) { 
-        return node; 
-    } 
-    auto crossJoin = node.Cast<TDqPhyCrossJoin>(); 
- 
+            .Build()
+        .Done();
+}
+
+TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyCrossJoin>()) {
+        return node;
+    }
+    auto crossJoin = node.Cast<TDqPhyCrossJoin>();
+
     auto leftTableLabel = GetTableLabel(crossJoin.LeftLabel());
     auto rightTableLabel = GetTableLabel(crossJoin.RightLabel());
- 
-    TCoArgument leftArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_left")}; 
-    TCoArgument rightArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_right")}; 
- 
-    TExprNodeList keys; 
-    auto collectKeys = [&ctx, &keys](const TExprBase& input, TStringBuf label, const TCoArgument& arg) { 
-        for (auto key : GetSeqItemType(input.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems()) { 
+
+    TCoArgument leftArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_left")};
+    TCoArgument rightArg{ctx.NewArgument(crossJoin.Pos(), "_kqp_right")};
+
+    TExprNodeList keys;
+    auto collectKeys = [&ctx, &keys](const TExprBase& input, TStringBuf label, const TCoArgument& arg) {
+        for (auto key : GetSeqItemType(input.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems()) {
             auto fqColumnName = GetColumnName(label, key);
-            keys.emplace_back( 
-                Build<TCoNameValueTuple>(ctx, input.Pos()) 
-                    .Name().Build(fqColumnName) 
-                    .Value<TCoMember>() 
-                        .Struct(arg) 
-                        .Name().Build(ToString(key->GetName())) 
-                        .Build() 
-                    .Done().Ptr()); 
-        } 
-    }; 
-    collectKeys(crossJoin.LeftInput(), leftTableLabel, leftArg); 
-    collectKeys(crossJoin.RightInput(), rightTableLabel, rightArg); 
- 
-    // we have to `Condense` right input as single-element stream of lists (single list of all elements from the right), 
-    // because stream supports single iteration only 
-    auto itemArg = Build<TCoArgument>(ctx, crossJoin.Pos()).Name("item").Done(); 
-    auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, crossJoin.Pos()) 
+            keys.emplace_back(
+                Build<TCoNameValueTuple>(ctx, input.Pos())
+                    .Name().Build(fqColumnName)
+                    .Value<TCoMember>()
+                        .Struct(arg)
+                        .Name().Build(ToString(key->GetName()))
+                        .Build()
+                    .Done().Ptr());
+        }
+    };
+    collectKeys(crossJoin.LeftInput(), leftTableLabel, leftArg);
+    collectKeys(crossJoin.RightInput(), rightTableLabel, rightArg);
+
+    // we have to `Condense` right input as single-element stream of lists (single list of all elements from the right),
+    // because stream supports single iteration only
+    auto itemArg = Build<TCoArgument>(ctx, crossJoin.Pos()).Name("item").Done();
+    auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, crossJoin.Pos())
         .Input<TCoToFlow>()
             .Input(crossJoin.RightInput())
             .Build()
-        .InitHandler() 
-            .Args({itemArg}) 
-            .Body<TCoAsList>() 
-                .Add(itemArg) 
-                .Build() 
-            .Build() 
-        .SwitchHandler() 
-            .Args({"item", "state"}) 
-            .Body<TCoBool>() 
-                .Literal().Build("false") 
-                .Build() 
-            .Build() 
-        .UpdateHandler() 
-            .Args({"item", "state"}) 
-            .Body<TCoAppend>() 
-                .List("state") 
-                .Item("item") 
-                .Build() 
-            .Build() 
-        .Done(); 
- 
-    return Build<TCoFlatMap>(ctx, crossJoin.Pos()) 
-        .Input(rightAsStreamOfLists) 
-        .Lambda() 
-            .Args({"rightAsList"}) 
-            .Body<TCoFlatMap>() 
-                .Input(crossJoin.LeftInput()) 
-                .Lambda() 
-                    .Args({leftArg}) 
-                    .Body<TCoMap>() 
-                        // here we have `List`, so we can iterate over it many times (for every `leftArg`) 
-                        .Input("rightAsList") 
-                        .Lambda() 
-                            .Args({rightArg}) 
-                            .Body<TCoAsStruct>() 
-                                .Add(keys) 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                .Build() 
-            .Build() 
-        .Done(); 
-} 
- 
+        .InitHandler()
+            .Args({itemArg})
+            .Body<TCoAsList>()
+                .Add(itemArg)
+                .Build()
+            .Build()
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body<TCoBool>()
+                .Literal().Build("false")
+                .Build()
+            .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TCoAppend>()
+                .List("state")
+                .Item("item")
+                .Build()
+            .Build()
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, crossJoin.Pos())
+        .Input(rightAsStreamOfLists)
+        .Lambda()
+            .Args({"rightAsList"})
+            .Body<TCoFlatMap>()
+                .Input(crossJoin.LeftInput())
+                .Lambda()
+                    .Args({leftArg})
+                    .Body<TCoMap>()
+                        // here we have `List`, so we can iterate over it many times (for every `leftArg`)
+                        .Input("rightAsList")
+                        .Lambda()
+                            .Args({rightArg})
+                            .Body<TCoAsStruct>()
+                                .Add(keys)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+}
+
 namespace {
 
 TExprNode::TPtr UnpackJoinedData(const TStructExprType* leftRowType, const TStructExprType* rightRowType,
@@ -475,46 +475,46 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         .Done();
 }
 
-NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExprContext& ctx) { 
-    if (!node.Maybe<TDqJoin>()) { 
-        return node; 
-    } 
- 
-    auto join = node.Cast<TDqJoin>(); 
- 
-    if (join.JoinType().Value() == "Cross") { 
-        return Build<TCoCollect>(ctx, join.Pos()) 
-            .Input<TDqPhyCrossJoin>() 
-                .LeftInput<TCoIterator>() 
-                    .List(join.LeftInput()) 
-                    .Build() 
-                .LeftLabel(join.LeftLabel()) 
-                .RightInput<TCoIterator>() 
-                    .List(join.RightInput()) 
-                    .Build() 
-                .RightLabel(join.RightLabel()) 
-                .JoinType(join.JoinType()) 
-                .JoinKeys(join.JoinKeys()) 
-                .Build() 
-            .Done(); 
-    } else { 
-        return Build<TCoCollect>(ctx, join.Pos()) 
-            .Input<TDqPhyJoinDict>() 
-                .LeftInput<TCoIterator>() 
-                    .List(join.LeftInput()) 
-                    .Build() 
-                .LeftLabel(join.LeftLabel()) 
-                .RightInput<TCoIterator>() 
-                    .List(join.RightInput()) 
-                    .Build() 
-                .RightLabel(join.RightLabel()) 
-                .JoinType(join.JoinType()) 
-                .JoinKeys(join.JoinKeys()) 
-                .Build() 
-            .Done(); 
-    } 
-} 
- 
+NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqJoin>()) {
+        return node;
+    }
+
+    auto join = node.Cast<TDqJoin>();
+
+    if (join.JoinType().Value() == "Cross") {
+        return Build<TCoCollect>(ctx, join.Pos())
+            .Input<TDqPhyCrossJoin>()
+                .LeftInput<TCoIterator>()
+                    .List(join.LeftInput())
+                    .Build()
+                .LeftLabel(join.LeftLabel())
+                .RightInput<TCoIterator>()
+                    .List(join.RightInput())
+                    .Build()
+                .RightLabel(join.RightLabel())
+                .JoinType(join.JoinType())
+                .JoinKeys(join.JoinKeys())
+                .Build()
+            .Done();
+    } else {
+        return Build<TCoCollect>(ctx, join.Pos())
+            .Input<TDqPhyJoinDict>()
+                .LeftInput<TCoIterator>()
+                    .List(join.LeftInput())
+                    .Build()
+                .LeftLabel(join.LeftLabel())
+                .RightInput<TCoIterator>()
+                    .List(join.RightInput())
+                    .Build()
+                .RightLabel(join.RightLabel())
+                .JoinType(join.JoinType())
+                .JoinKeys(join.JoinKeys())
+                .Build()
+            .Done();
+    }
+}
+
 NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqReplicate>()) {
         return node;
@@ -541,4 +541,4 @@ NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExp
         .Done();
 }
 
-} // namespace NYql::NDq 
+} // namespace NYql::NDq

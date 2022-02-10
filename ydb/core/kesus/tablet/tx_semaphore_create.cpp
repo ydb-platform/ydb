@@ -38,7 +38,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
                 Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::BAD_SESSION, 
+                    Ydb::StatusIds::BAD_SESSION,
                     proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
                 return true;
             }
@@ -49,7 +49,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
             if (!session || session->OwnerProxy != proxy) {
                 Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
+                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                     session ? "Session not attached" : "Session does not exist"));
                 return true;
             }
@@ -62,12 +62,12 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
             if (semaphore->Ephemeral) {
                 Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::PRECONDITION_FAILED, 
+                    Ydb::StatusIds::PRECONDITION_FAILED,
                     "Cannot create semaphore due to ephemeral locks"));
             } else {
                 Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::ALREADY_EXISTS, 
+                    Ydb::StatusIds::ALREADY_EXISTS,
                     "Semaphore already exists"));
             }
             return true;

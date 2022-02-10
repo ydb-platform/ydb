@@ -268,7 +268,7 @@ public:
                 builder.SetError("Only one argument is expected " + ToString(argsTypeInspector.GetElementsCount()));
                 return;
             }
- 
+
             TVector<TDataTypeId> typeIds;
             const auto structType = argsTypeInspector.GetElementType(0);
             THolder<TStructTypeInspector> structInspector(new TStructTypeInspector(*typeHelper, structType));

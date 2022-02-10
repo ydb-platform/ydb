@@ -26,7 +26,7 @@ SRCS(
     ydb_persqueue_cluster_discovery.proto
     ydb_clickhouse_internal.proto
     ydb_cms.proto
-    ydb_common.proto 
+    ydb_common.proto
     ydb_coordination.proto
     ydb_discovery.proto
     ydb_experimental.proto
@@ -39,10 +39,10 @@ SRCS(
     ydb_query_stats.proto
     ydb_rate_limiter.proto
     ydb_scheme.proto
-    ydb_scripting.proto 
-    ydb_status_codes.proto 
+    ydb_scripting.proto
+    ydb_status_codes.proto
     ydb_table.proto
-    ydb_value.proto 
+    ydb_value.proto
     ydb_s3_internal.proto
     yq.proto
 )

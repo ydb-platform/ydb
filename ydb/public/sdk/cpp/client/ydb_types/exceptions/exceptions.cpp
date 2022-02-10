@@ -1,12 +1,12 @@
 #include "exceptions.h"
 
-namespace NYdb { 
+namespace NYdb {
 
-TYdbException::TYdbException(const TString& reason) { 
+TYdbException::TYdbException(const TString& reason) {
     Append(reason);
 }
 
 TContractViolation::TContractViolation(const TString& reason)
-    : TYdbException(reason) {} 
+    : TYdbException(reason) {}
 
-} // namespace NYdb 
+} // namespace NYdb

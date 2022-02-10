@@ -29,7 +29,7 @@ sql_stmt_core:
   | commit_stmt
   | update_stmt
   | delete_stmt
-  | rollback_stmt 
+  | rollback_stmt
   | declare_stmt
   | import_stmt
   | export_stmt
@@ -328,8 +328,8 @@ sort_specification_list: sort_specification (COMMA sort_specification)*;
 
 select_stmt: select_kind_parenthesis (select_op select_kind_parenthesis)*;
 
-select_unparenthesized_stmt: select_kind_partial (select_op select_kind_parenthesis)*; 
- 
+select_unparenthesized_stmt: select_kind_partial (select_op select_kind_parenthesis)*;
+
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
 select_op: UNION (ALL)? | INTERSECT | EXCEPT;
@@ -583,8 +583,8 @@ table_hint:
 simple_table_ref: (((cluster_expr DOT)? id_or_at) | AT? bind_parameter) table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?; 
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source); 
+delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
+update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -643,16 +643,16 @@ window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXC
 // EXTRAS
 use_stmt: USE cluster_expr;
 
-subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt); 
+subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
 
 // TODO: [fatal] rule named_nodes_stmt has non-LL(*) decision due to recursive rule invocations reachable from alts 1,3
 // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt | values_stmt | LPAREN values_stmt RPAREN);
-named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt); 
- 
+named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
+
 commit_stmt: COMMIT;
 
-rollback_stmt: ROLLBACK; 
- 
+rollback_stmt: ROLLBACK;
+
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
 id: identifier | keyword;
@@ -977,7 +977,7 @@ keyword_compat: (
   | RESTRICT
   | RESULT
   | RETURNING
-  | REVERT 
+  | REVERT
   | RIGHT
   | RLIKE
   | ROLLBACK
@@ -1281,7 +1281,7 @@ RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
 RETURN: R E T U R N;
 RETURNING: R E T U R N I N G;
-REVERT: R E V E R T; 
+REVERT: R E V E R T;
 RIGHT: R I G H T;
 RLIKE: R L I K E;
 ROLLBACK: R O L L B A C K;

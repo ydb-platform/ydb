@@ -147,7 +147,7 @@ namespace {
 
     private:
         inline void AddError(const TString& message) {
-            Issues_.AddIssue(Ctx_.Position(), message); 
+            Issues_.AddIssue(Ctx_.Position(), message);
         }
 
         inline void SkipComment() {
@@ -569,19 +569,19 @@ namespace {
                     Indent(out, indent * 2);
                 }
 
-                if (localIndent == 0 && blockLevel > 0) { 
-                    Indent(out, (blockLevel - 1) * 2); 
-                } 
- 
+                if (localIndent == 0 && blockLevel > 0) {
+                    Indent(out, (blockLevel - 1) * 2);
+                }
+
                 out << ')';
             }
         }
 
         if (!isQuote || !(flags & TAstPrintFlags::ShortQuote)) {
-            if (localIndent > 0 || blockLevel == 0) { 
-                if (localIndent <= 1 || !(flags & TAstPrintFlags::PerLine)) { 
-                    out << Endl; 
-                } 
+            if (localIndent > 0 || blockLevel == 0) {
+                if (localIndent <= 1 || !(flags & TAstPrintFlags::PerLine)) {
+                    out << Endl;
+                }
             }
         }
     }

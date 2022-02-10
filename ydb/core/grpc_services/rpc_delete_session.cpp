@@ -10,37 +10,37 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb; 
+using namespace Ydb;
 using namespace NKqp;
 
-class TDeleteSessionRPC : public TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest> { 
-    using TBase = TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest>; 
- 
+class TDeleteSessionRPC : public TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest> {
+    using TBase = TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest>;
+
 public:
     TDeleteSessionRPC(IRequestOpCtx* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         DeleteSessionImpl(ctx);
-        Become(&TDeleteSessionRPC::StateWork); 
+        Become(&TDeleteSessionRPC::StateWork);
     }
- 
+
 private:
     void DeleteSessionImpl(const TActorContext& ctx) {
         const auto req = GetProtoRequest();
- 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>(); 
- 
-        NYql::TIssues issues; 
-        if (CheckSession(req->session_id(), issues)) { 
-            ev->Record.MutableRequest()->SetSessionId(req->session_id()); 
-        } else { 
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx); 
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+
+        NYql::TIssues issues;
+        if (CheckSession(req->session_id(), issues)) {
+            ev->Record.MutableRequest()->SetSessionId(req->session_id());
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
         }
 
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); //no respose will be sended, so don't wait for anything 
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); //no respose will be sended, so don't wait for anything
         Request_->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         this->Die(ctx);
     }

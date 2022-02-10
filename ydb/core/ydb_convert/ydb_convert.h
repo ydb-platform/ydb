@@ -8,17 +8,17 @@
 
 namespace NKikimr {
 
-void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output); 
+void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output);
 void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
     const NKikimrMiniKQL::TValue& inputValue,
     Ydb::Value& output);
-void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& output); 
-void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType, 
+void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& output);
+void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     const Ydb::Value& inputValue,
     NKikimrMiniKQL::TValue& output);
 
-void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output); 
- 
+void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output);
+
 void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
     NKikimrMiniKQL::TParams& output);
 

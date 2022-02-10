@@ -64,7 +64,7 @@ struct TAllocState : public TAlignedPagePool
 
     explicit TAllocState(const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
-    void InvalidateMemInfo(); 
+    void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
 };
 
@@ -117,7 +117,7 @@ public:
     void DisableStrictAllocationCheck() { MyState_.DisableStrictAllocationCheck(); }
 
     void ReleaseFreePages() { MyState_.ReleaseFreePages(); }
-    void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); } 
+    void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }
 
     bool IsAttached() const { return AttachedCount_ > 0; }
 

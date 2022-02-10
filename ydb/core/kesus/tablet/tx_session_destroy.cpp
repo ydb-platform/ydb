@@ -26,7 +26,7 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
             new TEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration()));
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) { 
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         Events.emplace_back(Sender, Cookie,
             new TEvKesus::TEvDestroySessionResult(Record.GetProxyGeneration(), status, reason));
     }
@@ -40,7 +40,7 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
             // World has changed by the time we executed
             ReplyError(
-                Ydb::StatusIds::BAD_SESSION, 
+                Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered");
             return true;
         }
@@ -53,7 +53,7 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
         if (!session) {
             // Session destroyed by the time we executed
             ReplyError(
-                Ydb::StatusIds::SESSION_EXPIRED, 
+                Ydb::StatusIds::SESSION_EXPIRED,
                 "Session does not exist");
             return true;
         }

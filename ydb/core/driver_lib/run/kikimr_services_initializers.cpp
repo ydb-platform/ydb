@@ -1455,7 +1455,7 @@ TSecurityServicesInitializer::TSecurityServicesInitializer(const TKikimrRunConfi
 
 void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                       const NKikimr::TAppData* appData) {
-    if (!IsServiceInitialized(setup, MakeTicketParserID())) { 
+    if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
         if (Factories && Factories->CreateTicketParser) {
             ticketParser = Factories->CreateTicketParser(Config.GetAuthConfig());
@@ -1465,8 +1465,8 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
         if (ticketParser) {
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTicketParserID(),
                 TActorSetupCmd(ticketParser, TMailboxType::HTSwap, appData->UserPoolId)));
-        } 
-    } 
+        }
+    }
 }
 
 // TGRpcServicesInitializer
@@ -1930,25 +1930,25 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories)
-    : IKikimrServicesInitializer(runConfig) 
+    : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
 {}
- 
-void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
-    bool enableKqp = true; 
+
+void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    bool enableKqp = true;
     TVector<NKikimrKqp::TKqpSetting> settings;
-    if (Config.HasKQPConfig()) { 
-        auto& kqpConfig = Config.GetKQPConfig(); 
-        if (kqpConfig.HasEnable()) { 
-            enableKqp = kqpConfig.GetEnable(); 
-        } 
- 
-        for (auto& setting : kqpConfig.GetSettings()) { 
-            settings.push_back(setting); 
-        } 
-    } 
- 
-    if (enableKqp) { 
+    if (Config.HasKQPConfig()) {
+        auto& kqpConfig = Config.GetKQPConfig();
+        if (kqpConfig.HasEnable()) {
+            enableKqp = kqpConfig.GetEnable();
+        }
+
+        for (auto& setting : kqpConfig.GetSettings()) {
+            settings.push_back(setting);
+        }
+    }
+
+    if (enableKqp) {
         NKikimrKqp::TKqpSetting enableSpilling;
         enableSpilling.SetName("_KqpEnableSpilling");
         enableSpilling.SetValue(appData->EnableKqpSpilling ? "true" : "false");
@@ -1966,8 +1966,8 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
     }
-} 
- 
+}
+
 TMemoryLogInitializer::TMemoryLogInitializer(
         const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)

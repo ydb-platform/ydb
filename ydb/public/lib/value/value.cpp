@@ -167,46 +167,46 @@ TWriteValue TWriteValue::AddListItem() {
     return TWriteValue::Create(*Value.AddList(), *Type.MutableList()->MutableItem());
 }
 
-TWriteValue TWriteValue::AddTupleItem() { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Tuple); 
-    NKikimrMiniKQL::TType* type = Type.MutableTuple()->AddElement(); 
-    NKikimrMiniKQL::TValue* value = Value.AddTuple(); 
-    return TWriteValue::Create(*value, *type); 
-} 
- 
+TWriteValue TWriteValue::AddTupleItem() {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
+    NKikimrMiniKQL::TType* type = Type.MutableTuple()->AddElement();
+    NKikimrMiniKQL::TValue* value = Value.AddTuple();
+    return TWriteValue::Create(*value, *type);
+}
+
 TWriteValue& TWriteValue::Void() {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Void);
     return *this;
 }
 
-TWriteValue& TWriteValue::Bytes(const char* value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+TWriteValue& TWriteValue::Bytes(const char* value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::String);
-    Value.SetBytes(value); 
-    return *this; 
-} 
- 
+    Value.SetBytes(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::Bytes(const TString& value) {
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::String);
-    Value.SetBytes(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::Yson(const char* value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Yson); 
-    Value.SetBytes(value); 
-    return *this; 
-} 
- 
+    Value.SetBytes(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Yson(const char* value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Yson);
+    Value.SetBytes(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::Yson(const TString& value) {
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Yson); 
-    Value.SetBytes(value); 
-    return *this; 
-} 
- 
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Yson);
+    Value.SetBytes(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::Json(const char* value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Json);
@@ -221,34 +221,34 @@ TWriteValue& TWriteValue::Json(const TString& value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::Date(ui16 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Date); 
-    Value.SetUint32(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::Datetime(ui32 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Datetime); 
-    Value.SetUint32(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::Timestamp(ui64 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Timestamp); 
-    Value.SetUint64(value); 
-    return *this; 
-} 
- 
+TWriteValue& TWriteValue::Date(ui16 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Date);
+    Value.SetUint32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Datetime(ui32 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Datetime);
+    Value.SetUint32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Timestamp(ui64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Timestamp);
+    Value.SetUint64(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::Interval(i64 value) {
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Interval); 
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Interval);
     Value.SetInt64(value);
-    return *this; 
-} 
- 
+    return *this;
+}
+
 TWriteValue& TWriteValue::operator =(bool value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Bool);
@@ -256,13 +256,13 @@ TWriteValue& TWriteValue::operator =(bool value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::operator =(ui8 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+TWriteValue& TWriteValue::operator =(ui8 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint8);
-    Value.SetUint32(value); 
-    return *this; 
-} 
- 
+    Value.SetUint32(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::operator =(i8 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Int8);
@@ -307,7 +307,7 @@ TWriteValue& TWriteValue::operator =(ui32 value) {
 
 TWriteValue& TWriteValue::operator =(i32 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int32); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int32);
     Value.SetInt32(value);
     return *this;
 }
@@ -340,24 +340,24 @@ TWriteValue& TWriteValue::operator =(const char* value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::operator =(const TValue& value) { 
-    Type.CopyFrom(value.GetType()); 
-    Value.CopyFrom(value.GetValue()); 
-    return *this; 
-} 
- 
-ui32 TWriteValue::GetValueBytesSize() const { 
-    return (ui32)Value.ByteSize(); 
-} 
- 
-ui32 TWriteValue::GetTypeBytesSize() const { 
-    return (ui32)Type.ByteSize(); 
-} 
- 
-ui32 TWriteValue::GetBytesSize() const { 
-    return GetValueBytesSize() + GetTypeBytesSize(); 
-} 
- 
+TWriteValue& TWriteValue::operator =(const TValue& value) {
+    Type.CopyFrom(value.GetType());
+    Value.CopyFrom(value.GetValue());
+    return *this;
+}
+
+ui32 TWriteValue::GetValueBytesSize() const {
+    return (ui32)Value.ByteSize();
+}
+
+ui32 TWriteValue::GetTypeBytesSize() const {
+    return (ui32)Type.ByteSize();
+}
+
+ui32 TWriteValue::GetBytesSize() const {
+    return GetValueBytesSize() + GetTypeBytesSize();
+}
+
 size_t TValue::Size() const {
     if (Type.HasList())
         return Value.ListSize();
@@ -915,12 +915,12 @@ TValue::operator bool() const {
     return Value.GetBool();
 }
 
-TValue::operator ui8() const { 
+TValue::operator ui8() const {
     Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint8);
-    Y_ASSERT(Value.HasUint32()); 
-    return Value.GetUint32(); 
-} 
- 
+    Y_ASSERT(Value.HasUint32());
+    return Value.GetUint32();
+}
+
 TValue::operator ui16() const {
     Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint16);
     Y_ASSERT(Value.HasUint32());

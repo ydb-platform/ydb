@@ -17,7 +17,7 @@ namespace {
 class TResultCommonChannelProxy : public NActors::TActor<TResultCommonChannelProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_RESULT_CHANNEL_PROXY; 
+        return NKikimrServices::TActivity::KQP_RESULT_CHANNEL_PROXY;
     }
 
     TResultCommonChannelProxy(ui64 txId, ui64 channelId, TQueryExecutionStats* stats, TActorId executer)

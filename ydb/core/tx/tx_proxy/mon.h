@@ -32,7 +32,7 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr SchemeRequestProxyNotReady;
         NMonitoring::TDynamicCounters::TCounterPtr MakeRequestProxyNotReady;
         NMonitoring::TDynamicCounters::TCounterPtr TxNotImplemented;
-        NMonitoring::TDynamicCounters::TCounterPtr KqpRequest; 
+        NMonitoring::TDynamicCounters::TCounterPtr KqpRequest;
 
         NMonitoring::TDynamicCounters::TCounterPtr DataReqInFly;
         NMonitoring::TDynamicCounters::TCounterPtr SchemeReqInFly;
@@ -77,8 +77,8 @@ namespace NTxProxy {
 
         NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultComplete;
         NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultAborted;
-        NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultResultUnavailable; 
-        NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultCancelled; 
+        NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultResultUnavailable;
+        NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultCancelled;
         NMonitoring::TDynamicCounters::TCounterPtr PlanClientTxResultExecError;
 
         NMonitoring::TDynamicCounters::TCounterPtr ClientTxStatusAccepted;
@@ -113,9 +113,9 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr TxResultFatal;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultShardOverloaded;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultShardTryLater;
-        NMonitoring::TDynamicCounters::TCounterPtr TxResultExecError; 
-        NMonitoring::TDynamicCounters::TCounterPtr TxResultResultUnavailable; 
-        NMonitoring::TDynamicCounters::TCounterPtr TxResultCancelled; 
+        NMonitoring::TDynamicCounters::TCounterPtr TxResultExecError;
+        NMonitoring::TDynamicCounters::TCounterPtr TxResultResultUnavailable;
+        NMonitoring::TDynamicCounters::TCounterPtr TxResultCancelled;
 
         NMonitoring::TDynamicCounters::TCounterPtr MergeResultRequestExecError;
         NMonitoring::TDynamicCounters::TCounterPtr MergeResultRequestExecComplete;

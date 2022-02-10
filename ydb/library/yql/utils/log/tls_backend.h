@@ -49,7 +49,7 @@ template <typename TBackend>
 class TScopedBackend: public TBackend {
 public:
     template <typename... TArgs>
-    TScopedBackend(TArgs&&... args) 
+    TScopedBackend(TArgs&&... args)
         : TBackend(std::forward<TArgs>(args)...)
         , PrevBacked_(SetLogBackendForCurrentThread(this))
     {

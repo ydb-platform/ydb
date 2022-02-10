@@ -12,5 +12,5 @@ RECURSE(
     value
     ydb_cli
     yq
-    yson_value 
+    yson_value
 )

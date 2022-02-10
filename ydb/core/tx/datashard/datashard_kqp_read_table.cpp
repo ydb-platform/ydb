@@ -1,79 +1,79 @@
-#include "datashard_kqp_compute.h" 
- 
+#include "datashard_kqp_compute.h"
+
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/yverify_stream.h>
- 
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-using namespace NTable; 
-using namespace NUdf; 
- 
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using namespace NTable;
+using namespace NUdf;
+
 namespace {
 
-void ValidateKeyType(const TType* keyType, const std::pair<NScheme::TTypeId, TString>& keyColumn) { 
-    auto type = keyType; 
- 
-    if (type->IsOptional()) { 
-        type = AS_TYPE(TOptionalType, type)->GetItemType(); 
-    } 
- 
-    auto dataType = AS_TYPE(TDataType, type)->GetSchemeType(); 
- 
-    MKQL_ENSURE_S(dataType == keyColumn.first); 
-} 
- 
-void ValidateKeyTuple(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) { 
-    MKQL_ENSURE_S(tupleType); 
-    MKQL_ENSURE_S(tupleType->GetElementsCount() <= keyColumns.size()); 
- 
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
-        ValidateKeyType(tupleType->GetElementType(i), keyColumns[i]); 
-    } 
-} 
- 
-void ValidateRangeBound(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) { 
-    MKQL_ENSURE_S(tupleType); 
-    MKQL_ENSURE_S(tupleType->GetElementsCount() == keyColumns.size() + 1); 
- 
-    for (ui32 i = 0; i < keyColumns.size(); ++i) { 
-        auto elementType = tupleType->GetElementType(i); 
-        ValidateKeyType(AS_TYPE(TOptionalType, elementType)->GetItemType(), keyColumns[i]); 
-    } 
-} 
- 
-struct TKeyRangesType { 
-    TTupleType* From = nullptr; 
-    TTupleType* To = nullptr; 
-}; 
- 
-TMaybe<TKeyRangesType> ParseKeyRangesType(const TTupleType* rangeTupleType) { 
-    MKQL_ENSURE_S(rangeTupleType); 
-    MKQL_ENSURE_S(rangeTupleType->GetElementsCount() == 1); 
- 
-    auto rangesType = rangeTupleType->GetElementType(0); 
-    if (rangesType->GetKind() == TType::EKind::Void) { 
-        return {}; 
-    } 
- 
-    auto listType = AS_TYPE(TListType, AS_TYPE(TTupleType, rangesType)->GetElementType(0)); 
-    auto tupleType = AS_TYPE(TTupleType, listType->GetItemType()); 
-    MKQL_ENSURE_S(tupleType->GetElementsCount() == 2); 
- 
-    auto fromType = AS_TYPE(TTupleType, tupleType->GetElementType(0)); 
-    auto toType = AS_TYPE(TTupleType, tupleType->GetElementType(1)); 
- 
-    return TKeyRangesType { 
-        .From = fromType, 
-        .To = toType 
-    }; 
-} 
- 
+void ValidateKeyType(const TType* keyType, const std::pair<NScheme::TTypeId, TString>& keyColumn) {
+    auto type = keyType;
+
+    if (type->IsOptional()) {
+        type = AS_TYPE(TOptionalType, type)->GetItemType();
+    }
+
+    auto dataType = AS_TYPE(TDataType, type)->GetSchemeType();
+
+    MKQL_ENSURE_S(dataType == keyColumn.first);
+}
+
+void ValidateKeyTuple(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) {
+    MKQL_ENSURE_S(tupleType);
+    MKQL_ENSURE_S(tupleType->GetElementsCount() <= keyColumns.size());
+
+    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+        ValidateKeyType(tupleType->GetElementType(i), keyColumns[i]);
+    }
+}
+
+void ValidateRangeBound(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) {
+    MKQL_ENSURE_S(tupleType);
+    MKQL_ENSURE_S(tupleType->GetElementsCount() == keyColumns.size() + 1);
+
+    for (ui32 i = 0; i < keyColumns.size(); ++i) {
+        auto elementType = tupleType->GetElementType(i);
+        ValidateKeyType(AS_TYPE(TOptionalType, elementType)->GetItemType(), keyColumns[i]);
+    }
+}
+
+struct TKeyRangesType {
+    TTupleType* From = nullptr;
+    TTupleType* To = nullptr;
+};
+
+TMaybe<TKeyRangesType> ParseKeyRangesType(const TTupleType* rangeTupleType) {
+    MKQL_ENSURE_S(rangeTupleType);
+    MKQL_ENSURE_S(rangeTupleType->GetElementsCount() == 1);
+
+    auto rangesType = rangeTupleType->GetElementType(0);
+    if (rangesType->GetKind() == TType::EKind::Void) {
+        return {};
+    }
+
+    auto listType = AS_TYPE(TListType, AS_TYPE(TTupleType, rangesType)->GetElementType(0));
+    auto tupleType = AS_TYPE(TTupleType, listType->GetItemType());
+    MKQL_ENSURE_S(tupleType->GetElementsCount() == 2);
+
+    auto fromType = AS_TYPE(TTupleType, tupleType->GetElementType(0));
+    auto toType = AS_TYPE(TTupleType, tupleType->GetElementType(1));
+
+    return TKeyRangesType {
+        .From = fromType,
+        .To = toType
+    };
+}
+
 TSerializedTableRange CreateTableRange(const TParseReadTableResult& parseResult, const IComputationNode* fromNode,
     const IComputationNode* toNode, const TTypeEnvironment& typeEnv, TComputationContext& ctx)
 {
@@ -159,8 +159,8 @@ template <bool IsReverse>
 TVector<TSerializedTableRange> CreateTableRanges(const TParseReadTableRangesResult& parseResult,
     const IComputationNode* rangesNode, const TTypeEnvironment& typeEnv, TComputationContext& ctx, ui32 keyColumnsSize)
 {
-    auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType()); 
-    if (!keyRangesType) { 
+    auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType());
+    if (!keyRangesType) {
         return {BuildFullRange(keyColumnsSize)};
     }
 
@@ -173,7 +173,7 @@ TVector<TSerializedTableRange> CreateTableRanges(const TParseReadTableRangesResu
         const auto& from = tuple.GetElement(0);
         const auto& to = tuple.GetElement(1);
 
-        ranges.emplace_back(BuildRange(keyRangesType->From, from, keyRangesType->To, to, typeEnv, keyColumnsSize)); 
+        ranges.emplace_back(BuildRange(keyRangesType->From, from, keyRangesType->To, to, typeEnv, keyColumnsSize));
     }
 
     if constexpr (IsReverse) {
@@ -474,67 +474,67 @@ private:
     mutable std::optional<ui32> RangeId;
 };
 
-void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats, 
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags) 
-{ 
-    size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size(); 
+void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
+    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
+{
+    size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size();
 
-    TUnboxedValue* rowItems = nullptr; 
-    row = ctx.HolderFactory.CreateDirectArrayHolder(columnsCount, rowItems); 
- 
-    ui64 rowSize = 0; 
-    for (ui32 i = 0; i < dbTuple.ColumnCount; ++i) { 
-        rowSize += dbTuple.Columns[i].IsNull() ? 1 : dbTuple.Columns[i].Size(); 
-        rowItems[i] = GetCellValue(dbTuple.Cells()[i], dbTuple.Types[i]); 
-    } 
- 
-    // Some per-row overhead to deal with the case when no columns were requested 
-    rowSize = std::max(rowSize, (ui64)8); 
- 
-    for (ui32 i = dbTuple.ColumnCount, j = 0; i < columnsCount; ++i, ++j) { 
-        switch (systemColumnTags[j]) { 
-            case TKeyDesc::EColumnIdDataShard: 
-                rowItems[i] = TUnboxedValue(TUnboxedValuePod(computeCtx.GetShardId())); 
-                break; 
-            default: 
-                throw TSchemeErrorTabletException(); 
-        } 
-    } 
- 
+    TUnboxedValue* rowItems = nullptr;
+    row = ctx.HolderFactory.CreateDirectArrayHolder(columnsCount, rowItems);
+
+    ui64 rowSize = 0;
+    for (ui32 i = 0; i < dbTuple.ColumnCount; ++i) {
+        rowSize += dbTuple.Columns[i].IsNull() ? 1 : dbTuple.Columns[i].Size();
+        rowItems[i] = GetCellValue(dbTuple.Cells()[i], dbTuple.Types[i]);
+    }
+
+    // Some per-row overhead to deal with the case when no columns were requested
+    rowSize = std::max(rowSize, (ui64)8);
+
+    for (ui32 i = dbTuple.ColumnCount, j = 0; i < columnsCount; ++i, ++j) {
+        switch (systemColumnTags[j]) {
+            case TKeyDesc::EColumnIdDataShard:
+                rowItems[i] = TUnboxedValue(TUnboxedValuePod(computeCtx.GetShardId()));
+                break;
+            default:
+                throw TSchemeErrorTabletException();
+        }
+    }
+
     tableStats.NSelectRow++;
     tableStats.SelectRowRows++;
     tableStats.SelectRowBytes += rowSize;
-} 
- 
+}
+
 template <typename TTableIterator>
 bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags, 
-    const TSmallVec<bool>& skipNullKeys) 
-{ 
-    while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) { 
-        TDbTupleRef rowKey = iterator.GetKey(); 
- 
-        Y_VERIFY(skipNullKeys.size() <= rowKey.ColumnCount); 
-        bool skipRow = false; 
-        for (ui32 i = 0; i < skipNullKeys.size(); ++i) { 
-            if (skipNullKeys[i] && rowKey.Columns[i].IsNull()) { 
-                skipRow = true; 
-                break; 
-            } 
-        } 
- 
-        if (skipRow) { 
-            continue; 
-        } 
- 
-        TDbTupleRef rowValues = iterator.GetValues(); 
-        FetchRowImpl(rowValues, row, ctx, tableStats, computeCtx, systemColumnTags); 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
+    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys)
+{
+    while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
+        TDbTupleRef rowKey = iterator.GetKey();
+
+        Y_VERIFY(skipNullKeys.size() <= rowKey.ColumnCount);
+        bool skipRow = false;
+        for (ui32 i = 0; i < skipNullKeys.size(); ++i) {
+            if (skipNullKeys[i] && rowKey.Columns[i].IsNull()) {
+                skipRow = true;
+                break;
+            }
+        }
+
+        if (skipRow) {
+            continue;
+        }
+
+        TDbTupleRef rowValues = iterator.GetValues();
+        FetchRowImpl(rowValues, row, ctx, tableStats, computeCtx, systemColumnTags);
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace
 
 bool TryFetchRow(TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
@@ -551,25 +551,25 @@ bool TryFetchRow(TTableReverseIt& iterator, TUnboxedValue& row, TComputationCont
     return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
 }
 
-void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats, 
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags) 
-{ 
-    return FetchRowImpl(dbTuple, row, ctx, tableStats, computeCtx, systemColumnTags); 
-} 
- 
+void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
+    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
+{
+    return FetchRowImpl(dbTuple, row, ctx, tableStats, computeCtx, systemColumnTags);
+}
+
 IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {
     auto parseResult = ParseWideReadTableRanges(callable);
     auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
 
-    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId); 
-    auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType()); 
-    if (keyRangesType) { 
-        ValidateRangeBound(keyRangesType->From, keyColumns); 
-        ValidateRangeBound(keyRangesType->To, keyColumns); 
-    } 
- 
+    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId);
+    auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType());
+    if (keyRangesType) {
+        ValidateRangeBound(keyRangesType->From, keyColumns);
+        ValidateRangeBound(keyRangesType->To, keyColumns);
+    }
+
     IComputationNode* itemsLimit = nullptr;
     if (parseResult.ItemsLimit) {
         itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit);
@@ -589,10 +589,10 @@ IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNo
     auto fromNode = LocateNode(ctx.NodeLocator, *parseResult.FromTuple);
     auto toNode = LocateNode(ctx.NodeLocator, *parseResult.ToTuple);
 
-    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId); 
-    ValidateKeyTuple(parseResult.FromTuple->GetType(), keyColumns); 
-    ValidateKeyTuple(parseResult.ToTuple->GetType(), keyColumns); 
- 
+    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId);
+    ValidateKeyTuple(parseResult.FromTuple->GetType(), keyColumns);
+    ValidateKeyTuple(parseResult.ToTuple->GetType(), keyColumns);
+
     IComputationNode* itemsLimit = nullptr;
     if (parseResult.ItemsLimit) {
         itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit);
@@ -606,4 +606,4 @@ IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNo
 }
 
 } // namespace NMiniKQL
-} // namespace NKikimr 
+} // namespace NKikimr

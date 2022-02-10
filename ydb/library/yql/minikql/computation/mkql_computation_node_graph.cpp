@@ -496,14 +496,14 @@ public:
     }
 
 private:
-    void PushBackNode(const IComputationNode::TPtr& computationNode) { 
+    void PushBackNode(const IComputationNode::TPtr& computationNode) {
         computationNode->RegisterDependencies();
-        PatternNodes->ComputationNodesList.push_back(computationNode); 
+        PatternNodes->ComputationNodesList.push_back(computationNode);
     }
 
-    void AddNode(TNode& node, const IComputationNode::TPtr& computationNode) { 
+    void AddNode(TNode& node, const IComputationNode::TPtr& computationNode) {
         PushBackNode(computationNode);
-        node.SetCookie((ui64)computationNode.Get()); 
+        node.SetCookie((ui64)computationNode.Get());
     }
 
 private:

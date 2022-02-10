@@ -6,23 +6,23 @@
 namespace NYdb {
 namespace NScripting {
 
-class TExecuteYqlResult : public TStatus { 
-public: 
-    TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets, 
-        const TMaybe<NTable::TQueryStats>& queryStats); 
+class TExecuteYqlResult : public TStatus {
+public:
+    TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets,
+        const TMaybe<NTable::TQueryStats>& queryStats);
 
-    const TVector<TResultSet>& GetResultSets() const; 
-    TResultSet GetResultSet(size_t resultIndex) const; 
- 
-    TResultSetParser GetResultSetParser(size_t resultIndex) const; 
- 
-    const TMaybe<NTable::TQueryStats>& GetStats() const; 
- 
-private: 
-    TVector<TResultSet> ResultSets_; 
-    TMaybe<NTable::TQueryStats> QueryStats_; 
-}; 
- 
+    const TVector<TResultSet>& GetResultSets() const;
+    TResultSet GetResultSet(size_t resultIndex) const;
+
+    TResultSetParser GetResultSetParser(size_t resultIndex) const;
+
+    const TMaybe<NTable::TQueryStats>& GetStats() const;
+
+private:
+    TVector<TResultSet> ResultSets_;
+    TMaybe<NTable::TQueryStats> QueryStats_;
+};
+
 class TYqlPartialResult {
 public:
     TYqlPartialResult(ui32 resultSetIndex, TResultSet&& resultSet)
@@ -94,15 +94,15 @@ private:
     TString Plan_;
 };
 
-using TAsyncExecuteYqlResult = NThreading::TFuture<TExecuteYqlResult>; 
+using TAsyncExecuteYqlResult = NThreading::TFuture<TExecuteYqlResult>;
 using TAsyncYqlResultPartIterator = NThreading::TFuture<TYqlResultPartIterator>;
 using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
- 
+
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> { 
+struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> {
     FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
-}; 
+};
 
 enum class ExplainYqlRequestMode {
     // Parse = 1,
@@ -122,17 +122,17 @@ class TScriptingClient {
 public:
     TScriptingClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
-    //! Returns new params builder 
-    TParamsBuilder GetParamsBuilder(); 
- 
-    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, 
-        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings()); 
+    //! Returns new params builder
+    TParamsBuilder GetParamsBuilder();
 
-    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, const TParams& params, 
-        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings()); 
+    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script,
+        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
 
-    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParams&& params, 
-        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings()); 
+    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, const TParams& params,
+        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
+
+    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParams&& params,
+        const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
 
     TAsyncYqlResultPartIterator StreamExecuteYqlScript(const TString& script,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());

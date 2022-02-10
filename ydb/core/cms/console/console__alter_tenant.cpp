@@ -14,7 +14,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code, const TString &error, 
+    bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot alter tenant: " << error);
@@ -34,7 +34,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        Ydb::StatusIds::StatusCode code; 
+        Ydb::StatusIds::StatusCode code;
         TString error;
 
         auto &rec = Request->Get()->Record.GetRequest();
@@ -50,11 +50,11 @@ public:
         auto path = CanonizePath(rec.path());
         Tenant = Self->GetTenant(path);
         if (!Tenant)
-            return Error(Ydb::StatusIds::NOT_FOUND, 
+            return Error(Ydb::StatusIds::NOT_FOUND,
                          Sprintf("Database '%s' doesn't exist", path.data()), ctx);
 
         if (!Tenant->IsRunning() && !Tenant->IsConfiguring())
-            return Error(Ydb::StatusIds::UNAVAILABLE, 
+            return Error(Ydb::StatusIds::UNAVAILABLE,
                          Sprintf("Database '%s' is busy", path.data()), ctx);
 
         // Check idempotency key
@@ -106,7 +106,7 @@ public:
 
             auto key = std::make_pair(kind, zone);
             if (count > NewComputationalUnits[key])
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
+                return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Not enough units of kind '%s' in zone '%s' to remove",
                                      kind.data(), zone.data()),
                              ctx);
@@ -147,7 +147,7 @@ public:
             auto key = std::make_pair(unit.host(), unit.port());
             auto it = Tenant->RegisteredComputationalUnits.find(key);
             if (it == Tenant->RegisteredComputationalUnits.end())
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
+                return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Cannot deregister unknown unit %s:%" PRIu32,
                                      key.first.data(), key.second),
                              ctx);

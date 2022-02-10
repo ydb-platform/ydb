@@ -17,11 +17,11 @@ const TStringBuf TxInternalResultPrefix = "__";
 const TStringBuf TxLocksResultLabel = "__tx_locks";
 const TStringBuf TxLocksResultLabel2 = "__tx_locks2";
 const TStringBuf TxInfoResultLabel = "__tx_info";
- 
-// Should be strictly less than NActors::TEventPB::MaxByteSize to avoid VERIFY in actorlib 
-const ui32 MaxDatashardReplySize = 48 * 1024 * 1024; // 48 MB 
-const ui32 MaxProxyReplySize = 48 * 1024 * 1024; // 48 MB 
- 
+
+// Should be strictly less than NActors::TEventPB::MaxByteSize to avoid VERIFY in actorlib
+const ui32 MaxDatashardReplySize = 48 * 1024 * 1024; // 48 MB
+const ui32 MaxProxyReplySize = 48 * 1024 * 1024; // 48 MB
+
 class IEngineFlat {
 public:
     virtual ~IEngineFlat() {}
@@ -97,24 +97,24 @@ public:
         {}
     };
 
-    struct TTxLock { 
+    struct TTxLock {
         TTxLock(ui64 lockId, ui64 dataShard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId)
-            : LockId(lockId) 
-            , DataShard(dataShard) 
-            , Generation(generation) 
+            : LockId(lockId)
+            , DataShard(dataShard)
+            , Generation(generation)
             , Counter(counter)
             , SchemeShard(ssId)
             , PathId(pathId)
         {}
- 
+
         ui64 LockId;
         ui64 DataShard;
         ui32 Generation;
         ui64 Counter;
         ui64 SchemeShard;
         ui64 PathId;
-    }; 
- 
+    };
+
     struct TTabletInfo {
         struct TTxInfo {
             std::pair<ui64, ui64> StepTxId = {0,0};
@@ -194,7 +194,7 @@ public:
     virtual void SetStepTxId(const std::pair<ui64, ui64>& stepTxId) noexcept = 0;
     virtual void AddTabletInfo(IEngineFlat::TTabletInfo&& info) noexcept = 0;
     virtual void AddTxLock(IEngineFlat::TTxLock&& txLock) noexcept = 0;
-    virtual TMaybe<ui64> GetLockTxId() noexcept = 0; 
+    virtual TMaybe<ui64> GetLockTxId() noexcept = 0;
     virtual bool HasDiagnosticsRequest() noexcept = 0;
 
     //-- proxy interface
@@ -204,15 +204,15 @@ public:
     virtual ui32 GetAffectedShardCount() const noexcept = 0;
     virtual EResult GetAffectedShard(ui32 index, TShardData& data) const noexcept = 0;
     virtual void AfterShardProgramsExtracted() noexcept = 0;
-    virtual void AddShardReply(ui64 origin, const TStringBuf& reply) noexcept = 0; 
+    virtual void AddShardReply(ui64 origin, const TStringBuf& reply) noexcept = 0;
     virtual void FinalizeOriginReplies(ui64 origin) noexcept = 0;
     virtual void BuildResult() noexcept = 0;
     virtual EStatus GetStatus() const noexcept = 0;
-    virtual EResult FillResultValue(NKikimrMiniKQL::TResult& result) const noexcept = 0; 
-    virtual bool IsReadOnlyProgram() const noexcept = 0; 
+    virtual EResult FillResultValue(NKikimrMiniKQL::TResult& result) const noexcept = 0;
+    virtual bool IsReadOnlyProgram() const noexcept = 0;
 
     //-- datashard interface
-    virtual EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly = false) noexcept = 0; 
+    virtual EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly = false) noexcept = 0;
     virtual EResult ValidateKeys(TValidationInfo& validationInfo) = 0;
     virtual EResult Validate(TValidationInfo& validationInfo) = 0;
 
@@ -238,8 +238,8 @@ public:
     virtual size_t GetMemoryLimit() const noexcept = 0;
     virtual void SetMemoryLimit(size_t limit) noexcept = 0;
 
-    virtual void SetDeadline(const TInstant& deadline) noexcept = 0; 
- 
+    virtual void SetDeadline(const TInstant& deadline) noexcept = 0;
+
     virtual void ReleaseUnusedMemory() noexcept = 0;
 };
 
@@ -257,11 +257,11 @@ namespace NMiniKQL {
         IEngineFlatHost* Host;
         TAlignedPagePoolCounters AllocCounters;
         std::function<void(const char* operation, ui32 line, const TBackTrace*)> BacktraceWriter;
-        std::function<void(const TString& message)> LogErrorWriter; 
+        std::function<void(const TString& message)> LogErrorWriter;
         bool ForceOnline;
         bool EvaluateResultType = true;
         bool EvaluateResultValue = true;
-        bool LlvmRuntime = false; 
+        bool LlvmRuntime = false;
 
         TEngineFlatSettings(
                 IEngineFlat::EProtocol protocol,

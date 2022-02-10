@@ -100,7 +100,7 @@ void TIssueManager::RaiseIssue(const TIssue& issue) {
         return;
     }
     if (RawIssues_.empty()) {
-        CompletedIssues_.AddIssue(issue); 
+        CompletedIssues_.AddIssue(issue);
         return;
     }
     if (RawIssues_.top().first.Empty()) {

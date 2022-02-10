@@ -1,6 +1,6 @@
 #include "service_scheme.h"
 
-#include "rpc_scheme_base.h" 
+#include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -10,21 +10,21 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb; 
+using namespace Ydb;
 
 using TEvMakeDirectoryRequest = TGrpcRequestOperationCall<Ydb::Scheme::MakeDirectoryRequest,
     Ydb::Scheme::MakeDirectoryResponse>;
 
-class TMakeDirectoryRPC : public TRpcSchemeRequestActor<TMakeDirectoryRPC, TEvMakeDirectoryRequest> { 
-    using TBase = TRpcSchemeRequestActor<TMakeDirectoryRPC, TEvMakeDirectoryRequest>; 
- 
+class TMakeDirectoryRPC : public TRpcSchemeRequestActor<TMakeDirectoryRPC, TEvMakeDirectoryRequest> {
+    using TBase = TRpcSchemeRequestActor<TMakeDirectoryRPC, TEvMakeDirectoryRequest>;
+
 public:
     TMakeDirectoryRPC(IRequestOpCtx* msg)
-        : TBase(msg) {} 
+        : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx); 
- 
+        TBase::Bootstrap(ctx);
+
         SendProposeRequest(ctx);
         Become(&TMakeDirectoryRPC::StateWork);
     }

@@ -1,31 +1,31 @@
-LIBRARY() 
- 
-OWNER( 
-    spuchin 
-    g:kikimr 
-) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(
+    spuchin
+    g:kikimr
+)
+
+SRCS(
     kqp_channel_storage.cpp
-    kqp_compute.cpp 
-    kqp_compute.h 
-    kqp_effects.cpp 
-    kqp_output_stream.cpp 
-    kqp_program_builder.cpp 
-    kqp_program_builder.h 
+    kqp_compute.cpp
+    kqp_compute.h
+    kqp_effects.cpp
+    kqp_output_stream.cpp
+    kqp_program_builder.cpp
+    kqp_program_builder.h
     kqp_read_table.cpp
     kqp_read_table.h
-    kqp_runtime_impl.h 
+    kqp_runtime_impl.h
     kqp_scan_data.cpp
     kqp_scan_data.h
     kqp_spilling_file.cpp
-    kqp_tasks_runner.cpp 
-    kqp_tasks_runner.h 
-    kqp_transport.h 
-    kqp_transport.cpp 
-) 
- 
-PEERDIR( 
+    kqp_tasks_runner.cpp
+    kqp_tasks_runner.h
+    kqp_transport.h
+    kqp_transport.cpp
+)
+
+PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/actorlib_impl
     ydb/core/base
@@ -42,13 +42,13 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/runtime
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_spilling.h)
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut

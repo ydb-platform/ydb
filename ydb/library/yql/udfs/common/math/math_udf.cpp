@@ -63,7 +63,7 @@ using namespace NUdf;
 namespace {
     extern const char epsilon[] = "Epsilon";
     using TEpsilon = TNamedArg<double, epsilon>;
- 
+
     extern const char precision[] = "Precision";
     using TPrecision = TNamedArg<int, precision>;
 

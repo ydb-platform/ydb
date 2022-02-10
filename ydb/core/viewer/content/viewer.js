@@ -3045,7 +3045,7 @@ function onTreeNodeComplete(result, obj) {
         name = row.insertCell(-1);
         value = row.insertCell(-1);
         name.innerHTML = "Partitions";
-        value.innerHTML = result.PathDescription.PersQueueGroup.TotalGroupCount; 
+        value.innerHTML = result.PathDescription.PersQueueGroup.TotalGroupCount;
 
         var partitionConfig = result.PathDescription.PersQueueGroup.PQTabletConfig.PartitionConfig;
 

@@ -13,7 +13,7 @@ option cc_enable_arenas = true;
 message WriteSessionParams {
     // Path to the topic to write to.
     string topic = 1;
-    // Message group identifier. 
+    // Message group identifier.
     bytes source_id = 2;
     // Partition group to write to. 0 by default.
     uint32 partition_group = 3;

@@ -13,7 +13,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/memory/pool.h>
 
 #include <cstring>
@@ -197,12 +197,12 @@ ECharset CharsetByName(TStringBuf name) {
 }
 
 ECharset CharsetByNameOrDie(TStringBuf name) {
-    ECharset result = CharsetByName(name);
-    if (result == CODES_UNKNOWN)
+    ECharset result = CharsetByName(name); 
+    if (result == CODES_UNKNOWN) 
         ythrow yexception() << "CharsetByNameOrDie: unknown charset '" << name << "'";
-    return result;
-}
-
+    return result; 
+} 
+ 
 template <typename TxChar>
 static inline RECODE_RESULT utf8_read_rune_from_unknown_plane(TxChar& rune, size_t& rune_len, const TxChar* s, const TxChar* end) {
     if ((*s & 0xFF00) != 0xF000) {

@@ -1,13 +1,13 @@
 #include "ymath.h"
 
-double Exp2(double x) {
-    return pow(2.0, x);
-}
-
-float Exp2f(float x) {
-    return powf(2.0f, x);
-}
-
+double Exp2(double x) { 
+    return pow(2.0, x); 
+} 
+ 
+float Exp2f(float x) { 
+    return powf(2.0f, x); 
+} 
+ 
 #ifdef _MSC_VER
 
 double Erf(double x) {

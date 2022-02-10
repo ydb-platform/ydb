@@ -180,5 +180,5 @@ struct TMonth {
         }
     }
 };
- 
-Y_DECLARE_PODTYPE(NDatetime::TSimpleTM); 
+
+Y_DECLARE_PODTYPE(NDatetime::TSimpleTM);

@@ -4,7 +4,7 @@
 #include "cont_poller.h"
 #include "iostatus.h"
 #include "poller.h"
-#include "stack/stack_common.h"
+#include "stack/stack_common.h" 
 #include "trampoline.h"
 #include "custom_time.h"
 
@@ -25,9 +25,9 @@ struct TContRep;
 class TContExecutor;
 class TContPollEvent;
 
-namespace NCoro::NStack {
-    class IAllocator;
-}
+namespace NCoro::NStack { 
+    class IAllocator; 
+} 
 
 class TCont : private TIntrusiveListItem<TCont> {
     struct TJoinWait: public TIntrusiveListItem<TJoinWait> {
@@ -46,8 +46,8 @@ class TCont : private TIntrusiveListItem<TCont> {
 
 private:
     TCont(
-        NCoro::NStack::IAllocator& allocator,
-        uint32_t stackSize,
+        NCoro::NStack::IAllocator& allocator, 
+        uint32_t stackSize, 
         TContExecutor& executor,
         NCoro::TTrampoline::TFunc func,
         const char* name
@@ -151,11 +151,11 @@ class TContExecutor {
 
 public:
     TContExecutor(
-        uint32_t defaultStackSize,
+        uint32_t defaultStackSize, 
         THolder<IPollerFace> poller = IPollerFace::Default(),
         NCoro::IScheduleCallback* = nullptr,
         NCoro::IEnterPollerCallback* = nullptr,
-        NCoro::NStack::EGuard stackGuard = NCoro::NStack::EGuard::Canary,
+        NCoro::NStack::EGuard stackGuard = NCoro::NStack::EGuard::Canary, 
         TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings = Nothing(),
         NCoro::ITime* time = nullptr
     );
@@ -236,8 +236,8 @@ public:
         return TotalConts() - TotalReadyConts();
     }
 
-    NCoro::NStack::TAllocatorStats GetAllocatorStats() const noexcept;
-
+    NCoro::NStack::TAllocatorStats GetAllocatorStats() const noexcept; 
+ 
     // TODO(velavokr): rename, it is just CancelAll actually
     void Abort() noexcept;
 
@@ -290,8 +290,8 @@ private:
 private:
     NCoro::IScheduleCallback* const ScheduleCallback_ = nullptr;
     NCoro::IEnterPollerCallback* const EnterPollerCallback_ = nullptr;
-    const uint32_t DefaultStackSize_;
-    THolder<NCoro::NStack::IAllocator> StackAllocator_;
+    const uint32_t DefaultStackSize_; 
+    THolder<NCoro::NStack::IAllocator> StackAllocator_; 
 
     TExceptionSafeContext SchedContext_;
 

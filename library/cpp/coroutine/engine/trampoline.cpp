@@ -1,8 +1,8 @@
 #include "impl.h"
 #include "trampoline.h"
 
-#include "stack/stack_allocator.h"
-
+#include "stack/stack_allocator.h" 
+ 
 #include <util/system/info.h>
 #include <util/system/protect.h>
 #include <util/system/valgrind.h>
@@ -11,11 +11,11 @@
 #include <cstdlib>
 #include <util/stream/format.h>
 
-
+ 
 namespace NCoro {
 
 TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f, TCont* cont) noexcept
-        : Stack_(allocator, stackSize, cont->Name())
+        : Stack_(allocator, stackSize, cont->Name()) 
         , Clo_{this, Stack_.Get(), cont->Name()}
         , Ctx_(Clo_)
         , Func_(std::move(f))

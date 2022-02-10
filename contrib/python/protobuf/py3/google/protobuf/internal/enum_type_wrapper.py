@@ -104,8 +104,8 @@ class EnumTypeWrapper(object):
     """
     return [(value_descriptor.name, value_descriptor.number)
             for value_descriptor in self._enum_type.values]
- 
-  def __getattr__(self, name): 
+
+  def __getattr__(self, name):
     """Returns the value corresponding to the given enum name."""
     try:
       return super(

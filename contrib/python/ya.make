@@ -452,7 +452,7 @@ RECURSE(
     google-cloud-speech
     google-pasta
     googleads
-    gpxpy 
+    gpxpy
     GPy
     GPyOpt
     grafanalib

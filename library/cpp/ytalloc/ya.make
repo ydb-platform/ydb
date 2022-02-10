@@ -12,6 +12,6 @@ RECURSE(
 IF (YT_ALLOC_ENABLED)
     RECURSE(
         ut
-        benchmarks 
+        benchmarks
     )
 ENDIF()

@@ -78,8 +78,8 @@ def go_package_name(unit):
         else:
             name = unit.get('REALPRJNAME')
     return name
- 
- 
+
+
 def need_lint(path):
     return not path.startswith('$S/vendor/') and not path.startswith('$S/contrib/')
 
@@ -265,7 +265,7 @@ def on_go_process_srcs(unit):
                 unit.onsrc([f[:-2] + 'cgo2.c'] + cgo_cflags + cgo2_cflags)
             else:
                 ymake.report_configure_error('file {} should not be listed in CGO_SRCS() macros'.format(f))
-        args = [go_package_name(unit)] + cgo_files 
+        args = [go_package_name(unit)] + cgo_files
         if len(c_files) > 0:
             args += ['C_FILES'] + c_files
         if len(s_files) > 0:
@@ -273,37 +273,37 @@ def on_go_process_srcs(unit):
         if len(syso_files) > 0:
             args += ['OBJ_FILES'] + syso_files
         unit.on_go_compile_cgo2(args)
- 
- 
-def on_go_resource(unit, *args): 
-    args = list(args) 
-    files = args[::2] 
-    keys = args[1::2] 
+
+
+def on_go_resource(unit, *args):
+    args = list(args)
+    files = args[::2]
+    keys = args[1::2]
     suffix_md5 = md5.new('@'.join(args)).hexdigest()
     resource_go = os.path.join("resource.{}.res.go".format(suffix_md5))
- 
-    unit.onpeerdir(["library/go/core/resource"]) 
- 
-    if len(files) != len(keys): 
-        ymake.report_configure_error("last file {} is missing resource key".format(files[-1])) 
- 
-    for i, (key, filename) in enumerate(zip(keys, files)): 
-        if not key: 
-            ymake.report_configure_error("file key must be non empty") 
-            return 
- 
-        if filename == "-" and "=" not in key: 
-            ymake.report_configure_error("key \"{}\" must contain = sign".format(key)) 
-            return 
- 
-        # quote key, to avoid automatic substitution of filename by absolute 
-        # path in RUN_PROGRAM 
-        args[2*i+1] = "notafile" + args[2*i+1] 
- 
+
+    unit.onpeerdir(["library/go/core/resource"])
+
+    if len(files) != len(keys):
+        ymake.report_configure_error("last file {} is missing resource key".format(files[-1]))
+
+    for i, (key, filename) in enumerate(zip(keys, files)):
+        if not key:
+            ymake.report_configure_error("file key must be non empty")
+            return
+
+        if filename == "-" and "=" not in key:
+            ymake.report_configure_error("key \"{}\" must contain = sign".format(key))
+            return
+
+        # quote key, to avoid automatic substitution of filename by absolute
+        # path in RUN_PROGRAM
+        args[2*i+1] = "notafile" + args[2*i+1]
+
     files = [file for file in files if file != "-"]
-    unit.onrun_program([ 
-        "library/go/core/resource/cc", 
-        "-package", go_package_name(unit), 
-        "-o", resource_go] + list(args) + [ 
-        "IN"] + files + [ 
-        "OUT", resource_go]) 
+    unit.onrun_program([
+        "library/go/core/resource/cc",
+        "-package", go_package_name(unit),
+        "-o", resource_go] + list(args) + [
+        "IN"] + files + [
+        "OUT", resource_go])

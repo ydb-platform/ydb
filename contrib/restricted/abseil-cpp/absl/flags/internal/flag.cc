@@ -96,8 +96,8 @@ class FlagState : public flags_internal::FlagStateInterface {
         counter_(counter) {}
 
   ~FlagState() override {
-    if (flag_impl_.ValueStorageKind() != FlagValueStorageKind::kAlignedBuffer && 
-        flag_impl_.ValueStorageKind() != FlagValueStorageKind::kSequenceLocked) 
+    if (flag_impl_.ValueStorageKind() != FlagValueStorageKind::kAlignedBuffer &&
+        flag_impl_.ValueStorageKind() != FlagValueStorageKind::kSequenceLocked)
       return;
     flags_internal::Delete(flag_impl_.op_, value_.heap_allocated);
   }
@@ -164,11 +164,11 @@ void FlagImpl::Init() {
                            std::memory_order_release);
       break;
     }
-    case FlagValueStorageKind::kSequenceLocked: { 
+    case FlagValueStorageKind::kSequenceLocked: {
       // For this storage kind the default_value_ always points to gen_func
       // during initialization.
       assert(def_kind == FlagDefaultKind::kGenFunc);
-      (*default_value_.gen_func)(AtomicBufferValue()); 
+      (*default_value_.gen_func)(AtomicBufferValue());
       break;
     }
     case FlagValueStorageKind::kAlignedBuffer:
@@ -178,7 +178,7 @@ void FlagImpl::Init() {
       (*default_value_.gen_func)(AlignedBufferValue());
       break;
   }
-  seq_lock_.MarkInitialized(); 
+  seq_lock_.MarkInitialized();
 }
 
 absl::Mutex* FlagImpl::DataGuard() const {
@@ -239,11 +239,11 @@ void FlagImpl::StoreValue(const void* src) {
       int64_t one_word_val = OneWordValue().load(std::memory_order_acquire);
       std::memcpy(&one_word_val, src, Sizeof(op_));
       OneWordValue().store(one_word_val, std::memory_order_release);
-      seq_lock_.IncrementModificationCount(); 
+      seq_lock_.IncrementModificationCount();
       break;
     }
-    case FlagValueStorageKind::kSequenceLocked: { 
-      seq_lock_.Write(AtomicBufferValue(), src, Sizeof(op_)); 
+    case FlagValueStorageKind::kSequenceLocked: {
+      seq_lock_.Write(AtomicBufferValue(), src, Sizeof(op_));
       break;
     }
     case FlagValueStorageKind::kAlignedBuffer:
@@ -270,10 +270,10 @@ FlagFastTypeId FlagImpl::TypeId() const {
   return flags_internal::FastTypeId(op_);
 }
 
-int64_t FlagImpl::ModificationCount() const { 
-  return seq_lock_.ModificationCount(); 
-} 
- 
+int64_t FlagImpl::ModificationCount() const {
+  return seq_lock_.ModificationCount();
+}
+
 bool FlagImpl::IsSpecifiedOnCommandLine() const {
   absl::MutexLock l(DataGuard());
   return on_command_line_;
@@ -296,11 +296,11 @@ std::string FlagImpl::CurrentValue() const {
               OneWordValue().load(std::memory_order_acquire));
       return flags_internal::Unparse(op_, one_word_val.data());
     }
-    case FlagValueStorageKind::kSequenceLocked: { 
-      std::unique_ptr<void, DynValueDeleter> cloned(flags_internal::Alloc(op_), 
-                                                    DynValueDeleter{op_}); 
-      ReadSequenceLockedData(cloned.get()); 
-      return flags_internal::Unparse(op_, cloned.get()); 
+    case FlagValueStorageKind::kSequenceLocked: {
+      std::unique_ptr<void, DynValueDeleter> cloned(flags_internal::Alloc(op_),
+                                                    DynValueDeleter{op_});
+      ReadSequenceLockedData(cloned.get());
+      return flags_internal::Unparse(op_, cloned.get());
     }
     case FlagValueStorageKind::kAlignedBuffer: {
       absl::MutexLock l(guard);
@@ -355,17 +355,17 @@ std::unique_ptr<FlagStateInterface> FlagImpl::SaveState() {
     case FlagValueStorageKind::kOneWordAtomic: {
       return absl::make_unique<FlagState>(
           *this, OneWordValue().load(std::memory_order_acquire), modified,
-          on_command_line, ModificationCount()); 
+          on_command_line, ModificationCount());
     }
-    case FlagValueStorageKind::kSequenceLocked: { 
-      void* cloned = flags_internal::Alloc(op_); 
-      // Read is guaranteed to be successful because we hold the lock. 
-      bool success = 
-          seq_lock_.TryRead(cloned, AtomicBufferValue(), Sizeof(op_)); 
-      assert(success); 
-      static_cast<void>(success); 
-      return absl::make_unique<FlagState>(*this, cloned, modified, 
-                                          on_command_line, ModificationCount()); 
+    case FlagValueStorageKind::kSequenceLocked: {
+      void* cloned = flags_internal::Alloc(op_);
+      // Read is guaranteed to be successful because we hold the lock.
+      bool success =
+          seq_lock_.TryRead(cloned, AtomicBufferValue(), Sizeof(op_));
+      assert(success);
+      static_cast<void>(success);
+      return absl::make_unique<FlagState>(*this, cloned, modified,
+                                          on_command_line, ModificationCount());
     }
     case FlagValueStorageKind::kAlignedBuffer: {
       return absl::make_unique<FlagState>(
@@ -378,7 +378,7 @@ std::unique_ptr<FlagStateInterface> FlagImpl::SaveState() {
 
 bool FlagImpl::RestoreState(const FlagState& flag_state) {
   absl::MutexLock l(DataGuard());
-  if (flag_state.counter_ == ModificationCount()) { 
+  if (flag_state.counter_ == ModificationCount()) {
     return false;
   }
 
@@ -413,11 +413,11 @@ void* FlagImpl::AlignedBufferValue() const {
   return OffsetValue<void>();
 }
 
-std::atomic<uint64_t>* FlagImpl::AtomicBufferValue() const { 
-  assert(ValueStorageKind() == FlagValueStorageKind::kSequenceLocked); 
-  return OffsetValue<std::atomic<uint64_t>>(); 
-} 
- 
+std::atomic<uint64_t>* FlagImpl::AtomicBufferValue() const {
+  assert(ValueStorageKind() == FlagValueStorageKind::kSequenceLocked);
+  return OffsetValue<std::atomic<uint64_t>>();
+}
+
 std::atomic<int64_t>& FlagImpl::OneWordValue() const {
   assert(ValueStorageKind() == FlagValueStorageKind::kOneWordAtomic ||
          ValueStorageKind() == FlagValueStorageKind::kValueAndInitBit);
@@ -453,8 +453,8 @@ void FlagImpl::Read(void* dst) const {
       std::memcpy(dst, &one_word_val, Sizeof(op_));
       break;
     }
-    case FlagValueStorageKind::kSequenceLocked: { 
-      ReadSequenceLockedData(dst); 
+    case FlagValueStorageKind::kSequenceLocked: {
+      ReadSequenceLockedData(dst);
       break;
     }
     case FlagValueStorageKind::kAlignedBuffer: {
@@ -482,20 +482,20 @@ bool FlagImpl::ReadOneBool() const {
       .value;
 }
 
-void FlagImpl::ReadSequenceLockedData(void* dst) const { 
-  int size = Sizeof(op_); 
-  // Attempt to read using the sequence lock. 
-  if (ABSL_PREDICT_TRUE(seq_lock_.TryRead(dst, AtomicBufferValue(), size))) { 
-    return; 
-  } 
-  // We failed due to contention. Acquire the lock to prevent contention 
-  // and try again. 
-  absl::ReaderMutexLock l(DataGuard()); 
-  bool success = seq_lock_.TryRead(dst, AtomicBufferValue(), size); 
-  assert(success); 
-  static_cast<void>(success); 
-} 
- 
+void FlagImpl::ReadSequenceLockedData(void* dst) const {
+  int size = Sizeof(op_);
+  // Attempt to read using the sequence lock.
+  if (ABSL_PREDICT_TRUE(seq_lock_.TryRead(dst, AtomicBufferValue(), size))) {
+    return;
+  }
+  // We failed due to contention. Acquire the lock to prevent contention
+  // and try again.
+  absl::ReaderMutexLock l(DataGuard());
+  bool success = seq_lock_.TryRead(dst, AtomicBufferValue(), size);
+  assert(success);
+  static_cast<void>(success);
+}
+
 void FlagImpl::Write(const void* src) {
   absl::MutexLock l(DataGuard());
 

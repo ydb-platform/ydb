@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <array> 
+#include <array>
 #include <cmath>
 #include <csignal>
 #include <tuple>
@@ -30,7 +30,7 @@
 #include "absl/base/internal/spinlock.h"
 #include "absl/base/internal/sysinfo.h"
 #include "absl/debugging/stacktrace.h"
-#include "absl/numeric/bits.h" 
+#include "absl/numeric/bits.h"
 #include "absl/strings/string_view.h"
 #include "tcmalloc/common.h"
 #include "tcmalloc/internal/environment.h"
@@ -41,9 +41,9 @@
 #include "tcmalloc/static_vars.h"
 #include "tcmalloc/system-alloc.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 const size_t GuardedPageAllocator::kMagicSize;  // NOLINT
 
@@ -82,7 +82,7 @@ void *GuardedPageAllocator::Allocate(size_t size, size_t alignment) {
 
   ASSERT(size <= page_size_);
   ASSERT(alignment <= page_size_);
-  ASSERT(alignment == 0 || absl::has_single_bit(alignment)); 
+  ASSERT(alignment == 0 || absl::has_single_bit(alignment));
   void *result = reinterpret_cast<void *>(SlotToAddr(free_slot));
   if (mprotect(result, page_size_, PROT_READ | PROT_WRITE) == -1) {
     ASSERT(false && "mprotect failed");
@@ -175,7 +175,7 @@ static int GetChainedRate() {
   }
 }
 
-void GuardedPageAllocator::Print(Printer *out) { 
+void GuardedPageAllocator::Print(Printer *out) {
   absl::base_internal::SpinLockHolder h(&guarded_page_lock);
   out->printf(
       "\n"
@@ -360,14 +360,14 @@ void GuardedPageAllocator::MaybeRightAlign(size_t slot, size_t size,
 
   // If alignment == 0, the necessary alignment is never larger than the size
   // rounded up to the next power of 2.  We use this fact to minimize alignment
-  // padding between the end of small allocations and their guard pages. 
-  // 
-  // For allocations larger than the greater of kAlignment and 
-  // __STDCPP_DEFAULT_NEW_ALIGNMENT__, we're safe aligning to that value. 
-  size_t default_alignment = 
-      std::min(absl::bit_ceil(size), 
-               std::max(kAlignment, 
-                        static_cast<size_t>(__STDCPP_DEFAULT_NEW_ALIGNMENT__))); 
+  // padding between the end of small allocations and their guard pages.
+  //
+  // For allocations larger than the greater of kAlignment and
+  // __STDCPP_DEFAULT_NEW_ALIGNMENT__, we're safe aligning to that value.
+  size_t default_alignment =
+      std::min(absl::bit_ceil(size),
+               std::max(kAlignment,
+                        static_cast<size_t>(__STDCPP_DEFAULT_NEW_ALIGNMENT__)));
 
   // Ensure valid alignment.
   alignment = std::max(alignment, default_alignment);
@@ -384,7 +384,7 @@ void GuardedPageAllocator::MaybeRightAlign(size_t slot, size_t size,
 // If this failure occurs during "bazel test", writes a warning for Bazel to
 // display.
 static void RecordBazelWarning(absl::string_view error) {
-  const char *warning_file = thread_safe_getenv("TEST_WARNINGS_OUTPUT_FILE"); 
+  const char *warning_file = thread_safe_getenv("TEST_WARNINGS_OUTPUT_FILE");
   if (!warning_file) return;  // Not a bazel test.
 
   constexpr char warning[] = "GWP-ASan error detected: ";
@@ -402,7 +402,7 @@ static void RecordBazelWarning(absl::string_view error) {
 // do here).  So we write directly to the XML file instead.
 //
 static void RecordTestFailure(absl::string_view error) {
-  const char *xml_file = thread_safe_getenv("XML_OUTPUT_FILE"); 
+  const char *xml_file = thread_safe_getenv("XML_OUTPUT_FILE");
   if (!xml_file) return;  // Not a gUnit test.
 
   // Record test failure for Sponge.
@@ -467,9 +467,9 @@ static void SegvHandler(int signo, siginfo_t *info, void *context) {
       Static::guardedpage_allocator().GetAllocationOffsetAndSize(fault);
 
   Log(kLog, __FILE__, __LINE__,
-      "*** GWP-ASan " 
-      "(https://google.github.io/tcmalloc/gwp-asan.html)  " 
-      "has detected a memory error ***"); 
+      "*** GWP-ASan "
+      "(https://google.github.io/tcmalloc/gwp-asan.html)  "
+      "has detected a memory error ***");
   Log(kLog, __FILE__, __LINE__, ">>> Access at offset", offset,
       "into buffer of length", size);
   Log(kLog, __FILE__, __LINE__,
@@ -557,6 +557,6 @@ extern "C" void MallocExtension_Internal_ActivateGuardedSampling() {
   });
 }
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END

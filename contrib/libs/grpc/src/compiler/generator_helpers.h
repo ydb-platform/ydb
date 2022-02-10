@@ -26,7 +26,7 @@
 #include <vector>
 
 #include <util/generic/string.h>
-#include <util/string/split.h> 
+#include <util/string/split.h>
 #include <util/stream/str.h>
 
 #include "src/compiler/config.h"
@@ -183,10 +183,10 @@ inline void Split(const TStringType& s, char /*delim*/,
 template <>
 inline void Split(const TString &s, char delim,
                   std::vector<TString> *append_to) {
-  TVector<TString> parts; 
-  Split(s, TString(1, delim), parts); 
-  for (auto& p : parts) { 
-    append_to->push_back(std::move(p)); 
+  TVector<TString> parts;
+  Split(s, TString(1, delim), parts);
+  for (auto& p : parts) {
+    append_to->push_back(std::move(p));
   }
 }
 

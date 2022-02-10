@@ -1,4 +1,4 @@
-#include <yt/yt/core/test_framework/framework.h> 
+#include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/compact_flat_map.h>
 

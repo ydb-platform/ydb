@@ -10,8 +10,8 @@ namespace NMonitoring {
         auto [it, isInserted] = StrMap_.try_emplace(str, Max<ui32>(), 0);
         if (isInserted) {
             BytesSize_ += str.size();
-            it->second.Index = StrVector_.size(); 
-            StrVector_.emplace_back(it->first, &it->second); 
+            it->second.Index = StrVector_.size();
+            StrVector_.emplace_back(it->first, &it->second);
         }
 
         TValue* value = &it->second;
@@ -19,10 +19,10 @@ namespace NMonitoring {
         return value;
     }
 
-    const TStringPoolBuilder::TValue* TStringPoolBuilder::GetByIndex(ui32 index) const { 
-        return StrVector_.at(index).second; 
-    } 
- 
+    const TStringPoolBuilder::TValue* TStringPoolBuilder::GetByIndex(ui32 index) const {
+        return StrVector_.at(index).second;
+    }
+
     TStringPoolBuilder& TStringPoolBuilder::Build() {
         if (RequiresSorting_) {
             // sort in reversed order
@@ -30,10 +30,10 @@ namespace NMonitoring {
                 return a.second->Frequency > b.second->Frequency;
             });
 
-            ui32 i = 0; 
-            for (auto& value : StrVector_) { 
-                value.second->Index = i++; 
-            } 
+            ui32 i = 0;
+            for (auto& value : StrVector_) {
+                value.second->Index = i++;
+            }
         }
 
         IsBuilt_ = true;

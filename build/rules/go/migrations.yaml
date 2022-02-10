@@ -45,23 +45,23 @@ migrations:
       - a.yandex-team.ru/quasar/tsup/server
       - a.yandex-team.ru/cloud/iam/accessservice/client/go/cloudauth
       - a.yandex-team.ru/cloud/iam/accessservice/client/go/cloudauth_test
-  protonaming: 
-    packages: 
-      - a.yandex-team.ru/extsearch/video/content_id/proto 
-      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/ad/proto 
-      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/ng/proto 
-      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/proto 
-      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/qproxy/proto 
-      - a.yandex-team.ru/infra/diskmanager/proto 
-      - a.yandex-team.ru/infra/maxwell/go/proto 
-      - a.yandex-team.ru/infra/nanny2/proto 
-      - a.yandex-team.ru/infra/ya_salt/proto 
-      - a.yandex-team.ru/mds/valve/proto 
-      - a.yandex-team.ru/transfer_manager/go/cmd/yql_server/proto 
-      - a.yandex-team.ru/transfer_manager/go/proto 
-      - a.yandex-team.ru/yabs/proto 
-      - a.yandex-team.ru/yweb/video/faas/proto 
-      - a.yandex-team.ru/zen/integration/proto 
+  protonaming:
+    packages:
+      - a.yandex-team.ru/extsearch/video/content_id/proto
+      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/ad/proto
+      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/ng/proto
+      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/proto
+      - a.yandex-team.ru/extsearch/video/robot/rt_transcoder/qproxy/proto
+      - a.yandex-team.ru/infra/diskmanager/proto
+      - a.yandex-team.ru/infra/maxwell/go/proto
+      - a.yandex-team.ru/infra/nanny2/proto
+      - a.yandex-team.ru/infra/ya_salt/proto
+      - a.yandex-team.ru/mds/valve/proto
+      - a.yandex-team.ru/transfer_manager/go/cmd/yql_server/proto
+      - a.yandex-team.ru/transfer_manager/go/proto
+      - a.yandex-team.ru/yabs/proto
+      - a.yandex-team.ru/yweb/video/faas/proto
+      - a.yandex-team.ru/zen/integration/proto
   unusedwrite:
     packages:
       - a.yandex-team.ru/alice/gamma/sdk/golang

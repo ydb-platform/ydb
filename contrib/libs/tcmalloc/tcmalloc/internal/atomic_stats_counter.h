@@ -18,9 +18,9 @@
 #include <atomic>
 
 #include "absl/base/macros.h"
-#include "tcmalloc/internal/config.h" 
+#include "tcmalloc/internal/config.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
@@ -69,6 +69,6 @@ class StatsCounter {
 
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_INTERNAL_ATOMIC_STATS_COUNTER_H_

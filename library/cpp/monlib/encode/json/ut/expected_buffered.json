@@ -10,8 +10,8 @@
         "kind":"COUNTER",
         "labels":
           {
-            "labels":"l1", 
-            "metric":"single" 
+            "labels":"l1",
+            "metric":"single"
           },
         "ts":1509843723,
         "value":17
@@ -20,8 +20,8 @@
         "kind":"RATE",
         "labels":
           {
-            "labels":"l2", 
-            "metric":"single" 
+            "labels":"l2",
+            "metric":"single"
           },
         "ts":1509843723,
         "value":17
@@ -30,8 +30,8 @@
         "kind":"GAUGE",
         "labels":
           {
-            "labels":"l3", 
-            "metric":"single" 
+            "labels":"l3",
+            "metric":"single"
           },
         "ts":1509843723,
         "value":3.14
@@ -40,8 +40,8 @@
         "kind":"IGAUGE",
         "labels":
           {
-            "labels":"l4", 
-            "metric":"single_igauge" 
+            "labels":"l4",
+            "metric":"single_igauge"
           },
         "ts":1509843723,
         "value":42
@@ -50,8 +50,8 @@
         "kind":"GAUGE",
         "labels":
           {
-            "labels":"l5", 
-            "metric":"multiple" 
+            "labels":"l5",
+            "metric":"multiple"
           },
         "timeseries":
           [
@@ -73,8 +73,8 @@
         "kind":"COUNTER",
         "labels":
           {
-            "labels":"l6", 
-            "metric":"multiple" 
+            "labels":"l6",
+            "metric":"multiple"
           },
         "timeseries":
           [

@@ -26,7 +26,7 @@
 #include "absl/random/random.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 namespace {
 
 using testing::ElementsAre;
@@ -98,29 +98,29 @@ TEST_F(BitmapTest, GetBitEmpty) {
   }
 }
 
-TEST_F(BitmapTest, CheckIsZero) { 
-  Bitmap<253> map; 
-  EXPECT_EQ(map.IsZero(), true); 
-  for (size_t i = 0; i < map.size(); ++i) { 
-    map.Clear(); 
-    EXPECT_EQ(map.IsZero(), true); 
-    map.SetBit(i); 
-    EXPECT_EQ(map.IsZero(), false); 
-  } 
-} 
- 
-TEST_F(BitmapTest, CheckClearLowestBit) { 
-  Bitmap<253> map; 
-  for (size_t i = 0; i < map.size(); ++i) { 
-    map.SetBit(i); 
-  } 
-  for (size_t i = 0; i < map.size(); ++i) { 
-    size_t index = map.FindSet(0); 
-    EXPECT_EQ(index, i); 
-    map.ClearLowestBit(); 
-  } 
-} 
- 
+TEST_F(BitmapTest, CheckIsZero) {
+  Bitmap<253> map;
+  EXPECT_EQ(map.IsZero(), true);
+  for (size_t i = 0; i < map.size(); ++i) {
+    map.Clear();
+    EXPECT_EQ(map.IsZero(), true);
+    map.SetBit(i);
+    EXPECT_EQ(map.IsZero(), false);
+  }
+}
+
+TEST_F(BitmapTest, CheckClearLowestBit) {
+  Bitmap<253> map;
+  for (size_t i = 0; i < map.size(); ++i) {
+    map.SetBit(i);
+  }
+  for (size_t i = 0; i < map.size(); ++i) {
+    size_t index = map.FindSet(0);
+    EXPECT_EQ(index, i);
+    map.ClearLowestBit();
+  }
+}
+
 TEST_F(BitmapTest, GetBitOneSet) {
   const size_t N = 251;
   for (size_t s = 0; s < N; s++) {
@@ -290,5 +290,5 @@ TEST_F(RangeTrackerTest, Trivial) {
 }
 
 }  // namespace
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc

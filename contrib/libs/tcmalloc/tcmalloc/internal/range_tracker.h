@@ -23,13 +23,13 @@
 #include <limits>
 #include <type_traits>
 
-#include "absl/numeric/bits.h" 
+#include "absl/numeric/bits.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/optimization.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 // Keeps a bitmap of some fixed size (N bits).
 template <size_t N>
@@ -46,16 +46,16 @@ class Bitmap {
   // Returns the number of set bits [index, ..., index + n - 1].
   size_t CountBits(size_t index, size_t n) const;
 
-  // Returns whether the bitmap is entirely zero or not. 
-  bool IsZero() const; 
- 
+  // Returns whether the bitmap is entirely zero or not.
+  bool IsZero() const;
+
   // Equivalent to SetBit on bits [index, index + 1, ... index + n - 1].
   void SetRange(size_t index, size_t n);
   void ClearRange(size_t index, size_t n);
 
-  // Clears the lowest set bit. Special case is faster than more flexible code. 
-  void ClearLowestBit(); 
- 
+  // Clears the lowest set bit. Special case is faster than more flexible code.
+  void ClearLowestBit();
+
   // If there is at least one free range at or after <start>,
   // put it in *index, *length and return true; else return false.
   bool NextFreeRange(size_t start, size_t *index, size_t *length) const;
@@ -280,8 +280,8 @@ inline size_t Bitmap<N>::CountWordBits(size_t i, size_t from, size_t to) const {
   ASSERT(0 < n && n <= kWordSize);
   const size_t mask = (all_ones >> (kWordSize - n)) << from;
 
-  ASSUME(i < kWords); 
-  return absl::popcount(bits_[i] & mask); 
+  ASSUME(i < kWords);
+  return absl::popcount(bits_[i] & mask);
 }
 
 // Set the bits [from, to) in the i-th word to Value.
@@ -305,34 +305,34 @@ inline void Bitmap<N>::SetWordBits(size_t i, size_t from, size_t to) {
 
 template <size_t N>
 inline bool Bitmap<N>::GetBit(size_t i) const {
-  ASSERT(i < N); 
+  ASSERT(i < N);
   size_t word = i / kWordSize;
   size_t offset = i % kWordSize;
-  ASSUME(word < kWords); 
+  ASSUME(word < kWords);
   return bits_[word] & (size_t{1} << offset);
 }
 
 template <size_t N>
 inline void Bitmap<N>::SetBit(size_t i) {
-  ASSERT(i < N); 
+  ASSERT(i < N);
   size_t word = i / kWordSize;
   size_t offset = i % kWordSize;
-  ASSUME(word < kWords); 
+  ASSUME(word < kWords);
   bits_[word] |= (size_t{1} << offset);
 }
 
 template <size_t N>
 inline void Bitmap<N>::ClearBit(size_t i) {
-  ASSERT(i < N); 
+  ASSERT(i < N);
   size_t word = i / kWordSize;
   size_t offset = i % kWordSize;
-  ASSUME(word < kWords); 
+  ASSUME(word < kWords);
   bits_[word] &= ~(size_t{1} << offset);
 }
 
 template <size_t N>
 inline size_t Bitmap<N>::CountBits(size_t index, size_t n) const {
-  ASSUME(index + n <= N); 
+  ASSUME(index + n <= N);
   size_t count = 0;
   if (n == 0) {
     return count;
@@ -354,16 +354,16 @@ inline size_t Bitmap<N>::CountBits(size_t index, size_t n) const {
 }
 
 template <size_t N>
-inline bool Bitmap<N>::IsZero() const { 
-  for (int i = 0; i < kWords; ++i) { 
-    if (bits_[i] != 0) { 
-      return false; 
-    } 
-  } 
-  return true; 
-} 
- 
-template <size_t N> 
+inline bool Bitmap<N>::IsZero() const {
+  for (int i = 0; i < kWords; ++i) {
+    if (bits_[i] != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+template <size_t N>
 inline void Bitmap<N>::SetRange(size_t index, size_t n) {
   SetRangeValue<true>(index, n);
 }
@@ -374,16 +374,16 @@ inline void Bitmap<N>::ClearRange(size_t index, size_t n) {
 }
 
 template <size_t N>
-inline void Bitmap<N>::ClearLowestBit() { 
-  for (int i = 0; i < kWords; ++i) { 
-    if (bits_[i] != 0) { 
-      bits_[i] &= bits_[i] - 1; 
-      break; 
-    } 
-  } 
-} 
- 
-template <size_t N> 
+inline void Bitmap<N>::ClearLowestBit() {
+  for (int i = 0; i < kWords; ++i) {
+    if (bits_[i] != 0) {
+      bits_[i] &= bits_[i] - 1;
+      break;
+    }
+  }
+}
+
+template <size_t N>
 template <bool Value>
 inline void Bitmap<N>::SetRangeValue(size_t index, size_t n) {
   ASSERT(index + n <= N);
@@ -444,10 +444,10 @@ inline void Bitmap<N>::Clear() {
 template <size_t N>
 template <bool Goal>
 inline size_t Bitmap<N>::FindValue(size_t index) const {
-  ASSERT(index < N); 
+  ASSERT(index < N);
   size_t offset = index % kWordSize;
   size_t word = index / kWordSize;
-  ASSUME(word < kWords); 
+  ASSUME(word < kWords);
   size_t here = bits_[word];
   if (!Goal) here = ~here;
   size_t mask = ~static_cast<size_t>(0) << offset;
@@ -462,8 +462,8 @@ inline size_t Bitmap<N>::FindValue(size_t index) const {
   }
 
   word *= kWordSize;
-  ASSUME(here != 0); 
-  size_t ret = absl::countr_zero(here) + word; 
+  ASSUME(here != 0);
+  size_t ret = absl::countr_zero(here) + word;
   if (kDeadBits > 0) {
     if (ret > N) ret = N;
   }
@@ -473,10 +473,10 @@ inline size_t Bitmap<N>::FindValue(size_t index) const {
 template <size_t N>
 template <bool Goal>
 inline ssize_t Bitmap<N>::FindValueBackwards(size_t index) const {
-  ASSERT(index < N); 
+  ASSERT(index < N);
   size_t offset = index % kWordSize;
   ssize_t word = index / kWordSize;
-  ASSUME(word < kWords); 
+  ASSUME(word < kWords);
   size_t here = bits_[word];
   if (!Goal) here = ~here;
   size_t mask = (static_cast<size_t>(2) << offset) - 1;
@@ -491,13 +491,13 @@ inline ssize_t Bitmap<N>::FindValueBackwards(size_t index) const {
   }
 
   word *= kWordSize;
-  ASSUME(here != 0); 
-  size_t ret = absl::bit_width(here) - 1 + word; 
+  ASSUME(here != 0);
+  size_t ret = absl::bit_width(here) - 1 + word;
   return ret;
 }
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_INTERNAL_RANGE_TRACKER_H_

@@ -6863,7 +6863,7 @@ void FileOptions::MergeFrom(const FileOptions& from) {
     }
     if (cached_has_bits & 0x00020000u) {
       deprecated_ = from.deprecated_;
-    } 
+    }
     if (cached_has_bits & 0x00040000u) {
       optimize_for_ = from.optimize_for_;
     }

@@ -92,8 +92,8 @@ cdef _initialize():
   # We have Python callbacks called by c-core threads, this ensures the GIL
   # is initialized.
   PyEval_InitThreads()
-  import ssl 
-  grpc_dont_init_openssl() 
+  import ssl
+  grpc_dont_init_openssl()
   # Load Arcadia certs in ComputePemRootCerts and do not override here.
 
 _initialize()

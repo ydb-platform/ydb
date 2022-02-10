@@ -21,9 +21,9 @@
         "cling": {
             "description": "Run cling"
         },
-        "cue": { 
-            "description": "Validate and define text-based and dynamic configuration" 
-        }, 
+        "cue": {
+            "description": "Validate and define text-based and dynamic configuration"
+        },
         "dctl": {
             "description": "Run Yandex.Deploy CLI"
         },
@@ -68,9 +68,9 @@
         "ninja": {
             "description": "Run ninja"
         },
-        "pprof": { 
-            "description": "Run pprof" 
-        }, 
+        "pprof": {
+            "description": "Run pprof"
+        },
         "ytexec": {
             "description": "Run ytexec"
         },
@@ -1250,28 +1250,28 @@
                 }
             ]
         },
-        "cue": { 
-            "tools": { 
-                "cue": { 
-                    "bottle": "cue", 
-                    "executable": "cue" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "cue": {
+            "tools": {
+                "cue": {
+                    "bottle": "cue",
+                    "executable": "cue"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "yoimports": {
             "tools": {
                 "yoimports": {
@@ -2668,28 +2668,28 @@
                 }
             ]
         },
-        "pprof": { 
-            "tools": { 
-                "pprof": { 
-                    "bottle": "pprof", 
-                    "executable": "pprof" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "pprof": {
+            "tools": {
+                "pprof": {
+                    "bottle": "pprof",
+                    "executable": "pprof"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "ytexec": {
             "tools": {
                 "ytexec": {
@@ -5821,7 +5821,7 @@
         },
         "yo": {
             "formula": {
-                "sandbox_id": 1183539336, 
+                "sandbox_id": 1183539336,
                 "match": "yo"
             },
             "executable": {
@@ -5871,20 +5871,20 @@
                 ]
             }
         },
-        "cue": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    631593996, 
-                    631593924 
-                ], 
-                "match": "cue" 
-            }, 
-            "executable": { 
-                "cue": [ 
-                    "cue" 
-                ] 
-            } 
-        }, 
+        "cue": {
+            "formula": {
+                "sandbox_id": [
+                    631593996,
+                    631593924
+                ],
+                "match": "cue"
+            },
+            "executable": {
+                "cue": [
+                    "cue"
+                ]
+            }
+        },
         "yoimports": {
             "formula": {
                 "sandbox_id": 1113620552,
@@ -6745,20 +6745,20 @@
                 ]
             }
         },
-        "pprof": { 
-            "formula": { 
-                "sandbox_id": 1115456319, 
-                "match": "pprof" 
-            }, 
-            "executable": { 
-                "pprof": [ 
-                    "pprof" 
-                ] 
-            } 
-        }, 
+        "pprof": {
+            "formula": {
+                "sandbox_id": 1115456319,
+                "match": "pprof"
+            },
+            "executable": {
+                "pprof": [
+                    "pprof"
+                ]
+            }
+        },
         "ytexec": {
             "formula": {
-                "sandbox_id": 1101655914, 
+                "sandbox_id": 1101655914,
                 "match": "ytexec"
             },
             "executable": {

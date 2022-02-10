@@ -58,9 +58,9 @@ GRPCAPI void grpc_call_details_destroy(grpc_call_details* details);
     the reverse order they were initialized. */
 GRPCAPI void grpc_register_plugin(void (*init)(void), void (*destroy)(void));
 
-GRPCAPI void grpc_init_openssl(void); 
-GRPCAPI void grpc_dont_init_openssl(void); 
- 
+GRPCAPI void grpc_init_openssl(void);
+GRPCAPI void grpc_dont_init_openssl(void);
+
 /** Initialize the grpc library.
 
     After it's called, a matching invocation to grpc_shutdown() is expected.

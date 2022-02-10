@@ -36,15 +36,15 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "benchmark/benchmark.h" 
+#include "benchmark/benchmark.h"
 #include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/util.h"
 #include "tcmalloc/malloc_extension.h"
-#include "tcmalloc/testing/testutil.h" 
+#include "tcmalloc/testing/testutil.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 namespace subtle {
 namespace percpu {
 namespace {
@@ -96,8 +96,8 @@ void RunOnSingleCpu(std::function<bool(int)> test) {
 constexpr size_t kStressSlabs = 4;
 constexpr size_t kStressCapacity = 4;
 
-constexpr size_t kShift = 18; 
-typedef class TcmallocSlab<kStressSlabs> TcmallocSlab; 
+constexpr size_t kShift = 18;
+typedef class TcmallocSlab<kStressSlabs> TcmallocSlab;
 
 enum class SlabInit {
   kEager,
@@ -110,12 +110,12 @@ class TcmallocSlabTest : public testing::TestWithParam<SlabInit> {
     slab_test_ = &slab_;
     metadata_bytes_ = 0;
 
-// Ignore false-positive warning in GCC. For more information, see: 
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96003 
-#pragma GCC diagnostic ignored "-Wnonnull" 
+// Ignore false-positive warning in GCC. For more information, see:
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96003
+#pragma GCC diagnostic ignored "-Wnonnull"
     slab_.Init(
         &ByteCountingMalloc, [](size_t cl) { return kCapacity; },
-        GetParam() == SlabInit::kLazy, kShift); 
+        GetParam() == SlabInit::kLazy, kShift);
 
     for (int i = 0; i < kCapacity; ++i) {
       object_ptrs_[i] = &objects_[i];
@@ -267,14 +267,14 @@ TEST_P(TcmallocSlabTest, Unit) {
   for (auto cpu : AllowedCpus()) {
     SCOPED_TRACE(cpu);
 
-    // Temporarily fake being on the given CPU. 
-    ScopedFakeCpuId fake_cpu_id(cpu); 
- 
-#if !defined(__ppc__) 
+    // Temporarily fake being on the given CPU.
+    ScopedFakeCpuId fake_cpu_id(cpu);
+
+#if !defined(__ppc__)
     if (UsingFlatVirtualCpus()) {
-#if TCMALLOC_PERCPU_USE_RSEQ 
+#if TCMALLOC_PERCPU_USE_RSEQ
       __rseq_abi.vcpu_id = cpu ^ 1;
-#endif 
+#endif
       cpu = cpu ^ 1;
     }
 #endif
@@ -288,7 +288,7 @@ TEST_P(TcmallocSlabTest, Unit) {
       // This is imperfect but the window between operations below is small.  We
       // can make this more precise around individual operations if we see
       // measurable flakiness as a result.
-      if (fake_cpu_id.Tampered()) break; 
+      if (fake_cpu_id.Tampered()) break;
 #endif
 
       // Check new slab state.
@@ -296,7 +296,7 @@ TEST_P(TcmallocSlabTest, Unit) {
       ASSERT_EQ(slab_.Capacity(cpu, cl), 0);
 
       if (!initialized[cpu]) {
-#pragma GCC diagnostic ignored "-Wnonnull" 
+#pragma GCC diagnostic ignored "-Wnonnull"
         void* ptr = slab_.Pop(cl, [](int cpu, size_t cl) {
           slab_test_->InitCPU(cpu, [](size_t cl) { return kCapacity; });
 
@@ -506,7 +506,7 @@ static void StressThread(size_t thread_id, TcmallocSlab* slab,
   absl::BitGen rnd(absl::SeedSeq({thread_id}));
   while (!*stop) {
     size_t cl = absl::Uniform<int32_t>(rnd, 0, kStressSlabs);
-    const int what = absl::Uniform<int32_t>(rnd, 0, 91); 
+    const int what = absl::Uniform<int32_t>(rnd, 0, 91);
     if (what < 10) {
       if (!block->empty()) {
         if (slab->Push(cl, block->back(), &Handler::Overflow)) {
@@ -554,14 +554,14 @@ static void StressThread(size_t thread_id, TcmallocSlab* slab,
         }
       }
       if (n != 0) {
-        size_t res = slab->Grow(slab->GetCurrentVirtualCpuUnsafe(), cl, n, 
-                                kStressCapacity); 
+        size_t res = slab->Grow(slab->GetCurrentVirtualCpuUnsafe(), cl, n,
+                                kStressCapacity);
         EXPECT_LE(res, n);
         capacity->fetch_add(n - res);
       }
     } else if (what < 60) {
       size_t n =
-          slab->Shrink(slab->GetCurrentVirtualCpuUnsafe(), cl, 
+          slab->Shrink(slab->GetCurrentVirtualCpuUnsafe(), cl,
                        absl::Uniform<int32_t>(rnd, 0, kStressCapacity) + 1);
       capacity->fetch_add(n);
     } else if (what < 70) {
@@ -572,37 +572,37 @@ static void StressThread(size_t thread_id, TcmallocSlab* slab,
       size_t cap = slab->Capacity(
           absl::Uniform<int32_t>(rnd, 0, absl::base_internal::NumCPUs()), cl);
       EXPECT_LE(cap, kStressCapacity);
-    } else if (what < 90) { 
-      struct Context { 
-        std::vector<void*>* block; 
-        std::atomic<size_t>* capacity; 
-      }; 
-      Context ctx = {block, capacity}; 
-      int cpu = absl::Uniform<int32_t>(rnd, 0, absl::base_internal::NumCPUs()); 
-      if (mutexes->at(cpu).TryLock()) { 
-        size_t to_shrink = absl::Uniform<int32_t>(rnd, 0, kStressCapacity) + 1; 
-        size_t total_shrunk = slab->ShrinkOtherCache( 
-            cpu, cl, to_shrink, &ctx, 
-            [](void* arg, size_t cl, void** batch, size_t n) { 
-              Context* ctx = static_cast<Context*>(arg); 
-              EXPECT_LT(cl, kStressSlabs); 
-              EXPECT_LE(n, kStressCapacity); 
-              for (size_t i = 0; i < n; ++i) { 
-                EXPECT_NE(batch[i], nullptr); 
-                ctx->block->push_back(batch[i]); 
-              } 
-            }); 
-        EXPECT_LE(total_shrunk, to_shrink); 
-        EXPECT_LE(0, total_shrunk); 
-        capacity->fetch_add(total_shrunk); 
-        mutexes->at(cpu).Unlock(); 
-      } 
+    } else if (what < 90) {
+      struct Context {
+        std::vector<void*>* block;
+        std::atomic<size_t>* capacity;
+      };
+      Context ctx = {block, capacity};
+      int cpu = absl::Uniform<int32_t>(rnd, 0, absl::base_internal::NumCPUs());
+      if (mutexes->at(cpu).TryLock()) {
+        size_t to_shrink = absl::Uniform<int32_t>(rnd, 0, kStressCapacity) + 1;
+        size_t total_shrunk = slab->ShrinkOtherCache(
+            cpu, cl, to_shrink, &ctx,
+            [](void* arg, size_t cl, void** batch, size_t n) {
+              Context* ctx = static_cast<Context*>(arg);
+              EXPECT_LT(cl, kStressSlabs);
+              EXPECT_LE(n, kStressCapacity);
+              for (size_t i = 0; i < n; ++i) {
+                EXPECT_NE(batch[i], nullptr);
+                ctx->block->push_back(batch[i]);
+              }
+            });
+        EXPECT_LE(total_shrunk, to_shrink);
+        EXPECT_LE(0, total_shrunk);
+        capacity->fetch_add(total_shrunk);
+        mutexes->at(cpu).Unlock();
+      }
     } else {
       struct Context {
         std::vector<void*>* block;
         std::atomic<size_t>* capacity;
       };
-      Context ctx = {block, capacity}; 
+      Context ctx = {block, capacity};
       int cpu = absl::Uniform<int32_t>(rnd, 0, absl::base_internal::NumCPUs());
       if (mutexes->at(cpu).TryLock()) {
         slab->Drain(
@@ -646,8 +646,8 @@ TEST(TcmallocSlab, Stress) {
   TcmallocSlab slab;
   slab.Init(
       allocator,
-      [](size_t cl) { return cl < kStressSlabs ? kStressCapacity : 0; }, false, 
-      kShift); 
+      [](size_t cl) { return cl < kStressSlabs ? kStressCapacity : 0; }, false,
+      kShift);
   std::vector<std::thread> threads;
   const int n_threads = 2 * absl::base_internal::NumCPUs();
 
@@ -799,12 +799,12 @@ static void BM_PushPop(benchmark::State& state) {
   RunOnSingleCpu([&](int this_cpu) {
     const int kBatchSize = 32;
     TcmallocSlab slab;
- 
-#pragma GCC diagnostic ignored "-Wnonnull" 
+
+#pragma GCC diagnostic ignored "-Wnonnull"
     slab.Init(
-        allocator, [](size_t cl) -> size_t { return kBatchSize; }, false, 
-        kShift); 
- 
+        allocator, [](size_t cl) -> size_t { return kBatchSize; }, false,
+        kShift);
+
     CHECK_CONDITION(slab.Grow(this_cpu, 0, kBatchSize, kBatchSize) ==
                     kBatchSize);
     void* batch[kBatchSize];
@@ -831,8 +831,8 @@ static void BM_PushPopBatch(benchmark::State& state) {
     const int kBatchSize = 32;
     TcmallocSlab slab;
     slab.Init(
-        allocator, [](size_t cl) -> size_t { return kBatchSize; }, false, 
-        kShift); 
+        allocator, [](size_t cl) -> size_t { return kBatchSize; }, false,
+        kShift);
     CHECK_CONDITION(slab.Grow(this_cpu, 0, kBatchSize, kBatchSize) ==
                     kBatchSize);
     void* batch[kBatchSize];
@@ -851,5 +851,5 @@ BENCHMARK(BM_PushPopBatch);
 }  // namespace
 }  // namespace percpu
 }  // namespace subtle
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc

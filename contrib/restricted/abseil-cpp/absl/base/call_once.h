@@ -177,8 +177,8 @@ void CallOnceImpl(std::atomic<uint32_t>* control,
                                   scheduling_mode) == kOnceInit) {
     base_internal::invoke(std::forward<Callable>(fn),
                           std::forward<Args>(args)...);
-    old_control = 
-        control->exchange(base_internal::kOnceDone, std::memory_order_release); 
+    old_control =
+        control->exchange(base_internal::kOnceDone, std::memory_order_release);
     if (old_control == base_internal::kOnceWaiter) {
       base_internal::SpinLockWake(control, true);
     }

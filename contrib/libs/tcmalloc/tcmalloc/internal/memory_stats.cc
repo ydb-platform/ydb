@@ -20,11 +20,11 @@
 #include <unistd.h>
 
 #include "absl/strings/numbers.h"
-#include "tcmalloc/internal/config.h" 
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/util.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
@@ -129,4 +129,4 @@ bool GetMemoryStats(MemoryStats* stats) {
 
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END

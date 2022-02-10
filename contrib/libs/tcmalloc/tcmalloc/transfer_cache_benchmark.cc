@@ -23,18 +23,18 @@
 #include "tcmalloc/transfer_cache_internals.h"
 #include "tcmalloc/transfer_cache_stats.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 namespace {
 
 using TransferCacheEnv =
     FakeTransferCacheEnvironment<internal_transfer_cache::TransferCache<
         MinimalFakeCentralFreeList, FakeTransferCacheManager>>;
-using RingBufferTransferCacheEnv = FakeTransferCacheEnvironment< 
-    internal_transfer_cache::RingBufferTransferCache<MinimalFakeCentralFreeList, 
-                                                     FakeTransferCacheManager>>; 
-static constexpr int kSizeClass = 0; 
+using RingBufferTransferCacheEnv = FakeTransferCacheEnvironment<
+    internal_transfer_cache::RingBufferTransferCache<MinimalFakeCentralFreeList,
+                                                     FakeTransferCacheManager>>;
+static constexpr int kSizeClass = 0;
 
 template <typename Env>
 void BM_CrossThread(benchmark::State& state) {
@@ -44,21 +44,21 @@ void BM_CrossThread(benchmark::State& state) {
   void* batch[kMaxObjectsToMove];
 
   struct CrossThreadState {
-    CrossThreadState() : m{}, c{Cache(&m, 1), Cache(&m, 1)} {} 
-    FakeTransferCacheManager m; 
+    CrossThreadState() : m{}, c{Cache(&m, 1), Cache(&m, 1)} {}
+    FakeTransferCacheManager m;
     Cache c[2];
   };
 
   static CrossThreadState* s = nullptr;
   if (state.thread_index == 0) {
     s = new CrossThreadState();
-    for (int i = 0; i < ::tcmalloc::tcmalloc_internal::internal_transfer_cache:: 
-                                kInitialCapacityInBatches / 
-                            2; 
-         ++i) { 
+    for (int i = 0; i < ::tcmalloc::tcmalloc_internal::internal_transfer_cache::
+                                kInitialCapacityInBatches /
+                            2;
+         ++i) {
       for (Cache& c : s->c) {
         c.freelist().AllocateBatch(batch, kBatchSize);
-        c.InsertRange(kSizeClass, {batch, kBatchSize}); 
+        c.InsertRange(kSizeClass, {batch, kBatchSize});
       }
     }
   }
@@ -67,9 +67,9 @@ void BM_CrossThread(benchmark::State& state) {
   int dst = (src + 1) % 2;
   for (auto iter : state) {
     benchmark::DoNotOptimize(batch);
-    (void)s->c[src].RemoveRange(kSizeClass, batch, kBatchSize); 
+    (void)s->c[src].RemoveRange(kSizeClass, batch, kBatchSize);
     benchmark::DoNotOptimize(batch);
-    s->c[dst].InsertRange(kSizeClass, {batch, kBatchSize}); 
+    s->c[dst].InsertRange(kSizeClass, {batch, kBatchSize});
     benchmark::DoNotOptimize(batch);
   }
   if (state.thread_index == 0) {
@@ -110,7 +110,7 @@ void BM_InsertRange(benchmark::State& state) {
     benchmark::DoNotOptimize(batch);
     state.ResumeTiming();
 
-    e->transfer_cache().InsertRange(kSizeClass, {batch, kBatchSize}); 
+    e->transfer_cache().InsertRange(kSizeClass, {batch, kBatchSize});
   }
 }
 
@@ -130,20 +130,20 @@ void BM_RemoveRange(benchmark::State& state) {
     benchmark::DoNotOptimize(e);
     state.ResumeTiming();
 
-    (void)e->transfer_cache().RemoveRange(kSizeClass, batch, kBatchSize); 
+    (void)e->transfer_cache().RemoveRange(kSizeClass, batch, kBatchSize);
     benchmark::DoNotOptimize(batch);
   }
 }
 
 BENCHMARK_TEMPLATE(BM_CrossThread, TransferCacheEnv)->ThreadRange(2, 64);
-BENCHMARK_TEMPLATE(BM_CrossThread, RingBufferTransferCacheEnv) 
-    ->ThreadRange(2, 64); 
+BENCHMARK_TEMPLATE(BM_CrossThread, RingBufferTransferCacheEnv)
+    ->ThreadRange(2, 64);
 BENCHMARK_TEMPLATE(BM_InsertRange, TransferCacheEnv);
-BENCHMARK_TEMPLATE(BM_InsertRange, RingBufferTransferCacheEnv); 
+BENCHMARK_TEMPLATE(BM_InsertRange, RingBufferTransferCacheEnv);
 BENCHMARK_TEMPLATE(BM_RemoveRange, TransferCacheEnv);
-BENCHMARK_TEMPLATE(BM_RemoveRange, RingBufferTransferCacheEnv); 
+BENCHMARK_TEMPLATE(BM_RemoveRange, RingBufferTransferCacheEnv);
 
 }  // namespace
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END

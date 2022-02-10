@@ -30,8 +30,8 @@
 
 #if defined(__GLIBC__)
 #include "tcmalloc/libc_override_glibc.h"
- 
-#else 
+
+#else
 #include "tcmalloc/libc_override_redefine.h"
 
 #endif

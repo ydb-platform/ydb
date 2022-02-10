@@ -51,9 +51,9 @@ ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // This class is implicitly constructible from everything that absl::string_view
-// is implicitly constructible from, except for rvalue strings.  This means it 
-// can be used as a function parameter in places where passing a temporary 
-// string might cause memory lifetime issues. 
+// is implicitly constructible from, except for rvalue strings.  This means it
+// can be used as a function parameter in places where passing a temporary
+// string might cause memory lifetime issues.
 class ConvertibleToStringView {
  public:
   ConvertibleToStringView(const char* s)  // NOLINT(runtime/explicit)
@@ -65,8 +65,8 @@ class ConvertibleToStringView {
       : value_(s) {}
 
   // Disable conversion from rvalue strings.
-  ConvertibleToStringView(std::string&& s) = delete; 
-  ConvertibleToStringView(const std::string&& s) = delete; 
+  ConvertibleToStringView(std::string&& s) = delete;
+  ConvertibleToStringView(const std::string&& s) = delete;
 
   absl::string_view value() const { return value_; }
 
@@ -251,11 +251,11 @@ struct SplitterIsConvertibleTo
 // the split strings: only strings for which the predicate returns true will be
 // kept. A Predicate object is any unary functor that takes an absl::string_view
 // and returns bool.
-// 
-// The StringType parameter can be either string_view or string, depending on 
-// whether the Splitter refers to a string stored elsewhere, or if the string 
-// resides inside the Splitter itself. 
-template <typename Delimiter, typename Predicate, typename StringType> 
+//
+// The StringType parameter can be either string_view or string, depending on
+// whether the Splitter refers to a string stored elsewhere, or if the string
+// resides inside the Splitter itself.
+template <typename Delimiter, typename Predicate, typename StringType>
 class Splitter {
  public:
   using DelimiterType = Delimiter;
@@ -263,12 +263,12 @@ class Splitter {
   using const_iterator = strings_internal::SplitIterator<Splitter>;
   using value_type = typename std::iterator_traits<const_iterator>::value_type;
 
-  Splitter(StringType input_text, Delimiter d, Predicate p) 
+  Splitter(StringType input_text, Delimiter d, Predicate p)
       : text_(std::move(input_text)),
         delimiter_(std::move(d)),
         predicate_(std::move(p)) {}
 
-  absl::string_view text() const { return text_; } 
+  absl::string_view text() const { return text_; }
   const Delimiter& delimiter() const { return delimiter_; }
   const Predicate& predicate() const { return predicate_; }
 
@@ -418,7 +418,7 @@ class Splitter {
     static iterator ToIter(iterator iter) { return iter; }
   };
 
-  StringType text_; 
+  StringType text_;
   Delimiter delimiter_;
   Predicate predicate_;
 };

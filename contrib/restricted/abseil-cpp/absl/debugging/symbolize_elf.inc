@@ -1295,7 +1295,7 @@ static bool MaybeInitializeObjFile(ObjFile *obj) {
     const int phnum = obj->elf_header.e_phnum;
     const int phentsize = obj->elf_header.e_phentsize;
     size_t phoff = obj->elf_header.e_phoff;
-    size_t num_executable_load_segments = 0; 
+    size_t num_executable_load_segments = 0;
     for (int j = 0; j < phnum; j++) {
       ElfW(Phdr) phdr;
       if (!ReadFromOffsetExact(obj->fd, &phdr, sizeof(phdr), phoff)) {
@@ -1356,7 +1356,7 @@ const char *Symbolizer::GetSymbol(const void *const pc) {
         // Note: some binaries have multiple "rx" LOAD segments. We must
         // find the right one.
         ElfW(Phdr) *phdr = nullptr;
-        for (size_t j = 0; j < obj->phdr.size(); j++) { 
+        for (size_t j = 0; j < obj->phdr.size(); j++) {
           ElfW(Phdr) &p = obj->phdr[j];
           if (p.p_type != PT_LOAD) {
             // We only expect PT_LOADs. This must be PT_NULL that we didn't

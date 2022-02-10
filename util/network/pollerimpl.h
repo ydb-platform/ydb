@@ -204,8 +204,8 @@ class TEpollPoller {
 public:
     typedef struct ::epoll_event TEvent;
 
-    inline TEpollPoller(bool closeOnExec = false) 
-        : Fd_(epoll_create1(closeOnExec ? EPOLL_CLOEXEC : 0)) 
+    inline TEpollPoller(bool closeOnExec = false)
+        : Fd_(epoll_create1(closeOnExec ? EPOLL_CLOEXEC : 0))
     {
         if (Fd_ == -1) {
             ythrow TSystemError() << "epoll_create failed";
@@ -655,8 +655,8 @@ static inline TDuration PollStep(const TInstant& deadLine, const TInstant& now) 
 template <class TBase>
 class TGenericPoller: public TBase {
 public:
-    using TBase::TBase; 
- 
+    using TBase::TBase;
+
     using TEvent = typename TBase::TEvent;
 
     inline void Set(void* data, SOCKET fd, int what) {

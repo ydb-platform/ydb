@@ -26,7 +26,7 @@ public:
     void OnLabelsBegin() override;
     void OnLabelsEnd() override;
     void OnLabel(TStringBuf name, TStringBuf value) override;
-    void OnLabel(ui32 name, ui32 value) override; 
+    void OnLabel(ui32 name, ui32 value) override;
     std::pair<ui32, ui32> PrepareLabel(TStringBuf name, TStringBuf value) override;
 
     void OnDouble(TInstant time, double value) override;

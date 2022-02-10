@@ -24,7 +24,7 @@
 #include "absl/base/optimization.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "tcmalloc/internal/config.h" 
+#include "tcmalloc/internal/config.h"
 
 //-------------------------------------------------------------------
 // Utility routines
@@ -37,9 +37,9 @@
 // Example:
 //   Log(kLog, __FILE__, __LINE__, "error", bytes);
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 static constexpr int kMaxStackDepth = 64;
 
@@ -59,7 +59,7 @@ struct StackTrace {
   uintptr_t requested_size;
   uintptr_t requested_alignment;
   uintptr_t allocated_size;  // size after sizeclass/page rounding
- 
+
   uintptr_t depth;           // Number of PC values stored in array below
   void* stack[kMaxStackDepth];
 
@@ -75,8 +75,8 @@ struct StackTrace {
     // produce a hasher for the fields used as keys.
     return H::combine(H::combine_contiguous(std::move(h), t.stack, t.depth),
                       t.depth, t.requested_size, t.requested_alignment,
-                      t.allocated_size 
-    ); 
+                      t.allocated_size
+    );
   }
 };
 
@@ -130,11 +130,11 @@ extern void (*log_message_writer)(const char* msg, int length);
 
 // Like assert(), but executed even in NDEBUG mode
 #undef CHECK_CONDITION
-#define CHECK_CONDITION(cond)                                           \ 
-  (ABSL_PREDICT_TRUE(cond) ? (void)0                                    \ 
-                           : (::tcmalloc::tcmalloc_internal::Crash(     \ 
-                                 ::tcmalloc::tcmalloc_internal::kCrash, \ 
-                                 __FILE__, __LINE__, #cond))) 
+#define CHECK_CONDITION(cond)                                           \
+  (ABSL_PREDICT_TRUE(cond) ? (void)0                                    \
+                           : (::tcmalloc::tcmalloc_internal::Crash(     \
+                                 ::tcmalloc::tcmalloc_internal::kCrash, \
+                                 __FILE__, __LINE__, #cond)))
 
 // Our own version of assert() so we can avoid hanging by trying to do
 // all kinds of goofy printing while holding the malloc lock.
@@ -145,7 +145,7 @@ extern void (*log_message_writer)(const char* msg, int length);
 #endif
 
 // Print into buffer
-class Printer { 
+class Printer {
  private:
   char* buf_;     // Where should we write next
   int left_;      // Space left in buffer (including space for \0)
@@ -154,7 +154,7 @@ class Printer {
 
  public:
   // REQUIRES: "length > 0"
-  Printer(char* buf, int length) : buf_(buf), left_(length), required_(0) { 
+  Printer(char* buf, int length) : buf_(buf), left_(length), required_(0) {
     ASSERT(length > 0);
     buf[0] = '\0';
   }
@@ -191,7 +191,7 @@ enum PbtxtRegionType { kTop, kNested };
 // brackets).
 class PbtxtRegion {
  public:
-  PbtxtRegion(Printer* out, PbtxtRegionType type, int indent); 
+  PbtxtRegion(Printer* out, PbtxtRegionType type, int indent);
   ~PbtxtRegion();
 
   PbtxtRegion(const PbtxtRegion&) = delete;
@@ -210,13 +210,13 @@ class PbtxtRegion {
  private:
   void NewLineAndIndent();
 
-  Printer* out_; 
+  Printer* out_;
   PbtxtRegionType type_;
   int indent_;
 };
 
-}  // namespace tcmalloc_internal 
-}  // namespace tcmalloc 
-GOOGLE_MALLOC_SECTION_END 
- 
+}  // namespace tcmalloc_internal
+}  // namespace tcmalloc
+GOOGLE_MALLOC_SECTION_END
+
 #endif  // TCMALLOC_INTERNAL_LOGGING_H_

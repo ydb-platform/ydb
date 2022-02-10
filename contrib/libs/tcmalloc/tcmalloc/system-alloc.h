@@ -23,9 +23,9 @@
 #include "tcmalloc/common.h"
 #include "tcmalloc/malloc_extension.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 // REQUIRES: "alignment" is a power of two or "0" to indicate default alignment
 // REQUIRES: "alignment" and "size" <= kTagMask
@@ -50,9 +50,9 @@ void *SystemAlloc(size_t bytes, size_t *actual_bytes, size_t alignment,
 // call to SystemRelease.
 int SystemReleaseErrors();
 
-void AcquireSystemAllocLock(); 
-void ReleaseSystemAllocLock(); 
- 
+void AcquireSystemAllocLock();
+void ReleaseSystemAllocLock();
+
 // This call is a hint to the operating system that the pages
 // contained in the specified range of memory will not be used for a
 // while, and can be released for use by other processes or the OS.
@@ -84,8 +84,8 @@ void SetRegionFactory(AddressRegionFactory *factory);
 // REQUIRES: size <= kTagMask
 void *MmapAligned(size_t size, size_t alignment, MemoryTag tag);
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_SYSTEM_ALLOC_H_

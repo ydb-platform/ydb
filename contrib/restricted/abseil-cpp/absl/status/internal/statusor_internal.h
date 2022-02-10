@@ -17,7 +17,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "absl/base/attributes.h" 
+#include "absl/base/attributes.h"
 #include "absl/meta/type_traits.h"
 #include "absl/status/status.h"
 #include "absl/utility/utility.h"
@@ -136,14 +136,14 @@ class Helper {
  public:
   // Move type-agnostic error handling to the .cc.
   static void HandleInvalidStatusCtorArg(Status*);
-  ABSL_ATTRIBUTE_NORETURN static void Crash(const absl::Status& status); 
+  ABSL_ATTRIBUTE_NORETURN static void Crash(const absl::Status& status);
 };
 
 // Construct an instance of T in `p` through placement new, passing Args... to
 // the constructor.
 // This abstraction is here mostly for the gcc performance fix.
 template <typename T, typename... Args>
-ABSL_ATTRIBUTE_NONNULL(1) void PlacementNew(void* p, Args&&... args) { 
+ABSL_ATTRIBUTE_NONNULL(1) void PlacementNew(void* p, Args&&... args) {
   new (p) T(std::forward<Args>(args)...);
 }
 

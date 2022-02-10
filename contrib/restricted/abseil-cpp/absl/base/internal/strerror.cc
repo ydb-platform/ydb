@@ -75,7 +75,7 @@ std::array<std::string, kSysNerr>* NewStrErrorTable() {
 }  // namespace
 
 std::string StrError(int errnum) {
-  absl::base_internal::ErrnoSaver errno_saver; 
+  absl::base_internal::ErrnoSaver errno_saver;
   static const auto* table = NewStrErrorTable();
   if (errnum >= 0 && errnum < static_cast<int>(table->size())) {
     return (*table)[errnum];

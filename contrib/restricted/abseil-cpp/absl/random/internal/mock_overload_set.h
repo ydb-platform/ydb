@@ -44,12 +44,12 @@ struct MockSingleOverload<DistrT, Ret(MockingBitGen&, Args...)> {
                 "Overload signature must have return type matching the "
                 "distribution result_type.");
   using KeyT = Ret(DistrT, std::tuple<Args...>);
- 
-  template <typename MockURBG> 
-  auto gmock_Call(MockURBG& gen, const ::testing::Matcher<Args>&... matchers) 
+
+  template <typename MockURBG>
+  auto gmock_Call(MockURBG& gen, const ::testing::Matcher<Args>&... matchers)
       -> decltype(MockHelpers::MockFor<KeyT>(gen).gmock_Call(matchers...)) {
-    static_assert(std::is_base_of<MockingBitGen, MockURBG>::value, 
-                  "Mocking requires an absl::MockingBitGen"); 
+    static_assert(std::is_base_of<MockingBitGen, MockURBG>::value,
+                  "Mocking requires an absl::MockingBitGen");
     return MockHelpers::MockFor<KeyT>(gen).gmock_Call(matchers...);
   }
 };
@@ -60,14 +60,14 @@ struct MockSingleOverload<DistrT, Ret(Arg, MockingBitGen&, Args...)> {
                 "Overload signature must have return type matching the "
                 "distribution result_type.");
   using KeyT = Ret(DistrT, std::tuple<Arg, Args...>);
- 
-  template <typename MockURBG> 
-  auto gmock_Call(const ::testing::Matcher<Arg>& matcher, MockURBG& gen, 
-                  const ::testing::Matcher<Args>&... matchers) 
+
+  template <typename MockURBG>
+  auto gmock_Call(const ::testing::Matcher<Arg>& matcher, MockURBG& gen,
+                  const ::testing::Matcher<Args>&... matchers)
       -> decltype(MockHelpers::MockFor<KeyT>(gen).gmock_Call(matcher,
                                                              matchers...)) {
-    static_assert(std::is_base_of<MockingBitGen, MockURBG>::value, 
-                  "Mocking requires an absl::MockingBitGen"); 
+    static_assert(std::is_base_of<MockingBitGen, MockURBG>::value,
+                  "Mocking requires an absl::MockingBitGen");
     return MockHelpers::MockFor<KeyT>(gen).gmock_Call(matcher, matchers...);
   }
 };

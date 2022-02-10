@@ -24,17 +24,17 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "benchmark/benchmark.h" 
+#include "benchmark/benchmark.h"
 #include "tcmalloc/internal/logging.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 using ::testing::Eq;
 
 // Mock interface to mincore() which has reports residence based on
 // an array provided at construction.
-class MInCoreMock : public MInCoreInterface { 
+class MInCoreMock : public MInCoreInterface {
  public:
   MInCoreMock() : mapped_() {}
   ~MInCoreMock() override {}
@@ -77,10 +77,10 @@ class MInCoreTest {
 
   // Expose the internal size of array that we use to call mincore() so
   // that we can be sure to need multiple calls to cover large memory regions.
-  const size_t chunkSize() { return MInCore::kArrayLength; } 
+  const size_t chunkSize() { return MInCore::kArrayLength; }
 
  private:
-  MInCoreMock mcm_; 
+  MInCoreMock mcm_;
 };
 
 namespace {
@@ -88,7 +88,7 @@ namespace {
 using ::testing::Eq;
 
 TEST(StaticVarsTest, TestResidence) {
-  MInCoreTest mct; 
+  MInCoreTest mct;
   const size_t kPageSize = getpagesize();
 
   // Set up a pattern with a few resident pages.
@@ -142,7 +142,7 @@ TEST(StaticVarsTest, TestResidence) {
 
 // Test whether we are correctly handling multiple calls to mincore.
 TEST(StaticVarsTest, TestLargeResidence) {
-  MInCoreTest mct; 
+  MInCoreTest mct;
   uintptr_t uAddress = 0;
   const size_t kPageSize = getpagesize();
   // Set up a pattern covering 6 * page size *  MInCore::kArrayLength to
@@ -189,5 +189,5 @@ TEST(StaticVarsTest, UnmappedMemory) {
 }
 
 }  // namespace
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc

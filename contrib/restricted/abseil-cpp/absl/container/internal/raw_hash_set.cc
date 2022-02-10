@@ -33,7 +33,7 @@ constexpr size_t Group::kWidth;
 
 // Returns "random" seed.
 inline size_t RandomSeed() {
-#ifdef ABSL_HAVE_THREAD_LOCAL 
+#ifdef ABSL_HAVE_THREAD_LOCAL
   static thread_local size_t counter = 0;
   size_t value = ++counter;
 #else   // ABSL_HAVE_THREAD_LOCAL
@@ -51,17 +51,17 @@ bool ShouldInsertBackwards(size_t hash, const ctrl_t* ctrl) {
 
 void ConvertDeletedToEmptyAndFullToDeleted(ctrl_t* ctrl, size_t capacity) {
   assert(ctrl[capacity] == ctrl_t::kSentinel);
-  assert(IsValidCapacity(capacity)); 
+  assert(IsValidCapacity(capacity));
   for (ctrl_t* pos = ctrl; pos < ctrl + capacity; pos += Group::kWidth) {
-    Group{pos}.ConvertSpecialToEmptyAndFullToDeleted(pos); 
-  } 
-  // Copy the cloned ctrl bytes. 
+    Group{pos}.ConvertSpecialToEmptyAndFullToDeleted(pos);
+  }
+  // Copy the cloned ctrl bytes.
   std::memcpy(ctrl + capacity + 1, ctrl, NumClonedBytes());
   ctrl[capacity] = ctrl_t::kSentinel;
-} 
+}
 // Extern template instantiotion for inline function.
 template FindInfo find_first_non_full(const ctrl_t*, size_t, size_t);
- 
+
 }  // namespace container_internal
 ABSL_NAMESPACE_END
 }  // namespace absl

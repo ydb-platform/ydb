@@ -225,14 +225,14 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             e->Close();
             json += "\n";
 
-            auto parseJson = [] (auto buf) { 
-                NJson::TJsonValue value; 
-                NJson::ReadJsonTree(buf, &value, true); 
-                return value; 
-            }; 
- 
+            auto parseJson = [] (auto buf) {
+                NJson::TJsonValue value;
+                NJson::ReadJsonTree(buf, &value, true);
+                return value;
+            };
+
             const auto expectedJson = NResource::Find(expectedResourceKey);
-            UNIT_ASSERT_EQUAL(parseJson(json), parseJson(expectedJson)); 
+            UNIT_ASSERT_EQUAL(parseJson(json), parseJson(expectedJson));
         };
 
         check(false, false, "/expected.json");

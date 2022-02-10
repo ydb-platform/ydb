@@ -37,26 +37,26 @@
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 
-// Dummy global variables to prevent anyone else defining these. 
-bool FLAGS_help = false; 
-bool FLAGS_helpfull = false; 
-bool FLAGS_helpshort = false; 
-bool FLAGS_helppackage = false; 
-bool FLAGS_version = false; 
-bool FLAGS_only_check_args = false; 
-bool FLAGS_helpon = false; 
-bool FLAGS_helpmatch = false; 
+// Dummy global variables to prevent anyone else defining these.
+bool FLAGS_help = false;
+bool FLAGS_helpfull = false;
+bool FLAGS_helpshort = false;
+bool FLAGS_helppackage = false;
+bool FLAGS_version = false;
+bool FLAGS_only_check_args = false;
+bool FLAGS_helpon = false;
+bool FLAGS_helpmatch = false;
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace flags_internal {
 namespace {
 
-using PerFlagFilter = std::function<bool(const absl::CommandLineFlag&)>; 
- 
-// Maximum length size in a human readable format. 
-constexpr size_t kHrfMaxLineLength = 80; 
- 
+using PerFlagFilter = std::function<bool(const absl::CommandLineFlag&)>;
+
+// Maximum length size in a human readable format.
+constexpr size_t kHrfMaxLineLength = 80;
+
 // This class is used to emit an XML element with `tag` and `text`.
 // It adds opening and closing tags and escapes special characters in the text.
 // For example:
@@ -109,12 +109,12 @@ class FlagHelpPrettyPrinter {
  public:
   // Pretty printer holds on to the std::ostream& reference to direct an output
   // to that stream.
-  FlagHelpPrettyPrinter(size_t max_line_len, size_t min_line_len, 
-                        size_t wrapped_line_indent, std::ostream& out) 
+  FlagHelpPrettyPrinter(size_t max_line_len, size_t min_line_len,
+                        size_t wrapped_line_indent, std::ostream& out)
       : out_(out),
         max_line_len_(max_line_len),
-        min_line_len_(min_line_len), 
-        wrapped_line_indent_(wrapped_line_indent), 
+        min_line_len_(min_line_len),
+        wrapped_line_indent_(wrapped_line_indent),
         line_len_(0),
         first_line_(true) {}
 
@@ -168,12 +168,12 @@ class FlagHelpPrettyPrinter {
 
   void StartLine() {
     if (first_line_) {
-      line_len_ = min_line_len_; 
+      line_len_ = min_line_len_;
       first_line_ = false;
     } else {
-      line_len_ = min_line_len_ + wrapped_line_indent_; 
+      line_len_ = min_line_len_ + wrapped_line_indent_;
     }
-    out_ << std::string(line_len_, ' '); 
+    out_ << std::string(line_len_, ' ');
   }
   void EndLine() {
     out_ << '\n';
@@ -182,15 +182,15 @@ class FlagHelpPrettyPrinter {
 
  private:
   std::ostream& out_;
-  const size_t max_line_len_; 
-  const size_t min_line_len_; 
-  const size_t wrapped_line_indent_; 
-  size_t line_len_; 
+  const size_t max_line_len_;
+  const size_t min_line_len_;
+  const size_t wrapped_line_indent_;
+  size_t line_len_;
   bool first_line_;
 };
 
 void FlagHelpHumanReadable(const CommandLineFlag& flag, std::ostream& out) {
-  FlagHelpPrettyPrinter printer(kHrfMaxLineLength, 4, 2, out); 
+  FlagHelpPrettyPrinter printer(kHrfMaxLineLength, 4, 2, out);
 
   // Flag name.
   printer.Write(absl::StrCat("--", flag.Name()));
@@ -226,7 +226,7 @@ void FlagHelpHumanReadable(const CommandLineFlag& flag, std::ostream& out) {
 // If a flag's help message has been stripped (e.g. by adding '#define
 // STRIP_FLAG_HELP 1' then this flag will not be displayed by '--help'
 // and its variants.
-void FlagsHelpImpl(std::ostream& out, PerFlagFilter filter_cb, 
+void FlagsHelpImpl(std::ostream& out, PerFlagFilter filter_cb,
                    HelpFormat format, absl::string_view program_usage_message) {
   if (format == HelpFormat::kHumanReadable) {
     out << flags_internal::ShortProgramInvocationName() << ": "
@@ -261,9 +261,9 @@ void FlagsHelpImpl(std::ostream& out, PerFlagFilter filter_cb,
     // If the flag has been stripped, pretend that it doesn't exist.
     if (flag.Help() == flags_internal::kStrippedFlagHelp) return;
 
-    // Make sure flag satisfies the filter 
-    if (!filter_cb(flag)) return; 
- 
+    // Make sure flag satisfies the filter
+    if (!filter_cb(flag)) return;
+
     std::string flag_filename = flag.Filename();
 
     matching_flags[std::string(flags_internal::Package(flag_filename))]
@@ -300,34 +300,34 @@ void FlagsHelpImpl(std::ostream& out, PerFlagFilter filter_cb,
   }
 
   if (format == HelpFormat::kHumanReadable) {
-    FlagHelpPrettyPrinter printer(kHrfMaxLineLength, 0, 0, out); 
- 
+    FlagHelpPrettyPrinter printer(kHrfMaxLineLength, 0, 0, out);
+
     if (filter_cb && matching_flags.empty()) {
-      printer.Write("No flags matched.\n", true); 
+      printer.Write("No flags matched.\n", true);
     }
-    printer.EndLine(); 
-    printer.Write( 
-        "Try --helpfull to get a list of all flags or --help=substring " 
-        "shows help for flags which include specified substring in either " 
-        "in the name, or description or path.\n", 
-        true); 
+    printer.EndLine();
+    printer.Write(
+        "Try --helpfull to get a list of all flags or --help=substring "
+        "shows help for flags which include specified substring in either "
+        "in the name, or description or path.\n",
+        true);
   } else {
     // The end of the document.
     out << "</AllFlags>\n";
   }
 }
 
-void FlagsHelpImpl(std::ostream& out, 
-                   flags_internal::FlagKindFilter filename_filter_cb, 
-                   HelpFormat format, absl::string_view program_usage_message) { 
-  FlagsHelpImpl( 
-      out, 
-      [&](const absl::CommandLineFlag& flag) { 
-        return filename_filter_cb && filename_filter_cb(flag.Filename()); 
-      }, 
-      format, program_usage_message); 
-} 
- 
+void FlagsHelpImpl(std::ostream& out,
+                   flags_internal::FlagKindFilter filename_filter_cb,
+                   HelpFormat format, absl::string_view program_usage_message) {
+  FlagsHelpImpl(
+      out,
+      [&](const absl::CommandLineFlag& flag) {
+        return filename_filter_cb && filename_filter_cb(flag.Filename());
+      },
+      format, program_usage_message);
+}
+
 }  // namespace
 
 // --------------------------------------------------------------------
@@ -339,7 +339,7 @@ void FlagHelp(std::ostream& out, const CommandLineFlag& flag,
 }
 
 // --------------------------------------------------------------------
-// Produces the help messages for all flags matching the filename filter. 
+// Produces the help messages for all flags matching the filename filter.
 // If filter is empty produces help messages for all flags.
 void FlagsHelp(std::ostream& out, absl::string_view filter, HelpFormat format,
                absl::string_view program_usage_message) {
@@ -354,169 +354,169 @@ void FlagsHelp(std::ostream& out, absl::string_view filter, HelpFormat format,
 // If so, handles them appropriately.
 int HandleUsageFlags(std::ostream& out,
                      absl::string_view program_usage_message) {
-  switch (GetFlagsHelpMode()) { 
-    case HelpMode::kNone: 
-      break; 
-    case HelpMode::kImportant: 
-      flags_internal::FlagsHelpImpl( 
-          out, flags_internal::GetUsageConfig().contains_help_flags, 
-          GetFlagsHelpFormat(), program_usage_message); 
-      return 1; 
+  switch (GetFlagsHelpMode()) {
+    case HelpMode::kNone:
+      break;
+    case HelpMode::kImportant:
+      flags_internal::FlagsHelpImpl(
+          out, flags_internal::GetUsageConfig().contains_help_flags,
+          GetFlagsHelpFormat(), program_usage_message);
+      return 1;
 
-    case HelpMode::kShort: 
-      flags_internal::FlagsHelpImpl( 
-          out, flags_internal::GetUsageConfig().contains_helpshort_flags, 
-          GetFlagsHelpFormat(), program_usage_message); 
-      return 1; 
+    case HelpMode::kShort:
+      flags_internal::FlagsHelpImpl(
+          out, flags_internal::GetUsageConfig().contains_helpshort_flags,
+          GetFlagsHelpFormat(), program_usage_message);
+      return 1;
 
-    case HelpMode::kFull: 
-      flags_internal::FlagsHelp(out, "", GetFlagsHelpFormat(), 
-                                program_usage_message); 
-      return 1; 
+    case HelpMode::kFull:
+      flags_internal::FlagsHelp(out, "", GetFlagsHelpFormat(),
+                                program_usage_message);
+      return 1;
 
-    case HelpMode::kPackage: 
-      flags_internal::FlagsHelpImpl( 
-          out, flags_internal::GetUsageConfig().contains_helppackage_flags, 
-          GetFlagsHelpFormat(), program_usage_message); 
+    case HelpMode::kPackage:
+      flags_internal::FlagsHelpImpl(
+          out, flags_internal::GetUsageConfig().contains_helppackage_flags,
+          GetFlagsHelpFormat(), program_usage_message);
 
-      return 1; 
+      return 1;
 
-    case HelpMode::kMatch: { 
-      std::string substr = GetFlagsHelpMatchSubstr(); 
-      if (substr.empty()) { 
-        // show all options 
-        flags_internal::FlagsHelp(out, substr, GetFlagsHelpFormat(), 
-                                  program_usage_message); 
-      } else { 
-        auto filter_cb = [&substr](const absl::CommandLineFlag& flag) { 
-          if (absl::StrContains(flag.Name(), substr)) return true; 
-          if (absl::StrContains(flag.Filename(), substr)) return true; 
-          if (absl::StrContains(flag.Help(), substr)) return true; 
+    case HelpMode::kMatch: {
+      std::string substr = GetFlagsHelpMatchSubstr();
+      if (substr.empty()) {
+        // show all options
+        flags_internal::FlagsHelp(out, substr, GetFlagsHelpFormat(),
+                                  program_usage_message);
+      } else {
+        auto filter_cb = [&substr](const absl::CommandLineFlag& flag) {
+          if (absl::StrContains(flag.Name(), substr)) return true;
+          if (absl::StrContains(flag.Filename(), substr)) return true;
+          if (absl::StrContains(flag.Help(), substr)) return true;
 
-          return false; 
-        }; 
-        flags_internal::FlagsHelpImpl( 
-            out, filter_cb, HelpFormat::kHumanReadable, program_usage_message); 
-      } 
- 
-      return 1; 
-    } 
-    case HelpMode::kVersion: 
-      if (flags_internal::GetUsageConfig().version_string) 
-        out << flags_internal::GetUsageConfig().version_string(); 
-      // Unlike help, we may be asking for version in a script, so return 0 
-      return 0; 
- 
-    case HelpMode::kOnlyCheckArgs: 
-      return 0; 
+          return false;
+        };
+        flags_internal::FlagsHelpImpl(
+            out, filter_cb, HelpFormat::kHumanReadable, program_usage_message);
+      }
+
+      return 1;
+    }
+    case HelpMode::kVersion:
+      if (flags_internal::GetUsageConfig().version_string)
+        out << flags_internal::GetUsageConfig().version_string();
+      // Unlike help, we may be asking for version in a script, so return 0
+      return 0;
+
+    case HelpMode::kOnlyCheckArgs:
+      return 0;
   }
 
-  return -1; 
-} 
+  return -1;
+}
 
-// -------------------------------------------------------------------- 
-// Globals representing usage reporting flags 
+// --------------------------------------------------------------------
+// Globals representing usage reporting flags
 
-namespace { 
- 
-ABSL_CONST_INIT absl::Mutex help_attributes_guard(absl::kConstInit); 
-ABSL_CONST_INIT std::string* match_substr 
-    ABSL_GUARDED_BY(help_attributes_guard) = nullptr; 
-ABSL_CONST_INIT HelpMode help_mode ABSL_GUARDED_BY(help_attributes_guard) = 
-    HelpMode::kNone; 
-ABSL_CONST_INIT HelpFormat help_format ABSL_GUARDED_BY(help_attributes_guard) = 
-    HelpFormat::kHumanReadable; 
- 
-}  // namespace 
- 
-std::string GetFlagsHelpMatchSubstr() { 
-  absl::MutexLock l(&help_attributes_guard); 
-  if (match_substr == nullptr) return ""; 
-  return *match_substr; 
-} 
- 
-void SetFlagsHelpMatchSubstr(absl::string_view substr) { 
-  absl::MutexLock l(&help_attributes_guard); 
-  if (match_substr == nullptr) match_substr = new std::string; 
-  match_substr->assign(substr.data(), substr.size()); 
-} 
- 
-HelpMode GetFlagsHelpMode() { 
-  absl::MutexLock l(&help_attributes_guard); 
-  return help_mode; 
-} 
- 
-void SetFlagsHelpMode(HelpMode mode) { 
-  absl::MutexLock l(&help_attributes_guard); 
-  help_mode = mode; 
-} 
- 
-HelpFormat GetFlagsHelpFormat() { 
-  absl::MutexLock l(&help_attributes_guard); 
-  return help_format; 
-} 
- 
-void SetFlagsHelpFormat(HelpFormat format) { 
-  absl::MutexLock l(&help_attributes_guard); 
-  help_format = format; 
-} 
- 
-// Deduces usage flags from the input argument in a form --name=value or 
-// --name. argument is already split into name and value before we call this 
-// function. 
-bool DeduceUsageFlags(absl::string_view name, absl::string_view value) { 
-  if (absl::ConsumePrefix(&name, "help")) { 
-    if (name == "") { 
-      if (value.empty()) { 
-        SetFlagsHelpMode(HelpMode::kImportant); 
-      } else { 
-        SetFlagsHelpMode(HelpMode::kMatch); 
-        SetFlagsHelpMatchSubstr(value); 
-      } 
-      return true; 
-    } 
- 
-    if (name == "match") { 
-      SetFlagsHelpMode(HelpMode::kMatch); 
-      SetFlagsHelpMatchSubstr(value); 
-      return true; 
-    } 
- 
-    if (name == "on") { 
-      SetFlagsHelpMode(HelpMode::kMatch); 
-      SetFlagsHelpMatchSubstr(absl::StrCat("/", value, ".")); 
-      return true; 
-    } 
- 
-    if (name == "full") { 
-      SetFlagsHelpMode(HelpMode::kFull); 
-      return true; 
-    } 
- 
-    if (name == "short") { 
-      SetFlagsHelpMode(HelpMode::kShort); 
-      return true; 
-    } 
- 
-    if (name == "package") { 
-      SetFlagsHelpMode(HelpMode::kPackage); 
-      return true; 
-    } 
- 
-    return false; 
+namespace {
+
+ABSL_CONST_INIT absl::Mutex help_attributes_guard(absl::kConstInit);
+ABSL_CONST_INIT std::string* match_substr
+    ABSL_GUARDED_BY(help_attributes_guard) = nullptr;
+ABSL_CONST_INIT HelpMode help_mode ABSL_GUARDED_BY(help_attributes_guard) =
+    HelpMode::kNone;
+ABSL_CONST_INIT HelpFormat help_format ABSL_GUARDED_BY(help_attributes_guard) =
+    HelpFormat::kHumanReadable;
+
+}  // namespace
+
+std::string GetFlagsHelpMatchSubstr() {
+  absl::MutexLock l(&help_attributes_guard);
+  if (match_substr == nullptr) return "";
+  return *match_substr;
+}
+
+void SetFlagsHelpMatchSubstr(absl::string_view substr) {
+  absl::MutexLock l(&help_attributes_guard);
+  if (match_substr == nullptr) match_substr = new std::string;
+  match_substr->assign(substr.data(), substr.size());
+}
+
+HelpMode GetFlagsHelpMode() {
+  absl::MutexLock l(&help_attributes_guard);
+  return help_mode;
+}
+
+void SetFlagsHelpMode(HelpMode mode) {
+  absl::MutexLock l(&help_attributes_guard);
+  help_mode = mode;
+}
+
+HelpFormat GetFlagsHelpFormat() {
+  absl::MutexLock l(&help_attributes_guard);
+  return help_format;
+}
+
+void SetFlagsHelpFormat(HelpFormat format) {
+  absl::MutexLock l(&help_attributes_guard);
+  help_format = format;
+}
+
+// Deduces usage flags from the input argument in a form --name=value or
+// --name. argument is already split into name and value before we call this
+// function.
+bool DeduceUsageFlags(absl::string_view name, absl::string_view value) {
+  if (absl::ConsumePrefix(&name, "help")) {
+    if (name == "") {
+      if (value.empty()) {
+        SetFlagsHelpMode(HelpMode::kImportant);
+      } else {
+        SetFlagsHelpMode(HelpMode::kMatch);
+        SetFlagsHelpMatchSubstr(value);
+      }
+      return true;
+    }
+
+    if (name == "match") {
+      SetFlagsHelpMode(HelpMode::kMatch);
+      SetFlagsHelpMatchSubstr(value);
+      return true;
+    }
+
+    if (name == "on") {
+      SetFlagsHelpMode(HelpMode::kMatch);
+      SetFlagsHelpMatchSubstr(absl::StrCat("/", value, "."));
+      return true;
+    }
+
+    if (name == "full") {
+      SetFlagsHelpMode(HelpMode::kFull);
+      return true;
+    }
+
+    if (name == "short") {
+      SetFlagsHelpMode(HelpMode::kShort);
+      return true;
+    }
+
+    if (name == "package") {
+      SetFlagsHelpMode(HelpMode::kPackage);
+      return true;
+    }
+
+    return false;
   }
 
-  if (name == "version") { 
-    SetFlagsHelpMode(HelpMode::kVersion); 
-    return true; 
+  if (name == "version") {
+    SetFlagsHelpMode(HelpMode::kVersion);
+    return true;
   }
 
-  if (name == "only_check_args") { 
-    SetFlagsHelpMode(HelpMode::kOnlyCheckArgs); 
-    return true; 
+  if (name == "only_check_args") {
+    SetFlagsHelpMode(HelpMode::kOnlyCheckArgs);
+    return true;
   }
 
-  return false; 
+  return false;
 }
 
 }  // namespace flags_internal

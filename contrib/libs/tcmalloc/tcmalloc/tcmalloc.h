@@ -26,14 +26,14 @@
 #include <stddef.h>
 
 #include "absl/base/attributes.h"
-#include "tcmalloc/internal/config.h" 
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/declarations.h"
 
 // __THROW is defined in glibc systems.  It means, counter-intuitively,
 // "This function will never throw an exception."  It's an optional
 // optimization tool, but we may need to use it to match glibc prototypes.
 #ifndef __THROW  // I guess we're not on a glibc system
-#define __THROW __attribute__((__nothrow__)) 
+#define __THROW __attribute__((__nothrow__))
 #endif
 
 #ifdef __cplusplus
@@ -68,7 +68,7 @@ void TCMallocInternalMallocStats(void) __THROW
     ABSL_ATTRIBUTE_SECTION(google_malloc);
 int TCMallocInternalMallOpt(int cmd, int value) __THROW
     ABSL_ATTRIBUTE_SECTION(google_malloc);
-#if defined(TCMALLOC_HAVE_STRUCT_MALLINFO) 
+#if defined(TCMALLOC_HAVE_STRUCT_MALLINFO)
 struct mallinfo TCMallocInternalMallocInfo(void) __THROW
     ABSL_ATTRIBUTE_SECTION(google_malloc);
 #endif
@@ -120,7 +120,7 @@ void TCMallocInternalDeleteArrayNothrow(void* p, const std::nothrow_t&) __THROW
 }
 #endif
 
-void TCMallocInternalAcquireLocks(); 
-void TCMallocInternalReleaseLocks(); 
- 
+void TCMallocInternalAcquireLocks();
+void TCMallocInternalReleaseLocks();
+
 #endif  // TCMALLOC_TCMALLOC_H_

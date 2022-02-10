@@ -34,7 +34,7 @@ RECURSE(
     libffi
     libiscsi
     libntirpc
-    librseq 
+    librseq
     libsigcxx
     libsoup
     libtorrent

@@ -24,26 +24,26 @@
 #include "absl/algorithm/container.h"
 #include "absl/base/internal/cycleclock.h"
 #include "absl/time/time.h"
-#include "tcmalloc/common.h" 
+#include "tcmalloc/common.h"
 #include "tcmalloc/huge_allocator.h"
 #include "tcmalloc/huge_cache.h"
 #include "tcmalloc/huge_pages.h"
 #include "tcmalloc/internal/linked_list.h"
-#include "tcmalloc/internal/optimization.h" 
+#include "tcmalloc/internal/optimization.h"
 #include "tcmalloc/internal/range_tracker.h"
 #include "tcmalloc/internal/timeseries_tracker.h"
 #include "tcmalloc/span.h"
 #include "tcmalloc/stats.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
-// This and the following classes implement the adaptive hugepage subrelease 
-// mechanism and realized fragmentation metric described in "Adaptive Hugepage 
-// Subrelease for Non-moving Memory Allocators in Warehouse-Scale Computers" 
-// (ISMM 2021). 
- 
+// This and the following classes implement the adaptive hugepage subrelease
+// mechanism and realized fragmentation metric described in "Adaptive Hugepage
+// Subrelease for Non-moving Memory Allocators in Warehouse-Scale Computers"
+// (ISMM 2021).
+
 // Tracks correctness of skipped subrelease decisions over time.
 template <size_t kEpochs = 16>
 class SkippedSubreleaseCorrectnessTracker {
@@ -284,7 +284,7 @@ class FillerStatsTracker {
     }
   }
 
-  void Print(Printer* out) const; 
+  void Print(Printer* out) const;
   void PrintInPbtxt(PbtxtRegion* hpaa) const;
 
   // Calculates recent peaks for skipping subrelease decisions. If our allocated
@@ -457,15 +457,15 @@ inline double safe_div(Length a, Length b) {
 }
 
 template <size_t kEpochs>
-void FillerStatsTracker<kEpochs>::Print(Printer* out) const { 
+void FillerStatsTracker<kEpochs>::Print(Printer* out) const {
   NumberOfFreePages free_pages = min_free_pages(summary_interval_);
   out->printf("HugePageFiller: time series over %d min interval\n\n",
               absl::ToInt64Minutes(summary_interval_));
- 
-  // Realized fragmentation is equivalent to backed minimum free pages over a 
-  // 5-min interval. It is printed for convenience but not included in pbtxt. 
-  out->printf("HugePageFiller: realized fragmentation: %.1f MiB\n", 
-              free_pages.free_backed.in_mib()); 
+
+  // Realized fragmentation is equivalent to backed minimum free pages over a
+  // 5-min interval. It is printed for convenience but not included in pbtxt.
+  out->printf("HugePageFiller: realized fragmentation: %.1f MiB\n",
+              free_pages.free_backed.in_mib());
   out->printf("HugePageFiller: minimum free pages: %zu (%zu backed)\n",
               free_pages.free.raw_num(), free_pages.free_backed.raw_num());
 
@@ -632,56 +632,56 @@ class PageTracker : public TList<PageTracker<Unback>>::Elem {
  public:
   static void UnbackImpl(void* p, size_t size) { Unback(p, size); }
 
-  constexpr PageTracker(HugePage p, uint64_t when) 
+  constexpr PageTracker(HugePage p, uint64_t when)
       : location_(p),
         released_count_(0),
         donated_(false),
-        unbroken_(true), 
-        free_{} { 
-    init_when(when); 
+        unbroken_(true),
+        free_{} {
+    init_when(when);
 
-#ifndef __ppc64__ 
-#if defined(__GNUC__) 
-#pragma GCC diagnostic push 
-#pragma GCC diagnostic ignored "-Winvalid-offsetof" 
-#endif 
-    // Verify fields are structured so commonly accessed members (as part of 
-    // Put) are on the first two cache lines.  This allows the CentralFreeList 
-    // to accelerate deallocations by prefetching PageTracker instances before 
-    // taking the pageheap_lock. 
-    // 
-    // On PPC64, kHugePageSize / kPageSize is typically ~2K (16MB / 8KB), 
-    // requiring 512 bytes for representing free_.  While its cache line size is 
-    // larger, the entirety of free_ will not fit on two cache lines. 
-    static_assert( 
-        offsetof(PageTracker<Unback>, location_) + sizeof(location_) <= 
-            2 * ABSL_CACHELINE_SIZE, 
-        "location_ should fall within the first two cachelines of " 
-        "PageTracker."); 
-    static_assert(offsetof(PageTracker<Unback>, when_numerator_) + 
-                          sizeof(when_numerator_) <= 
-                      2 * ABSL_CACHELINE_SIZE, 
-                  "when_numerator_ should fall within the first two cachelines " 
-                  "of PageTracker."); 
-    static_assert(offsetof(PageTracker<Unback>, when_denominator_) + 
-                          sizeof(when_denominator_) <= 
-                      2 * ABSL_CACHELINE_SIZE, 
-                  "when_denominator_ should fall within the first two " 
-                  "cachelines of PageTracker."); 
-    static_assert( 
-        offsetof(PageTracker<Unback>, donated_) + sizeof(donated_) <= 
-            2 * ABSL_CACHELINE_SIZE, 
-        "donated_ should fall within the first two cachelines of PageTracker."); 
-    static_assert( 
-        offsetof(PageTracker<Unback>, free_) + sizeof(free_) <= 
-            2 * ABSL_CACHELINE_SIZE, 
-        "free_ should fall within the first two cachelines of PageTracker."); 
-#if defined(__GNUC__) 
-#pragma GCC diagnostic pop 
-#endif 
-#endif  // __ppc64__ 
-  } 
- 
+#ifndef __ppc64__
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif
+    // Verify fields are structured so commonly accessed members (as part of
+    // Put) are on the first two cache lines.  This allows the CentralFreeList
+    // to accelerate deallocations by prefetching PageTracker instances before
+    // taking the pageheap_lock.
+    //
+    // On PPC64, kHugePageSize / kPageSize is typically ~2K (16MB / 8KB),
+    // requiring 512 bytes for representing free_.  While its cache line size is
+    // larger, the entirety of free_ will not fit on two cache lines.
+    static_assert(
+        offsetof(PageTracker<Unback>, location_) + sizeof(location_) <=
+            2 * ABSL_CACHELINE_SIZE,
+        "location_ should fall within the first two cachelines of "
+        "PageTracker.");
+    static_assert(offsetof(PageTracker<Unback>, when_numerator_) +
+                          sizeof(when_numerator_) <=
+                      2 * ABSL_CACHELINE_SIZE,
+                  "when_numerator_ should fall within the first two cachelines "
+                  "of PageTracker.");
+    static_assert(offsetof(PageTracker<Unback>, when_denominator_) +
+                          sizeof(when_denominator_) <=
+                      2 * ABSL_CACHELINE_SIZE,
+                  "when_denominator_ should fall within the first two "
+                  "cachelines of PageTracker.");
+    static_assert(
+        offsetof(PageTracker<Unback>, donated_) + sizeof(donated_) <=
+            2 * ABSL_CACHELINE_SIZE,
+        "donated_ should fall within the first two cachelines of PageTracker.");
+    static_assert(
+        offsetof(PageTracker<Unback>, free_) + sizeof(free_) <=
+            2 * ABSL_CACHELINE_SIZE,
+        "free_ should fall within the first two cachelines of PageTracker.");
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+#endif  // __ppc64__
+  }
+
   struct PageAllocation {
     PageId page;
     Length previously_unbacked;
@@ -754,26 +754,26 @@ class PageTracker : public TList<PageTracker<Unback>>::Elem {
                     PageAgeHistograms* ages) const;
 
  private:
-  void init_when(uint64_t w) { 
-    const Length before = Length(free_.total_free()); 
-    when_numerator_ = w * before.raw_num(); 
-    when_denominator_ = before.raw_num(); 
-  } 
- 
+  void init_when(uint64_t w) {
+    const Length before = Length(free_.total_free());
+    when_numerator_ = w * before.raw_num();
+    when_denominator_ = before.raw_num();
+  }
+
   HugePage location_;
-  // We keep track of an average time weighted by Length::raw_num. In order to 
-  // avoid doing division on fast path, store the numerator and denominator and 
-  // only do the division when we need the average. 
-  uint64_t when_numerator_; 
-  uint64_t when_denominator_; 
- 
-  // Cached value of released_by_page_.CountBits(0, kPagesPerHugePages) 
-  // 
-  // TODO(b/151663108):  Logically, this is guarded by pageheap_lock. 
-  uint16_t released_count_; 
-  bool donated_; 
-  bool unbroken_; 
- 
+  // We keep track of an average time weighted by Length::raw_num. In order to
+  // avoid doing division on fast path, store the numerator and denominator and
+  // only do the division when we need the average.
+  uint64_t when_numerator_;
+  uint64_t when_denominator_;
+
+  // Cached value of released_by_page_.CountBits(0, kPagesPerHugePages)
+  //
+  // TODO(b/151663108):  Logically, this is guarded by pageheap_lock.
+  uint16_t released_count_;
+  bool donated_;
+  bool unbroken_;
+
   RangeTracker<kPagesPerHugePage.raw_num()> free_;
   // Bitmap of pages based on them being released to the OS.
   // * Not yet released pages are unset (considered "free")
@@ -837,19 +837,19 @@ class HugePageFiller {
 
   typedef TrackerType Tracker;
 
-  struct TryGetResult { 
-    TrackerType* pt; 
-    PageId page; 
-  }; 
+  struct TryGetResult {
+    TrackerType* pt;
+    PageId page;
+  };
 
-  // Our API is simple, but note that it does not include an unconditional 
-  // allocation, only a "try"; we expect callers to allocate new hugepages if 
-  // needed.  This simplifies using it in a few different contexts (and improves 
-  // the testing story - no dependencies.) 
-  // 
-  // On failure, returns nullptr/PageId{0}. 
-  TryGetResult TryGet(Length n) ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock); 
- 
+  // Our API is simple, but note that it does not include an unconditional
+  // allocation, only a "try"; we expect callers to allocate new hugepages if
+  // needed.  This simplifies using it in a few different contexts (and improves
+  // the testing story - no dependencies.)
+  //
+  // On failure, returns nullptr/PageId{0}.
+  TryGetResult TryGet(Length n) ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock);
+
   // Marks [p, p + n) as usable by new allocations into *pt; returns pt
   // if that hugepage is now empty (nullptr otherwise.)
   // REQUIRES: pt is owned by this object (has been Contribute()), and
@@ -903,7 +903,7 @@ class HugePageFiller {
 
   BackingStats stats() const;
   SubreleaseStats subrelease_stats() const { return subrelease_stats_; }
-  void Print(Printer* out, bool everything) const; 
+  void Print(Printer* out, bool everything) const;
   void PrintInPbtxt(PbtxtRegion* hpaa) const;
 
  private:
@@ -1070,18 +1070,18 @@ inline typename PageTracker<Unback>::PageAllocation PageTracker<Unback>::Get(
   ASSERT(released_by_page_.CountBits(0, kPagesPerHugePage.raw_num()) ==
          released_count_);
 
-  size_t unbacked = 0; 
-  // If release_count_ == 0, CountBits will return 0 and ClearRange will be a 
-  // no-op (but will touch cachelines) due to the invariants guaranteed by 
-  // CountBits() == released_count_. 
-  // 
-  // This is a performance optimization, not a logical requirement. 
-  if (ABSL_PREDICT_FALSE(released_count_ > 0)) { 
-    unbacked = released_by_page_.CountBits(index, n.raw_num()); 
-    released_by_page_.ClearRange(index, n.raw_num()); 
-    ASSERT(released_count_ >= unbacked); 
-    released_count_ -= unbacked; 
-  } 
+  size_t unbacked = 0;
+  // If release_count_ == 0, CountBits will return 0 and ClearRange will be a
+  // no-op (but will touch cachelines) due to the invariants guaranteed by
+  // CountBits() == released_count_.
+  //
+  // This is a performance optimization, not a logical requirement.
+  if (ABSL_PREDICT_FALSE(released_count_ > 0)) {
+    unbacked = released_by_page_.CountBits(index, n.raw_num());
+    released_by_page_.ClearRange(index, n.raw_num());
+    ASSERT(released_count_ >= unbacked);
+    released_count_ -= unbacked;
+  }
 
   ASSERT(released_by_page_.CountBits(0, kPagesPerHugePage.raw_num()) ==
          released_count_);
@@ -1094,8 +1094,8 @@ inline void PageTracker<Unback>::Put(PageId p, Length n) {
   Length index = p - location_.first_page();
   free_.Unmark(index.raw_num(), n.raw_num());
 
-  when_numerator_ += n.raw_num() * absl::base_internal::CycleClock::Now(); 
-  when_denominator_ += n.raw_num(); 
+  when_numerator_ += n.raw_num() * absl::base_internal::CycleClock::Now();
+  when_denominator_ += n.raw_num();
 }
 
 template <MemoryModifyFunction Unback>
@@ -1145,7 +1145,7 @@ inline Length PageTracker<Unback>::ReleaseFree() {
   ASSERT(Length(released_count_) <= kPagesPerHugePage);
   ASSERT(released_by_page_.CountBits(0, kPagesPerHugePage.raw_num()) ==
          released_count_);
-  init_when(absl::base_internal::CycleClock::Now()); 
+  init_when(absl::base_internal::CycleClock::Now());
   return Length(count);
 }
 
@@ -1155,8 +1155,8 @@ inline void PageTracker<Unback>::AddSpanStats(SmallSpanStats* small,
                                               PageAgeHistograms* ages) const {
   size_t index = 0, n;
 
-  uint64_t w = when_denominator_ == 0 ? when_numerator_ 
-                                      : when_numerator_ / when_denominator_; 
+  uint64_t w = when_denominator_ == 0 ? when_numerator_
+                                      : when_numerator_ / when_denominator_;
   while (free_.NextFreeRange(index, &index, &n)) {
     bool is_released = released_by_page_.GetBit(index);
     // Find the last bit in the run with the same state (set or cleared) as
@@ -1224,8 +1224,8 @@ inline HugePageFiller<TrackerType>::HugePageFiller(
       fillerstats_tracker_(clock, absl::Minutes(10), absl::Minutes(5)) {}
 
 template <class TrackerType>
-inline typename HugePageFiller<TrackerType>::TryGetResult 
-HugePageFiller<TrackerType>::TryGet(Length n) { 
+inline typename HugePageFiller<TrackerType>::TryGetResult
+HugePageFiller<TrackerType>::TryGet(Length n) {
   ASSERT(n > Length(0));
 
   // How do we choose which hugepage to allocate from (among those with
@@ -1292,7 +1292,7 @@ HugePageFiller<TrackerType>::TryGet(Length n) {
   // So all we have to do is find the first nonempty freelist in the regular
   // HintedTrackerList that *could* support our allocation, and it will be our
   // best choice. If there is none we repeat with the donated HintedTrackerList.
-  ASSUME(n < kPagesPerHugePage); 
+  ASSUME(n < kPagesPerHugePage);
   TrackerType* pt;
 
   bool was_released = false;
@@ -1325,11 +1325,11 @@ HugePageFiller<TrackerType>::TryGet(Length n) {
       break;
     }
 
-    return {nullptr, PageId{0}}; 
+    return {nullptr, PageId{0}};
   } while (false);
-  ASSUME(pt != nullptr); 
+  ASSUME(pt != nullptr);
   ASSERT(pt->longest_free_range() >= n);
-  const auto page_allocation = pt->Get(n); 
+  const auto page_allocation = pt->Get(n);
   AddToFillerList(pt);
   allocated_ += n;
 
@@ -1341,7 +1341,7 @@ HugePageFiller<TrackerType>::TryGet(Length n) {
   // donated by this point.
   ASSERT(!pt->donated());
   UpdateFillerStatsTracker();
-  return {pt, page_allocation.page}; 
+  return {pt, page_allocation.page};
 }
 
 // Marks [p, p + n) as usable by new allocations into *pt; returns pt
@@ -1668,7 +1668,7 @@ inline BackingStats HugePageFiller<TrackerType>::stats() const {
   return s;
 }
 
-namespace huge_page_filler_internal { 
+namespace huge_page_filler_internal {
 // Computes some histograms of fullness. Because nearly empty/full huge pages
 // are much more interesting, we calculate 4 buckets at each of the beginning
 // and end of size one, and then divide the overall space by 16 to have 16
@@ -1719,7 +1719,7 @@ class UsageInfo {
     nalloc_histo_[which][BucketNum(nalloc - 1)]++;
   }
 
-  void Print(Printer* out) { 
+  void Print(Printer* out) {
     PrintHisto(out, free_page_histo_[kRegular],
                "# of regular hps with a<= # of free pages <b", 0);
     PrintHisto(out, free_page_histo_[kDonated],
@@ -1769,7 +1769,7 @@ class UsageInfo {
     return it - bucket_bounds_ - 1;
   }
 
-  void PrintHisto(Printer* out, Histo h, const char blurb[], size_t offset) { 
+  void PrintHisto(Printer* out, Histo h, const char blurb[], size_t offset) {
     out->printf("\nHugePageFiller: %s", blurb);
     for (size_t i = 0; i < buckets_size_; ++i) {
       if (i % 6 == 0) {
@@ -1799,10 +1799,10 @@ class UsageInfo {
   size_t bucket_bounds_[kBucketCapacity];
   int buckets_size_ = 0;
 };
-}  // namespace huge_page_filler_internal 
+}  // namespace huge_page_filler_internal
 
 template <class TrackerType>
-inline void HugePageFiller<TrackerType>::Print(Printer* out, 
+inline void HugePageFiller<TrackerType>::Print(Printer* out,
                                                bool everything) const {
   out->printf("HugePageFiller: densely pack small requests into hugepages\n");
 
@@ -1864,7 +1864,7 @@ inline void HugePageFiller<TrackerType>::Print(Printer* out,
   if (!everything) return;
 
   // Compute some histograms of fullness.
-  using huge_page_filler_internal::UsageInfo; 
+  using huge_page_filler_internal::UsageInfo;
   UsageInfo usage;
   regular_alloc_.Iter(
       [&](const TrackerType* pt) { usage.Record(pt, UsageInfo::kRegular); }, 0);
@@ -1942,7 +1942,7 @@ inline void HugePageFiller<TrackerType>::PrintInPbtxt(PbtxtRegion* hpaa) const {
       "filler_num_hugepages_broken_due_to_limit",
       subrelease_stats_.total_hugepages_broken_due_to_limit.raw_num());
   // Compute some histograms of fullness.
-  using huge_page_filler_internal::UsageInfo; 
+  using huge_page_filler_internal::UsageInfo;
   UsageInfo usage;
   regular_alloc_.Iter(
       [&](const TrackerType* pt) { usage.Record(pt, UsageInfo::kRegular); }, 0);
@@ -2106,8 +2106,8 @@ inline Length HugePageFiller<TrackerType>::free_pages() const {
   return size().in_pages() - used_pages() - unmapped_pages();
 }
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_HUGE_PAGE_FILLER_H_

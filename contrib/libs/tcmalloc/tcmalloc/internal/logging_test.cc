@@ -20,12 +20,12 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/flags/flag.h" 
+#include "absl/flags/flag.h"
 
-namespace tcmalloc { 
-namespace tcmalloc_internal { 
-namespace { 
- 
+namespace tcmalloc {
+namespace tcmalloc_internal {
+namespace {
+
 static std::string* log_buffer;
 
 static void RecordLogMessage(const char* msg, int length) {
@@ -94,7 +94,7 @@ TEST(Printer, RequiredSpace) {
   for (int i = 0; i < 10; i++) {
     int length = strlen(kChunk) * i + 1;
     std::unique_ptr<char[]> buf(new char[length]);
-    Printer printer(buf.get(), length); 
+    Printer printer(buf.get(), length);
 
     for (int j = 0; j < i; j++) {
       printer.printf("%s", kChunk);
@@ -112,6 +112,6 @@ TEST(Printer, RequiredSpace) {
   }
 }
 
-}  // namespace 
-}  // namespace tcmalloc_internal 
+}  // namespace
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc

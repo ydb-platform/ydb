@@ -78,18 +78,18 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     ui8 expectedStringPools[] = {
         0x6e, 0x61, 0x6d, 0x65, 0x00,                   // "name\0"
         0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x00, // "project\0"
-        0x73, 0x6f, 0x6c, 0x6f, 0x6d, 0x6f, 0x6e, 0x00, // "solomon\0" 
-        0x71, 0x31, 0x00,                               // "q1\0" 
-        0x71, 0x32, 0x00,                               // "q2\0" 
-        0x71, 0x33, 0x00,                               // "q3\0" 
-        0x61, 0x6e, 0x73, 0x77, 0x65, 0x72, 0x00,       // "answer\0" 
+        0x73, 0x6f, 0x6c, 0x6f, 0x6d, 0x6f, 0x6e, 0x00, // "solomon\0"
+        0x71, 0x31, 0x00,                               // "q1\0"
+        0x71, 0x32, 0x00,                               // "q2\0"
+        0x71, 0x33, 0x00,                               // "q3\0"
+        0x61, 0x6e, 0x73, 0x77, 0x65, 0x72, 0x00,       // "answer\0"
         0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, // "responseTimeMillis\0"
         0x54, 0x69, 0x6d, 0x65, 0x4d, 0x69, 0x6c, 0x6c,
         0x69, 0x73, 0x00,
         0x62, 0x79, 0x74, 0x65, 0x73, 0x00,             // "bytes\0"
-        0x74, 0x65, 0x6D, 0x70, 0x65, 0x72, 0x61, 0x74, // "temperature\0" 
-        0x75, 0x72, 0x65, 0x00, 
-        0x6d, 0x73, 0x00,                               // "ms\0" 
+        0x74, 0x65, 0x6D, 0x70, 0x65, 0x72, 0x61, 0x74, // "temperature\0"
+        0x75, 0x72, 0x65, 0x00,
+        0x6d, 0x73, 0x00,                               // "ms\0"
     };
 
     ui8 expectedCommonTime[] = {
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     ui8 expectedCommonLabels[] = {
         0x01, // common labels count                     (varint)
         0x01, // label name index                        (varint)
-        0x00, // label value index                       (varint) 
+        0x00, // label value index                       (varint)
     };
 
     ui8 expectedMetric1[] = {
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00, // flags                                   (fixed ui8)
         0x01, // metric labels count                     (varint)
         0x00, // label name index                        (varint)
-        0x01, // label value index                       (varint) 
+        0x01, // label value index                       (varint)
     };
 
     ui8 expectedMetric2[] = {
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (varint)
         0x00,                                           // label name index                        (varint)
-        0x02,                                           // label value index                       (varint) 
+        0x02,                                           // label value index                       (varint)
         0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // value (fixed ui64)
     };
 
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (varint)
         0x00,                                           // label name index                        (varint)
-        0x05,                                           // label value index                       (varint) 
+        0x05,                                           // label value index                       (varint)
         0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
         0x06,                                           // histogram buckets count                 (varint)
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // histogram bucket bounds                 (array of fixed ui64)
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (varint)
         0x00,                                           // label name index                        (varint)
-        0x05,                                           // label value index                       (varint) 
+        0x05,                                           // label value index                       (varint)
         0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
         0x06,                                           // histogram buckets count                 (varint)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f, // histogram bucket bounds                 (array of doubles)
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (varint)
         0x00,                                           // label name index                        (varint)
-        0x07,                                           // label value index                       (varint) 
+        0x07,                                           // label value index                       (varint)
         0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
         0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // count                                   (fixed ui64)
         0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x24, 0x40, // sum                                     (fixed double)
@@ -755,7 +755,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
                     e->OnMetricBegin(EMetricType::COUNTER);
                     {
                         e->OnLabelsBegin();
-                        e->OnLabel("project", "solomon"); 
+                        e->OnLabel("project", "solomon");
                         e->OnLabel("s", "temperature");
                         e->OnLabelsEnd();
                     }

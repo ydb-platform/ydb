@@ -37,7 +37,7 @@
 #include "absl/flags/config.h"
 #include "absl/flags/internal/commandlineflag.h"
 #include "absl/flags/internal/registry.h"
-#include "absl/flags/internal/sequence_lock.h" 
+#include "absl/flags/internal/sequence_lock.h"
 #include "absl/flags/marshalling.h"
 #include "absl/meta/type_traits.h"
 #include "absl/strings/string_view.h"
@@ -315,15 +315,15 @@ using FlagUseOneWordStorage = std::integral_constant<
     bool, absl::type_traits_internal::is_trivially_copyable<T>::value &&
               (sizeof(T) <= 8)>;
 
-template <class T> 
+template <class T>
 using FlagUseSequenceLockStorage = std::integral_constant<
     bool, absl::type_traits_internal::is_trivially_copyable<T>::value &&
-              (sizeof(T) > 8)>; 
+              (sizeof(T) > 8)>;
 
 enum class FlagValueStorageKind : uint8_t {
   kValueAndInitBit = 0,
   kOneWordAtomic = 1,
-  kSequenceLocked = 2, 
+  kSequenceLocked = 2,
   kAlignedBuffer = 3,
 };
 
@@ -334,8 +334,8 @@ static constexpr FlagValueStorageKind StorageKind() {
          : FlagUseOneWordStorage<T>::value
              ? FlagValueStorageKind::kOneWordAtomic
          : FlagUseSequenceLockStorage<T>::value
-             ? FlagValueStorageKind::kSequenceLocked 
-             : FlagValueStorageKind::kAlignedBuffer; 
+             ? FlagValueStorageKind::kSequenceLocked
+             : FlagValueStorageKind::kAlignedBuffer;
 }
 
 struct FlagOneWordValue {
@@ -371,7 +371,7 @@ struct FlagValue<T, FlagValueStorageKind::kValueAndInitBit> : FlagOneWordValue {
 template <typename T>
 struct FlagValue<T, FlagValueStorageKind::kOneWordAtomic> : FlagOneWordValue {
   constexpr FlagValue() : FlagOneWordValue(UninitializedFlagValue()) {}
-  bool Get(const SequenceLock&, T& dst) const { 
+  bool Get(const SequenceLock&, T& dst) const {
     int64_t one_word_val = value.load(std::memory_order_acquire);
     if (ABSL_PREDICT_FALSE(one_word_val == UninitializedFlagValue())) {
       return false;
@@ -382,16 +382,16 @@ struct FlagValue<T, FlagValueStorageKind::kOneWordAtomic> : FlagOneWordValue {
 };
 
 template <typename T>
-struct FlagValue<T, FlagValueStorageKind::kSequenceLocked> { 
-  bool Get(const SequenceLock& lock, T& dst) const { 
-    return lock.TryRead(&dst, value_words, sizeof(T)); 
+struct FlagValue<T, FlagValueStorageKind::kSequenceLocked> {
+  bool Get(const SequenceLock& lock, T& dst) const {
+    return lock.TryRead(&dst, value_words, sizeof(T));
   }
- 
-  static constexpr int kNumWords = 
-      flags_internal::AlignUp(sizeof(T), sizeof(uint64_t)) / sizeof(uint64_t); 
- 
-  alignas(T) alignas( 
-      std::atomic<uint64_t>) std::atomic<uint64_t> value_words[kNumWords]; 
+
+  static constexpr int kNumWords =
+      flags_internal::AlignUp(sizeof(T), sizeof(uint64_t)) / sizeof(uint64_t);
+
+  alignas(T) alignas(
+      std::atomic<uint64_t>) std::atomic<uint64_t> value_words[kNumWords];
 };
 
 template <typename T>
@@ -507,14 +507,14 @@ class FlagImpl final : public CommandLineFlag {
   // flag.cc, we can define it in that file as well.
   template <typename StorageT>
   StorageT* OffsetValue() const;
-  // This is an accessor for a value stored in an aligned buffer storage 
-  // used for non-trivially-copyable data types. 
+  // This is an accessor for a value stored in an aligned buffer storage
+  // used for non-trivially-copyable data types.
   // Returns a mutable pointer to the start of a buffer.
   void* AlignedBufferValue() const;
- 
-  // The same as above, but used for sequencelock-protected storage. 
-  std::atomic<uint64_t>* AtomicBufferValue() const; 
- 
+
+  // The same as above, but used for sequencelock-protected storage.
+  std::atomic<uint64_t>* AtomicBufferValue() const;
+
   // This is an accessor for a value stored as one word atomic. Returns a
   // mutable reference to an atomic value.
   std::atomic<int64_t>& OneWordValue() const;
@@ -527,12 +527,12 @@ class FlagImpl final : public CommandLineFlag {
   // Stores the flag value based on the pointer to the source.
   void StoreValue(const void* src) ABSL_EXCLUSIVE_LOCKS_REQUIRED(*DataGuard());
 
-  // Copy the flag data, protected by `seq_lock_` into `dst`. 
-  // 
-  // REQUIRES: ValueStorageKind() == kSequenceLocked. 
-  void ReadSequenceLockedData(void* dst) const 
-      ABSL_LOCKS_EXCLUDED(*DataGuard()); 
- 
+  // Copy the flag data, protected by `seq_lock_` into `dst`.
+  //
+  // REQUIRES: ValueStorageKind() == kSequenceLocked.
+  void ReadSequenceLockedData(void* dst) const
+      ABSL_LOCKS_EXCLUDED(*DataGuard());
+
   FlagHelpKind HelpSourceKind() const {
     return static_cast<FlagHelpKind>(help_source_kind_);
   }
@@ -558,8 +558,8 @@ class FlagImpl final : public CommandLineFlag {
   void CheckDefaultValueParsingRoundtrip() const override
       ABSL_LOCKS_EXCLUDED(*DataGuard());
 
-  int64_t ModificationCount() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*DataGuard()); 
- 
+  int64_t ModificationCount() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(*DataGuard());
+
   // Interfaces to save and restore flags to/from persistent state.
   // Returns current flag state or nullptr if flag does not support
   // saving and restoring a state.
@@ -606,9 +606,9 @@ class FlagImpl final : public CommandLineFlag {
   // Unique tag for absl::call_once call to initialize this flag.
   absl::once_flag init_control_;
 
-  // Sequence lock / mutation counter. 
-  flags_internal::SequenceLock seq_lock_; 
- 
+  // Sequence lock / mutation counter.
+  flags_internal::SequenceLock seq_lock_;
+
   // Optional flag's callback and absl::Mutex to guard the invocations.
   FlagCallback* callback_ ABSL_GUARDED_BY(*DataGuard());
   // Either a pointer to the function generating the default value based on the
@@ -669,9 +669,9 @@ class Flag {
     impl_.AssertValidType(base_internal::FastTypeId<T>(), &GenRuntimeTypeId<T>);
 #endif
 
-    if (ABSL_PREDICT_FALSE(!value_.Get(impl_.seq_lock_, u.value))) { 
-      impl_.Read(&u.value); 
-    } 
+    if (ABSL_PREDICT_FALSE(!value_.Get(impl_.seq_lock_, u.value))) {
+      impl_.Read(&u.value);
+    }
     return std::move(u.value);
   }
   void Set(const T& v) {
@@ -772,9 +772,9 @@ struct FlagRegistrarEmpty {};
 template <typename T, bool do_register>
 class FlagRegistrar {
  public:
-  explicit FlagRegistrar(Flag<T>& flag, const char* filename) : flag_(flag) { 
-    if (do_register) 
-      flags_internal::RegisterCommandLineFlag(flag_.impl_, filename); 
+  explicit FlagRegistrar(Flag<T>& flag, const char* filename) : flag_(flag) {
+    if (do_register)
+      flags_internal::RegisterCommandLineFlag(flag_.impl_, filename);
   }
 
   FlagRegistrar OnUpdate(FlagCallbackFunc cb) && {

@@ -61,8 +61,8 @@ class SchedulingGuard {
  public:
   // Returns true iff the calling thread may be cooperatively rescheduled.
   static bool ReschedulingIsAllowed();
-  SchedulingGuard(const SchedulingGuard&) = delete; 
-  SchedulingGuard& operator=(const SchedulingGuard&) = delete; 
+  SchedulingGuard(const SchedulingGuard&) = delete;
+  SchedulingGuard& operator=(const SchedulingGuard&) = delete;
 
  private:
   // Disable cooperative rescheduling of the calling thread.  It may still

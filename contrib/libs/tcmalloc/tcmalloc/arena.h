@@ -18,13 +18,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "absl/base/attributes.h" 
+#include "absl/base/attributes.h"
 #include "absl/base/thread_annotations.h"
 #include "tcmalloc/common.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 // Arena allocation; designed for use by tcmalloc internal data structures like
 // spans, profiles, etc.  Always expands.
@@ -35,9 +35,9 @@ class Arena {
 
   // Return a properly aligned byte array of length "bytes".  Crashes if
   // allocation fails.  Requires pageheap_lock is held.
-  ABSL_ATTRIBUTE_RETURNS_NONNULL void* Alloc(size_t bytes, 
-                                             int alignment = kAlignment) 
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock); 
+  ABSL_ATTRIBUTE_RETURNS_NONNULL void* Alloc(size_t bytes,
+                                             int alignment = kAlignment)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(pageheap_lock);
 
   // Returns the total number of bytes allocated from this arena.  Requires
   // pageheap_lock is held.
@@ -61,8 +61,8 @@ class Arena {
   Arena& operator=(const Arena&) = delete;
 };
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_ARENA_H_

@@ -50,7 +50,7 @@ public:
     TCompactSet() {}
 
     [[nodiscard]] bool empty() const;
- 
+
     size_type size() const;
 
     const T& front() const;

@@ -189,16 +189,16 @@ static void init_openssl(void) {
   GPR_ASSERT(g_ssl_ctx_ex_factory_index != -1);
 }
 
-static void do_nothing(void) {} 
- 
-extern "C" void grpc_dont_init_openssl(void) { 
-  gpr_once_init(&g_init_openssl_once, do_nothing); 
-} 
- 
-extern "C" void grpc_init_openssl(void) { 
-  gpr_once_init(&g_init_openssl_once, init_openssl); 
-} 
- 
+static void do_nothing(void) {}
+
+extern "C" void grpc_dont_init_openssl(void) {
+  gpr_once_init(&g_init_openssl_once, do_nothing);
+}
+
+extern "C" void grpc_init_openssl(void) {
+  gpr_once_init(&g_init_openssl_once, init_openssl);
+}
+
 /* --- Ssl utils. ---*/
 
 static const char* ssl_error_string(int error) {

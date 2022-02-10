@@ -24,7 +24,7 @@
 #include "absl/base/internal/throw_delegate.h"
 #include "absl/container/internal/btree.h"  // IWYU pragma: export
 #include "absl/container/internal/common.h"
-#include "absl/memory/memory.h" 
+#include "absl/memory/memory.h"
 #include "absl/meta/type_traits.h"
 
 namespace absl {
@@ -70,21 +70,21 @@ class btree_container {
   explicit btree_container(const key_compare &comp,
                            const allocator_type &alloc = allocator_type())
       : tree_(comp, alloc) {}
-  explicit btree_container(const allocator_type &alloc) 
-      : tree_(key_compare(), alloc) {} 
- 
-  btree_container(const btree_container &other) 
-      : btree_container(other, absl::allocator_traits<allocator_type>:: 
-                                   select_on_container_copy_construction( 
-                                       other.get_allocator())) {} 
-  btree_container(const btree_container &other, const allocator_type &alloc) 
-      : tree_(other.tree_, alloc) {} 
- 
-  btree_container(btree_container &&other) noexcept( 
-      std::is_nothrow_move_constructible<Tree>::value) = default; 
-  btree_container(btree_container &&other, const allocator_type &alloc) 
-      : tree_(std::move(other.tree_), alloc) {} 
- 
+  explicit btree_container(const allocator_type &alloc)
+      : tree_(key_compare(), alloc) {}
+
+  btree_container(const btree_container &other)
+      : btree_container(other, absl::allocator_traits<allocator_type>::
+                                   select_on_container_copy_construction(
+                                       other.get_allocator())) {}
+  btree_container(const btree_container &other, const allocator_type &alloc)
+      : tree_(other.tree_, alloc) {}
+
+  btree_container(btree_container &&other) noexcept(
+      std::is_nothrow_move_constructible<Tree>::value) = default;
+  btree_container(btree_container &&other, const allocator_type &alloc)
+      : tree_(std::move(other.tree_), alloc) {}
+
   btree_container &operator=(const btree_container &other) = default;
   btree_container &operator=(btree_container &&other) noexcept(
       std::is_nothrow_move_assignable<Tree>::value) = default;
@@ -105,11 +105,11 @@ class btree_container {
 
   // Lookup routines.
   template <typename K = key_type>
-  size_type count(const key_arg<K> &key) const { 
-    auto equal_range = this->equal_range(key); 
-    return std::distance(equal_range.first, equal_range.second); 
-  } 
-  template <typename K = key_type> 
+  size_type count(const key_arg<K> &key) const {
+    auto equal_range = this->equal_range(key);
+    return std::distance(equal_range.first, equal_range.second);
+  }
+  template <typename K = key_type>
   iterator find(const key_arg<K> &key) {
     return tree_.find(key);
   }
@@ -158,11 +158,11 @@ class btree_container {
   iterator erase(const_iterator first, const_iterator last) {
     return tree_.erase_range(iterator(first), iterator(last)).second;
   }
-  template <typename K = key_type> 
-  size_type erase(const key_arg<K> &key) { 
-    auto equal_range = this->equal_range(key); 
-    return tree_.erase_range(equal_range.first, equal_range.second).first; 
-  } 
+  template <typename K = key_type>
+  size_type erase(const key_arg<K> &key) {
+    auto equal_range = this->equal_range(key);
+    return tree_.erase_range(equal_range.first, equal_range.second).first;
+  }
 
   // Extract routines.
   node_type extract(iterator position) {
@@ -259,7 +259,7 @@ class btree_set_container : public btree_container<Tree> {
   using super_type::super_type;
   btree_set_container() {}
 
-  // Range constructors. 
+  // Range constructors.
   template <class InputIterator>
   btree_set_container(InputIterator b, InputIterator e,
                       const key_compare &comp = key_compare(),
@@ -267,19 +267,19 @@ class btree_set_container : public btree_container<Tree> {
       : super_type(comp, alloc) {
     insert(b, e);
   }
-  template <class InputIterator> 
-  btree_set_container(InputIterator b, InputIterator e, 
-                      const allocator_type &alloc) 
-      : btree_set_container(b, e, key_compare(), alloc) {} 
+  template <class InputIterator>
+  btree_set_container(InputIterator b, InputIterator e,
+                      const allocator_type &alloc)
+      : btree_set_container(b, e, key_compare(), alloc) {}
 
-  // Initializer list constructors. 
+  // Initializer list constructors.
   btree_set_container(std::initializer_list<init_type> init,
                       const key_compare &comp = key_compare(),
                       const allocator_type &alloc = allocator_type())
       : btree_set_container(init.begin(), init.end(), comp, alloc) {}
-  btree_set_container(std::initializer_list<init_type> init, 
-                      const allocator_type &alloc) 
-      : btree_set_container(init.begin(), init.end(), alloc) {} 
+  btree_set_container(std::initializer_list<init_type> init,
+                      const allocator_type &alloc)
+      : btree_set_container(init.begin(), init.end(), alloc) {}
 
   // Insertion routines.
   std::pair<iterator, bool> insert(const value_type &v) {
@@ -341,10 +341,10 @@ class btree_set_container : public btree_container<Tree> {
   // Node extraction routines.
   template <typename K = key_type>
   node_type extract(const key_arg<K> &key) {
-    const std::pair<iterator, bool> lower_and_equal = 
-        this->tree_.lower_bound_equal(key); 
-    return lower_and_equal.second ? extract(lower_and_equal.first) 
-                                  : node_type(); 
+    const std::pair<iterator, bool> lower_and_equal =
+        this->tree_.lower_bound_equal(key);
+    return lower_and_equal.second ? extract(lower_and_equal.first)
+                                  : node_type();
   }
   using super_type::extract;
 
@@ -389,7 +389,7 @@ template <typename Tree>
 class btree_map_container : public btree_set_container<Tree> {
   using super_type = btree_set_container<Tree>;
   using params_type = typename Tree::params_type;
-  friend class BtreeNodePeer; 
+  friend class BtreeNodePeer;
 
  private:
   template <class K>
@@ -554,7 +554,7 @@ class btree_multiset_container : public btree_container<Tree> {
   using super_type::super_type;
   btree_multiset_container() {}
 
-  // Range constructors. 
+  // Range constructors.
   template <class InputIterator>
   btree_multiset_container(InputIterator b, InputIterator e,
                            const key_compare &comp = key_compare(),
@@ -562,19 +562,19 @@ class btree_multiset_container : public btree_container<Tree> {
       : super_type(comp, alloc) {
     insert(b, e);
   }
-  template <class InputIterator> 
-  btree_multiset_container(InputIterator b, InputIterator e, 
-                           const allocator_type &alloc) 
-      : btree_multiset_container(b, e, key_compare(), alloc) {} 
+  template <class InputIterator>
+  btree_multiset_container(InputIterator b, InputIterator e,
+                           const allocator_type &alloc)
+      : btree_multiset_container(b, e, key_compare(), alloc) {}
 
-  // Initializer list constructors. 
+  // Initializer list constructors.
   btree_multiset_container(std::initializer_list<init_type> init,
                            const key_compare &comp = key_compare(),
                            const allocator_type &alloc = allocator_type())
       : btree_multiset_container(init.begin(), init.end(), comp, alloc) {}
-  btree_multiset_container(std::initializer_list<init_type> init, 
-                           const allocator_type &alloc) 
-      : btree_multiset_container(init.begin(), init.end(), alloc) {} 
+  btree_multiset_container(std::initializer_list<init_type> init,
+                           const allocator_type &alloc)
+      : btree_multiset_container(init.begin(), init.end(), alloc) {}
 
   // Insertion routines.
   iterator insert(const value_type &v) { return this->tree_.insert_multi(v); }
@@ -623,10 +623,10 @@ class btree_multiset_container : public btree_container<Tree> {
   // Node extraction routines.
   template <typename K = key_type>
   node_type extract(const key_arg<K> &key) {
-    const std::pair<iterator, bool> lower_and_equal = 
-        this->tree_.lower_bound_equal(key); 
-    return lower_and_equal.second ? extract(lower_and_equal.first) 
-                                  : node_type(); 
+    const std::pair<iterator, bool> lower_and_equal =
+        this->tree_.lower_bound_equal(key);
+    return lower_and_equal.second ? extract(lower_and_equal.first)
+                                  : node_type();
   }
   using super_type::extract;
 

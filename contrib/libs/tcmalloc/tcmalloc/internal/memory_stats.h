@@ -17,9 +17,9 @@
 
 #include <stdint.h>
 
-#include "tcmalloc/internal/config.h" 
- 
-GOOGLE_MALLOC_SECTION_BEGIN 
+#include "tcmalloc/internal/config.h"
+
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
@@ -36,6 +36,6 @@ bool GetMemoryStats(MemoryStats* stats);
 
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END
 
 #endif  // TCMALLOC_INTERNAL_MEMORY_STATS_H_

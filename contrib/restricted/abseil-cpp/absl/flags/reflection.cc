@@ -50,7 +50,7 @@ class FlagRegistry {
   ~FlagRegistry() = default;
 
   // Store a flag in this registry. Takes ownership of *flag.
-  void RegisterFlag(CommandLineFlag& flag, const char* filename); 
+  void RegisterFlag(CommandLineFlag& flag, const char* filename);
 
   void Lock() ABSL_EXCLUSIVE_LOCK_FUNCTION(lock_) { lock_.Lock(); }
   void Unlock() ABSL_UNLOCK_FUNCTION(lock_) { lock_.Unlock(); }
@@ -110,20 +110,20 @@ CommandLineFlag* FlagRegistry::FindFlag(absl::string_view name) {
   return it != flags_.end() ? it->second : nullptr;
 }
 
-void FlagRegistry::RegisterFlag(CommandLineFlag& flag, const char* filename) { 
-  if (filename != nullptr && 
-      flag.Filename() != GetUsageConfig().normalize_filename(filename)) { 
-    flags_internal::ReportUsageError( 
-        absl::StrCat( 
-            "Inconsistency between flag object and registration for flag '", 
-            flag.Name(), 
-            "', likely due to duplicate flags or an ODR violation. Relevant " 
-            "files: ", 
-            flag.Filename(), " and ", filename), 
-        true); 
-    std::exit(1); 
-  } 
- 
+void FlagRegistry::RegisterFlag(CommandLineFlag& flag, const char* filename) {
+  if (filename != nullptr &&
+      flag.Filename() != GetUsageConfig().normalize_filename(filename)) {
+    flags_internal::ReportUsageError(
+        absl::StrCat(
+            "Inconsistency between flag object and registration for flag '",
+            flag.Name(),
+            "', likely due to duplicate flags or an ODR violation. Relevant "
+            "files: ",
+            flag.Filename(), " and ", filename),
+        true);
+    std::exit(1);
+  }
+
   FlagRegistryLock registry_lock(*this);
 
   std::pair<FlagIterator, bool> ins =
@@ -188,8 +188,8 @@ void ForEachFlag(std::function<void(CommandLineFlag&)> visitor) {
 
 // --------------------------------------------------------------------
 
-bool RegisterCommandLineFlag(CommandLineFlag& flag, const char* filename) { 
-  FlagRegistry::GlobalRegistry().RegisterFlag(flag, filename); 
+bool RegisterCommandLineFlag(CommandLineFlag& flag, const char* filename) {
+  FlagRegistry::GlobalRegistry().RegisterFlag(flag, filename);
   return true;
 }
 
@@ -283,7 +283,7 @@ void Retire(const char* name, FlagFastTypeId type_id, char* buf) {
   static_assert(alignof(RetiredFlagObj) == kRetiredFlagObjAlignment, "");
   auto* flag = ::new (static_cast<void*>(buf))
       flags_internal::RetiredFlagObj(name, type_id);
-  FlagRegistry::GlobalRegistry().RegisterFlag(*flag, nullptr); 
+  FlagRegistry::GlobalRegistry().RegisterFlag(*flag, nullptr);
 }
 
 // --------------------------------------------------------------------
@@ -345,7 +345,7 @@ CommandLineFlag* FindCommandLineFlag(absl::string_view name) {
 absl::flat_hash_map<absl::string_view, absl::CommandLineFlag*> GetAllFlags() {
   absl::flat_hash_map<absl::string_view, absl::CommandLineFlag*> res;
   flags_internal::ForEachFlag([&](CommandLineFlag& flag) {
-    if (!flag.IsRetired()) res.insert({flag.Name(), &flag}); 
+    if (!flag.IsRetired()) res.insert({flag.Name(), &flag});
   });
   return res;
 }

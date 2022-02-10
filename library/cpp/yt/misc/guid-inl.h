@@ -66,7 +66,7 @@ Y_FORCE_INLINE bool operator < (TGuid lhs, TGuid rhs)
 
 } // namespace NYT
 
-Y_FORCE_INLINE size_t THash<NYT::TGuid>::operator()(const NYT::TGuid& guid) const 
+Y_FORCE_INLINE size_t THash<NYT::TGuid>::operator()(const NYT::TGuid& guid) const
 {
     const size_t p = 1000000009; // prime number
     return guid.Parts32[0] +

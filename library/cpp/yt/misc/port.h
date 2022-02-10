@@ -32,7 +32,7 @@
 #endif
 
 // Configure SSE usage.
-#ifdef SSE42_ENABLED 
+#ifdef SSE42_ENABLED
     #define YT_USE_SSE42
 #endif
 

@@ -20,7 +20,7 @@
 
 #include "absl/base/internal/cycleclock.h"
 #include "absl/base/internal/spinlock.h"
-#include "absl/numeric/bits.h" 
+#include "absl/numeric/bits.h"
 #include "tcmalloc/common.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/page_heap_allocator.h"
@@ -30,9 +30,9 @@
 #include "tcmalloc/static_vars.h"
 #include "tcmalloc/system-alloc.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN 
+GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 
 // Helper function to record span address into pageheap
 void PageHeap::RecordSpan(Span* span) {
@@ -132,7 +132,7 @@ static bool IsSpanBetter(Span* span, Span* best, Length n) {
 // don't bother.
 Span* PageHeap::NewAligned(Length n, Length align) {
   ASSERT(n > Length(0));
-  ASSERT(absl::has_single_bit(align.raw_num())); 
+  ASSERT(absl::has_single_bit(align.raw_num()));
 
   if (align <= Length(1)) {
     return New(n);
@@ -493,7 +493,7 @@ void PageHeap::PrintInPbtxt(PbtxtRegion* region) {
   // We do not collect info_.PrintInPbtxt for now.
 }
 
-void PageHeap::Print(Printer* out) { 
+void PageHeap::Print(Printer* out) {
   absl::base_internal::SpinLockHolder h(&pageheap_lock);
   SmallSpanStats small;
   GetSmallSpanStats(&small);
@@ -523,6 +523,6 @@ void PageHeap::Print(Printer* out) {
   info_.Print(out);
 }
 
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END 
+GOOGLE_MALLOC_SECTION_END

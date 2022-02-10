@@ -89,25 +89,25 @@ void TBufferedEncoderBase::OnLabel(TStringBuf name, TStringBuf value) {
     labels->emplace_back(LabelNamesPool_.PutIfAbsent(name), LabelValuesPool_.PutIfAbsent(value));
 }
 
-void TBufferedEncoderBase::OnLabel(ui32 name, ui32 value) { 
-    TPooledLabels* labels; 
-    if (State_ == TEncoderState::EState::METRIC_LABELS) { 
-        labels = &Metrics_.back().Labels; 
-    } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
-        labels = &CommonLabels_; 
-    } else { 
-        State_.ThrowInvalid("expected LABELS or COMMON_LABELS"); 
-    } 
- 
-    labels->emplace_back(LabelNamesPool_.GetByIndex(name), LabelValuesPool_.GetByIndex(value)); 
-} 
- 
+void TBufferedEncoderBase::OnLabel(ui32 name, ui32 value) {
+    TPooledLabels* labels;
+    if (State_ == TEncoderState::EState::METRIC_LABELS) {
+        labels = &Metrics_.back().Labels;
+    } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
+        labels = &CommonLabels_;
+    } else {
+        State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
+    }
+
+    labels->emplace_back(LabelNamesPool_.GetByIndex(name), LabelValuesPool_.GetByIndex(value));
+}
+
 std::pair<ui32, ui32> TBufferedEncoderBase::PrepareLabel(TStringBuf name, TStringBuf value) {
-    auto nameLabel = LabelNamesPool_.PutIfAbsent(name); 
-    auto valueLabel = LabelValuesPool_.PutIfAbsent(value); 
-    return std::make_pair(nameLabel->Index, valueLabel->Index); 
-} 
- 
+    auto nameLabel = LabelNamesPool_.PutIfAbsent(name);
+    auto valueLabel = LabelValuesPool_.PutIfAbsent(value);
+    return std::make_pair(nameLabel->Index, valueLabel->Index);
+}
+
 void TBufferedEncoderBase::OnDouble(TInstant time, double value) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();

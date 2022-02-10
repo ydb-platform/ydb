@@ -174,13 +174,13 @@ class InlinedVector {
   // provided `allocator`.
   InlinedVector(const InlinedVector& other, const allocator_type& allocator)
       : storage_(allocator) {
-    if (other.empty()) { 
-      // Empty; nothing to do. 
+    if (other.empty()) {
+      // Empty; nothing to do.
     } else if (IsMemcpyOk<A>::value && !other.storage_.GetIsAllocated()) {
-      // Memcpy-able and do not need allocation. 
+      // Memcpy-able and do not need allocation.
       storage_.MemcpyFrom(other.storage_);
     } else {
-      storage_.InitFrom(other.storage_); 
+      storage_.InitFrom(other.storage_);
     }
   }
 

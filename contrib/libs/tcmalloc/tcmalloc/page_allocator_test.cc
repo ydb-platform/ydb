@@ -39,7 +39,7 @@
 #include "tcmalloc/stats.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal { 
+namespace tcmalloc_internal {
 namespace {
 
 class PageAllocatorTest : public testing::Test {
@@ -79,7 +79,7 @@ class PageAllocatorTest : public testing::Test {
 
   std::string Print() {
     std::vector<char> buf(1024 * 1024);
-    Printer out(&buf[0], buf.size()); 
+    Printer out(&buf[0], buf.size());
     allocator_->Print(&out, MemoryTag::kNormal);
 
     return std::string(&buf[0]);
@@ -141,5 +141,5 @@ TEST_F(PageAllocatorTest, PrintIt) {
 }
 
 }  // namespace
-}  // namespace tcmalloc_internal 
+}  // namespace tcmalloc_internal
 }  // namespace tcmalloc

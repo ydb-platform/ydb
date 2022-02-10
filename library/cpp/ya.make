@@ -427,7 +427,7 @@ IF (OS_LINUX)
         balloc_market/test
         balloc_market/aba_agri_test
         ytalloc
-        rseq 
+        rseq
     )
 ENDIF()
 

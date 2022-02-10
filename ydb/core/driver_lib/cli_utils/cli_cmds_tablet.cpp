@@ -201,9 +201,9 @@ public:
     }
 };
 
-class TClientCommandDrainNode : public TClientCommand { 
+class TClientCommandDrainNode : public TClientCommand {
 public:
-    TClientCommandDrainNode() 
+    TClientCommandDrainNode()
         : TClientCommand("drain", {}, "Drain node")
     {}
 
@@ -227,9 +227,9 @@ public:
     }
 };
 
-class TClientCommandFillNode : public TClientCommand { 
+class TClientCommandFillNode : public TClientCommand {
 public:
-    TClientCommandFillNode() 
+    TClientCommandFillNode()
         : TClientCommand("fill", {}, "Fill node")
     {}
 

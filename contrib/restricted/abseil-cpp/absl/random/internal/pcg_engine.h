@@ -19,7 +19,7 @@
 
 #include "absl/base/config.h"
 #include "absl/meta/type_traits.h"
-#include "absl/numeric/bits.h" 
+#include "absl/numeric/bits.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/internal/fastmath.h"
 #include "absl/random/internal/iostream_state_saver.h"
@@ -262,7 +262,7 @@ struct pcg_xsl_rr_128_64 {
     uint64_t rotate = h >> 58u;
     uint64_t s = Uint128Low64(state) ^ h;
 #endif
-    return rotr(s, rotate); 
+    return rotr(s, rotate);
   }
 };
 
@@ -282,8 +282,8 @@ struct pcg_xsh_rr_64_32 {
   using state_type = uint64_t;
   using result_type = uint32_t;
   inline uint32_t operator()(uint64_t state) {
-    return rotr(static_cast<uint32_t>(((state >> 18) ^ state) >> 27), 
-                state >> 59); 
+    return rotr(static_cast<uint32_t>(((state >> 18) ^ state) >> 27),
+                state >> 59);
   }
 };
 

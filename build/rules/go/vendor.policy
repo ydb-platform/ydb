@@ -2,20 +2,20 @@
 # This file cannot be moved or split into multiple files without explicit OK from go-com@yandex-team.ru
 # Doing otherwise will break vendoring tooling.
 
-ALLOW vendor/ -> .* 
- 
+ALLOW vendor/ -> .*
+
 # CONTRIB-2451
 ALLOW .* -> vendor/github.com/deepmap/oapi-codegen
 
 # CONTRIB-2311 gossip discovery protocol implementation
 ALLOW .* -> vendor/github.com/hashicorp/memberlist
 
-# CONTRIB-2177 testing helpers for terraform 
-ALLOW .* -> vendor/github.com/gruntwork-io/terratest/modules/terraform 
- 
-# CONTRIB-2078 provides functions to retrieve system, kernel and process metrics from the pseudo-filesystem proc. 
-ALLOW .* -> vendor/github.com/prometheus/procfs 
- 
+# CONTRIB-2177 testing helpers for terraform
+ALLOW .* -> vendor/github.com/gruntwork-io/terratest/modules/terraform
+
+# CONTRIB-2078 provides functions to retrieve system, kernel and process metrics from the pseudo-filesystem proc.
+ALLOW .* -> vendor/github.com/prometheus/procfs
+
 # CONTRIB-2166
 ALLOW .* -> vendor/github.com/openconfig/gnmi
 
@@ -67,14 +67,14 @@ ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/resource
 ALLOW .* -> vendor/sigs.k8s.io/controller-runtime
 ALLOW .* -> vendor/github.com/go-logr/logr
 
-# CONTRIB-2195 
-ALLOW .* -> vendor/github.com/timakin/bodyclose 
+# CONTRIB-2195
+ALLOW .* -> vendor/github.com/timakin/bodyclose
 # github.com/gostaticanalysis/comment tests depends on the unlicensed package https://github.com/tenntenn/text
 DENY .* -> vendor/github.com/gostaticanalysis/comment;test
- 
-# CONTRIB-2196 
-ALLOW .* -> vendor/github.com/jingyugao/rowserrcheck 
- 
+
+# CONTRIB-2196
+ALLOW .* -> vendor/github.com/jingyugao/rowserrcheck
+
 # CONTRIB-2163
 ALLOW .* -> vendor/go.temporal.io/sdk
 ALLOW .* -> vendor/go.temporal.io/api
@@ -89,9 +89,9 @@ ALLOW infra/temporal/swat/server -> vendor/github.com/urfave/cli
 ALLOW infra/temporal/swat/tctl -> vendor/github.com/urfave/cli
 ALLOW infra/temporal -> vendor/github.com/uber-go/tally
 
-# CONTRIB-2116 
-ALLOW .* -> vendor/github.com/google/licensecheck 
- 
+# CONTRIB-2116
+ALLOW .* -> vendor/github.com/google/licensecheck
+
 # CONTRIB-2087
 ALLOW .* -> vendor/github.com/armon/go-radix
 
@@ -113,9 +113,9 @@ ALLOW .* -> vendor/github.com/phin1x/go-ipp
 # CONTRIB-2113 gobreaker
 ALLOW .* -> vendor/github.com/sony/gobreaker
 
-# Validate and define text-based and dynamic configuration 
-ALLOW .* -> vendor/cuelang.org/go 
- 
+# Validate and define text-based and dynamic configuration
+ALLOW .* -> vendor/cuelang.org/go
+
 # driver for write to and read from XLSX files
 ALLOW .* -> vendor/github.com/360EntSecGroup-Skylar/excelize/v2
 
@@ -125,30 +125,30 @@ ALLOW .* -> vendor/github.com/alicebob/miniredis/v2
 # AMQP client with RabbitMQ extensions
 ALLOW .* -> vendor/github.com/streadway/amqp
 
-# AWS client libraries 
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/aws 
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/s3 
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sqs 
+# AWS client libraries
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/aws
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/s3
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sqs
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kms
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/ec2
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/route53
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kinesis
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sts
- 
+
 # TOML parser/encoder with reflection
 ALLOW .* -> vendor/github.com/BurntSushi/toml
 
-# helpers for data sizes (kilobytes, petabytes), human readable sizes, parsing 
+# helpers for data sizes (kilobytes, petabytes), human readable sizes, parsing
 ALLOW .* -> vendor/github.com/c2h5oh/datasize
- 
-# Disable tests because testdata won't fit into arcadia commit. 
-DENY .* -> vendor/github.com/go-git/go-git/v5/storage/test 
-DENY .* -> vendor/github.com/go-git/go-git/v5/plumbing/transport/test 
-DENY .* -> vendor/github.com/go-git/go-git/v5;test 
-ALLOW .* -> vendor/github.com/go-git/go-git/v5 
+
+# Disable tests because testdata won't fit into arcadia commit.
+DENY .* -> vendor/github.com/go-git/go-git/v5/storage/test
+DENY .* -> vendor/github.com/go-git/go-git/v5/plumbing/transport/test
+DENY .* -> vendor/github.com/go-git/go-git/v5;test
+ALLOW .* -> vendor/github.com/go-git/go-git/v5
 ALLOW .* -> vendor/github.com/go-git/go-billy/v5
- 
-# etcd client 
+
+# etcd client
 DENY .* -> vendor/go.etcd.io/etcd/clientv3/naming
 ALLOW .* -> vendor/go.etcd.io/etcd/mvcc
 ALLOW .* -> vendor/go.etcd.io/etcd/etcdserver/api
@@ -178,12 +178,12 @@ ALLOW .* -> vendor/github.com/cucumber/godog
 ## Old location (deprecated)
 ALLOW .* -> vendor/github.com/DATA-DOG/godog
 
-# pretty printer for GO 
+# pretty printer for GO
 ALLOW .* -> vendor/github.com/davecgh/go-spew/spew
- 
+
 # CONTRIB-425 implementation of JSON Web Tokens (JWT)
 ALLOW .* -> vendor/github.com/golang-jwt/jwt
- 
+
 # Docker API client
 # docker tests depends on broken package: gotest.tools
 DENY .* -> vendor/github.com/docker/docker;test
@@ -193,12 +193,12 @@ ALLOW .* -> vendor/github.com/docker/docker/client
 ALLOW .* -> vendor/github.com/docker/docker/api
 ALLOW .* -> vendor/github.com/docker/go-connections
 
-# cross-platform file system notifications 
+# cross-platform file system notifications
 ALLOW .* -> vendor/github.com/fsnotify/fsnotify
- 
-# lightweight, idiomatic and composable router 
+
+# lightweight, idiomatic and composable router
 ALLOW .* -> vendor/github.com/go-chi/chi/v5
- 
+
 # a pure Go MySQL driver
 ALLOW .* -> vendor/github.com/go-sql-driver/mysql
 
@@ -208,12 +208,12 @@ ALLOW .* -> vendor/github.com/denisenkom/go-mssqldb
 # thread-safe file locking library
 ALLOW .* -> vendor/github.com/gofrs/flock
 
-# a pure Go implementation of Universally Unique Identifiers 
+# a pure Go implementation of Universally Unique Identifiers
 ALLOW .* -> vendor/github.com/gofrs/uuid
- 
-# websocket protocol 
+
+# websocket protocol
 ALLOW .* -> vendor/github.com/gorilla/websocket
- 
+
 # http sessions with cookie and filesystem session storage
 ALLOW .* -> vendor/github.com/gorilla/sessions
 
@@ -223,9 +223,9 @@ ALLOW .* -> vendor/github.com/gorilla/schema
 # S2 geometry
 ALLOW .* -> vendor/github.com/golang/geo
 
-# snappy compression 
+# snappy compression
 ALLOW .* -> vendor/github.com/golang/snappy
- 
+
 # CONTRIB-632, CONTRIB-1992 API for sentry
 DENY .* -> vendor/github.com/AndreasBriese/bbloom;test
 DENY .* -> vendor/github.com/getsentry/sentry-go;test
@@ -241,14 +241,14 @@ DENY .* -> vendor/github.com/rs/cors/wrapper/gin
 
 ALLOW .* -> vendor/github.com/getsentry/sentry-go
 ALLOW .* -> vendor/github.com/getsentry/raven-go
- 
+
 # configuration library
 ALLOW .* -> vendor/github.com/heetch/confita
 
 # string case conversion library
 ALLOW .* -> vendor/github.com/iancoleman/strcase
 
-# PostgreSQL driver and toolkit for Go 
+# PostgreSQL driver and toolkit for Go
 ALLOW .* -> vendor/github.com/jackc/pgx/v4
 ALLOW .* -> vendor/github.com/jackc/pgconn
 ALLOW .* -> vendor/github.com/jackc/pgtype
@@ -256,81 +256,81 @@ ALLOW .* -> vendor/github.com/jackc/pgerrcode
 ALLOW .* -> vendor/github.com/jackc/pgproto3/v2
 ALLOW .* -> vendor/github.com/jackc/pgio
 ALLOW .* -> vendor/github.com/jackc/pglogrepl
- 
-# database/sql wrapper with a lot of helper functions 
-ALLOW .* -> vendor/github.com/jmoiron/sqlx 
- 
+
+# database/sql wrapper with a lot of helper functions
+ALLOW .* -> vendor/github.com/jmoiron/sqlx
+
 # gorm and drivers
 ALLOW .* -> vendor/gorm.io/gorm
 ALLOW .* -> vendor/gorm.io/driver/sqlite
 ALLOW .* -> vendor/gorm.io/driver/postgres
 ALLOW .* -> vendor/gorm.io/plugin/dbresolver
 
-# clock mock for tests 
-ALLOW .* -> vendor/github.com/jonboulle/clockwork 
- 
-# LRU Cache with TTL 
+# clock mock for tests
+ALLOW .* -> vendor/github.com/jonboulle/clockwork
+
+# LRU Cache with TTL
 ALLOW .* -> vendor/github.com/karlseguin/ccache/v2
- 
+
 # Garbage collector-sensitive patricia tree for IP/CIDR tagging
 ALLOW .* -> vendor/github.com/kentik/patricia
 
-# driver for ClickHouse column-oriented database management system 
+# driver for ClickHouse column-oriented database management system
 ALLOW .* -> vendor/github.com/ClickHouse/clickhouse-go
- 
-# High performance, minimalist web framework 
+
+# High performance, minimalist web framework
 ALLOW .* -> vendor/github.com/labstack/echo/v4
- 
-# fluent SQL builder 
+
+# fluent SQL builder
 ALLOW .* -> vendor/github.com/Masterminds/squirrel
- 
-# isatty for golang 
+
+# isatty for golang
 ALLOW .* -> vendor/github.com/mattn/go-isatty
- 
+
 # go-sqlite3 for golang
 ALLOW .* -> vendor/github.com/mattn/go-sqlite3
 
-# complete and usable DNS library 
+# complete and usable DNS library
 ALLOW .* -> vendor/github.com/miekg/dns
- 
-# deep copying values 
+
+# deep copying values
 ALLOW .* -> vendor/github.com/mitchellh/copystructure
- 
-# decoding generic map values to structures and vice versa 
+
+# decoding generic map values to structures and vice versa
 ALLOW .* -> vendor/github.com/mitchellh/mapstructure
- 
+
 # library for detecting and expanding the user's home directory without cgo
 ALLOW .* -> vendor/github.com/mitchellh/go-homedir
 
 # A well tested and comprehensive Golang statistics library package with no dependencies
 ALLOW .* -> vendor/github.com/montanaflynn/stats
 
-# runtime dependencies of go-swagger 
+# runtime dependencies of go-swagger
 ALLOW .* -> vendor/github.com/go-openapi
- 
+
 # CONTRIB-469: swagger code generator for both client and server
 ALLOW .* -> vendor/github.com/go-swagger/go-swagger/cmd/swagger
 
-# redis client 
+# redis client
 ALLOW .* -> vendor/github.com/go-redis/redis/v8
- 
+
 # library for accessing the GitHub API v3
 ALLOW .* -> vendor/github.com/google/go-github/v35/github
 
-# fast JSON serializer for golang. relies on code generation. 
+# fast JSON serializer for golang. relies on code generation.
 ALLOW .* -> vendor/github.com/mailru/easyjson
 
-# lz4 compression codec 
+# lz4 compression codec
 ALLOW .* -> vendor/github.com/pierrec/lz4
- 
-# library for HTML DOM manipulations and searching nodes by CSS selectors 
+
+# library for HTML DOM manipulations and searching nodes by CSS selectors
 ALLOW .* -> vendor/github.com/PuerkitoBio/goquery
- 
-# prometheus client 
-ALLOW .* -> vendor/github.com/prometheus/client_golang 
+
+# prometheus client
+ALLOW .* -> vendor/github.com/prometheus/client_golang
 ALLOW .* -> vendor/github.com/prometheus/client_model
 ALLOW .* -> vendor/github.com/prometheus/common
- 
+
 # ZooKeeper client
 ALLOW .* -> vendor/github.com/go-zookeeper/zk
 
@@ -340,87 +340,87 @@ ALLOW .* -> vendor/github.com/serialx/hashring
 # Slack API in Go
 ALLOW .* -> vendor/github.com/slack-go/slack
 
-# Text diffing. 
-ALLOW .* -> vendor/github.com/pmezard/go-difflib 
- 
-# statsd client library 
+# Text diffing.
+ALLOW .* -> vendor/github.com/pmezard/go-difflib
+
+# statsd client library
 ALLOW .* -> vendor/github.com/smira/go-statsd
- 
+
 # ICMP Ping library
 ALLOW .* -> vendor/github.com/sparrc/go-ping
 
-# safe and easy casting from one type to another 
+# safe and easy casting from one type to another
 ALLOW .* -> vendor/github.com/spf13/cast
- 
-# library for creating CLI applications 
+
+# library for creating CLI applications
 ALLOW .* -> vendor/github.com/spf13/cobra
- 
-# drop-in replacement for stdlib flag module 
+
+# drop-in replacement for stdlib flag module
 ALLOW .* -> vendor/github.com/spf13/pflag
- 
-# a toolkit with common test assertions and mocks 
+
+# a toolkit with common test assertions and mocks
 ALLOW .* -> vendor/github.com/stretchr/testify
- 
-# very fast json parser and encoder. 
-# uses dynamic message structure, suitable for cases where json structure is not known in advance. 
+
+# very fast json parser and encoder.
+# uses dynamic message structure, suitable for cases where json structure is not known in advance.
 ALLOW .* -> vendor/github.com/valyala/fastjson
 
-# xxhash32 and xxhash64 hash functions 
-ALLOW .* -> vendor/github.com/OneOfOne/xxhash 
- 
-# default logging library. See also: library/go/core/log. 
+# xxhash32 and xxhash64 hash functions
+ALLOW .* -> vendor/github.com/OneOfOne/xxhash
+
+# default logging library. See also: library/go/core/log.
 ALLOW .* -> vendor/go.uber.org/zap
- 
+
 # package for writing logs to rolling files.
 ALLOW .* -> vendor/gopkg.in/natefinch/lumberjack.v2
 
-# Find goroutine leaks in tests. 
-ALLOW .* -> vendor/go.uber.org/goleak 
- 
-# golang.org/x/net 
-ALLOW .* -> vendor/golang.org/x/net 
- 
-# golang.org/x/oauth2 
-ALLOW .* -> vendor/golang.org/x/oauth2 
- 
-# golang.org/x/crypto 
-ALLOW .* -> vendor/golang.org/x/crypto 
- 
-# golang.org/x/tools 
-ALLOW .* -> vendor/golang.org/x/tools 
- 
-# golang.org/x/sync 
-ALLOW .* -> vendor/golang.org/x/sync 
- 
-# golang.org/x/text 
-ALLOW .* -> vendor/golang.org/x/text 
- 
+# Find goroutine leaks in tests.
+ALLOW .* -> vendor/go.uber.org/goleak
+
+# golang.org/x/net
+ALLOW .* -> vendor/golang.org/x/net
+
+# golang.org/x/oauth2
+ALLOW .* -> vendor/golang.org/x/oauth2
+
+# golang.org/x/crypto
+ALLOW .* -> vendor/golang.org/x/crypto
+
+# golang.org/x/tools
+ALLOW .* -> vendor/golang.org/x/tools
+
+# golang.org/x/sync
+ALLOW .* -> vendor/golang.org/x/sync
+
+# golang.org/x/text
+ALLOW .* -> vendor/golang.org/x/text
+
 # golang.org/x/time
 ALLOW .* -> vendor/golang.org/x/time
 
 # golang.org/x/image/webp
 ALLOW .* -> vendor/golang.org/x/image/webp
 
-# less experimental implementation of Go error inspection 
+# less experimental implementation of Go error inspection
 ALLOW .* -> vendor/golang.org/x/xerrors
- 
+
 # golang.org/x/sys required for SO_REUSEPORT, for example
 ALLOW .* -> vendor/golang.org/x/sys
 
-ALLOW .* -> vendor/golang.org/x/mod 
- 
-# basic LDAP v3 functionality for the GO programming language 
+ALLOW .* -> vendor/golang.org/x/mod
+
+# basic LDAP v3 functionality for the GO programming language
 ALLOW .* -> vendor/gopkg.in/ldap.v3
- 
-# simple HTTP and REST client library 
+
+# simple HTTP and REST client library
 ALLOW .* -> vendor/github.com/go-resty/resty/v2
- 
-# YAML support for Go 
-ALLOW .* -> vendor/gopkg.in/yaml.v2 
- 
-# INI file format 
-ALLOW .* -> vendor/gopkg.in/ini.v1 
- 
+
+# YAML support for Go
+ALLOW .* -> vendor/gopkg.in/yaml.v2
+
+# INI file format
+ALLOW .* -> vendor/gopkg.in/ini.v1
+
 # JSONPath
 ALLOW .* -> vendor/github.com/PaesslerAG/jsonpath
 
@@ -428,21 +428,21 @@ ALLOW .* -> vendor/github.com/PaesslerAG/jsonpath
 ALLOW .* -> vendor/github.com/golang/protobuf
 ALLOW .* -> vendor/google.golang.org/protobuf
 
-# Google RPC 
-ALLOW .* -> vendor/google.golang.org/grpc 
- 
-# Go generated proto packages
-ALLOW .* -> vendor/google.golang.org/genproto/protobuf 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/api 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/api 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/rpc 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/iam 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/logging 
-ALLOW .* -> vendor/google.golang.org/genproto/googleapis/type 
+# Google RPC
+ALLOW .* -> vendor/google.golang.org/grpc
 
-# Usefull GRPC interceptors 
-ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-middleware 
- 
+# Go generated proto packages
+ALLOW .* -> vendor/google.golang.org/genproto/protobuf
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/api
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/api
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/rpc
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/iam
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/logging
+ALLOW .* -> vendor/google.golang.org/genproto/googleapis/type
+
+# Usefull GRPC interceptors
+ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-middleware
+
 # GRPC Intercaptors for Prometheus monitoring
 ALLOW .* -> vendor/github.com/grpc-ecosystem/go-grpc-prometheus
 
@@ -452,9 +452,9 @@ ALLOW .* -> vendor/github.com/jhump/protoreflect
 # gRPC opentracing
 ALLOW .* -> vendor/github.com/opentracing-contrib/go-grpc
 
-# Job Scheduling Package 
+# Job Scheduling Package
 ALLOW .* -> vendor/github.com/jasonlvhit/gocron
- 
+
 # The MongoDB supported driver for Go
 ALLOW .* -> vendor/go.mongodb.org/mongo-driver
 
@@ -495,11 +495,11 @@ ALLOW .* -> vendor/github.com/go-cmd/cmd
 # NVIDIA Management Library (NVML) is a C-based API for monitoring and managing NVIDIA GPU devices (for Linux only)
 ALLOW .* -> vendor/github.com/NVIDIA/gpu-monitoring-tools/bindings/go
 
-# Opentracing interface and implementation. 
-ALLOW .* -> vendor/github.com/uber/jaeger-client-go 
+# Opentracing interface and implementation.
+ALLOW .* -> vendor/github.com/uber/jaeger-client-go
 ALLOW .* -> vendor/github.com/uber/jaeger-lib/metrics
-ALLOW .* -> vendor/github.com/opentracing/opentracing-go 
- 
+ALLOW .* -> vendor/github.com/opentracing/opentracing-go
+
 # Opentracing contribs
 # CONTRIB-1778
 ALLOW .* -> vendor/github.com/opentracing-contrib/go-stdlib
@@ -516,18 +516,18 @@ ALLOW .* -> vendor/github.com/dchest/siphash
 # CONTRIB-1415. Atomic.
 ALLOW .* -> vendor/go.uber.org/atomic
 
-# CONTRIB-1302. Godbus goes to Arcadia 
+# CONTRIB-1302. Godbus goes to Arcadia
 ALLOW .* -> vendor/github.com/godbus/dbus/v5
- 
-# CONTRIB-1300. Osquery SDK goes to Arcadia 
-ALLOW .* -> vendor/github.com/kolide/osquery-go 
- 
-# CONTRIB-1383. Groupcache is a caching and cache-filling library 
-ALLOW .* -> vendor/github.com/golang/groupcache 
- 
-# Mocking framework for go. 
-ALLOW .* -> vendor/github.com/golang/mock 
- 
+
+# CONTRIB-1300. Osquery SDK goes to Arcadia
+ALLOW .* -> vendor/github.com/kolide/osquery-go
+
+# CONTRIB-1383. Groupcache is a caching and cache-filling library
+ALLOW .* -> vendor/github.com/golang/groupcache
+
+# Mocking framework for go.
+ALLOW .* -> vendor/github.com/golang/mock
+
 # Go load generator. Can be used as library for custom load tools. CONTRIB-1420
 ALLOW .* -> vendor/github.com/yandex/pandora
 
@@ -658,50 +658,50 @@ ALLOW .* -> vendor/github.com/strongswan/govici/vici
 # CONTRIB-2002 A Go implementation of RTP
 ALLOW .* -> vendor/github.com/pion/rtp
 
-# CONTRIB-1959 Добавить casbin 
-ALLOW .* -> vendor/github.com/casbin/casbin/v2 
- 
+# CONTRIB-1959 Добавить casbin
+ALLOW .* -> vendor/github.com/casbin/casbin/v2
+
 # CONTRIB-2027 caddy
 ALLOW infra/rsm/dnsmanager/internal/libcoredns -> vendor/github.com/coredns/caddy
 
-# CONTRIB-1931 coredns 
-ALLOW .* -> vendor/github.com/coredns/coredns/request 
-ALLOW .* -> vendor/github.com/coredns/coredns/core/dnsserver 
-ALLOW .* -> vendor/github.com/coredns/coredns/coremain 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/bind 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/cache 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/chaos 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/forward 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/file 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/health 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/log 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/metrics 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/pkg 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/reload 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/rewrite 
-ALLOW .* -> vendor/github.com/coredns/coredns/plugin/ready 
+# CONTRIB-1931 coredns
+ALLOW .* -> vendor/github.com/coredns/coredns/request
+ALLOW .* -> vendor/github.com/coredns/coredns/core/dnsserver
+ALLOW .* -> vendor/github.com/coredns/coredns/coremain
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/bind
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/cache
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/chaos
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/forward
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/file
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/health
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/log
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/metrics
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/pkg
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/reload
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/rewrite
+ALLOW .* -> vendor/github.com/coredns/coredns/plugin/ready
 ALLOW .* -> vendor/github.com/coredns/coredns/plugin/root
 ALLOW .* -> vendor/github.com/coredns/coredns/plugin/loadbalance
- 
-# CONTRIB-2021 
-ALLOW .* -> vendor/github.com/shopspring/decimal 
- 
+
+# CONTRIB-2021
+ALLOW .* -> vendor/github.com/shopspring/decimal
+
 # CONTRIB-2050
 ALLOW .* -> vendor/github.com/brianvoe/gofakeit/v6
 
 # CONTRIB-2051
 ALLOW .* -> vendor/github.com/envoyproxy/go-control-plane
 
-# CONTRIB-2043 
-ALLOW .* -> vendor/github.com/xitongsys/parquet-go 
-ALLOW vendor -> vendor/github.com/slon/thrift 
- 
+# CONTRIB-2043
+ALLOW .* -> vendor/github.com/xitongsys/parquet-go
+ALLOW vendor -> vendor/github.com/slon/thrift
+
 # CONTRIB-2063 flatbuffers support
 ALLOW .* -> vendor/github.com/google/flatbuffers/go
 
-# CONTRIB-2073 
-ALLOW .* -> vendor/github.com/andybalholm/brotli 
- 
+# CONTRIB-2073
+ALLOW .* -> vendor/github.com/andybalholm/brotli
+
 # CONTRIB-2081 BTree implementation for Go
 ALLOW .* -> vendor/github.com/google/btree
 
@@ -817,46 +817,46 @@ ALLOW .* -> vendor/github.com/ydb-platform/ydb-go-yc-metadata
 # CONTRIB-2099
 ALLOW .* -> vendor/github.com/haivision/srtgo
 
-# CONTRIB-2307 
-ALLOW .* -> vendor/github.com/airbusgeo/godal 
-ALLOW .* -> vendor/github.com/airbusgeo/osio 
- 
-# CONTRIB-2167 
-ALLOW .* -> vendor/github.com/jarcoal/httpmock 
- 
-# CONTRIB-2423 
-ALLOW .* -> vendor/github.com/godror/godror 
- 
-# CONTRIB-2439 
-ALLOW .* -> vendor/github.com/elimity-com/scim 
- 
-# CONTRIB-2363 JSON Schema 
-ALLOW .* -> vendor/github.com/santhosh-tekuri/jsonschema 
- 
-# CONTRIB-2356 Django-syntax like template-engine 
-ALLOW .* -> vendor/github.com/flosch/pongo2/v4 
- 
-# CONTRIB-2355 Minifiers for web formats 
-DENY .* -> vendor/github.com/tdewolff/minify/v2/cmd 
-ALLOW .* -> vendor/github.com/tdewolff/minify/v2 
- 
-# CONTRIB-2354 Simple image processing package 
-ALLOW .* -> vendor/github.com/disintegration/imaging 
- 
-# CONTRIB-2376 HAProxy Native Golang Client 
-ALLOW .* -> vendor/github.com/haproxytech/client-native/v2 
-ALLOW .* -> vendor/github.com/haproxytech/config-parser/v4 
-ALLOW .* -> vendor/github.com/haproxytech/go-logger 
- 
-# CONTRIB-2416 Bit Reader/Writer 
-ALLOW .* -> vendor/github.com/icza/bitio 
- 
-# CONTRIB-2420 Syslog server/parser 
-ALLOW .* -> vendor/gopkg.in/mcuadros/go-syslog.v2 
- 
-# CONTRIB-2448 filesystem xattr support 
-ALLOW .* -> vendor/github.com/pkg/xattr 
- 
+# CONTRIB-2307
+ALLOW .* -> vendor/github.com/airbusgeo/godal
+ALLOW .* -> vendor/github.com/airbusgeo/osio
+
+# CONTRIB-2167
+ALLOW .* -> vendor/github.com/jarcoal/httpmock
+
+# CONTRIB-2423
+ALLOW .* -> vendor/github.com/godror/godror
+
+# CONTRIB-2439
+ALLOW .* -> vendor/github.com/elimity-com/scim
+
+# CONTRIB-2363 JSON Schema
+ALLOW .* -> vendor/github.com/santhosh-tekuri/jsonschema
+
+# CONTRIB-2356 Django-syntax like template-engine
+ALLOW .* -> vendor/github.com/flosch/pongo2/v4
+
+# CONTRIB-2355 Minifiers for web formats
+DENY .* -> vendor/github.com/tdewolff/minify/v2/cmd
+ALLOW .* -> vendor/github.com/tdewolff/minify/v2
+
+# CONTRIB-2354 Simple image processing package
+ALLOW .* -> vendor/github.com/disintegration/imaging
+
+# CONTRIB-2376 HAProxy Native Golang Client
+ALLOW .* -> vendor/github.com/haproxytech/client-native/v2
+ALLOW .* -> vendor/github.com/haproxytech/config-parser/v4
+ALLOW .* -> vendor/github.com/haproxytech/go-logger
+
+# CONTRIB-2416 Bit Reader/Writer
+ALLOW .* -> vendor/github.com/icza/bitio
+
+# CONTRIB-2420 Syslog server/parser
+ALLOW .* -> vendor/gopkg.in/mcuadros/go-syslog.v2
+
+# CONTRIB-2448 filesystem xattr support
+ALLOW .* -> vendor/github.com/pkg/xattr
+
 # CONTRIB-2452
 ALLOW .* -> vendor/github.com/scim2/filter-parser/v2
 
@@ -867,9 +867,9 @@ ALLOW .* -> vendor/github.com/scim2/filter-parser/v2
 # Native Go debugger
 ALLOW vendor -> vendor/github.com/go-delve/delve/cmd/dlv
 
-# Profile visualization 
-ALLOW .* -> vendor/github.com/google/pprof 
- 
+# Profile visualization
+ALLOW .* -> vendor/github.com/google/pprof
+
 # gRPCurl
 ALLOW vendor -> vendor/github.com/fullstorydev/grpcurl/cmd/grpcurl
 
@@ -954,16 +954,16 @@ ALLOW yabs/vh/cms-pgaas/transcoded -> vendor/github.com/jackc/pgx
 # Permanent exceptions.
 #
 
-# Docker is not vendored property. Docker dependency must be pulled-in explicitly. 
-ALLOW vendor/ -> vendor/github.com/opencontainers/go-digest 
- 
+# Docker is not vendored property. Docker dependency must be pulled-in explicitly.
+ALLOW vendor/ -> vendor/github.com/opencontainers/go-digest
+
 # CONTRIB-865. Jaeger YT plugin. responsible: prime@
-ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/plugin/storage/grpc 
-ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/spanstore 
-ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/dependencystore 
-ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/model 
-ALLOW yt/jaeger/plugin -> vendor/github.com/gogo/protobuf 
-ALLOW yt/jaeger/plugin -> vendor/github.com/hashicorp/go-plugin 
+ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/plugin/storage/grpc
+ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/spanstore
+ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/dependencystore
+ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/model
+ALLOW yt/jaeger/plugin -> vendor/github.com/gogo/protobuf
+ALLOW yt/jaeger/plugin -> vendor/github.com/hashicorp/go-plugin
 
 # CONTRIB-1518 client for monkey-patched Apache Pulsar by TuyaInc. responsible: jock@
 ALLOW alice/iot/adapters/tuya_adapter -> vendor/github.com/TuyaInc/tuya_pulsar_sdk_go
@@ -1035,8 +1035,8 @@ ALLOW psp -> vendor/github.com/zimmski/go-mutesting
 # CONTRIB-2460
 ALLOW .* -> vendor/github.com/dgraph-io/ristretto
 
-# 
-# This section is for EXCEPTIONS. Add new rule above, not here. 
-# 
+#
+# This section is for EXCEPTIONS. Add new rule above, not here.
+#
 
-DENY .* -> vendor/ 
+DENY .* -> vendor/

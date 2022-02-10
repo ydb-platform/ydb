@@ -70,10 +70,10 @@ TString GetGuidAsString(const TGUID& g);
 TString CreateGuidAsString();
 TGUID GetGuid(TStringBuf s);
 bool GetGuid(TStringBuf s, TGUID& result);
-
-/**
-* Functions for correct parsing RFC4122 GUID, which described in
-* https://en.wikipedia.org/wiki/Universally_unique_identifier
-**/
+ 
+/** 
+* Functions for correct parsing RFC4122 GUID, which described in 
+* https://en.wikipedia.org/wiki/Universally_unique_identifier 
+**/ 
 TGUID GetUuid(TStringBuf s);
 bool GetUuid(TStringBuf s, TGUID& result);

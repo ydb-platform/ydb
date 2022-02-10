@@ -76,7 +76,7 @@ public:
         , Blocking(params.Blocking_)
         , Catching(params.Catching_)
         , Namer(params)
-        , ShouldTerminate(1)
+        , ShouldTerminate(1) 
         , MaxQueueSize(0)
         , ThreadCountExpected(0)
         , ThreadCountReal(0)
@@ -98,7 +98,7 @@ public:
     }
 
     inline bool Add(IObjectInQueue* obj) {
-        if (AtomicGet(ShouldTerminate)) {
+        if (AtomicGet(ShouldTerminate)) { 
             return false;
         }
 
@@ -110,14 +110,14 @@ public:
         }
 
         with_lock (QueueMutex) {
-            while (MaxQueueSize > 0 && Queue.Size() >= MaxQueueSize && !AtomicGet(ShouldTerminate)) {
+            while (MaxQueueSize > 0 && Queue.Size() >= MaxQueueSize && !AtomicGet(ShouldTerminate)) { 
                 if (!Blocking) {
                     return false;
                 }
                 QueuePopCond.Wait(QueueMutex);
             }
 
-            if (AtomicGet(ShouldTerminate)) {
+            if (AtomicGet(ShouldTerminate)) { 
                 return false;
             }
 
@@ -157,7 +157,7 @@ public:
 
 private:
     inline void Start(size_t num, size_t maxque) {
-        AtomicSet(ShouldTerminate, 0);
+        AtomicSet(ShouldTerminate, 0); 
         MaxQueueSize = maxque;
         ThreadCountExpected = num;
 
@@ -174,7 +174,7 @@ private:
     }
 
     inline void Stop() {
-        AtomicSet(ShouldTerminate, 1);
+        AtomicSet(ShouldTerminate, 1); 
 
         with_lock (QueueMutex) {
             QueuePopCond.BroadCast();
@@ -212,11 +212,11 @@ private:
             IObjectInQueue* job = nullptr;
 
             with_lock (QueueMutex) {
-                while (Queue.Empty() && !AtomicGet(ShouldTerminate)) {
+                while (Queue.Empty() && !AtomicGet(ShouldTerminate)) { 
                     QueuePushCond.Wait(QueueMutex);
                 }
 
-                if (AtomicGet(ShouldTerminate) && Queue.Empty()) {
+                if (AtomicGet(ShouldTerminate) && Queue.Empty()) { 
                     tsr.Destroy();
 
                     break;
@@ -264,7 +264,7 @@ private:
     TCondVar StopCond;
     TJobQueue Queue;
     TVector<TThreadRef> Tharr;
-    TAtomic ShouldTerminate;
+    TAtomic ShouldTerminate; 
     size_t MaxQueueSize;
     size_t ThreadCountExpected;
     size_t ThreadCountReal;

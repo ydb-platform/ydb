@@ -19,7 +19,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMMapEqualityOperator);
     UNIT_TEST(TestHMMapConstructorsAndAssignments);
     UNIT_TEST(TestHMMap1);
-    UNIT_TEST(TestHMMapHas);
+    UNIT_TEST(TestHMMapHas); 
     UNIT_TEST(TestHSetConstructorsAndAssignments);
     UNIT_TEST(TestHSetSize);
     UNIT_TEST(TestHSet2);
@@ -70,7 +70,7 @@ protected:
     void TestHMMapEqualityOperator();
     void TestHMMapConstructorsAndAssignments();
     void TestHMMap1();
-    void TestHMMapHas();
+    void TestHMMapHas(); 
     void TestHSetConstructorsAndAssignments();
     void TestHSetSize();
     void TestHSet2();
@@ -355,17 +355,17 @@ void THashTest::TestHMMap1() {
     UNIT_ASSERT(hmap.bucket_count() < 30);
 }
 
-void THashTest::TestHMMapHas() {
+void THashTest::TestHMMapHas() { 
     using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
-    mmap m;
+    mmap m; 
     m.insert(std::pair<const char, int>('X', 10));
     m.insert(std::pair<const char, int>('X', 20));
     m.insert(std::pair<const char, int>('Y', 32));
     UNIT_ASSERT(m.contains('X'));
     UNIT_ASSERT(m.contains('Y'));
     UNIT_ASSERT(!m.contains('Z'));
-}
-
+} 
+ 
 void THashTest::TestHSetConstructorsAndAssignments() {
     using container = THashSet<int>;
 

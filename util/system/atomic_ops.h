@@ -114,11 +114,11 @@ inline TEnableIfCastable<T, T> AtomicAnd(T volatile& target, TAtomicBase value) 
     return static_cast<T>(AtomicAnd(*AsAtomicPtr(&target), value));
 }
 
-template <typename T>
-inline TEnableIfCastable<T, T> AtomicXor(T volatile& target, TAtomicBase value) {
-    return static_cast<T>(AtomicXor(*AsAtomicPtr(&target), value));
-}
-
+template <typename T> 
+inline TEnableIfCastable<T, T> AtomicXor(T volatile& target, TAtomicBase value) { 
+    return static_cast<T>(AtomicXor(*AsAtomicPtr(&target), value)); 
+} 
+ 
 // pointer types
 
 template <typename T>

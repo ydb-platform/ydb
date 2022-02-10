@@ -186,7 +186,7 @@ protected:
 #pragma pack(pop)
 
 protected:
-    static const ui16 VERSION_ID = 2;
+    static const ui16 VERSION_ID = 2; 
 
 #pragma pack(push, 8)
     struct TInterval {
@@ -256,7 +256,7 @@ public:
     void Save(IOutputStream& out) const {
         Y_ASSERT(Data.size() < Max<ui32>());
 
-        WriteBin<ui16>(&out, VERSION_ID);
+        WriteBin<ui16>(&out, VERSION_ID); 
         static const ui32 PAIR_SIZE = sizeof(TKeyValuePair);
         WriteBin<ui32>(&out, PAIR_SIZE);
 
@@ -327,7 +327,7 @@ private:
         P = reinterpret_cast<const char*>(p);
 #ifndef NDEBUG
         ui16 version = ReadUnaligned<ui16>(p);
-        if (version != VERSION_ID)
+        if (version != VERSION_ID) 
             ythrow yexception() << "bad version: " << version;
         static const ui32 PAIR_SIZE = sizeof(TKeyValuePair);
         const ui32 size = ReadUnaligned<ui32>(p + 2);

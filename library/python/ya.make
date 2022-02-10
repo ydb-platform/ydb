@@ -1,7 +1,7 @@
 OWNER(g:python-contrib)
 
 RECURSE(
-    aho_corasick
+    aho_corasick 
     aho_corasick/ut
     archive
     archive/benchmark

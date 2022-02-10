@@ -179,7 +179,7 @@ namespace NHashPrivate {
 template <class TFirst, class TSecond>
 struct hash<std::pair<TFirst, TSecond>>: public NHashPrivate::TPairHash<TFirst, TSecond> {
 };
-
+ 
 template <class T>
 struct TEqualTo: public std::equal_to<T> {
 };

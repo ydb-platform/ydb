@@ -796,7 +796,7 @@ RECURSE(
     pycares
     pycbrf
     pycodestyle
-    pycollada 
+    pycollada
     pycountry
     pycparser
     pycrypto

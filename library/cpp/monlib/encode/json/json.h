@@ -13,9 +13,9 @@ namespace NMonitoring {
 
     IMetricEncoderPtr EncoderJson(IOutputStream* out, int indentation = 0);
 
-    /// Buffered encoder will merge series with same labels into one.
+    /// Buffered encoder will merge series with same labels into one. 
     IMetricEncoderPtr BufferedEncoderJson(IOutputStream* out, int indentation = 0);
-
+ 
     IMetricEncoderPtr EncoderCloudJson(IOutputStream* out,
                                        int indentation = 0,
                                        TStringBuf metricNameLabel = "name");

@@ -94,28 +94,28 @@
 #define COLLAPSED_BUTTON_CONTENT(targetId, buttonText) \
     WITH_SCOPED(tmp, NMonitoring::TCollapsedButton(__stream, targetId, buttonText))
 
-#define HREF(path) \
-    WITH_SCOPED(tmp, NMonitoring::THref(__stream, path))
-
+#define HREF(path) \ 
+    WITH_SCOPED(tmp, NMonitoring::THref(__stream, path)) 
+ 
 namespace NMonitoring {
-    struct THref {
-        THref(IOutputStream& str, TStringBuf path)
-            : Str(str)
-        {
-            Str << "<a href="<< path << '>';
-        }
-
-        ~THref() {
-            Str <<  "</a>";
-        }
-
-        explicit inline operator bool() const noexcept {
-            return true; // just to work with WITH_SCOPED
-        }
-
-        IOutputStream& Str;
-    };
-
+    struct THref { 
+        THref(IOutputStream& str, TStringBuf path) 
+            : Str(str) 
+        { 
+            Str << "<a href="<< path << '>'; 
+        } 
+ 
+        ~THref() { 
+            Str <<  "</a>"; 
+        } 
+ 
+        explicit inline operator bool() const noexcept { 
+            return true; // just to work with WITH_SCOPED 
+        } 
+ 
+        IOutputStream& Str; 
+    }; 
+ 
     template <const char* tag>
     struct TTag {
         TTag(IOutputStream& str, TStringBuf cls = "", TStringBuf for0 = "", TStringBuf id = "")

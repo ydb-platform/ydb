@@ -319,7 +319,7 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
+            const TCgiParameters& cgi = Ev->Get()->Request.GetParams(); 
 
             TString dbnameParam = cgi.Get("dbname");
             TString formParam = cgi.Get("form");
@@ -523,7 +523,7 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
+            const TCgiParameters& cgi = Ev->Get()->Request.GetParams(); 
 
             TString dbnameParam = cgi.Get("dbname");
             TString formParam = cgi.Get("form");
@@ -704,14 +704,14 @@ namespace NKikimr {
         friend class TActorBootstrapped<TSkeletonFrontMonDbStatActor>;
 
         bool PrettyPrint() const {
-            const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
+            const TCgiParameters& cgi = Ev->Get()->Request.GetParams(); 
             // format numbers pretty print
             const TString &numbers = cgi.Get("numbers");
             return (numbers == "pretty" || numbers == ""); // pretty by default
         }
 
         NMonUtil::TParseResult<ui64> ParseNumber(const char *name) const {
-            const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
+            const TCgiParameters& cgi = Ev->Get()->Request.GetParams(); 
             // format numbers pretty print
             const TString &str = cgi.Get(name);
             if (str.empty())
@@ -983,7 +983,7 @@ namespace NKikimr {
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
                                                  const TString &frontHtml) {
-        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+        const TCgiParameters& cgi = ev->Get()->Request.GetParams(); 
 
         const TString &type = cgi.Get("type");
         const TString &dbname = cgi.Get("dbname");

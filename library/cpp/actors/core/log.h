@@ -219,16 +219,16 @@ namespace NActors {
             }
         }
 
-        STFUNC(StateDefunct) {
-            switch (ev->GetTypeRewrite()) {
-                cFunc(TLogIgnored::EventType, HandleIgnoredEventDrop);
-                hFunc(NLog::TEvLog, HandleLogEventDrop);
-                HFunc(TLogComponentLevelRequest, HandleLogComponentLevelRequest);
-                HFunc(NMon::TEvHttpInfo, HandleMonInfo);
-                cFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
-            }
-        }
-
+        STFUNC(StateDefunct) { 
+            switch (ev->GetTypeRewrite()) { 
+                cFunc(TLogIgnored::EventType, HandleIgnoredEventDrop); 
+                hFunc(NLog::TEvLog, HandleLogEventDrop); 
+                HFunc(TLogComponentLevelRequest, HandleLogComponentLevelRequest); 
+                HFunc(NMon::TEvHttpInfo, HandleMonInfo); 
+                cFunc(TEvents::TEvWakeup::EventType, HandleWakeup); 
+            } 
+        } 
+ 
         // Directly call logger instead of sending a message
         void Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...);
 
@@ -240,21 +240,21 @@ namespace NActors {
         ui64 IgnoredCount = 0;
         ui64 PassedCount = 0;
         static TAtomic IsOverflow;
-        TDuration WakeupInterval{TDuration::Seconds(5)};
+        TDuration WakeupInterval{TDuration::Seconds(5)}; 
         std::unique_ptr<ILoggerMetrics> Metrics;
 
-        void BecomeDefunct();
+        void BecomeDefunct(); 
         void HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx);
-        void HandleIgnoredEventDrop();
+        void HandleIgnoredEventDrop(); 
         void HandleLogEvent(NLog::TEvLog::TPtr& ev, const TActorContext& ctx);
-        void HandleLogEventDrop(const NLog::TEvLog::TPtr& ev);
+        void HandleLogEventDrop(const NLog::TEvLog::TPtr& ev); 
         void HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const TActorContext& ctx);
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
-        void HandleWakeup();
-        [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted) noexcept;
+        void HandleWakeup(); 
+        [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted) noexcept; 
         void RenderComponentPriorities(IOutputStream& str);
         void LogIgnoredCount(TInstant now);
-        void WriteMessageStat(const NLog::TEvLog& ev);
+        void WriteMessageStat(const NLog::TEvLog& ev); 
         static const char* FormatLocalTimestamp(TInstant time, char* buf);
     };
 
@@ -305,19 +305,19 @@ namespace NActors {
     //  Logging adaptors for memory log and logging into filesystem
     /////////////////////////////////////////////////////////////////////
 
-    namespace NDetail {
-        inline void Y_PRINTF_FORMAT(2, 3) PrintfV(TString& dst, const char* format, ...) {
-            va_list params;
-            va_start(params, format);
-            vsprintf(dst, format, params);
-            va_end(params);
-        }
+    namespace NDetail { 
+        inline void Y_PRINTF_FORMAT(2, 3) PrintfV(TString& dst, const char* format, ...) { 
+            va_list params; 
+            va_start(params, format); 
+            vsprintf(dst, format, params); 
+            va_end(params); 
+        } 
 
-        inline void PrintfV(TString& dst, const char* format, va_list params) {
-            vsprintf(dst, format, params);
-        }
-    } // namespace NDetail
-
+        inline void PrintfV(TString& dst, const char* format, va_list params) { 
+            vsprintf(dst, format, params); 
+        } 
+    } // namespace NDetail 
+ 
     template <typename TCtx>
     inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)
     {
@@ -326,21 +326,21 @@ namespace NActors {
         ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
     }
 
-    template <typename TCtx, typename... TArgs>
+    template <typename TCtx, typename... TArgs> 
     inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        const char* format, TArgs&&... params) {
+        const char* format, TArgs&&... params) { 
         TString Formatted;
 
 
-        if constexpr (sizeof... (params) > 0) {
-            NDetail::PrintfV(Formatted, format, std::forward<TArgs>(params)...);
-        } else {
-            NDetail::PrintfV(Formatted, "%s", format);
-        }
-
+        if constexpr (sizeof... (params) > 0) { 
+            NDetail::PrintfV(Formatted, format, std::forward<TArgs>(params)...); 
+        } else { 
+            NDetail::PrintfV(Formatted, "%s", format); 
+        } 
+ 
         MemLogWrite(Formatted.data(), Formatted.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted));
     }

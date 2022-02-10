@@ -101,7 +101,7 @@ public:
     }
 
     virtual void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
+        const auto& params(Event->Get()->Request.GetParams()); 
         TBase::InitConfig(params);
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
         std::replace(FilterNodeIds.begin(), FilterNodeIds.end(), (ui32)0, TlsActivationContext->ActorSystem()->NodeId);

@@ -21,20 +21,20 @@ namespace NActors {
 
         // request info from an actor in HTML format
         struct TEvHttpInfo: public NActors::TEventLocal<TEvHttpInfo, HttpInfo> {
-            TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, int subReqId = 0)
+            TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, int subReqId = 0) 
                 : Request(request)
                 , SubRequestId(subReqId)
             {
             }
 
-            TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, const TString& userToken)
+            TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, const TString& userToken) 
                 : Request(request)
                 , UserToken(userToken)
                 , SubRequestId(0)
             {
             }
 
-            const NMonitoring::IMonHttpRequest& Request;
+            const NMonitoring::IMonHttpRequest& Request; 
             TString UserToken; // built and serialized
             // SubRequestId != 0 means that we assemble reply from multiple parts and SubRequestId contains this part id
             int SubRequestId;

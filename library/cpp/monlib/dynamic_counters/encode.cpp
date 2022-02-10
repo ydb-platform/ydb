@@ -17,7 +17,7 @@ namespace NMonitoring {
         public:
             explicit TConsumer(NMonitoring::IMetricEncoderPtr encoderImpl, TCountableBase::EVisibility vis)
                 : EncoderImpl_(std::move(encoderImpl))
-                , Visibility_{vis}
+                , Visibility_{vis} 
             {
             }
 
@@ -73,10 +73,10 @@ namespace NMonitoring {
                 }
             }
 
-            TCountableBase::EVisibility Visibility() const override {
-                return Visibility_;
-            }
-
+            TCountableBase::EVisibility Visibility() const override { 
+                return Visibility_; 
+            } 
+ 
         private:
             void EncodeLabels(const TString& labelName, const TString& labelValue) {
                 EncoderImpl_->OnLabelsBegin();
@@ -90,12 +90,12 @@ namespace NMonitoring {
         private:
             NMonitoring::IMetricEncoderPtr EncoderImpl_;
             TVector<TLabel> ParentLabels_;
-            TCountableBase::EVisibility Visibility_;
+            TCountableBase::EVisibility Visibility_; 
         };
 
     }
 
-    THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format, TCountableBase::EVisibility vis) {
+    THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format, TCountableBase::EVisibility vis) { 
         switch (format) {
             case EFormat::JSON:
                 return MakeHolder<TConsumer>(NMonitoring::EncoderJson(out), vis);
@@ -103,7 +103,7 @@ namespace NMonitoring {
                 return MakeHolder<TConsumer>(NMonitoring::EncoderSpackV1(
                     out,
                     NMonitoring::ETimePrecision::SECONDS,
-                    NMonitoring::ECompression::ZSTD), vis);
+                    NMonitoring::ECompression::ZSTD), vis); 
             case EFormat::PROMETHEUS:
                 return MakeHolder<TConsumer>(NMonitoring::EncoderPrometheus(
                     out), vis);

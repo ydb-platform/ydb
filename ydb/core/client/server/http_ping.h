@@ -10,7 +10,7 @@ namespace NHttp {
 class TPing : public NMonitoring::IMonPage {
 public:
     TPing();
-    virtual void Output(NMonitoring::IMonHttpRequest& request) override;
+    virtual void Output(NMonitoring::IMonHttpRequest& request) override; 
 };
 
 TPing* CreatePing();

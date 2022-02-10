@@ -14,93 +14,93 @@
 
 using namespace NMonitoring;
 
-namespace NMonitoring {
-    bool operator<(const TLabel& lhs, const TLabel& rhs) {
-        return lhs.Name() < rhs.Name() ||
-            (lhs.Name() == rhs.Name() && lhs.Value() < rhs.Value());
-    }
-}
-namespace {
-    void AssertLabels(const NProto::TMultiSample& actual, const TLabels& expected) {
-        UNIT_ASSERT_EQUAL(actual.LabelsSize(), expected.Size());
-
-        TSet<TLabel> actualSet;
-        TSet<TLabel> expectedSet;
-        Transform(expected.begin(), expected.end(), std::inserter(expectedSet, expectedSet.end()), [] (auto&& l) {
-            return TLabel{l.Name(), l.Value()};
-        });
-
-        const auto& l = actual.GetLabels();
-        Transform(std::begin(l), std::end(l), std::inserter(actualSet, std::begin(actualSet)),
-                  [](auto&& elem) -> TLabel {
-                      return {elem.GetName(), elem.GetValue()};
-                  });
-
-        TVector<TLabel> diff;
-        SetSymmetricDifference(std::begin(expectedSet), std::end(expectedSet),
-                               std::begin(actualSet), std::end(actualSet), std::back_inserter(diff));
-
-        if (diff.size() > 0) {
-            for (auto&& l : diff) {
-                Cerr << l << Endl;
-            }
-
-            UNIT_FAIL("Labels don't match");
-        }
-    }
-
-    void AssertLabelEqual(const NProto::TLabel& l, TStringBuf name, TStringBuf value) {
-        UNIT_ASSERT_STRINGS_EQUAL(l.GetName(), name);
-        UNIT_ASSERT_STRINGS_EQUAL(l.GetValue(), value);
-    }
-
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, double value) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64);
-        UNIT_ASSERT_DOUBLES_EQUAL(p.GetFloat64(), value, std::numeric_limits<double>::epsilon());
-    }
-
-    void AssertPointEqualNan(const NProto::TPoint& p, TInstant time) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64);
-        UNIT_ASSERT(std::isnan(p.GetFloat64()));
-    }
-
-    void AssertPointEqualInf(const NProto::TPoint& p, TInstant time, int sign) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64);
-        UNIT_ASSERT(std::isinf(p.GetFloat64()));
-        if (sign < 0) {
-            UNIT_ASSERT(p.GetFloat64() < 0);
-        }
-    }
-
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, ui64 value) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kUint64);
-        UNIT_ASSERT_VALUES_EQUAL(p.GetUint64(), value);
-    }
-
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, i64 value) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kInt64);
-        UNIT_ASSERT_VALUES_EQUAL(p.GetInt64(), value);
-    }
-
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const IHistogramSnapshot& expected) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kHistogram);
-
-        const NProto::THistogram& h = p.GetHistogram();
-        UNIT_ASSERT_VALUES_EQUAL(h.BoundsSize(), expected.Count());
-        UNIT_ASSERT_VALUES_EQUAL(h.ValuesSize(), expected.Count());
-
-        for (size_t i = 0; i < h.BoundsSize(); i++) {
-            UNIT_ASSERT_DOUBLES_EQUAL(h.GetBounds(i), expected.UpperBound(i), Min<double>());
-            UNIT_ASSERT_VALUES_EQUAL(h.GetValues(i), expected.Value(i));
-        }
-    }
-
+namespace NMonitoring { 
+    bool operator<(const TLabel& lhs, const TLabel& rhs) { 
+        return lhs.Name() < rhs.Name() || 
+            (lhs.Name() == rhs.Name() && lhs.Value() < rhs.Value()); 
+    } 
+} 
+namespace { 
+    void AssertLabels(const NProto::TMultiSample& actual, const TLabels& expected) { 
+        UNIT_ASSERT_EQUAL(actual.LabelsSize(), expected.Size()); 
+ 
+        TSet<TLabel> actualSet; 
+        TSet<TLabel> expectedSet; 
+        Transform(expected.begin(), expected.end(), std::inserter(expectedSet, expectedSet.end()), [] (auto&& l) { 
+            return TLabel{l.Name(), l.Value()}; 
+        }); 
+ 
+        const auto& l = actual.GetLabels(); 
+        Transform(std::begin(l), std::end(l), std::inserter(actualSet, std::begin(actualSet)), 
+                  [](auto&& elem) -> TLabel { 
+                      return {elem.GetName(), elem.GetValue()}; 
+                  }); 
+ 
+        TVector<TLabel> diff; 
+        SetSymmetricDifference(std::begin(expectedSet), std::end(expectedSet), 
+                               std::begin(actualSet), std::end(actualSet), std::back_inserter(diff)); 
+ 
+        if (diff.size() > 0) { 
+            for (auto&& l : diff) { 
+                Cerr << l << Endl; 
+            } 
+ 
+            UNIT_FAIL("Labels don't match"); 
+        } 
+    } 
+ 
+    void AssertLabelEqual(const NProto::TLabel& l, TStringBuf name, TStringBuf value) { 
+        UNIT_ASSERT_STRINGS_EQUAL(l.GetName(), name); 
+        UNIT_ASSERT_STRINGS_EQUAL(l.GetValue(), value); 
+    } 
+ 
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, double value) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64); 
+        UNIT_ASSERT_DOUBLES_EQUAL(p.GetFloat64(), value, std::numeric_limits<double>::epsilon()); 
+    } 
+ 
+    void AssertPointEqualNan(const NProto::TPoint& p, TInstant time) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64); 
+        UNIT_ASSERT(std::isnan(p.GetFloat64())); 
+    } 
+ 
+    void AssertPointEqualInf(const NProto::TPoint& p, TInstant time, int sign) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kFloat64); 
+        UNIT_ASSERT(std::isinf(p.GetFloat64())); 
+        if (sign < 0) { 
+            UNIT_ASSERT(p.GetFloat64() < 0); 
+        } 
+    } 
+ 
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, ui64 value) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kUint64); 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetUint64(), value); 
+    } 
+ 
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, i64 value) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kInt64); 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetInt64(), value); 
+    } 
+ 
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const IHistogramSnapshot& expected) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kHistogram); 
+ 
+        const NProto::THistogram& h = p.GetHistogram(); 
+        UNIT_ASSERT_VALUES_EQUAL(h.BoundsSize(), expected.Count()); 
+        UNIT_ASSERT_VALUES_EQUAL(h.ValuesSize(), expected.Count()); 
+ 
+        for (size_t i = 0; i < h.BoundsSize(); i++) { 
+            UNIT_ASSERT_DOUBLES_EQUAL(h.GetBounds(i), expected.UpperBound(i), Min<double>()); 
+            UNIT_ASSERT_VALUES_EQUAL(h.GetValues(i), expected.Value(i)); 
+        } 
+    } 
+ 
     void AssertPointEqual(const NProto::TPoint& p, TInstant time, const TLogHistogramSnapshot& expected) {
         UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
         UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kLogHistogram);
@@ -129,9 +129,9 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(actual.GetCount(), expected.GetCount());
     }
 
-} // namespace
-
-
+} // namespace 
+ 
+ 
 Y_UNIT_TEST_SUITE(TJsonTest) {
     const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
 
@@ -304,53 +304,53 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
     }
 
     Y_UNIT_TEST(MetricsWithDifferentLabelOrderGetMerged) {
-        TString json;
-        TStringOutput out(json);
-        auto e = BufferedEncoderJson(&out, 2);
+        TString json; 
+        TStringOutput out(json); 
+        auto e = BufferedEncoderJson(&out, 2); 
 
-        e->OnStreamBegin();
-        {
+        e->OnStreamBegin(); 
+        { 
             e->OnMetricBegin(EMetricType::RATE);
-            {
-                e->OnLabelsBegin();
+            { 
+                e->OnLabelsBegin(); 
                 e->OnLabel("metric", "hello");
-                e->OnLabel("label", "world");
-                e->OnLabelsEnd();
-            }
-            e->OnUint64(TInstant::Zero(), 0);
+                e->OnLabel("label", "world"); 
+                e->OnLabelsEnd(); 
+            } 
+            e->OnUint64(TInstant::Zero(), 0); 
             e->OnMetricEnd();
         }
-        {
+        { 
             e->OnMetricBegin(EMetricType::RATE);
-            {
-                e->OnLabelsBegin();
-                e->OnLabel("label", "world");
+            { 
+                e->OnLabelsBegin(); 
+                e->OnLabel("label", "world"); 
                 e->OnLabel("metric", "hello");
-                e->OnLabelsEnd();
-            }
-            e->OnUint64(TInstant::Zero(), 1);
+                e->OnLabelsEnd(); 
+            } 
+            e->OnUint64(TInstant::Zero(), 1); 
             e->OnMetricEnd();
-        }
-        e->OnStreamEnd();
-        e->Close();
-        json += "\n";
+        } 
+        e->OnStreamEnd(); 
+        e->Close(); 
+        json += "\n"; 
 
-        TString expectedJson = NResource::Find("/merged.json");
-        // we cannot be sure regarding the label order in the result,
-        // so we'll have to parse the expected value and then compare it with actual
+        TString expectedJson = NResource::Find("/merged.json"); 
+        // we cannot be sure regarding the label order in the result, 
+        // so we'll have to parse the expected value and then compare it with actual 
 
-        NProto::TMultiSamplesList samples;
+        NProto::TMultiSamplesList samples; 
         IMetricEncoderPtr d = EncoderProtobuf(&samples);
-        DecodeJson(expectedJson, d.Get());
+        DecodeJson(expectedJson, d.Get()); 
 
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(0);
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1); 
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(0); 
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE);
             AssertLabels(s, TLabels{{"metric", "hello"}, {"label", "world"}});
 
-            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-            AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(1));
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+            AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(1)); 
         }
     }
     Y_UNIT_TEST(Decode1) {
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         AssertLabelEqual(samples.GetCommonLabels(1), "cluster", "man");
         AssertLabelEqual(samples.GetCommonLabels(2), "service", "stockpile");
 
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 4); 
         {
             const NProto::TMultiSample& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertPointEqual(s.GetPoints(0), ts, 3.14159);
         }
         {
-            const NProto::TMultiSample& s = samples.GetSamples(3);
+            const NProto::TMultiSample& s = samples.GetSamples(3); 
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
             AssertLabelEqual(s.GetLabels(0), "metric", "Writes");
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertPointEqual(s.GetPoints(1), ts2, 20.0);
         }
     }
-
+ 
     Y_UNIT_TEST(DecodeToEncoder) {
         auto testJson = NResource::Find("/test_decode_to_encode.json");
 
@@ -575,154 +575,154 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
     }
 
     void WriteEmptySeries(const IMetricEncoderPtr& e) {
-        e->OnStreamBegin();
-        {
+        e->OnStreamBegin(); 
+        { 
             e->OnMetricBegin(EMetricType::COUNTER);
-            {
-                e->OnLabelsBegin();
-                e->OnLabel("foo", "bar");
-                e->OnLabelsEnd();
-            }
+            { 
+                e->OnLabelsBegin(); 
+                e->OnLabel("foo", "bar"); 
+                e->OnLabelsEnd(); 
+            } 
             e->OnMetricEnd();
-        }
-
-        e->OnStreamEnd();
-        e->Close();
-    }
-
-    Y_UNIT_TEST(EncodeEmptySeries) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = EncoderJson(&out, 2);
-        WriteEmptySeries(e);
-        json += "\n";
-
-        TString expectedJson = NResource::Find("/empty_series.json");
-        UNIT_ASSERT_NO_DIFF(json, expectedJson);
-    }
-
+        } 
+ 
+        e->OnStreamEnd(); 
+        e->Close(); 
+    } 
+ 
+    Y_UNIT_TEST(EncodeEmptySeries) { 
+        TString json; 
+        TStringOutput out(json); 
+ 
+        auto e = EncoderJson(&out, 2); 
+        WriteEmptySeries(e); 
+        json += "\n"; 
+ 
+        TString expectedJson = NResource::Find("/empty_series.json"); 
+        UNIT_ASSERT_NO_DIFF(json, expectedJson); 
+    } 
+ 
     void WriteEmptyLabels(IMetricEncoderPtr& e) {
-        e->OnStreamBegin();
+        e->OnStreamBegin(); 
         e->OnMetricBegin(EMetricType::COUNTER);
-
-        e->OnLabelsBegin();
-        UNIT_ASSERT_EXCEPTION(e->OnLabelsEnd(), yexception);
-    }
-
-    Y_UNIT_TEST(LabelsCannotBeEmpty) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = EncoderJson(&out, 2);
-        WriteEmptyLabels(e);
-    }
-
-    Y_UNIT_TEST(LabelsCannotBeEmptyBuffered) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = BufferedEncoderJson(&out, 2);
-        WriteEmptyLabels(e);
-    }
-
-    Y_UNIT_TEST(EncodeEmptySeriesBuffered) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = BufferedEncoderJson(&out, 2);
-        WriteEmptySeries(e);
-        json += "\n";
-
-        TString expectedJson = NResource::Find("/empty_series.json");
-        UNIT_ASSERT_NO_DIFF(json, expectedJson);
-    }
-
+ 
+        e->OnLabelsBegin(); 
+        UNIT_ASSERT_EXCEPTION(e->OnLabelsEnd(), yexception); 
+    } 
+ 
+    Y_UNIT_TEST(LabelsCannotBeEmpty) { 
+        TString json; 
+        TStringOutput out(json); 
+ 
+        auto e = EncoderJson(&out, 2); 
+        WriteEmptyLabels(e); 
+    } 
+ 
+    Y_UNIT_TEST(LabelsCannotBeEmptyBuffered) { 
+        TString json; 
+        TStringOutput out(json); 
+ 
+        auto e = BufferedEncoderJson(&out, 2); 
+        WriteEmptyLabels(e); 
+    } 
+ 
+    Y_UNIT_TEST(EncodeEmptySeriesBuffered) { 
+        TString json; 
+        TStringOutput out(json); 
+ 
+        auto e = BufferedEncoderJson(&out, 2); 
+        WriteEmptySeries(e); 
+        json += "\n"; 
+ 
+        TString expectedJson = NResource::Find("/empty_series.json"); 
+        UNIT_ASSERT_NO_DIFF(json, expectedJson); 
+    } 
+ 
     Y_UNIT_TEST(BufferedEncoderMergesMetrics) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = BufferedEncoderJson(&out, 2);
-        auto ts = 1;
-
+        TString json; 
+        TStringOutput out(json); 
+ 
+        auto e = BufferedEncoderJson(&out, 2); 
+        auto ts = 1; 
+ 
         auto writeMetric = [&] (const TString& val) {
             e->OnMetricBegin(EMetricType::COUNTER);
-
-            e->OnLabelsBegin();
-            e->OnLabel("foo", val);
-            e->OnLabelsEnd();
-            e->OnUint64(TInstant::Seconds(ts++), 42);
-
+ 
+            e->OnLabelsBegin(); 
+            e->OnLabel("foo", val); 
+            e->OnLabelsEnd(); 
+            e->OnUint64(TInstant::Seconds(ts++), 42); 
+ 
             e->OnMetricEnd();
-        };
-
-        e->OnStreamBegin();
+        }; 
+ 
+        e->OnStreamBegin(); 
         writeMetric("bar");
         writeMetric("bar");
         writeMetric("baz");
         writeMetric("bar");
-        e->OnStreamEnd();
-        e->Close();
-
-        json += "\n";
-
-        TString expectedJson = NResource::Find("/buffered_test.json");
-        UNIT_ASSERT_NO_DIFF(json, expectedJson);
-    }
-
-    Y_UNIT_TEST(JsonEncoderDisallowsValuesInTimeseriesWithoutTs) {
-        TStringStream out;
-
-        auto e = EncoderJson(&out);
-        auto writePreamble = [&] {
-            e->OnStreamBegin();
+        e->OnStreamEnd(); 
+        e->Close(); 
+ 
+        json += "\n"; 
+ 
+        TString expectedJson = NResource::Find("/buffered_test.json"); 
+        UNIT_ASSERT_NO_DIFF(json, expectedJson); 
+    } 
+ 
+    Y_UNIT_TEST(JsonEncoderDisallowsValuesInTimeseriesWithoutTs) { 
+        TStringStream out; 
+ 
+        auto e = EncoderJson(&out); 
+        auto writePreamble = [&] { 
+            e->OnStreamBegin(); 
             e->OnMetricBegin(EMetricType::COUNTER);
-            e->OnLabelsBegin();
-            e->OnLabel("foo", "bar");
-            e->OnLabelsEnd();
-        };
-
+            e->OnLabelsBegin(); 
+            e->OnLabel("foo", "bar"); 
+            e->OnLabelsEnd(); 
+        }; 
+ 
         // writing two values for a metric in a row will trigger
-        // timeseries object construction
-        writePreamble();
-        e->OnUint64(TInstant::Zero(), 42);
-        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Zero(), 42), yexception);
-
-        e = EncoderJson(&out);
-        writePreamble();
-        e->OnUint64(TInstant::Zero(), 42);
-        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Now(), 42), yexception);
-
-        e = EncoderJson(&out);
-        writePreamble();
-        e->OnUint64(TInstant::Now(), 42);
-        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Zero(), 42), yexception);
-    }
-
-    Y_UNIT_TEST(BufferedJsonEncoderMergesTimeseriesWithoutTs) {
-        TStringStream out;
-
-        {
-            auto e = BufferedEncoderJson(&out, 2);
-            e->OnStreamBegin();
+        // timeseries object construction 
+        writePreamble(); 
+        e->OnUint64(TInstant::Zero(), 42); 
+        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Zero(), 42), yexception); 
+ 
+        e = EncoderJson(&out); 
+        writePreamble(); 
+        e->OnUint64(TInstant::Zero(), 42); 
+        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Now(), 42), yexception); 
+ 
+        e = EncoderJson(&out); 
+        writePreamble(); 
+        e->OnUint64(TInstant::Now(), 42); 
+        UNIT_ASSERT_EXCEPTION(e->OnUint64(TInstant::Zero(), 42), yexception); 
+    } 
+ 
+    Y_UNIT_TEST(BufferedJsonEncoderMergesTimeseriesWithoutTs) { 
+        TStringStream out; 
+ 
+        { 
+            auto e = BufferedEncoderJson(&out, 2); 
+            e->OnStreamBegin(); 
             e->OnMetricBegin(EMetricType::COUNTER);
-            e->OnLabelsBegin();
-            e->OnLabel("foo", "bar");
-            e->OnLabelsEnd();
-            // in buffered mode we are able to find values with same (in this case zero)
-            // timestamp and discard duplicates
-            e->OnUint64(TInstant::Zero(), 42);
-            e->OnUint64(TInstant::Zero(), 43);
-            e->OnUint64(TInstant::Zero(), 44);
-            e->OnUint64(TInstant::Zero(), 45);
+            e->OnLabelsBegin(); 
+            e->OnLabel("foo", "bar"); 
+            e->OnLabelsEnd(); 
+            // in buffered mode we are able to find values with same (in this case zero) 
+            // timestamp and discard duplicates 
+            e->OnUint64(TInstant::Zero(), 42); 
+            e->OnUint64(TInstant::Zero(), 43); 
+            e->OnUint64(TInstant::Zero(), 44); 
+            e->OnUint64(TInstant::Zero(), 45); 
             e->OnMetricEnd();
-            e->OnStreamEnd();
-        }
-
-        out << "\n";
-        UNIT_ASSERT_NO_DIFF(out.Str(), NResource::Find("/buffered_ts_merge.json"));
+            e->OnStreamEnd(); 
+        } 
+ 
+        out << "\n"; 
+        UNIT_ASSERT_NO_DIFF(out.Str(), NResource::Find("/buffered_ts_merge.json")); 
     }
-
+ 
     template <typename TFactory, typename TConsumer>
     TString EncodeToString(TFactory factory, TConsumer consumer) {
         TStringStream out;
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         }
         out << '\n';
         return out.Str();
-    }
+    } 
 
     Y_UNIT_TEST(SummaryValueEncode) {
         auto writeDocument = [](IMetricEncoder* e) {
@@ -1235,35 +1235,35 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         AssertPointEqual(s.GetPoints(2), now + TDuration::Seconds(2), i64(0));
         AssertPointEqual(s.GetPoints(3), now + TDuration::Seconds(3), Max<i64>());
     }
-
-    Y_UNIT_TEST(FuzzerRegression) {
-        NProto::TMultiSamplesList samples;
-        {
+ 
+    Y_UNIT_TEST(FuzzerRegression) { 
+        NProto::TMultiSamplesList samples; 
+        { 
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            for (auto f : { "/hist_crash.json", "/crash.json" }) {
-                TString testJson = NResource::Find(f);
-                UNIT_ASSERT_EXCEPTION(DecodeJson(testJson, e.Get()), yexception);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(LegacyNegativeRateThrows) {
-        const auto input = R"({
-          "sensors": [
-                {
-                  "mode": "deriv",
-                  "value": -1,
+ 
+            for (auto f : { "/hist_crash.json", "/crash.json" }) { 
+                TString testJson = NResource::Find(f); 
+                UNIT_ASSERT_EXCEPTION(DecodeJson(testJson, e.Get()), yexception); 
+            } 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(LegacyNegativeRateThrows) { 
+        const auto input = R"({ 
+          "sensors": [ 
+                { 
+                  "mode": "deriv", 
+                  "value": -1, 
                   "labels": { "metric": "SystemTime" }
-                },
-            }
-            ]}")";
-
-        NProto::TMultiSamplesList samples;
+                }, 
+            } 
+            ]}")"; 
+ 
+        NProto::TMultiSamplesList samples; 
         IMetricEncoderPtr e = EncoderProtobuf(&samples);
-        UNIT_ASSERT_EXCEPTION(DecodeJson(input, e.Get()), yexception);
-    }
-
+        UNIT_ASSERT_EXCEPTION(DecodeJson(input, e.Get()), yexception); 
+    } 
+ 
     Y_UNIT_TEST(DecodeNamedMetrics) {
         NProto::TMultiSamplesList samples;
         {

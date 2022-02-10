@@ -326,7 +326,7 @@ class TDatashardInitialEventsFilter {
 public:
     TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds);
     TTestActorRuntime::TEventFilter Prepare();
-    bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+    bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event); 
 
     TDatashardInitialEventsFilter(const TDatashardInitialEventsFilter&) = delete;
     TDatashardInitialEventsFilter(TDatashardInitialEventsFilter&&) = default;

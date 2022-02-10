@@ -7,7 +7,7 @@
 
 namespace NMonitoring {
 
-    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values) {
+    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values) { 
         Y_ENSURE(bounds.size() == values.size(),
                  "mismatched sizes: bounds(" << bounds.size() <<
                  ") != buckets(" << values.size() << ')');

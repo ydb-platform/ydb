@@ -175,11 +175,11 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     }
 
     Y_UNIT_TEST(BasicRunning) {
-        NActors::TTestActorRuntimeBase actorSystem;
+        NActors::TTestActorRuntimeBase actorSystem; 
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
-        actorSystem.Initialize();
+        actorSystem.Initialize(); 
         NMonitoring::TMetricRegistry sensors;
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);

@@ -17,8 +17,8 @@ namespace NMonitoring {
     static const char HTTPOKCSS[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/css\r\nConnection: Close\r\n\r\n";
     static const char HTTPNOCONTENT[] = "HTTP/1.1 204 No content\r\nConnection: Close\r\n\r\n";
     static const char HTTPNOTFOUND[] = "HTTP/1.1 404 Invalid URI\r\nConnection: Close\r\n\r\nInvalid URL\r\n";
-    static const char HTTPUNAUTHORIZED[] = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\n\r\nUnauthorized\r\n";
-    static const char HTTPFORBIDDEN[] = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\n\r\nForbidden\r\n";
+    static const char HTTPUNAUTHORIZED[] = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\n\r\nUnauthorized\r\n"; 
+    static const char HTTPFORBIDDEN[] = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\n\r\nForbidden\r\n"; 
 
     // Fonts
     static const char HTTPOKFONTEOT[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/vnd.ms-fontobject\r\nConnection: Close\r\n\r\n";
@@ -60,7 +60,7 @@ namespace NMonitoring {
             return !Title.empty();
         }
 
-        virtual void Output(IMonHttpRequest& request) = 0;
+        virtual void Output(IMonHttpRequest& request) = 0; 
     };
 
 }

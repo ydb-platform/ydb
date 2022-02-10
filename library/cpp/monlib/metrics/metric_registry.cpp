@@ -1,7 +1,7 @@
 #include "metric_registry.h"
 
-#include <memory>
-
+#include <memory> 
+ 
 namespace NMonitoring {
     namespace {
         void ConsumeLabels(IMetricConsumer* consumer, const ILabels& labels) {
@@ -25,21 +25,21 @@ namespace NMonitoring {
         }
     }
 
-    void WriteLabels(IMetricConsumer* consumer, const ILabels& labels) {
-        consumer->OnLabelsBegin();
+    void WriteLabels(IMetricConsumer* consumer, const ILabels& labels) { 
+        consumer->OnLabelsBegin(); 
         ConsumeLabels(consumer, labels);
-        consumer->OnLabelsEnd();
-    }
-
+        consumer->OnLabelsEnd(); 
+    } 
+ 
     TMetricRegistry::TMetricRegistry() = default;
     TMetricRegistry::~TMetricRegistry() = default;
-
+ 
     TMetricRegistry::TMetricRegistry(const TLabels& commonLabels)
         : TMetricRegistry{}
-    {
-        CommonLabels_ = commonLabels;
-    }
-
+    { 
+        CommonLabels_ = commonLabels; 
+    } 
+ 
     TMetricRegistry* TMetricRegistry::Instance() {
         return Singleton<TMetricRegistry>();
     }
@@ -78,12 +78,12 @@ namespace NMonitoring {
 
     TCounter* TMetricRegistry::Counter(TLabels labels) {
         return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
-    }
-
+    } 
+ 
     TCounter* TMetricRegistry::Counter(ILabelsPtr labels) {
         return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
-    }
-
+    } 
+ 
     TLazyCounter* TMetricRegistry::LazyCounter(TLabels labels, std::function<ui64()> supplier) {
         return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier));
     }
@@ -94,12 +94,12 @@ namespace NMonitoring {
 
     TRate* TMetricRegistry::Rate(TLabels labels) {
         return Metric<TRate, EMetricType::RATE>(std::move(labels));
-    }
-
+    } 
+ 
     TRate* TMetricRegistry::Rate(ILabelsPtr labels) {
         return Metric<TRate, EMetricType::RATE>(std::move(labels));
-    }
-
+    } 
+ 
     TLazyRate* TMetricRegistry::LazyRate(TLabels labels, std::function<ui64()> supplier) {
         return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier));
     }
@@ -114,16 +114,16 @@ namespace NMonitoring {
 
     THistogram* TMetricRegistry::HistogramCounter(ILabelsPtr labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(collector), false);
-    }
-
+    } 
+ 
     THistogram* TMetricRegistry::HistogramRate(TLabels labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
     }
 
     THistogram* TMetricRegistry::HistogramRate(ILabelsPtr labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
-    }
-
+    } 
+ 
     void TMetricRegistry::Reset() {
         TWriteGuard g{Lock_};
         for (auto& [label, metric] : Metrics_) {
@@ -177,12 +177,12 @@ namespace NMonitoring {
             TWriteGuard g{Lock_};
             // decltype(Metrics_)::iterator breaks build on windows
             THashMap<ILabelsPtr, IMetricPtr>::iterator it;
-            if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) {
+            if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) { 
                 it = Metrics_.emplace(new TLabels{std::forward<TLabelsType>(labels)}, std::move(metric)).first;
-            } else {
+            } else { 
                 it = Metrics_.emplace(std::forward<TLabelsType>(labels), std::move(metric)).first;
-            }
-
+            } 
+ 
             return static_cast<TMetric*>(it->second.Get());
         }
     }
@@ -193,14 +193,14 @@ namespace NMonitoring {
     }
 
     void TMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
-        consumer->OnStreamBegin();
-
-        if (!CommonLabels_.Empty()) {
+        consumer->OnStreamBegin(); 
+ 
+        if (!CommonLabels_.Empty()) { 
             consumer->OnLabelsBegin();
             ConsumeLabels(consumer, CommonLabels_);
             consumer->OnLabelsEnd();
-        }
-
+        } 
+ 
         {
             TReadGuard g{Lock_};
             for (const auto& it: Metrics_) {
@@ -212,12 +212,12 @@ namespace NMonitoring {
             }
         }
 
-        consumer->OnStreamEnd();
-    }
+        consumer->OnStreamEnd(); 
+    } 
 
     void TMetricRegistry::Append(TInstant time, IMetricConsumer* consumer) const {
         TReadGuard g{Lock_};
-
+ 
         for (const auto& it: Metrics_) {
             ILabels* labels = it.first.Get();
             IMetric* metric = it.second.Get();

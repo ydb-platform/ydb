@@ -1,12 +1,12 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     g:solomon
     msherbakov
 )
-
-SRCS(
-    fake.cpp
-)
-
-END()
+ 
+SRCS( 
+    fake.cpp 
+) 
+ 
+END() 

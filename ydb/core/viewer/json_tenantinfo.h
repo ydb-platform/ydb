@@ -59,7 +59,7 @@ public:
     }
 
     void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
+        const auto& params(Event->Get()->Request.GetParams()); 
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Followers = false;

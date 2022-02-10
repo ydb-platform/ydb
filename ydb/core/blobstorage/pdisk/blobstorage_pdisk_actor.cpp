@@ -886,7 +886,7 @@ public:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
-        const TCgiParameters &cgi = ev->Get()->Request.GetPostParams();
+        const TCgiParameters &cgi = ev->Get()->Request.GetPostParams(); 
         if (cgi.Has("chunksLockByRange")) {
             ui32 begin = strtoul(cgi.Get("chunksLockBegin").c_str(), nullptr, 10);
             ui32 end = strtoul(cgi.Get("chunksLockEnd").c_str(), nullptr, 10);
@@ -925,7 +925,7 @@ public:
         }
 
         bool doGetSchedule = false;
-        const auto& httpRequest = ev->Get()->Request;
+        const auto& httpRequest = ev->Get()->Request; 
         if (httpRequest.GetMethod() == HTTP_METHOD_GET) {
             /*
             TStringStream out;

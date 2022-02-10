@@ -27,23 +27,23 @@ struct TDsProxyNodeMon : public TThrRefBase {
     TIntrusivePtr<NMonitoring::TDynamicCounters> Group;
     TIntrusivePtr<NMonitoring::TDynamicCounters> LatencyOverview;
 
-    NMonitoring::TPercentileTracker<4, 512, 15> PutResponseTime;
+    NMonitoring::TPercentileTracker<4, 512, 15> PutResponseTime; 
 
-    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime;
-    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime256;
-    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime512;
+    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime; 
+    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime256; 
+    NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime512; 
 
     static constexpr ui32 KnownDeviceTypesCount = 4;
     using THistoPtrForDeviceType = std::array<NMonitoring::THistogramPtr, KnownDeviceTypesCount>;
     THistoPtrForDeviceType PutTabletLogResponseTimeHist256Ki;
     THistoPtrForDeviceType PutTabletLogResponseTimeHistInf;
 
-    NMonitoring::TPercentileTracker<4, 512, 15> PutAsyncBlobResponseTime;
+    NMonitoring::TPercentileTracker<4, 512, 15> PutAsyncBlobResponseTime; 
     THistoPtrForDeviceType PutAsyncBlobResponseTimeHist;
-    NMonitoring::TPercentileTracker<4, 512, 15> PutUserDataResponseTime;
+    NMonitoring::TPercentileTracker<4, 512, 15> PutUserDataResponseTime; 
     THistoPtrForDeviceType PutUserDataResponseTimeHist;
 
-    NMonitoring::TPercentileTracker<16, 512, 15> GetResponseTime;
+    NMonitoring::TPercentileTracker<16, 512, 15> GetResponseTime; 
     NMonitoring::TPercentileTracker<16, 512, 15> GetAsyncReadResponseTime;
     THistoPtrForDeviceType GetAsyncReadResponseTimeHist;
     NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTime256Ki;
@@ -58,10 +58,10 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TPercentileTracker<16, 512, 15> PatchResponseTime;
     THistoPtrForDeviceType PatchResponseTimeHist;
 
-    NMonitoring::TPercentileTracker<16, 512, 15> BlockResponseTime;
-    NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime;
-    NMonitoring::TPercentileTracker<16, 512, 15> IndexRestoreGetResponseTime;
-    NMonitoring::TPercentileTracker<16, 512, 15> RangeResponseTime;
+    NMonitoring::TPercentileTracker<16, 512, 15> BlockResponseTime; 
+    NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime; 
+    NMonitoring::TPercentileTracker<16, 512, 15> IndexRestoreGetResponseTime; 
+    NMonitoring::TPercentileTracker<16, 512, 15> RangeResponseTime; 
 
     std::array<bool, KnownDeviceTypesCount> IsCountersPresentedForIdx;
 

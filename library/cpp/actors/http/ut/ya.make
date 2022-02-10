@@ -8,11 +8,11 @@ PEERDIR(
     library/cpp/actors/testlib
 )
 
-IF (NOT OS_WINDOWS)
+IF (NOT OS_WINDOWS) 
 SRCS(
     http_ut.cpp
 )
-ELSE()
-ENDIF()
+ELSE() 
+ENDIF() 
 
 END()

@@ -664,7 +664,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         // should use RS. Hold one RS to 'pause' one transaction
         // and then restart its shard. This will cause locks
         // cache to be used.
-        auto captureRS = [shards](TTestActorRuntimeBase&,
+        auto captureRS = [shards](TTestActorRuntimeBase&, 
                                   TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
                 auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;

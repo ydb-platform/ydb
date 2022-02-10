@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT_SESSION, NActors::NLog::PRI_DEBUG);
         SOCKET s = INVALID_SOCKET;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
             if (auto *p = ev->CastAsLocal<TEvHandshakeDone>()) {
                 s = *p->Socket;
             }

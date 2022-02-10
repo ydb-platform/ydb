@@ -121,7 +121,7 @@ RECURSE(
     monitoring
     monlib
     monlib/examples
-    monlib/so
+    monlib/so 
     murmurhash
     nirvana
     nirvana_api

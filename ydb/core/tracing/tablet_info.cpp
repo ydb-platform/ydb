@@ -685,7 +685,7 @@ void TTabletInfoActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &
         return;
     }
     NMon::TEvHttpInfo* msg = ev->Get();
-    const TCgiParameters& cgi = msg->Request.GetParams();
+    const TCgiParameters& cgi = msg->Request.GetParams(); 
     ui32 timeout = FromStringWithDefault<ui32>(cgi.Get("timeout"), 10000);
 
     bool hasNodeIdParam = HasProperty(cgi, "NodeID");

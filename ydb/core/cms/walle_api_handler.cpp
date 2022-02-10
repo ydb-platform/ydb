@@ -35,21 +35,21 @@ public:
     {
         NMon::TEvHttpInfo *msg = RequestEvent->Get();
 
-        TString path {msg->Request.GetPathInfo().substr(strlen(WALLE_API_URL_PREFIX))};
+        TString path {msg->Request.GetPathInfo().substr(strlen(WALLE_API_URL_PREFIX))}; 
 
 
         if (path == "tasks") {
-            if (msg->Request.GetMethod() == HTTP_METHOD_GET)
+            if (msg->Request.GetMethod() == HTTP_METHOD_GET) 
                 ProcessListTasksRequest(ctx);
-            else if (msg->Request.GetMethod() == HTTP_METHOD_POST)
-                ProcessCreateTasksRequest(msg->Request, ctx);
+            else if (msg->Request.GetMethod() == HTTP_METHOD_POST) 
+                ProcessCreateTasksRequest(msg->Request, ctx); 
             else
                 ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx);
         } else if (path.StartsWith("tasks/")) {
             TString id = path.substr(strlen("tasks/"));
-            if (msg->Request.GetMethod() == HTTP_METHOD_GET)
+            if (msg->Request.GetMethod() == HTTP_METHOD_GET) 
                 ProcessCheckTaskRequest(id, ctx);
-            else if (msg->Request.GetMethod() == HTTP_METHOD_DELETE)
+            else if (msg->Request.GetMethod() == HTTP_METHOD_DELETE) 
                 ProcessRemoveTaskRequest(id, ctx);
             else
                 ReplyWithError("HTTP/1.1 405 Method Not Allowed\r\n\r\n", ctx);
@@ -62,7 +62,7 @@ private:
     //////////////////////////////////////////////
     // Create task
     //////////////////////////////////////////////
-    void ProcessCreateTasksRequest(const NMonitoring::IMonHttpRequest &http, const TActorContext &ctx)
+    void ProcessCreateTasksRequest(const NMonitoring::IMonHttpRequest &http, const TActorContext &ctx) 
     {
         NJson::TJsonValue json;
 

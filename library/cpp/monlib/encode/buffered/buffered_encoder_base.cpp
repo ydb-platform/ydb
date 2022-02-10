@@ -1,29 +1,29 @@
-#include "buffered_encoder_base.h"
-
+#include "buffered_encoder_base.h" 
+ 
 #include <util/string/join.h>
 #include <util/string/builder.h>
 
-namespace NMonitoring {
-
-void TBufferedEncoderBase::OnStreamBegin() {
+namespace NMonitoring { 
+ 
+void TBufferedEncoderBase::OnStreamBegin() { 
     State_.Expect(TEncoderState::EState::ROOT);
-}
-
-void TBufferedEncoderBase::OnStreamEnd() {
+} 
+ 
+void TBufferedEncoderBase::OnStreamEnd() { 
     State_.Expect(TEncoderState::EState::ROOT);
-}
-
-void TBufferedEncoderBase::OnCommonTime(TInstant time) {
+} 
+ 
+void TBufferedEncoderBase::OnCommonTime(TInstant time) { 
     State_.Expect(TEncoderState::EState::ROOT);
-    CommonTime_ = time;
-}
-
+    CommonTime_ = time; 
+} 
+ 
 void TBufferedEncoderBase::OnMetricBegin(EMetricType type) {
     State_.Switch(TEncoderState::EState::ROOT, TEncoderState::EState::METRIC);
     Metrics_.emplace_back();
     Metrics_.back().MetricType = type;
-}
-
+} 
+ 
 void TBufferedEncoderBase::OnMetricEnd() {
     State_.Switch(TEncoderState::EState::METRIC, TEncoderState::EState::ROOT);
 
@@ -41,7 +41,7 @@ void TBufferedEncoderBase::OnMetricEnd() {
                 auto& existing = Metrics_[it->second].TimeSeries;
 
                 Y_ENSURE(existing.GetValueType() == metric.TimeSeries.GetValueType(),
-                    "Time series point type mismatch: expected " << existing.GetValueType()
+                    "Time series point type mismatch: expected " << existing.GetValueType() 
                     << " but found " << metric.TimeSeries.GetValueType()
                     << ", labels '" << FormatLabels(metric.Labels) << "'");
 
@@ -54,41 +54,41 @@ void TBufferedEncoderBase::OnMetricEnd() {
         case EMetricsMergingMode::DEFAULT:
             break;
     }
-}
-
-void TBufferedEncoderBase::OnLabelsBegin() {
+} 
+ 
+void TBufferedEncoderBase::OnLabelsBegin() { 
     if (State_ == TEncoderState::EState::METRIC) {
         State_ = TEncoderState::EState::METRIC_LABELS;
     } else if (State_ == TEncoderState::EState::ROOT) {
         State_ = TEncoderState::EState::COMMON_LABELS;
-    } else {
+    } else { 
         State_.ThrowInvalid("expected METRIC or ROOT");
-    }
-}
-
-void TBufferedEncoderBase::OnLabelsEnd() {
+    } 
+} 
+ 
+void TBufferedEncoderBase::OnLabelsEnd() { 
     if (State_ == TEncoderState::EState::METRIC_LABELS) {
         State_ = TEncoderState::EState::METRIC;
     } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
         State_ = TEncoderState::EState::ROOT;
-    } else {
-        State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
-    }
-}
-
+    } else { 
+        State_.ThrowInvalid("expected LABELS or COMMON_LABELS"); 
+    } 
+} 
+ 
 void TBufferedEncoderBase::OnLabel(TStringBuf name, TStringBuf value) {
-    TPooledLabels* labels;
+    TPooledLabels* labels; 
     if (State_ == TEncoderState::EState::METRIC_LABELS) {
         labels = &Metrics_.back().Labels;
     } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
-        labels = &CommonLabels_;
-    } else {
-        State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
-    }
-
-    labels->emplace_back(LabelNamesPool_.PutIfAbsent(name), LabelValuesPool_.PutIfAbsent(value));
-}
-
+        labels = &CommonLabels_; 
+    } else { 
+        State_.ThrowInvalid("expected LABELS or COMMON_LABELS"); 
+    } 
+ 
+    labels->emplace_back(LabelNamesPool_.PutIfAbsent(name), LabelValuesPool_.PutIfAbsent(value)); 
+} 
+ 
 void TBufferedEncoderBase::OnLabel(ui32 name, ui32 value) {
     TPooledLabels* labels;
     if (State_ == TEncoderState::EState::METRIC_LABELS) {
@@ -108,24 +108,24 @@ std::pair<ui32, ui32> TBufferedEncoderBase::PrepareLabel(TStringBuf name, TStrin
     return std::make_pair(nameLabel->Index, valueLabel->Index);
 }
 
-void TBufferedEncoderBase::OnDouble(TInstant time, double value) {
+void TBufferedEncoderBase::OnDouble(TInstant time, double value) { 
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.TimeSeries.Add(time, value);
-}
-
+} 
+ 
 void TBufferedEncoderBase::OnInt64(TInstant time, i64 value) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.TimeSeries.Add(time, value);
 }
 
-void TBufferedEncoderBase::OnUint64(TInstant time, ui64 value) {
+void TBufferedEncoderBase::OnUint64(TInstant time, ui64 value) { 
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.TimeSeries.Add(time, value);
-}
-
+} 
+ 
 void TBufferedEncoderBase::OnHistogram(TInstant time, IHistogramSnapshotPtr s) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
@@ -167,4 +167,4 @@ TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const {
     return TStringBuilder() << "{" <<  JoinSeq(", ", formattedLabels) << "}";
 }
 
-} // namespace NMonitoring
+} // namespace NMonitoring 

@@ -39,12 +39,12 @@ public:
 
     TTestActorRuntime::TEventFilter Prepare() {
         IsDone = false;
-        return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
             return (*this)(runtime, event);
         };
     }
 
-    bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+    bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
         Y_UNUSED(runtime);
         Y_UNUSED(event);
         return false;

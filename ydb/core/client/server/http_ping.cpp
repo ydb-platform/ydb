@@ -7,8 +7,8 @@ TPing::TPing()
     : NMonitoring::IMonPage("ping")
 {}
 
-void TPing::Output(NMonitoring::IMonHttpRequest& request) {
-    IOutputStream& out(request.Output());
+void TPing::Output(NMonitoring::IMonHttpRequest& request) { 
+    IOutputStream& out(request.Output()); 
     out << NMonitoring::HTTPOKTEXT;
     out << "ok /ping";
 }

@@ -3437,7 +3437,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         ui32 undelivered = 0;
         bool attemptFinished = false;
-        auto countRetries = [&](TTestActorRuntimeBase&,
+        auto countRetries = [&](TTestActorRuntimeBase&, 
                                 TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
                 if (!attemptFinished)

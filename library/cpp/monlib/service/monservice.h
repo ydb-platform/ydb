@@ -1,7 +1,7 @@
 #pragma once
 
 #include "service.h"
-#include "auth.h"
+#include "auth.h" 
 #include "mon_service_http_request.h"
 
 #include <library/cpp/monlib/service/pages/index_mon_page.h>
@@ -17,7 +17,7 @@ namespace NMonitoring {
         const TString Title;
         char StartTime[26];
         TIntrusivePtr<TIndexMonPage> IndexMonPage;
-        THolder<IAuthProvider> AuthProvider_;
+        THolder<IAuthProvider> AuthProvider_; 
 
     public:
         static THttpServerOptions HttpServerOptions(ui16 port, const TString& host, ui32 threads) {
@@ -38,11 +38,11 @@ namespace NMonitoring {
         }
 
     public:
-        explicit TMonService2(ui16 port, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
-        explicit TMonService2(ui16 port, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
-        explicit TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
-        explicit TMonService2(const THttpServerOptions& options, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
-        explicit TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
+        explicit TMonService2(ui16 port, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr); 
+        explicit TMonService2(ui16 port, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr); 
+        explicit TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr); 
+        explicit TMonService2(const THttpServerOptions& options, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr); 
+        explicit TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr); 
 
         ~TMonService2() override {
         }
@@ -61,8 +61,8 @@ namespace NMonitoring {
         virtual void OutputIndexBody(IOutputStream& out);
 
         void Register(IMonPage* page);
-        void Register(TMonPagePtr page);
-
+        void Register(TMonPagePtr page); 
+ 
         TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
 
         IMonPage* FindPage(const TString& relativePath);

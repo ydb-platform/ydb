@@ -18,7 +18,7 @@ public:
     TGolovanCountersPage(const TString& path, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                          TOutputCallback outputCallback = nullptr);
 
-    void Output(NMonitoring::IMonHttpRequest& request) override;
+    void Output(NMonitoring::IMonHttpRequest& request) override; 
 
 private:
     TOutputCallback OutputCallback;

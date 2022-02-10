@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         UNIT_ASSERT_VALUES_EQUAL(1, h2->RefCount());
         UNIT_ASSERT_VALUES_EQUAL(1, h3->RefCount());
     }
-
+ 
     Y_UNIT_TEST(LogHistogramsUnique) {
         auto ts1 = TInstant::Now();
         auto ts2 = ts1 + TDuration::Seconds(1);
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         auto ts1 = TInstant::Now();
         auto ts2 = ts1 + TDuration::Seconds(1);
         auto ts3 = ts2 + TDuration::Seconds(1);
-
+ 
         auto h1 = MakeSummarySnapshot();
         auto h2 = MakeSummarySnapshot();
         auto h3 = MakeSummarySnapshot();
@@ -262,13 +262,13 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         UNIT_ASSERT_VALUES_EQUAL(1, h3->RefCount());
     }
 
-    Y_UNIT_TEST(HistogramsUnique2) {
-        auto ts1 = TInstant::Now();
-        auto ts2 = ts1 + TDuration::Seconds(1);
-        auto ts3 = ts2 + TDuration::Seconds(1);
-        auto ts4 = ts3 + TDuration::Seconds(1);
-        auto ts5 = ts4 + TDuration::Seconds(1);
-
+    Y_UNIT_TEST(HistogramsUnique2) { 
+        auto ts1 = TInstant::Now(); 
+        auto ts2 = ts1 + TDuration::Seconds(1); 
+        auto ts3 = ts2 + TDuration::Seconds(1); 
+        auto ts4 = ts3 + TDuration::Seconds(1); 
+        auto ts5 = ts4 + TDuration::Seconds(1); 
+ 
         auto h1 = MakeIntrusive<TTestHistogram>(1u);
         auto h2 = MakeIntrusive<TTestHistogram>(2u);
         auto h3 = MakeIntrusive<TTestHistogram>(3u);
@@ -276,30 +276,30 @@ Y_UNIT_TEST_SUITE(TMetricValueTest) {
         auto h5 = MakeIntrusive<TTestHistogram>(5u);
         auto h6 = MakeIntrusive<TTestHistogram>(6u);
         auto h7 = MakeIntrusive<TTestHistogram>(7u);
-
-        {
+ 
+        { 
             TMetricTimeSeries timeSeries;
-            timeSeries.Add(ts1, h1.Get());
-            timeSeries.Add(ts1, h2.Get());
+            timeSeries.Add(ts1, h1.Get()); 
+            timeSeries.Add(ts1, h2.Get()); 
 
             timeSeries.Add(ts2, h3.Get());
 
             timeSeries.Add(ts3, h4.Get());
-            timeSeries.Add(ts3, h5.Get());
+            timeSeries.Add(ts3, h5.Get()); 
 
-            timeSeries.Add(ts4, h6.Get());
-            timeSeries.Add(ts5, h7.Get());
-
-            timeSeries.SortByTs();
-
-            UNIT_ASSERT_EQUAL(timeSeries.Size(), 5);
+            timeSeries.Add(ts4, h6.Get()); 
+            timeSeries.Add(ts5, h7.Get()); 
+ 
+            timeSeries.SortByTs(); 
+ 
+            UNIT_ASSERT_EQUAL(timeSeries.Size(), 5); 
             UNIT_ASSERT_EQUAL(timeSeries[0].GetValue().AsHistogram()->Count(), 2);
             UNIT_ASSERT_EQUAL(timeSeries[1].GetValue().AsHistogram()->Count(), 3);
             UNIT_ASSERT_EQUAL(timeSeries[2].GetValue().AsHistogram()->Count(), 5);
             UNIT_ASSERT_EQUAL(timeSeries[3].GetValue().AsHistogram()->Count(), 6);
             UNIT_ASSERT_EQUAL(timeSeries[4].GetValue().AsHistogram()->Count(), 7);
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(LogHistogramsUnique2) {
         auto ts1 = TInstant::Now();

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -203,7 +203,7 @@ namespace NMonitoring {
     static_assert(alignof(TExplicitHistogramSnapshot) == alignof(TBucket),
                   "mismatched alingments of THistogramSnapshot and TBucket");
 
-    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values);
+    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values); 
 
 } // namespace NMonitoring
 

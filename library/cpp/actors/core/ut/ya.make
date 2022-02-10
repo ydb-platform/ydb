@@ -38,7 +38,7 @@ SRCS(
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
     executor_pool_united_ut.cpp
-    log_ut.cpp
+    log_ut.cpp 
     memory_tracker_ut.cpp
     scheduler_actor_ut.cpp
 )

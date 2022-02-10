@@ -7,8 +7,8 @@ using namespace NMonitoring;
 Y_UNIT_TEST_SUITE(TStringPoolTest) {
     Y_UNIT_TEST(PutIfAbsent) {
         TStringPoolBuilder strPool;
-        strPool.SetSorted(true);
-
+        strPool.SetSorted(true); 
+ 
         auto* h1 = strPool.PutIfAbsent("one");
         auto* h2 = strPool.PutIfAbsent("two");
         auto* h3 = strPool.PutIfAbsent("two");
@@ -27,15 +27,15 @@ Y_UNIT_TEST_SUITE(TStringPoolTest) {
 
     Y_UNIT_TEST(SortByFrequency) {
         TStringPoolBuilder strPool;
-        strPool.SetSorted(true);
-
+        strPool.SetSorted(true); 
+ 
         auto* h1 = strPool.PutIfAbsent("one");
         auto* h2 = strPool.PutIfAbsent("two");
         auto* h3 = strPool.PutIfAbsent("two");
         UNIT_ASSERT(h1 != h2);
         UNIT_ASSERT(h2 == h3);
 
-        strPool.Build();
+        strPool.Build(); 
 
         UNIT_ASSERT_VALUES_EQUAL(h1->Frequency, 1);
         UNIT_ASSERT_VALUES_EQUAL(h1->Index, 1);
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TStringPoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(strPool.BytesSize(), 11);
         UNIT_ASSERT_VALUES_EQUAL(strPool.Count(), 3);
 
-        strPool.Build();
+        strPool.Build(); 
 
         TVector<TString> strings;
         TVector<ui32> indexes;

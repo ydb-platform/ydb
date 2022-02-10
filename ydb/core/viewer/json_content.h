@@ -44,7 +44,7 @@ public:
 
 public:
     void Bootstrap(const TActorContext& ctx) {
-        BuildRequestContext(&Event->Get()->Request, ContentRequestContext);
+        BuildRequestContext(&Event->Get()->Request, ContentRequestContext); 
         if (!Event->Get()->UserToken.empty()) {
             ContentRequestContext.UserToken = Event->Get()->UserToken;
         }
@@ -60,7 +60,7 @@ public:
 
 private:
     static void BuildRequestContext(
-        const NMonitoring::IMonHttpRequest* httpRequest,
+        const NMonitoring::IMonHttpRequest* httpRequest, 
         IViewer::TContentRequestContext& reqCtx) {
         if (!httpRequest) {
             return;

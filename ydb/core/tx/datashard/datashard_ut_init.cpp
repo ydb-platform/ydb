@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         bool sawResolve = false;
         bool dropResolve = restart;
         // Remove table path from propose.
-        auto captureTableId = [&](TTestActorRuntimeBase&,
+        auto captureTableId = [&](TTestActorRuntimeBase&, 
                                   TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvDataShard::EvProposeTransaction) {
                 auto &rec = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;

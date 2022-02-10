@@ -11,6 +11,6 @@ RECURSE(
     protos
     util
     wilson
-    testlib
-    http
+    testlib 
+    http 
 )

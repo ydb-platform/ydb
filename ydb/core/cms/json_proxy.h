@@ -46,7 +46,7 @@ public:
     void Bootstrap(const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
+                    "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo()); 
 
         auto dinfo = AppData(ctx)->DomainsInfo;
         if (dinfo->Domains.size() != 1) {
@@ -202,7 +202,7 @@ public:
         NMon::TEvHttpInfo *msg = TBase::RequestEvent->Get();
 
         try {
-            const auto &json = msg->Request.GetPostContent();
+            const auto &json = msg->Request.GetPostContent(); 
             if (json)
                 request->Record = NProtobufJson::Json2Proto<typename TRequestEvent::ProtoRecordType>(json);
         } catch (yexception e) {

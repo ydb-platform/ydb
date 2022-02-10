@@ -1684,7 +1684,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
     TString html;
     TStringOutput oss(html);
     NMonitoring::TDynamicCounters counters;
-    const auto& params = it->second.second->Request.GetParams();
+    const auto& params = it->second.second->Request.GetParams(); 
     TString reqTabletType = params.Get("type");
 
     auto mainGroup = counters.GetSubgroup("user_counters", reqTabletType);
@@ -1795,9 +1795,9 @@ void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveData
 void
 TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
 
-    TString reqTabletType = ev->Get()->Request.GetParams().Get("type");
+    TString reqTabletType = ev->Get()->Request.GetParams().Get("type"); 
     ui32 workers = 0;
-    TryFromString(ev->Get()->Request.GetParams().Get("workers"), workers);
+    TryFromString(ev->Get()->Request.GetParams().Get("workers"), workers); 
     for (ui32 tabletType = 0; tabletType < TTabletTypes::USER_TYPE_START; ++tabletType) {
         if (!NKikimrTabletBase::TTabletTypes::EType_IsValid(tabletType))
             continue;

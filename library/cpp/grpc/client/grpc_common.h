@@ -1,7 +1,7 @@
 #pragma once
 
 #include <grpc++/grpc++.h>
-#include <grpc++/resource_quota.h>
+#include <grpc++/resource_quota.h> 
 
 #include <util/datetime/base.h>
 #include <unordered_map>
@@ -9,19 +9,19 @@
 
 constexpr ui64 DEFAULT_GRPC_MESSAGE_SIZE_LIMIT = 64000000;
 
-namespace NGrpc {
+namespace NGrpc { 
 
 struct TGRpcClientConfig {
     TString Locator; // format host:port
     TDuration Timeout = TDuration::Max(); // request timeout
     ui64 MaxMessageSize = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT; // Max request and response size
-    ui64 MaxInboundMessageSize = 0; // overrides MaxMessageSize for incoming requests
-    ui64 MaxOutboundMessageSize = 0; // overrides MaxMessageSize for outgoing requests
+    ui64 MaxInboundMessageSize = 0; // overrides MaxMessageSize for incoming requests 
+    ui64 MaxOutboundMessageSize = 0; // overrides MaxMessageSize for outgoing requests 
     ui32 MaxInFlight = 0;
     bool EnableSsl = false;
     TString SslCaCert;  //Implicitly enables Ssl if not empty
     grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE;
-    ui64 MemQuota = 0;
+    ui64 MemQuota = 0; 
     std::unordered_map<TString, TString> StringChannelParams;
     std::unordered_map<TString, int> IntChannelParams;
     TString LoadBalancingPolicy = { };
@@ -48,10 +48,10 @@ struct TGRpcClientConfig {
 
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;
-    args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
-    args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
+    args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize); 
+    args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize); 
     args.SetCompressionAlgorithm(config.CompressionAlgoritm);
-
+ 
     for (const auto& kvp: config.StringChannelParams) {
         args.SetString(kvp.first, kvp.second);
     }
@@ -60,11 +60,11 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
         args.SetInt(kvp.first, kvp.second);
     }
 
-    if (config.MemQuota) {
-        grpc::ResourceQuota quota;
-        quota.Resize(config.MemQuota);
-        args.SetResourceQuota(quota);
-    }
+    if (config.MemQuota) { 
+        grpc::ResourceQuota quota; 
+        quota.Resize(config.MemQuota); 
+        args.SetResourceQuota(quota); 
+    } 
     if (mutator) {
         args.SetSocketMutator(mutator);
     }
@@ -81,4 +81,4 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     }
 }
 
-} // namespace NGRpc
+} // namespace NGRpc 

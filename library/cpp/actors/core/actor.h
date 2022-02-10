@@ -234,7 +234,7 @@ namespace NActors {
             INTERCONNECT_SESSION_TCP = 13,
             INTERCONNECT_COMMON = 171,
             SELF_PING_ACTOR = 207,
-            TEST_ACTOR_RUNTIME = 283,
+            TEST_ACTOR_RUNTIME = 283, 
             INTERCONNECT_HANDSHAKE = 284,
             INTERCONNECT_POLLER = 285,
             INTERCONNECT_SESSION_KILLER = 286,

@@ -426,7 +426,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        const auto& params = ev->Get()->Request.GetParams();
+        const auto& params = ev->Get()->Request.GetParams(); 
         TStringBuilder html;
         if (params.Has("token")) {
             TString token = params.Get("token");

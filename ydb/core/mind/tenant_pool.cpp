@@ -817,7 +817,7 @@ public:
     {
         NMon::TEvHttpInfo *msg = ev->Get();
         // Check for index page.
-        if (msg->Request.GetPathInfo() == "" || msg->Request.GetPathInfo() == "/") {
+        if (msg->Request.GetPathInfo() == "" || msg->Request.GetPathInfo() == "/") { 
             TStringStream str;
             if (!DomainTenantPools.size()) {
                 str << "No domains are handled";
@@ -832,8 +832,8 @@ public:
             }
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0,
                                                           NMon::IEvHttpInfoRes::EContentType::Html));
-        } else if (msg->Request.GetPathInfo().StartsWith(DomainPrefix)) {
-            TString domain{msg->Request.GetPathInfo().substr(DomainPrefix.size())};
+        } else if (msg->Request.GetPathInfo().StartsWith(DomainPrefix)) { 
+            TString domain{msg->Request.GetPathInfo().substr(DomainPrefix.size())}; 
             if (!DomainTenantPools.contains(domain)) {
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown domain " + domain, 0,
                                                               NMon::IEvHttpInfoRes::EContentType::Html));

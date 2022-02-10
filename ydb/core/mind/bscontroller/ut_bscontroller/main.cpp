@@ -27,7 +27,7 @@ using namespace NKikimr::NBsController;
 class TInitialEventsFilter : TNonCopyable {
 public:
     TTestActorRuntime::TEventFilter Prepare() {
-        return [](TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& /*event*/) {
+        return [](TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& /*event*/) { 
             return false;
         };
     }

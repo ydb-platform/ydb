@@ -6,14 +6,14 @@
 
 namespace NGrpc {
 
-struct ICounterBlock : public TThrRefBase {
-    virtual void CountNotOkRequest() = 0;
-    virtual void CountNotOkResponse() = 0;
-    virtual void CountNotAuthenticated() = 0;
-    virtual void CountResourceExhausted() = 0;
-    virtual void CountRequestBytes(ui32 requestSize) = 0;
-    virtual void CountResponseBytes(ui32 responseSize) = 0;
-    virtual void StartProcessing(ui32 requestSize) = 0;
+struct ICounterBlock : public TThrRefBase { 
+    virtual void CountNotOkRequest() = 0; 
+    virtual void CountNotOkResponse() = 0; 
+    virtual void CountNotAuthenticated() = 0; 
+    virtual void CountResourceExhausted() = 0; 
+    virtual void CountRequestBytes(ui32 requestSize) = 0; 
+    virtual void CountResponseBytes(ui32 responseSize) = 0; 
+    virtual void StartProcessing(ui32 requestSize) = 0; 
     virtual void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status, TDuration requestDuration) = 0;
     virtual void CountRequestsWithoutDatabase() {}
     virtual void CountRequestsWithoutToken() {}
@@ -21,11 +21,11 @@ struct ICounterBlock : public TThrRefBase {
 
     virtual TIntrusivePtr<ICounterBlock> Clone() { return this; }
     virtual void UseDatabase(const TString& database) { Y_UNUSED(database); }
-};
-
+}; 
+ 
 using ICounterBlockPtr = TIntrusivePtr<ICounterBlock>;
 
-class TCounterBlock final : public ICounterBlock {
+class TCounterBlock final : public ICounterBlock { 
     NMonitoring::TDynamicCounters::TCounterPtr TotalCounter;
     NMonitoring::TDynamicCounters::TCounterPtr InflyCounter;
     NMonitoring::TDynamicCounters::TCounterPtr NotOkRequestCounter;
@@ -36,7 +36,7 @@ class TCounterBlock final : public ICounterBlock {
     NMonitoring::TDynamicCounters::TCounterPtr NotAuthenticated;
     NMonitoring::TDynamicCounters::TCounterPtr ResourceExhausted;
     bool Percentile = false;
-    NMonitoring::TPercentileTracker<4, 512, 15> RequestHistMs;
+    NMonitoring::TPercentileTracker<4, 512, 15> RequestHistMs; 
     std::array<NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
 public:
@@ -66,31 +66,31 @@ public:
         }
     }
 
-    void CountNotOkRequest() override {
+    void CountNotOkRequest() override { 
         NotOkRequestCounter->Inc();
     }
 
-    void CountNotOkResponse() override {
+    void CountNotOkResponse() override { 
         NotOkResponseCounter->Inc();
     }
 
-    void CountNotAuthenticated() override {
+    void CountNotAuthenticated() override { 
         NotAuthenticated->Inc();
     }
 
-    void CountResourceExhausted() override {
+    void CountResourceExhausted() override { 
         ResourceExhausted->Inc();
     }
 
-    void CountRequestBytes(ui32 requestSize) override {
+    void CountRequestBytes(ui32 requestSize) override { 
         *RequestBytes += requestSize;
     }
 
-    void CountResponseBytes(ui32 responseSize) override {
+    void CountResponseBytes(ui32 responseSize) override { 
         *ResponseBytes += responseSize;
     }
 
-    void StartProcessing(ui32 requestSize) override {
+    void StartProcessing(ui32 requestSize) override { 
         TotalCounter->Inc();
         InflyCounter->Inc();
         *RequestBytes += requestSize;

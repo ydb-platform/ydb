@@ -3,45 +3,45 @@
 
 using namespace NMonitoring;
 
-IMonHttpRequest::~IMonHttpRequest() {
-}
-
-TMonService2HttpRequest::~TMonService2HttpRequest() {
-}
-
+IMonHttpRequest::~IMonHttpRequest() { 
+} 
+ 
+TMonService2HttpRequest::~TMonService2HttpRequest() { 
+} 
+ 
 TString TMonService2HttpRequest::GetServiceTitle() const {
     return MonService->GetTitle();
 }
 
-IOutputStream& TMonService2HttpRequest::Output() {
-    return *Out;
-}
-
-HTTP_METHOD TMonService2HttpRequest::GetMethod() const {
-    return HttpRequest->GetMethod();
-}
-
-TStringBuf TMonService2HttpRequest::GetPathInfo() const {
-    return PathInfo;
-}
-
-TStringBuf TMonService2HttpRequest::GetPath() const {
-    return HttpRequest->GetPath();
-}
-
-TStringBuf TMonService2HttpRequest::GetUri() const {
-    return HttpRequest->GetURI();
-}
-
-const TCgiParameters& TMonService2HttpRequest::GetParams() const {
-    return HttpRequest->GetParams();
-}
-
-const TCgiParameters& TMonService2HttpRequest::GetPostParams() const {
-    return HttpRequest->GetPostParams();
-}
-
-TStringBuf TMonService2HttpRequest::GetHeader(TStringBuf name) const {
+IOutputStream& TMonService2HttpRequest::Output() { 
+    return *Out; 
+} 
+ 
+HTTP_METHOD TMonService2HttpRequest::GetMethod() const { 
+    return HttpRequest->GetMethod(); 
+} 
+ 
+TStringBuf TMonService2HttpRequest::GetPathInfo() const { 
+    return PathInfo; 
+} 
+ 
+TStringBuf TMonService2HttpRequest::GetPath() const { 
+    return HttpRequest->GetPath(); 
+} 
+ 
+TStringBuf TMonService2HttpRequest::GetUri() const { 
+    return HttpRequest->GetURI(); 
+} 
+ 
+const TCgiParameters& TMonService2HttpRequest::GetParams() const { 
+    return HttpRequest->GetParams(); 
+} 
+ 
+const TCgiParameters& TMonService2HttpRequest::GetPostParams() const { 
+    return HttpRequest->GetPostParams(); 
+} 
+ 
+TStringBuf TMonService2HttpRequest::GetHeader(TStringBuf name) const { 
     const THttpHeaders& headers = HttpRequest->GetHeaders();
     const THttpInputHeader* header = headers.FindHeader(name);
     if (header != nullptr) {
@@ -50,15 +50,15 @@ TStringBuf TMonService2HttpRequest::GetHeader(TStringBuf name) const {
     return TStringBuf();
 }
 
-const THttpHeaders& TMonService2HttpRequest::GetHeaders() const {
-    return HttpRequest->GetHeaders();
-}
+const THttpHeaders& TMonService2HttpRequest::GetHeaders() const { 
+    return HttpRequest->GetHeaders(); 
+} 
 
 TString TMonService2HttpRequest::GetRemoteAddr() const {
     return HttpRequest->GetRemoteAddr();
 }
 
-TStringBuf TMonService2HttpRequest::GetCookie(TStringBuf name) const {
+TStringBuf TMonService2HttpRequest::GetCookie(TStringBuf name) const { 
     TStringBuf cookie = GetHeader("Cookie");
     size_t size = cookie.size();
     size_t start = 0;

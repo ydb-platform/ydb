@@ -1,12 +1,12 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
-SRCS(
-    test_runtime.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    test_runtime.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/testlib
     library/cpp/testing/unittest
     ydb/core/base
@@ -14,15 +14,15 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/scheme
     ydb/core/tablet
-)
-
-IF (GCC)
+) 
+ 
+IF (GCC) 
     CFLAGS(
         -fno-devirtualize-speculatively
     )
-ENDIF()
-
-END()
+ENDIF() 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

@@ -60,7 +60,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        const auto& params(Event->Get()->Request.GetParams());
+        const auto& params(Event->Get()->Request.GetParams()); 
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -69,9 +69,9 @@ public:
         TString database = params.Get("database");
         Stats = params.Get("stats");
         Action = params.Get("action");
-        if (query.empty() && Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
+        if (query.empty() && Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) { 
+            TStringBuf content = Event->Get()->Request.GetPostContent(); 
+            const THttpHeaders& headers = Event->Get()->Request.GetHeaders(); 
             auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
             if (itContentType != headers.end()) {
                 TStringBuf contentTypeHeader = itContentType->Value();

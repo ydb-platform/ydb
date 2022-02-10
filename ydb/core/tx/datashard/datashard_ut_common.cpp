@@ -752,7 +752,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     UNIT_ASSERT(DelayedReadSets.size() <= 1);
     UNIT_ASSERT(DelayedData.size() <= 1);
 
-    auto observer = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+    auto observer = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) { 
         // send immediate in the right moment
         if (ev->Type == TEvProposeTransactionResult::EventType) {
             auto event = ev->Get<TEvProposeTransactionResult>();
@@ -1010,12 +1010,12 @@ TDatashardInitialEventsFilter::TDatashardInitialEventsFilter(const TVector<ui64>
 
 TTestActorRuntime::TEventFilter TDatashardInitialEventsFilter::Prepare() {
     RemainTablets = TabletIds;
-    return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+    return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
         return (*this)(runtime, event);
     };
 }
 
-bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
     Y_UNUSED(runtime);
     if (event->GetTypeRewrite() == TEvTxProcessing::EvPlanStepAck) {
         ui64 tabletId = reinterpret_cast<TEvTxProcessing::TEvPlanStepAck::TPtr&>(event)->Get()->Record.GetTabletId();

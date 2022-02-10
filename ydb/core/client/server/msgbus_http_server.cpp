@@ -24,7 +24,7 @@ public:
 
 class TBusHttpServerSession : public NBus::TBusServerSession {
 public:
-    TBusHttpServerSession(IMessageBusHttpServer* httpServer, NMonitoring::IMonHttpRequest& request,
+    TBusHttpServerSession(IMessageBusHttpServer* httpServer, NMonitoring::IMonHttpRequest& request, 
                           const TProtocol& protocol, const NBus::TBusServerSessionConfig& config)
         : HttpServer(httpServer)
         , Request(request)
@@ -52,7 +52,7 @@ public:
     // the only methods used
     virtual NBus::EMessageStatus SendReply(const NBus::TBusIdentity&, NBus::TBusMessage *pRep) override {
         TAutoPtr<NBus::TBusBufferBase> response(static_cast<NBus::TBusBufferBase*>(pRep));
-        IOutputStream& out(Request.Output());
+        IOutputStream& out(Request.Output()); 
         if (response->GetHeader()->Type == MTYPE_CLIENT_RESPONSE) {
             NKikimrClient::TResponse* pbResponse(static_cast<NKikimrClient::TResponse*>(response->GetRecord()));
             NMsgBusProxy::EResponseStatus status = static_cast<NMsgBusProxy::EResponseStatus>(pbResponse->GetStatus());
@@ -101,7 +101,7 @@ public:
     virtual NBus::EMessageStatus ForgetRequest(const NBus::TBusIdentity& ident) override {
         TBusHttpIdentity& httpIdent(const_cast<TBusHttpIdentity&>(static_cast<const TBusHttpIdentity&>(ident)));
         if (!ReplySent) {
-            IOutputStream& out(Request.Output());
+            IOutputStream& out(Request.Output()); 
             out << NMonitoring::HTTPNOCONTENT;
         }
         httpIdent.FinishWork();
@@ -115,7 +115,7 @@ public:
 
 protected:
     IMessageBusHttpServer* HttpServer;
-    NMonitoring::IMonHttpRequest& Request;
+    NMonitoring::IMonHttpRequest& Request; 
     const TProtocol& Protocol;
     const NBus::TBusServerSessionConfig& Config;
     TSystemEvent DoneEvent;
@@ -126,7 +126,7 @@ class TMessageBusHttpServer : public IMessageBusHttpServer {
 public:
     TMessageBusHttpServer(TActorSystem* actorSystem, NBus::IBusServerHandler* handler, const TProtocol& protocol, const NBus::TBusServerSessionConfig& config);
     ~TMessageBusHttpServer();
-    virtual void Output(NMonitoring::IMonHttpRequest& request) override;
+    virtual void Output(NMonitoring::IMonHttpRequest& request) override; 
     virtual void Shutdown() override;
 
 protected:
@@ -168,15 +168,15 @@ void TMessageBusHttpServer::Shutdown() {
     Handler = nullptr;
 }
 
-void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
+void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) { 
     if (Handler != nullptr) {
         THPTimer startTime;
-        TString pathInfo{request.GetPathInfo().substr(1)};
-        TAutoPtr<NBus::TBusBufferBase> message = Protocol.NewMessage(pathInfo);
+        TString pathInfo{request.GetPathInfo().substr(1)}; 
+        TAutoPtr<NBus::TBusBufferBase> message = Protocol.NewMessage(pathInfo); 
         if (message != nullptr) {
             RequestsCount->Inc();
             RequestsActive->Inc();
-            TStringBuf postContent(request.GetPostContent());
+            TStringBuf postContent(request.GetPostContent()); 
             *InboundSize += postContent.size();
             const ::google::protobuf::Descriptor* msgDescriptor = message->GetRecord()->GetDescriptor();
             if (msgDescriptor->name() == "TJSON") {
@@ -204,9 +204,9 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             }
 
             LOG_DEBUG_S(*ActorSystem, NKikimrServices::HTTP, "HttpRequest "
-                        << request.GetMethod()
+                        << request.GetMethod() 
                         << " "
-                        << request.GetUri()
+                        << request.GetUri() 
                         << " "
                         << message->GetRecord()->AsJSON());
 
@@ -218,7 +218,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             session.Wait();
             RequestsActive->Dec();
         } else {
-            IOutputStream& out(request.Output());
+            IOutputStream& out(request.Output()); 
             out << NMonitoring::HTTPNOTFOUND;
         }
         RequestTotalTimeHistogram.Add(startTime.Passed() * 1000/*ms*/);

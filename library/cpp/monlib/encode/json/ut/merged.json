@@ -1,14 +1,14 @@
-{
-  "sensors":
-    [
-      {
-        "kind":"RATE",
-        "labels":
-          {
+{ 
+  "sensors": 
+    [ 
+      { 
+        "kind":"RATE", 
+        "labels": 
+          { 
             "metric":"hello",
-            "label":"world"
-          },
-        "value":1
-      }
-    ]
-}
+            "label":"world" 
+          }, 
+        "value":1 
+      } 
+    ] 
+} 

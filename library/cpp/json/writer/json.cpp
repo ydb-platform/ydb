@@ -221,7 +221,7 @@ namespace NJsonWriter {
     TValueContext TBuf::WriteBool(bool b) {
         constexpr TStringBuf trueVal = "true";
         constexpr TStringBuf falseVal = "false";
-        UnsafeWriteValue(b ? trueVal : falseVal);
+        UnsafeWriteValue(b ? trueVal : falseVal); 
         return TValueContext(*this);
     }
 

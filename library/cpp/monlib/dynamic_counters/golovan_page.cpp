@@ -72,8 +72,8 @@ TGolovanCountersPage::TGolovanCountersPage(const TString& path, TIntrusivePtr<NM
 {
 }
 
-void TGolovanCountersPage::Output(IMonHttpRequest& request) {
-    TGolovanCountableConsumer consumer(request.Output(), OutputCallback);
+void TGolovanCountersPage::Output(IMonHttpRequest& request) { 
+    TGolovanCountableConsumer consumer(request.Output(), OutputCallback); 
     Counters->Accept("", "", consumer);
     consumer.Flush();
 }

@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) { 
             Y_UNUSED(event);
             deadline = runtime.GetCurrentTime() + delay;
             return false;
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
-        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) { 
             if (event->GetTypeRewrite() != TEvents::TSystem::Wakeup)
                 return true;
 
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             return false;
         });
 
-        runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
+        runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector); 
         TActorId sender = runtime.AllocateEdgeActor();
         auto myActor = new TMyActor;
         TActorId actorId = runtime.Register(myActor);
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             auto producerActor = new TProducerActor(count, consumerIds);
             TActorId producerId = runtime.Register(producerActor);
             runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
-            runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
                 Y_UNUSED(runtime);
                 Y_UNUSED(event);
                 return TTestActorRuntime::EEventAction::PROCESS;

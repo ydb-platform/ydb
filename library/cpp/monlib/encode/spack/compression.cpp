@@ -1,12 +1,12 @@
 #include "compression.h"
 
-#include <util/generic/buffer.h>
+#include <util/generic/buffer.h> 
 #include <util/generic/cast.h>
 #include <util/generic/ptr.h>
 #include <util/generic/scope.h>
-#include <util/generic/size_literals.h>
-#include <util/stream/format.h>
-#include <util/stream/output.h>
+#include <util/generic/size_literals.h> 
+#include <util/stream/format.h> 
+#include <util/stream/output.h> 
 #include <util/stream/walk.h>
 
 #include <contrib/libs/lz4/lz4.h>
@@ -24,10 +24,10 @@ namespace NMonitoring {
         using TUncompressedSize = ui32;
         using TCheckSum = ui32;
 
-        constexpr size_t COMPRESSED_FRAME_SIZE_LIMIT = 512_KB;
-        constexpr size_t UNCOMPRESSED_FRAME_SIZE_LIMIT = COMPRESSED_FRAME_SIZE_LIMIT;
-        constexpr size_t FRAME_SIZE_LIMIT = 2_MB;
-        constexpr size_t DEFAULT_FRAME_LEN = 64_KB;
+        constexpr size_t COMPRESSED_FRAME_SIZE_LIMIT = 512_KB; 
+        constexpr size_t UNCOMPRESSED_FRAME_SIZE_LIMIT = COMPRESSED_FRAME_SIZE_LIMIT; 
+        constexpr size_t FRAME_SIZE_LIMIT = 2_MB; 
+        constexpr size_t DEFAULT_FRAME_LEN = 64_KB; 
 
         struct Y_PACKED TFrameHeader {
             TCompressedSize CompressedSize;
@@ -46,7 +46,7 @@ namespace NMonitoring {
             TBlock(T&& t)
                 : TStringBuf(t.data(), t.size())
             {
-                Y_ENSURE(t.data() != nullptr);
+                Y_ENSURE(t.data() != nullptr); 
             }
 
             char* data() noexcept {
@@ -208,14 +208,14 @@ namespace NMonitoring {
                     return 0;
                 }
 
-                Y_ENSURE(header.CompressedSize <= COMPRESSED_FRAME_SIZE_LIMIT, "Compressed frame size is limited to "
-                    << HumanReadableSize(COMPRESSED_FRAME_SIZE_LIMIT, SF_BYTES)
-                    << " but is " <<  HumanReadableSize(header.CompressedSize, SF_BYTES));
-
-                Y_ENSURE(header.UncompressedSize <= UNCOMPRESSED_FRAME_SIZE_LIMIT, "Uncompressed frame size is limited to "
-                    << HumanReadableSize(UNCOMPRESSED_FRAME_SIZE_LIMIT, SF_BYTES)
-                    << " but is " <<  HumanReadableSize(header.UncompressedSize, SF_BYTES));
-
+                Y_ENSURE(header.CompressedSize <= COMPRESSED_FRAME_SIZE_LIMIT, "Compressed frame size is limited to " 
+                    << HumanReadableSize(COMPRESSED_FRAME_SIZE_LIMIT, SF_BYTES) 
+                    << " but is " <<  HumanReadableSize(header.CompressedSize, SF_BYTES)); 
+ 
+                Y_ENSURE(header.UncompressedSize <= UNCOMPRESSED_FRAME_SIZE_LIMIT, "Uncompressed frame size is limited to " 
+                    << HumanReadableSize(UNCOMPRESSED_FRAME_SIZE_LIMIT, SF_BYTES) 
+                    << " but is " <<  HumanReadableSize(header.UncompressedSize, SF_BYTES)); 
+ 
                 Compressed_.Resize(header.CompressedSize);
                 In_->LoadOrFail(Compressed_.Data(), header.CompressedSize);
 
@@ -307,13 +307,13 @@ namespace NMonitoring {
 
             void WriteCompressedFrame() {
                 static const auto framePayload = sizeof(TFrameHeader) + sizeof(TFrameFooter);
-                const auto maxFrameSize = ui64(TCodecAlg::MaxCompressedLength(Uncompressed_.Size())) + framePayload;
-                Y_ENSURE(maxFrameSize <= FRAME_SIZE_LIMIT, "Frame size in encoder is limited to "
-                    << HumanReadableSize(FRAME_SIZE_LIMIT, SF_BYTES)
-                    << " but is " <<  HumanReadableSize(maxFrameSize, SF_BYTES));
+                const auto maxFrameSize = ui64(TCodecAlg::MaxCompressedLength(Uncompressed_.Size())) + framePayload; 
+                Y_ENSURE(maxFrameSize <= FRAME_SIZE_LIMIT, "Frame size in encoder is limited to " 
+                    << HumanReadableSize(FRAME_SIZE_LIMIT, SF_BYTES) 
+                    << " but is " <<  HumanReadableSize(maxFrameSize, SF_BYTES)); 
 
-                Frame_.Resize(maxFrameSize);
-
+                Frame_.Resize(maxFrameSize); 
+ 
                 // compress
                 TBlock compressedBlock = Frame_;
                 compressedBlock.Skip(sizeof(TFrameHeader));

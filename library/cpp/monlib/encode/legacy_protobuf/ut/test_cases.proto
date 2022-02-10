@@ -1,90 +1,90 @@
 import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto";
-
-message TSimple {
+ 
+message TSimple { 
     optional uint64 Foo = 1       [ (NMonProto.Metric).Type = GAUGE ];
     optional double Bar = 2        [ (NMonProto.Metric).Type = GAUGE ];
     optional double Baz = 3        [ (NMonProto.Metric).Type = RATE ];
-    optional string Label = 4;
-}
-
-message TRepeated {
+    optional string Label = 4; 
+} 
+ 
+message TRepeated { 
     repeated TSimple Messages = 1 [ (NMonProto.Metric).Path = false ];
-};
-
-message TRepeatedWithPath {
+}; 
+ 
+message TRepeatedWithPath { 
     repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true ];
-};
-
-message TNestedWithKeys {
+}; 
+ 
+message TNestedWithKeys { 
     repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label fixed_label=fixed_value numbered:#" ];
-};
-
-message TDeepNesting {
+}; 
+ 
+message TDeepNesting { 
     optional TRepeatedWithPath Nested = 1 [ (NMonProto.Metric).Path = false ];
-};
-
-enum EEnum {
-    MY = 1;
-    ENUM = 2;
-};
-
-message TNonStringKeys {
+}; 
+ 
+enum EEnum { 
+    MY = 1; 
+    ENUM = 2; 
+}; 
+ 
+message TNonStringKeys { 
     optional uint32 Foo = 1 [ (NMonProto.Metric).Type = GAUGE ];
-    optional EEnum Enum = 2;
-    optional uint32 Int = 3;
-};
-
-message TRepeatedNonStringKeys {
+    optional EEnum Enum = 2; 
+    optional uint32 Int = 3; 
+}; 
+ 
+message TRepeatedNonStringKeys { 
     repeated TNonStringKeys Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "enum:Enum int:Int" ];
-};
-
-message TExtraLabels {
+}; 
+ 
+message TExtraLabels { 
     optional NMonProto.TExtraLabelMetrics ExtraAsIs = 1 [ (NMonProto.Metric).Type = GAUGE ];
     optional NMonProto.TExtraLabelMetrics ExtraDeriv = 2 [ (NMonProto.Metric).Type = RATE ];
-};
-
-message TRepeatedWithName {
-    optional string Name = 1;
+}; 
+ 
+message TRepeatedWithName { 
+    optional string Name = 1; 
     repeated TSimple Nested = 2 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label" ];
-};
-
-message TKeysFromNonLeaf {
+}; 
+ 
+message TKeysFromNonLeaf { 
     repeated TRepeatedWithName Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "name:Name" ];
-};
-
-
-message TNamedCounter {
-    optional string Name = 1;
+}; 
+ 
+ 
+message TNamedCounter { 
+    optional string Name = 1; 
     optional uint64 Count = 2 [ (NMonProto.Metric).Type = RATE ];
-}
-
-message TCrawlerCounters {
-    message TStatusCounters {
+} 
+ 
+message TCrawlerCounters { 
+    message TStatusCounters { 
         repeated TNamedCounter ZoraResponses = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "ZoraResponse:Name" ];
         repeated TNamedCounter FetcherResponses = 4 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ];
         repeated TNamedCounter RotorResponses = 5 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ];
         repeated TNamedCounter PDFetchResponses = 6 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "PDFetchResponse:Name" ];
         repeated TNamedCounter CalcResponses = 7 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "CalcResponse:Name" ];
         repeated TNamedCounter Responses = 8 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "AggregatedResponse:Name" ];
-    }
-
-    message TPolicyCounters {
-        optional string SubComponent = 1;
-        optional string Name = 2;
-        optional string Zone = 3;
-
+    } 
+ 
+    message TPolicyCounters { 
+        optional string SubComponent = 1; 
+        optional string Name = 2; 
+        optional string Zone = 3; 
+ 
         optional TStatusCounters StatusCounters = 4 [ (NMonProto.Metric).Path = true ];
-    }
-
-    optional string Component = 1;
+    } 
+ 
+    optional string Component = 1; 
     repeated TPolicyCounters PoliciesCounters = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SubComponent:SubComponent Policy:Name Zone:Zone" ];
-}
-
-message TTimeLogHist {
-    optional uint32 MinBucketMillisec = 1;
+} 
+ 
+message TTimeLogHist { 
+    optional uint32 MinBucketMillisec = 1; 
     repeated uint64 Buckets = 2 [ (NMonProto.Metric).Type = RATE, (NMonProto.Metric).Keys = "slot:#" ];
-}
-
-message TKiwiCounters {
+} 
+ 
+message TKiwiCounters { 
     optional TTimeLogHist Times = 22 [ (NMonProto.Metric).Path = true ];
-}
+} 

@@ -2,17 +2,17 @@
 
 using namespace NMonitoring;
 
-void TPreMonPage::OutputContent(NMonitoring::IMonHttpRequest& request) {
-    auto& out = request.Output();
+void TPreMonPage::OutputContent(NMonitoring::IMonHttpRequest& request) { 
+    auto& out = request.Output(); 
     if (PreTag) {
         BeforePre(request);
-        out << "<pre>\n";
-        OutputText(out, request);
-        out << "</pre>\n";
+        out << "<pre>\n"; 
+        OutputText(out, request); 
+        out << "</pre>\n"; 
     } else {
-        OutputText(out, request);
+        OutputText(out, request); 
     }
 }
 
-void TPreMonPage::BeforePre(NMonitoring::IMonHttpRequest&) {
+void TPreMonPage::BeforePre(NMonitoring::IMonHttpRequest&) { 
 }

@@ -4,8 +4,8 @@
 
 using namespace NMonitoring;
 
-void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
-    IOutputStream& out = request.Output();
+void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) { 
+    IOutputStream& out = request.Output(); 
 
     out << HTTPOKHTML;
     HTML(out) {
@@ -47,14 +47,14 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 }
 
-void THtmlMonPage::NotFound(NMonitoring::IMonHttpRequest& request) const {
-    IOutputStream& out = request.Output();
+void THtmlMonPage::NotFound(NMonitoring::IMonHttpRequest& request) const { 
+    IOutputStream& out = request.Output(); 
     out << HTTPNOTFOUND;
     out.Flush();
 }
-
-void THtmlMonPage::NoContent(NMonitoring::IMonHttpRequest& request) const {
-    IOutputStream& out = request.Output();
-    out << HTTPNOCONTENT;
-    out.Flush();
-}
+ 
+void THtmlMonPage::NoContent(NMonitoring::IMonHttpRequest& request) const { 
+    IOutputStream& out = request.Output(); 
+    out << HTTPNOCONTENT; 
+    out.Flush(); 
+} 

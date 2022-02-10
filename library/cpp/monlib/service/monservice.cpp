@@ -12,40 +12,40 @@
 
 using namespace NMonitoring;
 
-TMonService2::TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title, THolder<IAuthProvider> auth)
-    : TMonService2(HttpServerOptions(port, host, threads), title, std::move(auth))
+TMonService2::TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title, THolder<IAuthProvider> auth) 
+    : TMonService2(HttpServerOptions(port, host, threads), title, std::move(auth)) 
 {
 }
 
-TMonService2::TMonService2(const THttpServerOptions& options, const TString& title, THolder<IAuthProvider> auth)
+TMonService2::TMonService2(const THttpServerOptions& options, const TString& title, THolder<IAuthProvider> auth) 
     : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2))
     , Title(title)
     , IndexMonPage(new TIndexMonPage("", Title))
-    , AuthProvider_{std::move(auth)}
+    , AuthProvider_{std::move(auth)} 
 {
     Y_VERIFY(!!title);
     time_t t = time(nullptr);
     ctime_r(&t, StartTime);
 }
 
-TMonService2::TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title, THolder<IAuthProvider> auth)
+TMonService2::TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title, THolder<IAuthProvider> auth) 
     : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2), std::move(pool))
     , Title(title)
     , IndexMonPage(new TIndexMonPage("", Title))
-    , AuthProvider_{std::move(auth)}
+    , AuthProvider_{std::move(auth)} 
 {
     Y_VERIFY(!!title);
     time_t t = time(nullptr);
     ctime_r(&t, StartTime);
 }
 
-TMonService2::TMonService2(ui16 port, ui32 threads, const TString& title, THolder<IAuthProvider> auth)
-    : TMonService2(port, TString(), threads, title, std::move(auth))
+TMonService2::TMonService2(ui16 port, ui32 threads, const TString& title, THolder<IAuthProvider> auth) 
+    : TMonService2(port, TString(), threads, title, std::move(auth)) 
 {
 }
 
-TMonService2::TMonService2(ui16 port, const TString& title, THolder<IAuthProvider> auth)
-    : TMonService2(port, TString(), 0, title, std::move(auth))
+TMonService2::TMonService2(ui16 port, const TString& title, THolder<IAuthProvider> auth) 
+    : TMonService2(port, TString(), 0, title, std::move(auth)) 
 {
 }
 
@@ -80,21 +80,21 @@ void TMonService2::OutputIndexBody(IOutputStream& out) {
 void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequest& request) {
     TString path = request.GetPath();
     Y_VERIFY(path.StartsWith('/'));
-
-    if (AuthProvider_) {
-        const auto authResult = AuthProvider_->Check(request);
-        switch (authResult.Status) {
-            case TAuthResult::EStatus::NoCredentials:
-                out << HTTPUNAUTHORIZED;
-                return;
-            case TAuthResult::EStatus::Denied:
-                out << HTTPFORBIDDEN;
-                return;
-            case TAuthResult::EStatus::Ok:
-                break;
-        }
-    }
-
+ 
+    if (AuthProvider_) { 
+        const auto authResult = AuthProvider_->Check(request); 
+        switch (authResult.Status) { 
+            case TAuthResult::EStatus::NoCredentials: 
+                out << HTTPUNAUTHORIZED; 
+                return; 
+            case TAuthResult::EStatus::Denied: 
+                out << HTTPFORBIDDEN; 
+                return; 
+            case TAuthResult::EStatus::Ok: 
+                break; 
+        } 
+    } 
+ 
     if (path == "/") {
         OutputIndexPage(out);
     } else {
@@ -108,10 +108,10 @@ void TMonService2::Register(IMonPage* page) {
     IndexMonPage->Register(page);
 }
 
-void TMonService2::Register(TMonPagePtr page) {
+void TMonService2::Register(TMonPagePtr page) { 
     IndexMonPage->Register(std::move(page));
-}
-
+} 
+ 
 TIndexMonPage* TMonService2::RegisterIndexPage(const TString& path, const TString& title) {
     return IndexMonPage->RegisterIndexPage(path, title);
 }

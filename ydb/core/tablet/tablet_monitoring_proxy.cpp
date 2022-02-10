@@ -11,7 +11,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 ////////////////////////////////////////////
 namespace NKikimr { namespace NTabletMonitoringProxy {
@@ -207,7 +207,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
-            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, std::move(url)));
+            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, std::move(url))); 
             return;
         }
     }
@@ -228,7 +228,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const ui64 tabletId = TryParseTabletId(ssIdParam);
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
-            ctx.ExecutorThread.RegisterActor(CreateStateStorageMonitoringActor(tabletId, ev->Sender, std::move(url)));
+            ctx.ExecutorThread.RegisterActor(CreateStateStorageMonitoringActor(tabletId, ev->Sender, std::move(url))); 
             return;
         }
     }

@@ -6,68 +6,68 @@
 
 using namespace NMonitoring;
 
-namespace {
-    TDynamicCounters* AsDynamicCounters(const TIntrusivePtr<TCountableBase>& ptr) {
-        return dynamic_cast<TDynamicCounters*>(ptr.Get());
-    }
-
-    TCounterForPtr* AsCounter(const TIntrusivePtr<TCountableBase>& ptr) {
-        return dynamic_cast<TCounterForPtr*>(ptr.Get());
-    }
-
-    TExpiringCounter* AsExpiringCounter(const TIntrusivePtr<TCountableBase>& ptr) {
-        return dynamic_cast<TExpiringCounter*>(ptr.Get());
-    }
-
+namespace { 
+    TDynamicCounters* AsDynamicCounters(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return dynamic_cast<TDynamicCounters*>(ptr.Get()); 
+    } 
+ 
+    TCounterForPtr* AsCounter(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return dynamic_cast<TCounterForPtr*>(ptr.Get()); 
+    } 
+ 
+    TExpiringCounter* AsExpiringCounter(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return dynamic_cast<TExpiringCounter*>(ptr.Get()); 
+    } 
+ 
     TExpiringHistogramCounter* AsExpiringHistogramCounter(const TIntrusivePtr<TCountableBase>& ptr) {
         return dynamic_cast<TExpiringHistogramCounter*>(ptr.Get());
     }
 
-    THistogramCounter* AsHistogram(const TIntrusivePtr<TCountableBase>& ptr) {
-        return dynamic_cast<THistogramCounter*>(ptr.Get());
-    }
-
-    TIntrusivePtr<TCounterForPtr> AsCounterRef(const TIntrusivePtr<TCountableBase>& ptr) {
-        return VerifyDynamicCast<TCounterForPtr*>(ptr.Get());
-    }
-
-    TIntrusivePtr<TDynamicCounters> AsGroupRef(const TIntrusivePtr<TCountableBase>& ptr) {
-        return VerifyDynamicCast<TDynamicCounters*>(ptr.Get());
-    }
-
-    THistogramPtr AsHistogramRef(const TIntrusivePtr<TCountableBase>& ptr) {
-        return VerifyDynamicCast<THistogramCounter*>(ptr.Get());
-    }
+    THistogramCounter* AsHistogram(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return dynamic_cast<THistogramCounter*>(ptr.Get()); 
+    } 
+ 
+    TIntrusivePtr<TCounterForPtr> AsCounterRef(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return VerifyDynamicCast<TCounterForPtr*>(ptr.Get()); 
+    } 
+ 
+    TIntrusivePtr<TDynamicCounters> AsGroupRef(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return VerifyDynamicCast<TDynamicCounters*>(ptr.Get()); 
+    } 
+ 
+    THistogramPtr AsHistogramRef(const TIntrusivePtr<TCountableBase>& ptr) { 
+        return VerifyDynamicCast<THistogramCounter*>(ptr.Get()); 
+    } 
 
     bool IsExpiringCounter(const TIntrusivePtr<TCountableBase>& ptr) {
         return AsExpiringCounter(ptr) != nullptr || AsExpiringHistogramCounter(ptr) != nullptr;
     }
-}
-
+} 
+ 
 static constexpr TStringBuf INDENT = "    ";
 
-TDynamicCounters::TDynamicCounters(EVisibility vis)
-{
-    Visibility_ = vis;
+TDynamicCounters::TDynamicCounters(EVisibility vis) 
+{ 
+    Visibility_ = vis; 
 }
-
+ 
 TDynamicCounters::~TDynamicCounters() {
 }
 
-TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringCounter(const TString& value, bool derivative, EVisibility vis) {
-    return GetExpiringNamedCounter("sensor", value, derivative, vis);
+TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringCounter(const TString& value, bool derivative, EVisibility vis) { 
+    return GetExpiringNamedCounter("sensor", value, derivative, vis); 
+} 
+ 
+TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) { 
+    return AsCounterRef(GetNamedCounterImpl<true, TExpiringCounter>(name, value, derivative, vis)); 
+} 
+ 
+TDynamicCounters::TCounterPtr TDynamicCounters::GetCounter(const TString& value, bool derivative, EVisibility vis) { 
+    return GetNamedCounter("sensor", value, derivative, vis); 
 }
 
-TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) {
-    return AsCounterRef(GetNamedCounterImpl<true, TExpiringCounter>(name, value, derivative, vis));
-}
-
-TDynamicCounters::TCounterPtr TDynamicCounters::GetCounter(const TString& value, bool derivative, EVisibility vis) {
-    return GetNamedCounter("sensor", value, derivative, vis);
-}
-
-TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) {
-    return AsCounterRef(GetNamedCounterImpl<false, TCounterForPtr>(name, value, derivative, vis));
+TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) { 
+    return AsCounterRef(GetNamedCounterImpl<false, TCounterForPtr>(name, value, derivative, vis)); 
 }
 
 THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
@@ -110,7 +110,7 @@ void TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &va
     auto g = LockForUpdate("RemoveNamedCounter", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsCounter(it->second)) {
         Counters.erase(it);
-    }
+    } 
 }
 
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& name, const TString& value) {
@@ -172,15 +172,15 @@ void TDynamicCounters::ResetCounters(bool derivOnly) {
     }
 }
 
-void TDynamicCounters::RegisterCountable(const TString& name, const TString& value, TCountablePtr countable) {
-    Y_VERIFY(countable);
+void TDynamicCounters::RegisterCountable(const TString& name, const TString& value, TCountablePtr countable) { 
+    Y_VERIFY(countable); 
     auto g = LockForUpdate("RegisterCountable", name, value);
     const bool inserted = Counters.emplace(TChildId(name, value), std::move(countable)).second;
     Y_VERIFY(inserted);
 }
 
 void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {
-    RegisterCountable(name, value, subgroup);
+    RegisterCountable(name, value, subgroup); 
 }
 
 void TDynamicCounters::OutputHtml(IOutputStream& os) const {
@@ -245,36 +245,36 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
 }
 
 void TDynamicCounters::Accept(const TString& labelName, const TString& labelValue, ICountableConsumer& consumer) const {
-    if (!IsVisible(Visibility(), consumer.Visibility())) {
-        return;
-    }
-
+    if (!IsVisible(Visibility(), consumer.Visibility())) { 
+        return; 
+    } 
+ 
     consumer.OnGroupBegin(labelName, labelValue, this);
     for (auto& [key, value] : ReadSnapshot()) {
         value->Accept(key.LabelName, key.LabelValue, consumer);
     }
     consumer.OnGroupEnd(labelName, labelValue, this);
 }
-
-void TDynamicCounters::RemoveExpired() const {
+ 
+void TDynamicCounters::RemoveExpired() const { 
     if (AtomicGet(ExpiringCount) == 0) {
-        return;
-    }
-
+        return; 
+    } 
+ 
     TWriteGuard g(Lock);
     TAtomicBase count = 0;
 
-    for (auto it = Counters.begin(); it != Counters.end();) {
+    for (auto it = Counters.begin(); it != Counters.end();) { 
         if (IsExpiringCounter(it->second) && it->second->RefCount() == 1) {
-            it = Counters.erase(it);
+            it = Counters.erase(it); 
             ++count;
-        } else {
-            ++it;
-        }
-    }
+        } else { 
+            ++it; 
+        } 
+    } 
 
     AtomicSub(ExpiringCount, count);
-}
+} 
 
 template <bool expiring, class TCounterType, class... TArgs>
 TDynamicCounters::TCountablePtr TDynamicCounters::GetNamedCounterImpl(const TString& name, const TString& value, TArgs&&... args) {

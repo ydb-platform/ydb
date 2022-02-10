@@ -17,13 +17,13 @@ namespace NMonitoring {
             , Smth(smth)
         {
         }
-        void Output(NMonitoring::IMonHttpRequest& request) override {
+        void Output(NMonitoring::IMonHttpRequest& request) override { 
             Y_UNUSED(request);
-            request.Output() << NMonitoring::HTTPOKHTML;
-            request.Output() << "<h2>" << Title << "</h2>";
-            request.Output() << "<pre>";
-            request.Output() << Smth->GetStatus();
-            request.Output() << "</pre>";
+            request.Output() << NMonitoring::HTTPOKHTML; 
+            request.Output() << "<h2>" << Title << "</h2>"; 
+            request.Output() << "<pre>"; 
+            request.Output() << Smth->GetStatus(); 
+            request.Output() << "</pre>"; 
         }
     };
 
@@ -40,7 +40,7 @@ namespace NMonitoring {
             , BusWww(new NBus::TBusWww)
         {
         }
-        void Output(NMonitoring::IMonHttpRequest& request) override;
+        void Output(NMonitoring::IMonHttpRequest& request) override; 
     };
 
 }

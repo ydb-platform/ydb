@@ -154,21 +154,21 @@ protected:
 
 
     // log response time
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutResponseTime; // Used by whiteboard
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutResponseTime; // Used by whiteboard 
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime256;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime512;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime256; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime512; 
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutAsyncBlobResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutUserDataResponseTime;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutAsyncBlobResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutUserDataResponseTime; 
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard 
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime; 
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime; 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
 
     // event counters

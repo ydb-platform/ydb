@@ -10,32 +10,32 @@
 using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(TFormatTest) {
-    Y_UNIT_TEST(ContentTypeHeader) {
-        UNIT_ASSERT_EQUAL(FormatFromContentType(""), EFormat::UNKNOWN);
-        UNIT_ASSERT_EQUAL(FormatFromContentType("application/json;some=stuff"), EFormat::JSON);
-        UNIT_ASSERT_EQUAL(FormatFromContentType("application/x-solomon-spack"), EFormat::SPACK);
-        UNIT_ASSERT_EQUAL(FormatFromContentType("application/xml"), EFormat::UNKNOWN);
-        UNIT_ASSERT_EQUAL(FormatFromContentType(";application/xml"), EFormat::UNKNOWN);
-    }
-
+    Y_UNIT_TEST(ContentTypeHeader) { 
+        UNIT_ASSERT_EQUAL(FormatFromContentType(""), EFormat::UNKNOWN); 
+        UNIT_ASSERT_EQUAL(FormatFromContentType("application/json;some=stuff"), EFormat::JSON); 
+        UNIT_ASSERT_EQUAL(FormatFromContentType("application/x-solomon-spack"), EFormat::SPACK); 
+        UNIT_ASSERT_EQUAL(FormatFromContentType("application/xml"), EFormat::UNKNOWN); 
+        UNIT_ASSERT_EQUAL(FormatFromContentType(";application/xml"), EFormat::UNKNOWN); 
+    } 
+ 
     Y_UNIT_TEST(AcceptHeader) {
-        UNIT_ASSERT_EQUAL(FormatFromAcceptHeader(""), EFormat::UNKNOWN);
-        UNIT_ASSERT_EQUAL(FormatFromAcceptHeader("*/*"), EFormat::UNKNOWN);
+        UNIT_ASSERT_EQUAL(FormatFromAcceptHeader(""), EFormat::UNKNOWN); 
+        UNIT_ASSERT_EQUAL(FormatFromAcceptHeader("*/*"), EFormat::UNKNOWN); 
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/xml"),
+            FormatFromAcceptHeader("application/xml"), 
             EFormat::UNKNOWN);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/json"),
+            FormatFromAcceptHeader("application/json"), 
             EFormat::JSON);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/x-solomon-spack"),
+            FormatFromAcceptHeader("application/x-solomon-spack"), 
             EFormat::SPACK);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/x-solomon-pb"),
+            FormatFromAcceptHeader("application/x-solomon-pb"), 
             EFormat::PROTOBUF);
 
         UNIT_ASSERT_EQUAL(
@@ -43,19 +43,19 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
             EFormat::TEXT);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/json, text/plain"),
+            FormatFromAcceptHeader("application/json, text/plain"), 
             EFormat::JSON);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/x-solomon-spack, application/json, text/plain"),
+            FormatFromAcceptHeader("application/x-solomon-spack, application/json, text/plain"), 
             EFormat::SPACK);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader(" , application/x-solomon-spack ,, application/json , text/plain"),
+            FormatFromAcceptHeader(" , application/x-solomon-spack ,, application/json , text/plain"), 
             EFormat::SPACK);
 
         UNIT_ASSERT_EQUAL(
-            FormatFromAcceptHeader("application/xml, application/x-solomon-spack, text/plain"),
+            FormatFromAcceptHeader("application/xml, application/x-solomon-spack, text/plain"), 
             EFormat::SPACK);
 
         UNIT_ASSERT_EQUAL(

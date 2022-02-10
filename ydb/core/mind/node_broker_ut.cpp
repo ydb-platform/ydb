@@ -203,11 +203,11 @@ void Setup(TTestActorRuntime& runtime,
     TMallocInfo mallocInfo = MallocInfo();
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
 
-    auto scheduledFilter = [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+    auto scheduledFilter = [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) { 
         if (event->HasEvent()
             && (dynamic_cast<TDynamicNameserver::TEvPrivate::TEvUpdateEpoch*>(event->GetBase())))
             return false;
-        return TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
+        return TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline); 
     };
     runtime.SetScheduledEventFilter(scheduledFilter);
 
@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TVector<NKikimrNodeBroker::TListNodes> listRequests;
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;
 
-        auto logRequests = [&](TTestActorRuntimeBase &, TAutoPtr<IEventHandle> &event) -> auto {
+        auto logRequests = [&](TTestActorRuntimeBase &, TAutoPtr<IEventHandle> &event) -> auto { 
             if (event->GetTypeRewrite() == TEvNodeBroker::EvListNodes)
                 listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
             else if (event->GetTypeRewrite() == TEvNodeBroker::EvResolveNode)

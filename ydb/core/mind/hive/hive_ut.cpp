@@ -368,12 +368,12 @@ namespace {
 
         TTestActorRuntime::TEventFilter Prepare() {
             IsDone = false;
-            return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
                 return (*this)(runtime, event);
             };
         }
 
-        bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
             Y_UNUSED(runtime);
             if (event->GetTypeRewrite() == TEvHive::EvCreateTablet) {
                 IsDone = true;
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK) {
         bool seenEvDeleteTabletResult = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
             if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
                 seenEvDeleteTabletResult = true;
             }
@@ -3909,7 +3909,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
 
         // Block group assignment
-        runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
             if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerSelectGroups) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -4135,7 +4135,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // Setup observer that would drop EvDeleteTabletResult messages
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
             if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
                 return TTestActorRuntime::EEventAction::DROP;
             }

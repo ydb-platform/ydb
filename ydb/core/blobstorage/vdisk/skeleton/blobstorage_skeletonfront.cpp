@@ -1352,7 +1352,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             // we process mon requests out of order
-            const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+            const TCgiParameters& cgi = ev->Get()->Request.GetParams(); 
             const TString& type = cgi.Get("type");
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
             auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,

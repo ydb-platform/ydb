@@ -38,7 +38,7 @@ public:
     void Bootstrap(const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyProto::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
+                    "TJsonProxyProto::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo()); 
         ProcessRequest(ctx);
         Die(ctx);
     }
@@ -47,7 +47,7 @@ protected:
 
     void ProcessRequest(const TActorContext &ctx)
     {
-        const TCgiParameters &cgi = RequestEvent->Get()->Request.GetParams();
+        const TCgiParameters &cgi = RequestEvent->Get()->Request.GetParams(); 
 
         if (cgi.Has("enum")) {
             TString name = cgi.Get("enum");

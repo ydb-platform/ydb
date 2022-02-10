@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:solomon)
+OWNER(g:solomon) 
 
 SRCS(
     mon_messagebus.cpp

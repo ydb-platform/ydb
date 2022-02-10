@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
             // We want to close the client right after it has sent EvConnect to the target tablet but before
             // the client received the EvConnectResult
-            runtime.SetObserverFunc([clientId, sender](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            runtime.SetObserverFunc([clientId, sender](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) { 
                 if (event->Type == TEvTabletPipe::EvConnect) {
                     runtime.Send(new IEventHandle(clientId, sender, new TEvents::TEvPoisonPill()), 0);
                 }

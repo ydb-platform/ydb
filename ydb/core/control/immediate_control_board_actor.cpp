@@ -89,9 +89,9 @@ private:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-        HTTP_METHOD method = ev->Get()->Request.GetMethod();
+        HTTP_METHOD method = ev->Get()->Request.GetMethod(); 
         if (method == HTTP_METHOD_POST) {
-            HandlePostParams(ev->Get()->Request.GetPostParams());
+            HandlePostParams(ev->Get()->Request.GetPostParams()); 
         }
         TStringStream str;
         str << Board->RenderAsHtml();

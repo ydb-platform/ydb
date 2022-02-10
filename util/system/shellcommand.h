@@ -407,14 +407,14 @@ public:
     TMaybe<int> GetExitCode() const;
 
     /**
-     * @brief get id of underlying process 
+     * @brief get id of underlying process
      * @note depends on os: pid_t on UNIX, HANDLE on win
-     * 
-     * @return pid or handle 
-     */ 
-    TProcessId GetPid() const; 
- 
-    /** 
+     *
+     * @return pid or handle
+     */
+    TProcessId GetPid() const;
+
+    /**
      * @brief return the file handle that provides input to the child process
      *
      * @return input file handle

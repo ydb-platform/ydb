@@ -11,7 +11,7 @@
 
 #include "compressor.h"
 
-namespace NCompProto { 
+namespace NCompProto {
     template <size_t CacheSize, typename TEntry>
     struct TCache {
         ui32 CacheKey[CacheSize];
@@ -35,7 +35,7 @@ namespace NCompProto {
             }
         }
     };
- 
+
     struct TCode {
         i64 Probability;
         ui32 Start;

@@ -366,14 +366,14 @@ public:
         return ExitCode;
     }
 
-    inline TProcessId GetPid() const { 
+    inline TProcessId GetPid() const {
 #if defined(_win_)
         return GetProcessId(Pid);
 #else
-        return Pid; 
+        return Pid;
 #endif
-    } 
- 
+    }
+
     inline TFileHandle& GetInputHandle() {
         return InputHandle;
     }
@@ -1159,10 +1159,10 @@ TMaybe<int> TShellCommand::GetExitCode() const {
     return Impl->GetExitCode();
 }
 
-TProcessId TShellCommand::GetPid() const { 
-    return Impl->GetPid(); 
-} 
- 
+TProcessId TShellCommand::GetPid() const {
+    return Impl->GetPid();
+}
+
 TFileHandle& TShellCommand::GetInputHandle() {
     return Impl->GetInputHandle();
 }

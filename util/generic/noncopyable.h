@@ -23,8 +23,8 @@ namespace NNonCopyable { // protection from unintended ADL
     };
 
     struct TMoveOnly {
-        TMoveOnly(TMoveOnly&&) noexcept = default; 
-        TMoveOnly& operator=(TMoveOnly&&) noexcept = default; 
+        TMoveOnly(TMoveOnly&&) noexcept = default;
+        TMoveOnly& operator=(TMoveOnly&&) noexcept = default;
 
         TMoveOnly(const TMoveOnly&) = delete;
         TMoveOnly& operator=(const TMoveOnly&) = delete;

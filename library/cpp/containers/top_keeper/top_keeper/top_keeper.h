@@ -5,7 +5,7 @@
 #include <util/generic/maybe.h>
 #include <util/str_stl.h>
 
-template <class T, class TComparator = TGreater<T>, bool sort = true, class Alloc = std::allocator<T>> 
+template <class T, class TComparator = TGreater<T>, bool sort = true, class Alloc = std::allocator<T>>
 class TTopKeeper {
 private:
     class TVectorWithMin {
@@ -16,16 +16,16 @@ private:
         size_t MinElementIndex;
 
     private:
-        void Reserve() { 
-            Internal.reserve(2 * HalfMaxSize); 
-        } 
+        void Reserve() {
+            Internal.reserve(2 * HalfMaxSize);
+        }
 
         template <class UT>
-        bool Insert(UT&& value) noexcept { 
+        bool Insert(UT&& value) noexcept {
             if (Y_UNLIKELY(0 == HalfMaxSize)) {
-                return false; 
-            } 
- 
+                return false;
+            }
+
             if (Internal.size() < HalfMaxSize) {
                 if (Internal.empty() || Comparer(Internal[MinElementIndex], value)) {
                     MinElementIndex = Internal.size();
@@ -33,37 +33,37 @@ private:
                     return true;
                 }
             } else if (!Comparer(value, Internal[MinElementIndex])) {
-                return false; 
-            } 
- 
-            Internal.push_back(std::forward<UT>(value)); 
- 
-            if (Internal.size() == (HalfMaxSize << 1)) { 
-                Partition(); 
-            } 
- 
-            return true; 
-        } 
- 
+                return false;
+            }
+
+            Internal.push_back(std::forward<UT>(value));
+
+            if (Internal.size() == (HalfMaxSize << 1)) {
+                Partition();
+            }
+
+            return true;
+        }
+
     public:
-        using value_type = T; 
- 
+        using value_type = T;
+
         TVectorWithMin(const size_t halfMaxSize, const TComparator& comp)
             : HalfMaxSize(halfMaxSize)
             , Comparer(comp)
         {
-            Reserve(); 
+            Reserve();
         }
 
         template <class TAllocParam>
-        TVectorWithMin(const size_t halfMaxSize, const TComparator& comp, TAllocParam&& param) 
-            : Internal(std::forward<TAllocParam>(param)) 
-            , HalfMaxSize(halfMaxSize) 
-            , Comparer(comp) 
-        { 
-            Reserve(); 
-        } 
- 
+        TVectorWithMin(const size_t halfMaxSize, const TComparator& comp, TAllocParam&& param)
+            : Internal(std::forward<TAllocParam>(param))
+            , HalfMaxSize(halfMaxSize)
+            , Comparer(comp)
+        {
+            Reserve();
+        }
+
         void SortAccending() {
             Sort(Internal.begin(), Internal.end(), Comparer);
         }
@@ -81,17 +81,17 @@ private:
             }
         }
 
-        bool Push(const T& value) { 
-            return Insert(value); 
-        } 
+        bool Push(const T& value) {
+            return Insert(value);
+        }
 
-        bool Push(T&& value) { 
-            return Insert(std::move(value)); 
-        } 
+        bool Push(T&& value) {
+            return Insert(std::move(value));
+        }
 
         template <class... TArgs>
-        bool Emplace(TArgs&&... args) { 
-            return Insert(T(std::forward<TArgs>(args)...)); // TODO: make it "real" emplace, not that fake one 
+        bool Emplace(TArgs&&... args) {
+            return Insert(T(std::forward<TArgs>(args)...)); // TODO: make it "real" emplace, not that fake one
         }
 
         void SetMaxSize(size_t newHalfMaxSize) {
@@ -104,10 +104,10 @@ private:
             return Internal.size();
         }
 
-        const auto& GetInternal() const { 
-            return Internal; 
-        } 
- 
+        const auto& GetInternal() const {
+            return Internal;
+        }
+
         auto Extract() {
             using std::swap;
 
@@ -131,13 +131,13 @@ private:
         }
     };
 
-    void CheckNotFinalized() { 
-        Y_ENSURE(!Finalized, "Cannot insert after finalizing (Pop() / GetNext() / Finalize())! " 
+    void CheckNotFinalized() {
+        Y_ENSURE(!Finalized, "Cannot insert after finalizing (Pop() / GetNext() / Finalize())! "
                              "Use TLimitedHeap for this scenario");
-    } 
- 
+    }
+
     size_t MaxSize;
-    const TComparator Comparer; 
+    const TComparator Comparer;
     TVectorWithMin Internal;
     bool Finalized;
 
@@ -159,16 +159,16 @@ public:
     }
 
     template <class TAllocParam>
-    TTopKeeper(size_t maxSize, const TComparator& comp, TAllocParam&& param) 
-        : MaxSize(maxSize) 
-        , Comparer(comp) 
-        , Internal(maxSize, comp, std::forward<TAllocParam>(param)) 
-        , Finalized(false) 
-    { 
-    } 
- 
+    TTopKeeper(size_t maxSize, const TComparator& comp, TAllocParam&& param)
+        : MaxSize(maxSize)
+        , Comparer(comp)
+        , Internal(maxSize, comp, std::forward<TAllocParam>(param))
+        , Finalized(false)
+    {
+    }
+
     void Finalize() {
-        if (Y_LIKELY(Finalized)) { 
+        if (Y_LIKELY(Finalized)) {
             return;
         }
         Internal.Partition();
@@ -193,43 +193,43 @@ public:
         }
     }
 
-    T ExtractOne() { 
+    T ExtractOne() {
         Y_ENSURE(!IsEmpty(), "Trying ExtractOne from empty heap!");
-        Finalize(); 
-        auto value = std::move(Internal.Back()); 
-        Internal.Pop(); 
-        if (IsEmpty()) { 
-            Reset(); 
-        } 
-        return value; 
-    } 
- 
+        Finalize();
+        auto value = std::move(Internal.Back());
+        Internal.Pop();
+        if (IsEmpty()) {
+            Reset();
+        }
+        return value;
+    }
+
     auto Extract() {
         Finalize();
         return Internal.Extract();
     }
 
-    bool Insert(const T& value) { 
-        CheckNotFinalized(); 
-        return Internal.Push(value); 
+    bool Insert(const T& value) {
+        CheckNotFinalized();
+        return Internal.Push(value);
     }
 
-    bool Insert(T&& value) { 
-        CheckNotFinalized(); 
-        return Internal.Push(std::move(value)); 
-    } 
- 
+    bool Insert(T&& value) {
+        CheckNotFinalized();
+        return Internal.Push(std::move(value));
+    }
+
     template <class... TArgs>
-    bool Emplace(TArgs&&... args) { 
-        CheckNotFinalized(); 
-        return Internal.Emplace(std::forward<TArgs>(args)...); 
-    } 
- 
-    const auto& GetInternal() { 
-        Finalize(); 
-        return Internal.GetInternal(); 
-    } 
- 
+    bool Emplace(TArgs&&... args) {
+        CheckNotFinalized();
+        return Internal.Emplace(std::forward<TArgs>(args)...);
+    }
+
+    const auto& GetInternal() {
+        Finalize();
+        return Internal.GetInternal();
+    }
+
     bool IsEmpty() const {
         return Internal.GetSize() == 0;
     }

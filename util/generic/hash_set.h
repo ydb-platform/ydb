@@ -47,7 +47,7 @@ public:
     }
     template <class TT>
     explicit THashSet(TT* allocParam, size_type n = 0)
-        : rep(n, hasher(), key_equal(), allocParam) 
+        : rep(n, hasher(), key_equal(), allocParam)
     {
     }
     explicit THashSet(size_type n)

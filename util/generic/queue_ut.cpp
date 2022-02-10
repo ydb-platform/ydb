@@ -130,28 +130,28 @@ Y_UNIT_TEST_SUITE(TYQueueTest) {
 
     Y_UNIT_TEST(pqueue4) {
         TDeque<int> c;
-        c.push_back(42); 
-        c.push_back(101); 
-        c.push_back(69); 
- 
+        c.push_back(42);
+        c.push_back(101);
+        c.push_back(69);
+
         TPriorityQueue<int, TDeque<int>, TLess<int>> q(TLess<int>(), std::move(c));
- 
-        UNIT_ASSERT(c.empty()); 
- 
-        UNIT_ASSERT_EQUAL(q.size(), 3); 
- 
-        UNIT_ASSERT(q.top() == 101); 
- 
-        q.pop(); 
-        UNIT_ASSERT(q.top() == 69); 
- 
-        q.pop(); 
-        UNIT_ASSERT(q.top() == 42); 
- 
-        q.pop(); 
-        UNIT_ASSERT(q.empty()); 
-    } 
- 
+
+        UNIT_ASSERT(c.empty());
+
+        UNIT_ASSERT_EQUAL(q.size(), 3);
+
+        UNIT_ASSERT(q.top() == 101);
+
+        q.pop();
+        UNIT_ASSERT(q.top() == 69);
+
+        q.pop();
+        UNIT_ASSERT(q.top() == 42);
+
+        q.pop();
+        UNIT_ASSERT(q.empty());
+    }
+
     Y_UNIT_TEST(queue1) {
         TQueue<int, TList<int>> q;
 

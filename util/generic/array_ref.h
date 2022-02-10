@@ -2,10 +2,10 @@
 
 #include <util/generic/yexception.h>
 
-#include <algorithm> 
+#include <algorithm>
 #include <initializer_list>
 #include <iterator>
- 
+
 /**
  * `TArrayRef` works pretty much like `std::span` with dynamic extent, presenting
  * an array-like interface into a contiguous sequence of objects.
@@ -77,7 +77,7 @@ public:
     bool operator==(const TArrayRef<TT>& other) const noexcept {
         return (S_ == other.size()) && std::equal(begin(), end(), other.begin());
     }
- 
+
     constexpr inline T* data() const noexcept {
         return T_;
     }

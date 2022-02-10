@@ -1461,7 +1461,7 @@ public:
     }
     template <class TAllocParam>
     explicit THashMap(TAllocParam* allocParam, size_type n = 0)
-        : rep(n, hasher(), key_equal(), allocParam) 
+        : rep(n, hasher(), key_equal(), allocParam)
     {
     }
     explicit THashMap(size_type n)
@@ -1509,13 +1509,13 @@ public:
     }
 
     THashMap(const std::initializer_list<std::pair<Key, T>>& list)
-        : rep(list.size(), hasher(), key_equal()) 
-    { 
-        for (const auto& v : list) { 
-            rep.insert_unique_noresize(v); 
-        } 
-    } 
- 
+        : rep(list.size(), hasher(), key_equal())
+    {
+        for (const auto& v : list) {
+            rep.insert_unique_noresize(v);
+        }
+    }
+
     // THashMap has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
@@ -1579,10 +1579,10 @@ public:
         return rep.insert_unique_noresize(obj);
     }
 
-    template <typename... Args> 
-    std::pair<iterator, bool> emplace_noresize(Args&&... args) { 
-        return rep.emplace_unique_noresize(std::forward<Args>(args)...); 
-    } 
+    template <typename... Args>
+    std::pair<iterator, bool> emplace_noresize(Args&&... args) {
+        return rep.emplace_unique_noresize(std::forward<Args>(args)...);
+    }
 
     template <class TheObj>
     iterator insert_direct(const TheObj& obj, const insert_ctx& ins) {

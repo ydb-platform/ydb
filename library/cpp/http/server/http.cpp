@@ -2,7 +2,7 @@
 #include "http_ex.h"
 
 #include <library/cpp/threading/equeue/equeue.h>
- 
+
 #include <util/generic/buffer.h>
 #include <util/generic/cast.h>
 #include <util/generic/intrlist.h>
@@ -458,8 +458,8 @@ public:
     THttpServer* Parent_ = nullptr;
     TWakeupPollAble WakeupPollAble;
     TMutex StopMutex;
- 
-private: 
+
+private:
     template <class TThreadPool_>
     static THolder<IThreadPool> MakeThreadPool(IThreadFactory* factory, bool elastic, ICallBack* callback = nullptr, const TString& threadName = {}) {
         if (!factory) {
@@ -470,20 +470,20 @@ private:
         const auto params = IThreadPool::TParams().SetFactory(factory).SetThreadName(threadName);
         if (callback) {
             pool = MakeHolder<TThreadPoolBinder<TThreadPool_, THttpServer::ICallBack>>(callback, params);
-        } else { 
+        } else {
             pool = MakeHolder<TThreadPool_>(params);
-        } 
- 
-        if (elastic) { 
+        }
+
+        if (elastic) {
             pool = MakeHolder<TElasticQueue>(std::move(pool));
-        } 
+        }
 
         return pool;
-    } 
+    }
 };
 
-THttpServer::THttpServer(ICallBack* cb, const TOptions& options, IThreadFactory* pool) 
-    : Impl_(new TImpl(this, cb, options, pool)) 
+THttpServer::THttpServer(ICallBack* cb, const TOptions& options, IThreadFactory* pool)
+    : Impl_(new TImpl(this, cb, options, pool))
 {
 }
 

@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     bench.cpp
-    dummy.cpp 
+    dummy.cpp
 )
 
 PEERDIR(

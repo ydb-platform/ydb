@@ -78,8 +78,8 @@ namespace NThreading {
             TNode* Next[]; // variable-size array maximum of MaxHeight values
 
         public:
-            TNode(T&& value) 
-                : Value(std::move(value)) 
+            TNode(T&& value)
+                : Value(std::move(value))
             {
                 Y_UNUSED(Next);
             }
@@ -192,13 +192,13 @@ namespace NThreading {
             Init();
         }
 
-        bool Insert(T value) { 
+        bool Insert(T value) {
             TNode* node = PrepareInsert(value);
             if (Y_UNLIKELY(node && Compare(node, value) == 0)) {
                 // we do not allow duplicates
                 return false;
             }
-            node = DoInsert(std::move(value)); 
+            node = DoInsert(std::move(value));
             TCounter::OnInsert(node->GetValue());
             return true;
         }
@@ -277,11 +277,11 @@ namespace NThreading {
             return static_cast<TNode*>(buffer);
         }
 
-        TNode* AllocateNode(T&& value, int height) { 
+        TNode* AllocateNode(T&& value, int height) {
             size_t size = sizeof(TNode) + sizeof(TNode*) * height;
             void* buffer = Allocator.Allocate(size);
             memset(buffer, 0, size);
-            return new (buffer) TNode(std::move(value)); 
+            return new (buffer) TNode(std::move(value));
         }
 
         TNode* FindFirst() const {
@@ -382,7 +382,7 @@ namespace NThreading {
             return next;
         }
 
-        TNode* DoInsert(T&& value) { 
+        TNode* DoInsert(T&& value) {
             // choose level to place new node
             int currentHeight = AtomicGet(Height);
             int height = RandomHeight();
@@ -394,7 +394,7 @@ namespace NThreading {
                 AtomicSet(Height, height);
             }
 
-            TNode* node = AllocateNode(std::move(value), height); 
+            TNode* node = AllocateNode(std::move(value), height);
             node->Link(height, Prev);
 
             // keep last inserted node to optimize sequential inserts

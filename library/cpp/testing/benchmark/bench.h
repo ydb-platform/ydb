@@ -4,7 +4,7 @@
 #include <util/system/types.h>
 
 #include <utility>
- 
+
 namespace NBench {
     namespace NCpu {
         struct TParams {
@@ -47,11 +47,11 @@ namespace NBench {
                      :
                      : "memory");
     }
-#elif defined(_MSC_VER) 
-    Y_FORCE_INLINE void Clobber() { 
-        _ReadWriteBarrier(); 
-    } 
- 
+#elif defined(_MSC_VER)
+    Y_FORCE_INLINE void Clobber() {
+        _ReadWriteBarrier();
+    }
+
 #else
     Y_FORCE_INLINE void Clobber() {
     }

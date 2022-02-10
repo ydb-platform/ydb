@@ -257,16 +257,16 @@ namespace NMonitoring {
 
         private:
             void OnStreamBegin() override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
             }
 
             void OnStreamEnd() override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
                 Writer_.WriteLn();
             }
 
             void OnCommonTime(TInstant time) override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
                 CommonTime_ = time;
             }
 
@@ -284,8 +284,8 @@ namespace NMonitoring {
             void OnLabelsBegin() override {
                 if (State_ == TEncoderState::EState::METRIC) {
                     State_ = TEncoderState::EState::METRIC_LABELS;
-                } else if (State_ == TEncoderState::EState::ROOT) {
-                    State_ = TEncoderState::EState::COMMON_LABELS;
+                } else if (State_ == TEncoderState::EState::ROOT) { 
+                    State_ = TEncoderState::EState::COMMON_LABELS; 
                 } else {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
@@ -294,8 +294,8 @@ namespace NMonitoring {
             void OnLabelsEnd() override {
                 if (State_ == TEncoderState::EState::METRIC_LABELS) {
                     State_ = TEncoderState::EState::METRIC;
-                } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
-                    State_ = TEncoderState::EState::ROOT;
+                } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
+                    State_ = TEncoderState::EState::ROOT; 
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
                 }
@@ -304,7 +304,7 @@ namespace NMonitoring {
             void OnLabel(TStringBuf name, TStringBuf value) override {
                 if (State_ == TEncoderState::EState::METRIC_LABELS) {
                     MetricState_.Labels.Add(name, value);
-                } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
+                } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
                     CommonLabels_.Add(name, value);
                 } else {
                     State_.ThrowInvalid("expected LABELS or COMMON_LABELS");

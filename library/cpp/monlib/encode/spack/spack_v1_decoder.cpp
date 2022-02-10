@@ -3,9 +3,9 @@
 #include "compression.h"
 
 #include <library/cpp/monlib/encode/buffered/string_pool.h>
-#include <library/cpp/monlib/exception/exception.h>
+#include <library/cpp/monlib/exception/exception.h> 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
-#include <library/cpp/monlib/metrics/metric.h>
+#include <library/cpp/monlib/metrics/metric.h> 
 
 #include <util/generic/yexception.h>
 #include <util/generic/buffer.h>
@@ -18,8 +18,8 @@
 
 namespace NMonitoring {
     namespace {
-#define DECODE_ENSURE(COND, ...) MONLIB_ENSURE_EX(COND, TSpackDecodeError() << __VA_ARGS__)
-
+#define DECODE_ENSURE(COND, ...) MONLIB_ENSURE_EX(COND, TSpackDecodeError() << __VA_ARGS__) 
+ 
         constexpr ui64 LABEL_SIZE_LIMIT = 128_MB;
 
         ///////////////////////////////////////////////////////////////////////
@@ -37,15 +37,15 @@ namespace NMonitoring {
                 c->OnStreamBegin();
 
                 // (1) read header
-                size_t readBytes = In_->Read(&Header_, sizeof(Header_));
-                DECODE_ENSURE(readBytes == sizeof(Header_), "not enough data in input stream to read header");
+                size_t readBytes = In_->Read(&Header_, sizeof(Header_)); 
+                DECODE_ENSURE(readBytes == sizeof(Header_), "not enough data in input stream to read header"); 
 
-                ui8 version = ((Header_.Version >> 8) & 0xff);
-                DECODE_ENSURE(version == 1, "versions mismatch (expected: 1, got: " << +version << ')');
+                ui8 version = ((Header_.Version >> 8) & 0xff); 
+                DECODE_ENSURE(version == 1, "versions mismatch (expected: 1, got: " << +version << ')'); 
 
-                DECODE_ENSURE(Header_.HeaderSize >= sizeof(Header_), "invalid header size");
-                if (size_t skipBytes = Header_.HeaderSize - sizeof(Header_)) {
-                    DECODE_ENSURE(In_->Skip(skipBytes) == skipBytes, "input stream unexpectedly ended");
+                DECODE_ENSURE(Header_.HeaderSize >= sizeof(Header_), "invalid header size"); 
+                if (size_t skipBytes = Header_.HeaderSize - sizeof(Header_)) { 
+                    DECODE_ENSURE(In_->Skip(skipBytes) == skipBytes, "input stream unexpectedly ended"); 
                 }
 
                 if (Header_.MetricCount == 0) {
@@ -55,27 +55,27 @@ namespace NMonitoring {
                 }
 
                 // if compression enabled all below reads must go throught decompressor
-                auto compressedIn = CompressedInput(In_, DecodeCompression(Header_.Compression));
+                auto compressedIn = CompressedInput(In_, DecodeCompression(Header_.Compression)); 
                 if (compressedIn) {
                     In_ = compressedIn.Get();
                 }
 
-                TimePrecision_ = DecodeTimePrecision(Header_.TimePrecision);
+                TimePrecision_ = DecodeTimePrecision(Header_.TimePrecision); 
 
-                const ui64 labelSizeTotal = ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize;
+                const ui64 labelSizeTotal = ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize; 
 
-                DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "Label names & values size of " << HumanReadableSize(labelSizeTotal, SF_BYTES)
+                DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "Label names & values size of " << HumanReadableSize(labelSizeTotal, SF_BYTES) 
                     << " exceeds the limit which is " << HumanReadableSize(LABEL_SIZE_LIMIT, SF_BYTES));
 
                 // (2) read string pools
                 TVector<char> namesBuf(Header_.LabelNamesSize);
                 readBytes = In_->Load(namesBuf.data(), namesBuf.size());
-                DECODE_ENSURE(readBytes == Header_.LabelNamesSize, "not enough data to read label names pool");
+                DECODE_ENSURE(readBytes == Header_.LabelNamesSize, "not enough data to read label names pool"); 
                 TStringPool labelNames(namesBuf.data(), namesBuf.size());
 
                 TVector<char> valuesBuf(Header_.LabelValuesSize);
                 readBytes = In_->Load(valuesBuf.data(), valuesBuf.size());
-                DECODE_ENSURE(readBytes == Header_.LabelValuesSize, "not enough data to read label values pool");
+                DECODE_ENSURE(readBytes == Header_.LabelValuesSize, "not enough data to read label values pool"); 
                 TStringPool labelValues(valuesBuf.data(), valuesBuf.size());
 
                 // (3) read common time
@@ -180,7 +180,7 @@ namespace NMonitoring {
                     break;
 
                 default:
-                    throw TSpackDecodeError() << "Unsupported metric type: " << metricType;
+                    throw TSpackDecodeError() << "Unsupported metric type: " << metricType; 
                 }
             }
 
@@ -212,25 +212,25 @@ namespace NMonitoring {
 
             IHistogramSnapshotPtr ReadHistogram() {
                 ui32 bucketsCount = ReadVarint();
-                auto s = TExplicitHistogramSnapshot::New(bucketsCount);
+                auto s = TExplicitHistogramSnapshot::New(bucketsCount); 
 
                 if (SV1_00 == Header_.Version) { // v1.0
-                    for (ui32 i = 0; i < bucketsCount; i++) {
-                        i64 bound = ReadFixed<i64>();
-                        double doubleBound = (bound != Max<i64>())
-                                ? static_cast<double>(bound)
-                                : Max<double>();
+                    for (ui32 i = 0; i < bucketsCount; i++) { 
+                        i64 bound = ReadFixed<i64>(); 
+                        double doubleBound = (bound != Max<i64>()) 
+                                ? static_cast<double>(bound) 
+                                : Max<double>(); 
 
-                        (*s)[i].first = doubleBound;
-                    }
-                } else {
-                    for (ui32 i = 0; i < bucketsCount; i++) {
-                        double doubleBound = ReadFixed<double>();
-                        (*s)[i].first = doubleBound;
-                    }
+                        (*s)[i].first = doubleBound; 
+                    } 
+                } else { 
+                    for (ui32 i = 0; i < bucketsCount; i++) { 
+                        double doubleBound = ReadFixed<double>(); 
+                        (*s)[i].first = doubleBound; 
+                    } 
                 }
 
-
+ 
                 // values
                 for (ui32 i = 0; i < bucketsCount; i++) {
                     (*s)[i].second = ReadFixed<ui64>();
@@ -265,7 +265,7 @@ namespace NMonitoring {
             inline T ReadFixed() {
                 T value;
                 size_t readBytes = In_->Load(&value, sizeof(T));
-                DECODE_ENSURE(readBytes == sizeof(T), "no enough data to read " << TypeName<T>());
+                DECODE_ENSURE(readBytes == sizeof(T), "no enough data to read " << TypeName<T>()); 
                 return value;
             }
 
@@ -277,16 +277,16 @@ namespace NMonitoring {
             IInputStream* In_;
             TString MetricNameLabel_;
             ETimePrecision TimePrecision_;
-            TSpackHeader Header_;
-        }; // class TDecoderSpackV1
+            TSpackHeader Header_; 
+        }; // class TDecoderSpackV1 
 
-#undef DECODE_ENSURE
-    } // namespace
+#undef DECODE_ENSURE 
+    } // namespace 
 
     EValueType DecodeValueType(ui8 byte) {
         EValueType result;
         if (!TryDecodeValueType(byte, &result)) {
-            throw TSpackDecodeError() << "unknown value type: " << byte;
+            throw TSpackDecodeError() << "unknown value type: " << byte; 
         }
         return result;
     }
@@ -320,7 +320,7 @@ namespace NMonitoring {
     ETimePrecision DecodeTimePrecision(ui8 byte) {
         ETimePrecision result;
         if (!TryDecodeTimePrecision(byte, &result)) {
-            throw TSpackDecodeError() << "unknown time precision: " << byte;
+            throw TSpackDecodeError() << "unknown time precision: " << byte; 
         }
         return result;
     }
@@ -344,7 +344,7 @@ namespace NMonitoring {
     EMetricType DecodeMetricType(ui8 byte) {
         EMetricType result;
         if (!TryDecodeMetricType(byte, &result)) {
-            throw TSpackDecodeError() << "unknown metric type: " << byte;
+            throw TSpackDecodeError() << "unknown metric type: " << byte; 
         }
         return result;
     }
@@ -419,7 +419,7 @@ namespace NMonitoring {
     ECompression DecodeCompression(ui8 byte) {
         ECompression result;
         if (!TryDecodeCompression(byte, &result)) {
-            throw TSpackDecodeError() << "unknown compression alg: " << byte;
+            throw TSpackDecodeError() << "unknown compression alg: " << byte; 
         }
         return result;
     }

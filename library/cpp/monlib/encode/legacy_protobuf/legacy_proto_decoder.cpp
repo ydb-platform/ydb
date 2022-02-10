@@ -224,8 +224,8 @@ namespace NMonitoring {
 
                 if (metricMeta.HasCustomPath()) {
                     if (const auto& nodePath = metricMeta.GetCustomPath()) {
-                        child.AppendPath(nodePath);
-                    }
+                        child.AppendPath(nodePath); 
+                    } 
                 } else if (metricMeta.GetPath()) {
                     child.AppendPath(name);
                 }

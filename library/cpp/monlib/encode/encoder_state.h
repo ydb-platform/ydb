@@ -1,24 +1,24 @@
 #pragma once
 
-#include "encoder_state_enum.h"
-
-#include <util/generic/serialized_enum.h>
+#include "encoder_state_enum.h" 
+ 
+#include <util/generic/serialized_enum.h> 
 #include <util/generic/yexception.h>
 
-
+ 
 namespace NMonitoring {
-
-    template <typename EEncoderState>
-    class TEncoderStateImpl {
+ 
+    template <typename EEncoderState> 
+    class TEncoderStateImpl { 
     public:
-        using EState = EEncoderState;
+        using EState = EEncoderState; 
 
-        explicit TEncoderStateImpl(EEncoderState state = EEncoderState::ROOT)
+        explicit TEncoderStateImpl(EEncoderState state = EEncoderState::ROOT) 
             : State_(state)
         {
         }
 
-        TEncoderStateImpl& operator=(EEncoderState rhs) noexcept {
+        TEncoderStateImpl& operator=(EEncoderState rhs) noexcept { 
             State_ = rhs;
             return *this;
         }
@@ -40,7 +40,7 @@ namespace NMonitoring {
             if (Y_UNLIKELY(State_ != expected)) {
                 ythrow yexception()
                     << "invalid encoder state: " << ToStr()
-                    << ", expected: " << TEncoderStateImpl(expected).ToStr();
+                    << ", expected: " << TEncoderStateImpl(expected).ToStr(); 
             }
         }
 
@@ -49,14 +49,14 @@ namespace NMonitoring {
             State_ = to;
         }
 
-        TStringBuf ToStr() const noexcept {
-            return NEnumSerializationRuntime::GetEnumNamesImpl<EEncoderState>().at(State_);
-        }
+        TStringBuf ToStr() const noexcept { 
+            return NEnumSerializationRuntime::GetEnumNamesImpl<EEncoderState>().at(State_); 
+        } 
 
     private:
         EEncoderState State_;
     };
 
-    using TEncoderState = TEncoderStateImpl<EEncoderState>;
-
-} // namespace NMonitoring
+    using TEncoderState = TEncoderStateImpl<EEncoderState>; 
+ 
+} // namespace NMonitoring 

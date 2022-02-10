@@ -15,7 +15,7 @@ namespace NMonitoring {
     class TLinearHistogramCollector: public IHistogramCollector {
     public:
         TLinearHistogramCollector(
-                ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth)
+                ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth) 
             : Values_(bucketsCount)
             , StartValue_(startValue)
             , BucketWidth_(bucketWidth)
@@ -23,14 +23,14 @@ namespace NMonitoring {
         {
         }
 
-        void Collect(double value, ui32 count) override {
+        void Collect(double value, ui32 count) override { 
             ui32 index = Max<ui32>();
             if (value <= StartValue_) {
                 index = 0;
             } else if (value > MaxValue_) {
                 index = Values_.Size() - 1;
             } else {
-                double buckets = (value - StartValue_) / BucketWidth_;
+                double buckets = (value - StartValue_) / BucketWidth_; 
                 index = static_cast<ui32>(std::ceil(buckets));
             }
             Values_.Add(index, count);
@@ -47,18 +47,18 @@ namespace NMonitoring {
 
     private:
         TAtomicsArray Values_;
-        TBucketBound StartValue_;
-        double BucketWidth_;
-        TBucketBound MaxValue_;
+        TBucketBound StartValue_; 
+        double BucketWidth_; 
+        TBucketBound MaxValue_; 
     };
 
     IHistogramCollectorPtr LinearHistogram(
-        ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth)
+        ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth) 
     {
         Y_ENSURE(bucketsCount >= 2,
                  "linear histogram must contain at least two buckets");
-        Y_ENSURE(bucketsCount <= HISTOGRAM_MAX_BUCKETS_COUNT,
-                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT
+        Y_ENSURE(bucketsCount <= HISTOGRAM_MAX_BUCKETS_COUNT, 
+                 "buckets count must be <=" << HISTOGRAM_MAX_BUCKETS_COUNT 
                                             << ", but got: " << bucketsCount);
         Y_ENSURE(bucketWidth >= 1, "bucketWidth must be >= 1, got: " << bucketWidth);
 

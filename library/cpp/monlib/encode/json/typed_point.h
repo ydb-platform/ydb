@@ -45,7 +45,7 @@ namespace NMonitoring {
             return *this;
         }
 
-        TTypedPoint(TTypedPoint&& rhs) noexcept
+        TTypedPoint(TTypedPoint&& rhs) noexcept 
             : Time_(rhs.Time_)
             , ValueType_(rhs.ValueType_)
             , Value_(rhs.Value_)
@@ -54,7 +54,7 @@ namespace NMonitoring {
             rhs.Value_ = {};
         }
 
-        TTypedPoint& operator=(TTypedPoint&& rhs) noexcept {
+        TTypedPoint& operator=(TTypedPoint&& rhs) noexcept { 
             UnRef();
 
             Time_ = rhs.Time_;

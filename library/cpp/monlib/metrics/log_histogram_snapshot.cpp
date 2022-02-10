@@ -2,16 +2,16 @@
 
 #include <util/stream/output.h>
 
-#include <iostream>
+#include <iostream> 
 
-
-namespace {
-
-template <typename TStream>
-auto& Output(TStream& o, const NMonitoring::TLogHistogramSnapshot& hist) {
+ 
+namespace { 
+ 
+template <typename TStream> 
+auto& Output(TStream& o, const NMonitoring::TLogHistogramSnapshot& hist) { 
     o << TStringBuf("{");
-
-    for (auto i = 0u; i < hist.Count(); ++i) {
+ 
+    for (auto i = 0u; i < hist.Count(); ++i) { 
         o << hist.UpperBound(i) << TStringBuf(": ") << hist.Bucket(i);
         o << TStringBuf(", ");
     }
@@ -19,17 +19,17 @@ auto& Output(TStream& o, const NMonitoring::TLogHistogramSnapshot& hist) {
     o << TStringBuf("zeros: ") << hist.ZerosCount();
 
     o << TStringBuf("}");
-
-    return o;
+ 
+    return o; 
 }
-
-} // namespace
-
-std::ostream& operator<<(std::ostream& os, const NMonitoring::TLogHistogramSnapshot& hist) {
-    return Output(os, hist);
-}
-
-template <>
-void Out<NMonitoring::TLogHistogramSnapshot>(IOutputStream& os, const NMonitoring::TLogHistogramSnapshot& hist) {
-    Output(os, hist);
-}
+ 
+} // namespace 
+ 
+std::ostream& operator<<(std::ostream& os, const NMonitoring::TLogHistogramSnapshot& hist) { 
+    return Output(os, hist); 
+} 
+ 
+template <> 
+void Out<NMonitoring::TLogHistogramSnapshot>(IOutputStream& os, const NMonitoring::TLogHistogramSnapshot& hist) { 
+    Output(os, hist); 
+} 

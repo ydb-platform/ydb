@@ -19,15 +19,15 @@ namespace NMonitoring {
 
         private:
             void OnStreamBegin() override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
             }
 
             void OnStreamEnd() override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
             }
 
             void OnCommonTime(TInstant time) override {
-                State_.Expect(TEncoderState::EState::ROOT);
+                State_.Expect(TEncoderState::EState::ROOT); 
                 CommonTime_ = time;
                 if (time != TInstant::Zero()) {
                     Out_->Write(TStringBuf("common time: "));
@@ -50,8 +50,8 @@ namespace NMonitoring {
             void OnLabelsBegin() override {
                 if (State_ == TEncoderState::EState::METRIC) {
                     State_ = TEncoderState::EState::METRIC_LABELS;
-                } else if (State_ == TEncoderState::EState::ROOT) {
-                    State_ = TEncoderState::EState::COMMON_LABELS;
+                } else if (State_ == TEncoderState::EState::ROOT) { 
+                    State_ = TEncoderState::EState::COMMON_LABELS; 
                 } else {
                     State_.ThrowInvalid("expected METRIC or ROOT");
                 }
@@ -60,8 +60,8 @@ namespace NMonitoring {
             void OnLabelsEnd() override {
                 if (State_ == TEncoderState::EState::METRIC_LABELS) {
                     State_ = TEncoderState::EState::METRIC;
-                } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
-                    State_ = TEncoderState::EState::ROOT;
+                } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
+                    State_ = TEncoderState::EState::ROOT; 
                     Out_->Write(TStringBuf("common labels: "));
                     WriteLabels();
                     Out_->Write('\n');

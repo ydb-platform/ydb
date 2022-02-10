@@ -1,14 +1,14 @@
-#pragma once
-
-#include <util/generic/strbuf.h>
-
-
-/* Taken from SpringFramework's HttpHeaders. Docs:
- * https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/http/HttpHeaders.html
- * Source:
- * https://github.com/spring-projects/spring-framework/blob/816bbee8de584676250e2bc5dcff6da6cd81623f/spring-web/src/main/java/org/springframework/http/HttpHeaders.java
- */
-namespace NHttpHeaders {
+#pragma once 
+ 
+#include <util/generic/strbuf.h> 
+ 
+ 
+/* Taken from SpringFramework's HttpHeaders. Docs: 
+ * https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/http/HttpHeaders.html 
+ * Source: 
+ * https://github.com/spring-projects/spring-framework/blob/816bbee8de584676250e2bc5dcff6da6cd81623f/spring-web/src/main/java/org/springframework/http/HttpHeaders.java 
+ */ 
+namespace NHttpHeaders { 
     constexpr TStringBuf ACCEPT = "Accept";
     constexpr TStringBuf ACCEPT_CHARSET = "Accept-Charset";
     constexpr TStringBuf ACCEPT_ENCODING = "Accept-Encoding";
@@ -69,4 +69,4 @@ namespace NHttpHeaders {
     constexpr TStringBuf VIA = "Via";
     constexpr TStringBuf WARNING = "Warning";
     constexpr TStringBuf WWW_AUTHENTICATE = "WWW-Authenticate";
-} // namespace HttpHeaders
+} // namespace HttpHeaders 

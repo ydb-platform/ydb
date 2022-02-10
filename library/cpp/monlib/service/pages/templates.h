@@ -6,7 +6,7 @@
 #define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_))
 
 #define WITH_SCOPED_I(var, value, label) \
-    if (auto var = (value)) {              \
+    if (auto var = (value)) {              \ 
         Y_UNUSED(var);                   \
         goto label;                      \
     } else                               \

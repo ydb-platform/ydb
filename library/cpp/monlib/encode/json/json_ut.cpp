@@ -559,21 +559,21 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         }
     }
 
-    Y_UNIT_TEST(DecodeToEncoder) {
-        auto testJson = NResource::Find("/test_decode_to_encode.json");
-
-        TStringStream Stream_;
-        auto encoder = BufferedEncoderJson(&Stream_, 4);
-        DecodeJson(testJson, encoder.Get());
-
-        encoder->Close();
-
-        auto val1 = NJson::ReadJsonFastTree(testJson, true);
-        auto val2 = NJson::ReadJsonFastTree(Stream_.Str(), true);
-
-        UNIT_ASSERT_VALUES_EQUAL(val1, val2);
-    }
-
+    Y_UNIT_TEST(DecodeToEncoder) { 
+        auto testJson = NResource::Find("/test_decode_to_encode.json"); 
+ 
+        TStringStream Stream_; 
+        auto encoder = BufferedEncoderJson(&Stream_, 4); 
+        DecodeJson(testJson, encoder.Get()); 
+ 
+        encoder->Close(); 
+ 
+        auto val1 = NJson::ReadJsonFastTree(testJson, true); 
+        auto val2 = NJson::ReadJsonFastTree(Stream_.Str(), true); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(val1, val2); 
+    } 
+ 
     void WriteEmptySeries(const IMetricEncoderPtr& e) {
         e->OnStreamBegin();
         {
@@ -1033,12 +1033,12 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         AssertPointEqual(s.GetPoints(1), now + TDuration::Seconds(15), *logHist);
     }
 
-    void HistogramValueDecode(const TString& filePath) {
+    void HistogramValueDecode(const TString& filePath) { 
         NProto::TMultiSamplesList samples;
         {
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
 
-            TString testJson = NResource::Find(filePath);
+            TString testJson = NResource::Find(filePath); 
             DecodeJson(testJson, e.Get());
         }
 
@@ -1059,11 +1059,11 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         AssertPointEqual(s.GetPoints(0), now, *h->Snapshot());
     }
 
-    Y_UNIT_TEST(HistogramValueDecode) {
-        HistogramValueDecode("/histogram_value.json");
-        HistogramValueDecode("/histogram_value_inf_before_bounds.json");
-    }
-
+    Y_UNIT_TEST(HistogramValueDecode) { 
+        HistogramValueDecode("/histogram_value.json"); 
+        HistogramValueDecode("/histogram_value_inf_before_bounds.json"); 
+    } 
+ 
     Y_UNIT_TEST(HistogramTimeSeriesEncode) {
         auto writeDocument = [](IMetricEncoder* e) {
             e->OnStreamBegin();

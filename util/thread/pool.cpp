@@ -143,10 +143,10 @@ public:
         return ThreadCountExpected;
     }
 
-    inline size_t GetThreadCountReal() const noexcept {
-        return ThreadCountReal;
-    }
-
+    inline size_t GetThreadCountReal() const noexcept { 
+        return ThreadCountReal; 
+    } 
+ 
     inline void AtforkAction() noexcept Y_NO_SANITIZE("thread") {
         Forked = true;
     }
@@ -326,29 +326,29 @@ size_t TThreadPool::Size() const noexcept {
 }
 
 size_t TThreadPool::GetThreadCountExpected() const noexcept {
-    if (!Impl_.Get()) {
-        return 0;
-    }
-
-    return Impl_->GetThreadCountExpected();
-}
-
+    if (!Impl_.Get()) { 
+        return 0; 
+    } 
+ 
+    return Impl_->GetThreadCountExpected(); 
+} 
+ 
 size_t TThreadPool::GetThreadCountReal() const noexcept {
-    if (!Impl_.Get()) {
-        return 0;
-    }
-
-    return Impl_->GetThreadCountReal();
-}
-
+    if (!Impl_.Get()) { 
+        return 0; 
+    } 
+ 
+    return Impl_->GetThreadCountReal(); 
+} 
+ 
 size_t TThreadPool::GetMaxQueueSize() const noexcept {
-    if (!Impl_.Get()) {
-        return 0;
-    }
-
-    return Impl_->GetMaxQueueSize();
-}
-
+    if (!Impl_.Get()) { 
+        return 0; 
+    } 
+ 
+    return Impl_->GetMaxQueueSize(); 
+} 
+ 
 bool TThreadPool::Add(IObjectInQueue* obj) {
     Y_ENSURE_EX(Impl_.Get(), TThreadPoolException() << TStringBuf("mtp queue not started"));
 

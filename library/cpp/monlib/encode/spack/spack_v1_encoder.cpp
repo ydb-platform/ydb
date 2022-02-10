@@ -22,11 +22,11 @@ namespace NMonitoring {
             TEncoderSpackV1(
                 IOutputStream* out,
                 ETimePrecision timePrecision,
-                ECompression compression,
+                ECompression compression, 
                 EMetricsMergingMode mergingMode,
                 ESpackV1Version version,
                 TStringBuf metricNameLabel
-            )
+            ) 
                 : Out_(out)
                 , TimePrecision_(timePrecision)
                 , Compression_(compression)
@@ -34,7 +34,7 @@ namespace NMonitoring {
                 , MetricName_(Version_ >= SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr)
             {
                 MetricsMergingMode_ = mergingMode;
-
+ 
                 LabelNamesPool_.SetSorted(true);
                 LabelValuesPool_.SetSorted(true);
             }
@@ -77,16 +77,16 @@ namespace NMonitoring {
                 LabelNamesPool_.Build();
                 LabelValuesPool_.Build();
 
-                // Sort all points uniquely by ts -- the size can decrease
-                ui64 pointsCount = 0;
+                // Sort all points uniquely by ts -- the size can decrease 
+                ui64 pointsCount = 0; 
                 for (TMetric& metric : Metrics_) {
                     if (metric.TimeSeries.Size() > 1) {
                         metric.TimeSeries.SortByTs();
-                    }
-
+                    } 
+ 
                     pointsCount += metric.TimeSeries.Size();
-                }
-
+                } 
+ 
                 // (1) write header
                 TSpackHeader header;
                 header.Version = Version_;
@@ -97,7 +97,7 @@ namespace NMonitoring {
                 header.LabelValuesSize = static_cast<ui32>(
                     LabelValuesPool_.BytesSize() + LabelValuesPool_.Count());
                 header.MetricCount = Metrics_.size();
-                header.PointsCount = pointsCount;
+                header.PointsCount = pointsCount; 
                 Out_->Write(&header, sizeof(header));
 
                 // if compression enabled all below writes must go throught compressor
@@ -258,7 +258,7 @@ namespace NMonitoring {
                 WriteVarUInt32(Out_, count);
 
                 for (ui32 i = 0; i < count; i++) {
-                    double bound = histogram.UpperBound(i);
+                    double bound = histogram.UpperBound(i); 
                     Out_->Write(&bound, sizeof(bound));
                 }
                 for (ui32 i = 0; i < count; i++) {
@@ -299,9 +299,9 @@ namespace NMonitoring {
     IMetricEncoderPtr EncoderSpackV1(
         IOutputStream* out,
         ETimePrecision timePrecision,
-        ECompression compression,
+        ECompression compression, 
         EMetricsMergingMode mergingMode
-    ) {
+    ) { 
         return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_01, "");
     }
 

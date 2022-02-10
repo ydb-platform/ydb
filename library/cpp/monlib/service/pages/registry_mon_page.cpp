@@ -30,9 +30,9 @@ namespace NMonitoring {
             }
 
             out.Write(resp);
-            RegistryRawPtr_->Accept(TInstant::Zero(), encoder.Get());
-
-            encoder->Close();
+            RegistryRawPtr_->Accept(TInstant::Zero(), encoder.Get()); 
+ 
+            encoder->Close(); 
         } else {
             THtmlMonPage::Output(request);
         }

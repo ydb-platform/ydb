@@ -1,12 +1,12 @@
-LIBRARY()
-
-OWNER(g:solomon)
-
-SRCS(
-    exception.cpp
-)
-
-PEERDIR(
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(g:solomon) 
+ 
+SRCS( 
+    exception.cpp 
+) 
+ 
+PEERDIR( 
+) 
+ 
+END() 

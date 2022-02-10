@@ -19,10 +19,10 @@ namespace NMonitoring {
             Y_ENSURE(::IsValidFloat(d) && d >= Min<T>() && d <= MaxFloor<T>(), "Cannot convert " << d << " to an integer value");
             return static_cast<T>(d);
         }
-
-        inline auto POINT_KEY_FN = [](auto& p) {
-            return p.GetTime();
-        };
+ 
+        inline auto POINT_KEY_FN = [](auto& p) { 
+            return p.GetTime(); 
+        }; 
     } // namespace NPrivate
 
     template <typename T, typename Enable = void>
@@ -62,11 +62,11 @@ namespace NMonitoring {
     // TMetricValue
     ///////////////////////////////////////////////////////////////////////////
     // TMetricValue represents a generic value. It does not contain type
-    // information about a value. This is done to minimize object footprint.
-    // To read an actual value from the object the type must be checked
-    // first or provided to AsXxxx(type) member-functions.
-    // This class does not hold an ownership of an IHistogramSnapshot or
-    // SummarySnapshot, so this must be done somewhere outside.
+    // information about a value. This is done to minimize object footprint. 
+    // To read an actual value from the object the type must be checked 
+    // first or provided to AsXxxx(type) member-functions. 
+    // This class does not hold an ownership of an IHistogramSnapshot or 
+    // SummarySnapshot, so this must be done somewhere outside. 
     class TMetricValue {
     public:
         TMetricValue() noexcept {
@@ -181,24 +181,24 @@ namespace NMonitoring {
 
         IHistogramSnapshot* AsHistogram(EMetricValueType type) const {
             if (type != EMetricValueType::HISTOGRAM) {
-                ythrow yexception() << type << " cannot be casted to Histogram";
-            }
-
-            return Value_.Histogram;
-        }
-
+                ythrow yexception() << type << " cannot be casted to Histogram"; 
+            } 
+ 
+            return Value_.Histogram; 
+        } 
+ 
         ISummaryDoubleSnapshot* AsSummaryDouble() const noexcept {
             return Value_.Summary;
         }
 
         ISummaryDoubleSnapshot* AsSummaryDouble(EMetricValueType type) const {
             if (type != EMetricValueType::SUMMARY) {
-                ythrow yexception() << type << " cannot be casted to SummaryDouble";
-            }
-
-            return Value_.Summary;
-        }
-
+                ythrow yexception() << type << " cannot be casted to SummaryDouble"; 
+            } 
+ 
+            return Value_.Summary; 
+        } 
+ 
         TLogHistogramSnapshot* AsLogHistogram() const noexcept {
             return Value_.LogHistogram;
         }
@@ -222,103 +222,103 @@ namespace NMonitoring {
         } Value_;
     };
 
-    ///////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////// 
     // TMetricValueWithType
-    ///////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////// 
     // Same as TMetricValue, but this type holds an ownership of
-    // snapshots and contains value type information.
+    // snapshots and contains value type information. 
     class TMetricValueWithType: private TMetricValue, public TMoveOnly {
-    public:
+    public: 
         using TBase = TMetricValue;
-
-        template <typename T>
+ 
+        template <typename T> 
         explicit TMetricValueWithType(T value)
-            : TBase(value)
-            , ValueType_{TValueType<T>::Type}
-        {
-            Ref();
-        }
-
+            : TBase(value) 
+            , ValueType_{TValueType<T>::Type} 
+        { 
+            Ref(); 
+        } 
+ 
         TMetricValueWithType(TMetricValueWithType&& other)
-            : TBase(std::move(other))
-            , ValueType_{other.ValueType_}
-        {
-            Ref();
-            other.Clear();
-        }
-
+            : TBase(std::move(other)) 
+            , ValueType_{other.ValueType_} 
+        { 
+            Ref(); 
+            other.Clear(); 
+        } 
+ 
         TMetricValueWithType& operator=(TMetricValueWithType&& other) {
-            TBase::operator=(other);
-            ValueType_ = other.ValueType_;
-
-            Ref();
-            other.Clear();
-
-            return *this;
-        }
-
+            TBase::operator=(other); 
+            ValueType_ = other.ValueType_; 
+ 
+            Ref(); 
+            other.Clear(); 
+ 
+            return *this; 
+        } 
+ 
         ~TMetricValueWithType() {
-            UnRef();
-        }
-
-        void Clear() {
-            UnRef();
+            UnRef(); 
+        } 
+ 
+        void Clear() { 
+            UnRef(); 
             ValueType_ = EMetricValueType::UNKNOWN;
-        }
-
+        } 
+ 
         EMetricValueType GetType() const noexcept {
-            return ValueType_;
-        }
-
-        double AsDouble() const {
-            return TBase::AsDouble(ValueType_);
-        }
-
-        ui64 AsUint64() const {
-            return TBase::AsUint64(ValueType_);
-        }
-
-        i64 AsInt64() const {
-            return TBase::AsInt64(ValueType_);
-        }
-
-        IHistogramSnapshot* AsHistogram() const {
-            return TBase::AsHistogram(ValueType_);
-        }
-
-        ISummaryDoubleSnapshot* AsSummaryDouble() const {
-            return TBase::AsSummaryDouble(ValueType_);
-        }
-
+            return ValueType_; 
+        } 
+ 
+        double AsDouble() const { 
+            return TBase::AsDouble(ValueType_); 
+        } 
+ 
+        ui64 AsUint64() const { 
+            return TBase::AsUint64(ValueType_); 
+        } 
+ 
+        i64 AsInt64() const { 
+            return TBase::AsInt64(ValueType_); 
+        } 
+ 
+        IHistogramSnapshot* AsHistogram() const { 
+            return TBase::AsHistogram(ValueType_); 
+        } 
+ 
+        ISummaryDoubleSnapshot* AsSummaryDouble() const { 
+            return TBase::AsSummaryDouble(ValueType_); 
+        } 
+ 
         TLogHistogramSnapshot* AsLogHistogram() const {
             return TBase::AsLogHistogram(ValueType_);
         }
 
-    private:
-        void Ref() {
+    private: 
+        void Ref() { 
             if (ValueType_ == EMetricValueType::SUMMARY) {
-                TBase::AsSummaryDouble()->Ref();
+                TBase::AsSummaryDouble()->Ref(); 
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
-                TBase::AsHistogram()->Ref();
+                TBase::AsHistogram()->Ref(); 
             } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
                 TBase::AsLogHistogram()->Ref();
-            }
-        }
-
-        void UnRef() {
+            } 
+        } 
+ 
+        void UnRef() { 
             if (ValueType_ == EMetricValueType::SUMMARY) {
-                TBase::AsSummaryDouble()->UnRef();
+                TBase::AsSummaryDouble()->UnRef(); 
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
-                TBase::AsHistogram()->UnRef();
+                TBase::AsHistogram()->UnRef(); 
             } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
                 TBase::AsLogHistogram()->UnRef();
-            }
-        }
-
-    private:
+            } 
+        } 
+ 
+    private: 
         EMetricValueType ValueType_ = EMetricValueType::UNKNOWN;
-    };
-
+    }; 
+ 
     static_assert(sizeof(TMetricValue) == sizeof(ui64),
                   "expected size of TMetricValue is one machine word");
 
@@ -451,10 +451,10 @@ namespace NMonitoring {
             return Points_.size();
         }
 
-        size_t Capacity() const noexcept {
-            return Points_.capacity();
-        }
-
+        size_t Capacity() const noexcept { 
+            return Points_.capacity(); 
+        } 
+ 
         const TPoint& operator[](size_t index) const noexcept {
             return Points_[index];
         }
@@ -518,18 +518,18 @@ namespace NMonitoring {
 
     template <typename TPoint>
     void SortPointsByTs(EMetricValueType valueType, TVector<TPoint>& points) {
-        if (points.size() < 2) {
-            return;
-        }
-
+        if (points.size() < 2) { 
+            return; 
+        } 
+ 
         if (valueType != EMetricValueType::HISTOGRAM && valueType != EMetricValueType::SUMMARY
             && valueType != EMetricValueType::LOGHISTOGRAM) {
-            // Stable sort + saving only the last point inside a group of duplicates
-            StableSortBy(points, NPrivate::POINT_KEY_FN);
-            auto it = UniqueBy(points.rbegin(), points.rend(), NPrivate::POINT_KEY_FN);
-            points.erase(points.begin(), it.base());
-        } else {
-            StableSortBy(points, NPrivate::POINT_KEY_FN);
+            // Stable sort + saving only the last point inside a group of duplicates 
+            StableSortBy(points, NPrivate::POINT_KEY_FN); 
+            auto it = UniqueBy(points.rbegin(), points.rend(), NPrivate::POINT_KEY_FN); 
+            points.erase(points.begin(), it.base()); 
+        } else { 
+            StableSortBy(points, NPrivate::POINT_KEY_FN); 
             if (valueType == EMetricValueType::HISTOGRAM) {
                 EraseDuplicates<EMetricValueType::HISTOGRAM>(points);
             } else if (valueType == EMetricValueType::LOGHISTOGRAM) {
@@ -537,6 +537,6 @@ namespace NMonitoring {
             } else {
                 EraseDuplicates<EMetricValueType::SUMMARY>(points);
             }
-        }
-    }
+        } 
+    } 
 }

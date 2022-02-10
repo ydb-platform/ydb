@@ -136,7 +136,7 @@ namespace NMonitoring {
     TCoHttpServer::TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler)
         : Executor(executor)
         , Listener(this, &executor)
-        , Handler(std::move(handler))
+        , Handler(std::move(handler)) 
         , BindAddr(bindAddr)
         , Port(port)
     {
@@ -205,16 +205,16 @@ namespace NMonitoring {
 
     TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool)
         : THttpServer(this, options, pool)
-        , Handler(std::move(handler))
+        , Handler(std::move(handler)) 
     {
     }
 
     TMtHttpServer::TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool)
-        : THttpServer(this, /* mainWorkers = */pool, /* failWorkers = */pool, options)
-        , Handler(std::move(handler))
-    {
-    }
-
+        : THttpServer(this, /* mainWorkers = */pool, /* failWorkers = */pool, options) 
+        , Handler(std::move(handler)) 
+    { 
+    } 
+ 
     bool TMtHttpServer::Start() {
         return THttpServer::Start();
     }
@@ -241,9 +241,9 @@ namespace NMonitoring {
 
     TMonService::TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort,
                              THandler coHandler, THandler mtHandler)
-        : CoServer(executor, "127.0.0.1", internalPort, std::move(coHandler))
+        : CoServer(executor, "127.0.0.1", internalPort, std::move(coHandler)) 
         , MtServer(THttpServerOptions(externalPort), std::bind(&TMonService::DispatchRequest, this, std::placeholders::_1, std::placeholders::_2))
-        , MtHandler(std::move(mtHandler))
+        , MtHandler(std::move(mtHandler)) 
     {
     }
 

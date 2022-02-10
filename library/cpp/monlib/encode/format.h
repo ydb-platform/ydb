@@ -87,30 +87,30 @@ namespace NMonitoring {
     };
 
     enum class EMetricsMergingMode {
-        /**
+        /** 
          * Do not merge metric batches. If several points of the same metric were
-         * added multiple times accross different writes, paste them as
+         * added multiple times accross different writes, paste them as 
          * separate metrics.
-         *
-         * Example:
-         * COUNTER [(ts1, val1)] |     COUNTER [(ts1, val1)]
-         * COUNTER [(ts2, val2)] | --> COUNTER [(ts2, val2)]
-         * COUNTER [(ts3, val3)] |     COUNTER [(ts3, val3)]
-         */
-        DEFAULT,
+         * 
+         * Example: 
+         * COUNTER [(ts1, val1)] |     COUNTER [(ts1, val1)] 
+         * COUNTER [(ts2, val2)] | --> COUNTER [(ts2, val2)] 
+         * COUNTER [(ts3, val3)] |     COUNTER [(ts3, val3)] 
+         */ 
+        DEFAULT, 
 
-        /**
+        /** 
          * If several points of the same metric were added multiple times across
-         * different writes, merge all values to one timeseries.
-         *
-         * Example:
-         * COUNTER [(ts1, val1)] |
-         * COUNTER [(ts2, val2)] | --> COUNTER [(ts1, val1), (ts2, val2), (ts3, val3)]
-         * COUNTER [(ts3, val3)] |
-         */
+         * different writes, merge all values to one timeseries. 
+         * 
+         * Example: 
+         * COUNTER [(ts1, val1)] | 
+         * COUNTER [(ts2, val2)] | --> COUNTER [(ts1, val1), (ts2, val2), (ts3, val3)] 
+         * COUNTER [(ts3, val3)] | 
+         */ 
         MERGE_METRICS,
-    };
-
+    }; 
+ 
     /**
      * Matches serialization format by the given "Accept" header value.
      *

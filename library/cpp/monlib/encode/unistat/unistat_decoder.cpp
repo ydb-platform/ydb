@@ -49,7 +49,7 @@ namespace NMonitoring {
         auto ExtractDouble = ExtractNumber<double>;
         auto ExtractUi64 = ExtractNumber<ui64>;
 
-        class THistogramBuilder {
+        class THistogramBuilder { 
         public:
             void Add(TBucketBound bound, TBucketValue value) {
                 /// XXX: yasm uses left-closed intervals, while in monlib we use right-closed ones,
@@ -67,14 +67,14 @@ namespace NMonitoring {
                 NextValue_ = value;
             }
 
-            IHistogramSnapshotPtr Finalize() {
+            IHistogramSnapshotPtr Finalize() { 
                 Bounds_.push_back(std::numeric_limits<TBucketBound>::max());
                 Values_.push_back(NextValue_);
 
-                Y_ENSURE(Bounds_.size() <= HISTOGRAM_MAX_BUCKETS_COUNT,
-                    "Histogram is only allowed to have " << HISTOGRAM_MAX_BUCKETS_COUNT << " buckets, but has " << Bounds_.size());
+                Y_ENSURE(Bounds_.size() <= HISTOGRAM_MAX_BUCKETS_COUNT, 
+                    "Histogram is only allowed to have " << HISTOGRAM_MAX_BUCKETS_COUNT << " buckets, but has " << Bounds_.size()); 
 
-                return ExplicitHistogramSnapshot(Bounds_, Values_);
+                return ExplicitHistogramSnapshot(Bounds_, Values_); 
             }
 
         public:
@@ -135,7 +135,7 @@ namespace NMonitoring {
                     MetricContext_.Type = EMetricType::HIST;
                 }
 
-                auto histogramBuilder = THistogramBuilder();
+                auto histogramBuilder = THistogramBuilder(); 
 
                 for (auto&& bucket : jsonHist.GetArray()) {
                     Y_ENSURE(bucket.IsArray(), "Expected an array, but found " << bucket.GetType());
@@ -143,10 +143,10 @@ namespace NMonitoring {
                     Y_ENSURE(arr.size() == 2, "Histogram bucket must be an array of 2 elements");
                     const auto bound = ExtractDouble(arr[0]);
                     const auto weight = ExtractUi64(arr[1]);
-                    histogramBuilder.Add(bound, weight);
+                    histogramBuilder.Add(bound, weight); 
                 }
 
-                MetricContext_.Histogram = histogramBuilder.Finalize();
+                MetricContext_.Histogram = histogramBuilder.Finalize(); 
                 MetricContext_.Value = TMetricValue{MetricContext_.Histogram.Get()};
             }
 
@@ -233,7 +233,7 @@ namespace NMonitoring {
                 TMetricValue Value;
                 bool IsDeriv{false};
                 TLabels Labels;
-                IHistogramSnapshotPtr Histogram;
+                IHistogramSnapshotPtr Histogram; 
             } MetricContext_;
         };
 

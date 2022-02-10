@@ -241,7 +241,7 @@ namespace NMonitoring {
         // TFramedOutputStream
         ///////////////////////////////////////////////////////////////////////////////
         template <typename TCodecAlg, typename TCheckSumAlg>
-        class TFramedCompressStream final: public IFramedCompressStream {
+        class TFramedCompressStream final: public IFramedCompressStream { 
         public:
             explicit TFramedCompressStream(IOutputStream* out)
                 : Out_(out)
@@ -277,13 +277,13 @@ namespace NMonitoring {
                 }
             }
 
-            void FlushWithoutEmptyFrame() override {
+            void FlushWithoutEmptyFrame() override { 
                 if (Out_ && !Uncompressed_.Empty()) {
                     WriteCompressedFrame();
                 }
             }
 
-            void FinishAndWriteEmptyFrame() override {
+            void FinishAndWriteEmptyFrame() override { 
                 if (Out_) {
                     Y_DEFER {
                         Out_ = nullptr;
@@ -297,14 +297,14 @@ namespace NMonitoring {
                 }
             }
 
-            void DoFlush() override {
-                FlushWithoutEmptyFrame();
-            }
-
-            void DoFinish() override {
-                FinishAndWriteEmptyFrame();
-            }
-
+            void DoFlush() override { 
+                FlushWithoutEmptyFrame(); 
+            } 
+ 
+            void DoFinish() override { 
+                FinishAndWriteEmptyFrame(); 
+            } 
+ 
             void WriteCompressedFrame() {
                 static const auto framePayload = sizeof(TFrameHeader) + sizeof(TFrameFooter);
                 const auto maxFrameSize = ui64(TCodecAlg::MaxCompressedLength(Uncompressed_.Size())) + framePayload;
@@ -364,7 +364,7 @@ namespace NMonitoring {
         Y_FAIL("invalid compression algorithm");
     }
 
-    THolder<IFramedCompressStream> CompressedOutput(IOutputStream* out, ECompression alg) {
+    THolder<IFramedCompressStream> CompressedOutput(IOutputStream* out, ECompression alg) { 
         switch (alg) {
             case ECompression::IDENTITY:
                 return nullptr;

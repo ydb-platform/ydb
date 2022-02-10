@@ -190,8 +190,8 @@ namespace NMonitoring {
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
         TWriteGuard g{Lock_};
         Metrics_.erase(labels);
-    }
-
+    } 
+ 
     void TMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
         consumer->OnStreamBegin();
 

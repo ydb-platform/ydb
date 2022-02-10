@@ -15,6 +15,6 @@ PEERDIR(
     library/cpp/monlib/metrics
 )
 
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(encoder_state_enum.h)
-
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(encoder_state_enum.h) 
+ 
 END()

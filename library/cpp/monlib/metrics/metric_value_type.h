@@ -1,16 +1,16 @@
-#pragma once
-
-
-namespace NMonitoring {
-
+#pragma once 
+ 
+ 
+namespace NMonitoring { 
+ 
 enum class EMetricValueType {
-    UNKNOWN,
-    DOUBLE,
-    INT64,
-    UINT64,
-    HISTOGRAM,
-    SUMMARY,
+    UNKNOWN, 
+    DOUBLE, 
+    INT64, 
+    UINT64, 
+    HISTOGRAM, 
+    SUMMARY, 
     LOGHISTOGRAM,
-};
-
-} // namespace NMonitoring
+}; 
+ 
+} // namespace NMonitoring 

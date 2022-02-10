@@ -22,7 +22,7 @@ message TMetricMeta {
     optional string Keys = 3;
     optional bool MemOnly = 4;
     optional bool IgnorePath = 5;
-    optional string CustomPath = 6;
+    optional string CustomPath = 6; 
 }
 
 enum THistogramBase {

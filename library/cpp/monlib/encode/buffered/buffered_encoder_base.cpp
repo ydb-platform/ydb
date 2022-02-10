@@ -6,15 +6,15 @@
 namespace NMonitoring {
 
 void TBufferedEncoderBase::OnStreamBegin() {
-    State_.Expect(TEncoderState::EState::ROOT);
+    State_.Expect(TEncoderState::EState::ROOT); 
 }
 
 void TBufferedEncoderBase::OnStreamEnd() {
-    State_.Expect(TEncoderState::EState::ROOT);
+    State_.Expect(TEncoderState::EState::ROOT); 
 }
 
 void TBufferedEncoderBase::OnCommonTime(TInstant time) {
-    State_.Expect(TEncoderState::EState::ROOT);
+    State_.Expect(TEncoderState::EState::ROOT); 
     CommonTime_ = time;
 }
 
@@ -26,41 +26,41 @@ void TBufferedEncoderBase::OnMetricBegin(EMetricType type) {
 
 void TBufferedEncoderBase::OnMetricEnd() {
     State_.Switch(TEncoderState::EState::METRIC, TEncoderState::EState::ROOT);
-
+ 
     switch (MetricsMergingMode_) {
         case EMetricsMergingMode::MERGE_METRICS: {
             auto& metric = Metrics_.back();
             Sort(metric.Labels, [] (const TPooledLabel& lhs, const TPooledLabel& rhs) {
-                return std::tie(lhs.Key, lhs.Value) < std::tie(rhs.Key, rhs.Value);
-            });
-
+                return std::tie(lhs.Key, lhs.Value) < std::tie(rhs.Key, rhs.Value); 
+            }); 
+ 
             auto it = MetricMap_.find(metric.Labels);
             if (it == std::end(MetricMap_)) {
                 MetricMap_.emplace(metric.Labels, Metrics_.size() - 1);
-            } else {
+            } else { 
                 auto& existing = Metrics_[it->second].TimeSeries;
-
+ 
                 Y_ENSURE(existing.GetValueType() == metric.TimeSeries.GetValueType(),
                     "Time series point type mismatch: expected " << existing.GetValueType()
                     << " but found " << metric.TimeSeries.GetValueType()
                     << ", labels '" << FormatLabels(metric.Labels) << "'");
-
+ 
                 existing.CopyFrom(metric.TimeSeries);
                 Metrics_.pop_back();
-            }
-
-            break;
-        }
+            } 
+ 
+            break; 
+        } 
         case EMetricsMergingMode::DEFAULT:
-            break;
-    }
+            break; 
+    } 
 }
 
 void TBufferedEncoderBase::OnLabelsBegin() {
     if (State_ == TEncoderState::EState::METRIC) {
         State_ = TEncoderState::EState::METRIC_LABELS;
-    } else if (State_ == TEncoderState::EState::ROOT) {
-        State_ = TEncoderState::EState::COMMON_LABELS;
+    } else if (State_ == TEncoderState::EState::ROOT) { 
+        State_ = TEncoderState::EState::COMMON_LABELS; 
     } else {
         State_.ThrowInvalid("expected METRIC or ROOT");
     }
@@ -69,8 +69,8 @@ void TBufferedEncoderBase::OnLabelsBegin() {
 void TBufferedEncoderBase::OnLabelsEnd() {
     if (State_ == TEncoderState::EState::METRIC_LABELS) {
         State_ = TEncoderState::EState::METRIC;
-    } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
-        State_ = TEncoderState::EState::ROOT;
+    } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
+        State_ = TEncoderState::EState::ROOT; 
     } else {
         State_.ThrowInvalid("expected LABELS or COMMON_LABELS");
     }
@@ -80,7 +80,7 @@ void TBufferedEncoderBase::OnLabel(TStringBuf name, TStringBuf value) {
     TPooledLabels* labels;
     if (State_ == TEncoderState::EState::METRIC_LABELS) {
         labels = &Metrics_.back().Labels;
-    } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
+    } else if (State_ == TEncoderState::EState::COMMON_LABELS) { 
         labels = &CommonLabels_;
     } else {
         State_.ThrowInvalid("expected LABELS or COMMON_LABELS");

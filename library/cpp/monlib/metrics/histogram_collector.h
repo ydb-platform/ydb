@@ -14,7 +14,7 @@ namespace NMonitoring {
         /**
          * Store {@code count} times given {@code value} in this collector.
          */
-        virtual void Collect(double value, ui32 count) = 0;
+        virtual void Collect(double value, ui32 count) = 0; 
 
         /**
          * Store given {@code value} in this collector.
@@ -114,6 +114,6 @@ namespace NMonitoring {
      *                     each bucket. The value must be >= 1.
      */
     IHistogramCollectorPtr LinearHistogram(
-        ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth);
+        ui32 bucketsCount, TBucketBound startValue, TBucketBound bucketWidth); 
 
-} // namespace NMonitoring
+} // namespace NMonitoring 

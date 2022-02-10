@@ -49,9 +49,9 @@ void AssertPointEqual(const NProto::TPoint& p, TInstant time, i64 value) {
 }
 
 Y_UNIT_TEST_SUITE(TSpackTest) {
-    ui8 expectedHeader_v1_0[] = {
+    ui8 expectedHeader_v1_0[] = { 
         0x53, 0x50,             // magic "SP"                     (fixed ui16)
-    // minor, major
+    // minor, major 
         0x00, 0x01,             // version                        (fixed ui16)
         0x18, 0x00,             // header size                    (fixed ui16)
         0x00,                   // time precision                 (fixed ui8)
@@ -62,19 +62,19 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32)
     };
 
-    ui8 expectedHeader[] = {
-        0x53, 0x50,             // magic "SP"                     (fixed ui16)
-    // minor, major
-        0x01, 0x01,             // version                        (fixed ui16)
-        0x18, 0x00,             // header size                    (fixed ui16)
-        0x00,                   // time precision                 (fixed ui8)
-        0x00,                   // compression algorithm          (fixed ui8)
+    ui8 expectedHeader[] = { 
+        0x53, 0x50,             // magic "SP"                     (fixed ui16) 
+    // minor, major 
+        0x01, 0x01,             // version                        (fixed ui16) 
+        0x18, 0x00,             // header size                    (fixed ui16) 
+        0x00,                   // time precision                 (fixed ui8) 
+        0x00,                   // compression algorithm          (fixed ui8) 
         0x0d, 0x00, 0x00, 0x00, // label names size   (fixed ui32)
         0x40, 0x00, 0x00, 0x00, // labels values size (fixed ui32)
         0x08, 0x00, 0x00, 0x00, // metric count       (fixed ui32)
         0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32)
-    };
-
+    }; 
+ 
     ui8 expectedStringPools[] = {
         0x6e, 0x61, 0x6d, 0x65, 0x00,                   // "name\0"
         0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x00, // "project\0"
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x05,                                           // label value index                       (varint)
         0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
         0x06,                                           // histogram buckets count                 (varint)
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // histogram bucket bounds                 (array of fixed ui64)
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // histogram bucket bounds                 (array of fixed ui64) 
         0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -165,27 +165,27 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     };
 
     ui8 expectedMetric5[] = {
-        0x16,                                           // types (HIST | ONE_WITH_TS)              (fixed ui8)
-        0x00,                                           // flags                                   (fixed ui8)
+        0x16,                                           // types (HIST | ONE_WITH_TS)              (fixed ui8) 
+        0x00,                                           // flags                                   (fixed ui8) 
         0x01,                                           // metric labels count                     (varint)
-        0x00,                                           // label name index                        (varint)
+        0x00,                                           // label name index                        (varint) 
         0x05,                                           // label value index                       (varint)
-        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
-        0x06,                                           // histogram buckets count                 (varint)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f, // histogram bucket bounds                 (array of doubles)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x40,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x40,
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xef, 0x7f,
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // histogram bucket values
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    };
-
+        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32) 
+        0x06,                                           // histogram buckets count                 (varint) 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f, // histogram bucket bounds                 (array of doubles) 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x40, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x40, 
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xef, 0x7f, 
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // histogram bucket values 
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+    }; 
+ 
     ui8 expectedMetric6[] = {
         0x12,                                           // types (IGAUGE | ONE_WITH_TS)            (fixed ui8)
         0x00,                                           // flags                                   (fixed ui8)
@@ -292,9 +292,9 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
                 e->OnLabel("name", "q2");
                 e->OnLabelsEnd();
             }
-            // Only the last value will be encoded
-            e->OnUint64(TInstant::Zero(), 10);
-            e->OnUint64(TInstant::Zero(), 13);
+            // Only the last value will be encoded 
+            e->OnUint64(TInstant::Zero(), 10); 
+            e->OnUint64(TInstant::Zero(), 13); 
             e->OnUint64(TInstant::Zero(), 17);
             e->OnMetricEnd();
         }
@@ -305,8 +305,8 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
                 e->OnLabel("name", "q3");
                 e->OnLabelsEnd();
             }
-            e->OnUint64(now, 10);
-            e->OnUint64(now, 13);
+            e->OnUint64(now, 10); 
+            e->OnUint64(now, 13); 
             e->OnUint64(now, 17);
             e->OnMetricEnd();
         }
@@ -410,98 +410,98 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     }
 
     NProto::TMultiSamplesList GetMergingMetricSamples(EMetricsMergingMode mergingMode) {
-        TBuffer buffer;
-        TBufferOutput out(buffer);
-
-        auto e = EncoderSpackV1(
-            &out,
-            ETimePrecision::SECONDS,
-            ECompression::IDENTITY,
-            mergingMode
-        );
-
-        e->OnStreamBegin();
-        for (size_t i = 0; i != 3; ++i) {
+        TBuffer buffer; 
+        TBufferOutput out(buffer); 
+ 
+        auto e = EncoderSpackV1( 
+            &out, 
+            ETimePrecision::SECONDS, 
+            ECompression::IDENTITY, 
+            mergingMode 
+        ); 
+ 
+        e->OnStreamBegin(); 
+        for (size_t i = 0; i != 3; ++i) { 
             e->OnMetricBegin(EMetricType::COUNTER);
-            {
-                e->OnLabelsBegin();
+            { 
+                e->OnLabelsBegin(); 
                 e->OnLabel("name", "my_counter");
-                e->OnLabelsEnd();
-            }
-            e->OnUint64(TInstant::Zero() + TDuration::Seconds(i), i + 1);
+                e->OnLabelsEnd(); 
+            } 
+            e->OnUint64(TInstant::Zero() + TDuration::Seconds(i), i + 1); 
             e->OnMetricEnd();
-        }
-        e->OnStreamEnd();
-        e->Close();
-
-        NProto::TMultiSamplesList samples;
+        } 
+        e->OnStreamEnd(); 
+        e->Close(); 
+ 
+        NProto::TMultiSamplesList samples; 
         IMetricEncoderPtr eProto = EncoderProtobuf(&samples);
-        TBufferInput in(buffer);
-        DecodeSpackV1(&in, eProto.Get());
-
-        return samples;
-    }
-
+        TBufferInput in(buffer); 
+        DecodeSpackV1(&in, eProto.Get()); 
+ 
+        return samples; 
+    } 
+ 
     Y_UNIT_TEST(SpackEncoderMergesMetrics) {
-        {
+        { 
             NProto::TMultiSamplesList samples = GetMergingMetricSamples(EMetricsMergingMode::DEFAULT);
-
-            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 3);
-            UNIT_ASSERT_EQUAL(samples.GetSamples(0).GetPoints(0).GetUint64(), 1);
-            UNIT_ASSERT_EQUAL(samples.GetSamples(1).GetPoints(0).GetUint64(), 2);
-            UNIT_ASSERT_EQUAL(samples.GetSamples(2).GetPoints(0).GetUint64(), 3);
-        }
-
-        {
+ 
+            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 3); 
+            UNIT_ASSERT_EQUAL(samples.GetSamples(0).GetPoints(0).GetUint64(), 1); 
+            UNIT_ASSERT_EQUAL(samples.GetSamples(1).GetPoints(0).GetUint64(), 2); 
+            UNIT_ASSERT_EQUAL(samples.GetSamples(2).GetPoints(0).GetUint64(), 3); 
+        } 
+ 
+        { 
             NProto::TMultiSamplesList samples = GetMergingMetricSamples(EMetricsMergingMode::MERGE_METRICS);
-
-            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1);
-
-            auto sample0 = samples.GetSamples(0);
-            UNIT_ASSERT_EQUAL(sample0.GetPoints(0).GetUint64(), 1);
-            UNIT_ASSERT_EQUAL(sample0.GetPoints(1).GetUint64(), 2);
-            UNIT_ASSERT_EQUAL(sample0.GetPoints(2).GetUint64(), 3);
-        }
-    }
-
-    void DecodeDataToSamples(NProto::TMultiSamplesList & samples, ui16 version) {
+ 
+            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 1); 
+ 
+            auto sample0 = samples.GetSamples(0); 
+            UNIT_ASSERT_EQUAL(sample0.GetPoints(0).GetUint64(), 1); 
+            UNIT_ASSERT_EQUAL(sample0.GetPoints(1).GetUint64(), 2); 
+            UNIT_ASSERT_EQUAL(sample0.GetPoints(2).GetUint64(), 3); 
+        } 
+    } 
+ 
+    void DecodeDataToSamples(NProto::TMultiSamplesList & samples, ui16 version) { 
         IMetricEncoderPtr e = EncoderProtobuf(&samples);
 
-        TBuffer data(expectedSize);
+        TBuffer data(expectedSize); 
         if (SV1_00 == version) { // v1.0
-            data.Append(reinterpret_cast<char*>(expectedHeader_v1_0), Y_ARRAY_SIZE(expectedHeader_v1_0));
-        } else {
+            data.Append(reinterpret_cast<char*>(expectedHeader_v1_0), Y_ARRAY_SIZE(expectedHeader_v1_0)); 
+        } else { 
             data.Append(reinterpret_cast<char*>(expectedHeader), Y_ARRAY_SIZE(expectedHeader));
-        }
-        data.Append(reinterpret_cast<char*>(expectedStringPools), Y_ARRAY_SIZE(expectedStringPools));
-        data.Append(reinterpret_cast<char*>(expectedCommonTime), Y_ARRAY_SIZE(expectedCommonTime));
-        data.Append(reinterpret_cast<char*>(expectedCommonLabels), Y_ARRAY_SIZE(expectedCommonLabels));
+        } 
+        data.Append(reinterpret_cast<char*>(expectedStringPools), Y_ARRAY_SIZE(expectedStringPools)); 
+        data.Append(reinterpret_cast<char*>(expectedCommonTime), Y_ARRAY_SIZE(expectedCommonTime)); 
+        data.Append(reinterpret_cast<char*>(expectedCommonLabels), Y_ARRAY_SIZE(expectedCommonLabels)); 
         data.Append(reinterpret_cast<char*>(expectedMetric1), Y_ARRAY_SIZE(expectedMetric1));
         data.Append(reinterpret_cast<char*>(expectedMetric2), Y_ARRAY_SIZE(expectedMetric2));
         data.Append(reinterpret_cast<char*>(expectedMetric3), Y_ARRAY_SIZE(expectedMetric3));
         data.Append(reinterpret_cast<char*>(expectedMetric4), Y_ARRAY_SIZE(expectedMetric4));
         if (SV1_00 == version) { // v1.0
             data.Append(reinterpret_cast<char*>(expectedMetric5_v1_0), Y_ARRAY_SIZE(expectedMetric5_v1_0));
-        } else {
+        } else { 
             data.Append(reinterpret_cast<char*>(expectedMetric5), Y_ARRAY_SIZE(expectedMetric5));
         }
         data.Append(reinterpret_cast<char*>(expectedMetric6), Y_ARRAY_SIZE(expectedMetric6));
         data.Append(reinterpret_cast<char*>(expectedMetric7), Y_ARRAY_SIZE(expectedMetric7));
         data.Append(reinterpret_cast<char*>(expectedMetric8), Y_ARRAY_SIZE(expectedMetric8));
-        TBufferInput in(data);
-        DecodeSpackV1(&in, e.Get());
-    }
-
-    void DecodeDataToSamples(NProto::TMultiSamplesList & samples) {
-        TSpackHeader header;
+        TBufferInput in(data); 
+        DecodeSpackV1(&in, e.Get()); 
+    } 
+ 
+    void DecodeDataToSamples(NProto::TMultiSamplesList & samples) { 
+        TSpackHeader header; 
         header.Version = SV1_01;
-        DecodeDataToSamples(samples, header.Version);
-    }
-
-    Y_UNIT_TEST(Decode) {
-        NProto::TMultiSamplesList samples;
-        DecodeDataToSamples(samples);
-
+        DecodeDataToSamples(samples, header.Version); 
+    } 
+ 
+    Y_UNIT_TEST(Decode) { 
+        NProto::TMultiSamplesList samples; 
+        DecodeDataToSamples(samples); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::MilliSeconds(samples.GetCommonTime()),
             TInstant::Seconds(1500000000));
@@ -684,20 +684,20 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     Y_UNIT_TEST(CompressionLz4) {
         TestCompression(ECompression::LZ4);
     }
-
-    Y_UNIT_TEST(Decode_v1_0_histograms) {
-        // Check that histogram bounds decoded from different versions are the same
-        NProto::TMultiSamplesList samples, samples_v1_0;
-        DecodeDataToSamples(samples);
+ 
+    Y_UNIT_TEST(Decode_v1_0_histograms) { 
+        // Check that histogram bounds decoded from different versions are the same 
+        NProto::TMultiSamplesList samples, samples_v1_0; 
+        DecodeDataToSamples(samples); 
         DecodeDataToSamples(samples_v1_0, /*version = */ SV1_00);
-
-        const NProto::THistogram& pointHistogram = samples.GetSamples(4).GetPoints(0).GetHistogram();
-        const NProto::THistogram& pointHistogram_v1_0 = samples_v1_0.GetSamples(4).GetPoints(0).GetHistogram();
-
-        for (size_t i = 0; i < pointHistogram.BoundsSize(); i++) {
-            UNIT_ASSERT_DOUBLES_EQUAL(pointHistogram.GetBounds(i), pointHistogram_v1_0.GetBounds(i), Min<double>());
-        }
-    }
+ 
+        const NProto::THistogram& pointHistogram = samples.GetSamples(4).GetPoints(0).GetHistogram(); 
+        const NProto::THistogram& pointHistogram_v1_0 = samples_v1_0.GetSamples(4).GetPoints(0).GetHistogram(); 
+ 
+        for (size_t i = 0; i < pointHistogram.BoundsSize(); i++) { 
+            UNIT_ASSERT_DOUBLES_EQUAL(pointHistogram.GetBounds(i), pointHistogram_v1_0.GetBounds(i), Min<double>()); 
+        } 
+    } 
 
     Y_UNIT_TEST(SimpleV12) {
         ui8 expectedSerialized[] = {

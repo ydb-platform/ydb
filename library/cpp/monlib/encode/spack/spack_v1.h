@@ -15,9 +15,9 @@ class IInputStream;
 class IOutputStream;
 
 namespace NMonitoring {
-    class TSpackDecodeError: public yexception {
-    };
-
+    class TSpackDecodeError: public yexception { 
+    }; 
+ 
     constexpr auto EncodeMetricType(EMetricType mt) noexcept {
         return static_cast<std::underlying_type_t<EMetricType>>(mt);
     }
@@ -98,9 +98,9 @@ namespace NMonitoring {
     IMetricEncoderPtr EncoderSpackV1(
         IOutputStream* out,
         ETimePrecision timePrecision,
-        ECompression compression,
+        ECompression compression, 
         EMetricsMergingMode mergingMode = EMetricsMergingMode::DEFAULT
-    );
+    ); 
 
     IMetricEncoderPtr EncoderSpackV12(
         IOutputStream* out,

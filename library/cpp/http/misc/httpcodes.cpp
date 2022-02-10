@@ -95,7 +95,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("423 Locked");
         case HTTP_FAILED_DEPENDENCY:
             return TStringBuf("424 Failed Dependency");
-        case HTTP_UNORDERED_COLLECTION:
+        case HTTP_UNORDERED_COLLECTION: 
             return TStringBuf("425 Unordered Collection");
         case HTTP_UPGRADE_REQUIRED:
             return TStringBuf("426 Upgrade Required");
@@ -103,7 +103,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("428 Precondition Required");
         case HTTP_TOO_MANY_REQUESTS:
             return TStringBuf("429 Too Many Requests");
-        case HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE:
+        case HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE: 
             return TStringBuf("431 Request Header Fields Too Large");
         case HTTP_UNAVAILABLE_FOR_LEGAL_REASONS:
             return TStringBuf("451 Unavailable For Legal Reason");

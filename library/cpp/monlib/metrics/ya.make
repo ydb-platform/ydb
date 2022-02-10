@@ -6,7 +6,7 @@ OWNER(
 )
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(metric_value_type.h)
-
+ 
 SRCS(
     ewma.cpp
     fake.cpp

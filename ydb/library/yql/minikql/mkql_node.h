@@ -1370,8 +1370,8 @@ inline TType* TRuntimeNode::GetRuntimeType() const {
 bool IsNumericType(NUdf::TDataTypeId typeId);
 bool IsCommonStringType(NUdf::TDataTypeId typeId);
 bool IsDateType(NUdf::TDataTypeId typeId);
-bool IsTzDateType(NUdf::TDataTypeId typeId);
-bool IsIntervalType(NUdf::TDataTypeId typeId);
+bool IsTzDateType(NUdf::TDataTypeId typeId); 
+bool IsIntervalType(NUdf::TDataTypeId typeId); 
 
 enum class EValueRepresentation {
     Embedded = 0,

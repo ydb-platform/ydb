@@ -145,11 +145,11 @@ public:
         THttpBaseHeader::Init();
         accept_ranges = -1;
         squid_error = 0;
-        x_robots_tag = 0;
+        x_robots_tag = 0; 
         rel_canonical.clear();
         http_status = -1;
         location.clear();
-        hreflangs[0] = 0;
+        hreflangs[0] = 0; 
         retry_after = DEFAULT_RETRY_AFTER;
         x_robots_state = "xxxxx";
     }

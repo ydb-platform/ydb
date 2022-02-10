@@ -6,7 +6,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <util/datetime/base.h>
 #include <util/generic/ylimits.h>
-#include <algorithm>    // max
+#include <algorithm>    // max 
 
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/http/fetch/httpfsm.h>
@@ -47,7 +47,7 @@ alphtype unsigned char;
 eol             = '\r'? '\n';
 ws              = [ \t];
 lw              = '\r'? '\n'? ws;
-separator       = [()<>@,;:\\"/\[\]?={}];
+separator       = [()<>@,;:\\"/\[\]?={}]; 
 token_char      = [!-~] - separator;          # http tokens chars
 url_char        = [!-~] - ["<>\[\]\\^`{}|];   # uric chars
 text_char       = ws | 33..126 | 128..255;
@@ -264,7 +264,7 @@ loc_url         = any_text_char+ >clear_buf $update_buf;
 location        = "location"i def loc_url eoh %set_location;
 refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
 
-################# x-robots-tag ################
+################# x-robots-tag ################ 
 action set_x_robots {
     if (hd && AcceptingXRobots) {
         if (I > 0)
@@ -275,8 +275,8 @@ action set_x_robots {
             if (abs(pos) & (1 << i)) // permissive flags take priority
                 hd->x_robots_state[i] = (I < 0) ? '1' : (hd->x_robots_state[i] != '1') ? '0' : '1';
     }
-}
-
+} 
+ 
 action accept_x_robots {
     AcceptingXRobots = (bool)I;
 }
@@ -287,7 +287,7 @@ x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
                    | "noarchive"i %{c(4)} | "archive"i %{c(-4)}
                    | "noyaca"i    %{c(16)}
                    | "noodp"i     %{c(8)};
-
+ 
 any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*;
 any_key = (any_text_char - [:, \t])+ (lws (any_text_char - [:, \t])+)*;
 
@@ -301,47 +301,47 @@ x_robots_value = (robot_specifier def %accept_x_robots)? (unavailable_after_dire
 
 x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value (lws ',' lws x_robots_value)* eoh;
 
-################# rel_canonical ###############
-action set_canonical {
+################# rel_canonical ############### 
+action set_canonical { 
     if (hd && buflen < FETCHER_URL_MAX) {
         hd->rel_canonical = TStringBuf(buf, buflen);
-    }
-}
-
-rel_canonical = "link"i def '<' url ">;"i lws "rel"i lws '=' lws "\"canonical\"" eoh %set_canonical;
-################# hreflang ###############
-action set_hreflang {
+    } 
+} 
+ 
+rel_canonical = "link"i def '<' url ">;"i lws "rel"i lws '=' lws "\"canonical\"" eoh %set_canonical; 
+################# hreflang ############### 
+action set_hreflang { 
     bool first = (hreflangpos == hd->hreflangs);
     size_t len2 = (first ? 0 : 1) + langlen + 1 + buflen;
     if (langlen && len2 < hreflangspace) {
         if (!first) {
             *(hreflangpos++) = '\t';
         }
-        memcpy(hreflangpos, langstart, langlen);
-        hreflangpos += langlen;
-        *(hreflangpos++) = ' ';
-        memcpy(hreflangpos, buf, buflen);
-        hreflangpos += buflen;
+        memcpy(hreflangpos, langstart, langlen); 
+        hreflangpos += langlen; 
+        *(hreflangpos++) = ' '; 
+        memcpy(hreflangpos, buf, buflen); 
+        hreflangpos += buflen; 
         *(hreflangpos) = 0;
         hreflangspace -= len2;
-    }
-}
-
-action start_lang {
-    langstart = fpc;
-    langlen = 0;
-}
-action end_lang {
-    langlen = fpc - langstart;
-}
+    } 
+} 
+ 
+action start_lang { 
+    langstart = fpc; 
+    langlen = 0; 
+} 
+action end_lang { 
+    langlen = fpc - langstart; 
+} 
 hreflang_token = (token_char - ['])+;
-quote = ['"]?; #"
+quote = ['"]?; #" 
 lang = hreflang_token >start_lang %end_lang;
-
-hreflang = "link"i def '<' url '>' lws ";" lws
-    ( ( "rel"i lws '=' lws quote "alternate" quote lws ';' lws "hreflang"i lws '=' lws quote lang quote )
-    | ( "hreflang"i lws '=' lws quote lang quote lws ';' lws "rel"i lws '=' lws quote "alternate" quote ) )
-   eoh %set_hreflang;
+ 
+hreflang = "link"i def '<' url '>' lws ";" lws 
+    ( ( "rel"i lws '=' lws quote "alternate" quote lws ';' lws "hreflang"i lws '=' lws quote lang quote ) 
+    | ( "hreflang"i lws '=' lws quote lang quote lws ';' lws "rel"i lws '=' lws quote "alternate" quote ) ) 
+   eoh %set_hreflang; 
 ################# squid_error #################
 action set_squid_error {
     hd->squid_error = 1;
@@ -577,9 +577,9 @@ response_header = message_header        $0
                 | auth                  @1
                 | accept_ranges         @1
                 | location              @1
-                | x_robots_tag          @1
-                | rel_canonical         @1
-                | hreflang              @1
+                | x_robots_tag          @1 
+                | rel_canonical         @1 
+                | hreflang              @1 
                 | squid_error           @1
                 | retry_after_withdate  @1
                 | retry_after_withdelta @1;

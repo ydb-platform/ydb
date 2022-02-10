@@ -27,8 +27,8 @@ struct THttpHeaderParser {
         int ret = Init((THttpBaseHeader*)(h));
         hd = h;
         hd->Init();
-        hreflangpos = hd->hreflangs;
-        hreflangspace = HREFLANG_MAX;
+        hreflangpos = hd->hreflangs; 
+        hreflangspace = HREFLANG_MAX; 
         return ret;
     }
 
@@ -54,10 +54,10 @@ struct THttpHeaderParser {
 
     const unsigned char* langstart;
     size_t langlen;
-
+ 
     char* hreflangpos;
     size_t hreflangspace;
-
+ 
     bool AcceptingXRobots;
 
     THttpAuthHeader* auth_hd;

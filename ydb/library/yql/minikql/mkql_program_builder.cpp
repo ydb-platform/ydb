@@ -353,7 +353,7 @@ TRuntimeNode TProgramBuilder::Member(TRuntimeNode structObj, const std::string_v
     }
 
     TCallableBuilder callableBuilder(Env, __func__, memberType);
-    callableBuilder.Add(structObj);
+    callableBuilder.Add(structObj); 
     callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -434,7 +434,7 @@ TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
             continue;
         }
 
-        AS_TYPE(TListType, list.GetStaticType());
+        AS_TYPE(TListType, list.GetStaticType()); 
         auto itemType = static_cast<const TListType&>(*list.GetStaticType()).GetItemType();
         tupleTypes.push_back(itemType);
     }
@@ -461,7 +461,7 @@ TRuntimeNode TProgramBuilder::ZipAll(const TArrayRef<const TRuntimeNode>& lists)
             continue;
         }
 
-        AS_TYPE(TListType, list.GetStaticType());
+        AS_TYPE(TListType, list.GetStaticType()); 
         auto itemType = static_cast<const TListType&>(*list.GetStaticType()).GetItemType();
         tupleTypes.push_back(TOptionalType::Create(itemType, Env));
     }
@@ -1788,7 +1788,7 @@ TRuntimeNode TProgramBuilder::SqueezeToList(TRuntimeNode flow, TRuntimeNode limi
 
 TRuntimeNode TProgramBuilder::Append(TRuntimeNode list, TRuntimeNode item) {
     auto listType = list.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = item.GetStaticType();
@@ -1802,7 +1802,7 @@ TRuntimeNode TProgramBuilder::Append(TRuntimeNode list, TRuntimeNode item) {
 
 TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
     auto listType = list.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = item.GetStaticType();

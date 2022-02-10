@@ -21,11 +21,11 @@ public:
     void PackLeaf(char*, const T&, size_t) const {
     }
 
-    size_t MeasureLeaf(const T&) const {
+    size_t MeasureLeaf(const T&) const { 
         return 0;
     }
 
-    size_t SkipLeaf(const char*) const {
+    size_t SkipLeaf(const char*) const { 
         return 0;
     }
 };
@@ -98,13 +98,13 @@ namespace NPackers {
     class TIntegralPacker { // can pack only integral types <= ui64
     public:
         void UnpackLeaf(const char* p, T& t) const;
-        void PackLeaf(char* buffer, const T& data, size_t size) const;
-        size_t MeasureLeaf(const T& data) const;
-        size_t SkipLeaf(const char* p) const;
+        void PackLeaf(char* buffer, const T& data, size_t size) const; 
+        size_t MeasureLeaf(const T& data) const; 
+        size_t SkipLeaf(const char* p) const; 
     };
 
     template <>
-    inline size_t TIntegralPacker<ui64>::MeasureLeaf(const ui64& val) const {
+    inline size_t TIntegralPacker<ui64>::MeasureLeaf(const ui64& val) const { 
         constexpr size_t MAX_SIZE = sizeof(ui64) + sizeof(ui64) / 8;
 
         ui64 value = val;
@@ -118,7 +118,7 @@ namespace NPackers {
     }
 
     template <>
-    inline void TIntegralPacker<ui64>::PackLeaf(char* buffer, const ui64& val, size_t len) const {
+    inline void TIntegralPacker<ui64>::PackLeaf(char* buffer, const ui64& val, size_t len) const { 
         ui64 value = val;
         int lenmask = 0;
 
@@ -145,7 +145,7 @@ namespace NPackers {
     }
 
     template <>
-    inline size_t TIntegralPacker<ui64>::SkipLeaf(const char* p) const {
+    inline size_t TIntegralPacker<ui64>::SkipLeaf(const char* p) const { 
         return SkipTable[(ui8)*p];
     }
 
@@ -183,17 +183,17 @@ namespace NPackers {
 
     template <class T>
     inline void TIntegralPacker<T>::PackLeaf(char* buffer, const T& data, size_t size) const {
-        TIntegralPacker<ui64>().PackLeaf(buffer, ConvertIntegral<T>(data), size);
+        TIntegralPacker<ui64>().PackLeaf(buffer, ConvertIntegral<T>(data), size); 
     }
 
     template <class T>
     inline size_t TIntegralPacker<T>::MeasureLeaf(const T& data) const {
-        return TIntegralPacker<ui64>().MeasureLeaf(ConvertIntegral<T>(data));
+        return TIntegralPacker<ui64>().MeasureLeaf(ConvertIntegral<T>(data)); 
     }
 
     template <class T>
     inline size_t TIntegralPacker<T>::SkipLeaf(const char* p) const {
-        return TIntegralPacker<ui64>().SkipLeaf(p);
+        return TIntegralPacker<ui64>().SkipLeaf(p); 
     }
 
     //-------------------------------------------
@@ -257,14 +257,14 @@ namespace NPackers {
         void UnpackLeaf(const char* p, TStringType& t) const;
         void PackLeaf(char* buffer, const TStringType& data, size_t size) const;
         size_t MeasureLeaf(const TStringType& data) const;
-        size_t SkipLeaf(const char* p) const;
+        size_t SkipLeaf(const char* p) const; 
     };
 
     template <class TStringType>
     inline void TStringPacker<TStringType>::UnpackLeaf(const char* buf, TStringType& t) const {
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buf, len);
-        size_t start = TIntegralPacker<size_t>().SkipLeaf(buf);
+        size_t start = TIntegralPacker<size_t>().SkipLeaf(buf); 
         t = TStringType((const typename TStringType::char_type*)(buf + start), len);
     }
 
@@ -273,7 +273,7 @@ namespace NPackers {
         size_t len = str.size();
         size_t lenChar = len * sizeof(typename TStringType::char_type);
         size_t start = size - lenChar;
-        TIntegralPacker<size_t>().PackLeaf(buf, len, TIntegralPacker<size_t>().MeasureLeaf(len));
+        TIntegralPacker<size_t>().PackLeaf(buf, len, TIntegralPacker<size_t>().MeasureLeaf(len)); 
         memcpy(buf + start, str.data(), lenChar);
     }
 

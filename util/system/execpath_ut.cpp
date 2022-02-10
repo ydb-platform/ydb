@@ -3,8 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "platform.h"
-#include <util/folder/dirut.h>
-
+#include <util/folder/dirut.h> 
+ 
 Y_UNIT_TEST_SUITE(TExecPathTest) {
     Y_UNIT_TEST(TestIt) {
         TString execPath = GetExecPath();
@@ -18,5 +18,5 @@ Y_UNIT_TEST_SUITE(TExecPathTest) {
 
             throw;
         }
-    }
-}
+    } 
+} 

@@ -718,10 +718,10 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
 
     x->Record.SetStatusCode(code);
 
-    for (auto& unresolvedKey : UnresolvedKeys) {
-        x->Record.AddUnresolvedKeys(unresolvedKey);
-    }
-
+    for (auto& unresolvedKey : UnresolvedKeys) { 
+        x->Record.AddUnresolvedKeys(unresolvedKey); 
+    } 
+ 
     if (PlanStep)
         x->Record.SetStep(PlanStep);
 
@@ -1540,7 +1540,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             if ((ui32)x.Status < (ui32) NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
                 TryToInvalidateTable(x.KeyDescription->TableId, ctx);
 
-                TStringStream ss;
+                TStringStream ss; 
                 switch (x.Status) {
                     case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                         gotHardResolveError = true;
@@ -1556,9 +1556,9 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 }
 
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, ss.Str()));
-                UnresolvedKeys.push_back(ss.Str());
-            }
-        }
+                UnresolvedKeys.push_back(ss.Str()); 
+            } 
+        } 
 
         if (gotHardResolveError) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);

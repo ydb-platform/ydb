@@ -2,19 +2,19 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/vector.h>
-
+ 
 Y_UNIT_TEST_SUITE(OptTest) {
     Y_UNIT_TEST(TestSimple) {
-        int argc = 3;
-        char* argv[] = {
+        int argc = 3; 
+        char* argv[] = { 
             (char*)"cmd", (char*)"-x"};
-        Opt opt(argc, argv, "");
-        opt.Err = false; // be quiet
-        UNIT_ASSERT_VALUES_EQUAL('?', opt.Get());
-        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get());
-        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get());
-        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get());
-    }
+        Opt opt(argc, argv, ""); 
+        opt.Err = false; // be quiet 
+        UNIT_ASSERT_VALUES_EQUAL('?', opt.Get()); 
+        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get()); 
+        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get()); 
+        UNIT_ASSERT_VALUES_EQUAL(EOF, opt.Get()); 
+    } 
 
     Y_UNIT_TEST(TestFreeArguments) {
         Opt::Ion options[] = {
@@ -49,4 +49,4 @@ Y_UNIT_TEST_SUITE(OptTest) {
             UNIT_ASSERT_VALUES_EQUAL(optionValue, "ARG2");
         }
     }
-}
+} 

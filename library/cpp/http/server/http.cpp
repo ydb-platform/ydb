@@ -42,7 +42,7 @@ namespace {
 
     struct TShouldStop {
     };
-
+ 
     struct TWakeupPollAble: public IPollAble {
         void OnPollEvent(TInstant) override {
             throw TShouldStop();
@@ -187,14 +187,14 @@ public:
         // Start the listener thread
         ListenerRunningOK = false;
 
-        // throws on error
-        TPipeHandle::Pipe(ListenWakeupReadFd, ListenWakeupWriteFd);
-
-        SetNonBlock(ListenWakeupWriteFd, true);
-        SetNonBlock(ListenWakeupReadFd, true);
-
-        Poller->WaitRead(ListenWakeupReadFd, &WakeupPollAble);
-
+        // throws on error 
+        TPipeHandle::Pipe(ListenWakeupReadFd, ListenWakeupWriteFd); 
+ 
+        SetNonBlock(ListenWakeupWriteFd, true); 
+        SetNonBlock(ListenWakeupReadFd, true); 
+ 
+        Poller->WaitRead(ListenWakeupReadFd, &WakeupPollAble); 
+ 
         ListenStartEvent.Reset();
         try {
             ListenThread.Reset(new TThread(ListenSocketFunction, this));
@@ -220,8 +220,8 @@ public:
     }
 
     void Stop() {
-        Shutdown();
-
+        Shutdown(); 
+ 
         TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
             ListenThread->Join();
@@ -238,8 +238,8 @@ public:
     }
 
     void Shutdown() {
-        ListenWakeupWriteFd.Write("", 1);
-        // ignore result
+        ListenWakeupWriteFd.Write("", 1); 
+        // ignore result 
     }
 
     void AddRequest(TAutoPtr<TClientRequest> req, bool fail) {
@@ -443,8 +443,8 @@ public:
     }
 
     THolder<TThread> ListenThread;
-    TPipeHandle ListenWakeupReadFd;
-    TPipeHandle ListenWakeupWriteFd;
+    TPipeHandle ListenWakeupReadFd; 
+    TPipeHandle ListenWakeupWriteFd; 
     TSystemEvent ListenStartEvent;
     TMtpQueueRef Requests;
     TMtpQueueRef FailRequests;

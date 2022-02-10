@@ -5,7 +5,7 @@
 #include <util/generic/ptr.h>
 #include <library/cpp/charset/doccodes.h>
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST_SUITE(THttpHeaderParserTestSuite);
     UNIT_TEST(TestRequestHeader);
@@ -63,10 +63,10 @@ public:
     void TestMimeType();
     void TestRepeatedContentEncoding();
 };
-
+ 
 void THttpHeaderParserTestSuite::TestStart() {
     httpHeaderParser.Reset(new THttpHeaderParser());
-}
+} 
 
 void THttpHeaderParserTestSuite::TestFinish() {
     httpHeaderParser.Reset();

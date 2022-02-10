@@ -2,24 +2,24 @@
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-#include "maybe.h"
-
-class TIncrementOnDestroy {
-private:
+ 
+#include "maybe.h" 
+ 
+class TIncrementOnDestroy { 
+private: 
     int* Ptr_;
 
-public:
+public: 
     TIncrementOnDestroy(int* ptr) noexcept
         : Ptr_(ptr)
     {
-    }
+    } 
 
     ~TIncrementOnDestroy() {
         ++*Ptr_;
     }
-};
-
+}; 
+ 
 Y_UNIT_TEST_SUITE(TMaybeTest) {
     Y_UNIT_TEST(TestStatic) {
         using T1 = TMaybe<int>;
@@ -56,35 +56,35 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     Y_UNIT_TEST(TTestConstructorDestructor) {
         int a = 0;
         int b = 0;
-
-        TMaybe<TIncrementOnDestroy>();
+ 
+        TMaybe<TIncrementOnDestroy>(); 
         UNIT_ASSERT_VALUES_EQUAL(a, b);
-
+ 
         TMaybe<TIncrementOnDestroy>(TIncrementOnDestroy(&a));
         b += 2;
         UNIT_ASSERT_VALUES_EQUAL(a, b);
-
-        {
+ 
+        { 
             TMaybe<TIncrementOnDestroy> m1 = TIncrementOnDestroy(&a);
             b += 1;
             UNIT_ASSERT_VALUES_EQUAL(a, b);
-
+ 
             TMaybe<TIncrementOnDestroy> m2 = m1;
             UNIT_ASSERT_VALUES_EQUAL(a, b);
-
+ 
             TMaybe<TIncrementOnDestroy> m3;
             m3 = m1;
             UNIT_ASSERT_VALUES_EQUAL(a, b);
-        }
-
+        } 
+ 
         b += 3;
         UNIT_ASSERT_VALUES_EQUAL(a, b);
-
-        {
+ 
+        { 
             TMaybe<TIncrementOnDestroy> m4 = TIncrementOnDestroy(&a);
             b += 1;
             UNIT_ASSERT_VALUES_EQUAL(a, b);
-
+ 
             m4 = TIncrementOnDestroy(&a);
             b += 1;
             UNIT_ASSERT_VALUES_EQUAL(a, b);
@@ -95,9 +95,9 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
             m4.Clear();
             UNIT_ASSERT_VALUES_EQUAL(a, b);
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestAssignmentClear) {
         TMaybe<int> m5;
         UNIT_ASSERT(!m5.Defined());
@@ -105,24 +105,24 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         UNIT_ASSERT(m5 == TMaybe<int>());
         UNIT_ASSERT(m5 == Nothing());
         UNIT_ASSERT(m5 != TMaybe<int>(4));
-
+ 
         m5 = 4;
-
+ 
         UNIT_ASSERT(m5.Defined());
         UNIT_ASSERT(!m5.Empty());
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(4, m5.GetRef());
         UNIT_ASSERT(m5 == TMaybe<int>(4));
         UNIT_ASSERT(m5 != TMaybe<int>(3));
         UNIT_ASSERT(m5 != TMaybe<int>());
         UNIT_ASSERT(m5 != Nothing());
-
+ 
         m5 = TMaybe<int>(5);
         UNIT_ASSERT(m5.Defined());
         UNIT_ASSERT_VALUES_EQUAL(5, m5.GetRef());
         UNIT_ASSERT(m5 == TMaybe<int>(5));
         UNIT_ASSERT(m5 != TMaybe<int>(4));
-
+ 
         m5 = TMaybe<int>();
         UNIT_ASSERT(m5.Empty());
         UNIT_ASSERT(m5 == TMaybe<int>());
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
         m5 = {};
         UNIT_ASSERT(m5.Empty());
-    }
+    } 
 
     Y_UNIT_TEST(TestInPlace) {
         TMaybe<int> m;
@@ -1003,4 +1003,4 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         TMaybe<TStringBuf> v;
         UNIT_ASSERT_EXCEPTION_CONTAINS(v.GetRef(), yexception, "StringBuf");
     }
-}
+} 

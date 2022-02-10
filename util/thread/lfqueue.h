@@ -173,27 +173,27 @@ class TLockFreeQueue: public TNonCopyable {
 
     void EnqueueImpl(TListNode* head, TListNode* tail) {
         TRootNode* newRoot = new TRootNode;
-        AsyncRef();
+        AsyncRef(); 
         AtomicSet(newRoot->PushQueue, head);
-        for (;;) {
+        for (;;) { 
             TRootNode* curRoot = AtomicGet(JobQueue);
             AtomicSet(tail->Next, AtomicGet(curRoot->PushQueue));
             AtomicSet(newRoot->PopQueue, AtomicGet(curRoot->PopQueue));
-            newRoot->CopyCounter(curRoot);
-
+            newRoot->CopyCounter(curRoot); 
+ 
             for (TListNode* node = head;; node = AtomicGet(node->Next)) {
-                newRoot->IncCount(node->Data);
-                if (node == tail)
-                    break;
-            }
-
-            if (AtomicCas(&JobQueue, newRoot, curRoot)) {
+                newRoot->IncCount(node->Data); 
+                if (node == tail) 
+                    break; 
+            } 
+ 
+            if (AtomicCas(&JobQueue, newRoot, curRoot)) { 
                 AsyncUnref(curRoot, nullptr);
-                break;
-            }
-        }
-    }
-
+                break; 
+            } 
+        } 
+    } 
+ 
     template <typename TCollection>
     static void FillCollection(TListNode* lst, TCollection* res) {
         while (lst) {
@@ -242,8 +242,8 @@ public:
     template <typename U>
     void Enqueue(U&& data) {
         TListNode* newNode = new TListNode(std::forward<U>(data));
-        EnqueueImpl(newNode, newNode);
-    }
+        EnqueueImpl(newNode, newNode); 
+    } 
     void Enqueue(T&& data) {
         TListNode* newNode = new TListNode(std::move(data));
         EnqueueImpl(newNode, newNode);
@@ -252,24 +252,24 @@ public:
         TListNode* newNode = new TListNode(data);
         EnqueueImpl(newNode, newNode);
     }
-    template <typename TCollection>
+    template <typename TCollection> 
     void EnqueueAll(const TCollection& data) {
-        EnqueueAll(data.begin(), data.end());
-    }
-    template <typename TIter>
+        EnqueueAll(data.begin(), data.end()); 
+    } 
+    template <typename TIter> 
     void EnqueueAll(TIter dataBegin, TIter dataEnd) {
-        if (dataBegin == dataEnd)
-            return;
-
-        TIter i = dataBegin;
+        if (dataBegin == dataEnd) 
+            return; 
+ 
+        TIter i = dataBegin; 
         TListNode* volatile node = new TListNode(*i);
         TListNode* volatile tail = node;
-
-        for (++i; i != dataEnd; ++i) {
-            TListNode* nextNode = node;
+ 
+        for (++i; i != dataEnd; ++i) { 
+            TListNode* nextNode = node; 
             node = new TListNode(*i, nextNode);
         }
-        EnqueueImpl(node, tail);
+        EnqueueImpl(node, tail); 
     }
     bool Dequeue(T* data) {
         TRootNode* newRoot = nullptr;

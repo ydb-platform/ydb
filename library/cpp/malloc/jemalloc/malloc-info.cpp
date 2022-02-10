@@ -1,5 +1,5 @@
 #include <library/cpp/malloc/api/malloc.h>
-
+ 
 using namespace NMalloc;
 
 #if defined(_MSC_VER)
@@ -12,7 +12,7 @@ TMallocInfo NMalloc::MallocInfo() {
 #include <strings.h>
 #include <stdlib.h>
 #include <inttypes.h>
-
+ 
 #include <contrib/libs/jemalloc/include/jemalloc/jemalloc.h>
 
 namespace {
@@ -55,11 +55,11 @@ namespace {
     }
 }
 
-TMallocInfo NMalloc::MallocInfo() {
-    TMallocInfo r;
-    r.Name = "jemalloc";
+TMallocInfo NMalloc::MallocInfo() { 
+    TMallocInfo r; 
+    r.Name = "jemalloc"; 
     r.SetParam = JESetParam;
     r.GetParam = JEGetParam;
-    return r;
-}
+    return r; 
+} 
 #endif

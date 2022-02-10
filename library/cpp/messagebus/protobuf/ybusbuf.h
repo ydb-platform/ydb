@@ -10,7 +10,7 @@
 #include <util/stream/mem.h>
 
 #include <array>
-
+ 
 namespace NBus {
     using TBusBufferRecord = ::google::protobuf::Message;
 
@@ -29,25 +29,25 @@ namespace NBus {
             : TBusMessage(MESSAGE_CREATE_UNINITIALIZED)
         {
         }
-
+ 
         ui16 GetType() const {
             return GetHeader()->Type;
         }
-
+ 
         virtual TBusBufferRecord* GetRecord() const = 0;
         virtual TBusBufferBase* New() = 0;
     };
-
+ 
     ///////////////////////////////////////////////////////////////////
     /// \brief Template for all messages that have protobuf description
-
+ 
     /// @param TBufferRecord is record described in .proto file with namespace
     /// @param MessageFile is offset for .proto file message ids
 
     /// \attention If you want one protocol NBus::TBusBufferProtocol to handle
     /// messageges described in different .proto files, make sure that they have
     /// unique values for MessageFile
-
+ 
     template <class TBufferRecord, int MType>
     class TBusBufferMessage: public TBusBufferBase {
     public:
@@ -93,7 +93,7 @@ namespace NBus {
     class TBusBufferMessagePtrBase {
     public:
         typedef typename TBufferMessage::RecordType RecordType;
-
+ 
     private:
         TSelf* GetSelf() {
             return static_cast<TSelf*>(this);
@@ -132,7 +132,7 @@ namespace NBus {
     class TBusBufferMessagePtr: public TBusBufferMessagePtrBase<TBusBufferMessagePtr<TBufferMessage>, TBufferMessage> {
     protected:
         TBufferMessage* Holder;
-
+ 
     public:
         TBusBufferMessagePtr(TBufferMessage* mess)
             : Holder(mess)
@@ -147,14 +147,14 @@ namespace NBus {
         const TBufferMessage* Get() const {
             return Holder;
         }
-
+ 
         operator TBufferMessage*() {
             return Holder;
         }
         operator const TBufferMessage*() const {
             return Holder;
         }
-
+ 
         operator TAutoPtr<TBusMessage>() {
             TAutoPtr<TBusMessage> r(Holder);
             Holder = 0;
@@ -166,12 +166,12 @@ namespace NBus {
             return r;
         }
     };
-
+ 
     template <class TBufferMessage>
     class TBusBufferMessageAutoPtr: public TBusBufferMessagePtrBase<TBusBufferMessageAutoPtr<TBufferMessage>, TBufferMessage> {
     public:
         TAutoPtr<TBufferMessage> AutoPtr;
-
+ 
     public:
         TBusBufferMessageAutoPtr() {
         }
@@ -186,11 +186,11 @@ namespace NBus {
         const TBufferMessage* Get() const {
             return AutoPtr.Get();
         }
-
+ 
         TBufferMessage* Release() const {
             return AutoPtr.Release();
         }
-
+ 
         operator TAutoPtr<TBusMessage>() {
             return AutoPtr.Release();
         }
@@ -201,22 +201,22 @@ namespace NBus {
 
     /////////////////////////////////////////////
     /// \brief Generic protocol object for messages descibed with protobuf
-
+ 
     /// \attention If you mix messages in the same protocol from more than
     /// .proto file make sure that they have different MessageFile parameter
     ///  in the NBus::TBusBufferMessage template
-
+ 
     class TBusBufferProtocol: public TBusProtocol {
     private:
         TVector<TBusBufferBase*> Types;
         std::array<ui32, ((1 << 16) >> 5)> TypeMask;
-
+ 
         TBusBufferBase* FindType(int type);
         bool IsRegisteredType(unsigned type);
-
+ 
     public:
         TBusBufferProtocol(TBusService name, int port);
-
+ 
         ~TBusBufferProtocol() override;
 
         /// register all the message that this protocol should handle

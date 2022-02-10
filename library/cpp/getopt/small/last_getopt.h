@@ -1,21 +1,21 @@
 #pragma once
-
+ 
 #include "last_getopt_opts.h"
 #include "last_getopt_easy_setup.h"
 #include "last_getopt_parse_result.h"
 
 #include <util/generic/function.h>
 #include <util/string/split.h>
-
+ 
 /// see some documentation in
 /// https://wiki.yandex-team.ru/development/poisk/arcadia/util/lastgetopt/
 /// https://wiki.yandex-team.ru/development/poisk/arcadia/library/getopt/
 /// see examples in library/cpp/getopt/last_getopt_demo
-
+ 
 //TODO: in most cases this include is unnecessary, but needed THandlerFunctor1<TpFunc, TpArg>::HandleOpt
 #include "last_getopt_parser.h"
 
-namespace NLastGetopt {
+namespace NLastGetopt { 
     /// Handler to split option value by delimiter into a target container and allow ranges.
     template <class Container>
     struct TOptRangeSplitHandler: public IOptHandler {
@@ -35,21 +35,21 @@ namespace NLastGetopt {
             if (curval.IsInited()) {
                 StringSplitter(curval).Split(ElementsDelim).Consume([&](const TStringBuf& val) {
                     TStringBuf mutableValue = val;
-
+ 
                     TValue first = NPrivate::OptFromString<TValue>(mutableValue.NextTok(RangesDelim), parser->CurOpt());
                     TValue last = mutableValue ? NPrivate::OptFromString<TValue>(mutableValue, parser->CurOpt()) : first;
-
+ 
                     if (last < first) {
                         throw TUsageException() << "failed to parse opt " << NPrivate::OptToString(parser->CurOpt()) << " value " << TString(val).Quote() << ": the second argument is less than the first one";
                     }
-
+ 
                     for (++last; first < last; ++first) {
                         Target->insert(Target->end(), first);
                     }
                 });
             }
         }
-
+ 
     private:
         TContainer* Target;
         char ElementsDelim;
@@ -126,7 +126,7 @@ namespace NLastGetopt {
                                          << " value " << TString(curval).Quote() << ": " << CurrentExceptionMessage();
             }
         }
-
-    }
+ 
+    } 
 
 }

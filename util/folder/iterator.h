@@ -7,8 +7,8 @@
 #include <util/generic/iterator.h>
 #include <util/generic/yexception.h>
 
-/// Note this magic API traverses directory hierarchy
-
+/// Note this magic API traverses directory hierarchy 
+ 
 class TDirIterator: public TInputRangeAdaptor<TDirIterator> {
     struct TFtsDestroy {
         static inline void Destroy(FTS* f) noexcept {

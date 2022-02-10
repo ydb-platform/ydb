@@ -1,20 +1,20 @@
-#pragma once
-
+#pragma once 
+ 
 #include <google/protobuf/repeated_field.h>
 #include <util/generic/vector.h>
-
-template <typename T>
-void RemoveRepeatedPtrFieldElement(google::protobuf::RepeatedPtrField<T>* repeated, unsigned index) {
-    google::protobuf::RepeatedPtrField<T> r;
+ 
+template <typename T> 
+void RemoveRepeatedPtrFieldElement(google::protobuf::RepeatedPtrField<T>* repeated, unsigned index) { 
+    google::protobuf::RepeatedPtrField<T> r; 
     Y_ASSERT(index < (unsigned)repeated->size());
     for (unsigned i = 0; i < (unsigned)repeated->size(); ++i) {
-        if (i == index) {
-            continue;
-        }
-        r.Add()->Swap(repeated->Mutable(i));
-    }
-    r.Swap(repeated);
-}
+        if (i == index) { 
+            continue; 
+        } 
+        r.Add()->Swap(repeated->Mutable(i)); 
+    } 
+    r.Swap(repeated); 
+} 
 
 namespace NProtoBuf {
     /// Move item to specified position

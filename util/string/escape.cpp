@@ -1,10 +1,10 @@
 #include "escape.h"
 #include "cast.h"
 
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
-
+ 
 /// @todo: escape trigraphs (eg "??/" is "\")
 
 /* REFEREBCES FOR ESCAPE SEQUENCE INTERPRETATION:
@@ -54,31 +54,31 @@ namespace {
     template <typename TChar>
     static inline char OctDigit(TChar value) {
         Y_ASSERT(value < 8);
-        return '0' + value;
+        return '0' + value; 
     }
-
+ 
     template <typename TChar>
     static inline bool IsPrintable(TChar c) {
         return c >= 32 && c <= 126;
     }
-
+ 
     template <typename TChar>
     static inline bool IsHexDigit(TChar c) {
         return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
     }
-
+ 
     template <typename TChar>
     static inline bool IsOctDigit(TChar c) {
         return c >= '0' && c <= '7';
     }
-
+ 
     template <typename TChar>
     struct TEscapeUtil;
-
+ 
     template <>
     struct TEscapeUtil<char> {
         static const size_t ESCAPE_C_BUFFER_SIZE = 4;
-
+ 
         template <typename TNextChar, typename TBufferChar>
         static inline size_t EscapeC(unsigned char c, TNextChar next, TBufferChar r[ESCAPE_C_BUFFER_SIZE]) {
             // (1) Printable characters go as-is, except backslash and double quote.
@@ -124,13 +124,13 @@ namespace {
                 r[3] = OctDigit((c & 0007) >> 0);
                 return 4;
             }
-        }
+        } 
     };
-
+ 
     template <>
     struct TEscapeUtil<wchar16> {
         static const size_t ESCAPE_C_BUFFER_SIZE = 6;
-
+ 
         template <typename TNextChar, typename TBufferChar>
         static inline size_t EscapeC(wchar16 c, TNextChar next, TBufferChar r[ESCAPE_C_BUFFER_SIZE]) {
             if (c < 0x100) {
@@ -144,26 +144,26 @@ namespace {
                 r[5] = HexDigit((c & 0x000F) >> 0);
                 return 6;
             }
-        }
+        } 
     };
 }
-
-template <class TChar>
+ 
+template <class TChar> 
 TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TChar>& r) {
     using TEscapeUtil = ::TEscapeUtil<TChar>;
-
+ 
     TChar buffer[TEscapeUtil::ESCAPE_C_BUFFER_SIZE];
-
+ 
     size_t i, j;
     for (i = 0, j = 0; i < len; ++i) {
         size_t rlen = TEscapeUtil::EscapeC(str[i], (i + 1 < len ? str[i + 1] : 0), buffer);
-
+ 
         if (rlen > 1) {
             r.append(str + j, i - j);
             j = i + 1;
             r.append(buffer, rlen);
         }
-    }
+    } 
 
     if (j > 0) {
         r.append(str + j, len - j);
@@ -172,8 +172,8 @@ TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TCha
     }
 
     return r;
-}
-
+} 
+ 
 template TString& EscapeCImpl<TString::TChar>(const TString::TChar* str, size_t len, TString& r);
 template TUtf16String& EscapeCImpl<TUtf16String::TChar>(const TUtf16String::TChar* str, size_t len, TUtf16String& r);
 
@@ -410,11 +410,11 @@ TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& w) {
 
 TString EscapeC(const TString& str) {
     return EscapeC(str.data(), str.size());
-}
-
+} 
+ 
 TUtf16String EscapeC(const TUtf16String& str) {
     return EscapeC(str.data(), str.size());
-}
+} 
 
 TString& UnescapeC(const TStringBuf str, TString& s) {
     return UnescapeC(str.data(), str.size(), s);

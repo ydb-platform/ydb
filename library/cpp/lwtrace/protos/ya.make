@@ -5,7 +5,7 @@ OWNER(serxa)
 INCLUDE_TAGS(GO_PROTO)
 
 SRCS(
-    lwtrace.proto
+    lwtrace.proto 
 )
 
 END()

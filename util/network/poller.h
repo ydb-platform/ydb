@@ -18,7 +18,7 @@ public:
     void WaitReadOneShot(SOCKET sock, void* cookie);
     void WaitWriteOneShot(SOCKET sock, void* cookie);
     void WaitReadWriteOneShot(SOCKET sock, void* cookie);
-
+ 
     void WaitReadWriteEdgeTriggered(SOCKET sock, void* cookie);
     void RestartReadWriteEdgeTriggered(SOCKET sock, void* cookie, bool empty = true);
 

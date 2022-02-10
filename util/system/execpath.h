@@ -1,7 +1,7 @@
 #pragma once
-
+ 
 #include <util/generic/fwd.h>
-
+ 
 // NOTE: This function has rare sporadic failures (throws exceptions) on FreeBSD. See REVIEW:54297
 const TString& GetExecPath();
 

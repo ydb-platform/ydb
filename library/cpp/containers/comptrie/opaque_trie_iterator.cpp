@@ -13,7 +13,7 @@ namespace NCompactTrie {
         if (!AtEmptyValue && !atend)
             Forward();
     }
-
+ 
     bool TOpaqueTrieIterator::operator==(const TOpaqueTrieIterator& rhs) const {
         return (Trie == rhs.Trie &&
                 Forks == rhs.Forks &&
@@ -52,7 +52,7 @@ namespace NCompactTrie {
                     return false;
                 topFork = &Forks.Top();
             }
-        }
+        } 
 
         Y_ASSERT(!Forks.Empty());
         while (Forks.Top().CurrentDirection != D_FINAL && !HasMaxKeyLength()) {
@@ -228,4 +228,4 @@ namespace NCompactTrie {
         return Node.GetLeafOffset();
     }
 
-}
+} 

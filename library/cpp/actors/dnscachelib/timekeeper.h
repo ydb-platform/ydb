@@ -4,7 +4,7 @@
 #include <util/generic/singleton.h>
 #include <util/string/cast.h>
 #include <util/system/thread.h>
-#include <util/system/event.h>
+#include <util/system/event.h> 
 #include <util/system/env.h>
 
 #include <cstdlib>
@@ -59,11 +59,11 @@ private:
     static void* Worker(void* arg) {
         TTimeKeeper* owner = static_cast<TTimeKeeper*>(arg);
 
-        do {
+        do { 
             /* Race condition may occur here but locking looks too expensive */
 
             gettimeofday(&owner->CurrentTime, nullptr);
-        } while (!owner->Exit.WaitT(TDuration::MicroSeconds(UpdateInterval)));
+        } while (!owner->Exit.WaitT(TDuration::MicroSeconds(UpdateInterval))); 
 
         return nullptr;
     }

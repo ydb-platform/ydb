@@ -10,13 +10,13 @@
 #include <util/random/mersenne.h>
 
 static TString JoinWithNewline(const TVector<TString>& strings) {
-    TStringStream ss;
+    TStringStream ss; 
     for (const auto& string : strings) {
         ss << string << "\n";
-    }
-    return ss.Str();
-}
-
+    } 
+    return ss.Str(); 
+} 
+ 
 class TDirIteratorTest: public TTestBase {
     UNIT_TEST_SUITE(TDirIteratorTest);
     UNIT_TEST(TestIt)

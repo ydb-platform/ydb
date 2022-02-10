@@ -4,7 +4,7 @@
 #include <cstddef>
 
 class IOutputStream;
-
+ 
 namespace NCompactTrie {
     // Return value: size of the resulting trie.
     size_t RawCompactTrieFastLayoutImpl(IOutputStream& os, const NCompactTrie::TOpaqueTrie& trie, bool verbose);

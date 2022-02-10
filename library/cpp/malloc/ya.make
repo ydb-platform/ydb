@@ -1,4 +1,4 @@
-RECURSE(
+RECURSE( 
     api
     api/helpers
     api/ut
@@ -13,7 +13,7 @@ RECURSE(
     mimalloc/link_test
     hu
     hu/link_test
-)
+) 
 
 IF (NOT OS_WINDOWS)
     RECURSE(

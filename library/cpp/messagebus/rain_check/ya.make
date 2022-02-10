@@ -1,8 +1,8 @@
 OWNER(g:messagebus)
 
-RECURSE(
+RECURSE( 
     core
     http
     messagebus
     test
-)
+) 

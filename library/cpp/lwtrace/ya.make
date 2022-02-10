@@ -10,7 +10,7 @@ SRCS(
     check.cpp
     control.cpp
     custom_action.cpp
-    kill_action.cpp
+    kill_action.cpp 
     log_shuttle.cpp
     perf.cpp
     probes.cpp

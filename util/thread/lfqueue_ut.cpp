@@ -6,9 +6,9 @@
 #include <util/generic/ptr.h>
 #include <util/system/atomic.h>
 #include <util/thread/pool.h>
-
+ 
 #include "lfqueue.h"
-
+ 
 class TMoveTest {
 public:
     TMoveTest(int marker = 0, int value = 0)
@@ -122,74 +122,74 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
     }
 
     Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
-        TLockFreeQueue<int> queue;
-
+        TLockFreeQueue<int> queue; 
+ 
         int i = -1;
-
-        UNIT_ASSERT(!queue.Dequeue(&i));
+ 
+        UNIT_ASSERT(!queue.Dequeue(&i)); 
         UNIT_ASSERT_VALUES_EQUAL(i, -1);
-
-        queue.Enqueue(10);
-        queue.Enqueue(11);
-        queue.Enqueue(12);
-
-        UNIT_ASSERT(queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(10, i);
-        UNIT_ASSERT(queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(11, i);
-
-        queue.Enqueue(13);
-
-        UNIT_ASSERT(queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(12, i);
-        UNIT_ASSERT(queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(13, i);
-
-        UNIT_ASSERT(!queue.Dequeue(&i));
+ 
+        queue.Enqueue(10); 
+        queue.Enqueue(11); 
+        queue.Enqueue(12); 
+ 
+        UNIT_ASSERT(queue.Dequeue(&i)); 
+        UNIT_ASSERT_VALUES_EQUAL(10, i); 
+        UNIT_ASSERT(queue.Dequeue(&i)); 
+        UNIT_ASSERT_VALUES_EQUAL(11, i); 
+ 
+        queue.Enqueue(13); 
+ 
+        UNIT_ASSERT(queue.Dequeue(&i)); 
+        UNIT_ASSERT_VALUES_EQUAL(12, i); 
+        UNIT_ASSERT(queue.Dequeue(&i)); 
+        UNIT_ASSERT_VALUES_EQUAL(13, i); 
+ 
+        UNIT_ASSERT(!queue.Dequeue(&i)); 
 
         const int tmp = 100;
         queue.Enqueue(tmp);
         UNIT_ASSERT(queue.Dequeue(&i));
         UNIT_ASSERT_VALUES_EQUAL(i, tmp);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestSimpleEnqueueAllDequeue) {
-        TLockFreeQueue<int> queue;
-
+        TLockFreeQueue<int> queue; 
+ 
         int i = -1;
-
-        UNIT_ASSERT(!queue.Dequeue(&i));
+ 
+        UNIT_ASSERT(!queue.Dequeue(&i)); 
         UNIT_ASSERT_VALUES_EQUAL(i, -1);
-
+ 
         TVector<int> v;
-        v.push_back(20);
-        v.push_back(21);
-
-        queue.EnqueueAll(v);
-
-        v.clear();
-        v.push_back(22);
-        v.push_back(23);
-        v.push_back(24);
-
-        queue.EnqueueAll(v);
-
-        v.clear();
-        queue.EnqueueAll(v);
-
-        v.clear();
-        v.push_back(25);
-
-        queue.EnqueueAll(v);
-
-        for (int j = 20; j <= 25; ++j) {
-            UNIT_ASSERT(queue.Dequeue(&i));
-            UNIT_ASSERT_VALUES_EQUAL(j, i);
-        }
-
-        UNIT_ASSERT(!queue.Dequeue(&i));
-    }
-
+        v.push_back(20); 
+        v.push_back(21); 
+ 
+        queue.EnqueueAll(v); 
+ 
+        v.clear(); 
+        v.push_back(22); 
+        v.push_back(23); 
+        v.push_back(24); 
+ 
+        queue.EnqueueAll(v); 
+ 
+        v.clear(); 
+        queue.EnqueueAll(v); 
+ 
+        v.clear(); 
+        v.push_back(25); 
+ 
+        queue.EnqueueAll(v); 
+ 
+        for (int j = 20; j <= 25; ++j) { 
+            UNIT_ASSERT(queue.Dequeue(&i)); 
+            UNIT_ASSERT_VALUES_EQUAL(j, i); 
+        } 
+ 
+        UNIT_ASSERT(!queue.Dequeue(&i)); 
+    } 
+ 
     void DequeueAllRunner(TLockFreeQueue<int>& queue, bool singleConsumer) {
         size_t threadsNum = 4;
         size_t enqueuesPerThread = 10'000;
@@ -304,19 +304,19 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
 
     Y_UNIT_TEST(CleanInDestructor) {
         TSimpleSharedPtr<bool> p(new bool);
-        UNIT_ASSERT_VALUES_EQUAL(1u, p.RefCount());
-
-        {
+        UNIT_ASSERT_VALUES_EQUAL(1u, p.RefCount()); 
+ 
+        { 
             TLockFreeQueue<TSimpleSharedPtr<bool>> stack;
-
-            stack.Enqueue(p);
-            stack.Enqueue(p);
-
-            UNIT_ASSERT_VALUES_EQUAL(3u, p.RefCount());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, p.RefCount());
-    }
+ 
+            stack.Enqueue(p); 
+            stack.Enqueue(p); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(3u, p.RefCount()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, p.RefCount()); 
+    } 
 
     Y_UNIT_TEST(CheckOperationsCount) {
         TOperationsChecker o;
@@ -330,4 +330,4 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
         queue.Dequeue(&o);
         o.Check(0, 0, 2, 1, 0);
     }
-}
+} 

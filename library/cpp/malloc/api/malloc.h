@@ -1,25 +1,25 @@
-#pragma once
-
+#pragma once 
+ 
 #include <string.h>
 #include <util/system/compiler.h>
 
-namespace NMalloc {
-    struct TMallocInfo {
-        TMallocInfo();
+namespace NMalloc { 
+    struct TMallocInfo { 
+        TMallocInfo(); 
 
-        const char* Name;
+        const char* Name; 
 
         bool (*SetParam)(const char* param, const char* value);
         const char* (*GetParam)(const char* param);
 
         bool (*CheckParam)(const char* param, bool defaultValue);
-    };
-
+    }; 
+ 
     extern volatile bool IsAllocatorCorrupted;
     void AbortFromCorruptedAllocator(const char* errorMessage = nullptr);
 
-    // this function should be implemented by malloc implementations
-    TMallocInfo MallocInfo();
+    // this function should be implemented by malloc implementations 
+    TMallocInfo MallocInfo(); 
 
     struct TAllocHeader {
         void* Block;
@@ -29,4 +29,4 @@ namespace NMalloc {
             AllocSize = size | signature;
         }
     };
-}
+} 

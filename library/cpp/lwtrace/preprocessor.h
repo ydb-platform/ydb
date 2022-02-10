@@ -3,18 +3,18 @@
 #include "check.h"
 #include "perf.h"
 #include "symbol.h"
-
+ 
 #include <util/generic/hide_ptr.h>
 #include <util/system/platform.h>
 
 #include <stddef.h> //size_t
 
-#ifdef _win_
-#ifndef LWTRACE_DISABLE
-#define LWTRACE_DISABLE
-#endif // LWTRACE_DISABLE
-#endif // _win_
-
+#ifdef _win_ 
+#ifndef LWTRACE_DISABLE 
+#define LWTRACE_DISABLE 
+#endif // LWTRACE_DISABLE 
+#endif // _win_ 
+ 
 // Maximum number of executors that can be attached to a probe
 #define LWTRACE_MAX_ACTIONS 100
 

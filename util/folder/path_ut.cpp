@@ -6,12 +6,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/scope.h>
-#include <util/system/platform.h>
+#include <util/system/platform.h> 
 #include <util/system/yassert.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/stream/file.h>
 #include <util/system/fs.h>
-
+ 
 #include <algorithm>
 
 #ifdef _win_
@@ -116,19 +116,19 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
             UNIT_ASSERT_VALUES_EQUAL(TFsPath("..").Parent(), TFsPath("../.."));
 #endif
     }
-
+ 
     Y_UNIT_TEST(GetName) {
         TTestDirectory d("GetName");
         UNIT_ASSERT_VALUES_EQUAL(TString("dfgh"), d.Child("dfgh").GetName());
-
+ 
         // check does not fail
         TFsPath(".").GetName();
-
-#ifdef _unix_
+ 
+#ifdef _unix_ 
         UNIT_ASSERT_VALUES_EQUAL(TString("/"), TFsPath("/").GetName());
-#endif
+#endif 
     }
-
+ 
     Y_UNIT_TEST(GetExtension) {
         TTestDirectory d("GetExtension");
         UNIT_ASSERT_VALUES_EQUAL("", d.Child("a").GetExtension());
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT(!f1.Exists());
         UNIT_ASSERT(f2.Exists());
     }
-
+ 
     Y_UNIT_TEST(TestForceRename) {
         TTestDirectory xx("TestForceRename");
         TFsPath fMain = xx.Child("main");
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(TestRenameFail) {
         UNIT_ASSERT_EXCEPTION(TFsPath("sfsfsfsdfsfsdfdf").RenameTo("sdfsdf"), TIoException);
     }
-
+ 
 #ifndef _win_
     Y_UNIT_TEST(TestRealPath) {
         UNIT_ASSERT(TFsPath(".").RealPath().IsDirectory());
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(link.RealPath(), target2.RealPath()); // must not cache old value
     }
 #endif
-
+ 
     Y_UNIT_TEST(TestSlashesAndBasename) {
         TFsPath p("/db/BASE/primus121-025-1380131338//");
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("primus121-025-1380131338"));
@@ -227,27 +227,27 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
     Y_UNIT_TEST(TestList) {
         TTestDirectory td("TestList-dir");
-
+ 
         TFsPath dir = td.GetFsPath();
         dir.Child("a").Touch();
         dir.Child("b").MkDir();
         dir.Child("b").Child("b-1").Touch();
         dir.Child("c").MkDir();
         dir.Child("d").Touch();
-
+ 
         TVector<TString> children;
         dir.ListNames(children);
         std::sort(children.begin(), children.end());
-
+ 
         TVector<TString> expected;
         expected.push_back("a");
         expected.push_back("b");
         expected.push_back("c");
         expected.push_back("d");
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(expected, children);
     }
-
+ 
 #ifdef _unix_
     Y_UNIT_TEST(MkDirMode) {
         TTestDirectory td("MkDirMode");
@@ -809,4 +809,4 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(testSymlink.ForceDelete(), TIoException, "failed to delete");
     }
 #endif
-}
+} 

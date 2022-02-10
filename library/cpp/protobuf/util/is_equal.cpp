@@ -4,8 +4,8 @@
 #include <google/protobuf/descriptor.h>
 
 #include <util/generic/yexception.h>
-#include <util/string/cast.h>
-#include <util/string/vector.h>
+#include <util/string/cast.h> 
+#include <util/string/vector.h> 
 
 namespace NProtoBuf {
     template <bool useDefault>
@@ -19,7 +19,7 @@ namespace NProtoBuf {
                 return value1 == value2;
             }
         };
-
+ 
         template <bool useDefault>
         struct TCompareValue<FieldDescriptor::CPPTYPE_MESSAGE, useDefault> {
             static inline bool IsEqual(const Message* value1, const Message* value2, TVector<TString>* differentPath) {
@@ -113,7 +113,7 @@ namespace NProtoBuf {
         const Descriptor* descr = m1.GetDescriptor();
         if (descr != m2.GetDescriptor()) {
             return false;
-        }
+        } 
         for (int i = 0; i < descr->field_count(); ++i)
             if (!IsEqualField<useDefault>(m1, m2, *descr->field(i), differentPath)) {
                 return false;
@@ -148,14 +148,14 @@ namespace NProtoBuf {
         const Descriptor* descr = m1.GetDescriptor();
         if (descr != m2.GetDescriptor()) {
             return false;
-        }
+        } 
         return IsEqualField<useDefault>(m1, m2, field, differentPath);
     }
 
     bool IsEqualField(const Message& m1, const Message& m2, const FieldDescriptor& field) {
         return IsEqualFieldImpl<false>(m1, m2, field, nullptr);
-    }
-
+    } 
+ 
     bool IsEqualFieldDefault(const Message& m1, const Message& m2, const FieldDescriptor& field) {
         return IsEqualFieldImpl<true>(m1, m2, field, nullptr);
     }

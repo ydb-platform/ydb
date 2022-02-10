@@ -296,7 +296,7 @@ static inline void Flush(IOutputStream& o) {
 /*
  * Also see format.h for additional manipulators.
  */
-
+ 
 #include "debug.h"
 
 void RedirectStdioToAndroidLog(bool redirect);

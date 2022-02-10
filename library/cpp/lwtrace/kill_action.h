@@ -1,7 +1,7 @@
-#pragma once
-
-#include "probe.h"
-
+#pragma once 
+ 
+#include "probe.h" 
+ 
 namespace NLWTrace {
     namespace NPrivate {
         class TKillActionExecutor: public IExecutor {
@@ -10,6 +10,6 @@ namespace NLWTrace {
             }
             bool DoExecute(TOrbit& orbit, const TParams& params) override;
         };
-
+ 
     }
 }

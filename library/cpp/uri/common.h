@@ -487,7 +487,7 @@ namespace NUri {
     const char* FieldToString(const TField::EField& t);
     const char* ParsedStateToString(const TState::EParsed& t);
     const char* SchemeKindToString(const TScheme::EKind& t);
-
+ 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NUri::TField::EField, out, t) {

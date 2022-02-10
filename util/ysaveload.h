@@ -25,12 +25,12 @@ public:
     };
 };
 
-struct TSerializeException: public yexception {
+struct TSerializeException: public yexception { 
 };
 
-struct TLoadEOF: public TSerializeException {
-};
-
+struct TLoadEOF: public TSerializeException { 
+}; 
+ 
 template <class T>
 static inline void Save(IOutputStream* out, const T& t);
 

@@ -102,7 +102,7 @@ public:
 
     void HandleTimeout(const TActorContext &ctx) {
         Y_UNUSED(ctx);
-        TAutoPtr<TBusResponse> response(new TBusResponseStatus(MSTATUS_TIMEOUT, ""));
+        TAutoPtr<TBusResponse> response(new TBusResponseStatus(MSTATUS_TIMEOUT, "")); 
         TBase::SendReplyAndDie(response.Release(), ctx);
     }
 

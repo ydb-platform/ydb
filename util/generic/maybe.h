@@ -222,7 +222,7 @@ public:
     }
 
     ~TMaybe() = default;
-
+ 
     constexpr TMaybe& operator=(const TMaybe&) = default;
     constexpr TMaybe& operator=(TMaybe&&) = default;
 
@@ -238,9 +238,9 @@ public:
         } else {
             Init(std::forward<U>(right));
         }
-        return *this;
-    }
-
+        return *this; 
+    } 
+ 
     template <class U>
     std::enable_if_t<TCopyAssignable<U>::value,
                      TMaybe&>
@@ -289,16 +289,16 @@ public:
             this->Defined_ = false;
             Data()->~T();
         }
-    }
-
+    } 
+ 
     constexpr bool Defined() const noexcept {
         return this->Defined_;
     }
-
+ 
     Y_PURE_FUNCTION constexpr bool Empty() const noexcept {
         return !Defined();
-    }
-
+    } 
+ 
     void CheckDefined() const {
         if (Y_UNLIKELY(!Defined())) {
             Policy::OnEmpty(typeid(TValueType));
@@ -314,17 +314,17 @@ public:
     }
 
     constexpr const T& GetRef() const& {
-        CheckDefined();
+        CheckDefined(); 
 
         return *Data();
-    }
-
+    } 
+ 
     constexpr T& GetRef() & {
-        CheckDefined();
+        CheckDefined(); 
 
         return *Data();
-    }
-
+    } 
+ 
     constexpr const T&& GetRef() const&& {
         CheckDefined();
 
@@ -340,11 +340,11 @@ public:
     constexpr const T& operator*() const& {
         return GetRef();
     }
-
+ 
     constexpr T& operator*() & {
         return GetRef();
-    }
-
+    } 
+ 
     constexpr const T&& operator*() const&& {
         return std::move(GetRef());
     }
@@ -355,8 +355,8 @@ public:
 
     constexpr const T* operator->() const {
         return &GetRef();
-    }
-
+    } 
+ 
     constexpr T* operator->() {
         return &GetRef();
     }
@@ -384,8 +384,8 @@ public:
 
     constexpr explicit operator bool() const noexcept {
         return Defined();
-    }
-
+    } 
+ 
     void Save(IOutputStream* out) const {
         const bool defined = Defined();
 

@@ -1,15 +1,15 @@
 #include "base.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/generic/utility.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/ymath.h>
 #include <util/string/cast.h>
 #include <util/stream/output.h>
-#include <util/system/compat.h>
+#include <util/system/compat.h> 
 #include <util/random/random.h>
-
+ 
 #include <limits.h>
 
 using namespace std::chrono_literals;
@@ -220,18 +220,18 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         UNIT_ASSERT(CompareTM(e.Tm_, t));
 
         /*
-         * strptime seems to be broken on Mac OS X:
-         *
-         *   struct tm t;
-         *   char *ret = strptime("Jul", "%b ", &t);
-         *   printf("-%s-\n", ret);
-         *
-         * yields "- -": ret contains a pointer to a substring of the format string,
-         * that should never occur: function returns either NULL or pointer to buf substring.
-         *
-         * So this test fails on Mac OS X.
-         */
-
+         * strptime seems to be broken on Mac OS X: 
+         * 
+         *   struct tm t; 
+         *   char *ret = strptime("Jul", "%b ", &t); 
+         *   printf("-%s-\n", ret); 
+         * 
+         * yields "- -": ret contains a pointer to a substring of the format string, 
+         * that should never occur: function returns either NULL or pointer to buf substring. 
+         * 
+         * So this test fails on Mac OS X. 
+         */ 
+ 
         struct tm t2;
         Zero(t2);
         char* ret = strptime(e.Date_, "%a %b %d %H:%M:%S %Y\n ", &t2);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         UNIT_ASSERT(Abs(milliseconds - microseconds / 1000) < 100);
         UNIT_ASSERT(seconds > 1243008607); // > time when test was written
     }
-
+ 
     Y_UNIT_TEST(TestStrftime) {
         struct tm tm;
         Zero(tm);
@@ -281,14 +281,14 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         tm.tm_mday = 29;
         UNIT_ASSERT_STRINGS_EQUAL("2009-05-29", Strftime("%Y-%m-%d", &tm));
     }
-
+ 
     Y_UNIT_TEST(TestNanoSleep) {
         NanoSleep(0);
         NanoSleep(1);
         NanoSleep(1000);
         NanoSleep(1000000);
     }
-
+ 
     static bool TimeZoneEq(const char* zone0, const char* zone1) {
         if (strcmp(zone0, "GMT") == 0) {
             zone0 = "UTC";
@@ -340,37 +340,37 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
 
 Y_UNIT_TEST_SUITE(DateTimeTest) {
     Y_UNIT_TEST(TestDurationFromFloat) {
-        UNIT_ASSERT_EQUAL(TDuration::MilliSeconds(500), TDuration::Seconds(0.5));
-        UNIT_ASSERT_EQUAL(TDuration::MilliSeconds(500), TDuration::Seconds(0.5f));
-    }
-
+        UNIT_ASSERT_EQUAL(TDuration::MilliSeconds(500), TDuration::Seconds(0.5)); 
+        UNIT_ASSERT_EQUAL(TDuration::MilliSeconds(500), TDuration::Seconds(0.5f)); 
+    } 
+ 
     Y_UNIT_TEST(TestSecondsLargeValue) {
-        unsigned int seconds = UINT_MAX;
+        unsigned int seconds = UINT_MAX; 
         UNIT_ASSERT_VALUES_EQUAL(((ui64)seconds) * 1000000, TDuration::Seconds(seconds).MicroSeconds());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestToString) {
 #define CHECK_CONVERTIBLE(v)                                         \
     do {                                                             \
         UNIT_ASSERT_VALUES_EQUAL(v, ToString(TDuration::Parse(v)));  \
         UNIT_ASSERT_VALUES_EQUAL(v, TDuration::Parse(v).ToString()); \
     } while (0)
-#if 0
-
-        CHECK_CONVERTIBLE("10s");
-        CHECK_CONVERTIBLE("1234s");
-        CHECK_CONVERTIBLE("1234ms");
-        CHECK_CONVERTIBLE("12ms");
-        CHECK_CONVERTIBLE("12us");
-        CHECK_CONVERTIBLE("1234us");
-#endif
-
-        CHECK_CONVERTIBLE("1.000000s");
-        CHECK_CONVERTIBLE("11234.000000s");
-        CHECK_CONVERTIBLE("0.011122s");
-        CHECK_CONVERTIBLE("33.011122s");
-    }
-
+#if 0 
+ 
+        CHECK_CONVERTIBLE("10s"); 
+        CHECK_CONVERTIBLE("1234s"); 
+        CHECK_CONVERTIBLE("1234ms"); 
+        CHECK_CONVERTIBLE("12ms"); 
+        CHECK_CONVERTIBLE("12us"); 
+        CHECK_CONVERTIBLE("1234us"); 
+#endif 
+ 
+        CHECK_CONVERTIBLE("1.000000s"); 
+        CHECK_CONVERTIBLE("11234.000000s"); 
+        CHECK_CONVERTIBLE("0.011122s"); 
+        CHECK_CONVERTIBLE("33.011122s"); 
+    } 
+ 
     Y_UNIT_TEST(TestFromString) {
         static const struct T {
             const char* const Str;
@@ -404,31 +404,31 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     }
 
     Y_UNIT_TEST(TestSleep) {
-        // check does not throw
-        Sleep(TDuration::Seconds(0));
-        Sleep(TDuration::MicroSeconds(1));
-        Sleep(TDuration::MilliSeconds(1));
-    }
-
+        // check does not throw 
+        Sleep(TDuration::Seconds(0)); 
+        Sleep(TDuration::MicroSeconds(1)); 
+        Sleep(TDuration::MilliSeconds(1)); 
+    } 
+ 
     Y_UNIT_TEST(TestInstantToString) {
         UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), ToString(TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)));
         UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToString());
         UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToStringUpToSeconds());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestInstantToRfc822String) {
         UNIT_ASSERT_VALUES_EQUAL(TString("Thu, 06 Aug 2009 15:19:06 GMT"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToRfc822String());
     }
 
     Y_UNIT_TEST(TestInstantMath) {
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1719), TInstant::Seconds(1700) + TDuration::Seconds(19));
-        // overflow
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Max(), TInstant::Max() - TDuration::Seconds(10) + TDuration::Seconds(19));
-        // underflow
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Zero(), TInstant::Seconds(1000) - TDuration::Seconds(2000));
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TInstant::Seconds(1000) - TInstant::Seconds(2000));
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(1719), TInstant::Seconds(1700) + TDuration::Seconds(19)); 
+        // overflow 
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Max(), TInstant::Max() - TDuration::Seconds(10) + TDuration::Seconds(19)); 
+        // underflow 
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Zero(), TInstant::Seconds(1000) - TDuration::Seconds(2000)); 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TInstant::Seconds(1000) - TInstant::Seconds(2000)); 
+    } 
+ 
     Y_UNIT_TEST(TestDurationMath) {
         TDuration empty;
         UNIT_ASSERT(!empty);
@@ -439,14 +439,14 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         TDuration nonEmpty = TDuration::MicroSeconds(1);
         UNIT_ASSERT(nonEmpty);
 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(110), TDuration::Seconds(77) + TDuration::Seconds(33));
-        // overflow
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Max(), TDuration::Max() - TDuration::Seconds(1) + TDuration::Seconds(10));
-        // underflow
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TDuration::Seconds(20) - TDuration::Seconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(110), TDuration::Seconds(77) + TDuration::Seconds(33)); 
+        // overflow 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Max(), TDuration::Max() - TDuration::Seconds(1) + TDuration::Seconds(10)); 
+        // underflow 
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TDuration::Seconds(20) - TDuration::Seconds(200)); 
         // division
         UNIT_ASSERT_DOUBLES_EQUAL(TDuration::Minutes(1) / TDuration::Seconds(10), 6.0, 1e-9);
-    }
+    } 
 
     Y_UNIT_TEST(TestDurationGetters) {
         const TDuration value = TDuration::MicroSeconds(1234567);
@@ -651,4 +651,4 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         static_assert(TDuration::Zero() + 1s == 1s);
         static_assert(TInstant::Seconds(1) + 1s == TInstant::Seconds(2));
     }
-}
+} 

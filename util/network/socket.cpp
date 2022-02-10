@@ -554,25 +554,25 @@ static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
 #endif
 
 void TSocketHolder::Close() noexcept {
-    if (Fd_ != INVALID_SOCKET) {
-        bool ok = (closesocket(Fd_) == 0);
-        if (!ok) {
+    if (Fd_ != INVALID_SOCKET) { 
+        bool ok = (closesocket(Fd_) == 0); 
+        if (!ok) { 
 // Do not quietly close bad descriptor,
 // because often it means double close
 // that is disasterous
-#ifdef _win_
+#ifdef _win_ 
             Y_VERIFY(WSAGetLastError() != WSAENOTSOCK, "must not quietly close bad socket descriptor");
-#elif defined(_unix_)
+#elif defined(_unix_) 
             Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_));
-#else
+#else 
     #error unsupported platform
-#endif
-        }
-
-        Fd_ = INVALID_SOCKET;
-    }
-}
-
+#endif 
+        } 
+ 
+        Fd_ = INVALID_SOCKET; 
+    } 
+} 
+ 
 class TSocket::TImpl: public TAtomicRefCount<TImpl> {
     using TOps = TSocket::TOps;
 

@@ -61,7 +61,7 @@ const char* GetDirectorySeparatorS();
 
 void RemoveDirWithContents(TString dirName);
 
-const char* GetFileNameComponent(const char* f);
+const char* GetFileNameComponent(const char* f); 
 
 inline TString GetFileNameComponent(const TString& f) {
     return GetFileNameComponent(f.data());
@@ -70,7 +70,7 @@ inline TString GetFileNameComponent(const TString& f) {
 /// RealPath doesn't guarantee trailing separator to be stripped or left in place for directories.
 TString RealPath(const TString& path);     // throws
 TString RealLocation(const TString& path); /// throws; last file name component doesn't need to exist
-
+ 
 TString GetSystemTempDir();
 
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix);

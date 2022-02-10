@@ -3,7 +3,7 @@
 #include <library/cpp/colorizer/colors.h>
 
 // For the sake of this example, let's implement Wget
-
+ 
 Y_COMPLETER(HeaderCompleter) {
     AddCompletion("Host");
     AddCompletion("Referer");
@@ -31,8 +31,8 @@ Y_COMPLETER(HeaderCompleter) {
         AddCompletion("Content-MD5");
         AddCompletion("Content-Range");
     }
-}
-
+} 
+ 
 class TMain: public TMainClassArgs {
     bool Background_;
     size_t Timeout_;
@@ -42,7 +42,7 @@ class TMain: public TMainClassArgs {
     TMaybe<TString> PostData_;
     TMaybe<TString> PostFile_;
     TVector<TString> Headers_;
-
+ 
 protected:
     void RegisterOptions(NLastGetopt::TOpts& opts) override {
         // Brief description for the whole program, will appear in the beginning of a help message.
@@ -75,7 +75,7 @@ protected:
             .CompletionArgHelp("timeout (ms)")
             .StoreResult(&Timeout_)
             .Completer(NLastGetopt::NComp::Choice({{"1000"}, {"5000"}, {"10000"}, {"60000"}}));
-
+ 
         opts.AddLongOption("method")
             .RequiredArgument("http-method")
             .Help("specify HTTP method")
@@ -100,7 +100,7 @@ protected:
             .CompletionHelp("set custom user agent for each HTTP request")
             .CompletionArgHelp("user agent string")
             .StoreResult(&UserAgent_);
-
+ 
         opts.AddLongOption("post-data")
             .RequiredArgument("string")
             .Help("use POST method and send the specified data in the request body (cannot be used with --post-file)")
@@ -121,10 +121,10 @@ protected:
                 ImplicitMethod_ = "POST";
             })
             .Completer(NLastGetopt::NComp::File());
-
+ 
         // These two options can't be together.
         opts.MutuallyExclusive("post-file", "post-data");
-
+ 
         opts.AddLongOption("header")
             .RequiredArgument("header-line")
             .Help("send `header-line` along with the rest of the headers in each HTTP request")
@@ -133,9 +133,9 @@ protected:
             .AppendTo(&Headers_)
             .AllowMultipleCompletion()
             .Completer(NLastGetopt::NComp::LaunchSelf(HeaderCompleter));
-
+ 
         // Setting up free arguments.
-
+ 
         // We are going to have one mandatory argument and unlimited number of optional arguments.
         opts.SetFreeArgsMin(1);
         opts.SetFreeArgsMax(NLastGetopt::TOpts::UNLIMITED_ARGS);
@@ -239,4 +239,4 @@ protected:
 int main(int argc, const char** argv) {
     NLastGetopt::NComp::TCustomCompleter::FireCustomCompleter(argc, argv);
     TMain().Run(argc, argv);
-}
+} 

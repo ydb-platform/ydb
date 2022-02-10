@@ -2,28 +2,28 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/charset/wide.h>
-
+ 
 Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
     Y_UNIT_TEST(TestLeftPad) {
-        TStringStream ss;
-        ss << LeftPad(10, 4, '0');
-        UNIT_ASSERT_VALUES_EQUAL("0010", ss.Str());
-
+        TStringStream ss; 
+        ss << LeftPad(10, 4, '0'); 
+        UNIT_ASSERT_VALUES_EQUAL("0010", ss.Str()); 
+ 
         ss.Clear();
-        ss << LeftPad(222, 1);
-        UNIT_ASSERT_VALUES_EQUAL("222", ss.Str());
-    }
-
+        ss << LeftPad(222, 1); 
+        UNIT_ASSERT_VALUES_EQUAL("222", ss.Str()); 
+    } 
+ 
     Y_UNIT_TEST(TestRightPad) {
-        TStringStream ss;
-        ss << RightPad("aa", 4);
-        UNIT_ASSERT_VALUES_EQUAL("aa  ", ss.Str());
-
+        TStringStream ss; 
+        ss << RightPad("aa", 4); 
+        UNIT_ASSERT_VALUES_EQUAL("aa  ", ss.Str()); 
+ 
         ss.Clear();
-        ss << RightPad("aa", 1);
-        UNIT_ASSERT_VALUES_EQUAL("aa", ss.Str());
-    }
-
+        ss << RightPad("aa", 1); 
+        UNIT_ASSERT_VALUES_EQUAL("aa", ss.Str()); 
+    } 
+ 
     Y_UNIT_TEST(TestTime) {
         TStringStream ss;
 
@@ -179,4 +179,4 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadable(TDuration::Seconds(3672))), "1h 1m 12s");
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadable(TDuration::Seconds(4220))), "1h 10m 20s");
     }
-}
+} 

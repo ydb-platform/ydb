@@ -216,7 +216,7 @@ public:
     inline void SetPrintBeforeSuite(bool print) {
         PrintBeforeSuite_ = print;
     }
-
+ 
     inline void SetPrintAfterSuite(bool print) {
         PrintAfterSuite_ = print;
     }
@@ -224,7 +224,7 @@ public:
     inline void SetPrintBeforeTest(bool print) {
         PrintBeforeTest_ = print;
     }
-
+ 
     inline void SetPrintAfterTest(bool print) {
         PrintAfterTest_ = print;
     }
@@ -286,7 +286,7 @@ public:
     inline void SetLoop(bool loop) {
         Loop = loop;
     }
-
+ 
     inline bool IsLoop() const {
         return Loop;
     }
@@ -300,17 +300,17 @@ private:
         TraceProcessor->UnitStart(*unit);
         if (IsForked) {
             return;
-        }
+        } 
         if (PrintBeforeSuite_ || PrintBeforeTest_) {
             fprintf(stderr, "%s<-----%s %s\n", LightBlueColor().data(), OldColor().data(), unit->name.data());
         }
     }
-
+ 
     void OnUnitStop(const TUnit* unit) override {
         TraceProcessor->UnitStop(*unit);
         if (IsForked) {
             return;
-        }
+        } 
         if (!PrintAfterSuite_) {
             return;
         }
@@ -329,12 +329,12 @@ private:
         TraceProcessor->BeforeTest(*test);
         if (IsForked) {
             return;
-        }
+        } 
         if (PrintBeforeTest_) {
             fprintf(stderr, "[%sexec%s] %s::%s...\n", LightBlueColor().data(), OldColor().data(), test->unit->name.data(), test->name);
         }
     }
-
+ 
     void OnError(const TError* descr) override {
         TraceProcessor->Error(*descr);
         if (!IsForked && ForkExitedCorrectly) {
@@ -454,19 +454,19 @@ private:
         if (EnabledTests_.empty()) {
             return true;
         }
-
+ 
         if (EnabledTests_.find(TString() + suite + "::*") != EnabledTests_.end()) {
             return true;
         }
-
+ 
         return EnabledTests_.find(name) != EnabledTests_.end();
     }
-
+ 
     void Run(std::function<void()> f, const TString& suite, const char* name, const bool forceFork) override {
         if (!(ForkTests || forceFork) || GetIsForked()) {
             return f();
-        }
-
+        } 
+ 
         TList<TString> args(1, "--is-forked-internal");
         args.push_back(Sprintf("+%s::%s", suite.data(), name));
 
@@ -614,7 +614,7 @@ static int DoUsage(const char* progname) {
          << "  -l, --list            print a list of available tests\n"
          << "  -A --list-verbose        print a list of available subtests\n"
          << "  --print-before-test   print each test name before running it\n"
-         << "  --print-before-suite  print each test suite name before running it\n"
+         << "  --print-before-suite  print each test suite name before running it\n" 
          << "  --show-fails          print a list of all failed tests at the end\n"
          << "  --dont-show-fails     do not print a list of all failed tests at the end\n"
          << "  --continue-on-fail    print a message and continue running test suite instead of break\n"
@@ -686,9 +686,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
                 } else if (strcmp(name, "--list-verbose") == 0 || strcmp(name, "-A") == 0) {
                     listTests = LIST_VERBOSE;
                 } else if (strcmp(name, "--print-before-suite=false") == 0) {
-                    processor.SetPrintBeforeSuite(false);
-                } else if (strcmp(name, "--print-before-test=false") == 0) {
-                    processor.SetPrintBeforeTest(false);
+                    processor.SetPrintBeforeSuite(false); 
+                } else if (strcmp(name, "--print-before-test=false") == 0) { 
+                    processor.SetPrintBeforeTest(false); 
                 } else if (strcmp(name, "--print-before-suite") == 0) {
                     processor.SetPrintBeforeSuite(true);
                 } else if (strcmp(name, "--print-before-test") == 0) {
@@ -709,10 +709,10 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetEnd(FromString<size_t>(argv[i]));
                 } else if (strcmp(name, "--fork-tests") == 0) {
                     processor.SetForkTests(true);
-                } else if (strcmp(name, "--is-forked-internal") == 0) {
+                } else if (strcmp(name, "--is-forked-internal") == 0) { 
                     processor.SetIsForked(true);
-                } else if (strcmp(name, "--loop") == 0) {
-                    processor.SetLoop(true);
+                } else if (strcmp(name, "--loop") == 0) { 
+                    processor.SetLoop(true); 
                 } else if (strcmp(name, "--trace-path") == 0) {
                     ++i;
                     processor.BeQuiet();
@@ -733,8 +733,8 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     size_t assign = param.find('=');
                     Singleton<::NPrivate::TTestEnv>()->AddTestParam(param.substr(0, assign), param.substr(assign + 1));
                 } else if (TString(name).StartsWith("--")) {
-                    return DoUsage(argv[0]), 1;
-                } else if (*name == '-') {
+                    return DoUsage(argv[0]), 1; 
+                } else if (*name == '-') { 
                     processor.Disable(name + 1);
                 } else if (*name == '+') {
                     processor.Enable(name + 1);
@@ -750,15 +750,15 @@ int NUnitTest::RunMain(int argc, char** argv) {
         TTestFactory::Instance().SetProcessor(&processor);
 
         unsigned ret;
-        for (;;) {
+        for (;;) { 
             ret = TTestFactory::Instance().Execute();
             if (!processor.GetIsForked() && ret && processor.GetPrintSummary()) {
-                Cerr << "SOME TESTS FAILED!!!!" << Endl;
-            }
-
+                Cerr << "SOME TESTS FAILED!!!!" << Endl; 
+            } 
+ 
             if (0 != ret || !processor.IsLoop()) {
                 break;
-            }
+            } 
         }
         return ret;
 #ifndef UT_SKIP_EXCEPTIONS

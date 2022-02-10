@@ -407,10 +407,10 @@ static inline void Split(char* buf, char ch, T* res) {
     SplitString(buf, delim, pusher);
 }
 
-/// Split string into res vector. Res vector is cleared before split.
+/// Split string into res vector. Res vector is cleared before split. 
 /// Old good slow split function.
 /// Field delimter is any number of symbols specified in delim (no empty strings in res vector)
-/// @return number of elements created
+/// @return number of elements created 
 size_t Split(const char* in, const char* delim, TVector<TString>& res);
 size_t Split(const TString& in, const TString& delim, TVector<TString>& res);
 

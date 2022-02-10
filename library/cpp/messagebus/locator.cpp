@@ -2,7 +2,7 @@
 /// \file
 /// \brief Implementation of locator service
 
-#include "locator.h"
+#include "locator.h" 
 
 #include "ybus.h"
 
@@ -121,7 +121,7 @@ namespace NBus {
         , End(end)
         , Addr(addr)
     {
-    }
+    } 
 
     bool TBusLocator::IsLocal(const TNetAddr& addr) {
         for (const auto& myInterface : MyInterfaces) {
@@ -151,7 +151,7 @@ namespace NBus {
     int TBusLocator::RegisterBreak(TServiceId serviceId, const TBusKey start, const TNetAddr& addr) {
         TItems::const_iterator it = Items.lower_bound(TItem(serviceId, 0, start, addr));
         TItems::const_iterator service_it =
-            Items.lower_bound(TItem(serviceId, 0, 0, TNetAddr()));
+            Items.lower_bound(TItem(serviceId, 0, 0, TNetAddr())); 
 
         THolder<TItem> left;
         THolder<TItem> right;
@@ -220,11 +220,11 @@ namespace NBus {
             }
             keyItem = item.Start - 1;
         } while (it != Items.begin());
-
+ 
         if (first != Items.end() && first->Start != 0) {
             TItem item(serviceId, YBUS_KEYMIN, first->Start - 1, first->Addr);
             Items.insert(item);
-        }
+        } 
 
         NormalizeBreaks(serviceId);
         return deleted;
@@ -245,7 +245,7 @@ namespace NBus {
 
             TItem& beg = const_cast<TItem&>(*first);
             beg.Addr = last->Addr;
-        }
+        } 
     }
 
     int TBusLocator::LocateAll(TBusService service, TBusKey key, TVector<TNetAddr>& addrs) {
@@ -307,7 +307,7 @@ namespace NBus {
                 }
                 port = GetAddrPort(item.Addr);
             }
-        }
+        } 
 
         return port;
     }
@@ -326,7 +326,7 @@ namespace NBus {
             if (IsLocal(item.Addr)) {
                 addrs.push_back(item.Addr);
             }
-        }
+        } 
 
         if (addrs.size() == 0) {
             return -1;

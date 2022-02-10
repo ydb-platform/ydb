@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "mem.h"
 #include "output.h"
 
@@ -8,7 +8,7 @@
 #include <util/generic/flags.h>
 #include <util/memory/tempbuf.h>
 #include <util/string/cast.h>
-
+ 
 enum ENumberFormatFlag {
     HF_FULL = 0x01, /**< Output number with leading zeros. */
     HF_ADDX = 0x02, /**< Output '0x' or '0b' before hex/bin digits. */
@@ -21,7 +21,7 @@ enum ESizeFormat {
     SF_BYTES,    /**< Base 1024, byte suffix. 1100 gets turned into "1.07KiB". */
 };
 
-namespace NFormatPrivate {
+namespace NFormatPrivate { 
     template <size_t Value>
     struct TLog2: std::integral_constant<size_t, TLog2<Value / 2>::value + 1> {};
 
@@ -29,66 +29,66 @@ namespace NFormatPrivate {
     struct TLog2<1>: std::integral_constant<size_t, 0> {};
 
     static inline void WriteChars(IOutputStream& os, char c, size_t count) {
-        if (count == 0)
-            return;
-        TTempBuf buf(count);
-        memset(buf.Data(), c, count);
-        os.Write(buf.Data(), count);
-    }
-
-    template <typename T>
-    struct TLeftPad {
+        if (count == 0) 
+            return; 
+        TTempBuf buf(count); 
+        memset(buf.Data(), c, count); 
+        os.Write(buf.Data(), count); 
+    } 
+ 
+    template <typename T> 
+    struct TLeftPad { 
         T Value;
-        size_t Width;
-        char Padc;
-
+        size_t Width; 
+        char Padc; 
+ 
         inline TLeftPad(const T& value, size_t width, char padc)
-            : Value(value)
-            , Width(width)
-            , Padc(padc)
-        {
-        }
-    };
-
-    template <typename T>
+            : Value(value) 
+            , Width(width) 
+            , Padc(padc) 
+        { 
+        } 
+    }; 
+ 
+    template <typename T> 
     IOutputStream& operator<<(IOutputStream& o, const TLeftPad<T>& lp) {
-        TTempBuf buf;
-        TMemoryOutput ss(buf.Data(), buf.Size());
+        TTempBuf buf; 
+        TMemoryOutput ss(buf.Data(), buf.Size()); 
         ss << lp.Value;
-        size_t written = buf.Size() - ss.Avail();
-        if (lp.Width > written) {
-            WriteChars(o, lp.Padc, lp.Width - written);
-        }
-        o.Write(buf.Data(), written);
-        return o;
-    }
-
-    template <typename T>
-    struct TRightPad {
+        size_t written = buf.Size() - ss.Avail(); 
+        if (lp.Width > written) { 
+            WriteChars(o, lp.Padc, lp.Width - written); 
+        } 
+        o.Write(buf.Data(), written); 
+        return o; 
+    } 
+ 
+    template <typename T> 
+    struct TRightPad { 
         T Value;
-        size_t Width;
-        char Padc;
-
+        size_t Width; 
+        char Padc; 
+ 
         inline TRightPad(const T& value, size_t width, char padc)
-            : Value(value)
-            , Width(width)
-            , Padc(padc)
-        {
-        }
-    };
-
-    template <typename T>
+            : Value(value) 
+            , Width(width) 
+            , Padc(padc) 
+        { 
+        } 
+    }; 
+ 
+    template <typename T> 
     IOutputStream& operator<<(IOutputStream& o, const TRightPad<T>& lp) {
-        TTempBuf buf;
-        TMemoryOutput ss(buf.Data(), buf.Size());
+        TTempBuf buf; 
+        TMemoryOutput ss(buf.Data(), buf.Size()); 
         ss << lp.Value;
-        size_t written = buf.Size() - ss.Avail();
-        o.Write(buf.Data(), written);
-        if (lp.Width > written) {
-            WriteChars(o, lp.Padc, lp.Width - written);
-        }
-        return o;
-    }
+        size_t written = buf.Size() - ss.Avail(); 
+        o.Write(buf.Data(), written); 
+        if (lp.Width > written) { 
+            WriteChars(o, lp.Padc, lp.Width - written); 
+        } 
+        return o; 
+    } 
 
     template <typename T, size_t Base>
     struct TBaseNumber {
@@ -184,8 +184,8 @@ namespace NFormatPrivate {
         double Value;
         ESizeFormat Format;
     };
-}
-
+} 
+ 
 /**
  * Output manipulator basically equivalent to `std::setw` and `std::setfill`
  * combined.
@@ -203,11 +203,11 @@ namespace NFormatPrivate {
  * @param padc                          Character to use for padding.
  * @see RightPad
  */
-template <typename T>
+template <typename T> 
 static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TLeftPad<T>(value, width, padc);
-}
-
+} 
+ 
 template <typename T, int N>
 static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TLeftPad<const T*>(value, width, padc);
@@ -229,11 +229,11 @@ static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N
  * @param padc                          Character to use for padding.
  * @see LeftPad
  */
-template <typename T>
+template <typename T> 
 static constexpr ::NFormatPrivate::TRightPad<T> RightPad(const T& value, const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TRightPad<T>(value, width, padc);
-}
-
+} 
+ 
 template <typename T, int N>
 static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)[N], const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TRightPad<const T*>(value, width, padc);

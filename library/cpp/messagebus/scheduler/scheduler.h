@@ -8,7 +8,7 @@
 #include <util/generic/vector.h>
 #include <util/system/atomic.h>
 #include <util/system/condvar.h>
-#include <util/system/mutex.h>
+#include <util/system/mutex.h> 
 #include <util/system/thread.h>
 
 namespace NBus {
@@ -18,10 +18,10 @@ namespace NBus {
             inline IScheduleItem(TInstant scheduleTime) noexcept;
             virtual ~IScheduleItem() {
             }
-
+ 
             virtual void Do() = 0;
             inline TInstant GetScheduleTime() const noexcept;
-
+ 
         private:
             TInstant ScheduleTime;
         };
@@ -50,16 +50,16 @@ namespace NBus {
             TCondVar CondVar;
 
             TObjectCounter<TScheduler> ObjectCounter;
-
+ 
             bool StopThread;
             NThreading::TLegacyFuture<> Thread;
         };
-
+ 
         inline IScheduleItem::IScheduleItem(TInstant scheduleTime) noexcept
             : ScheduleTime(scheduleTime)
         {
         }
-
+ 
         inline TInstant IScheduleItem::GetScheduleTime() const noexcept {
             return ScheduleTime;
         }

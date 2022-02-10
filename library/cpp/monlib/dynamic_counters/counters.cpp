@@ -2,10 +2,10 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <util/generic/cast.h>
-
-using namespace NMonitoring;
-
+#include <util/generic/cast.h> 
+ 
+using namespace NMonitoring; 
+ 
 namespace {
     TDynamicCounters* AsDynamicCounters(const TIntrusivePtr<TCountableBase>& ptr) {
         return dynamic_cast<TDynamicCounters*>(ptr.Get());
@@ -53,7 +53,7 @@ TDynamicCounters::TDynamicCounters(EVisibility vis)
 
 TDynamicCounters::~TDynamicCounters() {
 }
-
+ 
 TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringCounter(const TString& value, bool derivative, EVisibility vis) {
     return GetExpiringNamedCounter("sensor", value, derivative, vis);
 }
@@ -68,8 +68,8 @@ TDynamicCounters::TCounterPtr TDynamicCounters::GetCounter(const TString& value,
 
 TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& name, const TString& value, bool derivative, EVisibility vis) {
     return AsCounterRef(GetNamedCounterImpl<false, TCounterForPtr>(name, value, derivative, vis));
-}
-
+} 
+ 
 THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return GetNamedHistogram("sensor", value, std::move(collector), derivative, vis);
 }
@@ -126,7 +126,7 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
         }
     }
     return res;
-}
+} 
 
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const {
     TReadGuard g(Lock);
@@ -186,7 +186,7 @@ void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& valu
 void TDynamicCounters::OutputHtml(IOutputStream& os) const {
     HTML(os) {
         PRE() {
-            OutputPlainText(os);
+            OutputPlainText(os); 
         }
     }
 }
@@ -199,7 +199,7 @@ void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString
         }
     }
 }
-
+ 
 void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent) const {
     auto snap = ReadSnapshot();
     // mark private records in plain text output
@@ -232,18 +232,18 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
                 }
                 os << ": " << snapshot->Value(i) << '\n';
             }
-        }
-    }
-
+        } 
+    } 
+ 
     for (const auto& [key, value] : snap) {
         if (const auto subgroup = AsDynamicCounters(value)) {
-            os << "\n";
+            os << "\n"; 
             os << indent << key.LabelName << "=" << key.LabelValue << ":\n";
             subgroup->OutputPlainText(os, indent + INDENT);
-        }
-    }
-}
-
+        } 
+    } 
+} 
+ 
 void TDynamicCounters::Accept(const TString& labelName, const TString& labelValue, ICountableConsumer& consumer) const {
     if (!IsVisible(Visibility(), consumer.Visibility())) {
         return;

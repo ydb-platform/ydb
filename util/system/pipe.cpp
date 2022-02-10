@@ -2,36 +2,36 @@
 
 #include <util/stream/output.h>
 #include <util/generic/yexception.h>
-
+ 
 ssize_t TPipeHandle::Read(void* buffer, size_t byteCount) const noexcept {
-#ifdef _win_
+#ifdef _win_ 
     return recv(Fd_, (char*)buffer, byteCount, 0);
-#else
+#else 
     return read(Fd_, buffer, byteCount);
-#endif
-}
-
+#endif 
+} 
+ 
 ssize_t TPipeHandle::Write(const void* buffer, size_t byteCount) const noexcept {
-#ifdef _win_
+#ifdef _win_ 
     return send(Fd_, (const char*)buffer, byteCount, 0);
-#else
+#else 
     return write(Fd_, buffer, byteCount);
-#endif
-}
-
+#endif 
+} 
+ 
 bool TPipeHandle::Close() noexcept {
-    bool ok = true;
+    bool ok = true; 
     if (Fd_ != INVALID_PIPEHANDLE) {
-#ifdef _win_
+#ifdef _win_ 
         ok = closesocket(Fd_) == 0;
-#else
+#else 
         ok = close(Fd_) == 0;
-#endif
-    }
+#endif 
+    } 
     Fd_ = INVALID_PIPEHANDLE;
-    return ok;
-}
-
+    return ok; 
+} 
+ 
 void TPipeHandle::Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode) {
     PIPEHANDLE fds[2];
 #ifdef _win_
@@ -66,90 +66,90 @@ void TPipeHandle::Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode)
 }
 
 class TPipe::TImpl: public TAtomicRefCount<TImpl> {
-public:
-    TImpl()
+public: 
+    TImpl() 
         : Handle_(INVALID_PIPEHANDLE)
-    {
-    }
+    { 
+    } 
 
-    TImpl(PIPEHANDLE fd)
+    TImpl(PIPEHANDLE fd) 
         : Handle_(fd)
-    {
-    }
-
-    inline ~TImpl() {
-        Close();
-    }
-
-    bool IsOpen() {
+    { 
+    } 
+ 
+    inline ~TImpl() { 
+        Close(); 
+    } 
+ 
+    bool IsOpen() { 
         return Handle_.IsOpen();
-    }
-
-    inline void Close() {
+    } 
+ 
+    inline void Close() { 
         if (!Handle_.IsOpen()) {
-            return;
+            return; 
         }
         if (!Handle_.Close()) {
             ythrow TFileError() << "failed to close pipe";
         }
-    }
-
+    } 
+ 
     TPipeHandle& GetHandle() noexcept {
         return Handle_;
-    }
-
+    } 
+ 
     size_t Read(void* buffer, size_t count) const {
         ssize_t r = Handle_.Read(buffer, count);
         if (r < 0) {
             ythrow TFileError() << "failed to read from pipe";
         }
-        return r;
-    }
-
+        return r; 
+    } 
+ 
     size_t Write(const void* buffer, size_t count) const {
         ssize_t r = Handle_.Write(buffer, count);
         if (r < 0) {
             ythrow TFileError() << "failed to write to pipe";
         }
-        return r;
-    }
+        return r; 
+    } 
 
-private:
+private: 
     TPipeHandle Handle_;
-};
-
-TPipe::TPipe()
+}; 
+ 
+TPipe::TPipe() 
     : Impl_(new TImpl)
-{
-}
-
-TPipe::TPipe(PIPEHANDLE fd)
+{ 
+} 
+ 
+TPipe::TPipe(PIPEHANDLE fd) 
     : Impl_(new TImpl(fd))
-{
-}
-
+{ 
+} 
+ 
 TPipe::~TPipe() = default;
-
-void TPipe::Close() {
+ 
+void TPipe::Close() { 
     Impl_->Close();
-}
-
+} 
+ 
 PIPEHANDLE TPipe::GetHandle() const noexcept {
     return Impl_->GetHandle();
-}
-
+} 
+ 
 bool TPipe::IsOpen() const noexcept {
     return Impl_->IsOpen();
-}
-
+} 
+ 
 size_t TPipe::Read(void* buf, size_t len) const {
     return Impl_->Read(buf, len);
-}
-
+} 
+ 
 size_t TPipe::Write(const void* buf, size_t len) const {
     return Impl_->Write(buf, len);
-}
-
+} 
+ 
 void TPipe::Pipe(TPipe& reader, TPipe& writer, EOpenMode mode) {
     TImplRef r(new TImpl());
     TImplRef w(new TImpl());
@@ -158,4 +158,4 @@ void TPipe::Pipe(TPipe& reader, TPipe& writer, EOpenMode mode) {
 
     r.Swap(reader.Impl_);
     w.Swap(writer.Impl_);
-}
+} 

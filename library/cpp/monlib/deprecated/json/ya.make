@@ -1,26 +1,26 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 # Deprecated writer of Solomon JSON format
-# https://wiki.yandex-team.ru/solomon/api/dataformat/json
+# https://wiki.yandex-team.ru/solomon/api/dataformat/json 
 #
 # This writer will be deleted soon, so please consider to use
 # high level library library/cpp/monlib/encode which is decoupled from the
 # particular format.
-
+ 
 OWNER(
     jamel
     g:solomon
 )
-
+ 
 SRCS(
     writer.h
     writer.cpp
 )
 
-PEERDIR(
+PEERDIR( 
     library/cpp/json
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(ut)

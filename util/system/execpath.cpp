@@ -2,11 +2,11 @@
 
 #include <stdlib.h>
 
-#if defined(_solaris_)
+#if defined(_solaris_) 
     #include <stdlib.h>
-#elif defined(_darwin_)
+#elif defined(_darwin_) 
     #include <mach-o/dyld.h>
-#elif defined(_win_)
+#elif defined(_win_) 
     #include "winint.h"
     #include <io.h>
 #elif defined(_linux_)
@@ -16,13 +16,13 @@
     #include <sys/types.h> // for u_int not defined in sysctl.h
     #include <sys/sysctl.h>
     #include <unistd.h>
-#endif
-
+#endif 
+ 
 #include <util/folder/dirut.h>
 #include <util/generic/singleton.h>
 #include <util/generic/function.h>
 #include <util/generic/yexception.h>
-#include <util/memory/tempbuf.h>
+#include <util/memory/tempbuf.h> 
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
 #include <util/string/cast.h>
@@ -30,7 +30,7 @@
 #include "filemap.h"
 #include "execpath.h"
 #include "fs.h"
-
+ 
 #if defined(_freebsd_)
 static inline bool GoodPath(const TString& path) {
     return path.find('/') != TString::npos;
@@ -101,9 +101,9 @@ static inline bool FreeBSDGuessExecBasePath(const TString& guessBasePath, TStrin
 #endif
 
 static TString GetExecPathImpl() {
-#if defined(_solaris_)
+#if defined(_solaris_) 
     return execname();
-#elif defined(_darwin_)
+#elif defined(_darwin_) 
     TTempBuf execNameBuf;
     for (size_t i = 0; i < 2; ++i) {
         std::remove_pointer_t<TFunctionArg<decltype(_NSGetExecutablePath), 1>> bufsize = execNameBuf.Size();
@@ -112,10 +112,10 @@ static TString GetExecPathImpl() {
             return execNameBuf.Data();
         } else if (r == -1) {
             execNameBuf = TTempBuf(bufsize);
-        }
+        } 
     }
     ythrow yexception() << "GetExecPathImpl() failed";
-#elif defined(_win_)
+#elif defined(_win_) 
     TTempBuf execNameBuf;
     for (;;) {
         DWORD r = GetModuleFileName(nullptr, execNameBuf.Data(), execNameBuf.Size());
@@ -125,13 +125,13 @@ static TString GetExecPathImpl() {
             ythrow yexception() << "GetExecPathImpl() failed: " << LastSystemErrorText();
         } else {
             return execNameBuf.Data();
-        }
+        } 
     }
 #elif defined(_linux_) || defined(_cygwin_)
     TString path("/proc/self/exe");
     return NFs::ReadLink(path);
 // TODO(yoda): check if the filename ends with " (deleted)"
-#elif defined(_freebsd_)
+#elif defined(_freebsd_) 
     TString execPath = FreeBSDGetExecPath();
     if (GoodPath(execPath)) {
         return execPath;
@@ -150,9 +150,9 @@ static TString GetExecPathImpl() {
     }
 
     ythrow yexception() << "can not resolve exec path";
-#else
+#else 
     #error dont know how to implement GetExecPath on this platform
-#endif
+#endif 
 }
 
 static bool GetPersistentExecPathImpl(TString& to) {
@@ -189,10 +189,10 @@ namespace {
         TString PersistentExecPath;
     };
 }
-
+ 
 const TString& GetExecPath() {
     return TExecPathsHolder::Instance()->ExecPath;
-}
+} 
 
 const TString& GetPersistentExecPath() {
     return TExecPathsHolder::Instance()->PersistentExecPath;

@@ -1,23 +1,23 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/atomic.h>
 
-class TLocalTasks {
-private:
+class TLocalTasks { 
+private: 
     TAtomic GotTasks;
-
-public:
-    TLocalTasks()
+ 
+public: 
+    TLocalTasks() 
         : GotTasks(0)
     {
     }
-
-    void AddTask() {
+ 
+    void AddTask() { 
         AtomicSet(GotTasks, 1);
-    }
-
-    bool FetchTask() {
+    } 
+ 
+    bool FetchTask() { 
         bool gotTasks = AtomicCas(&GotTasks, 0, 1);
-        return gotTasks;
-    }
-};
+        return gotTasks; 
+    } 
+}; 

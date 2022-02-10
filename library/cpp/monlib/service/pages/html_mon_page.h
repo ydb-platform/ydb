@@ -1,8 +1,8 @@
-#pragma once
-
-#include "mon_page.h"
-
-namespace NMonitoring {
+#pragma once 
+ 
+#include "mon_page.h" 
+ 
+namespace NMonitoring { 
     struct THtmlMonPage: public IMonPage {
         THtmlMonPage(const TString& path,
                      const TString& title = TString(),
@@ -11,9 +11,9 @@ namespace NMonitoring {
             , OutputTableSorterJsCss(outputTableSorterJsCss)
         {
         }
-
+ 
         void Output(NMonitoring::IMonHttpRequest& request) override;
-
+ 
         void NotFound(NMonitoring::IMonHttpRequest& request) const;
         void NoContent(NMonitoring::IMonHttpRequest& request) const;
 
@@ -21,5 +21,5 @@ namespace NMonitoring {
 
         bool OutputTableSorterJsCss;
     };
-
+ 
 }

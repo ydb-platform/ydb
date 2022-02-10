@@ -1,10 +1,10 @@
-OWNER(nga)
-
+OWNER(nga) 
+ 
 UNITTEST_FOR(library/cpp/protobuf/util)
-
-SRCS(
+ 
+SRCS( 
     extensions.proto
-    sample_for_is_equal.proto
+    sample_for_is_equal.proto 
     sample_for_simple_reflection.proto
     common_ut.proto
     pb_io_ut.cpp
@@ -14,6 +14,6 @@ SRCS(
     repeated_field_utils_ut.cpp
     walk_ut.cpp
     merge_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

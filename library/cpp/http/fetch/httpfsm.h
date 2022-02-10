@@ -3,7 +3,7 @@
 #include "httpheader.h"
 
 #include <util/system/maxlen.h>
-#include <util/datetime/parser.h>
+#include <util/datetime/parser.h> 
 
 #include <time.h>
 
@@ -19,10 +19,10 @@ struct THttpHeaderParser {
         return execute((unsigned char*)inBuf, (int)len);
     }
 
-    int Execute(TStringBuf str) {
-        return Execute(str.data(), str.size());
-    }
-
+    int Execute(TStringBuf str) { 
+        return Execute(str.data(), str.size()); 
+    } 
+ 
     int Init(THttpHeader* h) {
         int ret = Init((THttpBaseHeader*)(h));
         hd = h;

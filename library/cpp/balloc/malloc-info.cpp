@@ -1,13 +1,13 @@
 #include <library/cpp/malloc/api/malloc.h>
-
+ 
 #include <string.h>
-
-using namespace NMalloc;
-
+ 
+using namespace NMalloc; 
+ 
 extern "C" void DisableBalloc();
 extern "C" void EnableBalloc();
 extern "C" bool BallocDisabled();
-
+ 
 namespace {
     bool SetAllocParam(const char* name, const char* value) {
         if (strcmp(name, "disable") == 0) {
@@ -30,12 +30,12 @@ namespace {
     }
 }
 
-TMallocInfo NMalloc::MallocInfo() {
-    TMallocInfo r;
+TMallocInfo NMalloc::MallocInfo() { 
+    TMallocInfo r; 
 
-    r.Name = "balloc";
+    r.Name = "balloc"; 
     r.SetParam = SetAllocParam;
     r.CheckParam = CheckAllocParam;
 
-    return r;
-}
+    return r; 
+} 

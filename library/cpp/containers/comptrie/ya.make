@@ -1,8 +1,8 @@
 LIBRARY()
-
+ 
 OWNER(velavokr)
 
-SRCS(
+SRCS( 
     array_with_size.h
     chunked_helpers_trie.h
     comptrie.h
@@ -23,8 +23,8 @@ SRCS(
     search_iterator.cpp
     write_trie_backwards.cpp
     writeable_node.cpp
-)
-
+) 
+ 
 PEERDIR(
     library/cpp/packers
     library/cpp/containers/compact_vector
@@ -32,4 +32,4 @@ PEERDIR(
     util/draft
 )
 
-END()
+END() 

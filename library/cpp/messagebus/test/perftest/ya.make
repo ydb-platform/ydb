@@ -1,7 +1,7 @@
-PROGRAM(messagebus_perftest)
+PROGRAM(messagebus_perftest) 
 
 OWNER(g:messagebus)
-
+ 
 PEERDIR(
     library/cpp/deprecated/threadable
     library/cpp/execprofile
@@ -16,9 +16,9 @@ PEERDIR(
 )
 
 SRCS(
-    messages.proto
+    messages.proto 
     perftest.cpp
-    simple_proto.cpp
+    simple_proto.cpp 
 )
 
 END()

@@ -9,7 +9,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 
 #if defined(_freebsd_) || defined(_darwin_)
     #define HAVE_KQUEUE_POLLER
@@ -426,7 +426,7 @@ public:
 
     inline void SetImpl(void* data, SOCKET fd, int what) {
         with_lock (CommandLock_) {
-            Commands_.push_back(TCommand(fd, what, data));
+            Commands_.push_back(TCommand(fd, what, data)); 
         }
 
         Signal();
@@ -434,7 +434,7 @@ public:
 
     inline void Remove(SOCKET fd) noexcept {
         with_lock (CommandLock_) {
-            Commands_.push_back(TCommand(fd, 0));
+            Commands_.push_back(TCommand(fd, 0)); 
         }
 
         Signal();
@@ -442,7 +442,7 @@ public:
 
     inline size_t Wait(TEvent* events, size_t len, int timeout) noexcept {
         auto guard = Guard(Lock_);
-
+ 
         do {
             if (Begin_ != End_) {
                 const size_t ret = Min<size_t>(End_ - Begin_, len);
@@ -475,25 +475,25 @@ public:
     inline size_t WaitBase(TEvent* events, size_t len, int timeout) noexcept {
         with_lock (CommandLock_) {
             for (auto command = Commands_.begin(); command != Commands_.end(); ++command) {
-                if (command->Filter_ != 0) {
-                    Fds_.Set(command->Fd_, command->Cookie_, command->Filter_);
-                } else {
-                    Fds_.Remove(command->Fd_);
-                }
-            }
-
-            Commands_.clear();
-        }
-
-        TTempBuf tmpBuf(3 * sizeof(fd_set) + Fds_.size() * sizeof(SOCKET));
+                if (command->Filter_ != 0) { 
+                    Fds_.Set(command->Fd_, command->Cookie_, command->Filter_); 
+                } else { 
+                    Fds_.Remove(command->Fd_); 
+                } 
+            } 
+ 
+            Commands_.clear(); 
+        } 
+ 
+        TTempBuf tmpBuf(3 * sizeof(fd_set) + Fds_.size() * sizeof(SOCKET)); 
 
         fd_set* in = (fd_set*)tmpBuf.Data();
         fd_set* out = &in[1];
         fd_set* errFds = &in[2];
 
         SOCKET* keysToDeleteBegin = (SOCKET*)&in[3];
-        SOCKET* keysToDeleteEnd = keysToDeleteBegin;
-
+        SOCKET* keysToDeleteEnd = keysToDeleteBegin; 
+ 
     #if defined(_msan_enabled_) // msan doesn't handle FD_ZERO and cause false positive BALANCER-1347
         memset(in, 0, sizeof(*in));
         memset(out, 0, sizeof(*out));
@@ -529,12 +529,12 @@ public:
 
             if (FD_ISSET(fd, errFds)) {
                 (events++)->Error(handle.Data(), EIO);
-
-                if (handle.Filter() & CONT_POLL_ONE_SHOT) {
-                    *keysToDeleteEnd = fd;
-                    ++keysToDeleteEnd;
-                }
-
+ 
+                if (handle.Filter() & CONT_POLL_ONE_SHOT) { 
+                    *keysToDeleteEnd = fd; 
+                    ++keysToDeleteEnd; 
+                } 
+ 
             } else {
                 int what = 0;
 
@@ -548,11 +548,11 @@ public:
 
                 if (what) {
                     (events++)->Success(handle.Data(), what);
-
-                    if (handle.Filter() & CONT_POLL_ONE_SHOT) {
-                        *keysToDeleteEnd = fd;
-                        ++keysToDeleteEnd;
-                    }
+ 
+                    if (handle.Filter() & CONT_POLL_ONE_SHOT) { 
+                        *keysToDeleteEnd = fd; 
+                        ++keysToDeleteEnd; 
+                    } 
 
                     if (handle.Filter() & CONT_POLL_EDGE_TRIGGERED) {
                         // Emulate edge-triggered for level-triggered select().
@@ -563,11 +563,11 @@ public:
             }
         }
 
-        while (keysToDeleteBegin != keysToDeleteEnd) {
-            Fds_.erase(*keysToDeleteBegin);
-            ++keysToDeleteBegin;
-        }
-
+        while (keysToDeleteBegin != keysToDeleteEnd) { 
+            Fds_.erase(*keysToDeleteBegin); 
+            ++keysToDeleteBegin; 
+        } 
+ 
         return events - eventsStart;
     }
 
@@ -611,25 +611,25 @@ private:
     }
 
 private:
-    struct TCommand {
-        SOCKET Fd_;
-        int Filter_; // 0 to remove
-        void* Cookie_;
-
-        TCommand(SOCKET fd, int filter, void* cookie)
+    struct TCommand { 
+        SOCKET Fd_; 
+        int Filter_; // 0 to remove 
+        void* Cookie_; 
+ 
+        TCommand(SOCKET fd, int filter, void* cookie) 
             : Fd_(fd)
             , Filter_(filter)
             , Cookie_(cookie)
         {
         }
-
-        TCommand(SOCKET fd, int filter)
+ 
+        TCommand(SOCKET fd, int filter) 
             : Fd_(fd)
             , Filter_(filter)
         {
         }
-    };
-
+    }; 
+ 
     TFds Fds_;
 
     TMyMutex Lock_;
@@ -637,9 +637,9 @@ private:
     TEvent* Begin_;
     TEvent* End_;
 
-    TMyMutex CommandLock_;
+    TMyMutex CommandLock_; 
     TVector<TCommand> Commands_;
-
+ 
     SOCKET Signal_[2];
 };
 #endif

@@ -12,7 +12,7 @@
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
-
+ 
 #include <cstdlib>
 #include <stdarg.h>
 #include <stdio.h>
@@ -37,20 +37,20 @@ namespace {
 namespace NPrivate {
     [[noreturn]] Y_NO_INLINE void InternalPanicImpl(int line, const char* function, const char* expr, int, int, int, const TStringBuf file, const char* errorMessage, size_t errorMessageSize) noexcept;
 }
-
+ 
 void ::NPrivate::Panic(const TStaticBuf& file, int line, const char* function, const char* expr, const char* format, ...) noexcept {
     try {
         // We care of panic of first failed thread only
         // Otherwise stderr could contain multiple messages and stack traces shuffled
         auto guard = Guard(*Singleton<TPanicLockHolder>());
-
+ 
         TString errorMsg;
         va_list args;
         va_start(args, format);
-        // format has " " prefix to mute GCC warning on empty format
-        vsprintf(errorMsg, format[0] == ' ' ? format + 1 : format, args);
+        // format has " " prefix to mute GCC warning on empty format 
+        vsprintf(errorMsg, format[0] == ' ' ? format + 1 : format, args); 
         va_end(args);
-
+ 
         constexpr int abiPlaceholder = 0;
         ::NPrivate::InternalPanicImpl(line, function, expr, abiPlaceholder, abiPlaceholder, abiPlaceholder, file.As<TStringBuf>(), errorMsg.c_str(), errorMsg.size());
     } catch (...) {
@@ -69,19 +69,19 @@ namespace NPrivate {
         TStringOutput o(r);
         if (expr) {
             o << "VERIFY failed (" << now << "): " << errorMsg << Endl;
-        } else {
+        } else { 
             o << "FAIL (" << now << "): " << errorMsg << Endl;
-        }
+        } 
         o << "  " << file << ":" << line << Endl;
         if (expr) {
-            o << "  " << function << "(): requirement " << expr << " failed" << Endl;
-        } else {
-            o << "  " << function << "() failed" << Endl;
-        }
+            o << "  " << function << "(): requirement " << expr << " failed" << Endl; 
+        } else { 
+            o << "  " << function << "() failed" << Endl; 
+        } 
         Cerr << r << Flush;
-#ifndef WITH_VALGRIND
+#ifndef WITH_VALGRIND 
         PrintBackTrace();
-#endif
+#endif 
 #ifdef CLANG_COVERAGE
         if (__llvm_profile_write_file()) {
             Cerr << "Failed to dump clang coverage" << Endl;
@@ -91,4 +91,4 @@ namespace NPrivate {
     } catch (...) {
         abort();
     }
-}
+} 

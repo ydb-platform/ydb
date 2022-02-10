@@ -1,21 +1,21 @@
 #pragma once
-
+ 
 #include "defaults.h"
 #include "platform.h"
-
+ 
 #if defined(_win_)
     #include <intrin.h>
     #pragma intrinsic(__rdtsc)
 #endif // _win_
-
+ 
 #if defined(_darwin_) && !defined(_x86_)
     #include <mach/mach_time.h>
 #endif
 
-/// util/system/datetime.h contains only system time providers
-/// for handy datetime utilities include util/datetime/base.h
-
-/// Current time in microseconds since epoch
+/// util/system/datetime.h contains only system time providers 
+/// for handy datetime utilities include util/datetime/base.h 
+ 
+/// Current time in microseconds since epoch 
 ui64 MicroSeconds() noexcept;
 /// Current time in milliseconds since epoch
 inline ui64 MilliSeconds() {
@@ -25,17 +25,17 @@ inline ui64 MilliSeconds() {
 inline ui64 millisec() {
     return MilliSeconds();
 }
-/// Current time in seconds since epoch
+/// Current time in seconds since epoch 
 ui32 Seconds() noexcept;
 ///Current thread time in microseconds
 ui64 ThreadCPUUserTime() noexcept;
 ui64 ThreadCPUSystemTime() noexcept;
 ui64 ThreadCPUTime() noexcept;
-
+ 
 void NanoSleep(ui64 ns) noexcept;
-
-// GetCycleCount guarantees to return synchronous values on different cores
-// and provide constant rate only on modern Intel and AMD processors
+ 
+// GetCycleCount guarantees to return synchronous values on different cores 
+// and provide constant rate only on modern Intel and AMD processors 
 // NOTE: rdtscp is used to prevent out of order execution
 // rdtsc can be reordered, while rdtscp cannot be reordered
 // with preceding instructions
@@ -95,4 +95,4 @@ Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
 #else
     #error "unsupported arch"
 #endif
-}
+} 

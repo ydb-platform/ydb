@@ -16,7 +16,7 @@
  * See http://altdevblogaday.com/2011/04/22/survey-of-fast-compression-algorithms-part-1/
  * for some comparisons.
  */
-
+ 
 struct TDecompressorError: public yexception {
 };
 

@@ -402,7 +402,7 @@ TRuntimeNode TKikimrProgramBuilder::EraseRow(
 TRuntimeNode TKikimrProgramBuilder::Prepare(TRuntimeNode listOfVoid)
 {
     auto listType = listOfVoid.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     MKQL_ENSURE(listDetailedType.GetItemType()->IsVoid(), "Expected list of void");
@@ -429,7 +429,7 @@ TRuntimeNode TKikimrProgramBuilder::MapParameter(
     MKQL_ENSURE(callable->GetType()->GetName() == "Parameter", "Expected Parameter callable");
 
     auto listType = list.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = listDetailedType.GetItemType();
@@ -455,7 +455,7 @@ TRuntimeNode TKikimrProgramBuilder::FlatMapParameter(
     MKQL_ENSURE(callable->GetType()->GetName() == "Parameter", "Expected Parameter callable");
 
     auto listType = list.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = listDetailedType.GetItemType();
@@ -506,7 +506,7 @@ TRuntimeNode TKikimrProgramBuilder::PartialTake(TRuntimeNode list, TRuntimeNode 
 
 TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode parameters, ui32 bindFlags) {
     auto listType = program.GetStaticType();
-    AS_TYPE(TListType, listType);
+    AS_TYPE(TListType, listType); 
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     MKQL_ENSURE(listDetailedType.GetItemType()->IsVoid(), "Expected list of void");

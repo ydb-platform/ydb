@@ -1,11 +1,11 @@
-#pragma once
-
+#pragma once 
+ 
 #include <functional>
 
-namespace NLWTrace {
+namespace NLWTrace { 
     class TManager;
-
+ 
     void StartLwtraceFromEnv();
     void StartLwtraceFromEnv(std::function<void(TManager&)> prepare);
-
-}
+ 
+} 

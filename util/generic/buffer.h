@@ -87,7 +87,7 @@ public:
     inline explicit operator bool() const noexcept {
         return Size();
     }
-
+ 
     inline size_t Avail() const noexcept {
         return Len_ - Pos_;
     }
@@ -123,9 +123,9 @@ public:
         } else {
             memmove(Data_ + pos, Data_ + end, Pos_ - end);
             Pos_ -= count;
-        }
+        } 
     }
-
+ 
     inline void ChopHead(size_t count) {
         Chop(0U, count);
     }
@@ -136,7 +136,7 @@ public:
     }
 
     inline void Advance(size_t len) {
-        Resize(Pos_ + len);
+        Resize(Pos_ + len); 
     }
 
     inline void Reserve(size_t len) {

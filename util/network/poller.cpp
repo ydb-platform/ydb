@@ -57,18 +57,18 @@ void TSocketPoller::WaitRdhup(SOCKET sock, void* cookie) {
     Impl_->Set(cookie, sock, CONT_POLL_RDHUP);
 }
 
-void TSocketPoller::WaitReadOneShot(SOCKET sock, void* cookie) {
-    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_ONE_SHOT);
-}
-
-void TSocketPoller::WaitWriteOneShot(SOCKET sock, void* cookie) {
-    Impl_->Set(cookie, sock, CONT_POLL_WRITE | CONT_POLL_ONE_SHOT);
-}
-
-void TSocketPoller::WaitReadWriteOneShot(SOCKET sock, void* cookie) {
-    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_ONE_SHOT);
-}
-
+void TSocketPoller::WaitReadOneShot(SOCKET sock, void* cookie) { 
+    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_ONE_SHOT); 
+} 
+ 
+void TSocketPoller::WaitWriteOneShot(SOCKET sock, void* cookie) { 
+    Impl_->Set(cookie, sock, CONT_POLL_WRITE | CONT_POLL_ONE_SHOT); 
+} 
+ 
+void TSocketPoller::WaitReadWriteOneShot(SOCKET sock, void* cookie) { 
+    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_ONE_SHOT); 
+} 
+ 
 void TSocketPoller::WaitReadWriteEdgeTriggered(SOCKET sock, void* cookie) {
     Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_EDGE_TRIGGERED);
 }

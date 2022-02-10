@@ -1,13 +1,13 @@
-PROGRAM(messagebus_example_client)
-
+PROGRAM(messagebus_example_client) 
+ 
 OWNER(g:messagebus)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/messagebus/test/example/common
-)
-
-SRCS(
-    client.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    client.cpp 
+) 
+ 
+END() 

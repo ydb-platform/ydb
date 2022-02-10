@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:messagebus)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/messagebus
     library/cpp/messagebus/actor
-)
-
-SRCS(
-    module.cpp
-    startsession.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    module.cpp 
+    startsession.cpp 
+) 
+ 
+END() 

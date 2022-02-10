@@ -1,7 +1,7 @@
-#pragma once
-
-#include <util/thread/singleton.h>
-
+#pragma once 
+ 
+#include <util/thread/singleton.h> 
+ 
 namespace NTSAN {
     template <typename T>
     inline void RelaxedStore(volatile T* a, T x) {
@@ -25,7 +25,7 @@ namespace NTSAN {
 }
 
 void SetCurrentThreadName(const char* name);
-
+ 
 namespace NThreadExtra {
     namespace NPrivate {
         template <typename TValue, typename TTag>
@@ -34,8 +34,8 @@ namespace NThreadExtra {
         };
     }
 }
-
-template <typename TValue, typename TTag>
-static inline TValue* FastTlsSingletonWithTag() {
+ 
+template <typename TValue, typename TTag> 
+static inline TValue* FastTlsSingletonWithTag() { 
     return &FastTlsSingleton< ::NThreadExtra::NPrivate::TValueHolder<TValue, TTag>>()->Value;
-}
+} 

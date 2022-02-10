@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:messagebus)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/messagebus
     library/cpp/messagebus/rain_check/core
-)
-
-SRCS(
-    messagebus_client.cpp
-    messagebus_server.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    messagebus_client.cpp 
+    messagebus_server.cpp 
+) 
+ 
+END() 

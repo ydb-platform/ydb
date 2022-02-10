@@ -444,7 +444,7 @@ message TSchemeDescribe {
 };
 
 message TFlatDescribeResponse {
-    option deprecated = true;
+    option deprecated = true; 
     optional uint32 Status = 1;
 
     optional string Path = 9;

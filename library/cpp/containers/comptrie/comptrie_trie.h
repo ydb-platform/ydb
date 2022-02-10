@@ -14,9 +14,9 @@
 #include <util/stream/input.h>
 #include <utility>
 
-template <class T, class D, class S>
-class TCompactTrieBuilder;
-
+template <class T, class D, class S> 
+class TCompactTrieBuilder; 
+ 
 namespace NCompactTrie {
     template <class TTrie>
     class TFirstSymbolIterator;
@@ -38,17 +38,17 @@ public:
 
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
-
+ 
     typedef std::pair<TKey, TData> TValueType;
     typedef std::pair<size_t, TData> TPhraseMatch;
     typedef TVector<TPhraseMatch> TPhraseMatchVector;
 
-    typedef TCompactTrieBuilder<T, D, S> TBuilder;
-
+    typedef TCompactTrieBuilder<T, D, S> TBuilder; 
+ 
 protected:
     TBlob DataHolder;
     const char* EmptyValue = nullptr;
-    TPacker Packer;
+    TPacker Packer; 
     NCompactTrie::TPackerLeafSkipper<TPacker> Skipper = &Packer; // This should be true for every constructor.
 
 public:
@@ -74,7 +74,7 @@ public:
         return !IsEmpty();
     }
 
-    void Init(const char* d, size_t len, TPacker packer = TPacker());
+    void Init(const char* d, size_t len, TPacker packer = TPacker()); 
     void Init(const TBlob& data, TPacker packer = TPacker());
 
     bool IsInitialized() const;
@@ -83,17 +83,17 @@ public:
     bool Find(const TSymbol* key, size_t keylen, TData* value = nullptr) const;
     bool Find(const TKeyBuf& key, TData* value = nullptr) const {
         return Find(key.data(), key.size(), value);
-    }
-
-    TData Get(const TSymbol* key, size_t keylen) const {
-        TData value;
-        if (!Find(key, keylen, &value))
-            ythrow yexception() << "key " << TKey(key, keylen).Quote() << " not found in trie";
-        return value;
-    }
+    } 
+ 
+    TData Get(const TSymbol* key, size_t keylen) const { 
+        TData value; 
+        if (!Find(key, keylen, &value)) 
+            ythrow yexception() << "key " << TKey(key, keylen).Quote() << " not found in trie"; 
+        return value; 
+    } 
     TData Get(const TKeyBuf& key) const {
         return Get(key.data(), key.size());
-    }
+    } 
     TData GetDefault(const TKeyBuf& key, const TData& def) const {
         TData value;
         if (!Find(key.data(), key.size(), &value))
@@ -101,7 +101,7 @@ public:
         else
             return value;
     }
-
+ 
     const TBlob& Data() const {
         return DataHolder;
     };
@@ -121,11 +121,11 @@ public:
     void FindPhrases(const TSymbol* key, size_t keylen, TPhraseMatchVector& matches, TSymbol separator = TSymbol(' ')) const;
     void FindPhrases(const TKeyBuf& key, TPhraseMatchVector& matches, TSymbol separator = TSymbol(' ')) const {
         return FindPhrases(key.data(), key.size(), matches, separator);
-    }
+    } 
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const;
     bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const {
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value, hasNext);
-    }
+    } 
 
     // Return trie, containing all tails for the given key
     inline TCompactTrie<T, D, S> FindTails(const TSymbol* key, size_t keylen) const;
@@ -154,7 +154,7 @@ public:
         bool IsEmpty() const {
             return !Impl;
         } // Almost no other method can be called.
-
+ 
         bool operator==(const TConstIterator& other) const;
         bool operator!=(const TConstIterator& other) const;
         TConstIterator& operator++();
@@ -163,12 +163,12 @@ public:
         TConstIterator operator--(int /*unused*/);
         TValueType operator*();
 
-        TKey GetKey() const;
+        TKey GetKey() const; 
         size_t GetKeySize() const;
-        TData GetValue() const;
+        TData GetValue() const; 
         void GetValue(TData& data) const;
-        const char* GetValuePtr() const;
-
+        const char* GetValuePtr() const; 
+ 
     private:
         TPacker Packer;
         TCopyPtr<TOpaqueTrieIterator> Impl;
@@ -186,7 +186,7 @@ public:
     TConstIterator UpperBound(const TKeyBuf& key) const;
 
     void Print(IOutputStream& os);
-
+ 
     size_t Size() const;
 
     friend class NCompactTrie::TFirstSymbolIterator<TCompactTrie>;
@@ -224,7 +224,7 @@ public:
 template <class T, class D, class S>
 TCompactTrie<T, D, S>::TCompactTrie(const TBlob& data, TPacker packer)
     : DataHolder(data)
-    , Packer(packer)
+    , Packer(packer) 
 {
     Init(data, packer);
 }
@@ -246,7 +246,7 @@ template <class T, class D, class S>
 TCompactTrie<T, D, S>::TCompactTrie(const TBlob& data, const char* emptyValue, TPacker packer)
     : DataHolder(data)
     , EmptyValue(emptyValue)
-    , Packer(packer)
+    , Packer(packer) 
 {
 }
 
@@ -296,7 +296,7 @@ void TCompactTrie<T, D, S>::Init(const TBlob& data, TPacker packer) {
     using namespace NCompactTrie;
 
     DataHolder = data;
-    Packer = packer;
+    Packer = packer; 
 
     const char* datapos = DataHolder.AsCharPtr();
     size_t len = DataHolder.Length();
@@ -454,11 +454,11 @@ typename TCompactTrie<T, D, S>::TConstIterator TCompactTrie<T, D, S>::UpperBound
 template <class T, class D, class S>
 void TCompactTrie<T, D, S>::Print(IOutputStream& os) {
     typedef typename ::TCompactTrieKeySelector<T>::TKeyBuf TSBuffer;
-    for (TConstIterator it = Begin(); it != End(); ++it) {
+    for (TConstIterator it = Begin(); it != End(); ++it) { 
         os << TSBuffer((*it).first.data(), (*it).first.size()) << "\t" << (*it).second << Endl;
-    }
-}
-
+    } 
+} 
+ 
 template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value, bool* hasNext) const {
     const char* valuepos = nullptr;
@@ -654,10 +654,10 @@ typename TCompactTrie<T, D, S>::TData TCompactTrie<T, D, S>::TConstIterator::Get
 
 template <class T, class D, class S>
 void TCompactTrie<T, D, S>::TConstIterator::GetValue(typename TCompactTrie<T, D, S>::TData& data) const {
-    const char* ptr = GetValuePtr();
+    const char* ptr = GetValuePtr(); 
     if (ptr) {
         Packer.UnpackLeaf(ptr, data);
-    } else {
+    } else { 
         data = typename TCompactTrie<T, D, S>::TData();
-    }
-}
+    } 
+} 

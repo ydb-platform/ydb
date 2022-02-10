@@ -1,26 +1,26 @@
 #include "base.h"
-
-#include <util/string/cast.h>
+ 
+#include <util/string/cast.h> 
 #include <util/stream/output.h>
 #include <util/stream/mem.h>
-#include <util/system/compat.h>
+#include <util/system/compat.h> 
 #include <util/memory/tempbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
-
+ 
 TString Strftime(const char* format, const struct tm* tm) {
     size_t size = Max<size_t>(strlen(format) * 2 + 1, 107);
-    for (;;) {
+    for (;;) { 
         TTempBuf buf(size);
-        int r = strftime(buf.Data(), buf.Size(), format, tm);
+        int r = strftime(buf.Data(), buf.Size(), format, tm); 
         if (r != 0) {
             return TString(buf.Data(), r);
         }
-        size *= 2;
-    }
-}
-
+        size *= 2; 
+    } 
+} 
+ 
 template <>
 TDuration FromStringImpl<TDuration, char>(const char* s, size_t len) {
     return TDuration::Parse(TStringBuf(s, len));

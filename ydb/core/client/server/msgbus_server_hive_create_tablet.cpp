@@ -251,11 +251,11 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        // handle error from constructor
-        if (!!ErrorReason) {
-            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
-        }
-
+        // handle error from constructor 
+        if (!!ErrorReason) { 
+            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx); 
+        } 
+ 
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {
             clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();

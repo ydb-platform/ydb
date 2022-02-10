@@ -25,7 +25,7 @@
 #include <utility>
 
 using namespace NRainCheck;
-using namespace NBus::NTest;
+using namespace NBus::NTest; 
 
 namespace {
     class THttpClientEnv: public TTestEnvTemplate<THttpClientEnv> {
@@ -145,11 +145,11 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
     static const TIpPort SERVER_PORT = 4000;
 
     Y_UNIT_TEST(Simple) {
-        // TODO: randomize port
-        if (!IsFixedPortTestAllowed()) {
-            return;
-        }
-
+        // TODO: randomize port 
+        if (!IsFixedPortTestAllowed()) { 
+            return; 
+        } 
+ 
         TSimpleServer server;
         NNeh::IServicesRef runner = RunServer(SERVER_PORT, server);
 

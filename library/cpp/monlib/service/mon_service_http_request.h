@@ -1,13 +1,13 @@
-#pragma once
-
+#pragma once 
+ 
 #include "service.h"
 
-#include <util/stream/output.h>
-
-namespace NMonitoring {
+#include <util/stream/output.h> 
+ 
+namespace NMonitoring { 
     class TMonService2;
     class IMonPage;
-
+ 
     // XXX: IHttpRequest is already taken
     struct IMonHttpRequest {
         virtual ~IMonHttpRequest();
@@ -40,12 +40,12 @@ namespace NMonitoring {
         IMonPage* const MonPage;
         const TString PathInfo;
         TMonService2HttpRequest* const Parent;
-
+ 
         TMonService2HttpRequest(
             IOutputStream* out, const IHttpRequest* httpRequest,
-            TMonService2* monService, IMonPage* monPage,
+            TMonService2* monService, IMonPage* monPage, 
             const TString& pathInfo,
-            TMonService2HttpRequest* parent)
+            TMonService2HttpRequest* parent) 
             : Out(out)
             , HttpRequest(httpRequest)
             , MonService(monService)
@@ -54,9 +54,9 @@ namespace NMonitoring {
             , Parent(parent)
         {
         }
-
+ 
         ~TMonService2HttpRequest() override;
-
+ 
         IOutputStream& Output() override;
         HTTP_METHOD GetMethod() const override;
         TStringBuf GetPath() const override;
@@ -67,7 +67,7 @@ namespace NMonitoring {
         TStringBuf GetPostContent() const override {
             return HttpRequest->GetPostContent();
         }
-
+ 
         TStringBuf GetHeader(TStringBuf name) const override;
         TStringBuf GetCookie(TStringBuf name) const override;
         const THttpHeaders& GetHeaders() const override;
@@ -86,5 +86,5 @@ namespace NMonitoring {
 
         TString GetServiceTitle() const override;
     };
-
+ 
 }

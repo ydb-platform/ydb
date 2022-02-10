@@ -1,9 +1,9 @@
-#undef NDEBUG
-// yassert.h must be included before all headers
-#include "yassert.h"
-
+#undef NDEBUG 
+// yassert.h must be included before all headers 
+#include "yassert.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(YassertTest) {
     Y_UNIT_TEST(TestAcsLikeFunctionCall) {
         if (true) {
@@ -11,25 +11,25 @@ Y_UNIT_TEST_SUITE(YassertTest) {
         } else {
             Y_ASSERT(false);
         }
-
-        bool var = false;
+ 
+        bool var = false; 
         if (false) {
             Y_ASSERT(false);
         } else {
             var = true; // this is unreachable if Y_ASSERT is "if (!cond) { ... }"
         }
-        UNIT_ASSERT(var);
-    }
-
+        UNIT_ASSERT(var); 
+    } 
+ 
     Y_UNIT_TEST(TestFailCompiles) {
-        if (false) {
+        if (false) { 
             Y_FAIL("%d is a lucky number", 7);
             Y_FAIL();
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestVerify) {
         Y_VERIFY(true, "hi %s", "there");
         Y_VERIFY(true);
-    }
-}
+    } 
+} 

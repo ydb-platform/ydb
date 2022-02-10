@@ -38,7 +38,7 @@ namespace NUnitTest {
         void SetCurrentTest(TTestBase*);
         TTestBase* GetCurrentTest();
     }
-
+ 
     extern bool ShouldColorizeDiff;
     extern bool ContinueOnFail;
     TString ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims = TString(), bool reverse = false);
@@ -122,19 +122,19 @@ namespace NUnitTest {
         void Finish(const TFinish& descr);
 
         unsigned GoodTests() const noexcept;
-
+ 
         unsigned FailTests() const noexcept;
 
         unsigned GoodTestsInCurrentUnit() const noexcept;
 
         unsigned FailTestsInCurrentUnit() const noexcept;
 
-        // Should execute test suite?
+        // Should execute test suite? 
         virtual bool CheckAccess(TString /*name*/, size_t /*num*/);
 
-        // Should execute a test whitin suite?
+        // Should execute a test whitin suite? 
         virtual bool CheckAccessTest(TString /*suite*/, const char* /*name*/);
-
+ 
         virtual void Run(std::function<void()> f, const TString& /*suite*/, const char* /*name*/, bool /*forceFork*/);
 
         // This process is forked for current test
@@ -157,7 +157,7 @@ namespace NUnitTest {
         virtual void OnFinish(const TFinish* /*finish*/);
 
         virtual void OnBeforeTest(const TTest* /*test*/);
-
+ 
         void AddTestError(const TTest& test);
 
         void AddTestFinish(const TTest& test);
@@ -176,7 +176,7 @@ namespace NUnitTest {
 
         virtual ~ITestBaseFactory();
 
-        // name of test suite
+        // name of test suite 
         virtual TString Name() const noexcept = 0;
         virtual TTestBase* ConstructTest() = 0;
 
@@ -210,9 +210,9 @@ namespace NUnitTest {
 
     protected:
         bool CheckAccessTest(const char* test);
-
+ 
         void BeforeTest(const char* func);
-
+ 
         void Finish(const char* func, TTestContext* context);
 
         void AtStart();
@@ -433,7 +433,7 @@ public:                       \
             auto&& failMsg = Sprintf("%s != %s %s", ToString(_a).data(), ToString(_b).data(), (::TStringBuilder() << C).data()); \
             UNIT_FAIL_IMPL("strings equal assertion failed", failMsg);                                       \
         }                                                                                                    \
-    } while (false)
+    } while (false) 
 
 #define UNIT_ASSERT_STRINGS_EQUAL(A, B) UNIT_ASSERT_STRINGS_EQUAL_C(A, B, "")
 
@@ -702,7 +702,7 @@ public:                       \
             return false;
         }
     }
-
+ 
 //values
 #define UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, EQflag, EQstr, NEQstr)                                                                  \
     do {                                                                                                                               \
@@ -720,7 +720,7 @@ public:                       \
             UNIT_FAIL_IMPL("assertion failed", failMsg);                                                                               \
         }                                                                                                                              \
     } while (false)
-
+ 
 #define UNIT_ASSERT_VALUES_EQUAL_C(A, B, C) \
     UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, true, "==", "!=")
 

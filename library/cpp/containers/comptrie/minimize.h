@@ -4,10 +4,10 @@
 #include <cstddef>
 
 class IOutputStream;
-
+ 
 namespace NCompactTrie {
     size_t MeasureOffset(size_t offset);
-
+ 
     enum EMinimizeMode {
         MM_DEFAULT, // alollocate new memory for minimized tree
         MM_NOALLOC, // minimize tree in the same buffer

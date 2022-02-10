@@ -1,10 +1,10 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <util/generic/string.h>
-#include <util/stream/output.h>
-
+#include <util/stream/output.h> 
+ 
 namespace NBus {
     namespace NPrivate {
 #define MESSAGE_LOCAL_FLAGS_MAP(XX)          \
@@ -14,13 +14,13 @@ namespace NBus {
     XX(MESSAGE_REPLY_IS_BEGING_SENT, 0x0008) \
     XX(MESSAGE_ONE_WAY_INTERNAL, 0x0010)     \
     /**/
-
+ 
         enum EMessageLocalFlags {
             MESSAGE_LOCAL_FLAGS_MAP(ENUM_VALUE_GEN)
         };
-
+ 
         ENUM_TO_STRING(EMessageLocalFlags, MESSAGE_LOCAL_FLAGS_MAP)
-
+ 
         TString LocalFlagSetToString(ui32);
     }
 }

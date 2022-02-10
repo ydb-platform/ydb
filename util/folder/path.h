@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "fwd.h"
 #include "pathsplit.h"
 
@@ -9,7 +9,7 @@
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/system/fstat.h>
-#include <util/system/platform.h>
+#include <util/system/platform.h> 
 #include <util/system/sysstat.h>
 #include <util/system/yassert.h>
 
@@ -19,26 +19,26 @@
  * Class behaviour is platform-dependent.
  * It uses platform-dependent separators for path-reconstructing operations.
  */
-class TFsPath {
+class TFsPath { 
 private:
-    struct TSplit;
-
-public:
-    TFsPath();
+    struct TSplit; 
+ 
+public: 
+    TFsPath(); 
     TFsPath(const TString& path);
     TFsPath(const TStringBuf path);
-    TFsPath(const char* path);
-
+    TFsPath(const char* path); 
+ 
     TFsPath(const std::string& path)
         : TFsPath(TStringBuf(path))
     {
     }
 
     void CheckDefined() const;
-
-    inline bool IsDefined() const {
+ 
+    inline bool IsDefined() const { 
         return Path_.length() > 0;
-    }
+    } 
 
     inline explicit operator bool() const {
         return IsDefined();
@@ -50,16 +50,16 @@ public:
 
     inline operator const TString&() const {
         return Path_;
-    }
+    } 
 
-    inline bool operator==(const TFsPath& that) const {
+    inline bool operator==(const TFsPath& that) const { 
         return Path_ == that.Path_;
-    }
+    } 
 
     inline bool operator!=(const TFsPath& that) const {
         return Path_ != that.Path_;
     }
-
+ 
     TFsPath& operator/=(const TFsPath& that);
 
     friend TFsPath operator/(const TFsPath& s, const TFsPath& p) {
@@ -73,11 +73,11 @@ public:
 
     inline const TString& GetPath() const {
         return Path_;
-    }
-
-    /// last component of path, or "/" if root
+    } 
+ 
+    /// last component of path, or "/" if root 
     TString GetName() const;
-
+ 
     /**
      * "a.b.tmp" -> "tmp"
      * "a.tmp"   -> "tmp"
@@ -85,8 +85,8 @@ public:
      */
     TString GetExtension() const;
 
-    bool IsAbsolute() const;
-    bool IsRelative() const;
+    bool IsAbsolute() const; 
+    bool IsRelative() const; 
 
     /**
      * TFsPath("/a/b").IsSubpathOf("/a")        -> true
@@ -113,7 +113,7 @@ public:
     bool IsContainerOf(const TFsPath& that) const {
         return that.IsSubpathOf(*this);
     }
-
+ 
     TFsPath RelativeTo(const TFsPath& root) const; //must be subpath of root
 
     /**
@@ -121,10 +121,10 @@ public:
      */
     TFsPath RelativePath(const TFsPath& root) const; //..; for relative paths 1st component must be the same
 
-    /**
-     * Never fails. Returns this if already a root.
-     */
-    TFsPath Parent() const;
+    /** 
+     * Never fails. Returns this if already a root. 
+     */ 
+    TFsPath Parent() const; 
 
     TString Basename() const {
         return GetName();
@@ -132,9 +132,9 @@ public:
     TString Dirname() const {
         return Parent();
     }
-
+ 
     TFsPath Child(const TString& name) const;
-
+ 
     /**
      * @brief create this directory
      *
@@ -143,7 +143,7 @@ public:
      * Nothing to do if dir exists.
      */
     void MkDir(const int mode = MODE0777) const;
-
+ 
     /**
      * @brief create this directory and all parent directories as needed
      *
@@ -151,66 +151,66 @@ public:
      */
     void MkDirs(const int mode = MODE0777) const;
 
-    // XXX: rewrite to return iterator
+    // XXX: rewrite to return iterator 
     void List(TVector<TFsPath>& children) const;
     void ListNames(TVector<TString>& children) const;
-
+ 
     // Check, if path contains at least one component with a specific name.
     bool Contains(const TString& component) const;
 
-    // fails to delete non-empty directory
-    void DeleteIfExists() const;
-    // delete recursively. Does nothing if not exists
-    void ForceDelete() const;
-
-    // XXX: ino
-
+    // fails to delete non-empty directory 
+    void DeleteIfExists() const; 
+    // delete recursively. Does nothing if not exists 
+    void ForceDelete() const; 
+ 
+    // XXX: ino 
+ 
     inline bool Stat(TFileStat& stat) const {
         stat = TFileStat(Path_.data());
 
         return stat.Mode;
     }
 
-    bool Exists() const;
-    /// false if not exists
-    bool IsDirectory() const;
+    bool Exists() const; 
+    /// false if not exists 
+    bool IsDirectory() const; 
     /// false if not exists
     bool IsFile() const;
     /// false if not exists
-    bool IsSymlink() const;
-    /// throw TIoException if not exists
-    void CheckExists() const;
-
+    bool IsSymlink() const; 
+    /// throw TIoException if not exists 
+    void CheckExists() const; 
+ 
     void RenameTo(const TString& newPath) const;
-    void RenameTo(const char* newPath) const;
-    void RenameTo(const TFsPath& newFile) const;
+    void RenameTo(const char* newPath) const; 
+    void RenameTo(const TFsPath& newFile) const; 
     void ForceRenameTo(const TString& newPath) const;
-
+ 
     void CopyTo(const TString& newPath, bool force) const;
 
-    void Touch() const;
-
-    TFsPath RealPath() const;
+    void Touch() const; 
+ 
+    TFsPath RealPath() const; 
     TFsPath RealLocation() const;
     TFsPath ReadLink() const;
-
-    /// always absolute
-    static TFsPath Cwd();
-
+ 
+    /// always absolute 
+    static TFsPath Cwd(); 
+ 
     inline void Swap(TFsPath& p) noexcept {
         DoSwap(Path_, p.Path_);
         Split_.Swap(p.Split_);
     }
 
-private:
-    void InitSplit() const;
-    TSplit& GetSplit() const;
+private: 
+    void InitSplit() const; 
+    TSplit& GetSplit() const; 
 
 private:
     TString Path_;
     /// cache
     mutable TSimpleIntrusivePtr<TSplit> Split_;
-};
+}; 
 
 namespace NPrivate {
     inline void AppendToFsPath(TFsPath&) {

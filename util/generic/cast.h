@@ -10,37 +10,37 @@
 
 #include <cstdlib>
 
-template <class T, class F>
-static inline T VerifyDynamicCast(F f) {
-    if (!f) {
+template <class T, class F> 
+static inline T VerifyDynamicCast(F f) { 
+    if (!f) { 
         return nullptr;
-    }
-
-    T ret = dynamic_cast<T>(f);
-
+    } 
+ 
+    T ret = dynamic_cast<T>(f); 
+ 
     Y_VERIFY(ret, "verify cast failed");
-
-    return ret;
-}
-
+ 
+    return ret; 
+} 
+ 
 #if !defined(NDEBUG)
     #define USE_DEBUG_CHECKED_CAST
 #endif
 
-namespace NPrivate {
-    template <typename T, typename F>
-    static T DynamicCast(F f) {
-        return dynamic_cast<T>(f);
-    }
-}
-
+namespace NPrivate { 
+    template <typename T, typename F> 
+    static T DynamicCast(F f) { 
+        return dynamic_cast<T>(f); 
+    } 
+} 
+ 
 /*
  * replacement for dynamic_cast(dynamic_cast in debug mode, else static_cast)
  */
 template <class T, class F>
 static inline T CheckedCast(F f) {
 #if defined(USE_DEBUG_CHECKED_CAST)
-    return VerifyDynamicCast<T>(f);
+    return VerifyDynamicCast<T>(f); 
 #else
     /* Make sure F is polymorphic.
      * Without this cast, CheckedCast with non-polymorphic F

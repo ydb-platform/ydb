@@ -15,15 +15,15 @@ public:
     }
 
     ~THolderVector() {
-        Clear();
-    }
-
-    void Clear() {
+        Clear(); 
+    } 
+ 
+    void Clear() { 
         for (typename TBase::iterator it = TBase::begin(); it != TBase::end(); ++it) {
             if (*it)
                 D::Destroy(*it);
         }
-        TBase::clear();
+        TBase::clear(); 
     }
 
     size_t Size() const {
@@ -46,9 +46,9 @@ public:
     }
 
     void PushBack(THolder<T> t) {
-        PushBack(t.Release());
-    }
-
+        PushBack(t.Release()); 
+    } 
+ 
     void Reset(size_t i, THolder<T> t) {
         T* current = (*this)[i];
         if (current) {
@@ -88,9 +88,9 @@ public:
     using TBase::back;
     using TBase::begin;
     using TBase::capacity;
-    using TBase::empty;
+    using TBase::empty; 
     using TBase::end;
-    using TBase::front;
+    using TBase::front; 
     using TBase::reserve;
     using TBase::size;
 

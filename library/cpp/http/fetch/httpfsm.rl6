@@ -4,7 +4,7 @@
 #include <library/cpp/charset/doccodes.h>
 #include <library/cpp/charset/codepage.h>
 #include <library/cpp/http/misc/httpcodes.h>
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 #include <util/generic/ylimits.h>
 #include <algorithm>    // max
 
@@ -15,8 +15,8 @@
 #pragma warning(disable: 4702)  // unreachable code
 #endif
 
-#define c(i) I = i;
-#define m(i) I = std::max(I, (long)i);
+#define c(i) I = i; 
+#define m(i) I = std::max(I, (long)i); 
 
 static inline int X(unsigned char c) {
     return (c >= 'A' ? ((c & 0xdf) - 'A' + 10) : (c - '0'));
@@ -40,7 +40,7 @@ static inline void setguarded(x &val, long cnt) {
 machine http_header_parser;
 
 include HttpDateTimeParser "../../../../util/datetime/parser.rl6";
-
+ 
 alphtype unsigned char;
 
 ################# 2.2 Basic Rules #################
@@ -61,8 +61,8 @@ text            = (text_char | lw)*;
 any_text        = (any_text_char | lw)*;
 def             = lws ':' lws;
 
-action clear_buf   { buflen = 0; }
-action update_buf  { if (buflen < sizeof(buf)) buf[buflen++] = fc; }
+action clear_buf   { buflen = 0; } 
+action update_buf  { if (buflen < sizeof(buf)) buf[buflen++] = fc; } 
 
 ###################################################
 ############ response status line #################
@@ -123,14 +123,14 @@ action set_connection { setguarded(base_hd->connection_closed, I); }
 c_token         = "close"i      %{m(1)}
                 | "keep-alive"i %{m(0)};
 c_tokenlist     = c_token (lws ',' lws c_token)?;
-connection      = "connection"i def %beg_connection c_tokenlist eoh %set_connection;
+connection      = "connection"i def %beg_connection c_tokenlist eoh %set_connection; 
 
 ################# content-encoding ################
-action beg_content_encoding { I = HTTP_COMPRESSION_ERROR; }
+action beg_content_encoding { I = HTTP_COMPRESSION_ERROR; } 
 action set_content_encoding { base_hd->compression_method =
                              ((base_hd->compression_method == HTTP_COMPRESSION_UNSET ||
                                base_hd->compression_method == I) ?
-                                 I : (int)HTTP_COMPRESSION_ERROR); }
+                                 I : (int)HTTP_COMPRESSION_ERROR); } 
 
 ce_tokenlist      = "identity"i   %{c(HTTP_COMPRESSION_IDENTITY)}
                   | "gzip"i       %{c(HTTP_COMPRESSION_GZIP)}
@@ -138,7 +138,7 @@ ce_tokenlist      = "identity"i   %{c(HTTP_COMPRESSION_IDENTITY)}
                   | "deflate"i    %{c(HTTP_COMPRESSION_DEFLATE)}
                   | "compress"i   %{c(HTTP_COMPRESSION_COMPRESS)}
                   | "x-compress"i %{c(HTTP_COMPRESSION_COMPRESS)};
-content_encoding = "content-encoding"i def %beg_content_encoding ce_tokenlist eoh %set_content_encoding;
+content_encoding = "content-encoding"i def %beg_content_encoding ce_tokenlist eoh %set_content_encoding; 
 
 ################# transfer-encoding ###############
 action beg_encoding { guard(base_hd->transfer_chunked); }
@@ -146,13 +146,13 @@ action set_encoding { setguarded(base_hd->transfer_chunked, I); }
 
 e_tokenlist       = "identity"i %{c(0)}
                   | "chunked"i  %{c(1)};
-transfer_encoding = "transfer-encoding"i def %beg_encoding e_tokenlist eoh %set_encoding;
+transfer_encoding = "transfer-encoding"i def %beg_encoding e_tokenlist eoh %set_encoding; 
 
 ################# content-length ##################
 action beg_content_length { guard(base_hd->content_length); }
 action set_content_length { setguarded(base_hd->content_length, I); }
 
-content_length  = "content-length"i def %beg_content_length int eoh %set_content_length;
+content_length  = "content-length"i def %beg_content_length int eoh %set_content_length; 
 
 ################# content-range ###################
 action beg_content_range_start { guard(base_hd->content_range_start); I = -1; }
@@ -162,9 +162,9 @@ action set_content_range_end { setguarded(base_hd->content_range_end, I); }
 action beg_content_range_el { guard(base_hd->content_range_entity_length); I = -1; }
 action set_content_range_el { setguarded(base_hd->content_range_entity_length, I); }
 
-content_range   = "content-range"i def "bytes"i sp %beg_content_range_start int '-' %set_content_range_start
-                                                   %beg_content_range_end int '/' %set_content_range_end
-                                                   %beg_content_range_el int eoh %set_content_range_el;
+content_range   = "content-range"i def "bytes"i sp %beg_content_range_start int '-' %set_content_range_start 
+                                                   %beg_content_range_end int '/' %set_content_range_end 
+                                                   %beg_content_range_el int eoh %set_content_range_el; 
 
 ################# accept-ranges ###################
 action beg_accept_ranges {
@@ -177,12 +177,12 @@ action set_accept_ranges { if (hd) setguarded(hd->accept_ranges, I); }
 
 ar_tokenlist    = "bytes"i %{c(1)}
                 | "none"i  %{c(0)};
-accept_ranges   = "accept-ranges"i def %beg_accept_ranges ar_tokenlist eoh %set_accept_ranges;
+accept_ranges   = "accept-ranges"i def %beg_accept_ranges ar_tokenlist eoh %set_accept_ranges; 
 
 ################# content-type ####################
 action beg_mime { guard(base_hd->mime_type); }
 action set_mime { setguarded(base_hd->mime_type, I); }
-action set_charset {
+action set_charset { 
     if (buflen < FETCHER_URL_MAX) {
         buf[buflen++] = 0;
         base_hd->charset = EncodingHintByName((const char*)buf);
@@ -232,12 +232,12 @@ mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
                 ;
 
 
-charset_name    = token_char+ >clear_buf $update_buf;
-mime_param      = "charset"i ws* '=' ws* '"'? charset_name '"'? %set_charset   @2
+charset_name    = token_char+ >clear_buf $update_buf; 
+mime_param      = "charset"i ws* '=' ws* '"'? charset_name '"'? %set_charset   @2 
                 | token ws* '=' ws* '"'? token '"'?                           @1
                 | text                                                        $0;
 mime_parms      = (lws ';' lws mime_param)*;
-content_type    = "content-type"i def %beg_mime mime_type mime_parms eoh %set_mime;
+content_type    = "content-type"i def %beg_mime mime_type mime_parms eoh %set_mime; 
 
 ################# last modified ###################
 action beg_modtime { guard(base_hd->http_time); }
@@ -245,10 +245,10 @@ action set_modtime {
     setguarded(base_hd->http_time, DateTimeFields.ToTimeT(-1));
 }
 
-last_modified   = "last-modified"i def %beg_modtime http_date eoh %set_modtime;
+last_modified   = "last-modified"i def %beg_modtime http_date eoh %set_modtime; 
 
 ################# location ########################
-action set_location {
+action set_location { 
     while (buflen > 0 && (buf[buflen - 1] == ' ' || buf[buflen - 1] == '\t')) {
         buflen --;
     }
@@ -350,16 +350,16 @@ action set_squid_error {
 squid_error     = "X-Yandex-Squid-Error"i def any_text eoh %set_squid_error;
 
 ################# auth ########################
-action init_auth {
+action init_auth { 
     if (auth_hd)
         auth_hd->use_auth=true;
 }
 
-action update_auth_buf
+action update_auth_buf 
     { if (auth_hd && buflen < sizeof(buf)) buf[buflen++] = *fpc; }
 
 quoted_str = /"/ (text_char - /"/)* /"/ >2;
-auth_quoted_str = ( /"/ ( ( text_char - /"/ )* >clear_buf $update_auth_buf ) /"/ ) > 2;
+auth_quoted_str = ( /"/ ( ( text_char - /"/ )* >clear_buf $update_auth_buf ) /"/ ) > 2; 
 
 #  do not support auth-int, too heavy procedure
 
@@ -394,7 +394,7 @@ auth_param = auth_good_param @1 |
 
 auth_params = auth_param ( ws* /,/ ws* auth_param )*;
 
-digest_challenge =  ("digest"i %init_auth ws+ auth_params) |
+digest_challenge =  ("digest"i %init_auth ws+ auth_params) | 
                     ((token-"digest"i) text);
 
 auth  = "www-authenticate"i def digest_challenge eoh;
@@ -597,7 +597,7 @@ request_header  = message_header        $0
                 | request_priority      @1;
 
 ################# main ############################
-action accepted { lastchar = (char*)fpc; return 2; }
+action accepted { lastchar = (char*)fpc; return 2; } 
 
 main            := ((response_status_line ('\r'? response_header)*)
                  | (request_status_line ('\r' ? request_header)*))
@@ -628,10 +628,10 @@ machine http_chunk_parser;
 
 alphtype unsigned char;
 
-action clear_hex   { cnt64 = 0; }
-action update_hex   { cnt64 = 16 * cnt64 + X(fc); if(cnt64 > Max<int>()) return -2; }
-action set_chunk { chunk_length = static_cast<int>(cnt64); }
-action accepted { lastchar = (char*)fpc; return 2; }
+action clear_hex   { cnt64 = 0; } 
+action update_hex   { cnt64 = 16 * cnt64 + X(fc); if(cnt64 > Max<int>()) return -2; } 
+action set_chunk { chunk_length = static_cast<int>(cnt64); } 
+action accepted { lastchar = (char*)fpc; return 2; } 
 
 eol             = '\r'? '\n';
 ws              = [ \t];
@@ -648,7 +648,7 @@ token           = token_char+;
 text            = (text_char | lw)*;
 def             = lws ':' lws;
 
-hex             = (xdigit+) >clear_hex $update_hex;
+hex             = (xdigit+) >clear_hex $update_hex; 
 quoted_string   = '"' ((text_char - '"') $0 | '\\"' @1)* '"';
 
 chunk_ext_val   = token | quoted_string;
@@ -658,9 +658,9 @@ chunk_extension = ws* (';' chunk_ext_name ws* '=' ws* chunk_ext_val ws*)*;
 entity_header   = token def text eoh;
 trailer         = entity_header*;
 
-chunk           = (hex - '0'+) chunk_extension? %set_chunk;
+chunk           = (hex - '0'+) chunk_extension? %set_chunk; 
 last_chunk      = '0'+ chunk_extension? eol trailer;
-main           := eol (chunk $0 | last_chunk @1) eol @accepted;
+main           := eol (chunk $0 | last_chunk @1) eol @accepted; 
 
 }%%
 

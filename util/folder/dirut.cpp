@@ -403,17 +403,17 @@ int mkpath(char* path, int mode) {
 // did not require last component of the file name to exist (other implementations will fail
 // if it does not). Use RealLocation if that behaviour is required.
 TString RealPath(const TString& path) {
-    TTempBuf result;
+    TTempBuf result; 
     Y_ASSERT(result.Size() > MAX_PATH); //TMP_BUF_LEN > MAX_PATH
-#ifdef _win_
+#ifdef _win_ 
     if (GetFullPathName(path.data(), result.Size(), result.Data(), nullptr) == 0)
-#else
+#else 
     if (realpath(path.data(), result.Data()) == nullptr)
-#endif
+#endif 
         ythrow TFileError() << "RealPath failed \"" << path << "\"";
-    return result.Data();
-}
-
+    return result.Data(); 
+} 
+ 
 TString RealLocation(const TString& path) {
     if (NFs::Exists(path))
         return RealPath(path);
@@ -451,37 +451,37 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
 
 bool IsDir(const TString& path) {
     return TFileStat(path).IsDir();
-}
-
+} 
+ 
 TString GetHomeDir() {
     TString s(getenv("HOME"));
-    if (!s) {
-#ifndef _win32_
+    if (!s) { 
+#ifndef _win32_ 
         passwd* pw = nullptr;
-        s = getenv("USER");
+        s = getenv("USER"); 
         if (s)
             pw = getpwnam(s.data());
-        else
-            pw = getpwuid(getuid());
-        if (pw)
-            s = pw->pw_dir;
-        else
-#endif
-        {
+        else 
+            pw = getpwuid(getuid()); 
+        if (pw) 
+            s = pw->pw_dir; 
+        else 
+#endif 
+        { 
             char* cur_dir = getcwd(nullptr, 0);
-            s = cur_dir;
-            free(cur_dir);
-        }
-    }
-    return s;
-}
-
+            s = cur_dir; 
+            free(cur_dir); 
+        } 
+    } 
+    return s; 
+} 
+ 
 void MakeDirIfNotExist(const char* path, int mode) {
     if (!NFs::MakeDirectory(path, NFs::EFilePermission(mode)) && !NFs::Exists(path)) {
         ythrow TSystemError() << "failed to create directory " << path;
-    }
-}
-
+    } 
+} 
+ 
 void MakePathIfNotExist(const char* path, int mode) {
     NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode));
     if (!NFs::Exists(path) || !TFileStat(path).IsDir()) {
@@ -489,22 +489,22 @@ void MakePathIfNotExist(const char* path, int mode) {
     }
 }
 
-const char* GetFileNameComponent(const char* f) {
-    const char* p = strrchr(f, LOCSLASH_C);
+const char* GetFileNameComponent(const char* f) { 
+    const char* p = strrchr(f, LOCSLASH_C); 
 #ifdef _win_
     // "/" is also valid char separator on Windows
     const char* p2 = strrchr(f, '/');
     if (p2 > p)
         p = p2;
 #endif
-
-    if (p) {
-        return p + 1;
-    }
-
-    return f;
-}
-
+ 
+    if (p) { 
+        return p + 1; 
+    } 
+ 
+    return f; 
+} 
+ 
 TString GetSystemTempDir() {
 #ifdef _win_
     char buffer[1024];
@@ -513,19 +513,19 @@ TString GetSystemTempDir() {
         ythrow TSystemError() << "failed to get system temporary directory";
     }
     return TString(buffer, size);
-#else
-    const char* var = "TMPDIR";
-    const char* def = "/tmp";
-    const char* r = getenv(var);
+#else 
+    const char* var = "TMPDIR"; 
+    const char* def = "/tmp"; 
+    const char* r = getenv(var); 
     const char* result = r ? r : def;
     return result[0] == '/' ? result : ResolveDir(result);
 #endif
-}
-
+} 
+ 
 TString ResolveDir(const char* path) {
-    return ResolvePath(path, true);
-}
-
+    return ResolvePath(path, true); 
+} 
+ 
 bool SafeResolveDir(const char* path, TString& result) {
     try {
         result = ResolvePath(path, true);
@@ -537,10 +537,10 @@ bool SafeResolveDir(const char* path, TString& result) {
 
 TString GetDirName(const TString& path) {
     return TFsPath(path).Dirname();
-}
-
-#ifdef _win32_
-
+} 
+ 
+#ifdef _win32_ 
+ 
 char* realpath(const char* pathname, char resolved_path[MAXPATHLEN]) {
     // partial implementation: no path existence check
     return _fullpath(resolved_path, pathname, MAXPATHLEN - 1);
@@ -607,7 +607,7 @@ TString ResolvePath(const char* rel, const char* abs, bool isdir) {
         ythrow yexception() << "cannot resolve path: \"" << rel << "\"";
     return buf;
 }
-
+ 
 TString ResolvePath(const char* path, bool isDir) {
     return ResolvePath(path, nullptr, isDir);
 }

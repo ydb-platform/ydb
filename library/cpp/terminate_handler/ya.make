@@ -1,13 +1,13 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     ilnurkh
     eeight
 )
-
-SRCS(
+ 
+SRCS( 
     GLOBAL terminate_handler.cpp
-    segv_handler.cpp
-)
-
-END()
+    segv_handler.cpp 
+) 
+ 
+END() 

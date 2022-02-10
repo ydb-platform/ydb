@@ -30,9 +30,9 @@ extern "C" {
 
 #if defined(__FreeBSD__) || defined(_darwin_)
     #define HAVE_NATIVE_GETPROGNAME
-#endif
-
-#ifndef HAVE_NATIVE_GETPROGNAME
+#endif 
+ 
+#ifndef HAVE_NATIVE_GETPROGNAME 
     const char* getprogname();
 #endif
 

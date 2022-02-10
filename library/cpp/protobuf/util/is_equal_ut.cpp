@@ -1,8 +1,8 @@
-#include "is_equal.h"
+#include "is_equal.h" 
 #include <library/cpp/protobuf/util/ut/sample_for_is_equal.pb.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <google/protobuf/descriptor.h>
 
 Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
@@ -18,37 +18,37 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
     }
 
     Y_UNIT_TEST(IsEqual1) {
-        TSampleForIsEqual a;
-        TSampleForIsEqual b;
-
-        a.SetName("aaa");
-        b.SetName("bbb");
-
+        TSampleForIsEqual a; 
+        TSampleForIsEqual b; 
+ 
+        a.SetName("aaa"); 
+        b.SetName("bbb"); 
+ 
         TString path;
-
-        bool equal = NProtoBuf::IsEqual(a, b, &path);
-        UNIT_ASSERT(!equal);
-        UNIT_ASSERT_VALUES_EQUAL("Name", path);
+ 
+        bool equal = NProtoBuf::IsEqual(a, b, &path); 
+        UNIT_ASSERT(!equal); 
+        UNIT_ASSERT_VALUES_EQUAL("Name", path); 
 
         UNIT_ASSERT(!NProtoBuf::IsEqualField(a, b, *NameDescr));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(IsEqual2) {
-        TSampleForIsEqual a;
-        TSampleForIsEqual b;
-
-        a.MutableInner()->SetBrbrbr("aaa");
-        b.MutableInner()->SetBrbrbr("bbb");
-
+        TSampleForIsEqual a; 
+        TSampleForIsEqual b; 
+ 
+        a.MutableInner()->SetBrbrbr("aaa"); 
+        b.MutableInner()->SetBrbrbr("bbb"); 
+ 
         TString path;
-
-        bool equal = NProtoBuf::IsEqual(a, b, &path);
-        UNIT_ASSERT(!equal);
-        UNIT_ASSERT_VALUES_EQUAL("Inner/Brbrbr", path);
+ 
+        bool equal = NProtoBuf::IsEqual(a, b, &path); 
+        UNIT_ASSERT(!equal); 
+        UNIT_ASSERT_VALUES_EQUAL("Inner/Brbrbr", path); 
 
         bool equalField = NProtoBuf::IsEqualField(a, b, *InnerDescr);
         UNIT_ASSERT(!equalField);
-    }
+    } 
 
     Y_UNIT_TEST(IsEqual3) {
         TSampleForIsEqual a;
@@ -85,4 +85,4 @@ Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
         UNIT_ASSERT(!NProtoBuf::IsEqualField(a, b, *NameDescr));
         UNIT_ASSERT(NProtoBuf::IsEqualFieldDefault(a, b, *NameDescr));
     }
-}
+} 

@@ -4,7 +4,7 @@
 namespace NBus {
     namespace NTest {
         using namespace std;
-
+ 
         ////////////////////////////////////////////////////////////////////
         /// \brief Client for sending synchronous message to local server
         struct TSyncClient {
@@ -13,7 +13,7 @@ namespace NBus {
             TExampleProtocol Proto;
             TBusMessageQueuePtr Bus;
             TBusSyncClientSessionPtr Session;
-
+ 
             int NumReplies;
             int NumMessages;
 
@@ -53,7 +53,7 @@ namespace NBus {
         Y_UNIT_TEST_SUITE(SyncClientTest) {
             Y_UNIT_TEST(TestSync) {
                 TObjectCountCheck objectCountCheck;
-
+ 
                 TExampleServer server;
                 TSyncClient client(server.GetActualListenAddr());
                 client.Work();
@@ -65,5 +65,5 @@ namespace NBus {
             }
         }
 
-    }
-}
+    } 
+} 

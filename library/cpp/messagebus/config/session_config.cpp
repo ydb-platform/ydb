@@ -1,31 +1,31 @@
-#include "session_config.h"
-
+#include "session_config.h" 
+ 
 #include <util/generic/strbuf.h>
 #include <util/string/hex.h>
-
-using namespace NBus;
-
-TBusSessionConfig::TSecret::TSecret()
-    : TimeoutPeriod(TDuration::Seconds(1))
-    , StatusFlushPeriod(TDuration::MilliSeconds(400))
+ 
+using namespace NBus; 
+ 
+TBusSessionConfig::TSecret::TSecret() 
+    : TimeoutPeriod(TDuration::Seconds(1)) 
+    , StatusFlushPeriod(TDuration::MilliSeconds(400)) 
+{ 
+} 
+ 
+TBusSessionConfig::TBusSessionConfig() 
+    : BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_INIT, COMMA) 
 {
 }
-
-TBusSessionConfig::TBusSessionConfig()
-    : BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_INIT, COMMA)
-{
-}
-
+ 
 TString TBusSessionConfig::PrintToString() const {
-    TStringStream ss;
-    BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_PRINT, )
-    return ss.Str();
-}
-
-static int ParseDurationForMessageBus(const char* option) {
-    return TDuration::Parse(option).MilliSeconds();
-}
-
+    TStringStream ss; 
+    BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_PRINT, ) 
+    return ss.Str(); 
+} 
+ 
+static int ParseDurationForMessageBus(const char* option) { 
+    return TDuration::Parse(option).MilliSeconds(); 
+} 
+ 
 static int ParseToSForMessageBus(const char* option) {
     int tos;
     TStringBuf str(option);
@@ -42,21 +42,21 @@ static int ParseToSForMessageBus(const char* option) {
 
 template <class T>
 static T ParseWithKmgSuffixT(const char* option) {
-    TStringBuf str(option);
+    TStringBuf str(option); 
     T multiplier = 1;
     if (str.EndsWith('k')) {
-        multiplier = 1024;
+        multiplier = 1024; 
         str = str.Head(str.size() - 1);
     } else if (str.EndsWith('m')) {
-        multiplier = 1024 * 1024;
+        multiplier = 1024 * 1024; 
         str = str.Head(str.size() - 1);
     } else if (str.EndsWith('g')) {
-        multiplier = 1024 * 1024 * 1024;
+        multiplier = 1024 * 1024 * 1024; 
         str = str.Head(str.size() - 1);
-    }
+    } 
     return FromString<T>(str) * multiplier;
-}
-
+} 
+ 
 static ui64 ParseWithKmgSuffix(const char* option) {
     return ParseWithKmgSuffixT<ui64>(option);
 }
@@ -90,7 +90,7 @@ void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
     opts.AddLongOption(prefix + "max-in-flight")
         .RequiredArgument("COUNT")
         .DefaultValue(ToString(MaxInFlight))
-        .StoreMappedResultT<const char*>(&MaxInFlight, &ParseWithKmgSuffix);
+        .StoreMappedResultT<const char*>(&MaxInFlight, &ParseWithKmgSuffix); 
     opts.AddLongOption(prefix + "max-in-flight-by-size")
         .RequiredArgument("BYTES")
         .DefaultValue(
@@ -116,7 +116,7 @@ void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
     opts.AddLongOption(prefix + "max-buffer-size")
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(MaxBufferSize))
-        .StoreMappedResultT<const char*>(&MaxBufferSize, &ParseWithKmgSuffix);
+        .StoreMappedResultT<const char*>(&MaxBufferSize, &ParseWithKmgSuffix); 
     opts.AddLongOption(prefix + "max-message-size")
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(MaxMessageSize))
@@ -149,9 +149,9 @@ void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
     opts.AddLongOption(prefix + "on-message-in-pool")
         .RequiredArgument("BOOL")
         .DefaultValue(ToString(ExecuteOnMessageInWorkerPool))
-        .StoreResult(&ExecuteOnMessageInWorkerPool);
+        .StoreResult(&ExecuteOnMessageInWorkerPool); 
     opts.AddLongOption(prefix + "on-reply-in-pool")
         .RequiredArgument("BOOL")
         .DefaultValue(ToString(ExecuteOnReplyInWorkerPool))
-        .StoreResult(&ExecuteOnReplyInWorkerPool);
-}
+        .StoreResult(&ExecuteOnReplyInWorkerPool); 
+} 

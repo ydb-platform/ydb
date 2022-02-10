@@ -1,18 +1,18 @@
 #include "dirut.h"
 #include "tempdir.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/generic/string.h>
 #include <util/memory/tempbuf.h>
 #include <util/stream/file.h>
 #include <util/system/platform.h>
-
+ 
 Y_UNIT_TEST_SUITE(TDirutTest) {
     Y_UNIT_TEST(TestRealPath) {
-        UNIT_ASSERT(IsDir(RealPath(".")));
+        UNIT_ASSERT(IsDir(RealPath("."))); 
     }
-
+ 
     Y_UNIT_TEST(TestRealLocation) {
         UNIT_ASSERT(IsDir(RealLocation(".")));
 

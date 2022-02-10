@@ -1,13 +1,13 @@
-#pragma once
-
+#pragma once 
+ 
 #include "codegen.h"
-#include "defs.h"
-
+#include "defs.h" 
+ 
 #include <library/cpp/getopt/last_getopt.h>
-
+ 
 #include <util/generic/string.h>
-
-namespace NBus {
+ 
+namespace NBus { 
 #define BUS_SESSION_CONFIG_MAP(XX, comma)                                                  \
     XX(Name, TString, "")                                                                  \
     comma                                                                                  \
@@ -35,31 +35,31 @@ namespace NBus {
                                         XX(ExecuteOnReplyInWorkerPool, bool, true) comma   \
                                         XX(ReusePort, bool, false) comma                   \
                                         XX(ListenPort, unsigned, 0) /* TODO: server only */
-
+ 
     ////////////////////////////////////////////////////////////////////
     /// \brief Configuration for client and server session
     struct TBusSessionConfig {
         BUS_SESSION_CONFIG_MAP(STRUCT_FIELD_GEN, )
-
+ 
         struct TSecret {
             TDuration TimeoutPeriod;
             TDuration StatusFlushPeriod;
-
+ 
             TSecret();
         };
-
+ 
         // secret options are available, but you shouldn't probably use them
         TSecret Secret;
-
+ 
         /// initialized with default settings
         TBusSessionConfig();
-
+ 
         TString PrintToString() const;
-
+ 
         void ConfigureLastGetopt(NLastGetopt::TOpts&, const TString& prefix = "mb-");
     };
-
+ 
     using TBusClientSessionConfig = TBusSessionConfig;
     using TBusServerSessionConfig = TBusSessionConfig;
-
-} // NBus
+ 
+} // NBus 

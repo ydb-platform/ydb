@@ -6,7 +6,7 @@
 
 #ifdef _win_
     #include "winint.h"
-#else
+#else 
     #include <fcntl.h>
 #endif
 

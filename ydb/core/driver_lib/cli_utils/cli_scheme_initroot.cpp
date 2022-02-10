@@ -46,15 +46,15 @@ int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv) {
             Cout << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl;
             if (response.HasTabletId())
                 Cout << "tabletid: " << response.GetTabletId() << Endl;
-
-            return response.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1;
+ 
+            return response.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1; 
         }
     default:
         {
             const char *description = NBus::MessageStatusDescription(status);
             Cerr << description << Endl;
         }
-        return 1;
+        return 1; 
     }
 }
 

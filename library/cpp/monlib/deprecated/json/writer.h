@@ -1,7 +1,7 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/json/json_writer.h>
-
+ 
 namespace NMonitoring {
     /**
      * Deprecated writer of Solomon JSON format
@@ -12,24 +12,24 @@ namespace NMonitoring {
      * particular format.
      */
     class TDeprecatedJsonWriter {
-    private:
-        NJson::TJsonWriter JsonWriter;
-        enum EState {
-            STATE_ROOT,
-            STATE_DOCUMENT,
+    private: 
+        NJson::TJsonWriter JsonWriter; 
+        enum EState { 
+            STATE_ROOT, 
+            STATE_DOCUMENT, 
             STATE_COMMON_LABELS,
             STATE_METRICS,
             STATE_METRIC,
-            STATE_LABELS,
-        };
-        EState State;
+            STATE_LABELS, 
+        }; 
+        EState State; 
 
-    public:
+    public: 
         explicit TDeprecatedJsonWriter(IOutputStream* out);
-
-        void OpenDocument();
-        void CloseDocument();
-
+ 
+        void OpenDocument(); 
+        void CloseDocument(); 
+ 
         void OpenCommonLabels();
         void CloseCommonLabels();
 
@@ -37,40 +37,40 @@ namespace NMonitoring {
 
         void OpenMetrics();
         void CloseMetrics();
-
+ 
         void OpenMetric();
         void CloseMetric();
-
-        void OpenLabels();
-        void CloseLabels();
-
-        void WriteLabel(TStringBuf name, TStringBuf value);
-
-        template <typename... T>
-        void WriteLabels(T... pairs) {
-            OpenLabels();
-            WriteLabelsInner(pairs...);
-            CloseLabels();
-        }
-
-        void WriteModeDeriv();
-
-        void WriteValue(long long value);
-        void WriteDoubleValue(double d);
+ 
+        void OpenLabels(); 
+        void CloseLabels(); 
+ 
+        void WriteLabel(TStringBuf name, TStringBuf value); 
+ 
+        template <typename... T> 
+        void WriteLabels(T... pairs) { 
+            OpenLabels(); 
+            WriteLabelsInner(pairs...); 
+            CloseLabels(); 
+        } 
+ 
+        void WriteModeDeriv(); 
+ 
+        void WriteValue(long long value); 
+        void WriteDoubleValue(double d); 
 
         void WriteTs(ui64 ts);
 
-    private:
-        void WriteLabelsInner(TStringBuf name, TStringBuf value) {
-            WriteLabel(name, value);
-        }
-
+    private: 
+        void WriteLabelsInner(TStringBuf name, TStringBuf value) { 
+            WriteLabel(name, value); 
+        } 
+ 
         template <typename... T>
-        void WriteLabelsInner(TStringBuf name, TStringBuf value, T... pairs) {
-            WriteLabel(name, value);
-            WriteLabelsInner(pairs...);
-        }
-
-        inline void TransitionState(EState current, EState next);
-    };
+        void WriteLabelsInner(TStringBuf name, TStringBuf value, T... pairs) { 
+            WriteLabel(name, value); 
+            WriteLabelsInner(pairs...); 
+        } 
+ 
+        inline void TransitionState(EState current, EState next); 
+    }; 
 }

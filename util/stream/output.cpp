@@ -99,7 +99,7 @@ void Out<std::string>(IOutputStream& o, const std::string& p) {
     o.Write(p.data(), p.length());
 }
 
-template <>
+template <> 
 void Out<std::string_view>(IOutputStream& o, const std::string_view& p) {
     o.Write(p.data(), p.length());
 }

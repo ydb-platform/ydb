@@ -1,16 +1,16 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/messagebus/ybus.h>
 #include <library/cpp/messagebus/www/www.h>
-
+ 
 #include <library/cpp/monlib/service/pages/mon_page.h>
-
-namespace NMonitoring {
+ 
+namespace NMonitoring { 
     template <class TBusSmth>
     class TBusSmthMonPage: public NMonitoring::IMonPage {
     private:
         TBusSmth* Smth;
-
+ 
     public:
         explicit TBusSmthMonPage(const TString& name, const TString& title, TBusSmth* smth)
             : IMonPage("msgbus/" + name, title)
@@ -26,14 +26,14 @@ namespace NMonitoring {
             request.Output() << "</pre>";
         }
     };
-
+ 
     using TBusQueueMonPage = TBusSmthMonPage<NBus::TBusMessageQueue>;
     using TBusModuleMonPage = TBusSmthMonPage<NBus::TBusModule>;
-
+ 
     class TBusNgMonPage: public NMonitoring::IMonPage {
     public:
         TIntrusivePtr<NBus::TBusWww> BusWww;
-
+ 
     public:
         TBusNgMonPage()
             : IMonPage("messagebus", "MessageBus")

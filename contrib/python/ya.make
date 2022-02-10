@@ -27,7 +27,7 @@ RECURSE(
     aioitertools
     aiojobs
     aiomysql
-    aiopg 
+    aiopg
     aioredis
     aioredis-lock
     aioresponses

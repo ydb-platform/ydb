@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "buffered_io.h"
 #include "class_factory.h"
 
@@ -14,7 +14,7 @@
 #include <util/generic/ylimits.h>
 #include <util/memory/blob.h>
 #include <util/digest/murmur.h>
-
+ 
 #include <array>
 #include <bitset>
 #include <list>
@@ -27,9 +27,9 @@
 enum ESaverMode {
     SAVER_MODE_READ = 1,
     SAVER_MODE_WRITE = 2,
-    SAVER_MODE_WRITE_COMPRESSED = 3,
-};
-
+    SAVER_MODE_WRITE_COMPRESSED = 3, 
+}; 
+ 
 namespace NBinSaverInternals {
     // This lets explicitly control the overload resolution priority
     // The higher P means higher priority in overload resolution order
@@ -42,13 +42,13 @@ namespace NBinSaverInternals {
     };
 }
 
-//////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////// 
 struct IBinSaver {
-public:
-    typedef unsigned char chunk_id;
+public: 
+    typedef unsigned char chunk_id; 
     typedef ui32 TStoredSize; // changing this will break compatibility
 
-private:
+private: 
     // This overload is required to avoid infinite recursion when overriding serialization in derived classes:
     // struct B {
     //  virtual int operator &(IBinSaver& f) {
@@ -82,22 +82,22 @@ private:
         DataChunk(p, sizeof(T));
     }
 
-    // vector
+    // vector 
     template <class T, class TA>
     void DoVector(TVector<T, TA>& data) {
         TStoredSize nSize;
-        if (IsReading()) {
-            data.clear();
-            Add(2, &nSize);
-            data.resize(nSize);
-        } else {
+        if (IsReading()) { 
+            data.clear(); 
+            Add(2, &nSize); 
+            data.resize(nSize); 
+        } else { 
             nSize = data.size();
             CheckOverflow(nSize, data.size());
-            Add(2, &nSize);
-        }
+            Add(2, &nSize); 
+        } 
         for (TStoredSize i = 0; i < nSize; i++)
-            Add(1, &data[i]);
-    }
+            Add(1, &data[i]); 
+    } 
 
     template <class T, int N>
     void DoArray(T (&data)[N]) {
@@ -118,34 +118,34 @@ private:
     void DoDataVector(TVector<T, TA>& data) {
         TStoredSize nSize = data.size();
         CheckOverflow(nSize, data.size());
-        Add(1, &nSize);
-        if (IsReading()) {
-            data.clear();
-            data.resize(nSize);
-        }
-        if (nSize > 0)
-            DataChunk(&data[0], sizeof(T) * nSize);
-    }
+        Add(1, &nSize); 
+        if (IsReading()) { 
+            data.clear(); 
+            data.resize(nSize); 
+        } 
+        if (nSize > 0) 
+            DataChunk(&data[0], sizeof(T) * nSize); 
+    } 
 
     template <class AM>
     void DoAnyMap(AM& data) {
-        if (IsReading()) {
-            data.clear();
+        if (IsReading()) { 
+            data.clear(); 
             TStoredSize nSize;
-            Add(3, &nSize);
+            Add(3, &nSize); 
             TVector<typename AM::key_type, typename std::allocator_traits<typename AM::allocator_type>::template rebind_alloc<typename AM::key_type>> indices;
-            indices.resize(nSize);
+            indices.resize(nSize); 
             for (TStoredSize i = 0; i < nSize; ++i)
-                Add(1, &indices[i]);
+                Add(1, &indices[i]); 
             for (TStoredSize i = 0; i < nSize; ++i)
                 Add(2, &data[indices[i]]);
-        } else {
+        } else { 
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
-            Add(3, &nSize);
-
+            Add(3, &nSize); 
+ 
             TVector<typename AM::key_type, typename std::allocator_traits<typename AM::allocator_type>::template rebind_alloc<typename AM::key_type>> indices;
-            indices.resize(nSize);
+            indices.resize(nSize); 
             TStoredSize i = 1;
             for (auto pos = data.begin(); pos != data.end(); ++pos, ++i)
                 indices[nSize - i] = pos->first;
@@ -153,8 +153,8 @@ private:
                 Add(1, &indices[j]);
             for (TStoredSize j = 0; j < nSize; ++j)
                 Add(2, &data[indices[j]]);
-        }
-    }
+        } 
+    } 
 
     // hash_multimap
     template <class AMM>
@@ -209,40 +209,40 @@ private:
     // 2D array
     template <class T>
     void Do2DArray(TArray2D<T>& a) {
-        int nXSize = a.GetXSize(), nYSize = a.GetYSize();
-        Add(1, &nXSize);
-        Add(2, &nYSize);
-        if (IsReading())
-            a.SetSizes(nXSize, nYSize);
-        for (int i = 0; i < nXSize * nYSize; i++)
+        int nXSize = a.GetXSize(), nYSize = a.GetYSize(); 
+        Add(1, &nXSize); 
+        Add(2, &nYSize); 
+        if (IsReading()) 
+            a.SetSizes(nXSize, nYSize); 
+        for (int i = 0; i < nXSize * nYSize; i++) 
             Add(3, &a[i / nXSize][i % nXSize]);
-    }
+    } 
     template <class T>
     void Do2DArrayData(TArray2D<T>& a) {
-        int nXSize = a.GetXSize(), nYSize = a.GetYSize();
-        Add(1, &nXSize);
-        Add(2, &nYSize);
-        if (IsReading())
-            a.SetSizes(nXSize, nYSize);
-        if (nXSize * nYSize > 0)
-            DataChunk(&a[0][0], sizeof(T) * nXSize * nYSize);
-    }
+        int nXSize = a.GetXSize(), nYSize = a.GetYSize(); 
+        Add(1, &nXSize); 
+        Add(2, &nYSize); 
+        if (IsReading()) 
+            a.SetSizes(nXSize, nYSize); 
+        if (nXSize * nYSize > 0) 
+            DataChunk(&a[0][0], sizeof(T) * nXSize * nYSize); 
+    } 
     // strings
     template <class TStringType>
     void DataChunkStr(TStringType& data, i64 elemSize) {
-        if (bRead) {
+        if (bRead) { 
             TStoredSize nCount = 0;
             File.Read(&nCount, sizeof(TStoredSize));
-            data.resize(nCount);
-            if (nCount)
+            data.resize(nCount); 
+            if (nCount) 
                 File.Read(&*data.begin(), nCount * elemSize);
-        } else {
+        } else { 
             TStoredSize nCount = data.size();
             CheckOverflow(nCount, data.size());
             File.Write(&nCount, sizeof(TStoredSize));
             File.Write(data.c_str(), nCount * elemSize);
-        }
-    }
+        } 
+    } 
     void DataChunkString(std::string& data) {
         DataChunkStr(data, sizeof(char));
     }
@@ -265,14 +265,14 @@ private:
         }
     }
 
-    // storing/loading pointers to objects
+    // storing/loading pointers to objects 
     void StoreObject(IObjectBase* pObject);
     IObjectBase* LoadObject();
-
-    bool bRead;
+ 
+    bool bRead; 
     TBufferedStream<> File;
-    // maps objects addresses during save(first) to addresses during load(second) - during loading
-    // or serves as a sign that some object has been already stored - during storing
+    // maps objects addresses during save(first) to addresses during load(second) - during loading 
+    // or serves as a sign that some object has been already stored - during storing 
     bool StableOutput;
 
     typedef THashMap<void*, ui32> PtrIdHash;
@@ -283,24 +283,24 @@ private:
 
     TVector<IObjectBase*> ObjectQueue;
 
-public:
+public: 
     bool IsReading() {
         return bRead;
     }
     void AddRawData(const chunk_id, void* pData, i64 nSize) {
         DataChunk(pData, nSize);
     }
-
+ 
     // return type of Add() is used to detect specialized serializer (see HasNonTrivialSerializer below)
     template <class T>
     char Add(const chunk_id, T* p) {
         CallObjectSerialize(p, NBinSaverInternals::TOverloadPriority<2>());
         return 0;
-    }
+    } 
     int Add(const chunk_id, std::string* pStr) {
-        DataChunkString(*pStr);
+        DataChunkString(*pStr); 
         return 0;
-    }
+    } 
     int Add(const chunk_id, TString* pStr) {
         DataChunkStroka(*pStr);
         return 0;
@@ -330,9 +330,9 @@ public:
         if (HasNonTrivialSerializer<T1>(0u))
             DoVector(*pVec);
         else
-            DoDataVector(*pVec);
+            DoDataVector(*pVec); 
         return 0;
-    }
+    } 
 
     template <class T, int N>
     int Add(const chunk_id, T (*pVec)[N]) {
@@ -352,7 +352,7 @@ public:
     int Add(const chunk_id, THashMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMap(*pHash);
         return 0;
-    }
+    } 
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMultiMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMultiMap(*pHash);
@@ -374,32 +374,32 @@ public:
         if (HasNonTrivialSerializer<T1>(0u))
             Do2DArray(*pArr);
         else
-            Do2DArrayData(*pArr);
+            Do2DArrayData(*pArr); 
         return 0;
-    }
+    } 
     template <class T1>
     int Add(const chunk_id, TList<T1>* pList) {
         TList<T1>& data = *pList;
         if (IsReading()) {
-            int nSize;
-            Add(2, &nSize);
-            data.clear();
-            data.insert(data.begin(), nSize, T1());
+            int nSize; 
+            Add(2, &nSize); 
+            data.clear(); 
+            data.insert(data.begin(), nSize, T1()); 
         } else {
-            int nSize = data.size();
-            Add(2, &nSize);
-        }
-        int i = 1;
+            int nSize = data.size(); 
+            Add(2, &nSize); 
+        } 
+        int i = 1; 
         for (typename TList<T1>::iterator k = data.begin(); k != data.end(); ++k, ++i)
             Add(i + 2, &(*k));
         return 0;
-    }
+    } 
     template <class T1, class T2>
     int Add(const chunk_id, std::pair<T1, T2>* pData) {
-        Add(1, &(pData->first));
-        Add(2, &(pData->second));
+        Add(1, &(pData->first)); 
+        Add(2, &(pData->second)); 
         return 0;
-    }
+    } 
 
     template <class T1, size_t N>
     int Add(const chunk_id, std::array<T1, N>* pData) {
@@ -492,8 +492,8 @@ public:
 
 
     void AddPolymorphicBase(chunk_id, IObjectBase* pObject) {
-        (*pObject) & (*this);
-    }
+        (*pObject) & (*this); 
+    } 
 
     template <class T1, class T2>
     void DoPtr(TPtrBase<T1, T2>* pData) {
@@ -502,8 +502,8 @@ public:
         if (IsReading())
             pData->Set(CastToUserObject(LoadObject(), (T1*)nullptr));
         else
-            StoreObject(pData->GetBarePtr());
-    }
+            StoreObject(pData->GetBarePtr()); 
+    } 
     template <class T, class TPolicy>
     int Add(const chunk_id, TMaybe<T, TPolicy>* pData) {
         TMaybe<T, TPolicy>& data = *pData;
@@ -523,7 +523,7 @@ public:
         }
         return 0;
     }
-
+ 
     template <typename TOne>
     void AddMulti(TOne& one) {
         Add(0, &one);
@@ -545,7 +545,7 @@ public:
         return sizeof(std::declval<IBinSaver*>()->Add(0, std::declval<T*>())) != 1;
     }
 
-public:
+public: 
     IBinSaver(IBinaryStream& stream, bool _bRead, bool stableOutput = false)
         : bRead(_bRead)
         , File(_bRead, stream)
@@ -556,19 +556,19 @@ public:
     bool IsValid() const {
         return File.IsValid();
     }
-};
-
-// realisation of forward declared serialisation operator
+}; 
+ 
+// realisation of forward declared serialisation operator 
 template <class TUserObj, class TRef>
 int TPtrBase<TUserObj, TRef>::operator&(IBinSaver& f) {
-    f.DoPtr(this);
-    return 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
+    f.DoPtr(this); 
+    return 0; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////////////////////////// 
 
 extern TClassFactory<IObjectBase>* pSaverClasses;
-void StartRegisterSaveload();
+void StartRegisterSaveload(); 
 
 template <class TReg>
 struct TRegisterSaveLoadType {

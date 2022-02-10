@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "fwd.h"
 
 #include <util/str_stl.h>
@@ -16,7 +16,7 @@
  */
 struct TGUID {
     ui32 dw[4] = {};
-
+ 
     constexpr bool IsEmpty() const noexcept {
         return (dw[0] | dw[1] | dw[2] | dw[3]) == 0;
     }
@@ -42,7 +42,7 @@ struct TGUID {
     * https://datatracker.ietf.org/doc/html/rfc4122#section-4.1
     **/
     static TGUID CreateTimebased();
-};
+}; 
 
 constexpr bool operator==(const TGUID& a, const TGUID& b) noexcept {
     return a.dw[0] == b.dw[0] && a.dw[1] == b.dw[1] && a.dw[2] == b.dw[2] && a.dw[3] == b.dw[3];
@@ -56,7 +56,7 @@ struct TGUIDHash {
     constexpr int operator()(const TGUID& a) const noexcept {
         return a.dw[0] + a.dw[1] + a.dw[2] + a.dw[3];
     }
-};
+}; 
 
 template <>
 struct THash<TGUID> {

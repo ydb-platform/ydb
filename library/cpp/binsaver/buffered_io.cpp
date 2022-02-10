@@ -1,8 +1,8 @@
 #include "buffered_io.h"
-
+ 
 i64 IBinaryStream::LongWrite(const void* userBuffer, i64 size) {
     Y_VERIFY(size >= 0, "IBinaryStream::Write() called with a negative buffer size.");
-
+ 
     i64 leftToWrite = size;
     while (leftToWrite != 0) {
         int writeSz = static_cast<int>(Min<i64>(leftToWrite, std::numeric_limits<int>::max()));

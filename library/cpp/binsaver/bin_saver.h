@@ -566,25 +566,25 @@ int TPtrBase<TUserObj, TRef>::operator&(IBinSaver& f) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
+ 
 extern TClassFactory<IObjectBase>* pSaverClasses;
 void StartRegisterSaveload();
-
+ 
 template <class TReg>
-struct TRegisterSaveLoadType {
-    TRegisterSaveLoadType(int num) {
-        StartRegisterSaveload();
+struct TRegisterSaveLoadType { 
+    TRegisterSaveLoadType(int num) { 
+        StartRegisterSaveload(); 
         pSaverClasses->RegisterType(num, TReg::NewSaveLoadNullItem, (TReg*)nullptr);
-    }
-};
-
+    } 
+}; 
+ 
 #define Y_BINSAVER_REGISTER(name) \
     BASIC_REGISTER_CLASS(name)    \
     static TRegisterSaveLoadType<name> init##name(MurmurHash<int>(#name, sizeof(#name)));
 
 #define REGISTER_SAVELOAD_CLASS(N, name) \
     BASIC_REGISTER_CLASS(name)           \
-    static TRegisterSaveLoadType<name> init##name##N(N);
+    static TRegisterSaveLoadType<name> init##name##N(N); 
 
 // using TObj/TRef on forward declared templ class will not work
 // but multiple registration with same id is allowed

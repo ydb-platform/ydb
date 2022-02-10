@@ -108,7 +108,7 @@ long httpAgentReader::readPortion(void*& buf) {
 
 /************************************************************/
 bool httpAgentReader::skipTheRest() {
-    void* b;
+    void* b; 
     while (!eof())
         readPortion(b);
     return (State == hp_eof);

@@ -161,7 +161,7 @@ protected:
                                                                                                                                      : hp_read_closed;
                         if (State == hp_begin_chunk_header) {
                             // unget \n for chunk reader
-                            buf = (char*)buf - 1;
+                            buf = (char*)buf - 1; 
                             size++;
                         }
                         if (isReader)
@@ -223,7 +223,7 @@ protected:
                         if (isReader)
                             return ChunkSize;
                         size -= ChunkSize;
-                        buf = (char*)buf + ChunkSize;
+                        buf = (char*)buf + ChunkSize; 
                     } else {
                         Header->entity_size += size;
                         ChunkSize -= size;
@@ -252,7 +252,7 @@ public:
     }
 
     void Parse(void* buf, long size) {
-        TBaseT::ParseGeneric(buf, size);
+        TBaseT::ParseGeneric(buf, size); 
     }
 };
 
@@ -310,7 +310,7 @@ public:
                     return Eoferr = -1;
                 }
             }
-            Chunk = ParseGeneric(Ptr, Size);
+            Chunk = ParseGeneric(Ptr, Size); 
             buf = Ptr;
             Ptr = (char*)Ptr + Chunk;
             Size -= Chunk;
@@ -330,7 +330,7 @@ protected:
         while (State == hp_in_header) {
             if ((Size = (long)Reader::Read(Ptr)) < 0)
                 return Eoferr = -1;
-            ParseGeneric(Ptr, Size);
+            ParseGeneric(Ptr, Size); 
         }
         if (State == hp_error)
             return Eoferr = -1;

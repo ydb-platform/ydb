@@ -77,7 +77,7 @@ static constexpr size_t NumericHash(T t) noexcept {
         TCvt cvt;
     } u{t};
 
-    return (size_t)IntHash(u.cvt);
+    return (size_t)IntHash(u.cvt); 
 }
 
 template <class T>

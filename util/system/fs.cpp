@@ -91,7 +91,7 @@ bool NFs::Rename(const TString& oldPath, const TString& newPath) {
     return ::rename(oldPath.data(), newPath.data()) == 0;
 #endif
 }
-
+ 
 void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
     if (!NFs::HardLink(existingPath, newPath)) {
         Copy(existingPath, newPath);
@@ -101,10 +101,10 @@ void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
 bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
 #if defined(_win_)
     return NFsPrivate::WinHardLink(existingPath, newPath);
-#elif defined(_unix_)
+#elif defined(_unix_) 
     return (0 == link(existingPath.data(), newPath.data()));
-#endif
-}
+#endif 
+} 
 
 bool NFs::SymLink(const TString& targetPath, const TString& linkPath) {
 #if defined(_win_)

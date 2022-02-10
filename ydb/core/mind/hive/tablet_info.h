@@ -235,13 +235,13 @@ public:
         return max(NormalizeRawValues(current, maximum));
     }
 
-    void UpdateWeight() {
+    void UpdateWeight() { 
         TResourceRawValues current = GetResourceCurrentValues();
         TResourceRawValues maximum = GetResourceMaximumValues();
         FilterRawValues(current);
         FilterRawValues(maximum);
 
-        Weight = GetUsage(current, maximum);
+        Weight = GetUsage(current, maximum); 
     }
 
     void PostponeStart(TInstant nextStart) {

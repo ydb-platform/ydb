@@ -807,7 +807,7 @@ public:
         ui64 whiteboardReportCycles = 0;
         ui64 updateSchedulerCycles = 0;
         if (!IsFormattingNow && AtomicGet(PDisk->IsStarted)) {
-            PDisk->InputRequest(request.Release());
+            PDisk->InputRequest(request.Release()); 
 
             // Update the current scheduler
             whiteboardReportCycles = timer.Elapsed();

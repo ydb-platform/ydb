@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 // unique tag to fix pragma once gcc glueing: ./ydb/core/tablet_flat/defs.h
 
 #include "flat_page_iface.h"
@@ -11,18 +11,18 @@
 #include <ydb/core/util/type_alias.h>
 #include <util/generic/xrange.h>
 #include <util/generic/ylimits.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 using TTxType = ui32; // App-specific transaction type number (protobuf enum values like TXTYPE_*)
 constexpr TTxType UnknownTxType = TTxType(-1);
 
-namespace NScheme {
-
-    class TTypeRegistry;
-
-} // end of NKikimr::NScheme namespace
-
+namespace NScheme { 
+ 
+    class TTypeRegistry; 
+ 
+} // end of NKikimr::NScheme namespace 
+ 
 namespace NTable {
 
     using TRawVals = TArrayRef<const TRawTypeValue>;
@@ -117,5 +117,5 @@ namespace NTable {
 namespace NTabletFlatExecutor {
     using TTxStamp = NTable::TTxStamp;
     using TRawVals = NTable::TRawVals;
-}
+} 
 }

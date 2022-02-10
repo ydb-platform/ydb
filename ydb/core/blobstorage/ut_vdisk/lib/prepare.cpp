@@ -274,7 +274,7 @@ TConfiguration::~TConfiguration() {
     }
 }
 
-static TProgramShouldContinue KikimrShouldContinue;
+static TProgramShouldContinue KikimrShouldContinue; 
 
 void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRepl) { // FIXME: put newPDisks into configuration (see up)
     Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());

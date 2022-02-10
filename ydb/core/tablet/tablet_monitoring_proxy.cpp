@@ -169,7 +169,7 @@ TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
     }
 }
 
-static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
+static ui64 TryParseTabletId(TStringBuf tabletIdParam) { 
     if (tabletIdParam.StartsWith("0x")) {
         ui64 result = 0;
         TryIntFromString<16, ui64>(tabletIdParam.substr(2), result);
@@ -177,8 +177,8 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     } else {
         return FromStringWithDefault<ui64>(tabletIdParam);
     }
-}
-
+} 
+ 
 ////////////////////////////////////////////
 void
 TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
@@ -208,10 +208,10 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
             ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, std::move(url)));
-            return;
-        }
-    }
-
+            return; 
+        } 
+    } 
+ 
     bool hasIdParam = cgi->Has("TabletID");
     if (hasIdParam) {
         const TString &tabletIdParam = cgi->Get("TabletID");
@@ -229,11 +229,11 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
             ctx.ExecutorThread.RegisterActor(CreateStateStorageMonitoringActor(tabletId, ev->Sender, std::move(url)));
-            return;
-        }
-    }
-
-
+            return; 
+        } 
+    } 
+ 
+ 
     TStringStream str;
 
     const NKikimr::TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();

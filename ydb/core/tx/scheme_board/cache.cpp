@@ -676,10 +676,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             TableKind = TResolve::KindUnknown;
             Created = false;
             CreateStep = 0;
-
-            // pathid is never changed (yet) so must be kept
+ 
+            // pathid is never changed (yet) so must be kept 
             AbandonedSchemeShardsIds.clear();
-
+ 
             SecurityObject.Drop();
             DomainInfo.Drop();
             Attributes.clear();
@@ -687,9 +687,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ListNodeEntry.Drop();
 
             IsPrivatePath = false;
-
-            // virtual must be kept
-
+ 
+            // virtual must be kept 
+ 
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
@@ -959,8 +959,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , TableKind(TResolve::EKind::KindUnknown)
             , Created(false)
             , CreateStep(0)
-            , IsPrivatePath(false)
-            , IsVirtual(isVirtual)
+            , IsPrivatePath(false) 
+            , IsVirtual(isVirtual) 
             , SchemaVersion(0)
         {
         }
@@ -977,8 +977,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , Created(other.Created)
             , CreateStep(other.CreateStep)
             , PathId(other.PathId)
-            , IsPrivatePath(other.IsPrivatePath)
-            , IsVirtual(other.IsVirtual)
+            , IsPrivatePath(other.IsPrivatePath) 
+            , IsVirtual(other.IsVirtual) 
             , SchemaVersion(other.SchemaVersion)
         {
             if (other.Subscriber) {
@@ -1196,11 +1196,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         template <typename TContextPtr>
-        void AddInFlight(TContextPtr context, const size_t entryIndex, const bool isSync) const {
+        void AddInFlight(TContextPtr context, const size_t entryIndex, const bool isSync) const { 
             if (IsVirtual) {
-                return;
+                return; 
             }
-
+ 
             if (isSync) {
                 SendSyncRequest();
             }
@@ -1266,8 +1266,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Created = true;
             PathId = TPathId(TSysTables::SysSchemeShard, 0);
             Path = "/sys";
-
-            IsVirtual = true;
+ 
+            IsVirtual = true; 
         }
 
         void FillAsSysLocks(const bool v2) {
@@ -1285,9 +1285,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             for (ui32 type : keyColumnTypes) {
                 KeyColumnTypes.push_back(type);
             }
-
-            IsPrivatePath = true;
-            IsVirtual = true;
+ 
+            IsPrivatePath = true; 
+            IsVirtual = true; 
         }
 
         void Fill(TSchemeBoardEvents::TEvNotifyUpdate& notify) {
@@ -1899,7 +1899,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
         THashMap<TString, TString> Attributes;
         bool IsPrivatePath;
-        bool IsVirtual;
+        bool IsVirtual; 
 
         // Used for Table and Index
         ui64 SchemaVersion;
@@ -2121,7 +2121,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         Y_VERIFY(byPath == byPathByPathId);
-
+ 
         if (!byPath->IsFilled() || byPath->GetPathId().OwnerId == notifyPathId.OwnerId) {
             if (byPath->GetPathId() < notifyPathId) {
                 return SwapSubscriberAndUpsert(byPath, notifyPathId, notifyPath);

@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "flat_row_eggs.h"
 #include "flat_row_column.h"
@@ -6,9 +6,9 @@
 #include <ydb/core/scheme_types/scheme_raw_type_value.h>
 #include <util/string/printf.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NTable {
-
+ 
     inline const char* EOpToStr(const ECellOp op) {
         switch (op) {
         case ECellOp::Empty:
@@ -26,13 +26,13 @@ namespace NTable {
 
     struct TUpdateOp {
         TUpdateOp() = default;
-
+ 
         TUpdateOp(TTag tag, TCellOp op, TRawTypeValue value)
             : Tag(tag)
             , Op(op)
             , Value(value)
         {
-
+ 
         }
 
         TArrayRef<const char> AsRef() const noexcept

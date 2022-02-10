@@ -1,45 +1,45 @@
-#pragma once
-
-#include "actor.h"
-#include "executor_thread.h"
-
+#pragma once 
+ 
+#include "actor.h" 
+#include "executor_thread.h" 
+ 
 #include <util/system/defaults.h>
 
-#define HFunc(TEvType, HandleFunc)                                                  \
-    case TEvType::EventType: {                                                      \
-        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                                        \
-        break;                                                                      \
-    }
-
-#define hFunc(TEvType, HandleFunc)                                                  \
-    case TEvType::EventType: {                                                      \
-        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x);                                                             \
-        break;                                                                      \
-    }
-
-#define HFuncTraced(TEvType, HandleFunc)                          \
-    case TEvType::EventType: {                                    \
+#define HFunc(TEvType, HandleFunc)                                                  \ 
+    case TEvType::EventType: {                                                      \ 
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x, ctx);                                                        \ 
+        break;                                                                      \ 
+    } 
+ 
+#define hFunc(TEvType, HandleFunc)                                                  \ 
+    case TEvType::EventType: {                                                      \ 
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x);                                                             \ 
+        break;                                                                      \ 
+    } 
+ 
+#define HFuncTraced(TEvType, HandleFunc)                          \ 
+    case TEvType::EventType: {                                    \ 
         TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                      \
-        TEvType::TPtr* x = reinterpret_cast<TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                      \
-        break;                                                    \
+        TEvType::TPtr* x = reinterpret_cast<TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x, ctx);                                      \ 
+        break;                                                    \ 
     }
 
-#define hFuncTraced(TEvType, HandleFunc)                                            \
-    case TEvType::EventType: {                                                      \
+#define hFuncTraced(TEvType, HandleFunc)                                            \ 
+    case TEvType::EventType: {                                                      \ 
         TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                                        \
-        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x);                                                             \
-        break;                                                                      \
-    }
-
-#define HTemplFunc(TEvType, HandleFunc)                                             \
-    case TEvType::EventType: {                                                      \
-        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                                        \
-        break;                                                                      \
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x);                                                             \ 
+        break;                                                                      \ 
+    } 
+ 
+#define HTemplFunc(TEvType, HandleFunc)                                             \ 
+    case TEvType::EventType: {                                                      \ 
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x, ctx);                                                        \ 
+        break;                                                                      \ 
     }
 
 #define hTemplFunc(TEvType, HandleFunc)                                             \
@@ -59,26 +59,26 @@
         HandleFunc();              \
         break;
 
-#define CFunc(TEventType, HandleFunc) \
-    case TEventType:                  \
-        HandleFunc(ctx);              \
-        break;
-
+#define CFunc(TEventType, HandleFunc) \ 
+    case TEventType:                  \ 
+        HandleFunc(ctx);              \ 
+        break; 
+ 
 #define cFunc(TEventType, HandleFunc) \
     case TEventType:                  \
         HandleFunc();                 \
-        break;
-
-#define FFunc(TEventType, HandleFunc) \
-    case TEventType:                  \
-        HandleFunc(ev, ctx);          \
-        break;
-
+        break; 
+ 
+#define FFunc(TEventType, HandleFunc) \ 
+    case TEventType:                  \ 
+        HandleFunc(ev, ctx);          \ 
+        break; 
+ 
 #define fFunc(TEventType, HandleFunc) \
     case TEventType:                  \
         HandleFunc(ev);               \
         break;
 
-#define IgnoreFunc(TEvType)  \
-    case TEvType::EventType: \
-        break;
+#define IgnoreFunc(TEvType)  \ 
+    case TEvType::EventType: \ 
+        break; 

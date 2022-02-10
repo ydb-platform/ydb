@@ -2,7 +2,7 @@
 
 ////////////////////////////////////////////
 #include "defs.h"
-#include "tablet_counters.h"
+#include "tablet_counters.h" 
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
@@ -44,7 +44,7 @@ struct TEvTabletCounters {
 
     struct TEvTabletAddCounters : public TEventLocal<TEvTabletAddCounters, EvTabletAddCounters> {
         //
-        const ui64 TabletID;
+        const ui64 TabletID; 
         const TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
         TAutoPtr<TTabletCountersBase> ExecutorCounters;
@@ -79,13 +79,13 @@ struct TEvTabletCounters {
     //
     struct TEvTabletCountersForgetTablet : public TEventLocal<TEvTabletCountersForgetTablet, EvTabletCountersForgetTablet> {
         //
-        const ui64 TabletID;
+        const ui64 TabletID; 
         const TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
 
         TEvTabletCountersForgetTablet(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId)
             : TabletID(tabletID)
-            , TabletType(tabletType)
+            , TabletType(tabletType) 
             , TenantPathId(tenantPathId)
         {}
     };

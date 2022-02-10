@@ -655,8 +655,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             if (icConfig.GetEnforceScopeValidation()) {
                 icCommon->EventFilter = std::make_shared<TEventFilter>();
-                RegisterBlobStorageEventScopes(icCommon->EventFilter);
-                RegisterStateStorageEventScopes(icCommon->EventFilter);
+                RegisterBlobStorageEventScopes(icCommon->EventFilter); 
+                RegisterStateStorageEventScopes(icCommon->EventFilter); 
             }
 
             if (const auto& whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId)) {
@@ -825,17 +825,17 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
 // TStateStorageServiceInitializer
 
-template<typename TCreateFunc>
-void StartLocalStateStorageReplicas(TCreateFunc createFunc, TStateStorageInfo *info, ui32 poolId, TActorSystemSetup &setup) {
-    ui32 index = 0;
-    for (auto &ring : info->Rings) {
+template<typename TCreateFunc> 
+void StartLocalStateStorageReplicas(TCreateFunc createFunc, TStateStorageInfo *info, ui32 poolId, TActorSystemSetup &setup) { 
+    ui32 index = 0; 
+    for (auto &ring : info->Rings) { 
         for (TActorId replica : ring.Replicas) {
-            if (replica.NodeId() == setup.NodeId) {
-                setup.LocalServices.emplace_back(
-                    replica,
-                    TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId));
+            if (replica.NodeId() == setup.NodeId) { 
+                setup.LocalServices.emplace_back( 
+                    replica, 
+                    TActorSetupCmd(createFunc(info, index), TMailboxType::ReadAsFilled, poolId)); 
             }
-            ++index;
+            ++index; 
         }
     }
 }
@@ -854,16 +854,16 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
         Y_VERIFY(ssid <= maxssid);
         knownss[ssid] = true;
 
-        TIntrusivePtr<TStateStorageInfo> ssrInfo;
-        TIntrusivePtr<TStateStorageInfo> ssbInfo;
-        TIntrusivePtr<TStateStorageInfo> sbrInfo;
+        TIntrusivePtr<TStateStorageInfo> ssrInfo; 
+        TIntrusivePtr<TStateStorageInfo> ssbInfo; 
+        TIntrusivePtr<TStateStorageInfo> sbrInfo; 
 
-        BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);
-
-        StartLocalStateStorageReplicas(CreateStateStorageReplica, ssrInfo.Get(), appData->SystemPoolId, *setup);
-        StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup);
-        StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup);
-
+        BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo); 
+ 
+        StartLocalStateStorageReplicas(CreateStateStorageReplica, ssrInfo.Get(), appData->SystemPoolId, *setup); 
+        StartLocalStateStorageReplicas(CreateStateStorageBoardReplica, ssbInfo.Get(), appData->SystemPoolId, *setup); 
+        StartLocalStateStorageReplicas(CreateSchemeBoardReplica, sbrInfo.Get(), appData->SystemPoolId, *setup); 
+ 
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeStateStorageProxyID(ssid),
                                                                            TActorSetupCmd(CreateStateStorageProxy(ssrInfo.Get(), ssbInfo.Get(), sbrInfo.Get()),
                                                                                           TMailboxType::ReadAsFilled,
@@ -876,11 +876,11 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
                                                                                               TMailboxType::HTSwap,
                                                                                               appData->SystemPoolId)));
     }
-
-    setup->LocalServices.emplace_back(
+ 
+    setup->LocalServices.emplace_back( 
         TActorId(),
-        TActorSetupCmd(CreateTenantNodeEnumerationPublisher(), TMailboxType::HTSwap, appData->SystemPoolId)
-    );
+        TActorSetupCmd(CreateTenantNodeEnumerationPublisher(), TMailboxType::HTSwap, appData->SystemPoolId) 
+    ); 
 }
 
 // TLocalServiceInitializer
@@ -942,7 +942,7 @@ void TLocalServiceInitializer::InitializeServices(
         }
     }
 
-    setup->LocalServices.push_back(std::make_pair(MakeTenantPoolRootID(),
+    setup->LocalServices.push_back(std::make_pair(MakeTenantPoolRootID(), 
         TActorSetupCmd(CreateTenantPool(tenantPoolConfig), TMailboxType::ReadAsFilled, 0)));
 
     setup->LocalServices.push_back(std::make_pair(
@@ -956,45 +956,45 @@ void TLocalServiceInitializer::InitializeServices(
     NKesus::AddKesusProbesList();
 }
 
-// TSharedCacheInitializer
-
-TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
-void TSharedCacheInitializer::InitializeServices(
-        NActors::TActorSystemSetup* setup,
-        const NKikimr::TAppData* appData) {
+// TSharedCacheInitializer 
+ 
+TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConfig) 
+    : IKikimrServicesInitializer(runConfig) 
+{} 
+ 
+void TSharedCacheInitializer::InitializeServices( 
+        NActors::TActorSystemSetup* setup, 
+        const NKikimr::TAppData* appData) { 
     auto config = MakeIntrusive<TSharedPageCacheConfig>();
-
+ 
     NKikimrSharedCache::TSharedCacheConfig cfg;
-    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) { 
         cfg.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
-    }
+    } 
     if (Config.HasSharedCacheConfig()) {
         cfg.MergeFrom(Config.GetSharedCacheConfig());
     }
-
+ 
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
-
+    TIntrusivePtr<NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE"); 
+ 
     config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
-            sausageGroup->GetCounter("fresh"),
-            sausageGroup->GetCounter("staging"),
-            sausageGroup->GetCounter("warm"));
+            sausageGroup->GetCounter("fresh"), 
+            sausageGroup->GetCounter("staging"), 
+            sausageGroup->GetCounter("warm")); 
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
-
+ 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
         TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
                                       TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
-}
-
+} 
+ 
 // TBlobCacheInitializer
 
 TBlobCacheInitializer::TBlobCacheInitializer(const TKikimrRunConfig& runConfig)
@@ -1214,14 +1214,14 @@ TTabletCountersAggregatorInitializer::TTabletCountersAggregatorInitializer(const
 void TTabletCountersAggregatorInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    {
-        TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(false), TMailboxType::ReadAsFilled, appData->UserPoolId);
+    { 
+        TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(false), TMailboxType::ReadAsFilled, appData->UserPoolId); 
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, false), tabletCountersAggregatorSetup));
-    }
-    {
-        TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(true), TMailboxType::ReadAsFilled, appData->UserPoolId);
+    } 
+    { 
+        TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(true), TMailboxType::ReadAsFilled, appData->UserPoolId); 
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, true), tabletCountersAggregatorSetup));
-    }
+    } 
 }
 
 //TGRpcProxyStatusInitializer
@@ -1275,7 +1275,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
     if (tabletInfo->TabletType == TTabletTypes::TYPE_INVALID) {
         tabletInfo->TabletType = tabletType;
     }
-
+ 
     return tabletSetup;
 }
 
@@ -1291,37 +1291,37 @@ void TBootstrapperInitializer::InitializeServices(
         const NKikimr::TAppData* appData) {
     if (Config.HasBootstrapConfig()) {
         for (const auto &boot : Config.GetBootstrapConfig().GetTablet()) {
-            if (boot.GetAllowDynamicConfiguration()) {
+            if (boot.GetAllowDynamicConfiguration()) { 
                 setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                     TActorId(),
-                    TActorSetupCmd(CreateConfiguredTabletBootstrapper(boot), TMailboxType::HTSwap, appData->SystemPoolId)));
-            } else {
-                const bool standby = boot.HasStandBy() && boot.GetStandBy();
-                for (const ui32 bootstrapperNode : boot.GetNode()) {
-                    if (bootstrapperNode == NodeId) {
+                    TActorSetupCmd(CreateConfiguredTabletBootstrapper(boot), TMailboxType::HTSwap, appData->SystemPoolId))); 
+            } else { 
+                const bool standby = boot.HasStandBy() && boot.GetStandBy(); 
+                for (const ui32 bootstrapperNode : boot.GetNode()) { 
+                    if (bootstrapperNode == NodeId) { 
 
                         TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
 
-                        auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
+                        auto tabletType = BootstrapperTypeToTabletType(boot.GetType()); 
 
-                        auto tabletSetupInfo = CreateTablet(
+                        auto tabletSetupInfo = CreateTablet( 
                             TTabletTypes::TypeToStr(tabletType),
                             info,
                             appData);
 
-                        TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
+                        TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get()); 
 
-                        if (boot.NodeSize() != 1) {
-                            bi->OtherNodes.reserve(boot.NodeSize() - 1);
-                            for (ui32 x : boot.GetNode())
-                                if (x != NodeId)
-                                    bi->OtherNodes.push_back(x);
-                            if (boot.HasWatchThreshold())
-                                bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
+                        if (boot.NodeSize() != 1) { 
+                            bi->OtherNodes.reserve(boot.NodeSize() - 1); 
+                            for (ui32 x : boot.GetNode()) 
+                                if (x != NodeId) 
+                                    bi->OtherNodes.push_back(x); 
+                            if (boot.HasWatchThreshold()) 
+                                bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold()); 
                             if (boot.HasStartFollowers())
                                 bi->StartFollowers = boot.GetStartFollowers();
-                        }
-
+                        } 
+ 
                         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBootstrapperID(info->TabletID, bootstrapperNode), TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
                     }
                 }
@@ -1520,24 +1520,24 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                               TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
         }
     }
-
-    if (Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
-    // logical copy from TKikimrRunner::InitializeGrpc
-        const auto &config = Config.GetGRpcConfig();
-
+ 
+    if (Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) { 
+    // logical copy from TKikimrRunner::InitializeGrpc 
+        const auto &config = Config.GetGRpcConfig(); 
+ 
         if (appData->Mon) {
             setup->LocalServices.emplace_back(NGRpcService::GrpcMonServiceId(),
                 TActorSetupCmd(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData->UserPoolId)
                 );
         }
 
-        TVector<TString> rootDomains;
-        for (auto &domain : appData->DomainsInfo->Domains)
-            rootDomains.emplace_back("/" + domain.second->Name);
-
-        const bool ignoreServeRootDomain = ScopeId.IsTenantScope();
-        const bool serveRootDomain = !ignoreServeRootDomain && config.GetServeRootDomains();
-
+        TVector<TString> rootDomains; 
+        for (auto &domain : appData->DomainsInfo->Domains) 
+            rootDomains.emplace_back("/" + domain.second->Name); 
+ 
+        const bool ignoreServeRootDomain = ScopeId.IsTenantScope(); 
+        const bool serveRootDomain = !ignoreServeRootDomain && config.GetServeRootDomains(); 
+ 
         auto stringsFromProto = [](TVector<TString>& vec, const auto& proto) {
             if (!proto.empty()) {
                 vec.reserve(proto.size());
@@ -1548,78 +1548,78 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         };
 
         TVector<TIntrusivePtr<NGRpcService::TGrpcEndpointDescription>> endpoints;
-        const TString &address = config.GetHost() && config.GetHost() != "[::]" ? config.GetHost() : FQDNHostName();
-        if (const ui32 port = config.GetPort()) {
-            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+        const TString &address = config.GetHost() && config.GetHost() != "[::]" ? config.GetHost() : FQDNHostName(); 
+        if (const ui32 port = config.GetPort()) { 
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription(); 
             desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
             desc->Port = config.GetPublicPort() ? config.GetPublicPort() : port;
-            desc->Ssl = false;
-
+            desc->Ssl = false; 
+ 
             stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
 
-            if (serveRootDomain)
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
-            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (serveRootDomain) 
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end()); 
+            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end()); 
             endpoints.push_back(std::move(desc));
-        }
-
-        if (const ui32 sslPort = config.GetSslPort()) {
-            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+        } 
+ 
+        if (const ui32 sslPort = config.GetSslPort()) { 
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription(); 
             desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
             desc->Port = config.GetPublicSslPort() ? config.GetPublicSslPort() : sslPort;
-            desc->Ssl = true;
-
+            desc->Ssl = true; 
+ 
             stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
             desc->TargetNameOverride = config.GetPublicTargetNameOverride();
 
-            if (serveRootDomain)
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
-
-            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            if (serveRootDomain) 
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end()); 
+ 
+            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end()); 
             endpoints.push_back(std::move(desc));
-        }
-
-        for (auto &sx : config.GetExtEndpoints()) {
-            const TString &localAddress = sx.GetHost() ? (sx.GetHost() != "[::]" ? sx.GetHost() : FQDNHostName()) : address;
-            if (const ui32 port = sx.GetPort()) {
-                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+        } 
+ 
+        for (auto &sx : config.GetExtEndpoints()) { 
+            const TString &localAddress = sx.GetHost() ? (sx.GetHost() != "[::]" ? sx.GetHost() : FQDNHostName()) : address; 
+            if (const ui32 port = sx.GetPort()) { 
+                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription(); 
                 desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress;
                 desc->Port = sx.GetPublicPort() ? sx.GetPublicPort() : port;
-                desc->Ssl = false;
-
+                desc->Ssl = false; 
+ 
                 stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
 
-                if (serveRootDomain)
-                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
-                desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (serveRootDomain) 
+                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end()); 
+                desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end()); 
                 endpoints.push_back(std::move(desc));
-            }
-
-            if (const ui32 sslPort = sx.GetSslPort()) {
-                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            } 
+ 
+            if (const ui32 sslPort = sx.GetSslPort()) { 
+                TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription(); 
                 desc->Address = sx.GetPublicHost() ? sx.GetPublicHost() : localAddress;
                 desc->Port = sx.GetPublicSslPort() ? sx.GetPublicSslPort() : sslPort;
-                desc->Ssl = true;
-
+                desc->Ssl = true; 
+ 
                 stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
                 desc->TargetNameOverride = sx.GetPublicTargetNameOverride();
 
-                if (serveRootDomain)
-                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
-                desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                if (serveRootDomain) 
+                    desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end()); 
+                desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end()); 
                 endpoints.push_back(std::move(desc));
-            }
-        }
+            } 
+        } 
 
         setup->LocalServices.emplace_back(
            NGRpcService::CreateGrpcPublisherServiceActorId(),
            TActorSetupCmd(CreateGrpcPublisherServiceActor(std::move(endpoints)), TMailboxType::ReadAsFilled, appData->UserPoolId)
         );
-    }
+    } 
 }
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -1915,18 +1915,18 @@ void TMemoryTrackerInitializer::InitializeServices(
     );
 }
 
-TQuoterServiceInitializer::TQuoterServiceInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
-void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    Y_UNUSED(appData);
-    setup->LocalServices.push_back(std::make_pair(
-        MakeQuoterServiceID(),
-        TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, appData->SystemPoolId))
-    );
-}
-
+TQuoterServiceInitializer::TQuoterServiceInitializer(const TKikimrRunConfig& runConfig) 
+    : IKikimrServicesInitializer(runConfig) 
+{} 
+ 
+void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
+    Y_UNUSED(appData); 
+    setup->LocalServices.push_back(std::make_pair( 
+        MakeQuoterServiceID(), 
+        TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, appData->SystemPoolId)) 
+    ); 
+} 
+ 
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories)

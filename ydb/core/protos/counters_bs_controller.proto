@@ -1,13 +1,13 @@
 import "ydb/core/protos/counters.proto";
-
-package NKikimr.NBlobStorageController;
-
-option java_package = "ru.yandex.kikimr.proto";
-
-option (TabletTypeName) = "BSController"; // Used as prefix for all counters
-
-enum ESimpleCounters {
-    COUNTER_RESPONSE_TIME_USEC = 0  [(CounterOpts) = {Name: "ResponseTimeMicrosec"}];
+ 
+package NKikimr.NBlobStorageController; 
+ 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
+option (TabletTypeName) = "BSController"; // Used as prefix for all counters 
+ 
+enum ESimpleCounters { 
+    COUNTER_RESPONSE_TIME_USEC = 0  [(CounterOpts) = {Name: "ResponseTimeMicrosec"}]; 
     COUNTER_GROUPS_WITH_SLOTS_ON_FAULTY_DISKS = 1 [(CounterOpts) = {Name: "GroupsWithSlotsOnFaultyDisks"}];
     COUNTER_SLOTS_ON_FAULTY_DISKS = 2 [(CounterOpts) = {Name: "SlotsOnFaultyDisks"}];
     COUNTER_BYTES_ON_FAULTY_DISKS = 3 [(CounterOpts) = {Name: "BytesOnFaultyDisks"}];
@@ -28,9 +28,9 @@ enum ESimpleCounters {
     COUNTER_DISK_SCRUB_CUR_DISKS = 18 [(CounterOpts) = {Name: "CurrentlyScrubbedDisks"}];
     COUNTER_DISK_SCRUB_CUR_GROUPS = 19 [(CounterOpts) = {Name: "CurrentlyScrubbedGroups"}];
     COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS = 20 [(CounterOpts) = {Name: "SelfHealUnreassignableGroups"}];
-}
-
-enum ECumulativeCounters {
+} 
+ 
+enum ECumulativeCounters { 
     COUNTER_REGISTER_NODE_COUNT = 0 [(CounterOpts) = {Name: "RegisterNodeCount"}];
     COUNTER_REGISTER_NODE_USEC  = 1 [(CounterOpts) = {Name: "RegisterNodeMicrosec"}];
     COUNTER_GET_GROUP_COUNT = 2 [(CounterOpts) = {Name: "GetGroupCount"}];
@@ -73,10 +73,10 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_REASSIGN_GROUP_DISK_USEC = 37 [(CounterOpts) = {Name: "ReassignGroupDisk"}];
 
     COUNTER_DISK_SCRUB_QUANTUM_FINISHED = 38 [(CounterOpts) = {Name: "QuantumFinished"}];
-}
-
-enum EPercentileCounters {
-    option (GlobalCounterOpts) = {
+} 
+ 
+enum EPercentileCounters { 
+    option (GlobalCounterOpts) = { 
         Ranges { Value: 0           Name: "(1) < 500 us"        }
         Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
         Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
@@ -95,8 +95,8 @@ enum EPercentileCounters {
         Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
         Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
-    };
-
+    }; 
+ 
     COUNTER_PERCENTILE_SELECT_GROUPS = 0 [(CounterOpts) = {Name: "SelectGroups"}];
 
     COUNTER_FAULTY_USETTLED_PDISKS = 1 [(CounterOpts) = {
@@ -188,9 +188,9 @@ enum EPercentileCounters {
         Ranges { Value: 21600 Name: "21600" }
         Ranges { Value: 86400 Name: "inf"   }
     }];
-}
-
-enum ETxTypes {
+} 
+ 
+enum ETxTypes { 
     TXTYPE_INIT_SCHEME = 0 [(TxTypeOpts) = {Name: "TTxInitScheme"}];
     TXTYPE_MIGRATE = 1 [(TxTypeOpts) = {Name: "TTxMigrate"}];
     TXTYPE_LOAD_EVERYTHING = 2 [(TxTypeOpts) = {Name: "TTxLoadEverything"}];
@@ -214,4 +214,4 @@ enum ETxTypes {
     TXTYPE_SCRUB_QUANTUM_FINISHED = 20 [(TxTypeOpts) = {Name: "TTxScrubQuantumFinished"}];
     TXTYPE_UPDATE_LAST_SEEN_READY = 21 [(TxTypeOpts) = {Name: "TTxUpdateLastSeenReady"}];
     TXTYPE_UPDATE_NODE_DRIVES = 22 [(TxTypeOpts) = {Name: "TTxUpdateNodeDrives"}];
-}
+} 

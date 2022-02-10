@@ -1,14 +1,14 @@
-#include "msgbus_tabletreq.h"
+#include "msgbus_tabletreq.h" 
 #include "msgbus_securereq.h"
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
-namespace {
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
+namespace { 
     const ui64 DefaultTimeout = 90000;
-}
-
+} 
+ 
 class TMessageBusBSAdmGroupReconfigureWipe : public TMessageBusSecureRequest<
         TMessageBusSimpleTabletRequest<
         TMessageBusBSAdmGroupReconfigureWipe,
@@ -53,10 +53,10 @@ public:
 
 IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) {
     const NKikimrClient::TBSAdm &record = static_cast<TBusBSAdm *>(msg.GetMessage())->Record;
-
-    const ui32 targetDomain = record.GetDomain();
-    const ui64 tabletId = MakeBSControllerID(targetDomain);
-
+ 
+    const ui32 targetDomain = record.GetDomain(); 
+    const ui64 tabletId = MakeBSControllerID(targetDomain); 
+ 
     if (record.HasGroupReconfigureWipe()) {
         const auto &x = record.GetGroupReconfigureWipe();
         if (!x.HasLocation()) {
@@ -73,10 +73,10 @@ IActor* CreateMessageBusBSAdm(TBusMessageContext &msg) {
 
         return new TMessageBusBSAdmGroupReconfigureWipe(msg, tabletId, req, true,
             TDuration::MilliSeconds(DefaultTimeout));
-    }
-
-    return nullptr;
-}
-
-}
-}
+    } 
+ 
+    return nullptr; 
+} 
+ 
+} 
+} 

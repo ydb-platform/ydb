@@ -47,7 +47,7 @@ public:
     }
 };
 
-ITransaction* TBlobStorageController::CreateTxInitScheme() {
+ITransaction* TBlobStorageController::CreateTxInitScheme() { 
     return new TTxInitScheme(this);
 }
 

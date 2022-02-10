@@ -68,17 +68,17 @@ message TTabletLogEntry {
     optional uint32 Confirmed = 4;
     optional bool IsSnapshot = 5;
 
-    repeated NKikimrProto.TLogoBlobID GcDiscovered = 6;
-    repeated NKikimrProto.TLogoBlobID GcLeft = 7;
-
-    optional bool IsTotalSnapshot = 8;
-
+    repeated NKikimrProto.TLogoBlobID GcDiscovered = 6; 
+    repeated NKikimrProto.TLogoBlobID GcLeft = 7; 
+ 
+    optional bool IsTotalSnapshot = 8; 
+ 
     // zero log entry
     optional fixed64 ZeroConfirmed = 10;
     optional uint32 ZeroTailSz = 11;
     repeated fixed64 ZeroTailBitmask = 12;
-
-    optional bytes EmbeddedLogBody = 13;
+ 
+    optional bytes EmbeddedLogBody = 13; 
 }
 
 message TTabletChannelInfo {
@@ -99,8 +99,8 @@ message TTabletStorageInfo {
     repeated TTabletChannelInfo Channels = 2;
     optional TTabletTypes.EType TabletType = 3;
     optional uint32 Version = 4;
-    optional uint64 TenantIdOwner = 5;
-    optional uint64 TenantIdLocalId = 6;
+    optional uint64 TenantIdOwner = 5; 
+    optional uint64 TenantIdLocalId = 6; 
 }
 
 message TEvPing {
@@ -127,61 +127,61 @@ message TEvReadLocalBaseResult {
 }
 
 message TEvFollowerAttach {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-}
-
+} 
+ 
 message TEvFollowerUpdate {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-    optional uint64 StreamCounter = 3;
-
-    optional uint32 Generation = 10;
-    optional uint32 Step = 11;
-
-    repeated NKikimrProto.TLogoBlobID ReferencesIds = 12;
-    repeated bytes References = 13;
-    optional bool IsSnapshot = 14;
-    optional bytes Body = 15;
-    optional bytes AuxPayload = 16;
-    optional TTabletStorageInfo TabletStorageInfo = 17; // set only for initial log snapshot
-
-    repeated NKikimrProto.TLogoBlobID GcDiscovered = 20;
-    repeated NKikimrProto.TLogoBlobID GcLeft = 21;
-    optional bool NeedGCApplyAck = 22;
-}
-
+    optional uint64 StreamCounter = 3; 
+ 
+    optional uint32 Generation = 10; 
+    optional uint32 Step = 11; 
+ 
+    repeated NKikimrProto.TLogoBlobID ReferencesIds = 12; 
+    repeated bytes References = 13; 
+    optional bool IsSnapshot = 14; 
+    optional bytes Body = 15; 
+    optional bytes AuxPayload = 16; 
+    optional TTabletStorageInfo TabletStorageInfo = 17; // set only for initial log snapshot 
+ 
+    repeated NKikimrProto.TLogoBlobID GcDiscovered = 20; 
+    repeated NKikimrProto.TLogoBlobID GcLeft = 21; 
+    optional bool NeedGCApplyAck = 22; 
+} 
+ 
 message TEvFollowerGcAck {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-    optional uint32 Generation = 3;
-    optional uint32 Step = 4;
-}
-
+    optional uint32 Generation = 3; 
+    optional uint32 Step = 4; 
+} 
+ 
 message TEvFollowerAuxUpdate {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-    optional uint64 StreamCounter = 3;
-
-    optional bytes AuxPayload = 10;
-}
-
+    optional uint64 StreamCounter = 3; 
+ 
+    optional bytes AuxPayload = 10; 
+} 
+ 
 message TEvFollowerDetach {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-}
-
+} 
+ 
 message TEvFollowerDisconnect {
-    optional fixed64 TabletId = 1;
+    optional fixed64 TabletId = 1; 
     optional uint32 FollowerAttempt = 2;
-    optional uint32 Reason = 3; // todo: enum
-}
-
+    optional uint32 Reason = 3; // todo: enum 
+} 
+ 
 message TEvFollowerRefresh {
-    optional fixed64 TabletId = 1;
-    optional uint32 Generation = 2;
-    optional bool OfflineProtocol = 3;
-}
+    optional fixed64 TabletId = 1; 
+    optional uint32 Generation = 2; 
+    optional bool OfflineProtocol = 3; 
+} 
 
 message TEvGetCounters {
 }

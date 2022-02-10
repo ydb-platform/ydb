@@ -19,16 +19,16 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         Enough
     };
 
-    struct TEvRequest: public TEventLocal<TEvRequest, Request> {
+    struct TEvRequest: public TEventLocal<TEvRequest, Request> { 
     };
 
-    struct TEvResponse: public TEventLocal<TEvResponse, Response> {
+    struct TEvResponse: public TEventLocal<TEvResponse, Response> { 
     };
 
-    struct TEvEnough: public TEventLocal<TEvEnough, Enough> {
+    struct TEvEnough: public TEventLocal<TEvEnough, Enough> { 
     };
 
-    class TBasicResponderActor: public TActorBootstrapped<TBasicResponderActor> {
+    class TBasicResponderActor: public TActorBootstrapped<TBasicResponderActor> { 
         TDeque<TActorId> RespondTo;
 
     public:
@@ -73,8 +73,8 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
             , DoneEvent(doneEvent)
             , ItemsProcessed(itemsProcessed)
             , Finish(false)
-        {
-        }
+        { 
+        } 
 
         void Run() override {
             TActorId child = GetActorContext().Register(new TBasicResponderActor);
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         }
     };
 
-    void Check(THolder<IEventBase> && message) {
+    void Check(THolder<IEventBase> && message) { 
         THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;

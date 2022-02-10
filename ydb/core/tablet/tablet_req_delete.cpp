@@ -86,8 +86,8 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
                     const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
                     ctx.Send(proxyActorID, new TEvStateStorage::TEvDelete(TabletStorageInfo->TabletID));
                 }
-
-                ReplyAndDie(NKikimrProto::OK, ctx);
+ 
+                ReplyAndDie(NKikimrProto::OK, ctx); 
             }
             break;
         default:

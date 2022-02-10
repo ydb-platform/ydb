@@ -1,13 +1,13 @@
-#pragma once
+#pragma once 
 
 #include "flat_local_tx_factory.h"
-#include "minikql_engine_host.h"
-
-namespace NKikimr {
+#include "minikql_engine_host.h" 
+ 
+namespace NKikimr { 
 namespace NMiniKQL {
-
-class TLocalMiniKQLHost : public TEngineHost {
-public:
+ 
+class TLocalMiniKQLHost : public TEngineHost { 
+public: 
     TLocalMiniKQLHost(
             NTable::TDatabase &db,
             TEngineHostCounters& counters,
@@ -17,7 +17,7 @@ public:
         , Factory(factory)
     {}
 
-private:
+private: 
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override
     {
         Y_UNUSED(row);
@@ -41,6 +41,6 @@ private:
 
 private:
     const TMiniKQLFactory* const Factory;
-};
-
-}}
+}; 
+ 
+}} 

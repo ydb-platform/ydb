@@ -419,8 +419,8 @@ public:
         tablet.UpdateResourceUsage(resourceValues);
         tablet.BoundChannels.clear();
         tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tablet.Id, tablet.Type));
-        tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
-
+        tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant(); 
+ 
         UpdateChannelsBinding(tablet, db);
 
         for (const auto& srcFollowerGroup : FollowerGroups) {

@@ -25,8 +25,8 @@ class TSubscriberTest: public NUnitTest::TTestBase {
         Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
-        Y_VERIFY(ev->Get()->Info);
-        auto allReplicas = ev->Get()->Info->SelectAllReplicas();
+        Y_VERIFY(ev->Get()->Info); 
+        auto allReplicas = ev->Get()->Info->SelectAllReplicas(); 
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 

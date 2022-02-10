@@ -156,7 +156,7 @@ namespace NKikimr {
             TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
 
             for (ui32 step = 0; step < maxStep; step++) {
-                TLogoBlobID id(1, 1, step, 0, 0, 0);
+                TLogoBlobID id(1, 1, step, 0, 0, 0); 
                 TKeyLogoBlob key(id);
 
                 ui64 ingressMagic = ui64(1) << ui64(2); // magic
@@ -193,7 +193,7 @@ namespace NKikimr {
             TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
 
             for (ui32 step = 0; step < maxStep; step++) {
-                TLogoBlobID id(1, 1, step, 0, 0, 0);
+                TLogoBlobID id(1, 1, step, 0, 0, 0); 
                 TKeyLogoBlob key(id);
 
                 ui64 ingressMagic1 = ui64(1) << ui64(2); // magic

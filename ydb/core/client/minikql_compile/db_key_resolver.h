@@ -24,14 +24,14 @@ public:
     struct TTable {
         TString TableName;
         TSet<TString> ColumnNames;
-        ui64 RefreshAgainst = 0;
+        ui64 RefreshAgainst = 0; 
     };
 
     struct TTableResult {
         enum EStatus {
             Ok = 0,
-            Error = 1,
-            LookupError = 2
+            Error = 1, 
+            LookupError = 2 
         };
 
         TTableResult(EStatus status, const TString& reason = TString())
@@ -52,7 +52,7 @@ public:
         TAutoPtr<NKikimr::TTableId> TableId;
         ui32 KeyColumnCount = 0;
         TMap<TString, TColumn> Columns;
-        ui64 CacheGeneration = 0;
+        ui64 CacheGeneration = 0; 
     };
 
     using TTableResults = TVector<TTableResult>;
@@ -70,9 +70,9 @@ public:
         };
         static_assert(End < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect End < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvResolveTablesResult : public NActors::TEventLocal<TEvResolveTablesResult, EvResolveTablesResult> {
+        struct TEvResolveTablesResult : public NActors::TEventLocal<TEvResolveTablesResult, EvResolveTablesResult> { 
             TEvResolveTablesResult(TTableResults&& result);
-
+ 
             TTableResults Result;
         };
     };

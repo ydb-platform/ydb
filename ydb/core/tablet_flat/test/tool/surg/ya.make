@@ -1,6 +1,6 @@
 PROGRAM()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     main.cpp

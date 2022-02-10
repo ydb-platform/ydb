@@ -1,6 +1,6 @@
 #pragma once
-#include "defs.h"
-#include "tablet_flat_executor.h"
+#include "defs.h" 
+#include "tablet_flat_executor.h" 
 #include "flat_executor_misc.h"
 #include "flat_store_bundle.h"
 #include "flat_exec_broker.h"
@@ -18,7 +18,7 @@ namespace NTable{
 namespace NTabletFlatExecutor {
 
 class TTableSnapshotContext;
-
+ 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
 enum class EForceCompaction {
@@ -43,7 +43,7 @@ enum class EForcedCompactionState {
     CompactingMem,
 };
 
-struct TCompactionLogicState {
+struct TCompactionLogicState { 
     struct TCompactionTask {
         ui64 TaskId = 0;
         ui32 Priority = 0;
@@ -51,7 +51,7 @@ struct TCompactionLogicState {
         ui64 CompactionId = 0;
     };
 
-    struct TInMem {
+    struct TInMem { 
         ui64 EstimatedSize = 0;
         ui32 Steps = 0;
         ui32 CompactingSteps = 0;
@@ -60,35 +60,35 @@ struct TCompactionLogicState {
         ui64 LogOverheadCount = 0;
         ui64 LogOverheadSize = 0;
         float OverloadFactor = 0.0;
-    };
-
-    struct TSnapRequest {
+    }; 
+ 
+    struct TSnapRequest { 
         const NTable::TSnapEdge Edge;
         TIntrusivePtr<TTableSnapshotContext> Context;
-
+ 
         TSnapRequest(NTable::TSnapEdge edge, TTableSnapshotContext *context)
             : Edge(edge)
-            , Context(context)
-        {}
-
-        ~TSnapRequest();
-    };
-
-    struct TTableInfo {
+            , Context(context) 
+        {} 
+ 
+        ~TSnapRequest(); 
+    }; 
+ 
+    struct TTableInfo { 
         ui32 TableId = Max<ui32>();
 
-        TInMem InMem;
+        TInMem InMem; 
 
         // This identifies currently active strategy type
         // The default value is used as a marker for uninitialized strategies
         NKikimrSchemeOp::ECompactionStrategy StrategyType = NKikimrSchemeOp::CompactionStrategyUnset;
 
         THolder<NTable::ICompactionStrategy> Strategy;
-
+ 
         TDeque<TSnapRequest> SnapRequests;
-
+ 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
-
+ 
         EForcedCompactionState ForcedCompactionState = EForcedCompactionState::None;
         bool ForcedCompactionQueued = false;
 
@@ -102,7 +102,7 @@ struct TCompactionLogicState {
 
         TTableInfo() = default;
 
-        ~TTableInfo();
+        ~TTableInfo(); 
 
         ui32 ComputeBackgroundPriority(const TCompactionLogicState::TCompactionTask &task,
                                                  const TCompactionPolicy::TBackgroundPolicy &policy,
@@ -131,13 +131,13 @@ struct TCompactionLogicState {
 
 class TFlatTableScan;
 
-struct TTableCompactionResult {
+struct TTableCompactionResult { 
     NTable::TCompactionChanges Changes;
     NKikimrSchemeOp::ECompactionStrategy Strategy;
     TVector<TIntrusivePtr<TTableSnapshotContext>> CompleteSnapshots;
     bool MemCompacted = false;
-};
-
+}; 
+ 
 struct TTableCompactionChanges {
     ui32 Table;
     NTable::TCompactionChanges Changes;
@@ -153,14 +153,14 @@ struct TReflectSchemeChangesResult {
     TVector<TStrategyChange> StrategyChanges;
 };
 
-class TCompactionLogic {
+class TCompactionLogic { 
     NUtil::ILogger * const Logger;
     NTable::IResourceBroker * const Broker;
     NTable::ICompactionBackend * const Backend;
     ITimeProvider * const Time = nullptr;
-    TAutoPtr<TCompactionLogicState> State;
+    TAutoPtr<TCompactionLogicState> State; 
     TString TaskNameSuffix;
-
+ 
     // Update background compaction task when priority changes
     // at least by 5% (1/20 of current value).
     static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20;
@@ -192,7 +192,7 @@ public:
         NTable::ICompactionBackend*,
         TAutoPtr<TCompactionLogicState>,
         TString taskSuffix = { });
-    ~TCompactionLogic();
+    ~TCompactionLogic(); 
 
     void Start();
     void Stop();
@@ -206,9 +206,9 @@ public:
     void RequestChanges(ui32 tableId);
     TVector<TTableCompactionChanges> ApplyChanges();
 
-    //
+    // 
     void PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext);
-
+ 
     // Force compaction support
     // See slightly simlified state diagram: jing.yandex-team.ru/files/eivanov89/ForcedCompactionPath.png
     // or img/ForcedCompactionQueue.drawio
@@ -225,7 +225,7 @@ public:
     float GetOverloadFactor() const;
     ui64 GetBackingSize() const;
     ui64 GetBackingSize(ui64 ownerTabletId) const;
-
+ 
     TTableCompactionResult CompleteCompaction(
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params,
@@ -238,7 +238,7 @@ public:
     void BorrowedPart(ui32 tableId, NTable::TPartView partView);
     void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);
     ui32 BorrowedPartLevel();
-
+ 
     TTableCompactionChanges RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts);
 
     void OutputHtml(IOutputStream &out, const NTable::TScheme &scheme, const TCgiParameters& cgi);

@@ -1,36 +1,36 @@
-#pragma once
-#include "defs.h"
-#include "events.h"
-
+#pragma once 
+#include "defs.h" 
+#include "events.h" 
+ 
 #include <ydb/core/protos/base.pb.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
-
-namespace NKikimr {
-
-struct TEvTabletResolver {
-    enum EEv {
-        EvForward = EventSpaceBegin(TKikimrEvents::ES_TABLETRESOLVER),
-        EvTabletProblem,
+ 
+namespace NKikimr { 
+ 
+struct TEvTabletResolver { 
+    enum EEv { 
+        EvForward = EventSpaceBegin(TKikimrEvents::ES_TABLETRESOLVER), 
+        EvTabletProblem, 
         EvNodeProblem,
-
-        EvForwardResult = EvForward + 1 * 512,
-
-        EvEnd
-    };
-
+ 
+        EvForwardResult = EvForward + 1 * 512, 
+ 
+        EvEnd 
+    }; 
+ 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER)");
-
-    struct TEvForward : public TEventLocal<TEvForward, EvForward> {
+ 
+    struct TEvForward : public TEventLocal<TEvForward, EvForward> { 
         ///
         enum class EResolvePrio : ui8 {
             ResPrioDisallow,
             ResPrioAllow,
             ResPrioPrefer,
             ResPrioForce,
-        };
-
+        }; 
+ 
         ///
         struct TResolveFlags {
             EResolvePrio LocalNodePrio;
@@ -104,17 +104,17 @@ struct TEvTabletResolver {
             SysTablet,
         };
 
-        const ui64 TabletID;
-        THolder<IEventHandle> Ev;
+        const ui64 TabletID; 
+        THolder<IEventHandle> Ev; 
         TResolveFlags ResolveFlags;
         EActor Actor;
-
+ 
         TEvForward(ui64 tabletId, IEventHandle *ev, TResolveFlags flags = TResolveFlags(), EActor actor = EActor::Tablet)
-            : TabletID(tabletId)
-            , Ev(ev)
+            : TabletID(tabletId) 
+            , Ev(ev) 
             , ResolveFlags(flags)
             , Actor(actor)
-        {}
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -133,16 +133,16 @@ struct TEvTabletResolver {
                     return sysTablet;
             }
         }
-    };
-
-    struct TEvTabletProblem : public TEventLocal<TEvTabletProblem, EvTabletProblem> {
-        const ui64 TabletID;
+    }; 
+ 
+    struct TEvTabletProblem : public TEventLocal<TEvTabletProblem, EvTabletProblem> { 
+        const ui64 TabletID; 
         const TActorId TabletActor;
-
+ 
         TEvTabletProblem(ui64 tabletId, const TActorId &tabletActor)
-            : TabletID(tabletId)
-            , TabletActor(tabletActor)
-        {}
+            : TabletID(tabletId) 
+            , TabletActor(tabletActor) 
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -151,8 +151,8 @@ struct TEvTabletResolver {
             str << "}";
             return str.Str();
         }
-    };
-
+    }; 
+ 
     struct TEvNodeProblem : public TEventLocal<TEvNodeProblem, EvNodeProblem> {
         const ui32 NodeId;
         const ui64 CacheEpoch;
@@ -170,27 +170,27 @@ struct TEvTabletResolver {
         }
     };
 
-    struct TEvForwardResult : public TEventLocal<TEvForwardResult, EvForwardResult> {
-        const NKikimrProto::EReplyStatus Status;
-
-        ui64 TabletID;
+    struct TEvForwardResult : public TEventLocal<TEvForwardResult, EvForwardResult> { 
+        const NKikimrProto::EReplyStatus Status; 
+ 
+        ui64 TabletID; 
         TActorId TabletActor;
         TActorId Tablet;
         ui64 CacheEpoch;
-
-        TEvForwardResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
-            : Status(status)
-            , TabletID(tabletId)
+ 
+        TEvForwardResult(NKikimrProto::EReplyStatus status, ui64 tabletId) 
+            : Status(status) 
+            , TabletID(tabletId) 
             , CacheEpoch(0)
-        {}
-
+        {} 
+ 
         TEvForwardResult(ui64 tabletId, const TActorId &tabletActor, const TActorId &tablet, ui64 cacheEpoch)
-            : Status(NKikimrProto::OK)
-            , TabletID(tabletId)
-            , TabletActor(tabletActor)
+            : Status(NKikimrProto::OK) 
+            , TabletID(tabletId) 
+            , TabletActor(tabletActor) 
             , Tablet(tablet)
             , CacheEpoch(cacheEpoch)
-        {}
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -202,18 +202,18 @@ struct TEvTabletResolver {
             str << "}";
             return str.Str();
         }
-    };
-};
-
+    }; 
+}; 
+ 
 struct TTabletResolverConfig : public TThrRefBase {
     ui64 TabletCacheLimit;
 
     TTabletResolverConfig()
-        : TabletCacheLimit(500000)
+        : TabletCacheLimit(500000) 
     {}
 };
 
 IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config);
 TActorId MakeTabletResolverID();
-
-}
+ 
+} 

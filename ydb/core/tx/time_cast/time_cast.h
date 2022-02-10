@@ -1,55 +1,55 @@
-#pragma once
+#pragma once 
 
-#include "defs.h"
+#include "defs.h" 
 
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/tx_mediator_timecast.pb.h>
-
+ 
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-
-class TMediatorTimecastEntry : public TThrRefBase {
-    TAtomic Step;
-public:
-    TMediatorTimecastEntry()
-        : Step(0)
-    {}
-
-    ui64 Get(ui64 tabletId) const;
-    void Update(ui64 step, ui64 *exemption, ui64 exsz);
-};
-
-struct TEvMediatorTimecast {
-    enum EEv {
-        // local part
-        EvRegisterTablet = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATORTIMECAST),
-        EvUnregisterTablet,
+namespace NKikimr { 
+ 
+class TMediatorTimecastEntry : public TThrRefBase { 
+    TAtomic Step; 
+public: 
+    TMediatorTimecastEntry() 
+        : Step(0) 
+    {} 
+ 
+    ui64 Get(ui64 tabletId) const; 
+    void Update(ui64 step, ui64 *exemption, ui64 exsz); 
+}; 
+ 
+struct TEvMediatorTimecast { 
+    enum EEv { 
+        // local part 
+        EvRegisterTablet = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATORTIMECAST), 
+        EvUnregisterTablet, 
         EvWaitPlanStep,
-
-        EvRegisterTabletResult = EvRegisterTablet + 1 * 512,
+ 
+        EvRegisterTabletResult = EvRegisterTablet + 1 * 512, 
         EvNotifyPlanStep,
-
-        // mediator part
-        EvWatch = EvRegisterTablet + 2 * 512,
-
-        EvUpdate = EvRegisterTablet + 3 * 512,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATORTIMECAST), "expected EvEnd < EventSpaceEnd()");
-
-    struct TEvRegisterTablet : public TEventLocal<TEvRegisterTablet, EvRegisterTablet> {
-        const ui64 TabletId;
+ 
+        // mediator part 
+        EvWatch = EvRegisterTablet + 2 * 512, 
+ 
+        EvUpdate = EvRegisterTablet + 3 * 512, 
+ 
+        EvEnd 
+    }; 
+ 
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATORTIMECAST), "expected EvEnd < EventSpaceEnd()"); 
+ 
+    struct TEvRegisterTablet : public TEventLocal<TEvRegisterTablet, EvRegisterTablet> { 
+        const ui64 TabletId; 
         NKikimrSubDomains::TProcessingParams ProcessingParams;
-
+ 
 
         TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams &processing)
-            : TabletId(tabletId)
+            : TabletId(tabletId) 
             , ProcessingParams(processing)
-        {}
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -61,16 +61,16 @@ struct TEvMediatorTimecast {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
-        const ui64 TabletId;
-        const TIntrusivePtr<TMediatorTimecastEntry> Entry;
-
-        TEvRegisterTabletResult(ui64 tabletId, TIntrusivePtr<TMediatorTimecastEntry> &entry)
-            : TabletId(tabletId)
-            , Entry(entry)
-        {}
+    }; 
+ 
+    struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> { 
+        const ui64 TabletId; 
+        const TIntrusivePtr<TMediatorTimecastEntry> Entry; 
+ 
+        TEvRegisterTabletResult(ui64 tabletId, TIntrusivePtr<TMediatorTimecastEntry> &entry) 
+            : TabletId(tabletId) 
+            , Entry(entry) 
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -84,14 +84,14 @@ struct TEvMediatorTimecast {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvUnregisterTablet : public TEventLocal<TEvUnregisterTablet, EvUnregisterTablet> {
-        const ui64 TabletId;
-
-        TEvUnregisterTablet(ui64 tabletId)
-            : TabletId(tabletId)
-        {}
+    }; 
+ 
+    struct TEvUnregisterTablet : public TEventLocal<TEvUnregisterTablet, EvUnregisterTablet> { 
+        const ui64 TabletId; 
+ 
+        TEvUnregisterTablet(ui64 tabletId) 
+            : TabletId(tabletId) 
+        {} 
 
         TString ToString() const {
             TStringStream str;
@@ -100,8 +100,8 @@ struct TEvMediatorTimecast {
             str << "}";
             return str.Str();
         }
-    };
-
+    }; 
+ 
     struct TEvWaitPlanStep : public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> {
         const ui64 TabletId;
         const ui64 PlanStep;
@@ -138,14 +138,14 @@ struct TEvMediatorTimecast {
         }
     };
 
-    struct TEvWatch : public TEventPB<TEvWatch, NKikimrTxMediatorTimecast::TEvWatch, EvWatch> {
-        TEvWatch()
-        {}
-
-        TEvWatch(ui32 bucket)
-        {
-            Record.AddBucket(bucket);
-        }
+    struct TEvWatch : public TEventPB<TEvWatch, NKikimrTxMediatorTimecast::TEvWatch, EvWatch> { 
+        TEvWatch() 
+        {} 
+ 
+        TEvWatch(ui32 bucket) 
+        { 
+            Record.AddBucket(bucket); 
+        } 
 
         TString ToString() const {
             TStringStream str;
@@ -156,9 +156,9 @@ struct TEvMediatorTimecast {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
+    }; 
+ 
+    struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> { 
         TString ToString() const {
             TStringStream str;
             str << "{TEvUpdate ";
@@ -177,13 +177,13 @@ struct TEvMediatorTimecast {
             str << "}";
             return str.Str();
         }
-    };
-};
-
-IActor* CreateMediatorTimecastProxy();
-
+    }; 
+}; 
+ 
+IActor* CreateMediatorTimecastProxy(); 
+ 
 inline TActorId MakeMediatorTimecastProxyID() {
     return TActorId(0, TStringBuf("txmdtimecast"));
-}
-
-}
+} 
+ 
+} 

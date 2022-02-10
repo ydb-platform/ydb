@@ -72,7 +72,7 @@ static constexpr TTypeId YqlIds[] = {
     DyNumber,
 };
 
-// types must be defined in GetValueHash and CompareTypedCells
+// types must be defined in GetValueHash and CompareTypedCells 
 constexpr bool IsYqlTypeImpl(TTypeId typeId, ui32 i) {
     return i == Y_ARRAY_SIZE(YqlIds) ? false :
         YqlIds[i] == typeId ? true : IsYqlTypeImpl(typeId, i + 1);

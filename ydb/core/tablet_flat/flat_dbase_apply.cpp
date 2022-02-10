@@ -118,8 +118,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= SetExecutorLimitInFlyTx(delta.GetExecutorLimitInFlyTx());
         if (delta.HasExecutorResourceProfile())
             changes |= SetExecutorResourceProfile(delta.GetExecutorResourceProfile());
-        if (delta.HasExecutorLogFastCommitTactic())
-            changes |= SetExecutorLogFastCommitTactic(delta.GetExecutorLogFastCommitTactic());
+        if (delta.HasExecutorLogFastCommitTactic()) 
+            changes |= SetExecutorLogFastCommitTactic(delta.GetExecutorLogFastCommitTactic()); 
     } else if (action == TAlterRecord::SetCompactionPolicy) {
         changes = SetCompactionPolicy(table, delta.GetCompactionPolicy());
     } else {
@@ -245,11 +245,11 @@ bool TSchemeModifier::SetExecutorAllowLogBatching(bool allow)
     return std::exchange(Scheme.Executor.AllowLogBatching, allow) != allow;
 }
 
-bool TSchemeModifier::SetExecutorLogFastCommitTactic(bool allow)
-{
-    return std::exchange(Scheme.Executor.LogFastTactic, allow) != allow;
-}
-
+bool TSchemeModifier::SetExecutorLogFastCommitTactic(bool allow) 
+{ 
+    return std::exchange(Scheme.Executor.LogFastTactic, allow) != allow; 
+} 
+ 
 bool TSchemeModifier::SetExecutorLogFlushPeriod(TDuration delay)
 {
     return std::exchange(Scheme.Executor.LogFlushPeriod, delay) != delay;

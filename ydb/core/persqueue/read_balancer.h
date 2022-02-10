@@ -102,7 +102,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     };
 
 
-    struct TTxPreInit : public ITransaction {
+    struct TTxPreInit : public ITransaction { 
         TPersQueueReadBalancer * const Self;
 
         TTxPreInit(TPersQueueReadBalancer *self)
@@ -117,7 +117,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     friend struct TTxPreInit;
 
 
-    struct TTxInit : public ITransaction {
+    struct TTxInit : public ITransaction { 
         TPersQueueReadBalancer * const Self;
 
         TTxInit(TPersQueueReadBalancer *self)
@@ -145,7 +145,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ui64 Idx;
     };
 
-    struct TTxWrite : public ITransaction {
+    struct TTxWrite : public ITransaction { 
         TPersQueueReadBalancer * const Self;
         TVector<ui32> DeletedPartitions;
         TVector<std::pair<ui32, TPartInfo>> NewPartitions;

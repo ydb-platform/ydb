@@ -65,11 +65,11 @@ namespace NActors {
         if (Poller)
             Poller->Stop();
 
-        if (MailboxTable) {
-            for (ui32 round = 0; !MailboxTable->Cleanup(); ++round)
-                Y_VERIFY(round < 10, "cyclic event/actor spawn while trying to shutdown actorsystem stub");
-        }
-
+        if (MailboxTable) { 
+            for (ui32 round = 0; !MailboxTable->Cleanup(); ++round) 
+                Y_VERIFY(round < 10, "cyclic event/actor spawn while trying to shutdown actorsystem stub"); 
+        } 
+ 
         if (ActorSystem)
             ActorSystem->Stop();
 
@@ -427,10 +427,10 @@ namespace NActors {
         void Shutdown() override {
         }
 
-        bool Cleanup() override {
-            return true;
-        }
-
+        bool Cleanup() override { 
+            return true; 
+        } 
+ 
         // generic
         TAffinity* Affinity() const override {
             Y_FAIL();
@@ -1574,7 +1574,7 @@ namespace NActors {
             node->ActorToActorId[recipientActor] = ev->GetRecipientRewrite();
             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), actorId);
             TActivationContext *prevTlsActivationContext = TlsActivationContext;
-            TlsActivationContext = &ctx;
+            TlsActivationContext = &ctx; 
             CurrentRecipient = actorId;
             {
                 TInverseGuard<TMutex> inverseGuard(Mutex);

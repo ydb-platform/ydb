@@ -74,7 +74,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev) {
+ITransaction* THive::CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev) { 
     return new TTxUpdateTabletMetrics(ev, this);
 }
 

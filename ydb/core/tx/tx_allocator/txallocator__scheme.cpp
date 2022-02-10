@@ -26,7 +26,7 @@ struct TTxAllocator::TTxSchema: public TTransactionBase<TTxAllocator> {
     }
 };
 
-ITransaction* TTxAllocator::CreateTxSchema() {
+ITransaction* TTxAllocator::CreateTxSchema() { 
     return new TTxSchema(this);
 }
 

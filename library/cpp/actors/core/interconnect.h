@@ -1,14 +1,14 @@
-#pragma once
+#pragma once 
 
 #include "events.h"
 #include "event_local.h"
 #include <library/cpp/actors/protos/interconnect.pb.h>
 #include <util/string/cast.h>
 #include <util/string/builder.h>
-
-namespace NActors {
+ 
+namespace NActors { 
     class TNodeLocation {
-    public:
+    public: 
         struct TKeys {
             enum E : int {
                 DataCenter = 10,
@@ -113,21 +113,21 @@ namespace NActors {
         friend bool operator <=(const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) <= 0; }
         friend bool operator > (const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) >  0; }
         friend bool operator >=(const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) >= 0; }
-    };
+    }; 
 
-    struct TEvInterconnect {
-        enum EEv {
-            EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT),
-            EvResolveNode, // resolve info about node (internal)
+    struct TEvInterconnect { 
+        enum EEv { 
+            EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT), 
+            EvResolveNode, // resolve info about node (internal) 
             EvNodeAddress, // node info (internal)
-            EvConnectNode, // request proxy to establish connection (like: we would send something there soon)
-            EvAcceptIncoming,
-            EvNodeConnected,    // node connected notify
-            EvNodeDisconnected, // node disconnected notify
-            EvRegisterNode,
-            EvRegisterNodeResult,
-            EvListNodes,
-            EvNodesInfo,
+            EvConnectNode, // request proxy to establish connection (like: we would send something there soon) 
+            EvAcceptIncoming, 
+            EvNodeConnected,    // node connected notify 
+            EvNodeDisconnected, // node disconnected notify 
+            EvRegisterNode, 
+            EvRegisterNodeResult, 
+            EvListNodes, 
+            EvNodesInfo, 
             EvDisconnect,
             EvGetNode,
             EvNodeInfo,
@@ -135,48 +135,48 @@ namespace NActors {
             EvCloseInputSession,
             EvPoisonSession,
             EvTerminate,
-            EvEnd
-        };
+            EvEnd 
+        }; 
 
-        enum ESubscribes {
-            SubConnected,
-            SubDisconnected,
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)");
-
-        struct TEvResolveNode;
+        enum ESubscribes { 
+            SubConnected, 
+            SubDisconnected, 
+        }; 
+ 
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)"); 
+ 
+        struct TEvResolveNode; 
         struct TEvNodeAddress;
+ 
+        struct TEvConnectNode: public TEventBase<TEvConnectNode, EvConnectNode> { 
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvConnectNode, "TEvInterconnect::TEvConnectNode") 
+        }; 
+ 
+        struct TEvAcceptIncoming; 
+ 
+        struct TEvNodeConnected: public TEventLocal<TEvNodeConnected, EvNodeConnected> { 
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeConnected, "TEvInterconnect::TEvNodeConnected") 
+            TEvNodeConnected(ui32 node) noexcept 
+                : NodeId(node) 
+            { 
+            } 
+            const ui32 NodeId; 
+        }; 
 
-        struct TEvConnectNode: public TEventBase<TEvConnectNode, EvConnectNode> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvConnectNode, "TEvInterconnect::TEvConnectNode")
-        };
+        struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> { 
+            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeDisconnected, "TEvInterconnect::TEvNodeDisconnected") 
+            TEvNodeDisconnected(ui32 node) noexcept 
+                : NodeId(node) 
+            { 
+            } 
+            const ui32 NodeId; 
+        }; 
 
-        struct TEvAcceptIncoming;
+        struct TEvRegisterNode; 
+        struct TEvRegisterNodeResult; 
 
-        struct TEvNodeConnected: public TEventLocal<TEvNodeConnected, EvNodeConnected> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeConnected, "TEvInterconnect::TEvNodeConnected")
-            TEvNodeConnected(ui32 node) noexcept
-                : NodeId(node)
-            {
-            }
-            const ui32 NodeId;
-        };
-
-        struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
-            DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeDisconnected, "TEvInterconnect::TEvNodeDisconnected")
-            TEvNodeDisconnected(ui32 node) noexcept
-                : NodeId(node)
-            {
-            }
-            const ui32 NodeId;
-        };
-
-        struct TEvRegisterNode;
-        struct TEvRegisterNodeResult;
-
-        struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
-        };
+        struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> { 
+        }; 
 
         struct TNodeInfo {
             ui32 NodeId;
@@ -211,13 +211,13 @@ namespace NActors {
 
         struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
             TVector<TNodeInfo> Nodes;
-
-            const TNodeInfo* GetNodeInfo(ui32 nodeId) const {
-                for (const auto& x : Nodes) {
-                    if (x.NodeId == nodeId)
-                        return &x;
-                }
-                return nullptr;
+ 
+            const TNodeInfo* GetNodeInfo(ui32 nodeId) const { 
+                for (const auto& x : Nodes) { 
+                    if (x.NodeId == nodeId) 
+                        return &x; 
+                } 
+                return nullptr; 
             }
         };
 
@@ -252,4 +252,4 @@ namespace NActors {
 
         struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {};
     };
-}
+} 

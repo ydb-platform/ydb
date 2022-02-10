@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
     struct TMiniKQLFactory : NTabletFlatExecutor::IMiniKQLFactory {
-        using ITransaction = NTabletFlatExecutor::ITransaction;
+        using ITransaction = NTabletFlatExecutor::ITransaction; 
 
         TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalMKQL::TPtr&) override;
         TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalSchemeTx::TPtr&) override;

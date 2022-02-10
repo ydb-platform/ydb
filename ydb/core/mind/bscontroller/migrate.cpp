@@ -209,7 +209,7 @@ public:
     }
 };
 
-ITransaction* TBlobStorageController::CreateTxMigrate() {
+ITransaction* TBlobStorageController::CreateTxMigrate() { 
     return new TTxMigrate(this);
 }
 

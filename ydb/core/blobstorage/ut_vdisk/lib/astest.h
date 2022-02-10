@@ -31,7 +31,7 @@ public:
     }
 
 private:
-    TProgramShouldContinue KikimrShouldContinue;
+    TProgramShouldContinue KikimrShouldContinue; 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     std::unique_ptr<NActors::TMon> Monitoring;
     std::unique_ptr<NKikimr::TAppData> AppData;

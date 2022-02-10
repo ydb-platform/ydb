@@ -37,14 +37,14 @@ struct TBlobStorageErasureParameters {
 
 static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesCount>
         BlobStorageGroupErasureSpeciesParameters{{
-    {0} // 0 = ErasureSpicies::ErasureNone
-    ,{1} // 1 = ErasureSpicies::ErasureMirror3
-    ,{1} // 2 = ErasureSpicies::Erasure3Plus1Block
-    ,{1} // 3 = ErasureSpicies::Erasure3Plus1Stipe
-    ,{2} // 4 = ErasureSpicies::Erasure4Plus2Block
-    ,{2} // 5 = ErasureSpicies::Erasure3Plus2Block
-    ,{2} // 6 = ErasureSpicies::Erasure4Plus2Stipe
-    ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe
+    {0} // 0 = ErasureSpicies::ErasureNone 
+    ,{1} // 1 = ErasureSpicies::ErasureMirror3 
+    ,{1} // 2 = ErasureSpicies::Erasure3Plus1Block 
+    ,{1} // 3 = ErasureSpicies::Erasure3Plus1Stipe 
+    ,{2} // 4 = ErasureSpicies::Erasure4Plus2Block 
+    ,{2} // 5 = ErasureSpicies::Erasure3Plus2Block 
+    ,{2} // 6 = ErasureSpicies::Erasure4Plus2Stipe 
+    ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe 
     ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2
     ,{6} // 9 = ErasureSpicies::ErasireMirror3dc
     ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block

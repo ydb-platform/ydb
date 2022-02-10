@@ -14,21 +14,21 @@ namespace NDataShard {
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
 
 TPipeline::TPipeline(TDataShard * self)
-    : Self(self)
+    : Self(self) 
     , DepTracker(self)
     , ActivePlannedOpsLogicallyCompleteEnd(ActivePlannedOps.end())
     , ActivePlannedOpsLogicallyIncompleteEnd(ActivePlannedOps.end())
-    , LastPlannedTx(0, 0)
-    , LastCompleteTx(0, 0)
-    , UtmostCompleteTx(0, 0)
-    , KeepSchemaStep(0)
-    , LastCleanupTime(0)
-    , SchemaTx(nullptr)
-{
-    for (ui32 i = 0; i < static_cast<ui32>(EExecutionUnitKind::Count); ++i)
-        ExecutionUnits[i] = CreateExecutionUnit(static_cast<EExecutionUnitKind>(i), *Self, *this);
-}
-
+    , LastPlannedTx(0, 0) 
+    , LastCompleteTx(0, 0) 
+    , UtmostCompleteTx(0, 0) 
+    , KeepSchemaStep(0) 
+    , LastCleanupTime(0) 
+    , SchemaTx(nullptr) 
+{ 
+    for (ui32 i = 0; i < static_cast<ui32>(EExecutionUnitKind::Count); ++i) 
+        ExecutionUnits[i] = CreateExecutionUnit(static_cast<EExecutionUnitKind>(i), *Self, *this); 
+} 
+ 
 TPipeline::~TPipeline()
 {
     for (auto &pr : ActiveOps) {
@@ -754,7 +754,7 @@ void TPipeline::RemoveInReadSets(TOperation::TPtr op,
 }
 
 void TPipeline::RemoveTx(TStepOrder stepTxId) {
-    // Optimization: faster Alter. Do not wait if no TxInFly.
+    // Optimization: faster Alter. Do not wait if no TxInFly. 
     // Can't persist KeepSchemaStep here. TxInFly must be restored on init.
     if (Self->TransQueue.TxInFly() == 0) {
         KeepSchemaStep = LastPlannedTx.Step;
@@ -861,7 +861,7 @@ void TPipeline::SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId) {
     Self->PersistSys(db, Schema::Sys_LastPlannedTx, LastPlannedTx.TxId);
 }
 
-void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx) {
+void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx) { 
     NIceDb::TNiceDb db(txc.DB);
     using Schema = TDataShard::Schema;
 
@@ -890,7 +890,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
 
     while (!DelayedAcks.empty()
            && DelayedAcks.begin()->first.Step <= OutdatedReadSetStep())
-    {
+    { 
         auto &pr = *DelayedAcks.begin();
 
         LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
@@ -948,7 +948,7 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
-ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
+ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const 
 {
     auto &plan = Self->TransQueue.GetPlan(kind);
     if (plan.empty())
@@ -961,18 +961,18 @@ ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
     return 0;
 }
 
-ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const
+ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const 
 {
-    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep);
-}
-
-ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
-{
-    return GetTxCompleteLag(EOperationKind::ReadTable, timecastStep);
-}
-
+    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep); 
+} 
+ 
+ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const 
+{ 
+    return GetTxCompleteLag(EOperationKind::ReadTable, timecastStep); 
+} 
+ 
 void TPipeline::ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransactionContext &txc, const TActorContext &ctx)
-{
+{ 
     NIceDb::TNiceDb db(txc.DB);
     SetProposed(op->GetTxId(), op->GetTarget());
     PreserveSchema(db, op->GetMaxStep());
@@ -1098,13 +1098,13 @@ void TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
 }
 
 void TPipeline::SetProposed(ui64 txId, const TActorId& actorId) {
-    auto it = DataTxCache.find(txId);
-    if (it != DataTxCache.end()) {
-        it->second->SetSource(actorId);
-    }
-}
-
-
+    auto it = DataTxCache.find(txId); 
+    if (it != DataTxCache.end()) { 
+        it->second->SetSource(actorId); 
+    } 
+} 
+ 
+ 
 void TPipeline::ForgetUnproposedTx(ui64 txId) {
     auto it = DataTxCache.find(txId);
     if (it != DataTxCache.end() && !it->second->IsProposed()) {
@@ -1326,7 +1326,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     return tx;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx) 
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx);
     Y_VERIFY(dataTx->Ready());
@@ -1336,7 +1336,7 @@ void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, co
         dataTx->ExtractKeys(false);
 }
 
-EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx)
+EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx) 
 {
     Y_VERIFY(!op->IsExecutionPlanFinished());
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());

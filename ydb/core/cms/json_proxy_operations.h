@@ -18,17 +18,17 @@ public:
     ui64 GetTabletId(const TActorContext &) const override
     {
         const TCgiParameters &cgi = this->RequestEvent->Get()->Request.GetParams();
-        ui64 tabletId = 0;
-
-        if (cgi.Has("tabletid")) {
-            TryFromString(cgi.Get("tabletid"), tabletId);
-        }
-
+        ui64 tabletId = 0; 
+ 
+        if (cgi.Has("tabletid")) { 
+            TryFromString(cgi.Get("tabletid"), tabletId); 
+        } 
+ 
         if (!tabletId && cgi.Has("followerid")) {
             TryFromString(cgi.Get("followerid"), tabletId);
-        }
-
-        return tabletId;
+        } 
+ 
+        return tabletId; 
     }
 
     TString GetTabletName() const override

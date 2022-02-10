@@ -64,7 +64,7 @@ private:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);

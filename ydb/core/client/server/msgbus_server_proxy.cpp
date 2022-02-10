@@ -1,4 +1,4 @@
-#include "msgbus_server.h"
+#include "msgbus_server.h" 
 #include "msgbus_server_request.h"
 #include "msgbus_server_proxy.h"
 #include "msgbus_securereq.h"
@@ -15,15 +15,15 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
 template <typename ResponseType>
 class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>>;
     THolder<TBusSchemeDescribe> Request;
-    NYql::TIssueManager IssueManager;
+    NYql::TIssueManager IssueManager; 
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         auto &mutableRecord = *ev->Get()->MutableRecord();
@@ -34,26 +34,26 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
             response->Record.SetStatus(MSTATUS_OK);
             response->Record.SetPath(mutableRecord.GetPath());
             response->Record.MutablePathDescription()->Swap(mutableRecord.MutablePathDescription());
-            response->Record.SetStatusCode(NKikimrIssues::TStatusIds::SUCCESS);
+            response->Record.SetStatusCode(NKikimrIssues::TStatusIds::SUCCESS); 
         } else {
             response->Record.SetStatus(MSTATUS_ERROR);
             response->Record.SetErrorReason(mutableRecord.GetReason());
-
-            switch (status) {
+ 
+            switch (status) { 
             case NKikimrScheme::StatusPathDoesNotExist:
-                response->Record.SetStatusCode(NKikimrIssues::TStatusIds::PATH_NOT_EXIST);
-                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::PATH_NOT_EXIST));
-                break;
-            default:
-                response->Record.SetStatusCode(NKikimrIssues::TStatusIds::ERROR);
-                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR));
-                break;
-            }
+                response->Record.SetStatusCode(NKikimrIssues::TStatusIds::PATH_NOT_EXIST); 
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::PATH_NOT_EXIST)); 
+                break; 
+            default: 
+                response->Record.SetStatusCode(NKikimrIssues::TStatusIds::ERROR); 
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)); 
+                break; 
+            } 
         }
-
-        if (IssueManager.GetIssues())
-            IssuesToMessage(IssueManager.GetIssues(), response->Record.MutableIssues());
-
+ 
+        if (IssueManager.GetIssues()) 
+            IssuesToMessage(IssueManager.GetIssues(), response->Record.MutableIssues()); 
+ 
         TBase::SendReplyAutoPtr(response);
         Request.Destroy();
         this->Die(ctx);
@@ -61,7 +61,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_DESCRIBE; }
-
+ 
     TMessageBusServerFlatDescribeRequest(TEvBusProxy::TEvFlatDescribeRequest* msg)
         : TBase(msg->MsgContext)
         , Request(static_cast<TBusSchemeDescribe*>(msg->MsgContext.ReleaseMessage()))
@@ -105,17 +105,17 @@ IActor* CreateMessageBusServerProxy(
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
 ) {
     return new TMessageBusServerProxy(server, pqReadSessionsInfoWorkerFactory);
-}
-
+} 
+ 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
-                                                 const NKikimrTxUserProxy::TEvProposeTransactionStatus &result) {
+                                                 const NKikimrTxUserProxy::TEvProposeTransactionStatus &result) { 
     TAutoPtr<TBusResponse> response(new TBusResponse());
     response->Record.SetStatus(status);
     response->Record.SetProxyErrorCode(result.GetStatus());
 
-    response->Record.SetStatusCode(result.GetStatusCode());
-    response->Record.MutableIssues()->CopyFrom(result.GetIssues());
-
+    response->Record.SetStatusCode(result.GetStatusCode()); 
+    response->Record.MutableIssues()->CopyFrom(result.GetIssues()); 
+ 
     if (result.HasExecutionEngineStatus())
         response->Record.SetExecutionEngineStatus(result.GetExecutionEngineStatus());
     if (result.HasExecutionEngineResponseStatus())
@@ -147,7 +147,7 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
         response->Record.MutableProxyTimings()->CopyFrom(result.GetTimings());
 
     return response.Release();
-}
+} 
 
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
 

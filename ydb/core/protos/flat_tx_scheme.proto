@@ -68,8 +68,8 @@ message TEvDescribeSchemeResult {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
-    optional fixed64 PathId = 6;
+    optional fixed64 PathOwner = 5; 
+    optional fixed64 PathId = 6; 
 
     optional string LastExistedPrefixPath = 7;
     optional fixed64 LastExistedPrefixPathId = 8;

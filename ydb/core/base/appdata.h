@@ -1,8 +1,8 @@
-#pragma once
+#pragma once 
 
-#include "defs.h"
+#include "defs.h" 
 #include "channel_profiles.h"
-#include "domain.h"
+#include "domain.h" 
 #include "feature_flags.h"
 #include "nameservice.h"
 #include "tablet_types.h"
@@ -25,21 +25,21 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 namespace NActors {
     class TMon;
 }
 
-namespace NMonitoring {
-    class TBusNgMonPage;
-}
-
+namespace NMonitoring { 
+    class TBusNgMonPage; 
+} 
+ 
 namespace NYdb {
     class TDriver;
 }
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 namespace NScheme {
     class TTypeRegistry;
 }
@@ -63,16 +63,16 @@ namespace NPQ {
 
 class TFormatFactory;
 
-struct TAppData {
-    static const ui32 MagicTag = 0x2991AAF8;
-    const ui32 Magic;
-
-    const ui32 SystemPoolId;
-    const ui32 UserPoolId;
-    const ui32 IOPoolId;
-    const ui32 BatchPoolId;
+struct TAppData { 
+    static const ui32 MagicTag = 0x2991AAF8; 
+    const ui32 Magic; 
+ 
+    const ui32 SystemPoolId; 
+    const ui32 UserPoolId; 
+    const ui32 IOPoolId; 
+    const ui32 BatchPoolId; 
     TMap<TString, ui32> ServicePools;
-
+ 
     const NScheme::TTypeRegistry* TypeRegistry = nullptr;
     const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
@@ -103,7 +103,7 @@ struct TAppData {
         TTabletTypes::EType TestShard;
         TTabletTypes::EType SequenceShard;
         TTabletTypes::EType ReplicationController;
-
+ 
         TDefaultTabletTypes();
     };
 
@@ -111,19 +111,19 @@ struct TAppData {
 
     static TIntrusivePtr<IRandomProvider> RandomProvider;
     static TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<TDomainsInfo> DomainsInfo;
+    TIntrusivePtr<TDomainsInfo> DomainsInfo; 
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
     TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;
 
-    ui64 ProxySchemeCacheNodes;
-    ui64 ProxySchemeCacheDistrNodes;
-
-    ui64 CompilerSchemeCachePaths;
-    ui64 CompilerSchemeCacheTables;
-
+    ui64 ProxySchemeCacheNodes; 
+    ui64 ProxySchemeCacheDistrNodes; 
+ 
+    ui64 CompilerSchemeCachePaths; 
+    ui64 CompilerSchemeCacheTables; 
+ 
     NActors::TMon* Mon;
     NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TBusNgMonPage* BusMonPage;
+    NMonitoring::TBusNgMonPage* BusMonPage; 
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
@@ -156,9 +156,9 @@ struct TAppData {
     TString AllAuthenticatedUsers;
     TResourceProfilesPtr ResourceProfiles;
 
-    TProgramShouldContinue * const KikimrShouldContinue;
+    TProgramShouldContinue * const KikimrShouldContinue; 
     bool EnableIntrospection = true;
-
+ 
     // Used to allow column families for testing
     bool AllowColumnFamiliesForTest = false;
     bool AllowPrivateTableDescribeForTest = false;
@@ -177,22 +177,22 @@ struct TAppData {
             const NScheme::TTypeRegistry* typeRegistry,
             const NMiniKQL::IFunctionRegistry* functionRegistry,
             const TFormatFactory* formatFactory,
-            TProgramShouldContinue *kikimrShouldContinue);
-};
-
+            TProgramShouldContinue *kikimrShouldContinue); 
+}; 
+ 
 inline TAppData* AppData(TActorSystem* actorSystem) {
     Y_VERIFY_DEBUG(actorSystem);
     TAppData * const x = actorSystem->AppData<TAppData>();
     Y_VERIFY_DEBUG(x && x->Magic == TAppData::MagicTag);
-    return x;
-}
-
+    return x; 
+} 
+ 
 inline TAppData* AppData() {
     return AppData(TlsActivationContext->ExecutorThread.ActorSystem);
 }
 
-inline TAppData* AppData(const TActorContext &ctx) {
+inline TAppData* AppData(const TActorContext &ctx) { 
     return AppData(ctx.ActorSystem());
-}
-
+} 
+ 
 } // NKikimr

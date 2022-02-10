@@ -108,10 +108,10 @@ public:
         return TCoAtom(node);
     }
 
-    TParent& Build() {
+    TParent& Build() { 
         return this->NGenerated::TCoAtomBuilder<TParent>::Build();
-    }
-
+    } 
+ 
     TParent& Build(const TStringBuf& value, ui32 flags = TNodeFlags::ArbitraryContent) {
         this->ValueHolder = this->Ctx.AppendString(value);
         this->Flags = flags;

@@ -1,5 +1,5 @@
 #include "kesus_quoter_proxy.h"
-#include "quoter_service_impl.h"
+#include "quoter_service_impl.h" 
 #include "debug_info.h"
 
 #include <ydb/core/base/counters.h>
@@ -13,10 +13,10 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-#include <util/generic/map.h>
-#include <util/generic/hash.h>
+#include <util/generic/map.h> 
+#include <util/generic/hash.h> 
 #include <util/system/types.h>
-
+ 
 #include <limits>
 #include <cmath>
 
@@ -37,20 +37,20 @@
 #define KESUS_PROXY_LOG_WARN(stream) PLOG_WARN(LogPrefix << stream)
 #define KESUS_PROXY_LOG_ERROR(stream) PLOG_ERROR(LogPrefix << stream)
 
-namespace NKikimr {
-namespace NQuoter {
-
+namespace NKikimr { 
+namespace NQuoter { 
+ 
 static constexpr double FADING_ALLOCATION_COEFFICIENT = 0.999;
 static constexpr double PREFETCH_COEFFICIENT_DEFAULT = 0.20;
 static constexpr double PREFETCH_WATERMARK_DEFAULT = 0.75;
 
 using NKesus::TEvKesus;
 
-class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
-    struct TResourceState {
-        const TString Resource;
+class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> { 
+    struct TResourceState { 
+        const TString Resource; 
         ui64 ResId = Max<ui64>();
-
+ 
         double Available = 0;
         double QueueWeight = 0;
         double ResourceBucketMaxSize = 0;
@@ -59,7 +59,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         bool ProxySessionWasSent = false;
         TInstant LastAllocated = TInstant::Zero();
         std::pair<TDuration, double> AverageAllocationParams = {TDuration::Zero(), 0.0};
-
+ 
         NKikimrKesus::TStreamingQuoterResource Props;
         bool InitedProps = false;
 
@@ -144,7 +144,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         explicit TResourceState(const TString& resource, const NMonitoring::TDynamicCounterPtr& quoterCounters)
             : Resource(resource)
             , Counters(resource, quoterCounters)
-        {}
+        {} 
 
         void AddUpdate(TEvQuota::TEvProxyUpdate& ev) const {
             TVector<TEvQuota::TUpdateTick> update;
@@ -211,8 +211,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 *Counters.Accumulated = static_cast<i64>(available);
             }
         }
-    };
-
+    }; 
+ 
     struct TEvPrivate {
         enum EEv {
             EvOfflineResourceAllocation = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -242,28 +242,28 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     };
 
     const TActorId QuoterServiceId;
-    const ui64 QuoterId;
-    const TVector<TString> Path;
+    const ui64 QuoterId; 
+    const TVector<TString> Path; 
     const TString LogPrefix;
-    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TKesusInfo> KesusInfo;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TKesusInfo> KesusInfo; 
     THolder<ITabletPipeFactory> TabletPipeFactory;
     TActorId KesusPipeClient;
-
+ 
     bool Connected = false;
     TInstant DisconnectTime;
     ui64 OfflineAllocationCookie = 0;
-
+ 
     TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
-    THashMap<ui64, decltype(Resources)::iterator> ResIndex;
-
+    THashMap<ui64, decltype(Resources)::iterator> ResIndex; 
+ 
     THashMap<ui64, std::vector<TString>> CookieToResourcePath;
     ui64 NextCookie = 1;
-
+ 
     THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
     THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
     THolder<TEvQuota::TEvProxyUpdate> ProxyUpdateEv;
     THashMap<TDuration, THolder<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
-
+ 
     struct TCounters {
         NMonitoring::TDynamicCounterPtr QuoterCounters;
 
@@ -286,14 +286,14 @@ private:
         std::vector<TString> paths = {std::move(resourcePath)};
         return NewCookieForRequest(std::move(paths));
     }
-
+ 
     ui64 NewCookieForRequest(std::vector<TString> resourcePaths) {
         Y_VERIFY(!resourcePaths.empty());
         const ui64 cookie = NextCookie++;
         Y_VERIFY(CookieToResourcePath.emplace(cookie, std::move(resourcePaths)).second);
         return cookie;
     }
-
+ 
     std::vector<TString> PopResourcePathsForRequest(ui64 cookie) {
         auto resPathIt = CookieToResourcePath.find(cookie);
         if (resPathIt != CookieToResourcePath.end()) {
@@ -304,13 +304,13 @@ private:
             return {};
         }
     }
-
+ 
     static TString KesusErrorToString(const NKikimrKesus::TKesusError& err) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(err.GetIssues(), issues);
         return issues.ToString();
     }
-
+ 
     void SendProxySessionError(TEvQuota::TEvProxySession::EResult code, const TString& resourcePath) {
         KESUS_PROXY_LOG_TRACE("ProxySession(\"" << resourcePath << "\", Error: " << code << ")");
         Send(QuoterServiceId,
@@ -322,8 +322,8 @@ private:
                  TDuration::Zero(),
                  TEvQuota::EStatUpdatePolicy::Never
              ));
-    }
-
+    } 
+ 
     void ProcessSubscribeResourceError(Ydb::StatusIds::StatusCode code, TResourceState* resState) {
         if (!resState->ProxySessionWasSent) {
             resState->ProxySessionWasSent = true;
@@ -349,13 +349,13 @@ private:
                     TEvQuota::EStatUpdatePolicy::EveryActiveTick
                 ));
         }
-    }
-
+    } 
+ 
     TResourceState* FindResource(ui64 id) {
         const auto indexIt = ResIndex.find(id);
         return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
     }
-
+ 
     const TResourceState* FindResource(ui64 id) const {
         const auto indexIt = ResIndex.find(id);
         return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
@@ -598,7 +598,7 @@ private:
 
     void DeleteResourceInfo(const TString& resource, const ui64 resourceId) {
         auto indexIt = ResIndex.find(resourceId);
-        if (indexIt != ResIndex.end()) {
+        if (indexIt != ResIndex.end()) { 
             auto resIt = indexIt->second;
             if (resIt != Resources.end()) { // else it is already new resource with same path.
                 TResourceState& res = *resIt->second;
@@ -607,12 +607,12 @@ private:
                 }
                 Resources.erase(resIt);
             }
-            ResIndex.erase(indexIt);
-            return;
-        }
-
+            ResIndex.erase(indexIt); 
+            return; 
+        } 
+ 
         auto resIt = Resources.find(resource);
-        if (resIt != Resources.end()) {
+        if (resIt != Resources.end()) { 
             TResourceState& res = *resIt->second;
             if (res.SessionIsActive) {
                 ActivateSession(res, false);
@@ -620,9 +620,9 @@ private:
             if (res.ResId != Max<ui64>()) {
                 ResIndex.erase(res.ResId);
             }
-            Resources.erase(resIt);
-        }
-    }
+            Resources.erase(resIt); 
+        } 
+    } 
 
     void Handle(TEvQuota::TEvProxyCloseSession::TPtr& ev) {
         TEvQuota::TEvProxyCloseSession* msg = ev->Get();
@@ -855,45 +855,45 @@ private:
         return TStringBuilder() << "[" << CanonizePath(path) << "]: ";
     }
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::QUOTER_PROXY_ACTOR;
-    }
-
+    } 
+ 
     TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory)
         : QuoterServiceId(quoterServiceId)
         , QuoterId(quoterId)
-        , Path(navEntry.Path)
+        , Path(navEntry.Path) 
         , LogPrefix(GetLogPrefix(Path))
-        , KesusInfo(navEntry.KesusInfo)
+        , KesusInfo(navEntry.KesusInfo) 
         , TabletPipeFactory(std::move(tabletPipeFactory))
-    {
+    { 
         Y_VERIFY(KesusInfo);
         Y_VERIFY(GetKesusTabletId());
         Y_VERIFY(TabletPipeFactory);
-        Y_UNUSED(QuoterId);
+        Y_UNUSED(QuoterId); 
 
         QUOTER_SYSTEM_DEBUG(DebugInfo->KesusQuoterProxies.emplace(CanonizePath(Path), this));
-    }
-
+    } 
+ 
     ~TKesusQuoterProxy() {
         QUOTER_SYSTEM_DEBUG(DebugInfo->KesusQuoterProxies.erase(CanonizePath(Path)));
     }
 
-    void Bootstrap() {
+    void Bootstrap() { 
         KESUS_PROXY_LOG_INFO("Created kesus quoter proxy. Tablet id: " << GetKesusTabletId());
         Counters.Init(CanonizePath(Path));
-        Become(&TThis::StateFunc);
+        Become(&TThis::StateFunc); 
         ConnectToKesus(false);
-    }
-
-    STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-            hFunc(TEvQuota::TEvProxyRequest, Handle);
-            hFunc(TEvQuota::TEvProxyStats, Handle);
-            hFunc(TEvQuota::TEvProxyCloseSession, Handle);
+    } 
+ 
+    STFUNC(StateFunc) { 
+        Y_UNUSED(ctx); 
+        switch (ev->GetTypeRewrite()) { 
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway); 
+            hFunc(TEvQuota::TEvProxyRequest, Handle); 
+            hFunc(TEvQuota::TEvProxyStats, Handle); 
+            hFunc(TEvQuota::TEvProxyCloseSession, Handle); 
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(NKesus::TEvKesus::TEvSubscribeOnResourcesResult, Handle);
@@ -901,18 +901,18 @@ public:
             hFunc(NKesus::TEvKesus::TEvUpdateConsumptionStateAck, Handle);
             hFunc(NKesus::TEvKesus::TEvAccountResourcesAck, Handle);
             hFunc(TEvPrivate::TEvOfflineResourceAllocation, Handle);
-            default:
+            default: 
                 KESUS_PROXY_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
+                    << ev->GetTypeRewrite() 
+                    << " event: " 
+                    << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?")); 
                 Y_VERIFY_DEBUG(false, "Unknown event");
-                break;
-        }
+                break; 
+        } 
 
         ScheduleOfflineAllocation();
         SendDeferredEvents();
-    }
+    } 
 
     ui64 GetKesusTabletId() const {
         return KesusInfo->Description.GetKesusTabletId();
@@ -958,8 +958,8 @@ public:
         }
         TActorBootstrapped::PassAway();
     }
-};
-
+}; 
+ 
 struct TDefaultTabletPipeFactory : public ITabletPipeFactory {
     IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config) override {
         return NTabletPipe::CreateClient(owner, tabletId, config);
@@ -968,18 +968,18 @@ struct TDefaultTabletPipeFactory : public ITabletPipeFactory {
 
 THolder<ITabletPipeFactory> ITabletPipeFactory::GetDefaultFactory() {
     return MakeHolder<TDefaultTabletPipeFactory>();
-}
-
+} 
+ 
 IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory) {
     return new TKesusQuoterProxy(quoterId, navEntry, quoterServiceId, std::move(tabletPipeFactory));
-}
+} 
 
 TKesusResourceAllocationStatistics::TKesusResourceAllocationStatistics(size_t windowSize)
     : BestPrevStat(windowSize)
     , Stat(windowSize)
 {
     Y_ASSERT(windowSize >= 2);
-}
+} 
 
 void TKesusResourceAllocationStatistics::SetProps(const NKikimrKesus::TStreamingQuoterResource& props) {
     DefaultAllocationDelta = TDuration::MilliSeconds(100);

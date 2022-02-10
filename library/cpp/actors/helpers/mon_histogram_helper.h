@@ -1,10 +1,10 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/string/cast.h>
 
-namespace NActors {
+namespace NActors { 
     namespace NMon {
         class THistogramCounterHelper {
         public:
@@ -13,7 +13,7 @@ namespace NActors {
                 , BucketCount(0)
             {
             }
-
+ 
             THistogramCounterHelper(const THistogramCounterHelper&) = default;
 
             void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit,
@@ -21,7 +21,7 @@ namespace NActors {
             {
                 Y_ASSERT(FirstBucketVal == 0);
                 Y_ASSERT(BucketCount == 0);
-
+ 
                 FirstBucketVal = firstBucket;
                 BucketCount = bucketCnt;
                 BucketsHolder.reserve(BucketCount);
@@ -33,7 +33,7 @@ namespace NActors {
                     Buckets.push_back(BucketsHolder.back().Get());
                 }
             }
-
+ 
             void Add(ui64 val) {
                 Y_ASSERT(FirstBucketVal != 0);
                 Y_ASSERT(BucketCount != 0);
@@ -47,7 +47,7 @@ namespace NActors {
                 }
                 Buckets[ind]->Inc();
             }
-
+ 
             ui64 GetBucketCount() const {
                 return BucketCount;
             }
@@ -73,8 +73,8 @@ namespace NActors {
                     // Last slot is up to +INF
                     return "INF";
                 }
-            }
-
+            } 
+ 
         private:
             ui64 FirstBucketVal;
             ui64 BucketCount;
@@ -82,5 +82,5 @@ namespace NActors {
             TVector<NMonitoring::TDeprecatedCounter*> Buckets;
         };
 
-    }
+    } 
 }

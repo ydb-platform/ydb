@@ -23,7 +23,7 @@ public:
     //
     typedef T TValueType;
     static constexpr TTypeId TypeId = TypeId_;
-
+ 
     //
     class TInstance {
     public:
@@ -49,7 +49,7 @@ public:
     }
     TTypeId GetTypeId() const override { return TypeId; }
     static TRawTypeValue ToRawTypeValue(const T& value) {
-        return TRawTypeValue((void*)&value, sizeof(T), TypeId);
+        return TRawTypeValue((void*)&value, sizeof(T), TypeId); 
     }
 
     static const char* TypeName() {
@@ -58,11 +58,11 @@ public:
 };
 
 ////////////////////////////////////////////////////////
-
+ 
 template<typename T, ui32 TypeId, const char* Name>
 class IIntegerTypeWithKeyString : public TTypedType<T, IIntegerTypeWithKeyString<T, TypeId, Name>, TypeId, Name> {
     static_assert(std::is_integral<T>::value, "expect std::is_integral<T>::value");
-public:
+public: 
 };
 
 ////////////////////////////////////////////////////////
@@ -75,43 +75,43 @@ namespace NNames {
     extern const char Int64[6];
     extern const char Uint64[7];
 }
-
+ 
 class TInt32 : public IIntegerTypeWithKeyString<i32, NTypeIds::Int32, NNames::Int32> {};
 class TUint32 : public IIntegerTypeWithKeyString<ui32, NTypeIds::Uint32, NNames::Uint32> {};
 class TInt64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Int64, NNames::Int64> {};
 class TUint64 : public IIntegerTypeWithKeyString<ui64, NTypeIds::Uint64, NNames::Uint64> {};
 
-// upyachka to get around undefined tryfromstring for chars
+// upyachka to get around undefined tryfromstring for chars 
 
 namespace NNames {
     extern const char Uint8[6];
 }
 
 class TUint8 : public TTypedType<ui8, TUint8, NTypeIds::Uint8, NNames::Uint8> {
-public:
-};
-
+public: 
+}; 
+ 
 namespace NNames {
     extern const char Bool[5];
 }
 
 class TBool : public TTypedType<bool, TBool, NTypeIds::Bool, NNames::Bool> {
-public:
-};
-
-namespace NNames {
+public: 
+}; 
+ 
+namespace NNames { 
     extern const char Float[6];
     extern const char Double[7];
-}
-
-template<typename T, typename TDerived, ui32 TypeId, const char *Name>
-class TRealBase : public TTypedType<T, TDerived, TypeId, Name> {
-public:
-};
-
+} 
+ 
+template<typename T, typename TDerived, ui32 TypeId, const char *Name> 
+class TRealBase : public TTypedType<T, TDerived, TypeId, Name> { 
+public: 
+}; 
+ 
 class TDouble : public TRealBase<double, TDouble, NTypeIds::Double, NNames::Double> {};
 class TFloat : public TRealBase<float, TFloat, NTypeIds::Float, NNames::Float> {};
-
+ 
 ////////////////////////////////////////////////////////
 template<typename TFirst, typename TSecond, ui32 TypeId, const char* Name>
 class IIntegerPair : public TTypedType<
@@ -131,7 +131,7 @@ namespace NNames {
 }
 
 class TPairUi64Ui64 : public IIntegerPair<ui64, ui64, NTypeIds::PairUi64Ui64, NNames::PairUi64Ui64> {};
-
+ 
 
 ////////////////////////////////////////////////////////
 /// Byte strings

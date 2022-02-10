@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
     Y_UNIT_TEST(WriteUntilYellowZone) {
         TWriteUntilYellowZone test;
         const ui32 chunkSize = 512u << 10u;
-        const ui64 diskSize = 700ull << 20ull;
+        const ui64 diskSize = 700ull << 20ull; 
         TestRun<TWriteUntilYellowZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize);
     }
 }

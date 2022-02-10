@@ -140,7 +140,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , ReadColumnsScanInUserPool(0, 0, 1)
     , BackupReadAheadLo(0, 0, 64*1024*1024)
     , BackupReadAheadHi(0, 0, 128*1024*1024)
-    , DataShardSysTables(InitDataShardSysTables(this))
+    , DataShardSysTables(InitDataShardSysTables(this)) 
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
 {
@@ -331,7 +331,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     Become(&TThis::StateWork);
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Switched to work state "
          << DatashardStateName(State) << " tabletId " << TabletID());
-
+ 
     // Cleanup any removed snapshots from the previous generation
     Execute(new TTxCleanupRemovedSnapshots(this), ctx);
 
@@ -1067,27 +1067,27 @@ TUserTable::TSpecialUpdate TDataShard::SpecialUpdates(const NTable::TDatabase& d
     const TUserTable& tableInfo = *it->second;
     Y_VERIFY(tableInfo.LocalTid != Max<ui32>());
 
-    TUserTable::TSpecialUpdate ret;
+    TUserTable::TSpecialUpdate ret; 
 
-    if (tableInfo.SpecialColTablet != Max<ui32>()) {
-        ret.ColIdTablet = tableInfo.SpecialColTablet;
-        ret.Tablet = TabletID();
-
-        ret.HasUpdates = true;
+    if (tableInfo.SpecialColTablet != Max<ui32>()) { 
+        ret.ColIdTablet = tableInfo.SpecialColTablet; 
+        ret.Tablet = TabletID(); 
+ 
+        ret.HasUpdates = true; 
     }
 
-    if (tableInfo.SpecialColEpoch != Max<ui32>() || tableInfo.SpecialColUpdateNo != Max<ui32>()) {
-        auto dbChange = db.Head(tableInfo.LocalTid);
-        ret.ColIdEpoch = tableInfo.SpecialColEpoch;
-        ret.ColIdUpdateNo = tableInfo.SpecialColUpdateNo;
-
+    if (tableInfo.SpecialColEpoch != Max<ui32>() || tableInfo.SpecialColUpdateNo != Max<ui32>()) { 
+        auto dbChange = db.Head(tableInfo.LocalTid); 
+        ret.ColIdEpoch = tableInfo.SpecialColEpoch; 
+        ret.ColIdUpdateNo = tableInfo.SpecialColUpdateNo; 
+ 
         ret.Epoch = dbChange.Epoch.ToCounter();
-        ret.UpdateNo = dbChange.Serial;
-
-        ret.HasUpdates = true;
-    }
-
-    return ret;
+        ret.UpdateNo = dbChange.Serial; 
+ 
+        ret.HasUpdates = true; 
+    } 
+ 
+    return ret; 
 }
 
 void TDataShard::SetTableAccessTime(const TTableId& tableId, TInstant ts) {
@@ -1354,7 +1354,7 @@ void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TAc
                 << "  datashard " << TabletID()
                 << " state " << DatashardStateName(State));
     // TODO: implement
-    NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe); 
 }
 
 bool TDataShard::CheckDataTxReject(const TString& opDescr,

@@ -20,7 +20,7 @@ namespace NActors {
         static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
 
         // request info from an actor in HTML format
-        struct TEvHttpInfo: public NActors::TEventLocal<TEvHttpInfo, HttpInfo> {
+        struct TEvHttpInfo: public NActors::TEventLocal<TEvHttpInfo, HttpInfo> { 
             TEvHttpInfo(const NMonitoring::IMonHttpRequest& request, int subReqId = 0)
                 : Request(request)
                 , SubRequestId(subReqId)
@@ -41,7 +41,7 @@ namespace NActors {
         };
 
         // base class for HTTP info response
-        struct IEvHttpInfoRes: public NActors::TEventLocal<IEvHttpInfoRes, HttpInfoRes> {
+        struct IEvHttpInfoRes: public NActors::TEventLocal<IEvHttpInfoRes, HttpInfoRes> { 
             enum EContentType {
                 Html,
                 Custom,
@@ -58,8 +58,8 @@ namespace NActors {
         };
 
         // Ready to output HTML in TString
-        struct TEvHttpInfoRes: public IEvHttpInfoRes {
-            TEvHttpInfoRes(const TString& answer, int subReqId = 0, EContentType contentType = Html)
+        struct TEvHttpInfoRes: public IEvHttpInfoRes { 
+            TEvHttpInfoRes(const TString& answer, int subReqId = 0, EContentType contentType = Html) 
                 : Answer(answer)
                 , SubRequestId(subReqId)
                 , ContentType(contentType)
@@ -79,14 +79,14 @@ namespace NActors {
             const EContentType ContentType;
         };
 
-        struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
-            TEvRemoteHttpInfo() {
-            }
+        struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> { 
+            TEvRemoteHttpInfo() { 
+            } 
 
             TEvRemoteHttpInfo(const TString& query)
                 : Query(query)
-            {
-            }
+            { 
+            } 
 
             TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method)
                 : Query(query)
@@ -133,14 +133,14 @@ namespace NActors {
             }
         };
 
-        struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> {
-            TEvRemoteHttpInfoRes() {
-            }
+        struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> { 
+            TEvRemoteHttpInfoRes() { 
+            } 
 
             TEvRemoteHttpInfoRes(const TString& html)
                 : Html(html)
-            {
-            }
+            { 
+            } 
 
             TString Html;
 
@@ -165,14 +165,14 @@ namespace NActors {
             }
         };
 
-        struct TEvRemoteJsonInfoRes: public NActors::TEventBase<TEvRemoteJsonInfoRes, RemoteJsonInfoRes> {
-            TEvRemoteJsonInfoRes() {
-            }
+        struct TEvRemoteJsonInfoRes: public NActors::TEventBase<TEvRemoteJsonInfoRes, RemoteJsonInfoRes> { 
+            TEvRemoteJsonInfoRes() { 
+            } 
 
             TEvRemoteJsonInfoRes(const TString& json)
                 : Json(json)
-            {
-            }
+            { 
+            } 
 
             TString Json;
 
@@ -197,14 +197,14 @@ namespace NActors {
             }
         };
 
-        struct TEvRemoteBinaryInfoRes: public NActors::TEventBase<TEvRemoteBinaryInfoRes, RemoteBinaryInfoRes> {
-            TEvRemoteBinaryInfoRes() {
-            }
+        struct TEvRemoteBinaryInfoRes: public NActors::TEventBase<TEvRemoteBinaryInfoRes, RemoteBinaryInfoRes> { 
+            TEvRemoteBinaryInfoRes() { 
+            } 
 
             TEvRemoteBinaryInfoRes(const TString& blob)
                 : Blob(blob)
-            {
-            }
+            { 
+            } 
 
             TString Blob;
 

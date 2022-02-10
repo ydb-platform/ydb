@@ -1,4 +1,4 @@
-#include "flat_table.h"
+#include "flat_table.h" 
 #include "flat_row_celled.h"
 #include "flat_row_remap.h"
 #include "flat_bloom_hash.h"
@@ -10,12 +10,12 @@
 #include "flat_range_cache.h"
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
-
+ 
 #include <ydb/core/util/yverify_stream.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NTable {
-
+ 
 TTable::TTable(TEpoch epoch) : Epoch(epoch) { }
 
 TTable::~TTable() { }
@@ -57,7 +57,7 @@ TIntrusiveConstPtr<TRowScheme> TTable::GetScheme() const noexcept
 TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch head)
 {
     head = Min(head, Epoch);
-
+ 
     TAutoPtr<TSubset> subset = new TSubset(head, Scheme);
 
     if (head > TEpoch::Zero()) {
@@ -71,8 +71,8 @@ TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch hea
                 subset->TxStatus.emplace_back(pr.second);
             }
         }
-    }
-
+    } 
+ 
     subset->Flatten.reserve(bundle.size());
     for (const TLogoBlobID &token : bundle) {
         if (auto* c = ColdParts.FindPtr(token)) {
@@ -83,17 +83,17 @@ TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch hea
         Y_VERIFY_S(p, "Cannot find part " << token);
         subset->Flatten.push_back(*p);
     }
-
+ 
     subset->CommittedTransactions = CommittedTransactions;
     subset->RemovedTransactions = RemovedTransactions;
 
     return subset;
-}
-
+} 
+ 
 TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
 {
     head = Min(head, Epoch);
-
+ 
     TAutoPtr<TSubset> subset = new TSubset(head, Scheme);
 
     for (const auto &it : TxStatus) {
@@ -213,7 +213,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
 
     for (auto &memTable : subset.Frozen) {
         const auto found = Frozen.erase(memTable.MemTable);
-
+ 
         Y_VERIFY(found == 1, "Got an unknown TMemTable table in TSubset");
 
         NUtil::SubSafe(Stat_.FrozenWaste, memTable->GetWastedMem());
@@ -230,12 +230,12 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
                 checkNewTransactions.insert(txId);
             }
         }
-    }
-
+    } 
+ 
     for (auto &part : subset.Flatten) {
         Y_VERIFY(part.Slices && *part.Slices,
             "Got an empty TPart subset in TSubset");
-
+ 
         auto it = Flatten.find(part->Label);
         Y_VERIFY(it != Flatten.end(), "Got an unknown TPart table in TSubset");
         auto& existing = it->second;
@@ -320,8 +320,8 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     ProcessCheckTransactions();
 
     ErasedKeysCache.Reset();
-}
-
+} 
+ 
 void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept
 {
     for (auto &part : subset.TxStatus) {
@@ -1012,4 +1012,4 @@ TPartStats& TPartStats::operator-=(const TPartStats& rhs)
     return *this;
 }
 
-}}
+}} 

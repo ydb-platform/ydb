@@ -6,13 +6,13 @@ namespace NHive {
 TString TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME = "default";
 
 TPathId TLeaderTabletInfo::GetTenant() const {
-    // todo: must be explicit TenantPathId
+    // todo: must be explicit TenantPathId 
     if (!ObjectDomain)
-        return TPathId();
-
+        return TPathId(); 
+ 
     return TPathId(ObjectDomain.GetSchemeShard(), ObjectDomain.GetPathId());
-}
-
+} 
+ 
 bool TLeaderTabletInfo::IsSomeoneAliveOnNode(TNodeId nodeId) const {
     if (CanBeAlive() && Node->Id == nodeId) {
         return true;

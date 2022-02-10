@@ -1,10 +1,10 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 #include "tablet_flat_executor.h"
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
 class TExecutor;
 
 struct IMiniKQLFactory {
@@ -15,36 +15,36 @@ struct IMiniKQLFactory {
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
 };
 
-class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
-protected:
+class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet { 
+protected: 
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
     TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory);
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
-
+ 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
-
+ 
     const NTable::TScheme& Scheme() const noexcept;
 
-    TActorContext ExecutorCtx(const TActivationContext &ctx) {
+    TActorContext ExecutorCtx(const TActivationContext &ctx) { 
         return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
-    }
-
-    virtual void OnActivateExecutor(const TActorContext &ctx) = 0;
-    virtual void OnDetach(const TActorContext &ctx) = 0;
+    } 
+ 
+    virtual void OnActivateExecutor(const TActorContext &ctx) = 0; 
+    virtual void OnDetach(const TActorContext &ctx) = 0; 
     virtual void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
-    virtual void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) = 0;
-    virtual bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx);
-
-    void SignalTabletActive(const TActorContext &ctx);
-    virtual void DefaultSignalTabletActive(const TActorContext &ctx); // must be overriden with empty body to postpone 'tablet active' notification
-
-    virtual void Enqueue(STFUNC_SIG);
-
-    void Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx);
+    virtual void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) = 0; 
+    virtual bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx); 
+ 
+    void SignalTabletActive(const TActorContext &ctx); 
+    virtual void DefaultSignalTabletActive(const TActorContext &ctx); // must be overriden with empty body to postpone 'tablet active' notification 
+ 
+    virtual void Enqueue(STFUNC_SIG); 
+ 
+    void Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvTablet::TEvFollowerSyncComplete::TPtr&);
     void Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvFUpdate::TPtr&);
@@ -52,22 +52,22 @@ protected:
     void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
-
+ 
     void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
-    void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx);
-    void HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx);
+    void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx); 
+    void HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx); 
     void HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx);
     void HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx);
     void HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev);
-
-    STFUNC(StateInitImpl);
-
-    void ActivateExecutor(const TActorContext &ctx) override; // executor is active after this point
-    void Detach(const TActorContext &ctx) override; // executor is dead after this point
-
-    bool HandleDefaultEvents(STFUNC_SIG);
+ 
+    STFUNC(StateInitImpl); 
+ 
+    void ActivateExecutor(const TActorContext &ctx) override; // executor is active after this point 
+    void Detach(const TActorContext &ctx) override; // executor is dead after this point 
+ 
+    bool HandleDefaultEvents(STFUNC_SIG); 
     virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&, const TActorContext &ctx);
-
+ 
     bool TryCaptureTxCache(ui64 size) {
         if (!TxCacheQuota)
             return false;
@@ -77,19 +77,19 @@ protected:
         if (size)
             TxCacheQuota->ReleaseQuota(size);
     }
-
-private:
+ 
+private: 
     IExecutor* CreateExecutor(const TActorContext &ctx);
-
+ 
 private:
     TAutoPtr<IMiniKQLFactory> Factory;
 
     IExecutor *Executor0;
-    TInstant StartTime0;
+    TInstant StartTime0; 
     TSharedQuotaPtr TxCacheQuota;
-};
-
-}}
+}; 
+ 
+}} 
 
 #define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                           \
     void NAME(STFUNC_SIG) {                                                                         \

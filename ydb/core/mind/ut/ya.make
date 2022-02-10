@@ -39,7 +39,7 @@ SRCS(
     tenant_ut_broker.cpp
     tenant_ut_local.cpp
     tenant_ut_pool.cpp
-    tenant_node_enumeration_ut.cpp
+    tenant_node_enumeration_ut.cpp 
 )
 
 YQL_LAST_ABI_VERSION()

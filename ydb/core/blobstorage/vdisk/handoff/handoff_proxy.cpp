@@ -322,12 +322,12 @@ namespace NKikimr {
             , WaitQueue()
             , InFlightQueue()
             , State()
-        {
-            BadStateTimeouts[0] = TDuration::Seconds(0);
-            BadStateTimeouts[1] = TDuration::MilliSeconds(500);
-            BadStateTimeouts[2] = TDuration::Seconds(3);
-            BadStateTimeouts[3] = TDuration::Seconds(10);
-        }
+        { 
+            BadStateTimeouts[0] = TDuration::Seconds(0); 
+            BadStateTimeouts[1] = TDuration::MilliSeconds(500); 
+            BadStateTimeouts[2] = TDuration::Seconds(3); 
+            BadStateTimeouts[3] = TDuration::Seconds(10); 
+        } 
     };
 
     IActor *CreateHandoffProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info,

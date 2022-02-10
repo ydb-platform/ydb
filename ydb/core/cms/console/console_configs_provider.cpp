@@ -178,7 +178,7 @@ public:
                     "TServiceConfigSender(" << Subscription->Id << ") Die");
 
         auto nodeId = Subscription->Subscriber.ServiceId.NodeId();
-        ctx.Send(TActivationContext::InterconnectProxy(nodeId),
+        ctx.Send(TActivationContext::InterconnectProxy(nodeId), 
                  new TEvents::TEvUnsubscribe);
         TBase::Die(ctx);
     }

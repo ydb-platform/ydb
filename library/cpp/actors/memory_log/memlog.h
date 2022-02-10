@@ -18,14 +18,14 @@
 #endif
 
 #ifndef NO_SANITIZE_THREAD
-#define NO_SANITIZE_THREAD
-#if defined(__has_feature)
-#if __has_feature(thread_sanitizer)
-#undef NO_SANITIZE_THREAD
-#define NO_SANITIZE_THREAD __attribute__((no_sanitize_thread))
+#define NO_SANITIZE_THREAD 
+#if defined(__has_feature) 
+#if __has_feature(thread_sanitizer) 
+#undef NO_SANITIZE_THREAD 
+#define NO_SANITIZE_THREAD __attribute__((no_sanitize_thread)) 
 #endif
-#endif
-#endif
+#endif 
+#endif 
 
 class TMemoryLog {
 public:
@@ -60,8 +60,8 @@ public:
     }
 
     inline static void CreateMemoryLogBuffer(
-        size_t totalSize = DEFAULT_TOTAL_SIZE,
-        size_t grainSize = DEFAULT_GRAIN_SIZE)
+        size_t totalSize = DEFAULT_TOTAL_SIZE, 
+        size_t grainSize = DEFAULT_GRAIN_SIZE) 
         Y_COLD {
         if (AtomicGet(MemLogBuffer) != nullptr) {
             return;
@@ -193,11 +193,11 @@ bool MemLogWriteStruct(const TObj* obj) noexcept {
     return MemLogWrite(begin, begin + sizeof(TObj));
 }
 
-Y_PRINTF_FORMAT(1, 0)
+Y_PRINTF_FORMAT(1, 0) 
 bool MemLogVPrintF(const char* format, va_list params) noexcept;
 
-Y_PRINTF_FORMAT(1, 2)
-Y_WRAPPER
+Y_PRINTF_FORMAT(1, 2) 
+Y_WRAPPER 
 inline bool MemLogPrintF(const char* format, ...) noexcept {
     va_list params;
     va_start(params, format);

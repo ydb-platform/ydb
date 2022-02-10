@@ -332,8 +332,8 @@ private:
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
 private:
-    NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
-    NTabletFlatExecutor::ITransaction* CreateTxInit();
+    NTabletFlatExecutor::ITransaction* CreateTxInitSchema(); 
+    NTabletFlatExecutor::ITransaction* CreateTxInit(); 
 
 private:
     void ResetState();

@@ -54,7 +54,7 @@ message TMsgBusRequestBase {
 message TRequest {
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
-    optional uint64 ExecTimeoutPeriod = 4;
+    optional uint64 ExecTimeoutPeriod = 4; 
     optional string SecurityToken = 5;
 }
 
@@ -101,7 +101,7 @@ message TResponse {
             {Value: 3 Name: "NotImplemented" Man: "Not yet implemented feature requested" },
             {Value: 4 Name: "ResolveError" Man: "Some keys not resolved, see UnresolvedKeys for details" },
             {Value: 5 Name: "AccessDenied" Man: "Access denied for request" },
-            {Value: 6 Name: "DomainLocalityError" Man: "Cross database transactions not allowed"},
+            {Value: 6 Name: "DomainLocalityError" Man: "Cross database transactions not allowed"}, 
             {Value: 16 Name: "ProxyNotReady" Man: "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s" },
             {Value: 17 Name: "ProxyAccepted" Man: "Request accepted by proxy. Transitional status" },
             {Value: 18 Name: "ProxyResolved" Man: "Request keys resolved to datashards. Transitional status" },
@@ -109,7 +109,7 @@ message TResponse {
             {Value: 20 Name: "ProxyShardNotAvailable" Man: "One or more of affected datashards not available, request execution cancelled" },
             {Value: 21 Name: "ProxyShardTryLater" Man: "One or more of affected datashards are starting, try again" },
             {Value: 22 Name: "ProxyShardOverloaded" Man: "One or more of affected datashards are overloaded, try again" },
-            {Value: 23 Name: "ProxyShardUnknown" Man: "State of transaction on one or more datashards is unknown" },
+            {Value: 23 Name: "ProxyShardUnknown" Man: "State of transaction on one or more datashards is unknown" }, 
             {Value: 32 Name: "CoordinatorDeclined" Man: "Coordinator declines to plan transaction, try again" },
             {Value: 33 Name: "CoordinatorOutdated" Man: "Coordinator was not able to plan transaction due to timing restrictions, try again" },
             {Value: 34 Name: "CoordinatorAborted" Man: "Transaction aborted by coordinator" },
@@ -128,9 +128,9 @@ message TResponse {
 
     optional bytes ProxyErrors = 6;
 
-    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
+    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7; 
     repeated Ydb.Issue.IssueMessage Issues = 8;
-
+ 
     optional uint32 ExecutionEngineStatus = 100 [
         (CommonDescription) = "MiniKQL engine processing status, if OK - see ExecutionEngineResponseStatus",
         (EnumValueHint) = { Hints : [
@@ -260,27 +260,27 @@ message TTabletCountersRequest {
     optional uint64 Timeout = 11;
 }
 
-message TLocalMKQL {
-    message TProgram {
-        optional bytes Bin = 1;
-        optional string Text = 2;
-    };
-
-    message TParams {
-        optional bytes Bin = 1;
-        optional string Text = 2;
-    }
-
-    optional uint64 TabletID = 1;
-    optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 2;
+message TLocalMKQL { 
+    message TProgram { 
+        optional bytes Bin = 1; 
+        optional string Text = 2; 
+    }; 
+ 
+    message TParams { 
+        optional bytes Bin = 1; 
+        optional string Text = 2; 
+    } 
+ 
+    optional uint64 TabletID = 1; 
+    optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 2; 
     optional bool ConnectToFollower = 3;
-
+ 
     optional string SecurityToken = 5;
 
-    optional bool WithRetry = 10;
-    optional uint64 Timeout = 11;
-}
-
+    optional bool WithRetry = 10; 
+    optional uint64 Timeout = 11; 
+} 
+ 
 message TLocalSchemeTx {
     optional uint64 TabletID = 1;
     optional bool ConnectToFollower = 2;
@@ -451,8 +451,8 @@ message TFlatDescribeResponse {
     optional NKikimrSchemeOp.TPathDescription PathDescription = 2;
     optional string ErrorReason = 3; // When present contains human-readable error description
     optional int32 SchemeStatus = 4;
-
-    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
+ 
+    optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7; 
     repeated Ydb.Issue.IssueMessage Issues = 8;
 };
 

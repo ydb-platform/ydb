@@ -1,11 +1,11 @@
-#pragma once
+#pragma once 
 #include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"
-#include "pathid.h"
+#include "pathid.h" 
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
@@ -13,16 +13,16 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/util/yverify_stream.h>
-
+ 
 #include <ydb/library/wilson/wilson_event.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 
 #include <util/stream/str.h>
-#include <util/generic/xrange.h>
+#include <util/generic/xrange.h> 
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
@@ -62,8 +62,8 @@ struct TStorageStatusFlags {
 
     bool Check(NKikimrBlobStorage::EStatusFlags statusToCheck) const {
         return (Raw & ui32(NKikimrBlobStorage::StatusIsValid)) && (Raw & ui32(statusToCheck));
-    }
-
+    } 
+ 
     TString ToString() const {
         TStringStream str;
         Output(str);
@@ -88,25 +88,25 @@ NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDevic
 
 TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type);
 
-enum EGroupConfigurationType {
-    GroupConfigurationTypeStatic = 0,
-    GroupConfigurationTypeDynamic = 1
-};
-
-struct TGroupID {
+enum EGroupConfigurationType { 
+    GroupConfigurationTypeStatic = 0, 
+    GroupConfigurationTypeDynamic = 1 
+}; 
+ 
+struct TGroupID { 
     TGroupID() { Set((EGroupConfigurationType)0x1, 0x3f, InvalidLocalId); }
     TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) {
-        Set(configurationType, dataCenterId, groupLocalId);
-    }
+        Set(configurationType, dataCenterId, groupLocalId); 
+    } 
     TGroupID(const TGroupID& group) { Raw.X = group.GetRaw(); }
-    explicit TGroupID(ui32 raw) { Raw.X = raw; }
-    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; }
-    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; }
-    ui32 GroupLocalID() const { return Raw.N.GroupLocalID; }
-    ui32 GetRaw() const { return Raw.X; }
-    bool operator==(const TGroupID &x) const { return GetRaw() == x.GetRaw(); }
-    bool operator!=(const TGroupID &x) const { return GetRaw() != x.GetRaw(); }
-
+    explicit TGroupID(ui32 raw) { Raw.X = raw; } 
+    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; } 
+    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; } 
+    ui32 GroupLocalID() const { return Raw.N.GroupLocalID; } 
+    ui32 GetRaw() const { return Raw.X; } 
+    bool operator==(const TGroupID &x) const { return GetRaw() == x.GetRaw(); } 
+    bool operator!=(const TGroupID &x) const { return GetRaw() != x.GetRaw(); } 
+ 
     TGroupID operator++() {
         Set(ConfigurationType(), AvailabilityDomainID(), NextValidLocalId());
         return *this;
@@ -118,25 +118,25 @@ struct TGroupID {
     }
 
     TString ToString() const;
-private:
-    union {
-        struct {
-            ui32 GroupLocalID : 25;
-            ui32 AvailabilityDomainID : 6;
-            ui32 ConfigurationType : 1;
-        } N;
-
-        ui32 X;
-    } Raw;
-
-    void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 groupLocalId) {
-        Y_VERIFY(ui32(configurationType) < (1 << 2));
-        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7));
-        Y_VERIFY(ui32(groupLocalId) < (1 << 26));
-        Raw.N.ConfigurationType = configurationType;
-        Raw.N.AvailabilityDomainID = availabilityDomainID;
-        Raw.N.GroupLocalID = groupLocalId;
-    }
+private: 
+    union { 
+        struct { 
+            ui32 GroupLocalID : 25; 
+            ui32 AvailabilityDomainID : 6; 
+            ui32 ConfigurationType : 1; 
+        } N; 
+ 
+        ui32 X; 
+    } Raw; 
+ 
+    void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 groupLocalId) { 
+        Y_VERIFY(ui32(configurationType) < (1 << 2)); 
+        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7)); 
+        Y_VERIFY(ui32(groupLocalId) < (1 << 26)); 
+        Raw.N.ConfigurationType = configurationType; 
+        Raw.N.AvailabilityDomainID = availabilityDomainID; 
+        Raw.N.GroupLocalID = groupLocalId; 
+    } 
 
     ui32 NextValidLocalId() {
         const ui32 localId = GroupLocalID();
@@ -150,51 +150,51 @@ private:
     }
 
     static constexpr ui32 InvalidLocalId = 0x1ffffff;
-    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TGroupID Raw value must be binary compatible with ui32");
-};
-
-struct TPDiskID {
-    TPDiskID() { Set((EGroupConfigurationType)0x1, 0x3f, 0x1ffffff); }
-    explicit TPDiskID(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) {
-        Set(configurationType, availabilityDomainID, pDiskLocalId);
-    }
-    explicit TPDiskID(ui32 raw) { Raw.X = raw; }
-    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; }
-    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; }
-    ui32 PDiskLocalID() const { return Raw.N.PDiskLocalID; }
-    ui32 GetRaw() const { return Raw.X; }
-    bool operator==(const TPDiskID &x) const { return GetRaw() == x.GetRaw(); }
-
+    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TGroupID Raw value must be binary compatible with ui32"); 
+}; 
+ 
+struct TPDiskID { 
+    TPDiskID() { Set((EGroupConfigurationType)0x1, 0x3f, 0x1ffffff); } 
+    explicit TPDiskID(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) { 
+        Set(configurationType, availabilityDomainID, pDiskLocalId); 
+    } 
+    explicit TPDiskID(ui32 raw) { Raw.X = raw; } 
+    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; } 
+    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; } 
+    ui32 PDiskLocalID() const { return Raw.N.PDiskLocalID; } 
+    ui32 GetRaw() const { return Raw.X; } 
+    bool operator==(const TPDiskID &x) const { return GetRaw() == x.GetRaw(); } 
+ 
     TString ToString() const;
-private:
-    union {
-        struct {
-            ui32 PDiskLocalID : 25;
-            ui32 AvailabilityDomainID : 6;
-            ui32 ConfigurationType : 1;
-        } N;
-
-        ui32 X;
-    } Raw;
-
-    void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) {
-        Y_VERIFY(ui32(configurationType) < (1 << 2));
-        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7));
-        Y_VERIFY(ui32(pDiskLocalId) < (1 << 26));
-        Raw.N.ConfigurationType = configurationType;
-        Raw.N.AvailabilityDomainID = availabilityDomainID;
-        Raw.N.PDiskLocalID = pDiskLocalId;
-    }
-    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TPDiskID Raw value must be binary compatible with ui32");
-};
-
-// channel info for tablet
-struct TTabletChannelInfo {
-    struct THistoryEntry {
-        ui32 FromGeneration;
-        ui32 GroupID;
+private: 
+    union { 
+        struct { 
+            ui32 PDiskLocalID : 25; 
+            ui32 AvailabilityDomainID : 6; 
+            ui32 ConfigurationType : 1; 
+        } N; 
+ 
+        ui32 X; 
+    } Raw; 
+ 
+    void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) { 
+        Y_VERIFY(ui32(configurationType) < (1 << 2)); 
+        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7)); 
+        Y_VERIFY(ui32(pDiskLocalId) < (1 << 26)); 
+        Raw.N.ConfigurationType = configurationType; 
+        Raw.N.AvailabilityDomainID = availabilityDomainID; 
+        Raw.N.PDiskLocalID = pDiskLocalId; 
+    } 
+    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TPDiskID Raw value must be binary compatible with ui32"); 
+}; 
+ 
+// channel info for tablet 
+struct TTabletChannelInfo { 
+    struct THistoryEntry { 
+        ui32 FromGeneration; 
+        ui32 GroupID; 
         TInstant Timestamp; // for diagnostics usage only
-
+ 
         THistoryEntry()
             : FromGeneration(0)
             , GroupID(0)
@@ -206,11 +206,11 @@ struct TTabletChannelInfo {
             , Timestamp(timestamp)
         {}
 
-        struct TCmp {
-            bool operator()(ui32 gen, const THistoryEntry &x) const {
-                return gen < x.FromGeneration;
-            }
-        };
+        struct TCmp { 
+            bool operator()(ui32 gen, const THistoryEntry &x) const { 
+                return gen < x.FromGeneration; 
+            } 
+        }; 
 
         TString ToString() const {
             TStringStream str;
@@ -225,13 +225,13 @@ struct TTabletChannelInfo {
             return FromGeneration == other.FromGeneration
                     && (GroupID == other.GroupID || GroupID == 0 || other.GroupID == 0);
         }
-    };
-
-    ui32 Channel;
-    TBlobStorageGroupType Type;
+    }; 
+ 
+    ui32 Channel; 
+    TBlobStorageGroupType Type; 
     TString StoragePool;
     TVector<THistoryEntry> History;
-
+ 
     TTabletChannelInfo()
         : Channel()
         , Type()
@@ -252,38 +252,38 @@ struct TTabletChannelInfo {
         , Type(TBlobStorageGroupType::ErasureNone)
         , StoragePool(storagePool)
     {}
-
-    ui32 GroupForGeneration(ui32 gen) const {
-        const size_t historySize = History.size();
+ 
+    ui32 GroupForGeneration(ui32 gen) const { 
+        const size_t historySize = History.size(); 
         Y_VERIFY(historySize > 0, "empty channel history");
-
-        const THistoryEntry * const first = &*History.begin();
-        if (historySize == 1) {
-            if (first->FromGeneration <= gen)
-                return first->GroupID;
-            return Max<ui32>();
+ 
+        const THistoryEntry * const first = &*History.begin(); 
+        if (historySize == 1) { 
+            if (first->FromGeneration <= gen) 
+                return first->GroupID; 
+            return Max<ui32>(); 
         }
-
-        const THistoryEntry * const end = first + historySize;
-        const THistoryEntry * const last = end - 1;
-        if (last->FromGeneration <= gen) {
-            return last->GroupID;
-        }
-
-        const THistoryEntry *x = UpperBound(first, end, gen, THistoryEntry::TCmp());
-        if (x != first) {
-            return (x - 1)->GroupID;
-        }
-
-        return Max<ui32>();
-    }
-
-    const THistoryEntry* LatestEntry() const {
+ 
+        const THistoryEntry * const end = first + historySize; 
+        const THistoryEntry * const last = end - 1; 
+        if (last->FromGeneration <= gen) { 
+            return last->GroupID; 
+        } 
+ 
+        const THistoryEntry *x = UpperBound(first, end, gen, THistoryEntry::TCmp()); 
+        if (x != first) { 
+            return (x - 1)->GroupID; 
+        } 
+ 
+        return Max<ui32>(); 
+    } 
+ 
+    const THistoryEntry* LatestEntry() const { 
         if (!History.empty())
-            return &History.back();
-        else
-            return nullptr;
-    }
+            return &History.back(); 
+        else 
+            return nullptr; 
+    } 
 
     const THistoryEntry* PreviousEntry() const {
         if (History.size() > 1)
@@ -308,8 +308,8 @@ struct TTabletChannelInfo {
         str << "}";
         return str.Str();
     }
-};
-
+}; 
+ 
 class TTabletStorageInfo : public TThrRefBase {
 public:
     //
@@ -324,8 +324,8 @@ public:
         , Version(0)
     {}
     virtual ~TTabletStorageInfo() {}
-
-    const TTabletChannelInfo* ChannelInfo(ui32 channel) const {
+ 
+    const TTabletChannelInfo* ChannelInfo(ui32 channel) const { 
         if (Channels.size() <= channel) {
             return nullptr;
         }
@@ -333,16 +333,16 @@ public:
         if (info.History.empty()) {
             return nullptr;
         }
-        return &info;
-    }
+        return &info; 
+    } 
 
-    ui32 GroupFor(ui32 channel, ui32 recordGen) const {
-        if (const TTabletChannelInfo *channelInfo = ChannelInfo(channel))
-            return channelInfo->GroupForGeneration(recordGen);
-        else
-            return Max<ui32>();
-    }
-
+    ui32 GroupFor(ui32 channel, ui32 recordGen) const { 
+        if (const TTabletChannelInfo *channelInfo = ChannelInfo(channel)) 
+            return channelInfo->GroupForGeneration(recordGen); 
+        else 
+            return Max<ui32>(); 
+    } 
+ 
     TString ToString() const {
         TStringStream str;
         str << "{Version# " << Version;
@@ -357,48 +357,48 @@ public:
             str << channelIdx << ":" << Channels[channelIdx].ToString();
         }
         str << "}";
-        if (TenantPathId)
-            str << " Tenant: " << TenantPathId;
+        if (TenantPathId) 
+            str << " Tenant: " << TenantPathId; 
         return str.Str();
     }
 
     TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const;
-
-    bool operator<(const TTabletStorageInfo &other) const noexcept {
+ 
+    bool operator<(const TTabletStorageInfo &other) const noexcept { 
         if (Version != 0 && other.Version != 0) {
             return Version < other.Version;
         }
-        const size_t selfSize = Channels.size();
-        const size_t otherSize = other.Channels.size();
-        if (selfSize != otherSize)
-            return (selfSize < otherSize);
-
-        for (ui64 channelIdx : xrange(selfSize)) {
-            const ui32 lastInSelf = Channels[channelIdx].History.back().FromGeneration;
-            const ui32 lastInOther = other.Channels[channelIdx].History.back().FromGeneration;
-            if (lastInSelf != lastInOther)
-                return (lastInSelf < lastInOther);
-        }
-
-        return false;
-    }
-
+        const size_t selfSize = Channels.size(); 
+        const size_t otherSize = other.Channels.size(); 
+        if (selfSize != otherSize) 
+            return (selfSize < otherSize); 
+ 
+        for (ui64 channelIdx : xrange(selfSize)) { 
+            const ui32 lastInSelf = Channels[channelIdx].History.back().FromGeneration; 
+            const ui32 lastInOther = other.Channels[channelIdx].History.back().FromGeneration; 
+            if (lastInSelf != lastInOther) 
+                return (lastInSelf < lastInOther); 
+        } 
+ 
+        return false; 
+    } 
+ 
     //
     ui64 TabletID;
     TVector<TTabletChannelInfo> Channels;
     TTabletTypes::EType TabletType;
     ui32 Version;
-    TPathId TenantPathId;
+    TPathId TenantPathId; 
     ui64 HiveId = 0;
-};
-
+}; 
+ 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
     const ui32 group = GroupFor(channel, generation);
     Y_VERIFY(group != Max<ui32>());
     const TActorId proxy = MakeBlobStorageProxyID(group);
-    return proxy;
-}
-
+    return proxy; 
+} 
+ 
 inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) {
     ui32 blobStorageGroup = ui32(
         ((actorId.RawX1() >> (7 * 8)) & 0xff) |
@@ -418,11 +418,11 @@ inline IEventHandle *CreateEventForBSProxy(TActorId sender, TActorId recipient, 
     ptr.release();
     return res;
 }
-
+ 
 inline IEventHandle *CreateEventForBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie, NWilson::TTraceId traceId = {}) {
     return CreateEventForBSProxy(sender, MakeBlobStorageProxyID(groupId), ev, cookie, std::move(traceId));
-}
-
+} 
+ 
 inline bool SendToBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, recipient, ev, cookie, std::move(traceId)));
 }
@@ -430,49 +430,49 @@ inline bool SendToBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, u
 inline bool SendToBSProxy(const TActorContext &ctx, TActorId recipient, IEventBase *ev, ui64 cookie = 0,
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, recipient, ev, cookie, std::move(traceId)));
-}
+} 
 
 inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, groupId, ev, cookie, std::move(traceId)));
-}
-
+} 
+ 
 inline bool SendToBSProxy(const TActorContext &ctx, ui32 groupId, IEventBase *ev, ui64 cookie = 0,
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
-}
-
-struct TEvBlobStorage {
-    enum EEv {
-        // user <-> proxy interface
+} 
+ 
+struct TEvBlobStorage { 
+    enum EEv { 
+        // user <-> proxy interface 
         EvPut = EventSpaceBegin(TKikimrEvents::ES_BLOBSTORAGE), /// 268 632 064
-        EvGet,
-        EvBlock,
-        EvDiscover,
-        EvRange,
-        EvProbe,
+        EvGet, 
+        EvBlock, 
+        EvDiscover, 
+        EvRange, 
+        EvProbe, 
         EvCollectGarbage,
         EvStatus,
         EvVBaldSyncLog,
         EvPatch,
         EvInplacePatch,
-
-        //
+ 
+        // 
         EvPutResult = EvPut + 512,                              /// 268 632 576
-        EvGetResult,
-        EvBlockResult,
-        EvDiscoverResult,
-        EvRangeResult,
-        EvProbeResult,
+        EvGetResult, 
+        EvBlockResult, 
+        EvDiscoverResult, 
+        EvRangeResult, 
+        EvProbeResult, 
         EvCollectGarbageResult,
         EvStatusResult,
         EvVBaldSyncLogResult,
         EvPatchResult,
         EvInplacePatchResult,
-
-        // proxy <-> vdisk interface
+ 
+        // proxy <-> vdisk interface 
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
-        EvVGet,
-        EvVBlock,
+        EvVGet, 
+        EvVBlock, 
         EvVGetBlock,
         EvVCollectGarbage,
         EvVGetBarrier,
@@ -488,10 +488,10 @@ struct TEvBlobStorage {
         EvVPatchXorDiff,
         EvVDefrag,
         EvVInplacePatch,
-
+ 
         EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600
-        EvVGetResult,
-        EvVBlockResult,
+        EvVGetResult, 
+        EvVBlockResult, 
         EvVGetBlockResult,
         EvVCollectGarbageResult,
         EvVGetBarrierResult,
@@ -507,29 +507,29 @@ struct TEvBlobStorage {
         EvVPatchResult,
         EvVDefragResult,
         EvVInplacePatchResult,
-
-        // vdisk <-> vdisk interface
+ 
+        // vdisk <-> vdisk interface 
         EvVDisk = EvPut + 4 * 512,                              /// 268 634 112
         EvVSync,
         EvVSyncFull,
         EvVSyncGuid,
-
+ 
         EvVDiskReply = EvPut + 5 * 512,                         /// 268 634 624
         EvVSyncResult,
         EvVSyncFullResult,
         EvVSyncGuidResult,
-
-        // vdisk <-> controller interface,
+ 
+        // vdisk <-> controller interface, 
         EvCnt = EvPut + 6 * 512,                                /// 268 635 136
         EvVGenerationChange,
         EvRegisterPDiskLoadActor,
         EvStatusUpdate,
         EvDropDonor,
-
+ 
         EvCntReply = EvPut + 7 * 512,                           /// 268 635 648
         EvVGenerationChangeResult,
         EvRegisterPDiskLoadActorResult,
-
+ 
         // internal vdisk interface
         EvYardInit = EvPut + 8 * 512,                           /// 268 636 160
         EvLog,
@@ -842,12 +842,12 @@ struct TEvBlobStorage {
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
 
-        EvEnd
-    };
-
+        EvEnd 
+    }; 
+ 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
-
+ 
     struct TEvPutResult;
     struct TEvGetResult;
     struct TEvBlockResult;
@@ -858,7 +858,7 @@ struct TEvBlobStorage {
     struct TEvPatchResult;
     struct TEvInplacePatchResult;
 
-    struct TEvPut : public TEventLocal<TEvPut, EvPut> {
+    struct TEvPut : public TEventLocal<TEvPut, EvPut> { 
         enum ETactic {
             TacticMaxThroughput = 0,
             TacticMinLatency,
@@ -878,19 +878,19 @@ struct TEvBlobStorage {
             }
         };
 
-        const TLogoBlobID Id;
+        const TLogoBlobID Id; 
         const TString Buffer;
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
-
+ 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
-            : Id(id)
-            , Buffer(buffer)
+            : Id(id) 
+            , Buffer(buffer) 
             , Deadline(deadline)
             , HandleClass(handleClass)
             , Tactic(tactic)
@@ -933,25 +933,25 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvPutResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> {
-        NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Id;
+    }; 
+ 
+    struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> { 
+        NKikimrProto::EReplyStatus Status; 
+        const TLogoBlobID Id; 
         const TStorageStatusFlags StatusFlags;
         const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
-
+ 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 ui32 groupId, float approximateFreeSpaceShare)
-            : Status(status)
-            , Id(id)
+            : Status(status) 
+            , Id(id) 
             , StatusFlags(statusFlags)
             , GroupId(groupId)
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
-        {}
+        {} 
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
@@ -970,29 +970,29 @@ struct TEvBlobStorage {
         TString ToString() const {
             return Print(false);
         }
-    };
-
-    struct TEvGet : public TEventLocal<TEvGet, EvGet> {
-        struct TQuery {
-            TLogoBlobID Id;
-            ui32 Shift;
-            ui32 Size;
-
-            TQuery()
-                : Shift(0)
-                , Size(0)
-            {}
-
+    }; 
+ 
+    struct TEvGet : public TEventLocal<TEvGet, EvGet> { 
+        struct TQuery { 
+            TLogoBlobID Id; 
+            ui32 Shift; 
+            ui32 Size; 
+ 
+            TQuery() 
+                : Shift(0) 
+                , Size(0) 
+            {} 
+ 
             void Set(const TLogoBlobID &id, ui32 sh = 0, ui32 sz = 0) {
-                Id = id;
-                Shift = sh;
-                Size = sz;
+                Id = id; 
+                Shift = sh; 
+                Size = sz; 
 
                 Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
                 Y_VERIFY(sh < id.BlobSize(),
                     "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32,
                     (ui32)id.BlobSize(), (ui32)sh);
-            }
+            } 
 
             TString ToString() const {
                 TStringStream str;
@@ -1002,11 +1002,11 @@ struct TEvBlobStorage {
                 str << "}";
                 return str.Str();
             }
-        };
-
-        // todo: replace with queue-like thing
+        }; 
+ 
+        // todo: replace with queue-like thing 
         const ui32 QuerySize;
-        TArrayHolder<TQuery> Queries;
+        TArrayHolder<TQuery> Queries; 
         TInstant Deadline;
         bool MustRestoreFirst;
         NKikimrBlobStorage::EGetHandleClass GetHandleClass;
@@ -1017,19 +1017,19 @@ struct TEvBlobStorage {
         bool IsVerboseNoDataEnabled; // Debug use only
         bool IsInternal = false; // set to true if generated by ds proxy
         bool CollectDebugInfo = false; // collect query debug info and return in response
-        ui32 ForceBlockedGeneration = 0;
+        ui32 ForceBlockedGeneration = 0; 
         bool ReportDetailedPartMap = false;
         ui32 RestartCounter = 0;
         bool PhantomCheck = false;
-
+ 
         // NKikimrBlobStorage::EGetHandleClass::FastRead
 
         TEvGet(TArrayHolder<TQuery> &q, ui32 sz, TInstant deadline, NKikimrBlobStorage::EGetHandleClass getHandleClass,
                 bool mustRestoreFirst = false, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0,
                 bool isInternal = false, bool isVerboseNoDataEnabled = false, bool collectDebugInfo = false,
                 bool reportDetailedPartMap = false)
-            : QuerySize(sz)
-            , Queries(q.Release())
+            : QuerySize(sz) 
+            , Queries(q.Release()) 
             , Deadline(deadline)
             , MustRestoreFirst(mustRestoreFirst)
             , GetHandleClass(getHandleClass)
@@ -1037,34 +1037,34 @@ struct TEvBlobStorage {
             , IsVerboseNoDataEnabled(isVerboseNoDataEnabled)
             , IsInternal(isInternal)
             , CollectDebugInfo(collectDebugInfo)
-            , ForceBlockedGeneration(forceBlockedGeneration)
+            , ForceBlockedGeneration(forceBlockedGeneration) 
             , ReportDetailedPartMap(reportDetailedPartMap)
         {
             Y_VERIFY(QuerySize > 0, "can't execute empty get queries");
             VerifySameTabletId();
         }
-
+ 
         TEvGet(const TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass getHandleClass,
-                bool mustRestoreFirst = false, bool isIndexOnly = false,
-                ui32 forceBlockedGeneration = 0)
-            : QuerySize(1)
-            , Queries(new TQuery[1])
+                bool mustRestoreFirst = false, bool isIndexOnly = false, 
+                ui32 forceBlockedGeneration = 0) 
+            : QuerySize(1) 
+            , Queries(new TQuery[1]) 
             , Deadline(deadline)
             , MustRestoreFirst(mustRestoreFirst)
             , GetHandleClass(getHandleClass)
             , IsIndexOnly(isIndexOnly)
             , IsVerboseNoDataEnabled(false)
-            , ForceBlockedGeneration(forceBlockedGeneration)
-        {
-            Queries[0].Id = id;
+            , ForceBlockedGeneration(forceBlockedGeneration) 
+        { 
+            Queries[0].Id = id; 
             Queries[0].Shift = shift;
             Queries[0].Size = size;
             Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
             Y_VERIFY(shift < id.BlobSize(),
                     "Please, don't read behind the end of the blob! Id# %s BlobSize# %" PRIu32 " shift# %" PRIu32,
                     id.ToString().c_str(), (ui32)id.BlobSize(), (ui32)shift);
-        }
+        } 
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
@@ -1074,8 +1074,8 @@ struct TEvBlobStorage {
             str << " IsVerboseNoDataEnabled# " << (IsVerboseNoDataEnabled ? "true" : "false");
             str << " Deadline# " << Deadline.MilliSeconds();
             str << " QuerySize# " << QuerySize;
-            if (ForceBlockedGeneration)
-                str << " ForceBlock: " << ForceBlockedGeneration;
+            if (ForceBlockedGeneration) 
+                str << " ForceBlock: " << ForceBlockedGeneration; 
             for (ui32 i = 0; i < QuerySize; ++i) {
                 TQuery &query = Queries[i];
                 str << " {Id# " << query.Id.ToString();
@@ -1110,9 +1110,9 @@ struct TEvBlobStorage {
                         Queries[0].Id.TabletID(), Queries[i].Id.TabletID());
             }
         }
-    };
-
-    struct TEvGetResult : public TEventLocal<TEvGetResult, EvGetResult> {
+    }; 
+ 
+    struct TEvGetResult : public TEventLocal<TEvGetResult, EvGetResult> { 
         struct TPartMapItem {
             ui32 DiskOrderNumber;
             ui32 PartIdRequested;
@@ -1120,42 +1120,42 @@ struct TEvBlobStorage {
             ui32 ResponseIndex;
             TVector<std::pair<ui32, NKikimrProto::EReplyStatus>> Status;
         };
-        struct TResponse {
-            NKikimrProto::EReplyStatus Status;
-
-            TLogoBlobID Id;
-            ui32 Shift;
+        struct TResponse { 
+            NKikimrProto::EReplyStatus Status; 
+ 
+            TLogoBlobID Id; 
+            ui32 Shift; 
             ui32 RequestedSize;
             TString Buffer;
             TVector<TPartMapItem> PartMap;
-
-            TResponse()
-                : Status(NKikimrProto::UNKNOWN)
-                , Shift(0)
+ 
+            TResponse() 
+                : Status(NKikimrProto::UNKNOWN) 
+                , Shift(0) 
                 , RequestedSize(0)
-            {}
-        };
-
-        NKikimrProto::EReplyStatus Status;
-
-        // todo: replace with queue-like thing
-        ui32 ResponseSz;
-        TArrayHolder<TResponse> Responses;
+            {} 
+        }; 
+ 
+        NKikimrProto::EReplyStatus Status; 
+ 
+        // todo: replace with queue-like thing 
+        ui32 ResponseSz; 
+        TArrayHolder<TResponse> Responses; 
         const ui32 GroupId;
         ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
         TString DebugInfo;
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
-
+ 
         // to measure blobstorage->client hop
         TInstant Sent;
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
-            : Status(status)
-            , ResponseSz(sz)
+            : Status(status) 
+            , ResponseSz(sz) 
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
-        {}
+        {} 
 
         TString Print(bool isFull) const {
             TStringStream str;
@@ -1198,21 +1198,21 @@ struct TEvBlobStorage {
             }
             return size;
         }
-    };
-
-    struct TEvBlock : public TEventLocal<TEvBlock, EvBlock> {
-        const ui64 TabletId;
-        const ui32 Generation;
+    }; 
+ 
+    struct TEvBlock : public TEventLocal<TEvBlock, EvBlock> { 
+        const ui64 TabletId; 
+        const ui32 Generation; 
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         bool IsMonitored = true;
         ui32 RestartCounter = 0;
-
+ 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline)
-            : TabletId(tabletId)
-            , Generation(generation)
+            : TabletId(tabletId) 
+            , Generation(generation) 
             , Deadline(deadline)
-        {}
+        {} 
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid)
             : TabletId(tabletId)
@@ -1242,15 +1242,15 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvBlockResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvBlockResult : public TEventLocal<TEvBlockResult, EvBlockResult> {
-        NKikimrProto::EReplyStatus Status;
+    }; 
+ 
+    struct TEvBlockResult : public TEventLocal<TEvBlockResult, EvBlockResult> { 
+        NKikimrProto::EReplyStatus Status; 
         TString ErrorReason;
-
-        TEvBlockResult(NKikimrProto::EReplyStatus status)
-            : Status(status)
-        {}
+ 
+        TEvBlockResult(NKikimrProto::EReplyStatus status) 
+            : Status(status) 
+        {} 
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
@@ -1266,8 +1266,8 @@ struct TEvBlobStorage {
         TString ToString() const {
             return Print(false);
         }
-    };
-
+    }; 
+ 
     struct TEvPatch : public TEventLocal<TEvPatch, EvPatch> {
     private:
         static constexpr ui32 BaseDomainsCount = 8;
@@ -1555,25 +1555,25 @@ struct TEvBlobStorage {
         }
     };
 
-    // special kind of request, strictly used for tablet discovery
-    // returns logoblobid of last known control-channel (zero) entry.
-    struct TEvDiscover : public TEventLocal<TEvDiscover, EvDiscover> {
-        const ui64 TabletId;
+    // special kind of request, strictly used for tablet discovery 
+    // returns logoblobid of last known control-channel (zero) entry. 
+    struct TEvDiscover : public TEventLocal<TEvDiscover, EvDiscover> { 
+        const ui64 TabletId; 
         const ui32 MinGeneration;
         const TInstant Deadline;
-        const bool ReadBody;
+        const bool ReadBody; 
         const bool DiscoverBlockedGeneration;
-        const ui32 ForceBlockedGeneration;
+        const ui32 ForceBlockedGeneration; 
         ui32 RestartCounter = 0;
-
-        TEvDiscover(ui64 tabletId, ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, TInstant deadline, ui32 forceBlockedGeneration)
-            : TabletId(tabletId)
+ 
+        TEvDiscover(ui64 tabletId, ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, TInstant deadline, ui32 forceBlockedGeneration) 
+            : TabletId(tabletId) 
             , MinGeneration(minGeneration)
             , Deadline(deadline)
-            , ReadBody(readBody)
+            , ReadBody(readBody) 
             , DiscoverBlockedGeneration(discoverBlockedGeneration)
-            , ForceBlockedGeneration(forceBlockedGeneration)
-        {}
+            , ForceBlockedGeneration(forceBlockedGeneration) 
+        {} 
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
@@ -1597,32 +1597,32 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvDiscoverResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvDiscoverResult : public TEventLocal<TEvDiscoverResult, EvDiscoverResult> {
-        NKikimrProto::EReplyStatus Status;
-
-        TLogoBlobID Id;
+    }; 
+ 
+    struct TEvDiscoverResult : public TEventLocal<TEvDiscoverResult, EvDiscoverResult> { 
+        NKikimrProto::EReplyStatus Status; 
+ 
+        TLogoBlobID Id; 
         ui32 MinGeneration;
         TString Buffer;
         ui32 BlockedGeneration;
         TString ErrorReason;
-
+ 
         TEvDiscoverResult(NKikimrProto::EReplyStatus status, ui32 minGeneration, ui32 blockedGeneration)
-            : Status(status)
+            : Status(status) 
             , MinGeneration(minGeneration)
             , BlockedGeneration(blockedGeneration)
-        {
+        { 
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
-        }
-
+        } 
+ 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
-            : Status(NKikimrProto::OK)
-            , Id(id)
+            : Status(NKikimrProto::OK) 
+            , Id(id) 
             , MinGeneration(minGeneration)
-            , Buffer(buffer)
+            , Buffer(buffer) 
             , BlockedGeneration(0)
-        {}
+        {} 
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
             : Status(NKikimrProto::OK)
@@ -1652,28 +1652,28 @@ struct TEvBlobStorage {
         TString ToString() const {
             return Print(false);
         }
-    };
-
-    struct TEvRange : public TEventLocal<TEvRange, EvRange> {
-        ui64 TabletId;
-        TLogoBlobID From;
-        TLogoBlobID To;
+    }; 
+ 
+    struct TEvRange : public TEventLocal<TEvRange, EvRange> { 
+        ui64 TabletId; 
+        TLogoBlobID From; 
+        TLogoBlobID To; 
         const TInstant Deadline;
         bool MustRestoreFirst;
         bool IsIndexOnly;
-        ui32 ForceBlockedGeneration;
+        ui32 ForceBlockedGeneration; 
         ui32 RestartCounter = 0;
-
+ 
         TEvRange(ui64 tabletId, const TLogoBlobID &from, const TLogoBlobID &to, const bool mustRestoreFirst,
-                TInstant deadline, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0)
-            : TabletId(tabletId)
-            , From(from)
-            , To(to)
+                TInstant deadline, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0) 
+            : TabletId(tabletId) 
+            , From(from) 
+            , To(to) 
             , Deadline(deadline)
             , MustRestoreFirst(mustRestoreFirst)
             , IsIndexOnly(isIndexOnly)
-            , ForceBlockedGeneration(forceBlockedGeneration)
-        {}
+            , ForceBlockedGeneration(forceBlockedGeneration) 
+        {} 
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
@@ -1683,8 +1683,8 @@ struct TEvBlobStorage {
             str << " To# " << To.ToString();
             str << " Deadline# " << Deadline.MilliSeconds();
             str << " MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false");
-            if (ForceBlockedGeneration)
-                str << " ForceBlock: " << ForceBlockedGeneration;
+            if (ForceBlockedGeneration) 
+                str << " ForceBlock: " << ForceBlockedGeneration; 
             str << "}";
             return str.Str();
         }
@@ -1699,36 +1699,36 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvRangeResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> {
-        struct TResponse {
-            TLogoBlobID Id;
+    }; 
+ 
+    struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> { 
+        struct TResponse { 
+            TLogoBlobID Id; 
             TString Buffer;
-
-            TResponse()
-            {}
-
+ 
+            TResponse() 
+            {} 
+ 
             TResponse(const TLogoBlobID &id, const TString &x)
-                : Id(id)
-                , Buffer(x)
-            {}
-        };
-
-        NKikimrProto::EReplyStatus Status;
-        TLogoBlobID From;
-        TLogoBlobID To;
-
+                : Id(id) 
+                , Buffer(x) 
+            {} 
+        }; 
+ 
+        NKikimrProto::EReplyStatus Status; 
+        TLogoBlobID From; 
+        TLogoBlobID To; 
+ 
         TVector<TResponse> Responses;
         const ui32 GroupId;
         TString ErrorReason;
-
+ 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
-            : Status(status)
-            , From(from)
-            , To(to)
+            : Status(status) 
+            , From(from) 
+            , To(to) 
             , GroupId(groupId)
-        {}
+        {} 
 
         TString Print(bool isFull) const {
             TStringStream str;
@@ -1755,8 +1755,8 @@ struct TEvBlobStorage {
         TString ToString() const {
             return Print(false);
         }
-    };
-
+    }; 
+ 
     struct TEvCollectGarbage : public TEventLocal<TEvCollectGarbage, EvCollectGarbage> {
         ui64 TabletId;
         ui32 RecordGeneration;
@@ -1982,20 +1982,20 @@ struct TEvBlobStorage {
     struct TEvVMovedPatchResult;
     struct TEvVInplacePatch;
     struct TEvVInplacePatchResult;
-    struct TEvVPut;
-    struct TEvVPutResult;
+    struct TEvVPut; 
+    struct TEvVPutResult; 
     struct TEvVMultiPut;
     struct TEvVMultiPutResult;
-    struct TEvVGet;
-    struct TEvVGetResult;
+    struct TEvVGet; 
+    struct TEvVGetResult; 
     struct TEvVPatchStart;
     struct TEvVPatchFoundParts;
     struct TEvVPatchDiff;
     struct TEvVPatchResult;
     struct TEvVPatchXorDiff;
     struct TEvVPatchXorDiffResult;
-    struct TEvVBlock;
-    struct TEvVBlockResult;
+    struct TEvVBlock; 
+    struct TEvVBlockResult; 
     struct TEvVGetBlock;
     struct TEvVGetBlockResult;
     struct TEvVCollectGarbage;
@@ -2063,8 +2063,8 @@ struct TEvBlobStorage {
     struct TEvAskRestartPDisk;
     struct TEvRestartPDisk;
     struct TEvRestartPDiskResult;
-};
-
+}; 
+ 
 // EPutHandleClass defines BlobStorage queue to a request to
 static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EPutHandleClass cls) {
     switch (cls) {
@@ -2077,8 +2077,8 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
         default:
             Y_FAIL("Unexpected case");
     }
-}
-
+} 
+ 
     // EGetHandleClass defines BlobStorage queue to a request to
     static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlobStorage::EGetHandleClass cls) {
         switch (cls) {

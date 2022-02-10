@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include "defs.h"
 
@@ -7,8 +7,8 @@
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 class TBlobStorageGroupInfo;
 struct TVDiskIdShort;
 
@@ -16,37 +16,37 @@ struct TVDiskIdShort;
 // TVDiskID -- global vdisk identifier
 ////////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 4)
-struct TVDiskID {
+struct TVDiskID { 
     ui32 GroupID = 0;
     ui32 GroupGeneration = 0;
     ui8 FailRealm = 0;
     ui8 FailDomain = 0;
     ui8 VDisk = 0;
     ui8 Padding = 0;
-
+ 
     TVDiskID() = default;
     TVDiskID(ui32 groupId, ui32 groupGen, TVDiskIdShort vdiskIdShort);
     TVDiskID(IInputStream &str);
-
+ 
     TVDiskID(ui32 groupId, ui32 groupGen, ui8 failRealm, ui8 failDomain, ui8 vdisk)
-        : GroupID(groupId)
-        , GroupGeneration(groupGen)
+        : GroupID(groupId) 
+        , GroupGeneration(groupGen) 
         , FailRealm(failRealm)
         , FailDomain(failDomain)
-        , VDisk(vdisk)
+        , VDisk(vdisk) 
     {}
-
+ 
     bool SameGroupAndGeneration(const TVDiskID &x) const {
-        return x.GroupID == GroupID && x.GroupGeneration == GroupGeneration;
-    }
+        return x.GroupID == GroupID && x.GroupGeneration == GroupGeneration; 
+    } 
 
     bool SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const {
-        return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration;
-    }
-
+        return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration; 
+    } 
+ 
     bool SameExceptGeneration(const TVDiskID &x) const {
         return x.GroupID == GroupID && x.FailRealm == FailRealm && x.FailDomain == FailDomain && x.VDisk == VDisk;
-    }
+    } 
 
     bool SameDisk(const TVDiskID &x) const {
         return *this == x;
@@ -76,12 +76,12 @@ struct TVDiskID {
     }
 
     static const TVDiskID InvalidId;
-};
+}; 
 #pragma pack(pop)
-
-TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x);
-void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto);
-
+ 
+TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x); 
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto); 
+ 
 ////////////////////////////////////////////////////////////////////////////
 // TVDiskIdShort -- topology info about VDisk, it avoids runtime info like
 // group generation
@@ -112,7 +112,7 @@ struct TVDiskIdShort {
         , FailDomain(id.FailDomain)
         , VDisk(id.VDisk)
     {}
-
+ 
     ui64 GetRaw() const {
         return (ui64(FailRealm) << 16) | (ui64(FailDomain) << 8) | ui64(VDisk);
     }
@@ -146,9 +146,9 @@ struct TVDiskIdShort {
         ui32 x = (((ui32(FailRealm) << 8) | ui32(FailDomain)) << 8) | ui32(VDisk);
         return IntHash<ui64>(x);
     }
-};
+}; 
 #pragma pack(pop)
-
+ 
 } // NKikimr
 
 

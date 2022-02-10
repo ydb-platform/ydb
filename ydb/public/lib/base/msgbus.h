@@ -1,5 +1,5 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 #include "msgbus_status.h"
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
@@ -8,18 +8,18 @@
 #include <library/cpp/messagebus/protobuf/ybusbuf.h>
 #include <library/cpp/messagebus/session_config.h>
 #include <library/cpp/messagebus/queue_config.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
-enum {
-    MTYPE_CLIENT_REQUEST = 10401,
-    MTYPE_CLIENT_RESPONSE = 10402,
-    MTYPE_CLIENT_FAKE_CONFIGDUMMY = 10403,
-    MTYPE_CLIENT_INSPECT = 10404,
-    MTYPE_CLIENT_SCHEME_INITROOT = 10405,
-    MTYPE_CLIENT_BSADM = 10406,
-    MTYPE_CLIENT_SCHEME_NAVIGATE = 10407,
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
+enum { 
+    MTYPE_CLIENT_REQUEST = 10401, 
+    MTYPE_CLIENT_RESPONSE = 10402, 
+    MTYPE_CLIENT_FAKE_CONFIGDUMMY = 10403, 
+    MTYPE_CLIENT_INSPECT = 10404, 
+    MTYPE_CLIENT_SCHEME_INITROOT = 10405, 
+    MTYPE_CLIENT_BSADM = 10406, 
+    MTYPE_CLIENT_SCHEME_NAVIGATE = 10407, 
     MTYPE_CLIENT_TYPES_REQUEST = 10408,
     MTYPE_CLIENT_TYPES_RESPONSE = 10409,
     MTYPE_CLIENT_CREATE_TABLET_POOL = 10410, // deprecated
@@ -43,7 +43,7 @@ enum {
     MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS = 10428,
     MTYPE_CLIENT_TABLET_KILL_REQUEST = 10429,
     MTYPE_CLIENT_TABLET_STATE_REQUEST = 10430,
-    MTYPE_CLIENT_LOCAL_MINIKQL = 10431,
+    MTYPE_CLIENT_LOCAL_MINIKQL = 10431, 
     MTYPE_CLIENT_FLAT_TX_REQUEST = 10432,
     MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST = 10434,
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
@@ -89,11 +89,11 @@ enum {
     MTYPE_CLIENT_TENANT_SLOT_BROKER_REQUEST = 10479,
     MTYPE_CLIENT_TENANT_SLOT_BROKER_RESPONSE = 10480,
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
-};
-
+}; 
+ 
 template <typename InstanceType, class TBufferRecord, int MType>
 struct TBusMessage : NBus::TBusBufferMessage<TBufferRecord, MType> { NBus::TBusBufferBase* New() override { return new InstanceType; } };
-
+ 
 // we had to define structs instead of typedef because we need to create real C++ type, so we could use RTTI names later in protocol registration
 struct TBusRequest : TBusMessage<TBusRequest, NKikimrClient::TRequest, MTYPE_CLIENT_REQUEST> {};
 struct TBusResponse : TBusMessage<TBusResponse, NKikimrClient::TResponse, MTYPE_CLIENT_RESPONSE> {};
@@ -152,22 +152,22 @@ struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TCons
 struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
 struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NKikimrClient::TTestShardControlRequest, MTYPE_CLIENT_TEST_SHARD_CONTROL> {};
 
-class TBusResponseStatus : public TBusResponse {
-public:
+class TBusResponseStatus : public TBusResponse { 
+public: 
     TBusResponseStatus(EResponseStatus status, const TString& text = TString())
-    {
-        Record.SetStatus(status);
+    { 
+        Record.SetStatus(status); 
         if (text) {
             Record.SetErrorReason(text);
         }
-    }
-};
-
-class TProtocol : public NBus::TBusBufferProtocol {
+    } 
+}; 
+ 
+class TProtocol : public NBus::TBusBufferProtocol { 
 protected:
     THashMap<TString, NBus::TBusBufferBase*> NameToType;
 
-public:
+public: 
     static TString TrimMessageName(const TString& name) {
         std::size_t pos = name.rfind(':');
         if (pos != TString::npos && pos + 5 <= name.size() && name.substr(pos + 1, 4) == "TBus")
@@ -189,14 +189,14 @@ public:
         return nullptr;
     }
 
-    TProtocol(int port)
-        : NBus::TBusBufferProtocol("CLI_MB", port)
-    {
-        RegisterType(new TBusRequest);
-        RegisterType(new TBusResponse);
-        RegisterType(new TBusFakeConfigDummy);
-        RegisterType(new TBusSchemeInitRoot);
-        RegisterType(new TBusBSAdm);
+    TProtocol(int port) 
+        : NBus::TBusBufferProtocol("CLI_MB", port) 
+    { 
+        RegisterType(new TBusRequest); 
+        RegisterType(new TBusResponse); 
+        RegisterType(new TBusFakeConfigDummy); 
+        RegisterType(new TBusSchemeInitRoot); 
+        RegisterType(new TBusBSAdm); 
         RegisterType(new TBusTypesRequest);
         RegisterType(new TBusTypesResponse);
         RegisterType(new TBusMessageBusTraceRequest);
@@ -214,7 +214,7 @@ public:
         RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);
         RegisterType(new TBusTabletCountersRequest);
-        RegisterType(new TBusTabletLocalMKQL);
+        RegisterType(new TBusTabletLocalMKQL); 
         RegisterType(new TBusTabletLocalSchemeTx);
         RegisterType(new TBusSchemeOperation);
         RegisterType(new TBusSchemeOperationStatus);
@@ -246,20 +246,20 @@ public:
         RegisterType(new TBusConsoleRequest);
         RegisterType(new TBusConsoleResponse);
         RegisterType(new TBusTestShardControlRequest);
-    }
-
+    } 
+ 
     const static ui32 DefaultPort = 2134;
-};
-
-class IMessageBusServer {
-public:
+}; 
+ 
+class IMessageBusServer { 
+public: 
     virtual NActors::IActor* CreateProxy() = 0;
     virtual NActors::IActor* CreateMessageBusTraceService() = 0;
-    virtual ~IMessageBusServer() {}
-};
-
+    virtual ~IMessageBusServer() {} 
+}; 
+ 
 class IPersQueueGetReadSessionsInfoWorkerFactory;
-
+ 
 IMessageBusServer* CreateMsgBusServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
@@ -276,7 +276,7 @@ IMessageBusServer* CreateMsgBusTracingServer(
 
 inline NActors::TActorId CreateMsgBusProxyId() {
     return NActors::TActorId(0, "MsgBusProxy");
-}
+} 
 
-}
+} 
 }

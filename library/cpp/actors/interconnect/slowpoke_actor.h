@@ -12,10 +12,10 @@ namespace NActors {
         const TDuration RescheduleMax;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::INTERCONNECT_COMMON;
-        }
-
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::INTERCONNECT_COMMON; 
+        } 
+ 
         TSlowpokeActor(TDuration duration, TDuration sleepMin, TDuration sleepMax, TDuration rescheduleMin, TDuration rescheduleMax)
             : Duration(duration)
             , SleepMin(sleepMin)

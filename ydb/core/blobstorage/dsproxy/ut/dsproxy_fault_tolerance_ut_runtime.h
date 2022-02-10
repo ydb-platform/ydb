@@ -27,7 +27,7 @@ public:
     TVector<std::pair<TVDiskID, TActorId>> VDisks;
     std::unique_ptr<TAppData> AppData;
     std::unique_ptr<TActorSystem> ActorSystem;
-    TProgramShouldContinue KikimrShouldContinue;
+    TProgramShouldContinue KikimrShouldContinue; 
 
     void Setup(TBlobStorageGroupType groupType, ui32 numFailDomains, ui32 numVDisksPerFailDomain, ui32 numRealms) {
         Counters = new NMonitoring::TDynamicCounters;

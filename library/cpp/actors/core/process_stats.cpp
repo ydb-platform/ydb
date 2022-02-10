@@ -13,84 +13,84 @@
 #include <util/string/split.h>
 
 #ifndef _win_
-#include <sys/user.h>
-#include <sys/sysctl.h>
+#include <sys/user.h> 
+#include <sys/sysctl.h> 
 #endif
 
 namespace NActors {
 #ifdef _linux_
 
-    namespace {
-        template <typename TVal>
-        static bool ExtractVal(const TString& str, const TString& name, TVal& res) {
-            if (!str.StartsWith(name))
-                return false;
+    namespace { 
+        template <typename TVal> 
+        static bool ExtractVal(const TString& str, const TString& name, TVal& res) { 
+            if (!str.StartsWith(name)) 
+                return false; 
             size_t pos = name.size();
             while (pos < str.size() && (str[pos] == ' ' || str[pos] == '\t')) {
-                pos++;
-            }
+                pos++; 
+            } 
             res = atol(str.data() + pos);
-            return true;
-        }
+            return true; 
+        } 
 
-        float TicksPerMillisec() {
+        float TicksPerMillisec() { 
 #ifdef _SC_CLK_TCK
-            return sysconf(_SC_CLK_TCK) / 1000.0;
+            return sysconf(_SC_CLK_TCK) / 1000.0; 
 #else
-            return 1.f;
+            return 1.f; 
 #endif
         }
-    }
+    } 
 
-    bool TProcStat::Fill(pid_t pid) {
-        try {
+    bool TProcStat::Fill(pid_t pid) { 
+        try { 
             TString strPid(ToString(pid));
             TFileInput proc("/proc/" + strPid + "/status");
-            TString str;
-            while (proc.ReadLine(str)) {
-                if (ExtractVal(str, "VmRSS:", Rss))
-                    continue;
-                if (ExtractVal(str, "voluntary_ctxt_switches:", VolCtxSwtch))
-                    continue;
-                if (ExtractVal(str, "nonvoluntary_ctxt_switches:", NonvolCtxSwtch))
-                    continue;
-            }
-            // Convert from kB to bytes
-            Rss *= 1024;
+            TString str; 
+            while (proc.ReadLine(str)) { 
+                if (ExtractVal(str, "VmRSS:", Rss)) 
+                    continue; 
+                if (ExtractVal(str, "voluntary_ctxt_switches:", VolCtxSwtch)) 
+                    continue; 
+                if (ExtractVal(str, "nonvoluntary_ctxt_switches:", NonvolCtxSwtch)) 
+                    continue; 
+            } 
+            // Convert from kB to bytes 
+            Rss *= 1024; 
 
-            float tickPerMillisec = TicksPerMillisec();
+            float tickPerMillisec = TicksPerMillisec(); 
 
             TFileInput procStat("/proc/" + strPid + "/stat");
-            procStat.ReadLine(str);
-            if (!str.empty()) {
+            procStat.ReadLine(str); 
+            if (!str.empty()) { 
                 sscanf(str.data(),
-                       "%d %*s %c %d %d %d %d %d %u %lu %lu "
-                       "%lu %lu %lu %lu %ld %ld %ld %ld %ld "
-                       "%ld %llu %lu %ld %lu",
-                       &Pid, &State, &Ppid, &Pgrp, &Session, &TtyNr, &TPgid, &Flags, &MinFlt, &CMinFlt,
-                       &MajFlt, &CMajFlt, &Utime, &Stime, &CUtime, &CStime, &Priority, &Nice, &NumThreads,
-                       &ItRealValue, &StartTime, &Vsize, &RssPages, &RssLim);
-                Utime /= tickPerMillisec;
-                Stime /= tickPerMillisec;
-                CUtime /= tickPerMillisec;
-                CStime /= tickPerMillisec;
+                       "%d %*s %c %d %d %d %d %d %u %lu %lu " 
+                       "%lu %lu %lu %lu %ld %ld %ld %ld %ld " 
+                       "%ld %llu %lu %ld %lu", 
+                       &Pid, &State, &Ppid, &Pgrp, &Session, &TtyNr, &TPgid, &Flags, &MinFlt, &CMinFlt, 
+                       &MajFlt, &CMajFlt, &Utime, &Stime, &CUtime, &CStime, &Priority, &Nice, &NumThreads, 
+                       &ItRealValue, &StartTime, &Vsize, &RssPages, &RssLim); 
+                Utime /= tickPerMillisec; 
+                Stime /= tickPerMillisec; 
+                CUtime /= tickPerMillisec; 
+                CStime /= tickPerMillisec; 
                 SystemUptime = ::Uptime();
                 Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec());
             }
-
+ 
             TFileInput statm("/proc/" + strPid + "/statm");
-            statm.ReadLine(str);
+            statm.ReadLine(str); 
             TVector<TString> fields;
             StringSplitter(str).Split(' ').SkipEmpty().Collect(&fields);
-            if (fields.size() >= 7) {
-                ui64 resident = FromString<ui64>(fields[1]);
-                ui64 shared = FromString<ui64>(fields[2]);
-                if (PageSize == 0) {
-                    PageSize = ObtainPageSize();
-                }
-                FileRss = shared * PageSize;
-                AnonRss = (resident - shared) * PageSize;
-            }
+            if (fields.size() >= 7) { 
+                ui64 resident = FromString<ui64>(fields[1]); 
+                ui64 shared = FromString<ui64>(fields[2]); 
+                if (PageSize == 0) { 
+                    PageSize = ObtainPageSize(); 
+                } 
+                FileRss = shared * PageSize; 
+                AnonRss = (resident - shared) * PageSize; 
+            } 
 
             TFileInput cgroup("/proc/" + strPid + "/cgroup");
             TString line;
@@ -112,70 +112,70 @@ namespace NActors {
                 }
             }
 
-        } catch (...) {
-            return false;
+        } catch (...) { 
+            return false; 
         }
-        return true;
+        return true; 
     }
 
-    long TProcStat::ObtainPageSize() {
-        long sz = sysconf(_SC_PAGESIZE);
-        return sz;
-    }
+    long TProcStat::ObtainPageSize() { 
+        long sz = sysconf(_SC_PAGESIZE); 
+        return sz; 
+    } 
 
 #else
 
-    bool TProcStat::Fill(pid_t pid) {
-        Y_UNUSED(pid);
-        return false;
-    }
+    bool TProcStat::Fill(pid_t pid) { 
+        Y_UNUSED(pid); 
+        return false; 
+    } 
 
-    long TProcStat::ObtainPageSize() {
-        return 0;
-    }
+    long TProcStat::ObtainPageSize() { 
+        return 0; 
+    } 
 
 #endif
 
 namespace {
-    // Periodically collects process stats and exposes them as mon counters
+    // Periodically collects process stats and exposes them as mon counters 
     template <typename TDerived>
     class TProcStatCollectingActor: public TActorBootstrapped<TProcStatCollectingActor<TDerived>> {
-    public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::ACTORLIB_STATS;
-        }
+    public: 
+        static constexpr IActor::EActivityType ActorActivityType() { 
+            return IActor::ACTORLIB_STATS; 
+        } 
 
         TProcStatCollectingActor(TDuration interval)
             : Interval(interval)
-        {
-        }
+        { 
+        } 
 
-        void Bootstrap(const TActorContext& ctx) {
+        void Bootstrap(const TActorContext& ctx) { 
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
             Self()->Become(&TDerived::StateWork);
-        }
+        } 
 
-        STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
-                CFunc(TEvents::TSystem::Wakeup, Wakeup);
-            }
-        }
+        STFUNC(StateWork) { 
+            switch (ev->GetTypeRewrite()) { 
+                CFunc(TEvents::TSystem::Wakeup, Wakeup); 
+            } 
+        } 
 
-    private:
-        void Wakeup(const TActorContext& ctx) {
+    private: 
+        void Wakeup(const TActorContext& ctx) { 
             Self()->UpdateCounters(ProcStat);
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
         }
 
         TDerived* Self() {
-            ProcStat.Fill(getpid());
+            ProcStat.Fill(getpid()); 
             return static_cast<TDerived*>(this);
-        }
+        } 
 
     private:
         const TDuration Interval;
         TProcStat ProcStat;
-    };
+    }; 
 
     // Periodically collects process stats and exposes them as mon counters
     class TDynamicCounterCollector: public TProcStatCollectingActor<TDynamicCounterCollector> {

@@ -17,12 +17,12 @@ namespace NKikimr {
         static const ui32 CompWorthReadSize = 2u << 20u;
 
         TLogoBlobSstPtr GenerateSst(ui32 step, ui32 recs, ui32 plus, ui64 tabletId = 0, ui32 generation = 0,
-                                    ui32 channel = 0, ui32 cookie = 0) {
-            using TRec = TLogoBlobSst::TRec;
+                                    ui32 channel = 0, ui32 cookie = 0) { 
+            using TRec = TLogoBlobSst::TRec; 
             Y_UNUSED(step);
             TLogoBlobSstPtr ptr(new TLogoBlobSst(TTestContexts().GetVCtx()));
             for (ui32 i = 0; i < recs; i++) {
-                TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie);
+                TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie); 
                 TRec rec {TKeyLogoBlob(id), TMemRecLogoBlob()};
                 ptr->LoadedIndex.push_back(rec);
             }
@@ -30,10 +30,10 @@ namespace NKikimr {
         }
 
         TLogoBlobOrderedSstsPtr GenerateOrderedSsts(ui32 step, ui32 recs, ui32 plus, ui32 ssts, ui64 tabletId = 0,
-                                                    ui32 generation = 0, ui32 channel = 0, ui32 cookie = 0) {
+                                                    ui32 generation = 0, ui32 channel = 0, ui32 cookie = 0) { 
             TSegments vec;
             for (ui32 i = 0; i < ssts; i++) {
-                vec.push_back(GenerateSst(step, recs, plus, tabletId, generation, channel, cookie));
+                vec.push_back(GenerateSst(step, recs, plus, tabletId, generation, channel, cookie)); 
                 step += recs * plus;
             }
 
@@ -46,7 +46,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageHullSstIt) {
 
         using namespace NBlobStorageHullSstItHelpers;
-        using TMemIterator = TLogoBlobSst::TMemIterator;
+        using TMemIterator = TLogoBlobSst::TMemIterator; 
 
         Y_UNIT_TEST(TestSeekToFirst) {
             TLogoBlobSstPtr ptr(GenerateSst(10, 10, 1));
@@ -89,7 +89,7 @@ namespace NKikimr {
             TMemIterator it(ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 15, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 15, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]"));
 
@@ -109,7 +109,7 @@ namespace NKikimr {
             TMemIterator it(ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 15, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 15, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(it.GetCurKey().ToString() == TString("[0:0:15:0:0:0:0]"));
 
@@ -129,7 +129,7 @@ namespace NKikimr {
             TMemIterator it(ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 5, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 5, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(it.GetCurKey().ToString() == "[0:0:10:0:0:0:0]");
         }
@@ -139,7 +139,7 @@ namespace NKikimr {
             TMemIterator it(ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 25, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 25, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(!it.Valid());
             it.Prev();
@@ -152,7 +152,7 @@ namespace NKikimr {
             TMemIterator it(ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 15, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 15, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(it.GetCurKey().ToString() == "[0:0:16:0:0:0:0]");
         }
@@ -161,7 +161,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageHullOrderedSstsIt) {
 
         using namespace NBlobStorageHullSstItHelpers;
-        using TIterator = TLogoBlobOrderedSsts::TReadIterator;
+        using TIterator = TLogoBlobOrderedSsts::TReadIterator; 
         TTestContexts TestCtx(ChunkSize, CompWorthReadSize);
 
         Y_UNIT_TEST(TestSeekToFirst) {
@@ -214,7 +214,7 @@ namespace NKikimr {
             TIterator it(hullCtx, ptr.Get());
 
             TLogoBlobID id;
-            id = TLogoBlobID(0, 0, 30, 0, 0, 0);
+            id = TLogoBlobID(0, 0, 30, 0, 0, 0); 
             it.Seek(id);
             UNIT_ASSERT(!it.Valid());
             it.Prev();

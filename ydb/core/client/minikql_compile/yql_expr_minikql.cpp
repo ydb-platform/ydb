@@ -42,7 +42,7 @@
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 #include <utility>
 
 namespace NYql {
@@ -1417,8 +1417,8 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
 
 TMiniKQLCompileActorEvents::TEvCompileResult::TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies)
     : Result(result)
-    , CompileResolveCookies(std::move(resolveCookies))
-{}
+    , CompileResolveCookies(std::move(resolveCookies)) 
+{} 
 
 class TMiniKQLCompileActor : public TActorBootstrapped<TMiniKQLCompileActor> {
 public:
@@ -1431,12 +1431,12 @@ public:
                          IDbSchemeResolver* dbSchemeResolver,
                          TActorId responseTo,
                          THashMap<TString, ui64> &&resolveRefreshCookies,
-                         bool forceCacheRefresh)
+                         bool forceCacheRefresh) 
         : TypeEnv(typeEnv)
         , Program(program)
         , DbSchemeResolver(dbSchemeResolver)
         , ResponseTo(responseTo)
-        , ResolveRefreshCookies(std::move(resolveRefreshCookies))
+        , ResolveRefreshCookies(std::move(resolveRefreshCookies)) 
     {
         Y_UNUSED(forceCacheRefresh);
     }
@@ -1447,7 +1447,7 @@ public:
         try {
             TMiniKQLCompileResult result;
             if (!ParseProgram(result.Errors)) {
-                return SendResponseAndDie(result, {}, ctx);
+                return SendResponseAndDie(result, {}, ctx); 
             }
 
             CollectKeys(Expr->Root.Get(), CompileCtx);
@@ -1466,20 +1466,20 @@ public:
             } else {
                 if (!PerformTypeAnnotation(Expr->Root, Expr->Context, CompileCtx)) {
                     result.Errors.AddIssues(Expr->Context.IssueManager.GetIssues());
-                    return SendResponseAndDie(result, {}, ctx);
+                    return SendResponseAndDie(result, {}, ctx); 
                 }
 
                 result.CompiledProgram = CompileProgram();
-                return SendResponseAndDie(result, {}, ctx);
+                return SendResponseAndDie(result, {}, ctx); 
             }
         } catch (const TNodeException& ex) {
             // TODO: pass backtrace
             TMiniKQLCompileResult res(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what()));
-            return SendResponseAndDie(res, {}, ctx);
+            return SendResponseAndDie(res, {}, ctx); 
         } catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
             // TODO: pass backtrace
             TMiniKQLCompileResult res(NYql::ExceptionToIssue(ex));
-            return SendResponseAndDie(res, {}, ctx);
+            return SendResponseAndDie(res, {}, ctx); 
         }
     }
 
@@ -1494,22 +1494,22 @@ public:
 private:
     void Handle(IDbSchemeResolver::TEvents::TEvResolveTablesResult::TPtr& ev, const TActorContext& ctx) {
         THashMap<TString, ui64> compileResolveCookies;
-
+ 
         try {
             const auto& results = ev->Get()->Result;
             auto& tablesToResolve = CompileCtx->GetTablesToResolve();
             Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
-
+ 
             TVector<NYql::TIssue> resolveErrors;
             ui32 i = 0;
-            for (auto &xpair : tablesToResolve) {
-                auto &x = xpair.second;
-                auto &response = results[i];
-
+            for (auto &xpair : tablesToResolve) { 
+                auto &x = xpair.second; 
+                auto &response = results[i]; 
+ 
                 switch (response.Status) {
                     case IDbSchemeResolver::TTableResult::Ok:
                         break;
-
+ 
                     case IDbSchemeResolver::TTableResult::LookupError:
                         resolveErrors.push_back(
                             NYql::TIssue(TPosition(), TStringBuilder()
@@ -1527,35 +1527,35 @@ private:
                         break;
                 }
 
-                compileResolveCookies[x.Request.TableName] = response.CacheGeneration;
-                x.Response = response;
-                ++i;
+                compileResolveCookies[x.Request.TableName] = response.CacheGeneration; 
+                x.Response = response; 
+                ++i; 
             }
 
             if (!resolveErrors.empty()) {
                 TMiniKQLCompileResult result(resolveErrors);
                 return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
             }
-
+ 
             TMiniKQLCompileResult result;
 
             if (!PerformTypeAnnotation(Expr->Root, Expr->Context, CompileCtx)) {
                 result.Errors.AddIssues(Expr->Context.IssueManager.GetIssues());
-                return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
+                return SendResponseAndDie(result, std::move(compileResolveCookies), ctx); 
             }
 
             result.CompiledProgram = CompileProgram();
-            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
+            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx); 
         }
         catch (const TNodeException& ex) {
             // TODO: pass backtrace
             TMiniKQLCompileResult result(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what()));
-            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
+            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx); 
         }
         catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
                                        // TODO: pass backtrace
             TMiniKQLCompileResult result(NYql::ExceptionToIssue(ex));
-            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
+            return SendResponseAndDie(result, std::move(compileResolveCookies), ctx); 
         }
     }
 
@@ -1593,22 +1593,22 @@ private:
     }
 
     void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(
-            new IEventHandle(
-                ResponseTo,
-                ctx.SelfID,
-                new TMiniKQLCompileActorEvents::TEvCompileResult(result, std::move(resolveCookies))
-            ));
+        ctx.ExecutorThread.Send( 
+            new IEventHandle( 
+                ResponseTo, 
+                ctx.SelfID, 
+                new TMiniKQLCompileActorEvents::TEvCompileResult(result, std::move(resolveCookies)) 
+            )); 
         Die(ctx);
     }
 
 private:
-    void Cleanup() {
-        CompileCtx.Drop();
-        Expr.Drop();
-        Compiler.Drop();
-    }
-
+    void Cleanup() { 
+        CompileCtx.Drop(); 
+        Expr.Drop(); 
+        Compiler.Drop(); 
+    } 
+ 
     const NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv;
     TString Program;
     TContext::TPtr CompileCtx;
@@ -1625,9 +1625,9 @@ CreateCompileActor(const TString& program,
                    IDbSchemeResolver* dbSchemeResolver,
                    TActorId responseTo,
                    THashMap<TString, ui64> &&resolveRefreshCookies,
-                   bool forceCacheRefresh)
+                   bool forceCacheRefresh) 
 {
-    return new TMiniKQLCompileActor(program, typeEnv, dbSchemeResolver, responseTo, std::move(resolveRefreshCookies), forceCacheRefresh);
+    return new TMiniKQLCompileActor(program, typeEnv, dbSchemeResolver, responseTo, std::move(resolveRefreshCookies), forceCacheRefresh); 
 }
 
 } // namespace NYql

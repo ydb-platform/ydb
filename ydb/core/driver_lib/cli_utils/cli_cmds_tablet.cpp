@@ -104,11 +104,11 @@ public:
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
-
+ 
         Program = GetMiniKQL(config.ParseResult->GetFreeArgs().at(0));
         if (config.ParseResult->GetFreeArgCount() > 1)
             Params = GetMiniKQL(config.ParseResult->GetFreeArgs().at(1));
-
+ 
         Request = new NMsgBusProxy::TBusTabletLocalMKQL;
         Request->Record.SetTabletID(config.TabletId);
         auto* pgm = Request->Record.MutableProgram();
@@ -117,7 +117,7 @@ public:
         } else {
             pgm->MutableProgram()->SetBin(Program);
         }
-
+ 
         if (!Params.empty()) {
             if (IsMiniKQL(Params)) {
                 pgm->MutableParams()->SetText(Params);
@@ -125,7 +125,7 @@ public:
                 pgm->MutableParams()->SetBin(Params);
             }
         }
-
+ 
         Request->Record.SetConnectToFollower(config.ParseResult->Has("follower"));
         config.JsonUi64AsText = config.ParseResult->Has("json-ui64-as-string");
         config.JsonBinaryAsBase64 = config.ParseResult->Has("json-binary-as-base64");

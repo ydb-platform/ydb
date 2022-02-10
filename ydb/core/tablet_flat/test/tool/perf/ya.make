@@ -1,6 +1,6 @@
 PROGRAM(table-perf)
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     colons.cpp

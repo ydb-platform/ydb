@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "keyvalue.h"
-
+ 
 #include "keyvalue_collector.h"
 #include "keyvalue_scheme_flat.h"
 #include "keyvalue_simple_db.h"
@@ -29,9 +29,9 @@
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NKeyValue {
-
+ 
 constexpr ui64 CollectorErrorInitialBackoffMs = 10;
 constexpr ui64 CollectorErrorMaxBackoffMs = 5000;
 constexpr ui64 CollectorMaxErrors = 20;
@@ -39,7 +39,7 @@ constexpr ui64 PeriodicRefreshMs = 15000;
 
 class TKeyValueFlat : public TActor<TKeyValueFlat>, public NTabletFlatExecutor::TTabletExecutedFlat {
 protected:
-    struct TTxInit : public NTabletFlatExecutor::ITransaction {
+    struct TTxInit : public NTabletFlatExecutor::ITransaction { 
         TActorId KeyValueActorId;
         TKeyValueFlat &Self;
 
@@ -103,7 +103,7 @@ protected:
                 if (state.GetIsDamaged()) {
                     return true;
                 }
-            }
+            } 
 
             return iter->Last() != NTable::EReady::Page;
         }
@@ -114,7 +114,7 @@ protected:
         }
     };
 
-    struct TTxRequest : public NTabletFlatExecutor::ITransaction {
+    struct TTxRequest : public NTabletFlatExecutor::ITransaction { 
         THolder<TIntermediate> Intermediate;
         TKeyValueFlat *Self;
 
@@ -140,13 +140,13 @@ protected:
             }
             TSimpleDbFlat db(txc.DB);
             Self->State.RequestExecute(Intermediate, db, ctx, Self->Info());
-            return true;
-        }
-
-        void Complete(const TActorContext &ctx) override {
+            return true; 
+        } 
+ 
+        void Complete(const TActorContext &ctx) override { 
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxRequest Complete");
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
-        }
+        } 
 
         bool CheckConsistency(NTabletFlatExecutor::TTransactionContext &txc) {
 #ifdef KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -163,13 +163,13 @@ protected:
             return true;
 #endif
         }
-    };
-
-    struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
+    }; 
+ 
+    struct TTxMonitoring : public NTabletFlatExecutor::ITransaction { 
         const THolder<NMon::TEvRemoteHttpInfo> Event;
         const TActorId RespondTo;
         TKeyValueFlat *Self;
-
+ 
         TTxMonitoring(THolder<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue)
             : Event(std::move(event))
             , RespondTo(respondTo)
@@ -204,7 +204,7 @@ protected:
         }
     };
 
-    struct TTxStoreCollect : public NTabletFlatExecutor::ITransaction {
+    struct TTxStoreCollect : public NTabletFlatExecutor::ITransaction { 
         TKeyValueFlat *Self;
 
         TTxStoreCollect(TKeyValueFlat *keyValueFlat)
@@ -225,7 +225,7 @@ protected:
         }
     };
 
-    struct TTxEraseCollect : public NTabletFlatExecutor::ITransaction {
+    struct TTxEraseCollect : public NTabletFlatExecutor::ITransaction { 
         TKeyValueFlat *Self;
 
         TTxEraseCollect(TKeyValueFlat *keyValueFlat)
@@ -249,25 +249,25 @@ protected:
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
-
+ 
     void OnDetach(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
         HandleDie(ctx);
-    }
-
+    } 
+ 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " OnTabletDead " << ev->Get()->ToString());
         HandleDie(ctx);
-    }
-
-    void OnActivateExecutor(const TActorContext &ctx) override {
+    } 
+ 
+    void OnActivateExecutor(const TActorContext &ctx) override { 
         Executor()->RegisterExternalTabletCounters(State.TakeTabletCounters());
         State.SetupResourceMetrics(Executor()->GetResourceMetrics());
         ctx.Schedule(TDuration::MilliSeconds(PeriodicRefreshMs), new TEvKeyValue::TEvPeriodicRefresh);
         Execute(new TTxInit(ctx.SelfID, *this), ctx);
-    }
-
+    } 
+ 
     void Enqueue(STFUNC_SIG) override {
         SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE,
@@ -275,8 +275,8 @@ protected:
                 << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().c_str() : "serialized?"));
         InitialEventsQueue.push_back(ev);
-    }
-
+    } 
+ 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // gRPC
@@ -372,7 +372,7 @@ protected:
         State.RegisterInitialCollectResult(ctx);
     }
 
-    void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {
+    void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvRequest " << ev->Get()->ToString());
         UpdateTabletYellow();
@@ -390,18 +390,18 @@ protected:
         State.OnUpdateWeights(ev);
     }
 
-    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override {
-        if (!Executor() || !Executor()->GetStats().IsActive)
-            return false;
-
-        if (!ev)
-            return true;
-
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override { 
+        if (!Executor() || !Executor()->GetStats().IsActive) 
+            return false; 
+ 
+        if (!ev) 
+            return true; 
+ 
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvRemoteHttpInfo: %s"
                 << ev->Get()->Query.data());
         Execute(new TTxMonitoring(ev->Release(), ev->Sender, this), ctx);
-
-        return true;
+ 
+        return true; 
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -409,19 +409,19 @@ protected:
         Y_UNUSED(ev);
         Become(&TThis::StateBroken);
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-    }
-
+    } 
+ 
     void RestoreActorActivity() {
         SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
     }
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit)
+        : TActor(&TThis::StateInit) 
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {
         TAutoPtr<TTabletCountersBase> counters(
@@ -434,7 +434,7 @@ public:
         State.SetupTabletCounters(counters);
         State.Clear();
     }
-
+ 
     virtual void HandleDie(const TActorContext &ctx)
     {
         if (CollectorActorId) {
@@ -456,19 +456,19 @@ public:
         return false;
     }
 
-    STFUNC(StateInit) {
+    STFUNC(StateInit) { 
         RestoreActorActivity();
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
-        StateInitImpl(ev, ctx);
-    }
-
-    STFUNC(StateWork) {
+        StateInitImpl(ev, ctx); 
+    } 
+ 
+    STFUNC(StateWork) { 
         if (HandleHook(ev, ctx))
             return;
         RestoreActorActivity();
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
             hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);
@@ -486,28 +486,28 @@ public:
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
 
-            default:
+            default: 
                 if (!HandleDefaultEvents(ev, ctx)) {
                     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                             << " StateWork unexpected event type# " << (ui32)ev->GetTypeRewrite()
                             << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
                 }
-                break;
-        }
-    }
-
-    STFUNC(StateBroken) {
+                break; 
+        } 
+    } 
+ 
+    STFUNC(StateBroken) { 
         RestoreActorActivity();
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead) 
 
             default:
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                         << " BrokenState unexpected event type# " << (ui32)ev->GetTypeRewrite()
                         << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
                 break;
-        }
-    }
+        } 
+    } 
 
     void InitSchemeComplete(const TActorContext &ctx) {
         Become(&TThis::StateWork);
@@ -538,8 +538,8 @@ public:
     bool ReassignChannelsEnabled() const override {
         return true;
     }
-};
-
-
+}; 
+ 
+ 
 }// NKeyValue
 }// NKikimr

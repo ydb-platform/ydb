@@ -233,7 +233,7 @@ private:
     void StopNode(const TActorContext &ctx)
     {
         LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER, "Stop node upon lease expiration (exit code 2)");
-        AppData(ctx)->KikimrShouldContinue->ShouldStop(2);
+        AppData(ctx)->KikimrShouldContinue->ShouldStop(2); 
     }
 
     TString ToString(TInstant t) const

@@ -1,9 +1,9 @@
-#include "msgbus_tabletreq.h"
+#include "msgbus_tabletreq.h" 
 #include <ydb/core/keyvalue/keyvalue_events.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
 namespace {
     const ui32 DefaultTimeoutMs = 1000 * 90; // 90 seconds is a good default
     const ui64 MaxAllowedTimeoutMs = 1000 * 60 * 30; // 30 minutes is an instanely long request
@@ -13,29 +13,29 @@ template <typename ResponseType>
 class TMessageBusKeyValue
         : public TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST> {
     using TBase = TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST>;
-public:
+public: 
     NKikimrClient::TKeyValueRequest RequestProto;
     ui64 TabletId;
 
     TMessageBusKeyValue(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout)
-        : TBase(msg, tabletId, withRetry, timeout, false)
+        : TBase(msg, tabletId, withRetry, timeout, false) 
         , RequestProto(static_cast<TBusKeyValue *>(msg.GetMessage())->Record)
         , TabletId(tabletId)
-    {}
-
+    {} 
+ 
     void Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
         TEvKeyValue::TEvResponse *msg = ev->Get();
         TAutoPtr<ResponseType> response(new ResponseType());
         CopyProtobufsByFieldName(response->Record, msg->Record);
         TBase::SendReplyAndDie(response.Release(), ctx);
-    }
-
+    } 
+ 
     TEvKeyValue::TEvRequest* MakeReq(const TActorContext &ctx) {
         Y_UNUSED(ctx);
         THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest());
         request->Record = RequestProto;
         return request.Release();
-    }
+    } 
 
      NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
             const TString& text = TString()) override {
@@ -55,11 +55,11 @@ public:
         }
         return response.Release();
     }
-};
-
+}; 
+ 
 IActor* CreateMessageBusKeyValue(NKikimr::NMsgBusProxy::TBusMessageContext &msg) {
     auto &record = static_cast<TBusKeyValue *>(msg.GetMessage())->Record;
-
+ 
     const ui64 tabletId = record.GetTabletId();
     const bool withRetry = true;
     TDuration timeout = TDuration::MilliSeconds(DefaultTimeoutMs);
@@ -92,7 +92,7 @@ IActor* CreateMessageBusKeyValue(NKikimr::NMsgBusProxy::TBusMessageContext &msg)
     } else {
         return new TMessageBusKeyValue<TBusResponse>(msg, tabletId, withRetry, timeout);
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

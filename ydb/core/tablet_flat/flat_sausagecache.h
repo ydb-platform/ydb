@@ -1,25 +1,25 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 #include "flat_sausage_gut.h"
 #include "flat_sausage_fetch.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
 #include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
 };
-
+ 
 struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
     // no internal state
-};
-
+}; 
+ 
 class TPrivatePageCache {
-public:
+public: 
     struct TInfo;
 
     struct TStats {
@@ -33,33 +33,33 @@ public:
         ui64 PinnedLoadSize = 0; // number of bytes pinned by transactions (which are currently being loaded)
     };
 
-    struct TPage : public TIntrusiveListItem<TPage> {
+    struct TPage : public TIntrusiveListItem<TPage> { 
         using TWaitQueue = TOneOneQueueInplace<TPrivatePageCacheWaitPad *, 64>;
-        using TWaitQueuePtr = TAutoPtr<TWaitQueue, TWaitQueue::TCleanDestructor>;
-
-        enum ELoadState {
-            LoadStateNo,
-            LoadStateLoaded,
-            LoadStateRequested,
-            LoadStateRequestedAsync,
-        };
-
-        ui64 LoadState : 2;
-        ui64 CacheGeneration : 3;
+        using TWaitQueuePtr = TAutoPtr<TWaitQueue, TWaitQueue::TCleanDestructor>; 
+ 
+        enum ELoadState { 
+            LoadStateNo, 
+            LoadStateLoaded, 
+            LoadStateRequested, 
+            LoadStateRequestedAsync, 
+        }; 
+ 
+        ui64 LoadState : 2; 
+        ui64 CacheGeneration : 3; 
         ui64 Sticky : 1;
         ui64 SharedPending : 1;
         ui64 Padding : 1;
-        const ui64 Size : 24;
-        const ui64 Id : 32;
-
+        const ui64 Size : 24; 
+        const ui64 Id : 32; 
+ 
         TInfo* const Info;
         TIntrusivePtr<TPrivatePageCachePinPad> PinPad;
-        TWaitQueuePtr WaitQueue;
+        TWaitQueuePtr WaitQueue; 
         TSharedPageRef SharedBody;
         TSharedData PinnedBody;
-
+ 
         TPage(ui32 size, ui32 pageId, TInfo* info);
-
+ 
         TPage(const TPage&) = delete;
         TPage(TPage&&) = delete;
 
@@ -122,13 +122,13 @@ public:
             return a;
         }
 
-        struct TWeight {
-            static ui64 Get(TPage *x) {
-                return x->Size;
-            }
-        };
-    };
-
+        struct TWeight { 
+            static ui64 Get(TPage *x) { 
+                return x->Size; 
+            } 
+        }; 
+    }; 
+ 
     struct TInfo : public TThrRefBase {
         ui32 Total() const noexcept {
             return PageMap.size();
@@ -225,32 +225,32 @@ public:
             }
         }
 
-        const TLogoBlobID Id;
+        const TLogoBlobID Id; 
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
         ui64 Users;
-
+ 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
-    };
-
-public:
+    }; 
+ 
+public: 
     TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache = true);
-
+ 
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     TPage::TWaitQueuePtr ForgetPageCollection(TLogoBlobID id);
-
+ 
     void LockPageCollection(TLogoBlobID id);
     // Return true for page collections removed after unlock.
     bool UnlockPageCollection(TLogoBlobID id);
 
-    TInfo* Info(TLogoBlobID id);
-
-    void Touch(ui32 page, TInfo *collectionInfo);
+    TInfo* Info(TLogoBlobID id); 
+ 
+    void Touch(ui32 page, TInfo *collectionInfo); 
     TIntrusivePtr<TPrivatePageCachePinPad> Pin(ui32 page, TInfo *collectionInfo);
     void Unpin(ui32 page, TPrivatePageCachePinPad *pad, TInfo *collectionInfo);
     void MarkSticky(ui32 pageId, TInfo *collectionInfo);
-
+ 
     const TStats& GetStats() const { return Stats; }
 
     void UpdateSharedBody(TInfo *collectionInfo, ui32 pageId, TSharedPageRef shared) noexcept {
@@ -262,25 +262,25 @@ public:
     }
 
     std::pair<ui32, ui64> Load(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info); // blocks to load, bytes to load
-
+ 
     const TSharedData* Lookup(ui32 page, TInfo *collection);
     TSharedPageRef LookupShared(ui32 page, TInfo *collection);
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
-
-    void UpdateCacheSize(ui64 cacheSize);
+ 
+    void UpdateCacheSize(ui64 cacheSize); 
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
     THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> GetPrepareSharedTouched();
-private:
+private: 
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
     THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> ToTouchShared;
-
+ 
     TStats Stats;
-    TCacheCache<TPage, TPage::TWeight> Cache;
-    bool PrepareForSharedCache;
-
+    TCacheCache<TPage, TPage::TWeight> Cache; 
+    bool PrepareForSharedCache; 
+ 
     bool Restore(TPage *page);
-    void Touch(TPage *page);
-    void Evict(TPage *pages);
-};
-
-}}
+    void Touch(TPage *page); 
+    void Evict(TPage *pages); 
+}; 
+ 
+}} 

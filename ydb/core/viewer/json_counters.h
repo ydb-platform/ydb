@@ -48,7 +48,7 @@ public:
     void Die(const TActorContext& ctx) override {
         if (NodesInfo != nullptr) {
             for (const auto& ni : NodesInfo->Nodes) {
-                ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
+                ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe()); 
             }
         }
         TBase::Die(ctx);

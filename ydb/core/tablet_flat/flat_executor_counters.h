@@ -1,11 +1,11 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 #include <ydb/core/tablet/tablet_counters.h>
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
-#define FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(XX) \
+ 
+namespace NKikimr { 
+namespace NTabletFlatExecutor { 
+ 
+#define FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(XX) \ 
     XX(DB_TX_IN_FLY, "ExecutorTxInFly") \
     XX(LOG_REDO_COUNT, "LogRedoItems") \
     XX(LOG_REDO_MEMORY, "LogRedoMemory") \
@@ -47,7 +47,7 @@ namespace NTabletFlatExecutor {
     XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
     XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
     XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
-    XX(CACHE_PINNED_SET, "CachePinned") \
+    XX(CACHE_PINNED_SET, "CachePinned") \ 
     XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
     XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \
     XX(CACHE_TOTAL_SHARED_BODY, "CacheTotalSharedBody") \
@@ -61,8 +61,8 @@ namespace NTabletFlatExecutor {
     XX(CONSUMED_STORAGE, "ConsumedStorage") \
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
-
-#define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
+ 
+#define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \ 
     XX(LOG_COMMITS, "LogCommits") \
     XX(LOG_WRITTEN, "LogWritten") \
     XX(LOG_EMBEDDED, "LogEmbedded" ) \
@@ -80,7 +80,7 @@ namespace NTabletFlatExecutor {
     XX(DB_ELOBS_ITEMS_GONE, "DbELargeObjsItemsGone") \
     XX(DB_REDO_WRITTEN_BYTES, "DbRedoWrittenBytes") \
     XX(DB_ANNEX_WRITTEN_BYTES, "DbAnnexWrittenBytes") \
-    XX(TX_COUNT_ALL, "Tx(all)") \
+    XX(TX_COUNT_ALL, "Tx(all)") \ 
     XX(TX_QUEUED, "TxQueued") \
     XX(TX_RETRIED, "TxRetried") \
     XX(TX_FINISHED, "TxFinished") \
@@ -89,8 +89,8 @@ namespace NTabletFlatExecutor {
     XX(TX_MEM_CAPTURES, "TxMemoryCaptures") \
     XX(TX_MEM_ATTACHES, "TxMemoryAttaches") \
     XX(TX_DATA_RELEASES, "TxDataReleases") \
-    XX(TX_RO_COMPLETED, "Tx(ro complete)") \
-    XX(TX_RW_COMPLETED, "Tx(rw complete)") \
+    XX(TX_RO_COMPLETED, "Tx(ro complete)") \ 
+    XX(TX_RW_COMPLETED, "Tx(rw complete)") \ 
     XX(TX_TERMINATED, "Tx(terminated)") \
     XX(TX_CHARGE_WEEDED, "TxKeyChargeWeeded") \
     XX(TX_CHARGE_SIEVED, "TxKeyChargeSieved") \
@@ -100,10 +100,10 @@ namespace NTabletFlatExecutor {
     XX(TX_BYTES_READ, "TxReadBytes") \
     XX(TX_CACHE_HITS, "TxPageCacheHits") \
     XX(TX_CACHE_MISSES, "TxPageCacheMisses") \
-    XX(GC_DISCOVERED, "GcBlobsDiscovered") \
-    XX(GC_DISCARDED, "GcBlobsDiscarded") \
-    XX(GC_FORGOTTEN, "GcBlobsForgotten") \
-    XX(GC_KEEPSET, "GcKeepFlagsSet") \
+    XX(GC_DISCOVERED, "GcBlobsDiscovered") \ 
+    XX(GC_DISCARDED, "GcBlobsDiscarded") \ 
+    XX(GC_FORGOTTEN, "GcBlobsForgotten") \ 
+    XX(GC_KEEPSET, "GcKeepFlagsSet") \ 
     XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
     XX(CONSUMED_CPU, "ConsumedCPU") \
     XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
@@ -111,44 +111,44 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \
     XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \
     XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
-
-#define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \
-    XX(TX_PERCENTILE_LATENCY_RO, "TxRoLatency") \
-    XX(TX_PERCENTILE_LATENCY_RW, "TxRwLatency") \
-    XX(TX_PERCENTILE_LATENCY_COMMIT, "TxCommitLatency") \
-    XX(TX_PERCENTILE_EXECUTE_CPUTIME, "TxExecuteCPUTime") \
-    XX(TX_PERCENTILE_BOOKKEEPING_CPUTIME, "TxBookkeepingCPUTime") \
-    XX(TX_PERCENTILE_COMMITED_CPUTIME, "TxCommitedCPUTime") \
-    XX(TX_PERCENTILE_LOGSNAP_CPUTIME, "LogSnapCPUTime") \
-    XX(TX_PERCENTILE_PARTSWITCH_CPUTIME, "PartSwitchCPUTime") \
+ 
+#define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \ 
+    XX(TX_PERCENTILE_LATENCY_RO, "TxRoLatency") \ 
+    XX(TX_PERCENTILE_LATENCY_RW, "TxRwLatency") \ 
+    XX(TX_PERCENTILE_LATENCY_COMMIT, "TxCommitLatency") \ 
+    XX(TX_PERCENTILE_EXECUTE_CPUTIME, "TxExecuteCPUTime") \ 
+    XX(TX_PERCENTILE_BOOKKEEPING_CPUTIME, "TxBookkeepingCPUTime") \ 
+    XX(TX_PERCENTILE_COMMITED_CPUTIME, "TxCommitedCPUTime") \ 
+    XX(TX_PERCENTILE_LOGSNAP_CPUTIME, "LogSnapCPUTime") \ 
+    XX(TX_PERCENTILE_PARTSWITCH_CPUTIME, "PartSwitchCPUTime") \ 
     XX(TX_PERCENTILE_TOUCHED_BLOCKS, "TouchedBlocks") \
     XX(TX_PERCENTILE_DB_DATA_BYTES, "HIST(DbDataBytes)") \
     XX(TX_PERCENTILE_TABLET_BYTES_WRITTEN, "HIST(TabletBytesWritten)") \
     XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \
     XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
     XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency")
-
-class TExecutorCounters : public TTabletCountersBase {
-public:
-    enum ESimpleCounter {
-        FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE)
-        SIMPLE_COUNTER_SIZE
-    };
-    static const char* SimpleCounterNames[SIMPLE_COUNTER_SIZE];
-
-    enum ECumulativeCounter {
-        FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE)
-        CUMULATIVE_COUNTER_SIZE
-    };
-    static const char* CumulativeCounterNames[CUMULATIVE_COUNTER_SIZE];
-
-    enum EPercentileCounter {
-        FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE)
-        PERCENTILE_COUNTER_SIZE
-    };
-    static const char* PercentileCounterNames[PERCENTILE_COUNTER_SIZE];
-
-    TExecutorCounters();
-};
-
-}}
+ 
+class TExecutorCounters : public TTabletCountersBase { 
+public: 
+    enum ESimpleCounter { 
+        FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE) 
+        SIMPLE_COUNTER_SIZE 
+    }; 
+    static const char* SimpleCounterNames[SIMPLE_COUNTER_SIZE]; 
+ 
+    enum ECumulativeCounter { 
+        FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE) 
+        CUMULATIVE_COUNTER_SIZE 
+    }; 
+    static const char* CumulativeCounterNames[CUMULATIVE_COUNTER_SIZE]; 
+ 
+    enum EPercentileCounter { 
+        FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(ENUM_VALUE_GEN_NO_VALUE) 
+        PERCENTILE_COUNTER_SIZE 
+    }; 
+    static const char* PercentileCounterNames[PERCENTILE_COUNTER_SIZE]; 
+ 
+    TExecutorCounters(); 
+}; 
+ 
+}} 

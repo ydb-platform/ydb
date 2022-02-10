@@ -1,23 +1,23 @@
-#pragma once
+#pragma once 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
 #include "msgbus_server_pq_metacache.h"
-
-namespace NMonitoring {
-    class TBusNgMonPage;
-}
-
-namespace NKikimr {
+ 
+namespace NMonitoring { 
+    class TBusNgMonPage; 
+} 
+ 
+namespace NKikimr { 
 
 namespace NGRpcProxy {
     class IRequestContext;
 } // NGRpcProxy
 
-namespace NMsgBusProxy {
-
+namespace NMsgBusProxy { 
+ 
 class IMessageWatcher {
 public:
     virtual ~IMessageWatcher() {}
@@ -90,10 +90,10 @@ private:
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder();
 };
 
-struct TEvBusProxy {
-    enum EEv {
-        EvRequest = EventSpaceBegin(TKikimrEvents::ES_PROXY_BUS),
-        EvNavigate,
+struct TEvBusProxy { 
+    enum EEv { 
+        EvRequest = EventSpaceBegin(TKikimrEvents::ES_PROXY_BUS), 
+        EvNavigate, 
         EvFlatTxRequest,
         EvFlatDescribeRequest,
         EvPersQueue,
@@ -106,18 +106,18 @@ struct TEvBusProxy {
         EvStreamIsReadyNotUsed = EvRequest + 512,
         EvStreamIsDeadNotUsed,
 
-        EvEnd
-    };
-
-    template<EEv EvId>
-    struct TEvMsgBusRequest : public TEventLocal<TEvMsgBusRequest<EvId>, EvId> {
+        EvEnd 
+    }; 
+ 
+    template<EEv EvId> 
+    struct TEvMsgBusRequest : public TEventLocal<TEvMsgBusRequest<EvId>, EvId> { 
         TBusMessageContext MsgContext;
-
+ 
         TEvMsgBusRequest(TBusMessageContext &msg) {
-            MsgContext.Swap(msg);
-        }
-    };
-
+            MsgContext.Swap(msg); 
+        } 
+    }; 
+ 
     typedef TEvMsgBusRequest<EvRequest> TEvRequest;
     typedef TEvMsgBusRequest<EvNavigate> TEvNavigate;
     typedef TEvMsgBusRequest<EvFlatTxRequest> TEvFlatTxRequest;
@@ -128,51 +128,51 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvDbOperation> TEvDbOperation;
     typedef TEvMsgBusRequest<EvDbBatch> TEvDbBatch;
     typedef TEvMsgBusRequest<EvInitRoot> TEvInitRoot;
-};
-
-class TMessageBusServer : public IMessageBusServer, public NBus::IBusServerHandler {
-    const NBus::TBusServerSessionConfig &SessionConfig;
-    NBus::TBusMessageQueuePtr BusQueue;
+}; 
+ 
+class TMessageBusServer : public IMessageBusServer, public NBus::IBusServerHandler { 
+    const NBus::TBusServerSessionConfig &SessionConfig; 
+    NBus::TBusMessageQueuePtr BusQueue; 
     NBus::TBusServerSessionPtr Session;
     TActorId Proxy;
     TActorId Monitor;
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
 protected:
-    TProtocol Protocol;
+    TProtocol Protocol; 
     TActorSystem *ActorSystem = nullptr;
     TIntrusivePtr<IMessageBusHttpServer> HttpServer;
-public:
+public: 
     TMessageBusServer(
         const NBus::TBusServerSessionConfig &sessionConfig,
         NBus::TBusMessageQueue *busQueue,
         ui32 bindPort,
         std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
     );
-    ~TMessageBusServer();
-
+    ~TMessageBusServer(); 
+ 
     void InitSession(TActorSystem *actorSystem, const TActorId &proxy);
-    void ShutdownSession();
-
-    void RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage);
+    void ShutdownSession(); 
+ 
+    void RegisterMonPage(NMonitoring::TBusNgMonPage *busMonPage); 
 
 protected:
     void OnMessage(NBus::TOnMessageContext &msg) override;
     void OnMessage(TBusMessageContext &msg);
     IActor* CreateMessageBusTraceService() override;
-private:
+private: 
     IActor* CreateProxy() override;
-    void OnError(TAutoPtr<NBus::TBusMessage> message, NBus::EMessageStatus status) override;
-
+    void OnError(TAutoPtr<NBus::TBusMessage> message, NBus::EMessageStatus status) override; 
+ 
     void GetTypes(TBusMessageContext &msg);
     void UnknownMessage(TBusMessageContext &msg);
-
-    template<typename TEv>
-    void ClientProxyRequest(TBusMessageContext &msg);
-
-    typedef std::function<IActor* (TBusMessageContext &msg)> ActorCreationFunc;
-    void ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg);
-};
-
+ 
+    template<typename TEv> 
+    void ClientProxyRequest(TBusMessageContext &msg); 
+ 
+    typedef std::function<IActor* (TBusMessageContext &msg)> ActorCreationFunc; 
+    void ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg); 
+}; 
+ 
 template <typename TProto>
 void CopyProtobufsByFieldName(TProto& protoTo, const TProto& protoFrom) {
     using namespace ::google::protobuf;
@@ -273,7 +273,7 @@ void CopyProtobufsByFieldName(TProtoTo& protoTo, const TProtoFrom& protoFrom) {
 }
 
 class IPersQueueGetReadSessionsInfoWorkerFactory;
-
+ 
 IActor* CreateMessageBusServerProxy(
     TMessageBusServer *server,
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
@@ -281,7 +281,7 @@ IActor* CreateMessageBusServerProxy(
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
+IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg); 
 IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
 IActor* CreateMessageBusBSAdm(TBusMessageContext &msg);
@@ -309,8 +309,8 @@ IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
+ 
+TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result); 
 
-TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
-
-}
-}
+} 
+} 

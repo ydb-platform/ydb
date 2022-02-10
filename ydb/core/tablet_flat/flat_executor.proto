@@ -1,10 +1,10 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
-
-package NKikimrExecutorFlat;
-option java_package = "ru.yandex.kikimr.proto";
-
+ 
+package NKikimrExecutorFlat; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 message TLargeGlobId {
     // This is the correct way of doing for what StorageInfo is now used.
 
@@ -88,61 +88,61 @@ message TEvolution {
     required uint32 Head  = 2;
 }
 
-message TLogTableSnap {
-    optional uint32 Table = 1;
+message TLogTableSnap { 
+    optional uint32 Table = 1; 
     repeated NKikimrProto.TLogoBlobID DbPartMetaInfoBody = 2; // Legacy, replaced with Bundles
     optional uint32 Legacy0_ = 3;
     optional uint32 Legacy1_ = 4;
     optional uint32 Legacy2_ = 5;
     optional uint32 Legacy3_ = 6;
-
-    optional uint32 CompactionLevel = 7;
+ 
+    optional uint32 CompactionLevel = 7; 
 
     repeated TBundle Bundles = 8;
-}
-
+} 
+ 
 message TLogTxStatusSnap {
     optional uint32 Table = 1;
     repeated TTxStatus TxStatus = 2;
 }
 
-message TLogMemSnap {
-    optional uint32 Table = 1;
-    optional uint32 Generation = 2;
-    optional uint32 Step = 3;
+message TLogMemSnap { 
+    optional uint32 Table = 1; 
+    optional uint32 Generation = 2; 
+    optional uint32 Step = 3; 
     optional int64 Head = 4;
-}
-
-message TGcChannelBarrierInfo {
-    optional uint32 Channel = 1;
-    optional uint32 SetToGeneration = 2;
-    optional uint32 SetToStep = 3;
-}
-
-message TEmbeddedLogBody {
-    optional uint32 Generation = 1;
-    optional uint32 Step = 2;
-    optional bytes Body = 3;
-}
-
-message TBorrowedList {
-    optional uint64 Who = 1;
-    repeated NKikimrProto.TLogoBlobID What = 2;
-}
-
-message TBorrowedPart {
+} 
+ 
+message TGcChannelBarrierInfo { 
+    optional uint32 Channel = 1; 
+    optional uint32 SetToGeneration = 2; 
+    optional uint32 SetToStep = 3; 
+} 
+ 
+message TEmbeddedLogBody { 
+    optional uint32 Generation = 1; 
+    optional uint32 Step = 2; 
+    optional bytes Body = 3; 
+} 
+ 
+message TBorrowedList { 
+    optional uint64 Who = 1; 
+    repeated NKikimrProto.TLogoBlobID What = 2; 
+} 
+ 
+message TBorrowedPart { 
     optional NKikimrProto.TLogoBlobID MetaId = 1;
 
-    repeated uint64 Loaners = 2;
-    repeated TBorrowedList BorrowedList = 3;
-    repeated NKikimrProto.TLogoBlobID BorrowKeepList = 4;
-
-    optional uint64 Lender = 10;
-    repeated NKikimrTabletBase.TTabletStorageInfo StorageInfo = 11;
-    optional bool LoanCollected = 12;
-    repeated NKikimrProto.TLogoBlobID LoanKeepList = 13;
-}
-
+    repeated uint64 Loaners = 2; 
+    repeated TBorrowedList BorrowedList = 3; 
+    repeated NKikimrProto.TLogoBlobID BorrowKeepList = 4; 
+ 
+    optional uint64 Lender = 10; 
+    repeated NKikimrTabletBase.TTabletStorageInfo StorageInfo = 11; 
+    optional bool LoanCollected = 12; 
+    repeated NKikimrProto.TLogoBlobID LoanKeepList = 13; 
+} 
+ 
 message TSnapWaste {
     optional uint64 Since = 1;  // Stamp of waste accounting age
     optional uint64 Level = 2;  // Total bytes keeping by tablet
@@ -171,17 +171,17 @@ message TRowVersionState {
     repeated TRemovedRange RemovedRanges = 2;
 }
 
-message TLogSnapshot {
-    repeated NKikimrProto.TLogoBlobID NonSnapLogBodies = 1;
-    repeated NKikimrProto.TLogoBlobID SchemeInfoBodies = 2;
-    repeated TLogTableSnap DbParts = 3;
-    repeated TEmbeddedLogBody EmbeddedLogBodies = 4;
-    repeated TLogMemSnap TableSnapshoted = 5;
-    repeated NKikimrProto.TLogoBlobID BorrowInfoIds = 6;
-
-    repeated NKikimrProto.TLogoBlobID GcSnapDiscovered = 12;
-    repeated NKikimrProto.TLogoBlobID GcSnapLeft = 13;
-    repeated TGcChannelBarrierInfo GcBarrierInfo = 14;
+message TLogSnapshot { 
+    repeated NKikimrProto.TLogoBlobID NonSnapLogBodies = 1; 
+    repeated NKikimrProto.TLogoBlobID SchemeInfoBodies = 2; 
+    repeated TLogTableSnap DbParts = 3; 
+    repeated TEmbeddedLogBody EmbeddedLogBodies = 4; 
+    repeated TLogMemSnap TableSnapshoted = 5; 
+    repeated NKikimrProto.TLogoBlobID BorrowInfoIds = 6; 
+ 
+    repeated NKikimrProto.TLogoBlobID GcSnapDiscovered = 12; 
+    repeated NKikimrProto.TLogoBlobID GcSnapLeft = 13; 
+    repeated TGcChannelBarrierInfo GcBarrierInfo = 14; 
 
     optional bytes Legacy0_ = 15;
     optional TEvolution Version = 16;
@@ -191,13 +191,13 @@ message TLogSnapshot {
     repeated TCompactionState CompactionStates = 19;
     repeated TRowVersionState RowVersionStates = 20;
     repeated TLogTxStatusSnap TxStatusParts = 21;
-}
-
-message TTablePartSwitch {
+} 
+ 
+message TTablePartSwitch { 
     optional TLogTableSnap IntroducedParts = 1;
-    optional TLogMemSnap TableSnapshoted = 2;
-    optional uint32 TableId = 3;
-
+    optional TLogMemSnap TableSnapshoted = 2; 
+    optional uint32 TableId = 3; 
+ 
     repeated NKikimrProto.TLogoBlobID LeavingBundles = 10;
     repeated TBundleChange ChangedBundles = 11;
     optional TCompactionState CompactionChanges = 12;
@@ -207,43 +207,43 @@ message TTablePartSwitch {
 
     repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
     optional TLogTxStatusSnap IntroducedTxStatus = 17;
-}
-
-message TExternalGcEntry {
-    repeated NKikimrProto.TLogoBlobID GcDiscovered = 1;
-    repeated NKikimrProto.TLogoBlobID GcLeft = 2;
-}
-
+} 
+ 
+message TExternalGcEntry { 
+    repeated NKikimrProto.TLogoBlobID GcDiscovered = 1; 
+    repeated NKikimrProto.TLogoBlobID GcLeft = 2; 
+} 
+ 
 message TFollowerPartSwitchAux {
-    message TBySwitch {
-        optional NKikimrProto.TLogoBlobID PartSwitchRef = 1;
+    message TBySwitch { 
+        optional NKikimrProto.TLogoBlobID PartSwitchRef = 1; 
         repeated TBundle HotBundles = 2;
         repeated TTxStatus HotTxStatus = 3;
-    }
-
-    repeated TBySwitch BySwitchAux = 1;
-}
-
+    } 
+ 
+    repeated TBySwitch BySwitchAux = 1; 
+} 
+ 
 message TFollowerAux {
     message TTouchByPageCollection {
-        optional NKikimrProto.TLogoBlobID MetaInfoId = 1;
-        repeated uint32 TouchedPages = 2;
-    }
-
+        optional NKikimrProto.TLogoBlobID MetaInfoId = 1; 
+        repeated uint32 TouchedPages = 2; 
+    } 
+ 
     repeated TTouchByPageCollection PageCollectionsTouched = 1;
 
     optional bytes UserAuxUpdate = 2;
-}
-
-message TDatabaseBorrowPart {
-    message TPartInfo {
+} 
+ 
+message TDatabaseBorrowPart { 
+    message TPartInfo { 
         optional TBundle Bundle = 12;
-        repeated NKikimrTabletBase.TTabletStorageInfo StorageInfo = 11;
-    }
-
-    optional uint64 LenderTablet = 1;
-    optional uint32 SourceTable = 2;
-
-    repeated TPartInfo Parts = 3;
+        repeated NKikimrTabletBase.TTabletStorageInfo StorageInfo = 11; 
+    } 
+ 
+    optional uint64 LenderTablet = 1; 
+    optional uint32 SourceTable = 2; 
+ 
+    repeated TPartInfo Parts = 3; 
     repeated TTxStatus TxStatusParts = 4;
-}
+} 

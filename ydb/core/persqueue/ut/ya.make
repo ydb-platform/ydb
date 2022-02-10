@@ -30,10 +30,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    internals_ut.cpp
+    internals_ut.cpp 
     mirrorer_ut.cpp
     pq_ut.cpp
-    type_codecs_ut.cpp
+    type_codecs_ut.cpp 
     pq_ut.h
     sourceid_ut.cpp
     user_info_ut.cpp

@@ -5,36 +5,36 @@
 #include <utility>
 
 namespace NActors {
-    template <typename TCallback>
-    class TExecuteLater: public TActorBootstrapped<TExecuteLater<TCallback>> {
-    public:
+    template <typename TCallback> 
+    class TExecuteLater: public TActorBootstrapped<TExecuteLater<TCallback>> { 
+    public: 
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::ACTORLIB_COMMON;
         }
 
-        TExecuteLater(
+        TExecuteLater( 
             TCallback&& callback,
             IActor::EActivityType activityType,
             ui32 channel = 0,
             ui64 cookie = 0,
             const TActorId& reportCompletionTo = TActorId(),
             const TActorId& reportExceptionTo = TActorId()) noexcept
-            : Callback(std::move(callback))
-            , Channel(channel)
-            , Cookie(cookie)
-            , ReportCompletionTo(reportCompletionTo)
-            , ReportExceptionTo(reportExceptionTo)
-        {
-            this->SetActivityType(activityType);
-        }
+            : Callback(std::move(callback)) 
+            , Channel(channel) 
+            , Cookie(cookie) 
+            , ReportCompletionTo(reportCompletionTo) 
+            , ReportExceptionTo(reportExceptionTo) 
+        { 
+            this->SetActivityType(activityType); 
+        } 
 
-        void Bootstrap(const TActorContext& ctx) noexcept {
-            try {
-                {
-                    /* RAII, Callback should be destroyed right before sending
+        void Bootstrap(const TActorContext& ctx) noexcept { 
+            try { 
+                { 
+                    /* RAII, Callback should be destroyed right before sending 
                    TEvCallbackCompletion */
 
-                    auto local = std::move(Callback);
+                    auto local = std::move(Callback); 
                     using T = decltype(local);
 
                     if constexpr (std::is_invocable_v<T, const TActorContext&>) {
@@ -42,46 +42,46 @@ namespace NActors {
                     } else {
                         local();
                     }
-                }
-
-                if (ReportCompletionTo) {
-                    ctx.Send(ReportCompletionTo,
-                             new TEvents::TEvCallbackCompletion(ctx.SelfID),
-                             Channel, Cookie);
-                }
-            } catch (...) {
-                if (ReportExceptionTo) {
-                    const TString msg = CurrentExceptionMessage();
-                    ctx.Send(ReportExceptionTo,
-                             new TEvents::TEvCallbackException(ctx.SelfID, msg),
-                             Channel, Cookie);
-                }
+                } 
+ 
+                if (ReportCompletionTo) { 
+                    ctx.Send(ReportCompletionTo, 
+                             new TEvents::TEvCallbackCompletion(ctx.SelfID), 
+                             Channel, Cookie); 
+                } 
+            } catch (...) { 
+                if (ReportExceptionTo) { 
+                    const TString msg = CurrentExceptionMessage(); 
+                    ctx.Send(ReportExceptionTo, 
+                             new TEvents::TEvCallbackException(ctx.SelfID, msg), 
+                             Channel, Cookie); 
+                } 
             }
 
-            this->Die(ctx);
+            this->Die(ctx); 
         }
 
-    private:
-        TCallback Callback;
-        const ui32 Channel;
-        const ui64 Cookie;
+    private: 
+        TCallback Callback; 
+        const ui32 Channel; 
+        const ui64 Cookie; 
         const TActorId ReportCompletionTo;
         const TActorId ReportExceptionTo;
-    };
+    }; 
 
-    template <typename T>
-    IActor* CreateExecuteLaterActor(
+    template <typename T> 
+    IActor* CreateExecuteLaterActor( 
         T&& func,
         IActor::EActivityType activityType,
         ui32 channel = 0,
         ui64 cookie = 0,
         const TActorId& reportCompletionTo = TActorId(),
         const TActorId& reportExceptionTo = TActorId()) noexcept {
-        return new TExecuteLater<T>(std::forward<T>(func),
-                                    activityType,
-                                    channel,
-                                    cookie,
-                                    reportCompletionTo,
-                                    reportExceptionTo);
-    }
+        return new TExecuteLater<T>(std::forward<T>(func), 
+                                    activityType, 
+                                    channel, 
+                                    cookie, 
+                                    reportCompletionTo, 
+                                    reportExceptionTo); 
+    } 
 }

@@ -39,7 +39,7 @@ namespace NTable {
 
         bool SetExecutorCacheSize(ui64 cacheSize);
         bool SetExecutorAllowLogBatching(bool allow);
-        bool SetExecutorLogFastCommitTactic(bool allow);
+        bool SetExecutorLogFastCommitTactic(bool allow); 
         bool SetExecutorLogFlushPeriod(TDuration flushPeriod);
         bool SetExecutorLimitInFlyTx(ui32 limitTxInFly);
         bool SetExecutorResourceProfile(const TString &name);

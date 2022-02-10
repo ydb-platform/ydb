@@ -118,15 +118,15 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx); 
 
-    void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
+    void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx); 
     void RemoveTx(TStepOrder stepTxId);
     const TSchemaOperation* FindSchemaTx(ui64 txId) const;
     void CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId);
     void MarkOpAsUsingSnapshot(TOperation::TPtr op);
 
-    bool PlanTxs(ui64 step, TVector<ui64> &txIds, TTransactionContext &txc, const TActorContext &ctx);
+    bool PlanTxs(ui64 step, TVector<ui64> &txIds, TTransactionContext &txc, const TActorContext &ctx); 
     void PreserveSchema(NIceDb::TNiceDb& db, ui64 step);
     TDuration CleanupTimeout() const;
     ECleanupStatus Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
@@ -144,9 +144,9 @@ public:
     TStepOrder GetLastCompleteTx() const { return LastCompleteTx; }
     TStepOrder GetUtmostCompleteTx() const { return UtmostCompleteTx; }
 
-    ui64 GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const;
-    ui64 GetDataTxCompleteLag(ui64 timecastStep) const;
-    ui64 GetScanTxCompleteLag(ui64 timecastStep) const;
+    ui64 GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const; 
+    ui64 GetDataTxCompleteLag(ui64 timecastStep) const; 
+    ui64 GetScanTxCompleteLag(ui64 timecastStep) const; 
 
     // schema ops
 
@@ -463,7 +463,7 @@ private:
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);
-    void CompleteTx(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx);
+    void CompleteTx(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx); 
     void PersistConfig(NIceDb::TNiceDb& db);
 
     void MoveToNextUnit(TOperation::TPtr op);

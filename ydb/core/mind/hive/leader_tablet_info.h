@@ -130,8 +130,8 @@ public:
     ui32 GetFollowersAliveOnDataCenter(TDataCenterId dataCenterId) const;
     ui32 GetFollowersAliveOnDataCenterExcludingFollower(TDataCenterId dataCenterId, const TTabletInfo& excludingFollower) const;
 
-    TPathId GetTenant() const;
-
+    TPathId GetTenant() const; 
+ 
     bool IsAllAlive() const {
         if (!IsAlive())
             return false;

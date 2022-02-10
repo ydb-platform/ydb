@@ -61,10 +61,10 @@ private:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ_AUTH;
-    }
-
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ_AUTH; 
+    } 
+ 
     template <typename... Args>
     TSecureRequestActor(Args&&... args)
         : TBase(std::forward<Args>(args)...)

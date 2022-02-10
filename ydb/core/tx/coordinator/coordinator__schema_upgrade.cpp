@@ -55,7 +55,7 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxUpgrade() {
+ITransaction* TTxCoordinator::CreateTxUpgrade() { 
     return new TTxUpgrade(this);
 }
 

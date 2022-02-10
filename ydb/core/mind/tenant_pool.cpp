@@ -270,7 +270,7 @@ public:
         for (auto &subscriber : StatusSubscribers) {
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
                         LogPrefix << "send status update to " << subscriber);
-            ctx.Send(subscriber, BuildStatusEvent(true));
+            ctx.Send(subscriber, BuildStatusEvent(true)); 
         }
     }
 
@@ -341,7 +341,7 @@ public:
             DetachSlot(*tenant->AssignedSlots.begin(), ctx);
     }
 
-    THolder<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false)
+    THolder<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false) 
     {
         THolder<TEvTenantPool::TEvTenantPoolStatus> ev = MakeHolder<TEvTenantPool::TEvTenantPoolStatus>();
         if (listStatic) {
@@ -497,17 +497,17 @@ public:
         Die(ctx);
     }
 
-    void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ctx);
-        StatusSubscribers.insert(ev->Sender);
-        Send(ev->Sender, BuildStatusEvent(true));
-    }
-
-    void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ctx);
-        StatusSubscribers.erase(ev->Sender);
-    }
-
+    void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) { 
+        Y_UNUSED(ctx); 
+        StatusSubscribers.insert(ev->Sender); 
+        Send(ev->Sender, BuildStatusEvent(true)); 
+    } 
+ 
+    void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) { 
+        Y_UNUSED(ctx); 
+        StatusSubscribers.erase(ev->Sender); 
+    } 
+ 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx)
     {
@@ -623,7 +623,7 @@ public:
     {
         auto& rec = ev->Get()->Record;
         auto event = BuildStatusEvent(rec.GetListStaticSlots());
-        ctx.Send(ev->Sender, std::move(event), 0, ev->Cookie);
+        ctx.Send(ev->Sender, std::move(event), 0, ev->Cookie); 
     }
 
     void Handle(TEvTenantPool::TEvConfigureSlot::TPtr &ev, const TActorContext &ctx)
@@ -766,8 +766,8 @@ public:
         TRACE_EVENT(NKikimrServices::TENANT_POOL);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-            HFuncTraced(TEvents::TEvSubscribe, Handle);
-            HFuncTraced(TEvents::TEvUnsubscribe, Handle);
+            HFuncTraced(TEvents::TEvSubscribe, Handle); 
+            HFuncTraced(TEvents::TEvUnsubscribe, Handle); 
             HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFuncTraced(TEvLocal::TEvTenantStatus, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
@@ -855,16 +855,16 @@ public:
         return res;
     }
 
-    void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) {
-        for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvSubscribe()));
-    }
-
-    void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) {
-        for (auto &pr : DomainTenantPools)
-            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvUnsubscribe()));
-    }
-
+    void Handle(TEvents::TEvSubscribe::TPtr &ev, const TActorContext &ctx) { 
+        for (auto &pr : DomainTenantPools) 
+            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvSubscribe())); 
+    } 
+ 
+    void Handle(TEvents::TEvUnsubscribe::TPtr &ev, const TActorContext &ctx) { 
+        for (auto &pr : DomainTenantPools) 
+            ctx.Send(new IEventHandle(pr.second, ev->Sender, new TEvents::TEvUnsubscribe())); 
+    } 
+ 
     void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL, "Forward drain node to local.");
         ctx.Send(ev->Forward(LocalID));
@@ -923,8 +923,8 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
-            HFunc(TEvents::TEvSubscribe, Handle);
-            HFunc(TEvents::TEvUnsubscribe, Handle);
+            HFunc(TEvents::TEvSubscribe, Handle); 
+            HFunc(TEvents::TEvUnsubscribe, Handle); 
             HFunc(NMon::TEvHttpInfo, Handle);
             HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:

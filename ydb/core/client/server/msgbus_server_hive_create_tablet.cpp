@@ -1,23 +1,23 @@
-#include "msgbus_tabletreq.h"
+#include "msgbus_tabletreq.h" 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
-namespace {
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
+namespace { 
     const ui32 DefaultTimeout = 90000;
-}
-
+} 
+ 
 template <typename ResponseType>
 class TMessageBusHiveCreateTablet
         : public TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>
         , public TMessageBusSessionIdentHolder {
 using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
-
+ 
     struct TRequest {
         TEvHive::EEv Event;
         ui64 OwnerId;
@@ -64,11 +64,11 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
     ui32 ResponsesReceived;
     ui32 DomainUid;
     TString ErrorReason;
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
-
+ 
     TMessageBusHiveCreateTablet(TBusMessageContext &msg)
             : TMessageBusSessionIdentHolder(msg)
             , Status(NKikimrProto::UNKNOWN)
@@ -126,7 +126,7 @@ public:
             ErrorReason = Sprintf("Unexpected reply from Hive with Cookie# %" PRIu64 ", Marker# HC2",
                 (ui64)ev->Cookie);
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
-        }
+        } 
 
         TRequest &cmd = Requests[ev->Cookie];
         if (cmd.Status != NKikimrProto::UNKNOWN) {
@@ -199,8 +199,8 @@ public:
                 }
             }
         }
-    }
-
+    } 
+ 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
@@ -304,13 +304,13 @@ public:
             }
 
             TBase::Become(&TMessageBusHiveCreateTablet<ResponseType>::StateWaiting, ctx, Timeout, new TEvents::TEvWakeup());
-        } else {
+        } else { 
             if (ErrorReason.size() == 0) {
                 ErrorReason = Sprintf("Unexpected Status, Marker# HC8");
             }
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
-        }
-    }
+        } 
+    } 
 
     STFUNC(StateWaiting) {
         switch (ev->GetTypeRewrite()) {
@@ -320,15 +320,15 @@ public:
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
-};
-
+}; 
+ 
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg) {
     if (msg.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET) {
         return new TMessageBusHiveCreateTablet<TBusHiveCreateTabletResult>(msg);
     } else {
         return new TMessageBusHiveCreateTablet<TBusResponse>(msg);
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

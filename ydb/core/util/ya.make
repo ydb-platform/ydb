@@ -1,22 +1,22 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     ddoarn
     g:kikimr
 )
-
-SRCS(
+ 
+SRCS( 
     address_classifier.cpp
     cache.cpp
     cache.h
-    cache_cache.h
+    cache_cache.h 
     circular_queue.h
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp
     console.h
     counted_leaky_bucket.h
-    defs.h
+    defs.h 
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp
@@ -40,7 +40,7 @@ SRCS(
     pb.h
     proto_duration.h
     queue_inplace.h
-    queue_oneone_inplace.h
+    queue_oneone_inplace.h 
     simple_cache.h
     single_thread_ic_mock.cpp
     single_thread_ic_mock.h
@@ -59,9 +59,9 @@ SRCS(
     ulid.h
     wildcard.h
     yverify_stream.h
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/actors/interconnect/mock
     library/cpp/actors/util
     library/cpp/containers/stack_vector
@@ -72,9 +72,9 @@ PEERDIR(
     library/cpp/random_provider
     ydb/core/base
     ydb/core/protos
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     btree_benchmark

@@ -1,27 +1,27 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package Ydb.Discovery;
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package Ydb.Discovery; 
 option java_package = "com.yandex.ydb.discovery";
-option java_outer_classname = "DiscoveryProtos";
-
+option java_outer_classname = "DiscoveryProtos"; 
+ 
 import "ydb/public/api/protos/ydb_operation.proto";
-
-message ListEndpointsRequest {
-    string database = 1;
-    repeated string service = 2;
-
-// todo: feature flags
+ 
+message ListEndpointsRequest { 
+    string database = 1; 
+    repeated string service = 2; 
+ 
+// todo: feature flags 
 }
-
-message EndpointInfo {
+ 
+message EndpointInfo { 
     // This is an address (usually fqdn) and port of this node's grpc endpoint
-    string address = 1;
-    uint32 port = 2;
-    float load_factor = 3;
-    bool ssl = 4;
-    repeated string service = 5;
-    string location = 6;
+    string address = 1; 
+    uint32 port = 2; 
+    float load_factor = 3; 
+    bool ssl = 4; 
+    repeated string service = 5; 
+    string location = 6; 
     uint32 node_id = 7;
 
     // Optional ipv4 and/or ipv6 addresses of the endpoint, which clients may
@@ -36,13 +36,13 @@ message EndpointInfo {
     string ssl_target_name_override = 10;
 }
 
-message ListEndpointsResult {
-    repeated EndpointInfo endpoints = 1;
-    string self_location = 2;
+message ListEndpointsResult { 
+    repeated EndpointInfo endpoints = 1; 
+    string self_location = 2; 
 }
-
-message ListEndpointsResponse {
-    Ydb.Operations.Operation operation = 1;
+ 
+message ListEndpointsResponse { 
+    Ydb.Operations.Operation operation = 1; 
 }
 
 message WhoAmIRequest {

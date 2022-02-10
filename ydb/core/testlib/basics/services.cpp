@@ -155,26 +155,26 @@ namespace NPDisk {
     {
         TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
         info->StateStorageGroup = stateStorageGroup;
-        info->NToSelect = N;
-        info->Rings.resize(N);
+        info->NToSelect = N; 
+        info->Rings.resize(N); 
         for (size_t i = 0; i < N; ++i) {
-            info->Rings[i].Replicas.push_back(replicas[i]);
+            info->Rings[i].Replicas.push_back(replicas[i]); 
         }
 
         return info;
     }
 
     static TActorId MakeBoardReplicaID(
-        const ui32 node,
-        const ui64 stateStorageGroup,
-        const ui32 replicaIndex
-    ) {
-        char x[12] = { 's', 's', 'b' };
-        x[3] = (char)stateStorageGroup;
-        memcpy(x + 5, &replicaIndex, sizeof(ui32));
+        const ui32 node, 
+        const ui64 stateStorageGroup, 
+        const ui32 replicaIndex 
+    ) { 
+        char x[12] = { 's', 's', 'b' }; 
+        x[3] = (char)stateStorageGroup; 
+        memcpy(x + 5, &replicaIndex, sizeof(ui32)); 
         return TActorId(node, TStringBuf(x, 12));
-    }
-
+    } 
+ 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, ui64 stateStorageGroup, bool firstNode)
     {
         const TActorId ssreplicas[3] = {
@@ -184,11 +184,11 @@ namespace NPDisk {
         };
 
         const TActorId breplicas[3] = {
-            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
-            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
-            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
-        };
-
+            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0), 
+            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1), 
+            MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2), 
+        }; 
+ 
         const TActorId sbreplicas[3] = {
             MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
             MakeSchemeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
@@ -199,7 +199,7 @@ namespace NPDisk {
 
         auto ssInfo = GenerateStateStorageInfo(ssreplicas, stateStorageGroup);
         auto sbInfo = GenerateStateStorageInfo(sbreplicas, stateStorageGroup);
-        auto bInfo = GenerateStateStorageInfo(breplicas, stateStorageGroup);
+        auto bInfo = GenerateStateStorageInfo(breplicas, stateStorageGroup); 
 
         if (!firstNode || nodeIndex == 0) {
             for (ui32 i = 0; i < 3; ++i) {
@@ -207,13 +207,13 @@ namespace NPDisk {
                     TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
                 runtime.AddLocalService(sbreplicas[i],
                     TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
-                runtime.AddLocalService(breplicas[i],
-                    TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
+                runtime.AddLocalService(breplicas[i], 
+                    TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex); 
             }
         }
 
         runtime.AddLocalService(ssproxy,
-            TActorSetupCmd(CreateStateStorageProxy(ssInfo.Get(), bInfo.Get(), sbInfo.Get()), TMailboxType::Revolving, 0), nodeIndex);
+            TActorSetupCmd(CreateStateStorageProxy(ssInfo.Get(), bInfo.Get(), sbInfo.Get()), TMailboxType::Revolving, 0), nodeIndex); 
     }
 
     static void SetupStateStorageGroups(TTestActorRuntime& runtime, ui32 nodeIndex, TAppPrepare& app)

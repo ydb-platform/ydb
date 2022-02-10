@@ -21,10 +21,10 @@ namespace {
         THashMap<ui32, TNodeStat> PerNodeStat;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::NODE_WARDEN_STATAGGR_ACTOR;
-        }
-
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::NODE_WARDEN_STATAGGR_ACTOR; 
+        } 
+ 
         TGroupStatAggregatorActor(ui32 groupId, const TActorId& vdiskServiceId, TDuration reportPeriod = TDuration::Seconds(10))
             : GroupId(groupId)
             , VDiskServiceId(vdiskServiceId)

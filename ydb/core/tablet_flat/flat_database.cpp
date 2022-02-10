@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "flat_abi_evol.h"
-#include "flat_database.h"
+#include "flat_database.h" 
 #include "flat_redo_writer.h"
 #include "flat_redo_player.h"
 #include "flat_dbase_naked.h"
@@ -13,14 +13,14 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
-
+ 
 
 #define MAX_REDO_BYTES_PER_COMMIT 268435456U // 256MB
 
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NTable {
-
+ 
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
     , NoMoreReadsFlag(true)
@@ -244,12 +244,12 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     Change = MakeHolder<TChange>(Stamp = stamp, DatabaseImpl->Serial() + 1);
     Env = &env;
     NoMoreReadsFlag = false;
-}
-
+} 
+ 
 TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
     return Require(tableId)->GetPartView(bundle);
-}
-
+} 
+ 
 TVector<TPartView> TDatabase::GetTableParts(ui32 tableId) const {
     return Require(tableId)->GetAllParts();
 }
@@ -328,8 +328,8 @@ ui32 TDatabase::TxSnapTable(ui32 table)
     Require(table);
     Change->Snapshots.emplace_back(table);
     return Change->Snapshots.size() - 1;
-}
-
+} 
+ 
 TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const
 {
     return Require(table)->Subset(bundle, before);
@@ -553,8 +553,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     Env = nullptr;
 
     return { std::move(Change) };
-}
-
+} 
+ 
 TTable* TDatabase::Require(ui32 table) const noexcept
 {
     return DatabaseImpl->Get(table, true).Self.Get();
@@ -562,11 +562,11 @@ TTable* TDatabase::Require(ui32 table) const noexcept
 
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
                                 TMemGlobs annex)
-{
+{ 
     Y_VERIFY(!annex || redo, "Annex have to be rolled up with redo log");
 
     DatabaseImpl->Switch(stamp);
-
+ 
     if (delta) {
         TSchemeChanges changes;
         bool parseOk = ParseFromStringNoSizeLimit(changes, delta);
@@ -574,23 +574,23 @@ TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRe
 
         DatabaseImpl->Apply(changes, nullptr);
     }
-
+ 
     if (redo) {
         DatabaseImpl->Assign(std::move(annex));
         DatabaseImpl->ApplyRedo(redo);
         DatabaseImpl->GrabAnnex();
     }
-
+ 
     return std::move(DatabaseImpl->Garbage);
-}
-
+} 
+ 
 void TDatabase::RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
     if (auto& wrap = DatabaseImpl->Get(table, false)) {
         wrap->RemoveRowVersions(lower, upper);
     }
 }
-
+ 
 TCompactionStats TDatabase::GetCompactionStats(ui32 table) const
 {
     return Require(table)->GetCompactionStats();
@@ -602,4 +602,4 @@ void DebugDumpDb(const TDatabase &db) {
     db.DebugDump(Cout, typeRegistry);
 }
 
-}}
+}} 

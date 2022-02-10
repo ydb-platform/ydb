@@ -77,7 +77,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev) {
+ITransaction* THive::CreateDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev) { 
     return new TTxDeleteTabletResult(ev, this);
 }
 

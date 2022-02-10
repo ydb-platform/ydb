@@ -1,13 +1,13 @@
 #include "proxy.h"
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 TActorId MakeTxProxyID() {
     return TActorId(0, TStringBuf("TxProxyServ"));
 }
 
 }
-
+ 
 
 TString NKikimr::TEvTxUserProxy::TEvProposeTransactionStatus::ToString() const {
     TStringStream str;

@@ -92,7 +92,7 @@ public:
                 }
             }
         } else {
-            TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result));
+            TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result)); 
             if (result.HasExecutionEngineEvaluatedResponse()) {
                 response->Record.MutableExecutionEngineEvaluatedResponse()->CopyFrom(result.GetExecutionEngineEvaluatedResponse());
             }
@@ -286,8 +286,8 @@ protected:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded:
             return ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx);
-        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
-            return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown: 
+            return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx); 
         default:
             return ReplyWithResult(MSTATUS_INTERNALERROR, msg->Record, ctx);
         }
@@ -709,8 +709,8 @@ protected:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded:
             return ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx);
-        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
-            return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx);
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown: 
+            return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx); 
         default:
             return ReplyWithResult(MSTATUS_INTERNALERROR, msg->Record, ctx);
         }

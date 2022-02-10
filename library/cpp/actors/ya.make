@@ -1,16 +1,16 @@
 RECURSE_FOR_TESTS(ut)
 
-RECURSE(
+RECURSE( 
     log_backend
-    core
+    core 
     dnsresolver
-    examples
-    memory_log
+    examples 
+    memory_log 
     helpers
-    prof
-    protos
-    util
-    wilson
+    prof 
+    protos 
+    util 
+    wilson 
     testlib
     http
-)
+) 

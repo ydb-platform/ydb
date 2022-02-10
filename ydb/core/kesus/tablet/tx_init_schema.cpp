@@ -23,7 +23,7 @@ struct TKesusTablet::TTxInitSchema : public TTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TKesusTablet::CreateTxInitSchema() {
+NTabletFlatExecutor::ITransaction* TKesusTablet::CreateTxInitSchema() { 
     return new TTxInitSchema(this);
 }
 

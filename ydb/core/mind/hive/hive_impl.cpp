@@ -20,9 +20,9 @@ inline IOutputStream& operator <<(IOutputStream& out, const TArrayRef<const NKik
     return out;
 }
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NHive {
-
+ 
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
     if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
@@ -41,8 +41,8 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         }
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);
     }
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvAdoptTablet");
     NKikimrHive::TEvAdoptTablet& rec = ev->Get()->Record;
@@ -129,16 +129,16 @@ void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
 }
 
 bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
-    if (!Executor() || !Executor()->GetStats().IsActive)
-        return false;
-
+    if (!Executor() || !Executor()->GetStats().IsActive) 
+        return false; 
+ 
     if (!ev)
         return true;
 
     CreateEvMonitoring(ev, ctx);
     return true;
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     BLOG_D("Handle StopTablet");
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
@@ -501,13 +501,13 @@ void THive::OnDetach(const TActorContext&) {
     Cleanup();
     PassAway();
 }
-
+ 
 void THive::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
     BLOG_I("OnTabletDead: " << TabletID());
     Cleanup();
     return PassAway();
-}
-
+} 
+ 
 void THive::BuildLocalConfig() {
     LocalConfig.Clear();
     if (ResourceProfiles)
@@ -541,23 +541,23 @@ void THive::Cleanup() {
     }
 
     PipeClientCache->Detach(DEPRECATED_CTX);
-
+ 
     if (BSControllerPipeClient) {
         NTabletPipe::CloseClient(SelfId(), BSControllerPipeClient);
         BSControllerPipeClient = TActorId();
     }
-
+ 
     if (RootHivePipeClient) {
         NTabletPipe::CloseClient(SelfId(), RootHivePipeClient);
         RootHivePipeClient = TActorId();
     }
 
-    if (ResponsivenessPinger) {
+    if (ResponsivenessPinger) { 
         ResponsivenessPinger->Detach(TlsActivationContext->ActorContextFor(ResponsivenessActorID));
-        ResponsivenessPinger = nullptr;
-    }
+        ResponsivenessPinger = nullptr; 
+    } 
 }
-
+ 
 void THive::Handle(TEvLocal::TEvStatus::TPtr& ev) {
     BLOG_D("Handle TEvLocal::TEvStatus for Node " << ev->Sender.NodeId() << ": " << ev->Get()->Record.ShortDebugString());
     Execute(CreateStatus(ev->Sender, ev->Get()->Record));
@@ -609,7 +609,7 @@ void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId);
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
 }
-
+ 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << ev->Get()->NodeId);
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
@@ -662,8 +662,8 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
     } else {
         KillNode(event->NodeId, event->Local);
     }
-}
-
+} 
+ 
 void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     TFullTabletId tabletId(ev->Get()->TabletId);
     TTabletInfo* tablet = FindTablet(tabletId);
@@ -843,16 +843,16 @@ void THive::OnActivateExecutor(const TActorContext&) {
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(NKikimrConsole::TConfigItem::HiveConfigItem));
     Execute(CreateInitScheme());
-    if (!ResponsivenessPinger) {
-        ResponsivenessPinger = new TTabletResponsivenessPinger(TabletCounters->Simple()[NHive::COUNTER_RESPONSE_TIME_USEC], TDuration::Seconds(1));
+    if (!ResponsivenessPinger) { 
+        ResponsivenessPinger = new TTabletResponsivenessPinger(TabletCounters->Simple()[NHive::COUNTER_RESPONSE_TIME_USEC], TDuration::Seconds(1)); 
         ResponsivenessActorID = RegisterWithSameMailbox(ResponsivenessPinger);
-    }
-}
-
+    } 
+} 
+ 
 void THive::DefaultSignalTabletActive(const TActorContext& ctx) {
     Y_UNUSED(ctx);
 }
-
+ 
 
 void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
     ui32 channels = tablet.GetChannelCount();
@@ -1567,16 +1567,16 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
 }
 
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
-    if (info) {
+    if (info) { 
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
-        tabletInfo.SetTabletType(info->Type);
-        tabletInfo.SetState(static_cast<ui32>(info->State));
+        tabletInfo.SetTabletType(info->Type); 
+        tabletInfo.SetState(static_cast<ui32>(info->State)); 
         tabletInfo.SetTabletBootMode(info->BootMode);
         tabletInfo.SetVolatileState(info->GetVolatileState());
-        tabletInfo.SetNodeID(info->NodeId);
-        tabletInfo.MutableTabletOwner()->SetOwner(info->Owner.first);
-        tabletInfo.MutableTabletOwner()->SetOwnerIdx(info->Owner.second);
+        tabletInfo.SetNodeID(info->NodeId); 
+        tabletInfo.MutableTabletOwner()->SetOwner(info->Owner.first); 
+        tabletInfo.MutableTabletOwner()->SetOwnerIdx(info->Owner.second); 
         tabletInfo.SetGeneration(info->KnownGeneration);
         tabletInfo.MutableObjectDomain()->CopyFrom(info->ObjectDomain);
         if (!info->IsRunning()) {
@@ -1590,14 +1590,14 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
             for (const auto& follower : info->Followers) {
                 if (req.HasFollowerID() && req.GetFollowerID() != follower.Id)
                     continue;
-                NKikimrHive::TTabletInfo& tabletInfo = *response.AddTablets();
-                tabletInfo.SetTabletID(tabletId);
-                tabletInfo.SetTabletType(info->Type);
+                NKikimrHive::TTabletInfo& tabletInfo = *response.AddTablets(); 
+                tabletInfo.SetTabletID(tabletId); 
+                tabletInfo.SetTabletType(info->Type); 
                 tabletInfo.SetFollowerID(follower.Id);
                 tabletInfo.SetVolatileState(follower.GetVolatileState());
                 tabletInfo.SetNodeID(follower.NodeId);
-                tabletInfo.MutableTabletOwner()->SetOwner(info->Owner.first);
-                tabletInfo.MutableTabletOwner()->SetOwnerIdx(info->Owner.second);
+                tabletInfo.MutableTabletOwner()->SetOwner(info->Owner.first); 
+                tabletInfo.MutableTabletOwner()->SetOwnerIdx(info->Owner.second); 
                 tabletInfo.MutableObjectDomain()->CopyFrom(info->ObjectDomain);
                 if (!follower.IsRunning()) {
                     tabletInfo.SetLastAliveTimestamp(follower.Statistics.GetLastAliveTimestamp());
@@ -1609,13 +1609,13 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
             }
         }
     }
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
-    TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
+    const auto& record = ev->Get()->Record; 
+    TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo(); 
     TInstant now = TlsActivationContext->Now();
-    if (record.HasTabletID()) {
+    if (record.HasTabletID()) { 
         TTabletId tabletId = record.GetTabletID();
         NKikimrHive::TForwardRequest forwardRequest;
         if (CheckForForwardTabletRequest(tabletId, forwardRequest)) {
@@ -1628,20 +1628,20 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
         } else {
             BLOG_W("Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
         }
-    } else {
-        response->Record.MutableTablets()->Reserve(Tablets.size());
-        for (auto it = Tablets.begin(); it != Tablets.end(); ++it) {
+    } else { 
+        response->Record.MutableTablets()->Reserve(Tablets.size()); 
+        for (auto it = Tablets.begin(); it != Tablets.end(); ++it) { 
             if (record.HasTabletType() && record.GetTabletType() != it->second.Type) {
-                continue;
+                continue; 
             }
             if (it->second.IsDeleting()) {
                 continue;
             }
             it->second.ActualizeTabletStatistics(now);
-            FillTabletInfo(response->Record, it->first, &it->second, record);
-        }
-    }
-
+            FillTabletInfo(response->Record, it->first, &it->second, record); 
+        } 
+    } 
+ 
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
@@ -2626,6 +2626,6 @@ TString THive::GetLogPrefix() const {
 
 IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info) {
     return new NHive::THive(info, tablet);
-}
-
+} 
+ 
 } // NKikimr

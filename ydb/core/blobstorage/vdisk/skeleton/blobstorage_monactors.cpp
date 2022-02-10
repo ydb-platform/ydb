@@ -382,8 +382,8 @@ namespace NKikimr {
             } else if (allButton) {
                 // browse database
                 IsRangeQuery = true;
-                From = TLogoBlobID(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-                To = TLogoBlobID(0, 0, 0, 0, 0, 0, 1);
+                From = TLogoBlobID(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId); 
+                To = TLogoBlobID(0, 0, 0, 0, 0, 0, 1); 
                 req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
             } else

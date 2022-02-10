@@ -59,7 +59,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                 if (partSituation == TBlobState::ESituation::Present) {
-                    R_LOG_DEBUG_SX(logCtx, "BPG42", "Request# "
+                    R_LOG_DEBUG_SX(logCtx, "BPG42", "Request# " 
                         << " Id# " << state.Id.ToString()
                         << " Disk# " << diskIdx << " Part# " << partIdx << " Present");
                     presentLayout.AddItem(diskIdx, partIdx, info.Type);

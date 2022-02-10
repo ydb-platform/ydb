@@ -116,8 +116,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
             for (size_t i = 0; i < size; ++i) {
                 actors[i]->Start(actors[i]->SelfId(), msgCount);
-            }
-            for (size_t i = 0; i < size; ++i) {
+            } 
+            for (size_t i = 0; i < size; ++i) { 
                 actorSystem.Send(actorIds[i], new TEvMsg());
             }
 
@@ -143,8 +143,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
             for (size_t i = 0; i < size; ++i) {
                 actors[i]->Start(actors[i]->SelfId(), msgCount);
-            }
-            for (size_t i = 0; i < size; ++i) {
+            } 
+            for (size_t i = 0; i < size; ++i) { 
                 actorSystem.Send(actorIds[i], new TEvMsg());
             }
 
@@ -184,8 +184,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         for (size_t i = 0; i < size; ++i) {
             actors[i]->Start(actorIds[i], msgCount);
-        }
-        for (size_t i = 0; i < size; ++i) {
+        } 
+        for (size_t i = 0; i < size; ++i) { 
             actorSystem.Send(actorIds[i], new TEvMsg());
         }
 
@@ -268,8 +268,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         }
         for (size_t i = 0; i < size; ++i) {
             actors[i]->Start(actors[i]->SelfId(), msgCount);
-        }
-        for (size_t i = 0; i < size; ++i) {
+        } 
+        for (size_t i = 0; i < size; ++i) { 
             actorSystem.Send(actorIds[i], new TEvMsg());
         }
 
@@ -312,8 +312,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         }
         for (size_t i = 0; i < actorsCount; ++i) {
             actors[i]->Start(actors[i]->SelfId(), msgCount);
-        }
-        for (size_t i = 0; i < actorsCount; ++i) {
+        } 
+        for (size_t i = 0; i < actorsCount; ++i) { 
             actorSystem.Send(actorIds[i], new TEvMsg());
         }
 
@@ -356,8 +356,8 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         }
         for (size_t i = 0; i < actorsCount; ++i) {
             actors[i]->Start(actorIds[(i + 1) % actorsCount], msgCount);
-        }
-        for (size_t i = 0; i < actorsCount; ++i) {
+        } 
+        for (size_t i = 0; i < actorsCount; ++i) { 
             actorSystem.Send(actorIds[i], new TEvMsg());
         }
 

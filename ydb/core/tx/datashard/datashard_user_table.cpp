@@ -260,11 +260,11 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
                                       descr.GetPartitionRangeBeginIsInclusive(),
                                       descr.GetPartitionRangeEndIsInclusive());
     }
-
+ 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
 
-    CheckSpecialColumns();
+    CheckSpecialColumns(); 
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
         Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
@@ -278,27 +278,27 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     }
 }
 
-void TUserTable::CheckSpecialColumns() {
-    SpecialColTablet = Max<ui32>();
-    SpecialColEpoch = Max<ui32>();
-    SpecialColUpdateNo = Max<ui32>();
-
-    for (const auto &xpair : Columns) {
-        const ui32 colId = xpair.first;
-        const auto &column = xpair.second;
-
-        if (column.IsKey || column.Type != NScheme::NTypeIds::Uint64)
-            continue;
-
-        if (column.Name == "__tablet")
-            SpecialColTablet = colId;
-        else if (column.Name == "__updateEpoch")
-            SpecialColEpoch = colId;
-        else if (column.Name == "__updateNo")
-            SpecialColUpdateNo = colId;
-    }
-}
-
+void TUserTable::CheckSpecialColumns() { 
+    SpecialColTablet = Max<ui32>(); 
+    SpecialColEpoch = Max<ui32>(); 
+    SpecialColUpdateNo = Max<ui32>(); 
+ 
+    for (const auto &xpair : Columns) { 
+        const ui32 colId = xpair.first; 
+        const auto &column = xpair.second; 
+ 
+        if (column.IsKey || column.Type != NScheme::NTypeIds::Uint64) 
+            continue; 
+ 
+        if (column.Name == "__tablet") 
+            SpecialColTablet = colId; 
+        else if (column.Name == "__updateEpoch") 
+            SpecialColEpoch = colId; 
+        else if (column.Name == "__updateNo") 
+            SpecialColUpdateNo = colId; 
+    } 
+} 
+ 
 void TUserTable::AlterSchema() {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);

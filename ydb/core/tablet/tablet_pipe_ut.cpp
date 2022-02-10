@@ -8,7 +8,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <library/cpp/actors/core/hfunc.h>
-
+ 
 namespace NKikimr {
     struct TEvProducerTablet {
         enum EEv {
@@ -54,10 +54,10 @@ namespace NKikimr {
         struct TEvReject : public TEventLocal<TEvReject, EvReject> {};
     };
 
-    class TProducerTablet : public TActor<TProducerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TProducerTablet : public TActor<TProducerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat { 
     public:
         TProducerTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TActor(&TThis::StateInit) 
             , TTabletExecutedFlat(info, tablet, nullptr)
             , HasData(false)
             , IsOpened(false)
@@ -69,13 +69,13 @@ namespace NKikimr {
     private:
         using IActor::Send; // name is used by IActor API
 
-        STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
-        }
-
-        STFUNC(StateWork) {
+        STFUNC(StateInit) { 
+            StateInitImpl(ev, ctx); 
+        } 
+ 
+        STFUNC(StateWork) { 
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
                 HFunc(TEvProducerTablet::TEvConnect, Handle);
                 HFunc(TEvProducerTablet::TEvSend, Handle);
                 HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -170,9 +170,9 @@ namespace NKikimr {
             return Die(ctx);
         }
 
-        void OnActivateExecutor(const TActorContext &ctx) override {
+        void OnActivateExecutor(const TActorContext &ctx) override { 
             Y_UNUSED(ctx);
-            Become(&TThis::StateWork);
+            Become(&TThis::StateWork); 
             Cout << "Producer loaded\n";
         }
 
@@ -206,10 +206,10 @@ namespace NKikimr {
         };
     };
 
-    class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat { 
     public:
         TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TActor(&TThis::StateInit) 
             , TTabletExecutedFlat(info, tablet, nullptr)
             , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID()))
             , RejectAll(false)
@@ -219,19 +219,19 @@ namespace NKikimr {
         }
 
     private:
-        void OnActivateExecutor(const TActorContext&) override {
-            Become(&TThis::StateWork);
+        void OnActivateExecutor(const TActorContext&) override { 
+            Become(&TThis::StateWork); 
             Cout << "Consumer loaded\n";
-            PipeConnectAcceptor->Activate(SelfId(), SelfId());
+            PipeConnectAcceptor->Activate(SelfId(), SelfId()); 
         }
 
-        STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
-        }
-
-        STFUNC(StateWork) {
+        STFUNC(StateInit) { 
+            StateInitImpl(ev, ctx); 
+        } 
+ 
+        STFUNC(StateWork) { 
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
                 HFunc(TEvTabletPipe::TEvConnect, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
@@ -245,21 +245,21 @@ namespace NKikimr {
             }
         }
 
-        void Handle(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) {
+        void Handle(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) { 
             Cout << "Get connect request from another tablet\n";
             if (RejectAll) {
-                PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED);
+                PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED); 
             } else {
-                LastServerId = PipeConnectAcceptor->Accept(ev, SelfId(), SelfId());
+                LastServerId = PipeConnectAcceptor->Accept(ev, SelfId(), SelfId()); 
             }
         }
 
-        void HandleQueued(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) {
+        void HandleQueued(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) { 
             Cout << "Enqueue connect request from another tablet\n";
             if (RejectAll) {
-                PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED);
+                PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED); 
             } else {
-                LastServerId = PipeConnectAcceptor->Enqueue(ev, SelfId());
+                LastServerId = PipeConnectAcceptor->Enqueue(ev, SelfId()); 
             }
         }
 
@@ -295,10 +295,10 @@ namespace NKikimr {
             Cout << "Cleanup of pipe reset on server\n";
         }
 
-        void Handle(TEvConsumerTablet::TEvReject::TPtr &ev, const TActorContext &) {
+        void Handle(TEvConsumerTablet::TEvReject::TPtr &ev, const TActorContext &) { 
             Y_UNUSED(ev);
             Cout << "Drop & reject all connects\n";
-            PipeConnectAcceptor->Detach(SelfId());
+            PipeConnectAcceptor->Detach(SelfId()); 
             RejectAll = true;
         }
 
@@ -309,14 +309,14 @@ namespace NKikimr {
 
         void OnDetach(const TActorContext &ctx) override {
             Cout << "Consumer dead\n";
-            PipeConnectAcceptor->Detach(SelfId());
+            PipeConnectAcceptor->Detach(SelfId()); 
             return Die(ctx);
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
             Cout << "Consumer dead\n";
             Y_UNUSED(ev);
-            PipeConnectAcceptor->Detach(SelfId());
+            PipeConnectAcceptor->Detach(SelfId()); 
             return Die(ctx);
         }
 
@@ -333,28 +333,28 @@ namespace NKikimr {
         ui32 ServerPipesClosed;
     };
 
-    class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat { 
     public:
         TConsumerTabletWithoutAcceptor(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
+            : TActor(&TThis::StateInit) 
             , TTabletExecutedFlat(info, tablet, nullptr)
         {
         }
 
     private:
-        void OnActivateExecutor(const TActorContext& ctx) override {
+        void OnActivateExecutor(const TActorContext& ctx) override { 
             Y_UNUSED(ctx);
-            Become(&TThis::StateWork);
+            Become(&TThis::StateWork); 
             Cout << "Consumer loaded\n";
         }
 
-        STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
-        }
-
-        STFUNC(StateWork) {
+        STFUNC(StateInit) { 
+            StateInitImpl(ev, ctx); 
+        } 
+ 
+        STFUNC(StateWork) { 
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvents::TEvPing, Handle);

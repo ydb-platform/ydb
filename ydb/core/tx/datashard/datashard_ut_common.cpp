@@ -43,7 +43,7 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
-                      domainId, domainId, TVector<ui32>{domainId},
+                      domainId, domainId, TVector<ui32>{domainId}, 
                       domainId, TVector<ui32>{domainId},
                       planResolution,
                       TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},

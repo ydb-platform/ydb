@@ -330,19 +330,19 @@ struct TUserTable : public TThrRefBase {
         }
     };
 
-    struct TSpecialUpdate {
-        bool HasUpdates = false;
-
-        ui32 ColIdTablet = Max<ui32>();
-        ui32 ColIdEpoch = Max<ui32>();
-        ui32 ColIdUpdateNo = Max<ui32>();
-
+    struct TSpecialUpdate { 
+        bool HasUpdates = false; 
+ 
+        ui32 ColIdTablet = Max<ui32>(); 
+        ui32 ColIdEpoch = Max<ui32>(); 
+        ui32 ColIdUpdateNo = Max<ui32>(); 
+ 
         ui64 Tablet = 0;
         ui64 Epoch = 0;
         ui64 UpdateNo = 0;
-    };
-
-    ui32 LocalTid = Max<ui32>();
+    }; 
+ 
+    ui32 LocalTid = Max<ui32>(); 
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
@@ -363,10 +363,10 @@ struct TUserTable : public TThrRefBase {
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
 
-    ui32 SpecialColTablet = Max<ui32>();
-    ui32 SpecialColEpoch = Max<ui32>();
-    ui32 SpecialColUpdateNo = Max<ui32>();
-
+    ui32 SpecialColTablet = Max<ui32>(); 
+    ui32 SpecialColEpoch = Max<ui32>(); 
+    ui32 SpecialColUpdateNo = Max<ui32>(); 
+ 
     TUserTable() { }
 
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
@@ -416,7 +416,7 @@ private:
     TString Schema;
     ui64 TableSchemaVersion = 0;
 
-    void CheckSpecialColumns();
+    void CheckSpecialColumns(); 
     void AlterSchema();
     void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);
 };

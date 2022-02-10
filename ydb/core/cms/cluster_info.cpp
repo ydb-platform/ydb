@@ -4,13 +4,13 @@
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, stream)
-
+#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR 
+#error log macro definition clash 
+#endif 
+ 
+#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, stream) 
+#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, stream) 
+ 
 namespace NKikimr {
 namespace NCms {
 
@@ -436,7 +436,7 @@ void TClusterInfo::AddPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk &info)
 void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard::TPDiskStateInfo &info)
 {
     if (!HasPDisk(id)) {
-        BLOG_ERROR("Cannot update state for unknown PDisk " << id.ToString());
+        BLOG_ERROR("Cannot update state for unknown PDisk " << id.ToString()); 
         return;
     }
 
@@ -449,7 +449,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
     ui32 nodeId = info.GetVSlotId().GetNodeId();
     Y_VERIFY_DEBUG(HasNode(nodeId));
     if (!HasNode(nodeId)) {
-        BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
+        BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId); 
         return;
     }
 
@@ -469,7 +469,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 
     Y_VERIFY_DEBUG(HasPDisk(vdisk->PDiskId));
     if (!HasPDisk(vdisk->PDiskId)) {
-        BLOG_ERROR("Got VDisk info from BSC base config for unknown PDisk " << vdisk->PDiskId.ToString());
+        BLOG_ERROR("Got VDisk info from BSC base config for unknown PDisk " << vdisk->PDiskId.ToString()); 
         PDisks.emplace(vdisk->PDiskId, new TPDiskInfo(vdisk->PDiskId));
     }
 
@@ -492,7 +492,7 @@ void TClusterInfo::UpdateVDiskState(const TVDiskID &id, const NKikimrWhiteboard:
             return;
         }
 
-        BLOG_ERROR("Cannot update state for unknown VDisk " << id.ToString());
+        BLOG_ERROR("Cannot update state for unknown VDisk " << id.ToString()); 
         return;
     }
 
@@ -513,14 +513,14 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         TPDiskID pdiskId = {vdisk.GetNodeId(), vdisk.GetPDiskId()};
         Y_VERIFY_DEBUG(HasPDisk(pdiskId));
         if (!HasPDisk(pdiskId)) {
-            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown pdisk " << pdiskId.ToString());
+            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown pdisk " << pdiskId.ToString()); 
             return;
         }
 
         auto &pdisk = PDiskRef(pdiskId);
         Y_VERIFY_DEBUG(pdisk.VSlots.contains(vdisk.GetVSlotId()));
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
-            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown slot " <<
+            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown slot " << 
                         vdisk.GetVSlotId() << " in disk " << pdiskId.ToString());
             return;
         }

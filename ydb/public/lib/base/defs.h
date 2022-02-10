@@ -1,13 +1,13 @@
-#pragma once
-
+#pragma once 
+ 
 /// @note It must not depend on anything except util, library and propobufs
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 enum class EDataReqStatusExcerpt {
     Unknown, // must not happen
     Complete, // request success
@@ -35,7 +35,7 @@ inline const char* EDataReqStatusExcerptStr(EDataReqStatusExcerpt status) {
     default:
         return "Unknown error";
     }
-}
+} 
 
 namespace NTxProxy {
 #define TXUSERPROXY_RESULT_STATUS_MAP(XX) \

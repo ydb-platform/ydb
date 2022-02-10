@@ -178,7 +178,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         ui32 planResolution = 50;
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
             name, domainUid, schemeshardTabletId,
-            stateStorageGroup, stateStorageGroup, TVector<ui32>{stateStorageGroup},
+            stateStorageGroup, stateStorageGroup, TVector<ui32>{stateStorageGroup}, 
             domainUid, TVector<ui32>{domainUid},
             planResolution,
             TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},
@@ -228,7 +228,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
     void BootCoordinator(TTestActorRuntime& runtime, ui64 tabletId) {
         CoordinatorState = new TFakeCoordinator::TState();
-        BootFakeCoordinator(runtime, tabletId, CoordinatorState);
+        BootFakeCoordinator(runtime, tabletId, CoordinatorState); 
     }
 
     void BootHive(TTestActorRuntime& runtime, ui64 tabletId) {

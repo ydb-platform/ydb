@@ -41,7 +41,7 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-ITransaction* THive::CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev) {
+ITransaction* THive::CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev) { 
     return new TTxCutTabletHistory(ev, this);
 }
 

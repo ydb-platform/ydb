@@ -1,34 +1,34 @@
-#pragma once
-
-#include "actorsystem.h"
-#include "executor_thread.h"
-#include "scheduler_queue.h"
+#pragma once 
+ 
+#include "actorsystem.h" 
+#include "executor_thread.h" 
+#include "scheduler_queue.h" 
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
-
-namespace NActors {
+ 
+namespace NActors { 
     class TExecutorPoolBaseMailboxed: public IExecutorPool {
-    protected:
-        TActorSystem* ActorSystem;
-        THolder<TMailboxTable> MailboxTable;
+    protected: 
+        TActorSystem* ActorSystem; 
+        THolder<TMailboxTable> MailboxTable; 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        // Need to have per pool object to collect stats like actor registrations (because
-        // registrations might be done in threads from other pools)
-        TExecutorThreadStats Stats;
+        // Need to have per pool object to collect stats like actor registrations (because 
+        // registrations might be done in threads from other pools) 
+        TExecutorThreadStats Stats; 
 #endif
         TAtomic RegisterRevolvingCounter = 0;
         ui64 AllocateID();
-    public:
+    public: 
         TExecutorPoolBaseMailboxed(ui32 poolId, ui32 maxActivityType);
         ~TExecutorPoolBaseMailboxed();
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override;
-        bool Send(TAutoPtr<IEventHandle>& ev) override;
+        bool Send(TAutoPtr<IEventHandle>& ev) override; 
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) override;
-        bool Cleanup() override;
+        bool Cleanup() override; 
     };
-
+ 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
         const ui32 PoolThreads;
@@ -41,9 +41,9 @@ namespace NActors {
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType);
         ~TExecutorPoolBase();
         void ScheduleActivation(ui32 activation) override;
-        TAffinity* Affinity() const override;
+        TAffinity* Affinity() const override; 
         ui32 GetThreads() const override;
-    };
+    }; 
 
     void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
-}
+} 

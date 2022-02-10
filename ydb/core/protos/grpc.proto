@@ -11,19 +11,19 @@ service TGRpcServer {
     // TODO
     // * Rename Request to MiniKQLRequest ???
 
-
+ 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // KIKIMR CLIENT INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // MiniKQL request (DML)
+    // MiniKQL request (DML) 
     rpc Request(TRequest) returns (TResponse);
 
-    // DML transactions
+    // DML transactions 
     rpc SchemeOperation(TSchemeOperation) returns (TResponse);
-    // status polling for scheme transactions
+    // status polling for scheme transactions 
     rpc SchemeOperationStatus(TSchemeOperationStatus) returns (TResponse);
-    // describe
+    // describe 
     rpc SchemeDescribe(TSchemeDescribe) returns (TResponse);
     // whoami
     rpc WhoAmI(TWhoAmI) returns (TResponse);
@@ -92,13 +92,13 @@ service TGRpcServer {
     rpc LocalSchemeTx(TLocalSchemeTx) returns (TResponse);
     rpc TabletKillRequest(TTabletKillRequest) returns (TResponse);
     rpc InterconnectDebug(TInterconnectDebug) returns (TResponse);
-
+ 
     // [DEPRECATED]
     //rpc Navigate(TSchemeNavigate) returns (TResponse);
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////
-    // MONITORING
-    /////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////// 
+    // MONITORING 
+    ///////////////////////////////////////////////////////////////////////////////////////////////// 
     rpc TabletStateRequest(TTabletStateRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////

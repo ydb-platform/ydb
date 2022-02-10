@@ -25,7 +25,7 @@ struct TTxMediator::TTxSchema : public TTransactionBase<TTxMediator> {
     }
 };
 
-ITransaction* TTxMediator::CreateTxSchema() {
+ITransaction* TTxMediator::CreateTxSchema() { 
     return new TTxSchema(this);
 }
 

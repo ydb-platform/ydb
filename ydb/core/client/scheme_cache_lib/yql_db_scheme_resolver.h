@@ -5,11 +5,11 @@ namespace NYql {
 class IDbSchemeResolver;
 } // namespace NYql
 
-namespace NActors {
-    class TActorSystem;
+namespace NActors { 
+    class TActorSystem; 
     struct TActorId;
-}
-
+} 
+ 
 namespace NKikimr {
 namespace NSchCache {
 

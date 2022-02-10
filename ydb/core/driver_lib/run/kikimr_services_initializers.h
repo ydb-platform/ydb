@@ -84,13 +84,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TSharedCacheInitializer : public IKikimrServicesInitializer {
-public:
+class TSharedCacheInitializer : public IKikimrServicesInitializer { 
+public: 
     TSharedCacheInitializer(const TKikimrRunConfig& runConfig);
-
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 class TBlobCacheInitializer : public IKikimrServicesInitializer {
 public:
     TBlobCacheInitializer(const TKikimrRunConfig& runConfig);
@@ -371,13 +371,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TQuoterServiceInitializer : public IKikimrServicesInitializer {
-public:
-    TQuoterServiceInitializer(const TKikimrRunConfig& runConfig);
+class TQuoterServiceInitializer : public IKikimrServicesInitializer { 
+public: 
+    TQuoterServiceInitializer(const TKikimrRunConfig& runConfig); 
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+}; 
+ 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
     TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);

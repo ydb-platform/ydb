@@ -33,7 +33,7 @@ namespace NKikimr {
         void Die(const TActorContext &ctx) override {
             // unsubscribe on session when die
             auto nodeId = TargetServiceId.NodeId();
-            ctx.Send(TActivationContext::InterconnectProxy(nodeId),
+            ctx.Send(TActivationContext::InterconnectProxy(nodeId), 
                      new TEvents::TEvUnsubscribe);
             TActor::Die(ctx);
         }

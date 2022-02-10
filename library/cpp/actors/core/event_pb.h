@@ -1,6 +1,6 @@
-#pragma once
-
-#include "event.h"
+#pragma once 
+ 
+#include "event.h" 
 #include "event_load.h"
 
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -10,19 +10,19 @@
 #include <util/system/context.h>
 #include <util/system/filemap.h>
 #include <array>
-
-namespace NActors {
+ 
+namespace NActors { 
 
     class TRopeStream : public NProtoBuf::io::ZeroCopyInputStream {
         TRope::TConstIterator Iter;
         const size_t Size;
 
-    public:
+    public: 
         TRopeStream(TRope::TConstIterator iter, size_t size)
             : Iter(iter)
             , Size(size)
         {}
-
+ 
         bool Next(const void** data, int* size) override;
         void BackUp(int count) override;
         bool Skip(int count) override;
@@ -32,19 +32,19 @@ namespace NActors {
 
     private:
         int64_t TotalByteCount = 0;
-    };
+    }; 
 
     class TChunkSerializer : public NProtoBuf::io::ZeroCopyOutputStream {
-    public:
+    public: 
         TChunkSerializer() = default;
         virtual ~TChunkSerializer() = default;
 
         virtual bool WriteRope(const TRope *rope) = 0;
         virtual bool WriteString(const TString *s) = 0;
-    };
+    }; 
 
     class TAllocChunkSerializer final : public TChunkSerializer {
-    public:
+    public: 
         bool Next(void** data, int* size) override;
         void BackUp(int count) override;
         int64_t ByteCount() const override {
@@ -61,29 +61,29 @@ namespace NActors {
                 Buffers->SetExtendedFormat();
             }
             return std::move(Buffers);
-        }
+        } 
 
-    protected:
+    protected: 
         TIntrusivePtr<TEventSerializedData> Buffers = new TEventSerializedData;
         TRope Backup;
-    };
+    }; 
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
-    public:
+    public: 
         using TChunk = std::pair<const char*, size_t>;
 
-        TCoroutineChunkSerializer();
-        ~TCoroutineChunkSerializer();
+        TCoroutineChunkSerializer(); 
+        ~TCoroutineChunkSerializer(); 
 
         void SetSerializingEvent(const IEventBase *event);
         void Abort();
         std::pair<TChunk*, TChunk*> FeedBuf(void* data, size_t size);
-        bool IsComplete() const {
+        bool IsComplete() const { 
             return !Event;
-        }
-        bool IsSuccessfull() const {
-            return SerializationSuccess;
-        }
+        } 
+        bool IsSuccessfull() const { 
+            return SerializationSuccess; 
+        } 
         const IEventBase *GetCurrentEvent() const {
             return Event;
         }
@@ -99,15 +99,15 @@ namespace NActors {
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
-    protected:
+    protected: 
         void DoRun() override;
-        void Resume();
+        void Resume(); 
         bool Produce(const void *data, size_t size);
 
-        i64 TotalSerializedDataSize;
-        TMappedAllocation Stack;
-        TContClosure SelfClosure;
-        TContMachineContext InnerContext;
+        i64 TotalSerializedDataSize; 
+        TMappedAllocation Stack; 
+        TContClosure SelfClosure; 
+        TContMachineContext InnerContext; 
         TContMachineContext *BufFeedContext = nullptr;
         char *BufferPtr;
         size_t SizeRemain;
@@ -119,7 +119,7 @@ namespace NActors {
         bool AbortFlag;
         bool SerializationSuccess;
         bool Finished = false;
-    };
+    }; 
 
 #ifdef ACTORLIB_HUGE_PB_SIZE
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
@@ -132,11 +132,11 @@ namespace NActors {
         // a vector of data buffers referenced by record; if filled, then extended serialization mechanism applies
         TVector<TRope> Payload;
 
-    public:
+    public: 
         using TRecHolder::Record;
 
     public:
-        using ProtoRecordType = TRecord;
+        using ProtoRecordType = TRecord; 
 
         TEventPBBase() = default;
 
@@ -150,13 +150,13 @@ namespace NActors {
             Record = std::move(rec);
         }
 
-        TString ToStringHeader() const override {
-            return Record.GetTypeName();
-        }
+        TString ToStringHeader() const override { 
+            return Record.GetTypeName(); 
+        } 
 
-        TString ToString() const override {
+        TString ToString() const override { 
             return Record.ShortDebugString();
-        }
+        } 
 
         bool IsSerializable() const override {
             return true;
@@ -213,9 +213,9 @@ namespace NActors {
                 }
             }
 
-            return Record.SerializeToZeroCopyStream(chunker);
-        }
-
+            return Record.SerializeToZeroCopyStream(chunker); 
+        } 
+ 
         ui32 CalculateSerializedSize() const override {
             ssize_t result = Record.ByteSize();
             if (result >= 0 && Payload) {
@@ -227,10 +227,10 @@ namespace NActors {
                     result += rope.GetSize();
                 }
             }
-            return result;
+            return result; 
         }
 
-        static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
+        static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) { 
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
@@ -270,7 +270,7 @@ namespace NActors {
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
                     Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
                 }
-            }
+            } 
             ev->CachedByteSize = input->GetSize();
             return ev.Release();
         }
@@ -278,18 +278,18 @@ namespace NActors {
         size_t GetCachedByteSize() const {
             if (CachedByteSize == 0) {
                 CachedByteSize = CalculateSerializedSize();
-            }
-            return CachedByteSize;
-        }
+            } 
+            return CachedByteSize; 
+        } 
 
         ui32 CalculateSerializedSizeCached() const override {
             return GetCachedByteSize();
         }
 
-        void InvalidateCachedByteSize() {
-            CachedByteSize = 0;
-        }
-
+        void InvalidateCachedByteSize() { 
+            CachedByteSize = 0; 
+        } 
+ 
     public:
         void ReservePayload(size_t size) {
             Payload.reserve(size);
@@ -316,7 +316,7 @@ namespace NActors {
         }
 
     protected:
-        mutable size_t CachedByteSize = 0;
+        mutable size_t CachedByteSize = 0; 
 
         static constexpr char PayloadMarker = 0x07;
         static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
@@ -367,8 +367,8 @@ namespace NActors {
             }
             return res;
         }
-    };
-
+    }; 
+ 
     // Protobuf record not using arena
     template <typename TRecord>
     struct TRecordHolder {
@@ -490,11 +490,11 @@ namespace NActors {
 
     inline TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId) {
         return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
-    }
-
+    } 
+ 
     inline void ActorIdToProto(const TActorId& src, NActorsProto::TActorId* dest) {
-        Y_VERIFY_DEBUG(dest);
-        dest->SetRawX1(src.RawX1());
-        dest->SetRawX2(src.RawX2());
-    }
-}
+        Y_VERIFY_DEBUG(dest); 
+        dest->SetRawX1(src.RawX1()); 
+        dest->SetRawX2(src.RawX2()); 
+    } 
+} 

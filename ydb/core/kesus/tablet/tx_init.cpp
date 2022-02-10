@@ -279,7 +279,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TKesusTablet::CreateTxInit() {
+NTabletFlatExecutor::ITransaction* TKesusTablet::CreateTxInit() { 
     return new TTxInit(this);
 }
 

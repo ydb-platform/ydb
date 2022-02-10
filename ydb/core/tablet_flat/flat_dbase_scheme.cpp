@@ -196,47 +196,47 @@ TAlter& TAlter::SetExecutorCacheSize(ui64 cacheSize)
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorCacheSize(cacheSize);
+    delta.SetExecutorCacheSize(cacheSize); 
 
     return *this;
-}
-
-TAlter& TAlter::SetExecutorFastLogPolicy(bool allow)
-{
-    TAlterRecord &delta = *Log.AddDelta();
-    delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorLogFastCommitTactic(allow);
-
-    return *this;
-}
-
+} 
+ 
+TAlter& TAlter::SetExecutorFastLogPolicy(bool allow) 
+{ 
+    TAlterRecord &delta = *Log.AddDelta(); 
+    delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo); 
+    delta.SetExecutorLogFastCommitTactic(allow); 
+ 
+    return *this; 
+} 
+ 
 TAlter& TAlter::SetExecutorAllowLogBatching(bool allow)
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorAllowLogBatching(allow);
+    delta.SetExecutorAllowLogBatching(allow); 
 
     return *this;
-}
-
+} 
+ 
 TAlter& TAlter::SetExecutorLogFlushPeriod(TDuration flushPeriod)
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorLogFlushPeriod(flushPeriod.MicroSeconds());
+    delta.SetExecutorLogFlushPeriod(flushPeriod.MicroSeconds()); 
 
     return *this;
-}
-
+} 
+ 
 TAlter& TAlter::SetExecutorLimitInFlyTx(ui32 limitTxInFly)
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorLimitInFlyTx(limitTxInFly);
+    delta.SetExecutorLimitInFlyTx(limitTxInFly); 
 
     return *this;
-}
-
+} 
+ 
 TAlter& TAlter::SetExecutorResourceProfile(const TString &name)
 {
     TAlterRecord &delta = *Log.AddDelta();

@@ -67,7 +67,7 @@ public:
 
     void Die(const TActorContext& ctx) override {
         for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
+            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe()); 
         }
         TBase::Die(ctx);
     }

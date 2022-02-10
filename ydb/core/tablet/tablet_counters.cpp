@@ -1,118 +1,118 @@
-#include "tablet_counters.h"
-
-////////////////////////////////////////////
-namespace NKikimr {
-
-////////////////////////////////////////////
-/// The TTabletCountersBase class
-////////////////////////////////////////////
-TAutoPtr<TTabletCountersBase>
-TTabletCountersBase::MakeDiffForAggr(const TTabletCountersBase& baseLine) const {
-    TAutoPtr<TTabletCountersBase> retVal = new TTabletCountersBase(*this);
-    if (baseLine.HasCounters()) {
+#include "tablet_counters.h" 
+ 
+//////////////////////////////////////////// 
+namespace NKikimr { 
+ 
+//////////////////////////////////////////// 
+/// The TTabletCountersBase class 
+//////////////////////////////////////////// 
+TAutoPtr<TTabletCountersBase> 
+TTabletCountersBase::MakeDiffForAggr(const TTabletCountersBase& baseLine) const { 
+    TAutoPtr<TTabletCountersBase> retVal = new TTabletCountersBase(*this); 
+    if (baseLine.HasCounters()) { 
         Y_VERIFY_DEBUG(baseLine.SimpleCounters.Size() == SimpleCounters.Size());
         Y_VERIFY_DEBUG(baseLine.CumulativeCounters.Size() == CumulativeCounters.Size());
         Y_VERIFY_DEBUG(baseLine.PercentileCounters.Size() == PercentileCounters.Size());
-
+ 
         Y_VERIFY_DEBUG(baseLine.SimpleCountersMetaInfo == SimpleCountersMetaInfo);
         Y_VERIFY_DEBUG(baseLine.CumulativeCountersMetaInfo == CumulativeCountersMetaInfo);
         Y_VERIFY_DEBUG(baseLine.PercentileCountersMetaInfo == PercentileCountersMetaInfo);
-
-        retVal->SimpleCounters.AdjustToBaseLine(baseLine.SimpleCounters);
-        retVal->CumulativeCounters.AdjustToBaseLine(baseLine.CumulativeCounters);
-        retVal->PercentileCounters.AdjustToBaseLine(baseLine.PercentileCounters);
-    }
-    return retVal;
-}
-
-////////////////////////////////////////////
-void TTabletCountersBase::RememberCurrentStateAsBaseline(/*out*/ TTabletCountersBase& baseLine) const {
-    baseLine = *this;
-}
-
-////////////////////////////////////////////
-// private
-////////////////////////////////////////////
-TTabletCountersBase::TTabletCountersBase(const TTabletCountersBase& rp)
-    : TTabletCountersBase()
-{
-    *this = rp;
-}
-
-////////////////////////////////////////////
-TTabletCountersBase&
-TTabletCountersBase::operator = (const TTabletCountersBase& rp) {
-    if (&rp == this)
-        return *this;
-
-    if (!HasCounters()) {
-        SimpleCounters.Reset(rp.SimpleCounters);
-        SimpleCountersMetaInfo = rp.SimpleCountersMetaInfo;
-
-        CumulativeCounters.Reset(rp.CumulativeCounters);
-        CumulativeCountersMetaInfo = rp.CumulativeCountersMetaInfo;
-
-        PercentileCounters.Reset(rp.PercentileCounters);
-        PercentileCountersMetaInfo = rp.PercentileCountersMetaInfo;
-    } else {
-        SimpleCounters.SetTo(rp.SimpleCounters);
-        CumulativeCounters.SetTo(rp.CumulativeCounters);
-        PercentileCounters.SetTo(rp.PercentileCounters);
-    }
-
-    return *this;
-}
-
+ 
+        retVal->SimpleCounters.AdjustToBaseLine(baseLine.SimpleCounters); 
+        retVal->CumulativeCounters.AdjustToBaseLine(baseLine.CumulativeCounters); 
+        retVal->PercentileCounters.AdjustToBaseLine(baseLine.PercentileCounters); 
+    } 
+    return retVal; 
+} 
+ 
+//////////////////////////////////////////// 
+void TTabletCountersBase::RememberCurrentStateAsBaseline(/*out*/ TTabletCountersBase& baseLine) const { 
+    baseLine = *this; 
+} 
+ 
+//////////////////////////////////////////// 
+// private 
+//////////////////////////////////////////// 
+TTabletCountersBase::TTabletCountersBase(const TTabletCountersBase& rp) 
+    : TTabletCountersBase() 
+{ 
+    *this = rp; 
+} 
+ 
+//////////////////////////////////////////// 
+TTabletCountersBase& 
+TTabletCountersBase::operator = (const TTabletCountersBase& rp) { 
+    if (&rp == this) 
+        return *this; 
+ 
+    if (!HasCounters()) { 
+        SimpleCounters.Reset(rp.SimpleCounters); 
+        SimpleCountersMetaInfo = rp.SimpleCountersMetaInfo; 
+ 
+        CumulativeCounters.Reset(rp.CumulativeCounters); 
+        CumulativeCountersMetaInfo = rp.CumulativeCountersMetaInfo; 
+ 
+        PercentileCounters.Reset(rp.PercentileCounters); 
+        PercentileCountersMetaInfo = rp.PercentileCountersMetaInfo; 
+    } else { 
+        SimpleCounters.SetTo(rp.SimpleCounters); 
+        CumulativeCounters.SetTo(rp.CumulativeCounters); 
+        PercentileCounters.SetTo(rp.PercentileCounters); 
+    } 
+ 
+    return *this; 
+} 
+ 
 void TTabletSimpleCounterBase::OutputHtml(IOutputStream &os, const char* name) const {
     HTML(os) {PRE() {os << name << ": " << Value;}}
-}
-
+} 
+ 
 void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) const {
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H4() {os << name;}}
         }
-
+ 
         DIV_CLASS("row") {
-            for (ui32 i = 0; i < RangeCount; ++i) {
+            for (ui32 i = 0; i < RangeCount; ++i) { 
                 DIV_CLASS("col-md-3") {
                     PRE() {
-                        os << Ranges[i].RangeName << ": " << Values[i];
+                        os << Ranges[i].RangeName << ": " << Values[i]; 
                     }
                 }
-            }
+            } 
         }
     }
-}
-
+} 
+ 
 void TTabletCountersBase::OutputHtml(IOutputStream &os) const {
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {OutputHtml(os, "Simple", SimpleCountersMetaInfo, "col-md-3", SimpleCounters);}
             DIV_CLASS("col-md-12") {OutputHtml(os, "Cumulative", CumulativeCountersMetaInfo, "col-md-3", CumulativeCounters);}
             DIV_CLASS("col-md-12") {OutputHtml(os, "Percentile", PercentileCountersMetaInfo, "col-md-12", PercentileCounters);}
-
+ 
         }
     }
-}
-
-////////////////////////////////////////////
-template<typename T>
+} 
+ 
+//////////////////////////////////////////// 
+template<typename T> 
 void TTabletCountersBase::OutputHtml(IOutputStream &os, const char* sectionName, const char* const* counterNames, const char* counterClass, const TCountersArray<T>& counters) const {
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H3() {os << sectionName; }}
         }
         DIV_CLASS("row") {
-            for (ui32 i = 0, e = counters.Size(); i < e; ++i) {
+            for (ui32 i = 0, e = counters.Size(); i < e; ++i) { 
                 if (counterNames[i]) {
                     DIV_CLASS(counterClass) {counters[i].OutputHtml(os, counterNames[i]);}
                 }
-            }
+            } 
         }
     }
-}
-
+} 
+ 
 void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const {
     if (HasCounters()) {
         for (ui32 idx = 0; idx < SimpleCounters.Size(); ++idx) {
@@ -247,5 +247,5 @@ IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase:
 }
 
 
-} // end of NKikimr namespace
-
+} // end of NKikimr namespace 
+ 

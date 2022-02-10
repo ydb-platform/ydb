@@ -7,10 +7,10 @@ option java_package = "ru.yandex.kikimr.proto";
 option (TabletTypeName) = "Hive"; // Used as prefix for all counters
 
 enum ESimpleCounters {
-    COUNTER_TABLETS_TOTAL = 0   [(CounterOpts) = {Name: "TabletsTotal"}];
-    COUNTER_TABLETS_ALIVE = 1   [(CounterOpts) = {Name: "TabletsAlive"}];
-    COUNTER_BOOTQUEUE_SIZE = 2   [(CounterOpts) = {Name: "BootQueueSize"}];
-    COUNTER_STATE_DONE = 3   [(CounterOpts) = {Name: "StateDone"}];
+    COUNTER_TABLETS_TOTAL = 0   [(CounterOpts) = {Name: "TabletsTotal"}]; 
+    COUNTER_TABLETS_ALIVE = 1   [(CounterOpts) = {Name: "TabletsAlive"}]; 
+    COUNTER_BOOTQUEUE_SIZE = 2   [(CounterOpts) = {Name: "BootQueueSize"}]; 
+    COUNTER_STATE_DONE = 3   [(CounterOpts) = {Name: "StateDone"}]; 
     COUNTER_RESPONSE_TIME_USEC = 4 [(CounterOpts) = {Name: "ResponseTimeMicrosec"}];
     COUNTER_METRICS_COUNTER = 5 [(CounterOpts) = {Name: "MetricsCounter"}];
     COUNTER_METRICS_CPU = 6 [(CounterOpts) = {Name: "MetricsCPU"}];

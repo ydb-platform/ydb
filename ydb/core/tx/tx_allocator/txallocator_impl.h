@@ -10,7 +10,7 @@
 namespace NKikimr {
 
 using namespace NTabletFlatExecutor;
-using NTabletFlatExecutor::ITransaction;
+using NTabletFlatExecutor::ITransaction; 
 
 namespace NTxAllocator {
 
@@ -29,8 +29,8 @@ private:
     struct TTxSchema;
     struct TTxReserve;
 
-    ITransaction* CreateTxSchema();
-    ITransaction* CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr &ev);
+    ITransaction* CreateTxSchema(); 
+    ITransaction* CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr &ev); 
 
     const ui64 PrivateMarker;
     TTxAllocatorMonCounters MonCounters;

@@ -56,7 +56,7 @@ struct TTxMediator::TTxUpgrade : public TTransactionBase<TTxMediator> {
     }
 };
 
-ITransaction* TTxMediator::CreateTxUpgrade() {
+ITransaction* TTxMediator::CreateTxUpgrade() { 
     return new TTxUpgrade(this);
 }
 

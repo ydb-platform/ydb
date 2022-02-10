@@ -18,8 +18,8 @@
 namespace NProfiling {
     class TStringAtoms {
     private:
-        TMutex Mutex;
-        atomizer<ci_hash, ci_equal_to> Tags;
+        TMutex Mutex; 
+        atomizer<ci_hash, ci_equal_to> Tags; 
 
     public:
         static TStringAtoms& Instance() {
@@ -58,17 +58,17 @@ namespace NProfiling {
                 return Tags.size();
             }
         }
-    };
+    }; 
 
-    ui32 MakeTag(const char* s) {
+    ui32 MakeTag(const char* s) { 
         return TStringAtoms::Instance().MakeTag(s);
-    }
+    } 
 
     ui32 MakeTags(const TVector<const char*>& ss) {
         return TStringAtoms::Instance().MakeTags(ss);
-    }
+    } 
 
-    const char* GetTag(ui32 tag) {
+    const char* GetTag(ui32 tag) { 
         return TStringAtoms::Instance().GetTag(tag);
     }
 

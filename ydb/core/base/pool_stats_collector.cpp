@@ -9,7 +9,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/helpers/pool_stats_collector.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 
 // Periodically collects stats from executor threads and exposes them as mon counters
 class TStatsCollectingActor : public NActors::TStatsCollectingActor {

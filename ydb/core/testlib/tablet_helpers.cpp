@@ -570,8 +570,8 @@ namespace NKikimr {
 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info, std::function<IActor * (const TActorId &, TTabletStorageInfo *)> op) {
         return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles));
-    }
-
+    } 
+ 
     TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
@@ -1075,7 +1075,7 @@ namespace NKikimr {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
-    class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat { 
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
             Y_UNUSED(type);

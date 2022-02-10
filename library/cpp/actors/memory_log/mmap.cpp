@@ -1,11 +1,11 @@
 #include "memlog.h"
 
-#if defined(_unix_)
-#include <sys/mman.h>
-#elif defined(_win_)
-#include <util/system/winint.h>
+#if defined(_unix_) 
+#include <sys/mman.h> 
+#elif defined(_win_) 
+#include <util/system/winint.h> 
 #else
-#error NO IMPLEMENTATION FOR THE PLATFORM
+#error NO IMPLEMENTATION FOR THE PLATFORM 
 #endif
 
 void TMemoryLog::TMMapArea::MMap(size_t amount) {
@@ -44,7 +44,7 @@ void TMemoryLog::TMMapArea::MUnmap() {
         return;
     }
 
-#if defined(_unix_)
+#if defined(_unix_) 
     int result = ::munmap(BufPtr, Size);
     Y_VERIFY(result == 0);
 

@@ -162,7 +162,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     case NKikimr::NScheme::NTypeIds::String2m:
     case NKikimr::NScheme::NTypeIds::Utf8:
     case NKikimr::NScheme::NTypeIds::Json:
-    case NKikimr::NScheme::NTypeIds::Yson:
+    case NKikimr::NScheme::NTypeIds::Yson: 
     // XXX: using memcmp is meaningless for both JsonDocument and Json
     case NKikimr::NScheme::NTypeIds::JsonDocument:
     case NKikimr::NScheme::NTypeIds::DyNumber:
@@ -224,57 +224,57 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
     return 0;
 }
 
-// TODO: use NYql ops when TCell and TUnboxedValuePod had merged
+// TODO: use NYql ops when TCell and TUnboxedValuePod had merged 
 inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     if (cell.IsNull())
         return 0;
 
-    const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(type);
-    switch (yqlType) {
-    case NYql::NProto::TypeIds::Bool:
-        return ((*(const ui8 *)cell.Data()) == 0) ? THash<ui8>()((ui8)0) : THash<ui8>()((ui8)1);
-    case NYql::NProto::TypeIds::Int8:
-        return THash<i8>()(*(const i8*)cell.Data());
-    case NYql::NProto::TypeIds::Uint8:
+    const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(type); 
+    switch (yqlType) { 
+    case NYql::NProto::TypeIds::Bool: 
+        return ((*(const ui8 *)cell.Data()) == 0) ? THash<ui8>()((ui8)0) : THash<ui8>()((ui8)1); 
+    case NYql::NProto::TypeIds::Int8: 
+        return THash<i8>()(*(const i8*)cell.Data()); 
+    case NYql::NProto::TypeIds::Uint8: 
         return THash<ui8>()(*(const ui8*)cell.Data());
-    case NYql::NProto::TypeIds::Int16:
-        return THash<i16>()(*(const i16*)cell.Data());
-    case NYql::NProto::TypeIds::Uint16:
-        return THash<ui16>()(*(const ui16*)cell.Data());
-    case NYql::NProto::TypeIds::Int32:
+    case NYql::NProto::TypeIds::Int16: 
+        return THash<i16>()(*(const i16*)cell.Data()); 
+    case NYql::NProto::TypeIds::Uint16: 
+        return THash<ui16>()(*(const ui16*)cell.Data()); 
+    case NYql::NProto::TypeIds::Int32: 
         return THash<i32>()(ReadUnaligned<i32>((const i32*)cell.Data()));
-    case NYql::NProto::TypeIds::Uint32:
+    case NYql::NProto::TypeIds::Uint32: 
         return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data()));
-    case NYql::NProto::TypeIds::Int64:
+    case NYql::NProto::TypeIds::Int64: 
         return THash<i64>()(ReadUnaligned<i64>((const i64*)cell.Data()));
-    case NYql::NProto::TypeIds::Uint64:
+    case NYql::NProto::TypeIds::Uint64: 
         return THash<ui64>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
-    case NYql::NProto::TypeIds::Float:
+    case NYql::NProto::TypeIds::Float: 
         return THash<float>()(ReadUnaligned<float>((const float*)cell.Data()));
-    case NYql::NProto::TypeIds::Double:
+    case NYql::NProto::TypeIds::Double: 
         return THash<double>()(ReadUnaligned<double>((const double*)cell.Data()));
 
-    case NYql::NProto::TypeIds::Date:
+    case NYql::NProto::TypeIds::Date: 
         return THash<ui16>()(ReadUnaligned<ui16>((const ui16*)cell.Data()));
-    case NYql::NProto::TypeIds::Datetime:
-        return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data()));
-    case NYql::NProto::TypeIds::Timestamp:
-        return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
-    case NYql::NProto::TypeIds::Interval:
-        return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
+    case NYql::NProto::TypeIds::Datetime: 
+        return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data())); 
+    case NYql::NProto::TypeIds::Timestamp: 
+        return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data())); 
+    case NYql::NProto::TypeIds::Interval: 
+        return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data())); 
 
-    case NYql::NProto::TypeIds::String:
-    case NYql::NProto::TypeIds::Utf8:
-    case NYql::NProto::TypeIds::Yson:
-    case NYql::NProto::TypeIds::Json:
-    case NYql::NProto::TypeIds::Decimal:
+    case NYql::NProto::TypeIds::String: 
+    case NYql::NProto::TypeIds::Utf8: 
+    case NYql::NProto::TypeIds::Yson: 
+    case NYql::NProto::TypeIds::Json: 
+    case NYql::NProto::TypeIds::Decimal: 
     case NYql::NProto::TypeIds::JsonDocument:
     case NYql::NProto::TypeIds::DyNumber:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
-    default:
-        Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", type);
-        break;
+    default: 
+        Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", type); 
+        break; 
     }
 
     return 0;
@@ -527,4 +527,4 @@ void DbgPrintValue(TString&, const TCell&, ui32 type);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
 
-}
+} 

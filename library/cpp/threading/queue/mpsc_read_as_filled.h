@@ -4,14 +4,14 @@
   Completely wait-free queue, multiple producers - one consumer. Strict order.
   The queue algorithm is using concept of virtual infinite array.
 
-  A producer takes a number from a counter and atomically increments the counter.
+  A producer takes a number from a counter and atomically increments the counter. 
   The number taken is a number of a slot for the producer to put a new message
   into infinite array.
 
   Then producer constructs a virtual infinite array by bidirectional linked list
   of blocks. Each block contains several slots.
 
-  There is a hint pointer which optimistically points to the last block
+  There is a hint pointer which optimistically points to the last block 
   of the list and never goes backward.
 
   Consumer exploits the property of the hint pointer always going forward
@@ -25,7 +25,7 @@
   Consumer can't stop the progress for producers.
   Consumer can skip not-yet-filled slots and read them later.
   Thus no producer can stop the progress for consumer.
-  The algorithm is virtually strictly ordered because it skips slots only
+  The algorithm is virtually strictly ordered because it skips slots only 
   if it is really does not matter in which order the slots were produced and
   consumed.
 
@@ -35,7 +35,7 @@
   WARNING: though the algorithm itself is completely wait-free
   but producers and consumer could be blocked by memory allocator
 
-  WARNING: copy constructors of the queue are not thread-safe
+  WARNING: copy constructors of the queue are not thread-safe 
  */
 
 #include <util/generic/deque.h>

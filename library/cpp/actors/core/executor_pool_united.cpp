@@ -4,32 +4,32 @@
 #include "cpu_state.h"
 #include "executor_thread.h"
 #include "probes.h"
-#include "mailbox.h"
+#include "mailbox.h" 
 #include "scheduler_queue.h"
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/futex.h>
 #include <library/cpp/actors/util/intrinsics.h>
 #include <library/cpp/actors/util/timerfd.h>
-
+ 
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
 
 #include <algorithm>
 
-namespace NActors {
-    LWTRACE_USING(ACTORLIB_PROVIDER);
-
+namespace NActors { 
+    LWTRACE_USING(ACTORLIB_PROVIDER); 
+ 
     struct TUnitedWorkers::TWorker: public TNonCopyable {
         TAutoPtr<TExecutorThread> Thread;
         volatile TThreadId ThreadId = UnknownThreadId;
         NSchedulerQueue::TQueueType SchedulerQueue;
     };
-
+ 
     struct TUnitedWorkers::TPool: public TNonCopyable {
         TAtomic Waiters = 0; // Number of idle cpus, waiting for activations in this pool
         char Padding[64 - sizeof(TAtomic)];
-
+ 
         TUnorderedCache<ui32, 512, 4> Activations; // MPMC-queue for mailbox activations
         TAtomic Active = 0; // Number of mailboxes ready for execution or currently executing
         TAtomic Tokens = 0; // Pending tokens (token is required for worker to start execution, guarantees concurrency limit and activation availability)
@@ -93,7 +93,7 @@ namespace NActors {
         bool TryAcquireToken() {
             return TryAcquireTokenImpl<false>(&Tokens);
         }
-
+ 
         // Try acquire pending token. Must be done before execution
         bool TryAcquireTokenRelaxed() {
             return TryAcquireTokenImpl<true>(&Tokens);
@@ -106,10 +106,10 @@ namespace NActors {
                     return;
                 }
                 SpinLockPause();
-            }
+            } 
             activation = 0; // should stop
         }
-
+ 
         // End currently active execution and start new one if token is available.
         // Reuses token if it's not destroyed.
         // Returned `true` means successful switch, `activation` is filled.
@@ -124,7 +124,7 @@ namespace NActors {
             }
             return false; // no more tokens available
         }
-
+ 
         // Stop active execution. Returns released token (unless it is destroyed)
         bool StopExecution() {
             TAtomicBase active = AtomicDecrement(Active);
@@ -534,13 +534,13 @@ namespace NActors {
                     case Standby:
                         if (!idleTimer) {
                             idleTimer = IdleQueue.Enqueue();
-                        }
+                        } 
                         SetPriority(0, IdlePriority);
                         idleTimer->Wait();
-                        break;
+                        break; 
                     case Stopped: return false;
                     default: Y_FAIL();
-                    }
+                    } 
                 } else { // lease has expired and hard preemption occured, so we are executing in a slow-worker
                     wctx.IncrementPreemptedEvents();
                     switch (SlowWorkerAction(wctx.PoolId)) {
@@ -551,11 +551,11 @@ namespace NActors {
                         wctx.Lease = wctx.Lease.NeverExpire();
                         wctx.PoolId = MaxPools;
                         idleTimer = nullptr;
-                        break;
+                        break; 
                     case Stopped: return false;
                     default: Y_FAIL();
-                    }
-                }
+                    } 
+                } 
             }
         }
 
@@ -576,7 +576,7 @@ namespace NActors {
                         if (AtomicCas(&SlowPoolsMask, slow | WaitPoolsFlag, slow)) { // try set wait flag
                             return RunSlowPool; // wait flag has been successfully set
                         }
-                    }
+                    } 
                 } else { // we are about to execute fast pool, token required
                     if (slow & WaitPoolsFlag) { // reset wait flag if required
                         if (AtomicCas(&SlowPoolsMask, slow & ~WaitPoolsFlag, slow)) { // try reset wait flag
@@ -649,12 +649,12 @@ namespace NActors {
                     // Lease has been changed just now, no way we need preemption right now, so no retry needed
                     return Standby;
                 }
-            } else {
+            } else { 
                 // Lease has not expired yet (maybe never expiring lease)
                 return Standby;
-            }
+            } 
         }
-
+ 
         EWorkerAction SlowWorkerAction(TPoolId pool) {
             if (Y_UNLIKELY(United->IsStopped())) {
                 return Stopped;
@@ -681,7 +681,7 @@ namespace NActors {
                 }
             }
         }
-
+ 
         void SetPoolIsSlowFlag(TPoolId pool) {
             while (true) {
                 TPoolsMask slow = AtomicLoad(&SlowPoolsMask);
@@ -693,9 +693,9 @@ namespace NActors {
                     Y_FAIL("two slow-workers executing the same pool on the same core");
                     return; // pool is already slow
                 }
-            }
-        }
-
+            } 
+        } 
+ 
         bool TryBeginHardPreemption(TLease lease) {
             return AtomicCas(&CurrentLease, HardPreemptionLease, lease);
         }
@@ -723,7 +723,7 @@ namespace NActors {
                 TPoolsMask slow = AtomicLoad(&SlowPoolsMask);
                 if ((slow & WaitPoolsFlag) == 0) {
                     return; // woken by WakeFast action
-                }
+                } 
                 ui64 ts = GetCycleCountFast();
                 if (deadlineTs <= ts) {
                     if (AtomicCas(&SlowPoolsMask, slow & ~WaitPoolsFlag, slow)) { // try reset wait flag
@@ -742,13 +742,13 @@ namespace NActors {
                 }
             }
         }
-
+ 
         void WakeFastWorker() {
 #ifdef _linux_
             SysFutex(FastWorkerFutex(), FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
 #endif
         }
-
+ 
 #ifdef _linux_
         ui32* FastWorkerFutex() {
             // Actually we wait on one highest bit, but futex value size is 4 bytes on all platforms
@@ -1023,12 +1023,12 @@ namespace NActors {
             } else {
                 return false;
             }
-        }
-
+        } 
+ 
         bool BlockedWait(TPoolId& result, ui64 timeoutNs) {
             return State.Block(timeoutNs, result);
         }
-
+ 
         void SwitchPool(TPoolId pool) {
             return State.SwitchPool(pool);
         }
@@ -1051,9 +1051,9 @@ namespace NActors {
             case TCpuState::Stopped:
                 return CpuStopped;
             }
-        }
+        } 
     };
-
+ 
     TUnitedWorkers::TUnitedWorkers(
             const TUnitedWorkersConfig& config,
             const TVector<TUnitedExecutorPoolConfig>& unitedPools,
@@ -1071,14 +1071,14 @@ namespace NActors {
             }
         }
         Pools.Reset(new TPool[PoolCount]);
-
+ 
         // Find max cpu id and initialize cpus
         CpuCount = 0;
         for (const TCpuAllocation& cpuAlloc : allocation.Items) {
             CpuCount = Max<size_t>(CpuCount, cpuAlloc.CpuId + 1);
         }
         Cpus.Reset(new TCpu[CpuCount]);
-
+ 
         // Setup allocated cpus
         // NOTE: leave gaps for not allocated cpus (default-initialized)
         WorkerCount = 0;
@@ -1143,18 +1143,18 @@ namespace NActors {
                 }
             }
         }
-    }
-
+    } 
+ 
     TUnitedWorkers::~TUnitedWorkers() {
     }
-
+ 
     void TUnitedWorkers::Prepare(TActorSystem* actorSystem, TVector<NSchedulerQueue::TReader*>& scheduleReaders) {
         // Setup allocated cpus
         // NOTE: leave gaps for not allocated cpus (default-initialized)
         TWorkerId workers = 0;
         for (TCpuId cpuId = 0; cpuId < CpuCount; cpuId++) {
             TCpu& cpu = Cpus[cpuId];
-
+ 
             // Setup cpu-local workers
             if (cpu.LocalManager) {
                 for (size_t i = 0; i < cpu.LocalManager->WorkerCount(); i++) {
@@ -1175,9 +1175,9 @@ namespace NActors {
                     scheduleReaders.push_back(&Workers[workerId].SchedulerQueue.Reader);
                 }
             }
-        }
-    }
-
+        } 
+    } 
+ 
     void TUnitedWorkers::Start() {
         for (TWorkerId workerId = 0; workerId < WorkerCount; workerId++) {
             Workers[workerId].Thread->Start();
@@ -1207,31 +1207,31 @@ namespace NActors {
     }
 
     void TUnitedWorkers::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        AtomicStore(&StopFlag, true); 
         for (TPoolId pool = 0; pool < PoolCount; pool++) {
             Pools[pool].Stop();
         }
         for (TCpuId cpuId = 0; cpuId < CpuCount; cpuId++) {
             Cpus[cpuId].Stop();
         }
-    }
-
+    } 
+ 
     void TUnitedWorkers::Shutdown() {
         for (TWorkerId workerId = 0; workerId < WorkerCount; workerId++) {
             Workers[workerId].Thread->Join();
         }
-    }
-
+    } 
+ 
     inline void TUnitedWorkers::PushActivation(TPoolId pool, ui32 activation, ui64 revolvingCounter) {
         if (Pools[pool].PushActivation(activation, revolvingCounter)) { // token generated
             TryWake(pool);
         }
     }
-
+ 
     inline bool TUnitedWorkers::TryAcquireToken(TPoolId pool) {
         return Pools[pool].TryAcquireToken();
-    }
-
+    } 
+ 
     inline void TUnitedWorkers::TryWake(TPoolId pool) {
         // Avoid using multiple atomic seq_cst loads in cycle, use barrier once
         AtomicBarrier();
@@ -1310,7 +1310,7 @@ namespace NActors {
         while (true) {
             if (cpu.StartSpinning(this, assignedPool, result)) {
                 break; // token already acquired (or stop)
-            }
+            } 
             result = WaitSequence(cpu, wctx, timeTracker);
             if (Y_UNLIKELY(result == CpuStopped) || TryAcquireToken(result)) {
                 break; // token acquired (or stop)
@@ -1319,7 +1319,7 @@ namespace NActors {
 
         wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
         return result;
-    }
+    } 
 
     TPoolId TUnitedWorkers::WaitSequence(TCpu& cpu, TWorkerContext& wctx, TTimeTracker& timeTracker) {
         TPoolId result;
@@ -1425,4 +1425,4 @@ namespace NActors {
         statsCopy[0].Aggregate(Stats);
         United->GetCurrentStats(PoolId, statsCopy);
     }
-}
+} 

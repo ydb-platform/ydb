@@ -34,10 +34,10 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr TxNotImplemented;
         NMonitoring::TDynamicCounters::TCounterPtr KqpRequest;
 
-        NMonitoring::TDynamicCounters::TCounterPtr DataReqInFly;
-        NMonitoring::TDynamicCounters::TCounterPtr SchemeReqInFly;
-        NMonitoring::TDynamicCounters::TCounterPtr NavigateReqInFly;
-
+        NMonitoring::TDynamicCounters::TCounterPtr DataReqInFly; 
+        NMonitoring::TDynamicCounters::TCounterPtr SchemeReqInFly; 
+        NMonitoring::TDynamicCounters::TCounterPtr NavigateReqInFly; 
+ 
         // tx_proxy_datareq group
         TIntrusivePtr<NMonitoring::TDynamicCounters> DataReqGroup;
 
@@ -45,28 +45,28 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr ReportStatusNotOK;
         NMonitoring::TDynamicCounters::TCounterPtr ReportStatusStreamData;
 
-        NMonitoring::THistogramPtr TxPrepareTimeHgram;
-        NMonitoring::THistogramPtr TxExecuteTimeHgram;
-        NMonitoring::THistogramPtr TxTotalTimeHgram;
-        NMonitoring::THistogramPtr TxPrepareSpreadHgram;
-        NMonitoring::THistogramPtr TxPrepareArriveSpreadHgram;
-        NMonitoring::THistogramPtr TxPrepareCompleteSpreadHgram;
-        NMonitoring::THistogramPtr TxExecSpreadHgram;
-
-        NMonitoring::THistogramPtr TxPrepareSetProgramHgram;
-        NMonitoring::THistogramPtr TxPrepareResolveHgram;
-        NMonitoring::THistogramPtr TxPrepareBuildShardProgramsHgram;
-        NMonitoring::THistogramPtr TxPrepareSendShardProgramsHgram;
-
+        NMonitoring::THistogramPtr TxPrepareTimeHgram; 
+        NMonitoring::THistogramPtr TxExecuteTimeHgram; 
+        NMonitoring::THistogramPtr TxTotalTimeHgram; 
+        NMonitoring::THistogramPtr TxPrepareSpreadHgram; 
+        NMonitoring::THistogramPtr TxPrepareArriveSpreadHgram; 
+        NMonitoring::THistogramPtr TxPrepareCompleteSpreadHgram; 
+        NMonitoring::THistogramPtr TxExecSpreadHgram; 
+ 
+        NMonitoring::THistogramPtr TxPrepareSetProgramHgram; 
+        NMonitoring::THistogramPtr TxPrepareResolveHgram; 
+        NMonitoring::THistogramPtr TxPrepareBuildShardProgramsHgram; 
+        NMonitoring::THistogramPtr TxPrepareSendShardProgramsHgram; 
+ 
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLResolveSentToShard;
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLWrongRequest;
 
         NMonitoring::TDynamicCounters::TCounterPtr ReadTableResolveSentToShard;
         NMonitoring::TDynamicCounters::TCounterPtr ReadTableWrongRequest;
 
-        NMonitoring::TDynamicCounters::TCounterPtr MiniKQLProgramSize;
-        NMonitoring::TDynamicCounters::TCounterPtr MiniKQLParamsSize;
-
+        NMonitoring::TDynamicCounters::TCounterPtr MiniKQLProgramSize; 
+        NMonitoring::TDynamicCounters::TCounterPtr MiniKQLParamsSize; 
+ 
         NMonitoring::TDynamicCounters::TCounterPtr ExecTimeout;
         NMonitoring::TDynamicCounters::TCounterPtr MarkShardError;
         NMonitoring::TDynamicCounters::TCounterPtr PrepareErrorTimeout;
@@ -111,8 +111,8 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr TxResultError;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultAborted;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultFatal;
-        NMonitoring::TDynamicCounters::TCounterPtr TxResultShardOverloaded;
-        NMonitoring::TDynamicCounters::TCounterPtr TxResultShardTryLater;
+        NMonitoring::TDynamicCounters::TCounterPtr TxResultShardOverloaded; 
+        NMonitoring::TDynamicCounters::TCounterPtr TxResultShardTryLater; 
         NMonitoring::TDynamicCounters::TCounterPtr TxResultExecError;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultResultUnavailable;
         NMonitoring::TDynamicCounters::TCounterPtr TxResultCancelled;
@@ -128,7 +128,7 @@ namespace NTxProxy {
 
         TAlignedPagePoolCounters AllocPoolCounters;
 
-        TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
+        TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters); 
     };
 
 } // NTxProxy

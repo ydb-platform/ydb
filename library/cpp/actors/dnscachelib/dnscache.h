@@ -15,17 +15,17 @@
  * 3) most of the time IP addresses do not change
  * 4) it's OK to return old IP address when DNS server not responding in time
  */
-
+ 
 class TDnsCache {
 public:
-    TDnsCache(bool allowIpv4 = true, bool allowIpv6 = true, time_t entry_lifetime = 1800, time_t neg_lifetime = 1, ui32 request_timeout = 500000);
+    TDnsCache(bool allowIpv4 = true, bool allowIpv6 = true, time_t entry_lifetime = 1800, time_t neg_lifetime = 1, ui32 request_timeout = 500000); 
     ~TDnsCache();
 
     TString GetHostByAddr(const NAddr::IRemoteAddr&);
 
     // ip in network byte order
     TIpHost Get(const TString& host);
-
+ 
     /* use with AF_INET, AF_INET6 or AF_UNSPEC */
     NAddr::IRemoteAddrPtr GetAddr(const TString& host,
                                   int family,
@@ -113,8 +113,8 @@ private:
     const time_t EntryLifetime;
     const time_t NegativeLifetime;
     const TDuration Timeout;
-    const bool AllowIpV4;
-    const bool AllowIpV6;
+    const bool AllowIpV4; 
+    const bool AllowIpV6; 
 
     TMutex CacheMtx;
     THostCache HostCache;

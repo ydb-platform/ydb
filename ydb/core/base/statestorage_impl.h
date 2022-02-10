@@ -1,40 +1,40 @@
-#pragma once
+#pragma once 
 #include "pathid.h"
-#include "statestorage.h"
-
-namespace NKikimr {
-
+#include "statestorage.h" 
+ 
+namespace NKikimr { 
+ 
 inline TActorId MakeStateStorageReplicaID(ui32 node, ui64 stateStorageGroup, ui32 replicaIndex) {
-    char x[12] = { 's', 't', 's' };
-    x[3] = (char)stateStorageGroup;
-    memcpy(x + 5, &replicaIndex, sizeof(ui32));
+    char x[12] = { 's', 't', 's' }; 
+    x[3] = (char)stateStorageGroup; 
+    memcpy(x + 5, &replicaIndex, sizeof(ui32)); 
     return TActorId(node, TStringBuf(x, 12));
-}
-
-struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
-    TEvReplicaInfo()
-    {}
-
-    TEvReplicaInfo(ui64 tabletId, NKikimrProto::EReplyStatus status)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetStatus(status);
-    }
-
+} 
+ 
+struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> { 
+    TEvReplicaInfo() 
+    {} 
+ 
+    TEvReplicaInfo(ui64 tabletId, NKikimrProto::EReplyStatus status) 
+    { 
+        Record.SetTabletID(tabletId); 
+        Record.SetStatus(status); 
+    } 
+ 
     TEvReplicaInfo(ui64 tabletId, const TActorId &currentLeader, const TActorId &currentLeaderTablet, ui32 currentGeneration, ui32 currentStep, bool locked, ui64 lockedFor)
-    {
-        Record.SetStatus(NKikimrProto::OK);
-
-        Record.SetTabletID(tabletId);
+    { 
+        Record.SetStatus(NKikimrProto::OK); 
+ 
+        Record.SetTabletID(tabletId); 
         ActorIdToProto(currentLeader, Record.MutableCurrentLeader());
         ActorIdToProto(currentLeaderTablet, Record.MutableCurrentLeaderTablet());
-        Record.SetCurrentGeneration(currentGeneration);
-        Record.SetCurrentStep(currentStep);
-        if (locked) {
-            Record.SetLocked(locked);
-            Record.SetLockedFor(lockedFor);
-        }
-    }
+        Record.SetCurrentGeneration(currentGeneration); 
+        Record.SetCurrentStep(currentStep); 
+        if (locked) { 
+            Record.SetLocked(locked); 
+            Record.SetLockedFor(lockedFor); 
+        } 
+    } 
 
     TString ToString() const {
         TStringStream str;
@@ -62,71 +62,71 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
         return str.Str();
     }
 
-};
-
-struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroupConfig, EvUpdateGroupConfig> {
-    TIntrusivePtr<TStateStorageInfo> GroupConfig;
-    TIntrusivePtr<TStateStorageInfo> BoardConfig;
-    TIntrusivePtr<TStateStorageInfo> SchemeBoardConfig;
-
-    TEvUpdateGroupConfig(
-                const TIntrusivePtr<TStateStorageInfo> &info,
-                const TIntrusivePtr<TStateStorageInfo> &board,
-                const TIntrusivePtr<TStateStorageInfo> &scheme)
-        : GroupConfig(info)
-        , BoardConfig(board)
-        , SchemeBoardConfig(scheme)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeSubscribe : public TEventLocal<TEvReplicaProbeSubscribe, EvReplicaProbeSubscribe> {
+}; 
+ 
+struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroupConfig, EvUpdateGroupConfig> { 
+    TIntrusivePtr<TStateStorageInfo> GroupConfig; 
+    TIntrusivePtr<TStateStorageInfo> BoardConfig; 
+    TIntrusivePtr<TStateStorageInfo> SchemeBoardConfig; 
+ 
+    TEvUpdateGroupConfig( 
+                const TIntrusivePtr<TStateStorageInfo> &info, 
+                const TIntrusivePtr<TStateStorageInfo> &board, 
+                const TIntrusivePtr<TStateStorageInfo> &scheme) 
+        : GroupConfig(info) 
+        , BoardConfig(board) 
+        , SchemeBoardConfig(scheme) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaProbeSubscribe : public TEventLocal<TEvReplicaProbeSubscribe, EvReplicaProbeSubscribe> { 
     const TActorId ReplicaId;
-
+ 
     TEvReplicaProbeSubscribe(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeUnsubscribe : public TEventLocal<TEvReplicaProbeUnsubscribe, EvReplicaProbeUnsubscribe> {
+        : ReplicaId(replicaId) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaProbeUnsubscribe : public TEventLocal<TEvReplicaProbeUnsubscribe, EvReplicaProbeUnsubscribe> { 
     const TActorId ReplicaId;
-
+ 
     TEvReplicaProbeUnsubscribe(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeConnected : public TEventLocal<TEvReplicaProbeConnected, EvReplicaProbeConnected> {
+        : ReplicaId(replicaId) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaProbeConnected : public TEventLocal<TEvReplicaProbeConnected, EvReplicaProbeConnected> { 
     const TActorId ReplicaId;
-
+ 
     TEvReplicaProbeConnected(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaProbeDisconnected : public TEventLocal<TEvReplicaProbeDisconnected, EvReplicaProbeDisconnected> {
+        : ReplicaId(replicaId) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaProbeDisconnected : public TEventLocal<TEvReplicaProbeDisconnected, EvReplicaProbeDisconnected> { 
     const TActorId ReplicaId;
-
+ 
     TEvReplicaProbeDisconnected(TActorId replicaId)
-        : ReplicaId(replicaId)
-    {}
-};
-
-struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
-    const ui64 TabletID;
-
-    TEvResolveReplicas(ui64 tabletId)
-        : TabletID(tabletId)
-    {}
-};
-
-struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, EvResolveBoard> {
-    const TString Path;
-
-    TEvResolveBoard(const TString &path)
-        : Path(path)
-    {}
-};
-
+        : ReplicaId(replicaId) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> { 
+    const ui64 TabletID; 
+ 
+    TEvResolveReplicas(ui64 tabletId) 
+        : TabletID(tabletId) 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvResolveBoard : public TEventLocal<TEvResolveBoard, EvResolveBoard> { 
+    const TString Path; 
+ 
+    TEvResolveBoard(const TString &path) 
+        : Path(path) 
+    {} 
+}; 
+ 
 struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSchemeBoard, EvResolveSchemeBoard> {
     enum EKeyType {
         KeyTypePath,
@@ -149,43 +149,43 @@ struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSch
     {}
 };
 
-struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveReplicasList, EvResolveReplicasList> {
+struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveReplicasList, EvResolveReplicasList> { 
     TVector<TActorId> Replicas;
-    ui32 ConfigContentHash = Max<ui32>();
-};
-
+    ui32 ConfigContentHash = Max<ui32>(); 
+}; 
+ 
 struct TEvStateStorage::TEvListSchemeBoard : public TEventLocal<TEvListSchemeBoard, EvListSchemeBoard> {
 };
 
 struct TEvStateStorage::TEvListSchemeBoardResult : public TEventLocal<TEvListSchemeBoardResult, EvListSchemeBoardResult> {
-    TIntrusiveConstPtr<TStateStorageInfo> Info;
-
-    TEvListSchemeBoardResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
-        : Info(info)
-    {}
+    TIntrusiveConstPtr<TStateStorageInfo> Info; 
+ 
+    TEvListSchemeBoardResult(const TIntrusiveConstPtr<TStateStorageInfo> &info) 
+        : Info(info) 
+    {} 
 };
 
-struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvReplicaLookup, NKikimrStateStorage::TEvLookup, TEvStateStorage::EvReplicaLookup>{
-    struct TActualityCounter : public TRefCounted<TActualityCounter, TAtomicCounter> {};
-    using TActualityCounterPtr = TIntrusivePtr<TActualityCounter>;
-    TActualityCounterPtr ActualityRefCounter;
+struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvReplicaLookup, NKikimrStateStorage::TEvLookup, TEvStateStorage::EvReplicaLookup>{ 
+    struct TActualityCounter : public TRefCounted<TActualityCounter, TAtomicCounter> {}; 
+    using TActualityCounterPtr = TIntrusivePtr<TActualityCounter>; 
+    TActualityCounterPtr ActualityRefCounter; 
+ 
+    TEvReplicaLookup() 
+    {} 
+ 
+    TEvReplicaLookup(ui64 tabletId, ui64 cookie) 
+    { 
+        Record.SetTabletID(tabletId); 
+        Record.SetCookie(cookie); 
+    } 
 
-    TEvReplicaLookup()
-    {}
-
-    TEvReplicaLookup(ui64 tabletId, ui64 cookie)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetCookie(cookie);
-    }
-
-    TEvReplicaLookup(ui64 tabletId, ui64 cookie, TActualityCounterPtr &actualityRefCounter)
-        : ActualityRefCounter(actualityRefCounter)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetCookie(cookie);
-    }
-
+    TEvReplicaLookup(ui64 tabletId, ui64 cookie, TActualityCounterPtr &actualityRefCounter) 
+        : ActualityRefCounter(actualityRefCounter) 
+    { 
+        Record.SetTabletID(tabletId); 
+        Record.SetCookie(cookie); 
+    } 
+ 
     TString ToString() const {
         TStringStream str;
         str << "{EvReplicaLookup TabletID: " << Record.GetTabletID();
@@ -193,18 +193,18 @@ struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvR
         str << "}";
         return str.Str();
     }
-};
-
-struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvReplicaUpdate, NKikimrStateStorage::TEvUpdate, TEvStateStorage::EvReplicaUpdate> {
-    TEvReplicaUpdate()
-    {}
-
-    TEvReplicaUpdate(ui64 tabletId, ui32 proposedGeneration, ui32 proposedStep)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetProposedGeneration(proposedGeneration);
-        Record.SetProposedStep(proposedStep);
-    }
+}; 
+ 
+struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvReplicaUpdate, NKikimrStateStorage::TEvUpdate, TEvStateStorage::EvReplicaUpdate> { 
+    TEvReplicaUpdate() 
+    {} 
+ 
+    TEvReplicaUpdate(ui64 tabletId, ui32 proposedGeneration, ui32 proposedStep) 
+    { 
+        Record.SetTabletID(tabletId); 
+        Record.SetProposedGeneration(proposedGeneration); 
+        Record.SetProposedStep(proposedStep); 
+    } 
 
     TString ToString() const {
         TStringStream str;
@@ -214,8 +214,8 @@ struct TEvStateStorage::TEvReplicaUpdate : public TEventPB<TEvStateStorage::TEvR
         str << "}";
         return str.Str();
     }
-};
-
+}; 
+ 
 struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvReplicaDelete, NKikimrStateStorage::TEvDelete, TEvStateStorage::EvReplicaDelete> {
     TEvReplicaDelete()
     {}
@@ -233,26 +233,26 @@ struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvR
     }
 };
 
-struct TEvStateStorage::TEvReplicaCleanup : public TEventPB<TEvStateStorage::TEvReplicaCleanup, NKikimrStateStorage::TEvCleanup, TEvStateStorage::EvReplicaCleanup> {
-    TEvReplicaCleanup()
-    {}
-
+struct TEvStateStorage::TEvReplicaCleanup : public TEventPB<TEvStateStorage::TEvReplicaCleanup, NKikimrStateStorage::TEvCleanup, TEvStateStorage::EvReplicaCleanup> { 
+    TEvReplicaCleanup() 
+    {} 
+ 
     TEvReplicaCleanup(ui64 tabletId, TActorId proposedLeader)
-    {
-        Record.SetTabletID(tabletId);
+    { 
+        Record.SetTabletID(tabletId); 
         ActorIdToProto(proposedLeader, Record.MutableProposedLeader());
-    }
-};
-
-struct TEvStateStorage::TEvReplicaLock : public TEventPB<TEvStateStorage::TEvReplicaLock, NKikimrStateStorage::TEvLock, TEvStateStorage::EvReplicaLock> {
-    TEvReplicaLock()
-    {}
-
-    TEvReplicaLock(ui64 tabletId, ui32 proposedGeneration)
-    {
-        Record.SetTabletID(tabletId);
-        Record.SetProposedGeneration(proposedGeneration);
-    }
+    } 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaLock : public TEventPB<TEvStateStorage::TEvReplicaLock, NKikimrStateStorage::TEvLock, TEvStateStorage::EvReplicaLock> { 
+    TEvReplicaLock() 
+    {} 
+ 
+    TEvReplicaLock(ui64 tabletId, ui32 proposedGeneration) 
+    { 
+        Record.SetTabletID(tabletId); 
+        Record.SetProposedGeneration(proposedGeneration); 
+    } 
 
     TString ToString() const {
         TStringStream str;
@@ -261,55 +261,55 @@ struct TEvStateStorage::TEvReplicaLock : public TEventPB<TEvStateStorage::TEvRep
         str << "}";
         return str.Str();
     }
-};
-
-struct TEvStateStorage::TEvReplicaBoardPublish : public TEventPB<TEvStateStorage::TEvReplicaBoardPublish, NKikimrStateStorage::TEvReplicaBoardPublish, TEvStateStorage::EvReplicaBoardPublish> {
-    TEvReplicaBoardPublish()
-    {}
-
+}; 
+ 
+struct TEvStateStorage::TEvReplicaBoardPublish : public TEventPB<TEvStateStorage::TEvReplicaBoardPublish, NKikimrStateStorage::TEvReplicaBoardPublish, TEvStateStorage::EvReplicaBoardPublish> { 
+    TEvReplicaBoardPublish() 
+    {} 
+ 
     TEvReplicaBoardPublish(const TString &path, const TString &payload, ui64 ttlMs, bool reg, TActorId owner)
-    {
-        Record.SetPath(path);
-        Record.SetPayload(payload);
-        Record.SetTtlMs(ttlMs);
-        Record.SetRegister(reg);
+    { 
+        Record.SetPath(path); 
+        Record.SetPayload(payload); 
+        Record.SetTtlMs(ttlMs); 
+        Record.SetRegister(reg); 
         ActorIdToProto(owner, Record.MutableOwner());
-    }
-};
-
-struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage::TEvReplicaBoardLookup, NKikimrStateStorage::TEvReplicaBoardLookup, TEvStateStorage::EvReplicaBoardLookup> {
-    TEvReplicaBoardLookup()
-    {}
-
+    } 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage::TEvReplicaBoardLookup, NKikimrStateStorage::TEvReplicaBoardLookup, TEvStateStorage::EvReplicaBoardLookup> { 
+    TEvReplicaBoardLookup() 
+    {} 
+ 
     TEvReplicaBoardLookup(const TString &path, TActorId owner, bool sub)
-    {
-        Record.SetPath(path);
+    { 
+        Record.SetPath(path); 
         ActorIdToProto(owner, Record.MutableOwner());
-        Record.SetSubscribe(sub);
-    }
-};
-
-struct TEvStateStorage::TEvReplicaBoardCleanup : public TEventPB<TEvStateStorage::TEvReplicaBoardCleanup, NKikimrStateStorage::TEvReplicaBoardCleanup, TEvStateStorage::EvReplicaBoardCleanup> {
-    TEvReplicaBoardCleanup()
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaBoardPublishAck : public TEventPB<TEvStateStorage::TEvReplicaBoardPublishAck, NKikimrStateStorage::TEvReplicaBoardPublishAck, TEvStateStorage::EvReplicaBoardPublishAck> {
-    TEvReplicaBoardPublishAck()
-    {}
-};
-
-struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::TEvReplicaBoardInfo, NKikimrStateStorage::TEvReplicaBoardInfo, TEvStateStorage::EvReplicaBoardInfo> {
-    TEvReplicaBoardInfo()
-    {}
-
-    TEvReplicaBoardInfo(const TString &path, bool dropped)
-    {
-        Record.SetPath(path);
-        Record.SetDropped(dropped);
-    }
-};
-
+        Record.SetSubscribe(sub); 
+    } 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaBoardCleanup : public TEventPB<TEvStateStorage::TEvReplicaBoardCleanup, NKikimrStateStorage::TEvReplicaBoardCleanup, TEvStateStorage::EvReplicaBoardCleanup> { 
+    TEvReplicaBoardCleanup() 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaBoardPublishAck : public TEventPB<TEvStateStorage::TEvReplicaBoardPublishAck, NKikimrStateStorage::TEvReplicaBoardPublishAck, TEvStateStorage::EvReplicaBoardPublishAck> { 
+    TEvReplicaBoardPublishAck() 
+    {} 
+}; 
+ 
+struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::TEvReplicaBoardInfo, NKikimrStateStorage::TEvReplicaBoardInfo, TEvStateStorage::EvReplicaBoardInfo> { 
+    TEvReplicaBoardInfo() 
+    {} 
+ 
+    TEvReplicaBoardInfo(const TString &path, bool dropped) 
+    { 
+        Record.SetPath(path); 
+        Record.SetDropped(dropped); 
+    } 
+}; 
+ 
 IActor* CreateStateStorageReplicaProbe(TActorId replica);
-
-}
+ 
+} 

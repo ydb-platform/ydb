@@ -1,14 +1,14 @@
-#pragma once
+#pragma once 
 #include "flat_row_eggs.h"
 #include "flat_row_versions.h"
-#include "flat_update_op.h"
+#include "flat_update_op.h" 
 #include "flat_dbase_scheme.h"
 #include "flat_dbase_change.h"
 #include "flat_dbase_misc.h"
 #include "flat_iterator.h"
 #include "util_basics.h"
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 
 namespace NPageCollection {
     class TCookieAllocator;
@@ -38,11 +38,11 @@ struct TKeyRange {
 };
 
 class TDatabase {
-public:
+public: 
     using TMemGlobs = TVector<NPageCollection::TMemGlob>;
     using TCookieAllocator = NPageCollection::TCookieAllocator;
     using TCounters = TDbStats;
-
+ 
     struct TProd {
         THolder<TChange> Change;
     };
@@ -54,8 +54,8 @@ public:
 
     TDatabase(const TDatabase&) = delete;
     TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
-    ~TDatabase();
-
+    ~TDatabase(); 
+ 
     /* Returns durable monotonic change number for table or entire database
         on default (table = Max<ui32>()). Serial is incremented for each
         successful Commit(). AHTUNG: Serial may go to the past in case of
@@ -86,7 +86,7 @@ public:
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
-
+ 
     void CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
@@ -115,13 +115,13 @@ public:
     const TRowVersionRanges& GetRemovedRowVersions(ui32 table) const;
 
     void NoMoreReadsForTx();
-
+ 
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     ui32 TxSnapTable(ui32 table);
 
     const TScheme& GetScheme() const noexcept;
-
+ 
     TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept;
 
     TPartView GetPartView(ui32 table, const TLogoBlobID &bundle) const;
@@ -151,17 +151,17 @@ public:
     void Merge(ui32 table, TPartView);
     void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
-
+ 
     void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
     void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
 
     TKeyRangeCache* DebugGetTableErasedKeysCache(ui32 table) const;
 
-    // executor interface
+    // executor interface 
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
     TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex);
-
+ 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
     bool ValidateCommit(TString&);
@@ -171,9 +171,9 @@ public:
 private:
     TTable* Require(ui32 tableId) const noexcept;
 
-private:
+private: 
     const THolder<TDatabaseImpl> DatabaseImpl;
-
+ 
     ui64 Stamp = Max<ui64>();
     bool NoMoreReadsFlag;
     IPages* Env = nullptr;
@@ -184,7 +184,7 @@ private:
 
     mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
     mutable THashSet<ui32> IteratedTables;
-};
+}; 
+ 
 
-
-}}
+}} 

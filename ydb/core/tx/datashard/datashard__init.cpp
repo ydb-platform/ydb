@@ -73,8 +73,8 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     Self->SendRegistrationRequestTimeCast(ctx);
 
     // InReadSets table might have a lot of garbage due to old bug.
-    // Run transaction to collect if shard is not going offline.
-    if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline)
+    // Run transaction to collect if shard is not going offline. 
+    if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline) 
         Self->Execute(Self->CreateTxCheckInReadSets(), ctx);
 
     // Tables created with older SchemeShard versions don't have

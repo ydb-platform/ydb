@@ -242,7 +242,7 @@ public:
         // Build snapshot data of all tables for each destination shard
         for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
             const auto& dstRangeDescr = Self->SrcSplitDescription->GetDestinationRanges(i);
-            const ui64 dstTablet = dstRangeDescr.GetTabletID();
+            const ui64 dstTablet = dstRangeDescr.GetTabletID(); 
 
             TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             snapshot->SetSrcTabletId(Self->TabletID());
@@ -284,10 +284,10 @@ public:
                     }
 
                     // Apply dst range to user table
-                    snapBody = Self->Executor()->BorrowSnapshot(localTableId, *SnapContext, from, to, dstTablet);
+                    snapBody = Self->Executor()->BorrowSnapshot(localTableId, *SnapContext, from, to, dstTablet); 
                 } else {
                     // Transfer full contents of system table
-                    snapBody = Self->Executor()->BorrowSnapshot(localTableId, *SnapContext, {}, {}, dstTablet);
+                    snapBody = Self->Executor()->BorrowSnapshot(localTableId, *SnapContext, {}, {}, dstTablet); 
                 }
 
                 if (snapBody.empty()) {

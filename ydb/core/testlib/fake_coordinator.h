@@ -97,12 +97,12 @@ namespace NKikimr {
             State->TxIds.insert(std::make_pair(tx.GetTxId(), shards));
             Cerr << "FAKE_COORDINATOR: Add transaction: " << tx.GetTxId() << " at step: " << State->CurrentStep << "\n";
             for (ui64 shard : shards) {
-                auto evPlan = new TEvTxProcessing::TEvPlanStep(State->CurrentStep, 0, shard);
-                auto planTx = evPlan->Record.AddTransactions();
-                planTx->SetCoordinator(TabletID());
-                planTx->SetTxId(tx.GetTxId());
+                auto evPlan = new TEvTxProcessing::TEvPlanStep(State->CurrentStep, 0, shard); 
+                auto planTx = evPlan->Record.AddTransactions(); 
+                planTx->SetCoordinator(TabletID()); 
+                planTx->SetTxId(tx.GetTxId()); 
                 ActorIdToProto(ctx.SelfID, planTx->MutableAckTo());
-                State->QueuedPlans[std::make_pair(shard, State->CurrentStep)].push_back(evPlan);
+                State->QueuedPlans[std::make_pair(shard, State->CurrentStep)].push_back(evPlan); 
             }
 
             AdvancePlan(ctx);
@@ -228,5 +228,5 @@ namespace NKikimr {
         TAutoPtr<NTabletPipe::IClientCache> Pipes;
     };
 
-    void BootFakeCoordinator(TTestActorRuntime& runtime, ui64 tabletId, TFakeCoordinator::TState::TPtr state);
+    void BootFakeCoordinator(TTestActorRuntime& runtime, ui64 tabletId, TFakeCoordinator::TState::TPtr state); 
 }

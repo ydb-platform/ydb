@@ -34,17 +34,17 @@ public:
         } else if (record.HasPoisonSessionNodeId()) {
             const ui32 nodeId = record.GetPoisonSessionNodeId();
             Callback = [=](const TActorContext& ctx) {
-                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvPoisonSession);
+                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvPoisonSession); 
             };
         } else if (record.HasCloseInputSessionNodeId()) {
             const ui32 nodeId = record.GetCloseInputSessionNodeId();
             Callback = [=](const TActorContext& ctx) {
-                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvCloseInputSession);
+                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvCloseInputSession); 
             };
         } else if (record.HasClosePeerSocketNodeId()) {
             const ui32 nodeId = record.GetClosePeerSocketNodeId();
             Callback = [=](const TActorContext& ctx) {
-                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvClosePeerSocket);
+                ctx.Send(TActivationContext::InterconnectProxy(nodeId), new NActors::TEvInterconnect::TEvClosePeerSocket); 
             };
         } else {
             NInterconnect::TLoadParams params;

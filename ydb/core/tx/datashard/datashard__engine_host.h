@@ -21,7 +21,7 @@ namespace NDataShard {
 class TDataShard;
 
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
-
+ 
 ///
 class TEngineBay : TNonCopyable {
 public:

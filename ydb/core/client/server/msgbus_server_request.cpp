@@ -11,67 +11,67 @@
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
 class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerRequest>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerRequest>>;
     THolder<TBusRequest> Request;
     TVector<TString*> WriteResolvedKeysTo;
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
     TAutoPtr<NKikimrTxUserProxy::TEvProposeTransactionStatus> ProposalStatus;
-
+ 
     size_t InFlyRequests;
     THashMap<TString, ui64> CompileResolveCookies;
     TString TextProgramForCompilation;
-    bool CompilationRetried;
-
+    bool CompilationRetried; 
+ 
     void ReplyWithResult(EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
                          const TActorContext &ctx);
-    bool RetryResolve(const TActorContext &ctx);
+    bool RetryResolve(const TActorContext &ctx); 
     void FinishReply(const TActorContext &ctx);
     void TryToAllocateQuota(const TActorContext &ctx);
-
+ 
     void Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
 
     bool AllRequestsCompleted(const TActorContext& ctx);
     bool AllRequestsCompletedMKQL(const TActorContext& ctx);
     bool AllRequestsCompletedReadTable(const TActorContext& ctx);
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_MKQL_REQUEST;
-    }
-
+    } 
+ 
     TMessageBusServerRequest(TEvBusProxy::TEvRequest* msg)
         : TBase(msg->MsgContext)
         , Request(static_cast<TBusRequest*>(msg->MsgContext.ReleaseMessage()))
         , InFlyRequests(0)
-        , CompilationRetried(false)
+        , CompilationRetried(false) 
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
         TBase::SetRequireAdminAccess(true); // MiniKQL and ReadTable execution required administative access
     }
-
+ 
     //STFUNC(StateWork)
     void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             HFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, Handle);
-            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle); 
             HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-        }
-    }
-
+        } 
+    } 
+ 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Become(&TMessageBusServerRequest::StateWork);
 
         ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
-
+ 
         // Transaction protobuf structure might be very heavy (if it has a batch of parameters)
         // so we don't want to copy it, just move its contents
         record.MutableTransaction()->Swap(Request->Record.MutableTransaction());
@@ -98,17 +98,17 @@ public:
             }
 
             if (mkqlTx.HasProgram() && mkqlTx.GetProgram().HasText()) {
-                TextProgramForCompilation = mkqlTx.GetProgram().GetText();
-                const bool forceRefresh = (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
-                auto* compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation);
-                compEv->ForceRefresh = forceRefresh;
-
+                TextProgramForCompilation = mkqlTx.GetProgram().GetText(); 
+                const bool forceRefresh = (mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE); 
+                auto* compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation); 
+                compEv->ForceRefresh = forceRefresh; 
+ 
                 ctx.Send(GetMiniKQLCompileServiceID(), compEv);
                 ++InFlyRequests;
             }
             if (mkqlTx.HasParams()) {
                 if (mkqlTx.GetParams().HasText()) {
-                    auto* compEv = new TMiniKQLCompileServiceEvents::TEvCompile(mkqlTx.GetParams().GetText());
+                    auto* compEv = new TMiniKQLCompileServiceEvents::TEvCompile(mkqlTx.GetParams().GetText()); 
                     ctx.Send(GetMiniKQLCompileServiceID(), compEv); // todo: handle undelivery (with warns atleast)
                     ++InFlyRequests;
                 } else
@@ -141,26 +141,26 @@ public:
     }
 };
 
-bool TMessageBusServerRequest::RetryResolve(const TActorContext &ctx) {
-    if (CompilationRetried || !TextProgramForCompilation)
-        return false;
-
-    auto *compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation);
-    compEv->ForceRefresh = false;
-    compEv->CompileResolveCookies = std::move(CompileResolveCookies);
-    ctx.Send(GetMiniKQLCompileServiceID(), compEv);
-    ++InFlyRequests;
-
-    CompilationRetried = true;
-    return true;
-}
-
+bool TMessageBusServerRequest::RetryResolve(const TActorContext &ctx) { 
+    if (CompilationRetried || !TextProgramForCompilation) 
+        return false; 
+ 
+    auto *compEv = new TMiniKQLCompileServiceEvents::TEvCompile(TextProgramForCompilation); 
+    compEv->ForceRefresh = false; 
+    compEv->CompileResolveCookies = std::move(CompileResolveCookies); 
+    ctx.Send(GetMiniKQLCompileServiceID(), compEv); 
+    ++InFlyRequests; 
+ 
+    CompilationRetried = true; 
+    return true; 
+} 
+ 
 void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
                                                NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
                                                const TActorContext &ctx)
 {
-    TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result));
-
+    TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result)); 
+ 
     if (result.HasExecutionEngineEvaluatedResponse()) {
         response->Record.MutableExecutionEngineEvaluatedResponse()->Swap(result.MutableExecutionEngineEvaluatedResponse());
     }
@@ -170,7 +170,7 @@ void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
     if (result.HasStatus()) {
         response->Record.SetProxyErrorCode(result.GetStatus());
     }
-
+ 
     if (result.HasTxStats()) {
         response->Record.MutableTxStats()->Swap(result.MutableTxStats());
     }
@@ -186,20 +186,20 @@ void TMessageBusServerRequest::FinishReply(const TActorContext &ctx)
         AsyncDestroy(Proposal, ctx, AppData(ctx)->UserPoolId);
 
     Die(ctx);
-}
-
+} 
+ 
 void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx) {
     auto* mkqlTx = Proposal->Record.MutableTransaction()->MutableMiniKQLTransaction();
 
     const auto& result = ev->Get()->Result;
 
-    const bool need2CompileProgram = (bool)TextProgramForCompilation;
+    const bool need2CompileProgram = (bool)TextProgramForCompilation; 
     const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
     const TString& pgm = ev->Get()->Program;
-    Y_VERIFY((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies
+    Y_VERIFY((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies 
         || (need2CompileParams && mkqlTx->GetParams().GetText() == pgm));
 
-    if (need2CompileProgram && TextProgramForCompilation == pgm) {
+    if (need2CompileProgram && TextProgramForCompilation == pgm) { 
         auto* compileResults = ProposalStatus->MutableMiniKQLCompileResults();
         auto* pgm = mkqlTx->MutableProgram();
         if (result.Errors.Empty()) {
@@ -210,7 +210,7 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
             NYql::IssuesToMessage(result.Errors, compileResults->MutableProgramCompileErrors());
         }
         --InFlyRequests;
-        CompileResolveCookies = std::move(ev->Get()->CompileResolveCookies);
+        CompileResolveCookies = std::move(ev->Get()->CompileResolveCookies); 
     }
 
     if (need2CompileParams && mkqlTx->GetParams().GetText() == pgm) {
@@ -261,8 +261,8 @@ bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx
 
     switch (mkqlTx->GetMode()) {
         case NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE_AND_EXEC: {
-            TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev = new TEvTxUserProxy::TEvProposeTransaction();
-            ev->Record.CopyFrom(Proposal->Record);
+            TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev = new TEvTxUserProxy::TEvProposeTransaction(); 
+            ev->Record.CopyFrom(Proposal->Record); 
             ctx.Send(MakeTxProxyID(), ev.Release());
             return true;
         }
@@ -275,56 +275,56 @@ bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx
     }
 }
 
-void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx) {
-    TEvTxUserProxy::TEvProposeTransactionStatus *msg = ev->Get();
-
-    const TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-    switch (status) {
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyAccepted:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned:
-    // transitional statuses
-        return;
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
-    // completion
+void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx) { 
+    TEvTxUserProxy::TEvProposeTransactionStatus *msg = ev->Get(); 
+ 
+    const TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus()); 
+    switch (status) { 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyAccepted: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorPlanned: 
+    // transitional statuses 
+        return; 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready: 
+    // completion 
         return ReplyWithResult(MSTATUS_OK, msg->Record, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout:
-        return ReplyWithResult(MSTATUS_INPROGRESS, msg->Record, ctx);
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout: 
+        return ReplyWithResult(MSTATUS_INPROGRESS, msg->Record, ctx); 
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
-        return HandleError(MSTATUS_NOTREADY, status, ctx);
+        return HandleError(MSTATUS_NOTREADY, status, ctx); 
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
-        return HandleError(MSTATUS_ABORTED, status, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
+        return HandleError(MSTATUS_ABORTED, status, ctx); 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet: 
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:
-        return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
-        if (!RetryResolve(ctx))
-            ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
-        return;
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
+        return ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx); 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError: 
+        if (!RetryResolve(ctx)) 
+            ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx); 
+        return; 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable: 
         if (!RetryResolve(ctx)) // TODO: retry if partitioning changed due to split/merge
-            ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx);
-        return;
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
-        return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorAborted:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorOutdated:
-        return ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx);
-    default:
-        return ReplyWithResult(MSTATUS_INTERNALERROR, msg->Record, ctx);
-    }
-}
-
+            ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx); 
+        return; 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown: 
+        return ReplyWithResult(MSTATUS_TIMEOUT, msg->Record, ctx); 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorAborted: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorOutdated: 
+        return ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx); 
+    default: 
+        return ReplyWithResult(MSTATUS_INTERNALERROR, msg->Record, ctx); 
+    } 
+} 
+ 
 void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
     auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
 
@@ -337,7 +337,7 @@ void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRe
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TMessageBusServerRequest(ev->Get()));
-}
+} 
 
 }
 }

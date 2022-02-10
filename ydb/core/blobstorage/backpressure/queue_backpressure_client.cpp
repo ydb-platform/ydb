@@ -498,7 +498,7 @@ private:
         if (ev && ev->Get()->Cookie != CheckReadinessCookie) {
             return; // obsolete scheduled event
         }
-
+ 
         QLOG_INFO_S("BSQ16", "called"
             << " CheckReadinessCookie# " << CheckReadinessCookie
             << " State# " << GetStateName());

@@ -43,7 +43,7 @@ public:
             return WaitForSingleObject(cond, (deadLine - now).MilliSeconds()) == WAIT_OBJECT_0;
         }
 
-        return (WaitForSingleObject(cond, 0) == WAIT_OBJECT_0);
+        return (WaitForSingleObject(cond, 0) == WAIT_OBJECT_0); 
     }
 #else
     inline TEvImpl(ResetMode rmode)

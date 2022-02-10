@@ -44,22 +44,22 @@
 #ifndef KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES
 #define KIKIMR_SCHEMESHARD_ALLOW_COLUMN_FAMILIES 1
 #endif
-
-// This feature flag enables use of flow controlled queue in statestorage lookup requests
-#ifndef KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP
+ 
+// This feature flag enables use of flow controlled queue in statestorage lookup requests 
+#ifndef KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP 
 #define KIKIMR_ALLOW_FLOWCONTROLLED_QUEUE_FOR_SSLOOKUP 0
-#endif
-
+#endif 
+ 
 // This feature flag enables immediate ReadTable on datashard
 // Runtime support shipped in 20-2, will be enabled in 20-4
 #ifndef KIKIMR_ALLOW_READTABLE_IMMEDIATE
 #define KIKIMR_ALLOW_READTABLE_IMMEDIATE 1
 #endif
-
-// This feature flag enables statestorage replica probes
-#ifndef KIKIMR_ALLOW_SSREPLICA_PROBES
-#define KIKIMR_ALLOW_SSREPLICA_PROBES 0
-#endif
+ 
+// This feature flag enables statestorage replica probes 
+#ifndef KIKIMR_ALLOW_SSREPLICA_PROBES 
+#define KIKIMR_ALLOW_SSREPLICA_PROBES 0 
+#endif 
 
 // This feature enables cutting PDisk's log from the middle of log chunks list
 #ifndef KIKIMR_PDISK_ENABLE_CUT_LOG_FROM_THE_MIDDLE

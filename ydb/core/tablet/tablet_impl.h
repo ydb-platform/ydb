@@ -1,122 +1,122 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/statestorage.h>
-
+ 
 #include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tablet/tablet_metrics.h>
-
+ 
 #include <library/cpp/actors/core/scheduler_cookie.h>
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <ydb/core/base/tracing.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie);
 IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGen);
 IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info);
 IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry);
 IActor* CreateTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo> &tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max());
-
-struct TEvTabletBase {
-    enum EEv {
-        EvBlockBlobStorageResult = EventSpaceBegin(TKikimrEvents::ES_TABLETBASE),
-        EvRebuildGraphResult,
-        EvFindLatestLogEntryResult,
-        EvWriteLogResult,
+ 
+struct TEvTabletBase { 
+    enum EEv { 
+        EvBlockBlobStorageResult = EventSpaceBegin(TKikimrEvents::ES_TABLETBASE), 
+        EvRebuildGraphResult, 
+        EvFindLatestLogEntryResult, 
+        EvWriteLogResult, 
         EvDeleteTabletResult,
-
+ 
         EvFollowerRetry = EvBlockBlobStorageResult + 512,
         EvTrySyncFollower,
         EvTryBuildFollowerGraph,
-
-        EvEnd
-    };
-
+ 
+        EvEnd 
+    }; 
+ 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE)");
-
-    struct TEvBlockBlobStorageResult : public TEventLocal<TEvBlockBlobStorageResult, EvBlockBlobStorageResult> {
-        const NKikimrProto::EReplyStatus Status;
+ 
+    struct TEvBlockBlobStorageResult : public TEventLocal<TEvBlockBlobStorageResult, EvBlockBlobStorageResult> { 
+        const NKikimrProto::EReplyStatus Status; 
         const ui64 TabletId;
         const TString ErrorReason;
-
+ 
         TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
-            : Status(status)
+            : Status(status) 
             , TabletId(tabletId)
             , ErrorReason(reason)
-        {}
-    };
-
-    struct TEvRebuildGraphResult : public TEventLocal<TEvRebuildGraphResult, EvRebuildGraphResult> {
-        const NKikimrProto::EReplyStatus Status;
+        {} 
+    }; 
+ 
+    struct TEvRebuildGraphResult : public TEventLocal<TEvRebuildGraphResult, EvRebuildGraphResult> { 
+        const NKikimrProto::EReplyStatus Status; 
         const TString ErrorReason;
-
-        TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph;
+ 
+        TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph; 
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
         NMetrics::TTabletIopsRawValue GroupReadOps;
         THolder<NTracing::ITrace> Trace;
-
+ 
         TEvRebuildGraphResult(
             NKikimrProto::EReplyStatus status,
             NTracing::ITrace *trace,
             const TString &reason = TString()
         )
-            : Status(status)
+            : Status(status) 
             , ErrorReason(reason)
             , Trace(trace)
-        {}
-
+        {} 
+ 
         TEvRebuildGraphResult(
             const TIntrusivePtr<TEvTablet::TDependencyGraph> &graph,
             NMetrics::TTabletThroughputRawValue &&read,
             NMetrics::TTabletIopsRawValue &&readOps,
             NTracing::ITrace *trace
         )
-            : Status(NKikimrProto::OK)
-            , DependencyGraph(graph)
+            : Status(NKikimrProto::OK) 
+            , DependencyGraph(graph) 
             , GroupReadBytes(std::move(read))
             , GroupReadOps(std::move(readOps))
             , Trace(trace)
-        {}
-    };
-
-    struct TEvFindLatestLogEntryResult : public TEventLocal<TEvFindLatestLogEntryResult, EvFindLatestLogEntryResult> {
-        const NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID Latest;
-        const ui32 BlockedGeneration;
+        {} 
+    }; 
+ 
+    struct TEvFindLatestLogEntryResult : public TEventLocal<TEvFindLatestLogEntryResult, EvFindLatestLogEntryResult> { 
+        const NKikimrProto::EReplyStatus Status; 
+        const TLogoBlobID Latest; 
+        const ui32 BlockedGeneration; 
         const TString Buffer;
         const TString ErrorReason;
-
+ 
         TEvFindLatestLogEntryResult(NKikimrProto::EReplyStatus status, const TString &reason = TString())
-            : Status(status)
-            , BlockedGeneration(0)
+            : Status(status) 
+            , BlockedGeneration(0) 
             , ErrorReason(reason)
-        {
+        { 
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
-        }
-
+        } 
+ 
         TEvFindLatestLogEntryResult(const TLogoBlobID &latest, ui32 blockedGeneration, const TString &buffer)
-            : Status(NKikimrProto::OK)
-            , Latest(latest)
-            , BlockedGeneration(blockedGeneration)
-            , Buffer(buffer)
-        {}
-    };
-
-    struct TEvWriteLogResult : public TEventLocal<TEvWriteLogResult, EvWriteLogResult> {
-        const NKikimrProto::EReplyStatus Status;
-        const TLogoBlobID EntryId;
+            : Status(NKikimrProto::OK) 
+            , Latest(latest) 
+            , BlockedGeneration(blockedGeneration) 
+            , Buffer(buffer) 
+        {} 
+    }; 
+ 
+    struct TEvWriteLogResult : public TEventLocal<TEvWriteLogResult, EvWriteLogResult> { 
+        const NKikimrProto::EReplyStatus Status; 
+        const TLogoBlobID EntryId; 
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
         const TString ErrorReason;
-
-        struct TErrorCondition {
-
-        } ErrorCondition;
-
+ 
+        struct TErrorCondition { 
+ 
+        } ErrorCondition; 
+ 
         TEvWriteLogResult(
                 NKikimrProto::EReplyStatus status,
                 const TLogoBlobID &entryId,
@@ -125,36 +125,36 @@ struct TEvTabletBase {
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps,
                 const TString &reason = TString())
-            : Status(status)
-            , EntryId(entryId)
+            : Status(status) 
+            , EntryId(entryId) 
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
             , ErrorReason(reason)
-        {}
-    };
-
+        {} 
+    }; 
+ 
     struct TEvFollowerRetry : public TEventLocal<TEvFollowerRetry, EvFollowerRetry> {
-        const ui32 Round;
-
+        const ui32 Round; 
+ 
         TEvFollowerRetry(ui32 round)
-            : Round(round)
-        {}
-    };
+            : Round(round) 
+        {} 
+    }; 
 
     struct TEvTrySyncFollower : public TEventLocal<TEvTrySyncFollower, EvTrySyncFollower> {
         const TActorId FollowerId;
-        TSchedulerCookieHolder CookieHolder;
-
+        TSchedulerCookieHolder CookieHolder; 
+ 
         TEvTrySyncFollower(TActorId followerId, ISchedulerCookie *cookie)
             : FollowerId(followerId)
-            , CookieHolder(cookie)
-        {}
-    };
-
+            , CookieHolder(cookie) 
+        {} 
+    }; 
+ 
     struct TEvTryBuildFollowerGraph : public TEventLocal<TEvTryBuildFollowerGraph, EvTryBuildFollowerGraph> {};
-
+ 
     struct TEvDeleteTabletResult : public TEventLocal<TEvDeleteTabletResult, EvDeleteTabletResult> {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletId;
@@ -164,6 +164,6 @@ struct TEvTabletBase {
             , TabletId(tabletId)
         {}
     };
-};
-
-}
+}; 
+ 
+} 

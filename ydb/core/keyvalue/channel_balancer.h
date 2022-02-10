@@ -135,10 +135,10 @@ namespace NKikimr::NKeyValue {
         const TActorId ActorId;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::KEYVALUE_ACTOR;
-        }
-
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::KEYVALUE_ACTOR; 
+        } 
+ 
         TChannelBalancer(ui8 numChannels, TActorId actorId)
             : ChannelInfo(numChannels)
             , ActorId(actorId)

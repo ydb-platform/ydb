@@ -70,7 +70,7 @@ namespace NKikimr {
         // overridden Die (unsubsribe from Message/Session tracking)
         void Die(const TActorContext &ctx) override {
             // unsubscribe on session when die
-            ctx.Send(TActivationContext::InterconnectProxy(NodeId),
+            ctx.Send(TActivationContext::InterconnectProxy(NodeId), 
                      new TEvents::TEvUnsubscribe);
             TBase::Die(ctx);
         }

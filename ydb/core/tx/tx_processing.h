@@ -1,44 +1,44 @@
-#pragma once
-#include "defs.h"
-#include "tx.h"
-
-namespace NKikimr {
-
-struct TEvTxProcessing {
-    enum EEv {
-        EvPlanStep = EventSpaceBegin(TKikimrEvents::ES_TX_PROCESSING),
-        EvReadSet,
-        EvPrePlanTx, // unused
+#pragma once 
+#include "defs.h" 
+#include "tx.h" 
+ 
+namespace NKikimr { 
+ 
+struct TEvTxProcessing { 
+    enum EEv { 
+        EvPlanStep = EventSpaceBegin(TKikimrEvents::ES_TX_PROCESSING), 
+        EvReadSet, 
+        EvPrePlanTx, // unused 
         EvStreamClearanceRequest,
         EvStreamQuotaRequest,
         EvStreamQuotaRelease,
         EvStreamIsDead,
         EvInterruptTransaction,
-
-        EvPlanStepAck = EvPlanStep + 512,
-        EvPrePlanTxAck, // unused
+ 
+        EvPlanStepAck = EvPlanStep + 512, 
+        EvPrePlanTxAck, // unused 
         EvReadSetAck,
-        EvPlanStepAccepted,
+        EvPlanStepAccepted, 
         EvStreamClearanceResponse,
         EvStreamQuotaResponse,
         EvStreamClearancePending,
         EvStreamDataAck,
-
-        EvEnd
-    };
-
+ 
+        EvEnd 
+    }; 
+ 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING)");
-
-    struct TEvPlanStep : public TEventPB<TEvPlanStep, NKikimrTx::TEvMediatorPlanStep, EvPlanStep> {
-        TEvPlanStep()
-        {}
-
-        TEvPlanStep(ui64 step, ui64 mediator, ui64 tablet)
-        {
-            Record.SetStep(step);
-            Record.SetMediatorID(mediator);
-            Record.SetTabletID(tablet);
-        }
+ 
+    struct TEvPlanStep : public TEventPB<TEvPlanStep, NKikimrTx::TEvMediatorPlanStep, EvPlanStep> { 
+        TEvPlanStep() 
+        {} 
+ 
+        TEvPlanStep(ui64 step, ui64 mediator, ui64 tablet) 
+        { 
+            Record.SetStep(step); 
+            Record.SetMediatorID(mediator); 
+            Record.SetTabletID(tablet); 
+        } 
 
         TString ToString() const {
             TStringStream str;
@@ -48,12 +48,12 @@ struct TEvTxProcessing {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvPlanStepAck : public TEventPB<TEvPlanStepAck, NKikimrTx::TEvPlanStepAck, EvPlanStepAck> {
-        TEvPlanStepAck()
-        {}
-
+    }; 
+ 
+    struct TEvPlanStepAck : public TEventPB<TEvPlanStepAck, NKikimrTx::TEvPlanStepAck, EvPlanStepAck> { 
+        TEvPlanStepAck() 
+        {} 
+ 
         TEvPlanStepAck(ui64 tabletId, ui64 step, ui64 txid)
         {
             Record.SetTabletId(tabletId);
@@ -61,18 +61,18 @@ struct TEvTxProcessing {
             Record.AddTxId(txid);
         }
 
-        template<typename TIterator>
-        TEvPlanStepAck(ui64 tabletId, ui64 step, TIterator begin, const TIterator &end)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetStep(step);
-
-            while (begin != end) {
+        template<typename TIterator> 
+        TEvPlanStepAck(ui64 tabletId, ui64 step, TIterator begin, const TIterator &end) 
+        { 
+            Record.SetTabletId(tabletId); 
+            Record.SetStep(step); 
+ 
+            while (begin != end) { 
                 const ui64 x = ui64(*begin);
-                Record.AddTxId(x);
-                ++begin;
-            }
-        }
+                Record.AddTxId(x); 
+                ++begin; 
+            } 
+        } 
 
         TString ToString() const {
             TStringStream str;
@@ -84,17 +84,17 @@ struct TEvTxProcessing {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvPlanStepAccepted : public TEventPB<TEvPlanStepAccepted, NKikimrTx::TEvPlanStepAccepted, EvPlanStepAccepted> {
-        TEvPlanStepAccepted()
-        {}
-
-        TEvPlanStepAccepted(ui64 tabletId, ui64 step)
-        {
-            Record.SetTabletId(tabletId);
-            Record.SetStep(step);
-        }
+    }; 
+ 
+    struct TEvPlanStepAccepted : public TEventPB<TEvPlanStepAccepted, NKikimrTx::TEvPlanStepAccepted, EvPlanStepAccepted> { 
+        TEvPlanStepAccepted() 
+        {} 
+ 
+        TEvPlanStepAccepted(ui64 tabletId, ui64 step) 
+        { 
+            Record.SetTabletId(tabletId); 
+            Record.SetStep(step); 
+        } 
 
         TString ToString() const {
             TStringStream str;
@@ -103,22 +103,22 @@ struct TEvTxProcessing {
             str << "}";
             return str.Str();
         }
-    };
-
-    struct TEvReadSet : public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
-        TEvReadSet()
-        {}
-
+    }; 
+ 
+    struct TEvReadSet : public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> { 
+        TEvReadSet() 
+        {} 
+ 
         TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer, const TString &readSet, ui64 seqno = 0)
-        {
-            Record.SetStep(step);
-            Record.SetTxId(orderId);
-            Record.SetTabletSource(tabletSource);
-            Record.SetTabletDest(tabletDest);
+        { 
+            Record.SetStep(step); 
+            Record.SetTxId(orderId); 
+            Record.SetTabletSource(tabletSource); 
+            Record.SetTabletDest(tabletDest); 
             Record.SetTabletProducer(tabletProducer);
-            Record.SetReadSet(readSet);
+            Record.SetReadSet(readSet); 
             Record.SetSeqno(seqno);
-        }
+        } 
 
         TString ToString() const {
             TStringStream str;
@@ -133,7 +133,7 @@ struct TEvTxProcessing {
             str << "}";
             return str.Str();
         }
-    };
+    }; 
 
     struct TEvReadSetAck : public TThrRefBase, public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> {
         TEvReadSetAck()
@@ -244,6 +244,6 @@ struct TEvTxProcessing {
                                              EvStreamDataAck>
     {
     };
-};
-
-}
+}; 
+ 
+} 

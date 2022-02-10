@@ -832,10 +832,10 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         NActors::TScopeId ScopeId;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
-        }
-
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+            return NKikimrServices::TActivity::NODE_BROKER_ACTOR; 
+        } 
+ 
         TRegisterNodeActor(TEvNodeBroker::TEvRegistrationRequest::TPtr& ev, TNodeBroker *self)
             : Ev(ev)
             , Self(self)

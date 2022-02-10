@@ -51,7 +51,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         mkqlTx->MutableProgram()->SetBin(pgmBin);
     } else if (config.PathToTextPgm) {
         TString pgmText = TFileInput(config.PathToTextPgm).ReadAll();
-        mkqlTx->MutableProgram()->SetText(pgmText);
+        mkqlTx->MutableProgram()->SetText(pgmText); 
     }
 
     if (config.PathToBinParams) {
@@ -59,7 +59,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         mkqlTx->MutableParams()->SetBin(paramsBin);
     } else if (config.PathToTextParams) {
         TString paramsText = TFileInput(config.PathToTextParams).ReadAll();
-        mkqlTx->MutableParams()->SetText(paramsText);
+        mkqlTx->MutableParams()->SetText(paramsText); 
     }
 
     mkqlTx->SetFlatMKQL(true);

@@ -5,7 +5,7 @@
 #include "blobstorage_groupinfo_partlayout.h"
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
-
+ 
 #include <library/cpp/actors/core/interconnect.h>
 
 #include <library/cpp/pop_count/popcount.h>
@@ -18,8 +18,8 @@
 #include <util/random/fast.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 class TQuorumCheckerBase : public TBlobStorageGroupInfo::IQuorumChecker {
 protected:
     const TBlobStorageGroupInfo::TTopology *Top;
@@ -784,8 +784,8 @@ void TBlobStorageGroupInfo::PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServic
             outServiceIds->push_back(GetActorId(x));
         }
     }
-}
-
+} 
+ 
 bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const {
     Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
@@ -902,21 +902,21 @@ TString TBlobStorageGroupInfo::ToString() const {
 
 
 
-TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) {
-    return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk());
-}
-
-void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) {
-    proto->SetGroupID(id.GroupID);
-    proto->SetGroupGeneration(id.GroupGeneration);
+TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x) { 
+    return TVDiskID(x.GetGroupID(), x.GetGroupGeneration(), x.GetRing(), x.GetDomain(), x.GetVDisk()); 
+} 
+ 
+void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto) { 
+    proto->SetGroupID(id.GroupID); 
+    proto->SetGroupGeneration(id.GroupGeneration); 
     proto->SetRing(id.FailRealm);
     proto->SetDomain(id.FailDomain);
-    proto->SetVDisk(id.VDisk);
-}
-
-
+    proto->SetVDisk(id.VDisk); 
+} 
+ 
+ 
 TFailDomain::TLevelIds::TLevelIds() {
-}
+} 
 
 bool TFailDomain::TLevelIds::IsEmpty() const {
     return Ids.empty();

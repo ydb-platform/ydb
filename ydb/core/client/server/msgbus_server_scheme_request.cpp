@@ -66,7 +66,7 @@ class TMessageBusServerSchemeRequest : public TMessageBusSecureRequest<TMessageB
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_REQUEST; }
-
+ 
     template <TEvBusProxy::EEv EvId>
     TMessageBusServerSchemeRequest(TEvBusProxy::TEvMsgBusRequest<EvId>* msg)
         : TBase(msg->MsgContext)
@@ -158,14 +158,14 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> req(new TEvTxUserProxy::TEvProposeTransaction());
     NKikimrTxUserProxy::TEvProposeTransaction &record = req->Record;
 
-    if (!Request->Record.HasTransaction()) {
+    if (!Request->Record.HasTransaction()) { 
         return HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::Unknown, "Malformed request: no modify scheme transaction provided", ctx);
-    }
+    } 
 
-    if (!Request->Record.GetTransaction().HasModifyScheme()) {
+    if (!Request->Record.GetTransaction().HasModifyScheme()) { 
         return HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::Unknown, "Malformed request: no modify scheme request body provided", ctx);
-    }
-
+    } 
+ 
     bool needAdminCheck = false;
     switch (Request->Record.GetTransaction().GetModifyScheme().GetOperationType()) {
         case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:

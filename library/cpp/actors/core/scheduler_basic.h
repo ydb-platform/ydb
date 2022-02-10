@@ -1,54 +1,54 @@
-#pragma once
-
-#include "actorsystem.h"
+#pragma once 
+ 
+#include "actorsystem.h" 
 #include "monotonic.h"
-#include "scheduler_queue.h"
+#include "scheduler_queue.h" 
 #include <library/cpp/actors/util/queue_chunk.h>
 #include <library/cpp/threading/future/legacy_future.h>
-#include <util/generic/hash.h>
-#include <util/generic/map.h>
+#include <util/generic/hash.h> 
+#include <util/generic/map.h> 
+ 
+namespace NActors { 
 
-namespace NActors {
-
-    class TBasicSchedulerThread: public ISchedulerThread {
-        // TODO: replace with NUMA-local threads and per-thread schedules
-        const TSchedulerConfig Config;
-
+    class TBasicSchedulerThread: public ISchedulerThread { 
+        // TODO: replace with NUMA-local threads and per-thread schedules 
+        const TSchedulerConfig Config; 
+ 
         struct TMonCounters;
         const THolder<TMonCounters> MonCounters;
 
-        TActorSystem* ActorSystem;
-        volatile ui64* CurrentTimestamp;
+        TActorSystem* ActorSystem; 
+        volatile ui64* CurrentTimestamp; 
         volatile ui64* CurrentMonotonic;
-
-        ui32 TotalReaders;
-        TArrayHolder<NSchedulerQueue::TReader*> Readers;
-
-        volatile bool StopFlag;
-
+ 
+        ui32 TotalReaders; 
+        TArrayHolder<NSchedulerQueue::TReader*> Readers; 
+ 
+        volatile bool StopFlag; 
+ 
         typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
         typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule
-
-        TScheduleMap ScheduleMap;
-
-        THolder<NThreading::TLegacyFuture<void, false>> MainCycle;
-
-        static const ui64 IntrasecondThreshold = 1048576; // ~second
-
-        void CycleFunc();
-
-    public:
-        TBasicSchedulerThread(const TSchedulerConfig& config = TSchedulerConfig());
-        ~TBasicSchedulerThread();
-
+ 
+        TScheduleMap ScheduleMap; 
+ 
+        THolder<NThreading::TLegacyFuture<void, false>> MainCycle; 
+ 
+        static const ui64 IntrasecondThreshold = 1048576; // ~second 
+ 
+        void CycleFunc(); 
+ 
+    public: 
+        TBasicSchedulerThread(const TSchedulerConfig& config = TSchedulerConfig()); 
+        ~TBasicSchedulerThread(); 
+ 
         void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override;
         void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override;
-
+ 
         void PrepareStart() override;
         void Start() override;
         void PrepareStop() override;
         void Stop() override;
-    };
+    }; 
 
     class TMockSchedulerThread: public ISchedulerThread {
     public:
@@ -78,4 +78,4 @@ namespace NActors {
 
     ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& cfg);
 
-}
+} 

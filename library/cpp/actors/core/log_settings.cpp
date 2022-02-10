@@ -5,7 +5,7 @@
 namespace NActors {
     namespace NLog {
         TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
-                             EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
+                             EComponent minVal, EComponent maxVal, EComponentToStringFunc func, 
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)
@@ -88,8 +88,8 @@ namespace NActors {
         }
 
         int TSettings::SetLevelImpl(
-            const TString& name, bool isSampling,
-            EPriority priority, EComponent component, TString& explanation) {
+            const TString& name, bool isSampling, 
+            EPriority priority, EComponent component, TString& explanation) { 
             TString titleName(name);
             titleName.to_title();
 
@@ -143,17 +143,17 @@ namespace NActors {
             }
         }
 
-        int TSettings::SetLevel(EPriority priority, EComponent component, TString& explanation) {
+        int TSettings::SetLevel(EPriority priority, EComponent component, TString& explanation) { 
             return SetLevelImpl("priority", false,
-                                priority, component, explanation);
+                                priority, component, explanation); 
         }
 
-        int TSettings::SetSamplingLevel(EPriority priority, EComponent component, TString& explanation) {
+        int TSettings::SetSamplingLevel(EPriority priority, EComponent component, TString& explanation) { 
             return SetLevelImpl("sampling priority", true,
-                                priority, component, explanation);
+                                priority, component, explanation); 
         }
 
-        int TSettings::SetSamplingRate(ui32 sampling, EComponent component, TString& explanation) {
+        int TSettings::SetSamplingRate(ui32 sampling, EComponent component, TString& explanation) { 
             if (component == InvalidComponent) {
                 for (int i = 0; i < Mask + 1; i++) {
                     TComponentSettings settings = AtomicGet(ComponentInfo[i]);
@@ -174,8 +174,8 @@ namespace NActors {
                 AtomicSet(ComponentInfo[component], settings.Raw.Data);
                 TStringStream str;
                 str << "Sampling rate for the component " << ComponentNames[component]
-                    << " has been changed from " << oldSampling
-                    << " to " << sampling;
+                    << " has been changed from " << oldSampling 
+                    << " to " << sampling; 
                 explanation = str.Str();
             }
             return 0;
@@ -192,9 +192,9 @@ namespace NActors {
 
         bool TSettings::IsValidPriority(EPriority priority) {
             return priority == PRI_EMERG || priority == PRI_ALERT ||
-                   priority == PRI_CRIT || priority == PRI_ERROR ||
-                   priority == PRI_WARN || priority == PRI_NOTICE ||
-                   priority == PRI_INFO || priority == PRI_DEBUG || priority == PRI_TRACE;
+                   priority == PRI_CRIT || priority == PRI_ERROR || 
+                   priority == PRI_WARN || priority == PRI_NOTICE || 
+                   priority == PRI_INFO || priority == PRI_DEBUG || priority == PRI_TRACE; 
         }
 
         bool TSettings::IsValidComponent(EComponent component) {

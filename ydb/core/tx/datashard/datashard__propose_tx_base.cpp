@@ -169,7 +169,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
                 Op->SetDelayedCommitTime(commitTime);
 
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
-        }
+        } 
         Op->DecrementInProgress();
 
         if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished())

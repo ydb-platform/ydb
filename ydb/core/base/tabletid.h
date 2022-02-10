@@ -1,25 +1,25 @@
-#pragma once
-#include "defs.h"
-
-namespace NKikimr {
-    // extract 8 bits of state-storage group
-    inline ui64 StateStorageGroupFromTabletID(ui64 tabletId) {
-        return (tabletId >> 56) & 0xFFull;
-    }
-
-    inline ui32 StateStorageHashFromTabletID(ui64 tabletId) {
+#pragma once 
+#include "defs.h" 
+ 
+namespace NKikimr { 
+    // extract 8 bits of state-storage group 
+    inline ui64 StateStorageGroupFromTabletID(ui64 tabletId) { 
+        return (tabletId >> 56) & 0xFFull; 
+    } 
+ 
+    inline ui32 StateStorageHashFromTabletID(ui64 tabletId) { 
         return (ui32)Hash64to32(tabletId);
-    }
-
+    } 
+ 
     // extract 12 bits of hive group id (zero is 'human assigned')
     inline ui64 HiveUidFromTabletID(ui64 tabletId) {
-        return (tabletId >> 44) & 0xFFFull;
-    }
-
-    inline ui64 UniqPartFromTabletID(ui64 tabletId) {
-        return (tabletId & 0x00000FFFFFFFFFFFull);
-    }
-
+        return (tabletId >> 44) & 0xFFFull; 
+    } 
+ 
+    inline ui64 UniqPartFromTabletID(ui64 tabletId) { 
+        return (tabletId & 0x00000FFFFFFFFFFFull); 
+    } 
+ 
     inline ui64 AvoidReservedUniqPart(ui64 candidate, ui64 brokenBegin, ui64 brokenEnd) {
         if (candidate >= brokenBegin && candidate < brokenEnd) {
             return brokenEnd;
@@ -43,24 +43,24 @@ namespace NKikimr {
         return uniqPart != AvoidReservedUniqPartsBySystemTablets(uniqPart);
     }
 
-    // 8 + 12 + 44
+    // 8 + 12 + 44 
     inline ui64 MakeTabletID(ui64 stateStorageGroup, ui64 hiveUid, ui64 uniqPart) {
         Y_VERIFY(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));
         return (stateStorageGroup << 56ull) | (hiveUid << 44ull) | uniqPart;
-    }
-
+    } 
+ 
     // blob storage controller (exactly one per domain in default state storage group)
     inline ui64 MakeBSControllerID(ui64 stateStorageGroup) {
         Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x1001);
-    }
-
+    } 
+ 
     // one default hive per domain (in default state storage group!)
     inline ui64 MakeDefaultHiveID(ui64 stateStorageGroup) {
         Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 1);
-    }
-
+    } 
+ 
     // cluster management system tablet (exactly one per domain in default state storage group)
     inline ui64 MakeCmsID(ui64 stateStorageGroup) {
         Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
@@ -86,12 +86,12 @@ namespace NKikimr {
     }
 
     // TODO: think about encoding scheme for sibling group hive
-
+ 
     inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) {
         Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
-        char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' };
-        x[8] = (char)stateStorageGroup;
+        char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' }; 
+        x[8] = (char)stateStorageGroup; 
         return TActorId(0, TStringBuf(x, 12));
-    }
+    } 
 
-}
+} 

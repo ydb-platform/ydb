@@ -27,7 +27,7 @@ namespace NBus {
     public:
         TBusStarter(TBusModule* module, const TBusSessionConfig& config);
         ~TBusStarter();
- 
+
         void Shutdown();
     };
 

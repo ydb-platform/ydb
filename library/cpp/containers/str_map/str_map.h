@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/memory/segmented_string_pool.h>
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
@@ -7,14 +7,14 @@
 #include <util/str_stl.h> // less<> and equal_to<> for const char*
 #include <utility>
 #include <util/generic/noncopyable.h>
- 
+
 template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>, class Alloc = std::allocator<const char*>>
 class string_hash;
 
 template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>>
 class segmented_string_hash;
 
-template <class Map> 
+template <class Map>
 inline std::pair<typename Map::iterator, bool>
 pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuffer& pool) {
     std::pair<typename Map::iterator, bool> ins = m->insert(typename Map::value_type(key, data));
@@ -23,23 +23,23 @@ pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuf
         const char* old_pool = pool.Begin();
         pool.Append(key, buflen);
         if (pool.Begin() != old_pool) // repoint?
-            for (typename Map::iterator it = m->begin(); it != m->end(); ++it) 
-                if ((*it).first != key) 
+            for (typename Map::iterator it = m->begin(); it != m->end(); ++it)
+                if ((*it).first != key)
                     const_cast<const char*&>((*it).first) += (pool.Begin() - old_pool);
         const_cast<const char*&>((*ins.first).first) = pool.End() - buflen;
-    } 
-    return ins; 
-} 
- 
+    }
+    return ins;
+}
+
 #define HASH_SIZE_DEFAULT 100
 #define AVERAGEWORD_BUF 10
 
 template <class T, class HashFcn, class EqualTo, class Alloc>
 class string_hash: public THashMap<const char*, T, HashFcn, EqualTo, Alloc> {
-protected: 
+protected:
     TBuffer pool;
 
-public: 
+public:
     using yh = THashMap<const char*, T, HashFcn, EqualTo, Alloc>;
     using iterator = typename yh::iterator;
     using const_iterator = typename yh::const_iterator;
@@ -48,24 +48,24 @@ public:
     using pool_size_type = typename yh::size_type;
     string_hash() {
         pool.Reserve(HASH_SIZE_DEFAULT * AVERAGEWORD_BUF); // reserve here
-    } 
+    }
     string_hash(size_type hash_size, pool_size_type pool_size)
         : THashMap<const char*, T, HashFcn, EqualTo, Alloc>(hash_size)
-    { 
+    {
         pool.Reserve(pool_size); // reserve here
-    } 
- 
+    }
+
     std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) {
-        return ::pool_insert(this, key, data, pool); 
-    } 
- 
+        return ::pool_insert(this, key, data, pool);
+    }
+
     void clear_hash() {
         yh::clear();
         pool.Clear();
-    } 
+    }
     pool_size_type pool_size() const {
         return pool.Size();
-    } 
+    }
 
     string_hash(const string_hash& sh)
         : THashMap<const char*, T, HashFcn, EqualTo, Alloc>()
@@ -98,8 +98,8 @@ public:
             I = insert_copy(key, mapped_type()).first;
         return (*I).second;
     }
-}; 
- 
+};
+
 template <class C, class T, class HashFcn, class EqualTo>
 class THashWithSegmentedPoolForKeys: protected  THashMap<const C*, T, HashFcn, EqualTo>, TNonCopyable {
 protected:
@@ -113,7 +113,7 @@ public:
     using size_type = typename yh::size_type;
     using key_type = typename yh::key_type;
     using value_type = typename yh::value_type;
- 
+
     THashWithSegmentedPoolForKeys(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)
         : yh(hash_size)
         , pool(segsize)
@@ -177,7 +177,7 @@ public:
 
 template <class T, class HashFcn, class EqualTo>
 class segmented_string_hash: public THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo> {
-public: 
+public:
     using Base = THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo>;
     using iterator = typename Base::iterator;
     using const_iterator = typename Base::const_iterator;
@@ -189,17 +189,17 @@ public:
 public:
     segmented_string_hash(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)
         : Base(hash_size, segsize, afs)
-    { 
-    } 
+    {
+    }
 
     std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) {
         return Base::insert_copy(key, strlen(key) + 1, data);
-    } 
+    }
 
     mapped_type& operator[](const char* key) {
         iterator I = Base::find(key);
         if (I == Base::end())
             I = insert_copy(key, mapped_type()).first;
         return (*I).second;
-    } 
-}; 
+    }
+};

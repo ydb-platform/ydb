@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "defaults.h"
 
 #include <util/generic/ptr.h>
@@ -176,7 +176,7 @@ namespace NTls {
         }
     };
 
-    template <class T> 
+    template <class T>
     class TValue: public TMoveOnly {
         class TConstructor {
         public:
@@ -227,12 +227,12 @@ namespace NTls {
             : Constructor_(new TCopyConstructor<T1>(value))
             , Key_(Dtor)
         {
-        } 
+        }
 
         template <class T1>
         inline T& operator=(const T1& val) {
             return Get() = val;
-        } 
+        }
 
         inline operator const T&() const {
             return Get();
@@ -275,7 +275,7 @@ namespace NTls {
             }
 
             return val;
-        } 
+        }
 
     private:
         static void Dtor(void* ptr) {
@@ -283,12 +283,12 @@ namespace NTls {
 
             ((T*)ptr)->~T();
             ::NPrivate::FillWithTrash(ptr, sizeof(T));
-        } 
+        }
 
     private:
         THolder<TConstructor> Constructor_;
         TKey Key_;
-    }; 
+    };
 }
 
 template <class T>

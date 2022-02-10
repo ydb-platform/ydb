@@ -44,18 +44,18 @@ class TDateTimeParseException: public yexception {
 };
 
 const int DATE_BUF_LEN = 4 + 2 + 2 + 1; // [YYYYMMDD*]
- 
+
 constexpr long seconds(const struct tm& theTm) {
     return 60 * (60 * theTm.tm_hour + theTm.tm_min) + theTm.tm_sec;
-} 
- 
+}
+
 void sprint_gm_date(char* buf, time_t when, long* sec = nullptr);
 bool sscan_date(const char* date, struct tm& theTm);
- 
+
 const int DATE_8601_LEN = 21; // strlen("YYYY-MM-DDThh:mm:ssZ") = 20 + '\0'
 
 size_t FormatDate8601(char* buf, size_t len, time_t when);
- 
+
 inline void sprint_date8601(char* buf, time_t when) {
     buf[FormatDate8601(buf, 64, when)] = 0;
 }

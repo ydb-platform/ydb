@@ -7,14 +7,14 @@
     #include "winint.h"
 #else
     #include <pthread.h>
-#endif 
- 
+#endif
+
 class TMutex::TImpl {
 public:
     inline TImpl() {
 #if defined(_win_)
         InitializeCriticalSection(&Obj);
-#else 
+#else
         struct T {
             pthread_mutexattr_t Attr;
 
@@ -43,25 +43,25 @@ public:
         if (result != 0) {
             ythrow yexception() << "mutex init failed(" << LastSystemErrorText(result) << ")";
         }
-#endif 
+#endif
     }
- 
+
     inline ~TImpl() {
 #if defined(_win_)
         DeleteCriticalSection(&Obj);
-#else 
+#else
         int result = pthread_mutex_destroy(&Obj);
         Y_VERIFY(result == 0, "mutex destroy failure (%s)", LastSystemErrorText(result));
-#endif 
+#endif
     }
 
     inline void Acquire() noexcept {
 #if defined(_win_)
         EnterCriticalSection(&Obj);
-#else 
+#else
         int result = pthread_mutex_lock(&Obj);
         Y_VERIFY(result == 0, "mutex lock failure (%s)", LastSystemErrorText(result));
-#endif 
+#endif
     }
 
 #if defined(_win_)
@@ -90,22 +90,22 @@ public:
     inline bool TryAcquire() noexcept {
 #if defined(_win_)
         return TryEnterCriticalSectionInt(&Obj);
-#else 
+#else
         int result = pthread_mutex_trylock(&Obj);
         if (result == 0 || result == EBUSY) {
             return result == 0;
         }
         Y_FAIL("mutex trylock failure (%s)", LastSystemErrorText(result));
-#endif 
+#endif
     }
 
     inline void Release() noexcept {
 #if defined(_win_)
         LeaveCriticalSection(&Obj);
-#else 
+#else
         int result = pthread_mutex_unlock(&Obj);
         Y_VERIFY(result == 0, "mutex unlock failure (%s)", LastSystemErrorText(result));
-#endif 
+#endif
     }
 
     inline void* Handle() const noexcept {
@@ -123,8 +123,8 @@ private:
 TMutex::TMutex()
     : Impl_(new TImpl())
 {
-} 
- 
+}
+
 TMutex::TMutex(TMutex&&) = default;
 
 TMutex::~TMutex() = default;

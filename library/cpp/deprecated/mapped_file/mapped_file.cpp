@@ -4,7 +4,7 @@
 #include <util/system/defaults.h>
 #include <util/system/hi_lo.h>
 #include <util/system/filemap.h>
- 
+
 TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
     Map_ = map;
     i64 len = Map_->Length();

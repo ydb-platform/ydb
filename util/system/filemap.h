@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "file.h"
 #include "align.h"
 #include "yassert.h"
@@ -47,7 +47,7 @@ struct TMemoryMapCommon {
             Reset();
         }
     };
- 
+
     enum EOpenModeFlag {
         oRdOnly = 1,
         oRdWr = 2,
@@ -105,7 +105,7 @@ private:
     class TImpl;
     TSimpleIntrusivePtr<TImpl> Impl_;
 };
- 
+
 class TFileMap: public TMemoryMapCommon {
 public:
     TFileMap(const TMemoryMap& map) noexcept;
@@ -141,7 +141,7 @@ public:
     inline i64 Length() const noexcept {
         return Map_.Length();
     }
- 
+
     inline bool IsOpen() const noexcept {
         return Map_.IsOpen();
     }
@@ -182,7 +182,7 @@ private:
     TMemoryMap Map_;
     TMapResult Region_;
 };
- 
+
 template <class T>
 class TFileMappedArray {
 private:
@@ -325,7 +325,7 @@ private:
     bool Shared_ = false;
 #ifdef _win_
     void* Mapping_ = nullptr;
-#endif 
+#endif
 };
 
 template <class T>

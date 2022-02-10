@@ -29,7 +29,7 @@ namespace std {
         using is_transparent = void;
     };
 }
- 
+
 namespace NHashPrivate {
     template <class T, bool needNumericHashing>
     struct THashHelper {
@@ -78,8 +78,8 @@ struct hash<const char*>: ::NHashPrivate::TStringHash<char> {
 
 template <>
 struct THash<TStringBuf>: ::NHashPrivate::TStringHash<char> {
-}; 
- 
+};
+
 template <>
 struct hash<TString>: ::NHashPrivate::TStringHash<char> {
 };

@@ -9,7 +9,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 #include <functional>
- 
+
 class TDuration;
 
 struct IObjectInQueue {
@@ -25,8 +25,8 @@ struct IObjectInQueue {
      * parameter.
      */
     virtual void Process(void* threadSpecificResource) = 0;
-}; 
- 
+};
+
 /**
  * Mighty class to add 'Pool' method to derived classes.
  * Useful only for creators of new queue classes.

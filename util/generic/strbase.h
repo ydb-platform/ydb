@@ -12,7 +12,7 @@
 #include <util/system/yassert.h>
 
 #include <contrib/libs/libc_compat/string.h>
- 
+
 #include <cctype>
 #include <cstring>
 #include <string>

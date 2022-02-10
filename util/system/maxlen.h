@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <cstdlib>
 
 // http://support.microsoft.com/kb/208427

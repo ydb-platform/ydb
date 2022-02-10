@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "defaults.h"
 #include "src_root.h"
 #include "backtrace.h"
@@ -21,7 +21,7 @@
     #endif
     #include <cassert>
 #endif
- 
+
 #if !defined(_MSC_VER)
     #if defined(__has_builtin) && __has_builtin(__debugbreak)
     // Do nothing, use __debugbreak builtin

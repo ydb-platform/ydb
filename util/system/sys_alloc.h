@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/system/compiler.h>
 
 #include <cstdlib>

@@ -6,7 +6,7 @@
 
 #define PUT_8(x, buf, shift) WriteUnaligned<ui8>((buf)++, (x) >> (shift))
 #define GET_8_OR(x, buf, type, shift) (x) |= (type) * (buf)++ << (shift)
- 
+
 #if defined(_big_endian_)
 #define LO_SHIFT 1
 #define HI_SHIFT 0
@@ -29,16 +29,16 @@
 #else
 #define PUT_32(x, buf, shift) PUT_16(x, buf, shift + 16 * LO_SHIFT), PUT_16(x, buf, shift + 16 * HI_SHIFT)
 #define GET_32_OR(x, buf, type, shift) GET_16_OR(x, buf, type, shift + 16 * LO_SHIFT), GET_16_OR(x, buf, type, shift + 16 * HI_SHIFT)
-#endif 
- 
+#endif
+
 #if !defined(_must_align8_)
 #define PUT_64(x, buf, shift) WriteUnaligned<ui64>(buf, (x) >> (shift)), (buf) += 8
 #define GET_64_OR(x, buf, type, shift) (x) |= (type)ReadUnaligned<ui64>(buf) << (shift), (buf) += 8
 #else
 #define PUT_64(x, buf, shift) PUT_32(x, buf, shift + 32 * LO_SHIFT), PUT_32(x, buf, shift + 32 * HI_SHIFT)
 #define GET_64_OR(x, buf, type, shift) GET_32_OR(x, buf, type, shift + 32 * LO_SHIFT), GET_32_OR(x, buf, type, shift + 32 * HI_SHIFT)
-#endif 
- 
+#endif
+
 struct mem_traits {
     static ui8 get_8(const char*& mem) {
         ui8 x = 0;
@@ -67,19 +67,19 @@ struct mem_traits {
     static int is_good(char*&) {
         return 1;
     }
-}; 
- 
-/* 
-|____|____|____|____|____|____|____|____|____|____|____|____|____|____|8***|**** 
-|____|____|____|____|____|____|____|____|____|____|____|____|i4**|****|****|**** 
-|____|____|____|____|____|____|____|____|____|____|ii2*|****|****|****|****|**** 
-|____|____|____|____|____|____|____|____|iii1|****|****|****|****|****|****|**** 
-|____|____|____|____|____|____|iiii|8***|****|****|****|****|****|****|****|**** 
-|____|____|____|____|iiii|i4**|****|****|****|****|****|****|****|****|****|**** 
-|____|____|iiii|ii2*|****|****|****|****|****|****|****|****|****|****|****|**** 
-|iiii|iii1|****|****|****|****|****|****|****|****|****|****|****|****|****|**** 
-*/ 
- 
+};
+
+/*
+|____|____|____|____|____|____|____|____|____|____|____|____|____|____|8***|****
+|____|____|____|____|____|____|____|____|____|____|____|____|i4**|****|****|****
+|____|____|____|____|____|____|____|____|____|____|ii2*|****|****|****|****|****
+|____|____|____|____|____|____|____|____|iii1|****|****|****|****|****|****|****
+|____|____|____|____|____|____|iiii|8***|****|****|****|****|****|****|****|****
+|____|____|____|____|iiii|i4**|****|****|****|****|****|****|****|****|****|****
+|____|____|iiii|ii2*|****|****|****|****|****|****|****|****|****|****|****|****
+|iiii|iii1|****|****|****|****|****|****|****|****|****|****|****|****|****|****
+*/
+
 #define PACK1LIM 0x80u
 #define PACK2LIM 0x4000u
 #define PACK3LIM 0x200000u
@@ -88,7 +88,7 @@ struct mem_traits {
 #define PACK6LIM 0x40000000000ull
 #define PACK7LIM 0x2000000000000ull
 #define PACK8LIM 0x100000000000000ull
- 
+
 #define MY_14(x) ((ui16)(x) < PACK1LIM ? 1 : 2)
 #define MY_28(x) ((ui32)(x) < PACK2LIM ? MY_14(x) : ((ui32)(x) < PACK3LIM ? 3 : 4))
 
@@ -100,8 +100,8 @@ struct mem_traits {
 #define MACRO_END \
     }             \
     while (0)
-#endif 
- 
+#endif
+
 #define PACK_14(x, buf, how, ret)                  \
     MACRO_BEGIN                                    \
     if ((ui16)(x) < PACK1LIM) {                    \
@@ -113,7 +113,7 @@ struct mem_traits {
         (ret) = 2;                                 \
     }                                              \
     MACRO_END
- 
+
 #define PACK_28(x, buf, how, ret)                     \
     MACRO_BEGIN                                       \
     if ((ui32)(x) < PACK2LIM) {                       \
@@ -130,7 +130,7 @@ struct mem_traits {
         how::put_16((ui16)(x), (buf));                \
     }                                                 \
     MACRO_END
- 
+
 #define PACK_32(x, buf, how, ret)     \
     MACRO_BEGIN                       \
     if ((ui32)(x) < PACK4LIM) {       \
@@ -176,7 +176,7 @@ struct mem_traits {
         how::put_32((ui32)(x), buf);                          \
     }                                                         \
     MACRO_END
- 
+
 #define DO_UNPACK_14(firstByte, x, buf, how, ret) \
     MACRO_BEGIN                                   \
     if (firstByte < 0x80) {                       \
@@ -188,13 +188,13 @@ struct mem_traits {
         (ret) = 2;                                \
     }                                             \
     MACRO_END
- 
+
 #define UNPACK_14(x, buf, how, ret)            \
     MACRO_BEGIN                                \
     ui8 firstByte = how::get_8(buf);           \
     DO_UNPACK_14(firstByte, x, buf, how, ret); \
     MACRO_END
- 
+
 #define DO_UNPACK_28(firstByte, x, buf, how, ret)  \
     MACRO_BEGIN                                    \
     if (firstByte < 0xC0) {                        \
@@ -211,13 +211,13 @@ struct mem_traits {
         (x) |= how::get_16(buf);                   \
     }                                              \
     MACRO_END
- 
+
 #define UNPACK_28(x, buf, how, ret)            \
     MACRO_BEGIN                                \
     ui8 firstByte = how::get_8(buf);           \
     DO_UNPACK_28(firstByte, x, buf, how, ret); \
     MACRO_END
- 
+
 #define DO_UNPACK_32(firstByte, x, buf, how, ret)  \
     MACRO_BEGIN                                    \
     if (firstByte < 0xF0) {                        \
@@ -267,44 +267,44 @@ struct mem_traits {
         (x) |= how::get_32(buf);                          \
     }                                                     \
     MACRO_END
- 
+
 #define UNPACK_64(x, buf, how, ret)            \
     MACRO_BEGIN                                \
     ui8 firstByte = how::get_8(buf);           \
     DO_UNPACK_64(firstByte, x, buf, how, ret); \
     MACRO_END
- 
+
 inline int in_long(i64& longVal, const char* ptrBuf) {
-    int ret; 
-    UNPACK_64(longVal, ptrBuf, mem_traits, ret); 
-    return ret; 
-} 
- 
+    int ret;
+    UNPACK_64(longVal, ptrBuf, mem_traits, ret);
+    return ret;
+}
+
 inline int out_long(const i64& longVal, char* ptrBuf) {
-    int ret; 
+    int ret;
     PACK_64(longVal, ptrBuf, mem_traits, ret); /*7*/
-    return ret; 
-} 
- 
+    return ret;
+}
+
 inline int len_long(const i64& longVal) {
-    return MY_64(longVal); 
-} 
- 
+    return MY_64(longVal);
+}
+
 inline int in_long(i32& longVal, const char* ptrBuf) {
-    int ret; 
+    int ret;
     UNPACK_32(longVal, ptrBuf, mem_traits, ret);
-    return ret; 
-} 
- 
+    return ret;
+}
+
 inline int out_long(const i32& longVal, char* ptrBuf) {
-    int ret; 
+    int ret;
     PACK_32(longVal, ptrBuf, mem_traits, ret);
-    return ret; 
-} 
- 
+    return ret;
+}
+
 inline int len_long(const i32& longVal) {
-    return MY_32(longVal); 
-} 
+    return MY_32(longVal);
+}
 
 template <typename T, typename C>
 inline const C* Unpack32(T& x, const C* src) {

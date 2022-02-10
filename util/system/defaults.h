@@ -14,10 +14,10 @@
     #include <new>
 #endif
 
-// low and high parts of integers 
+// low and high parts of integers
 #if !defined(_win_)
     #include <sys/param.h>
-#endif 
+#endif
 
 #if defined(BSD) || defined(_android_)
 
@@ -42,20 +42,20 @@
 #else
     #define _little_endian_
 #endif
- 
-// alignment 
+
+// alignment
 #if (defined(_sun_) && !defined(__i386__)) || defined(_hpux_) || defined(__alpha__) || defined(__ia64__) || defined(WHATEVER_THAT_NEEDS_ALIGNING_QUADS)
     #define _must_align8_
-#endif 
- 
+#endif
+
 #if (defined(_sun_) && !defined(__i386__)) || defined(_hpux_) || defined(__alpha__) || defined(__ia64__) || defined(WHATEVER_THAT_NEEDS_ALIGNING_LONGS)
     #define _must_align4_
-#endif 
- 
+#endif
+
 #if (defined(_sun_) && !defined(__i386__)) || defined(_hpux_) || defined(__alpha__) || defined(__ia64__) || defined(WHATEVER_THAT_NEEDS_ALIGNING_SHORTS)
     #define _must_align2_
-#endif 
- 
+#endif
+
 #if defined(__GNUC__)
     #define alias_hack __attribute__((__may_alias__))
 #endif
@@ -66,13 +66,13 @@
 
 #include "types.h"
 
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) 
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
     #define PRAGMA(x) _Pragma(#x)
     #define RCSID(idstr) PRAGMA(comment(exestr, idstr))
-#else 
+#else
     #define RCSID(idstr) static const char rcsid[] = idstr
-#endif 
- 
+#endif
+
 #include "compiler.h"
 
 #ifdef _win_

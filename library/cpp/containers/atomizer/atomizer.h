@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <library/cpp/containers/str_map/str_map.h>
 
 #include <util/generic/vector.h>
@@ -14,12 +14,12 @@ class atomizer;
 template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>>
 class super_atomizer;
 
-template <class HashFcn, class EqualTo> 
+template <class HashFcn, class EqualTo>
 class atomizer: public string_hash<ui32, HashFcn, EqualTo> {
 private:
     TVector<const char*> order;
 
-public: 
+public:
     using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator;
     using const_iterator = typename string_hash<ui32, HashFcn, EqualTo>::const_iterator;
     using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type;
@@ -34,13 +34,13 @@ public:
     using string_hash<ui32, HashFcn, EqualTo>::clear_hash;
 
     atomizer() {
-        order.reserve(HASH_SIZE_DEFAULT); 
-    } 
+        order.reserve(HASH_SIZE_DEFAULT);
+    }
     atomizer(size_type hash_size, pool_size_type pool_size)
         : string_hash<ui32, HashFcn, EqualTo>(hash_size, pool_size)
-    { 
-        order.reserve(hash_size); 
-    } 
+    {
+        order.reserve(hash_size);
+    }
     ~atomizer() = default;
     ui32 string_to_atom(const char* key) {
         const char* old_begin = pool.Begin();
@@ -49,36 +49,36 @@ public:
         if (ins.second) {                  // new?
             if (pool.Begin() != old_begin) // repoint?
                 for (TVector<const char*>::iterator ptr = order.begin(); ptr != order.end(); ++ptr)
-                    if (old_begin <= *ptr && *ptr < old_end) // from old pool? 
+                    if (old_begin <= *ptr && *ptr < old_end) // from old pool?
                         *ptr += pool.Begin() - old_begin;
-            order.push_back((*ins.first).first); // copy of 'key' 
-        } 
+            order.push_back((*ins.first).first); // copy of 'key'
+        }
         return (ui32)(*ins.first).second;
-    } 
- 
+    }
+
     ui32 perm_string_to_atom(const char* key) {
         value_type val(key, ui32(size() + 1));
         std::pair<iterator, bool> ins = this->insert(val);
-        if (ins.second) 
-            order.push_back((*ins.first).first); // == copy of 'key' 
+        if (ins.second)
+            order.push_back((*ins.first).first); // == copy of 'key'
         return (ui32)(*ins.first).second;        // == size()+1
-    } 
+    }
     ui32 find_atom(const char* key) const {
         const_iterator it = find(key);
-        if (it == end()) 
-            return 0; // INVALID_ATOM 
-        else 
+        if (it == end())
+            return 0; // INVALID_ATOM
+        else
             return (ui32)(*it).second;
-    } 
+    }
     const char* get_atom_name(ui32 atom) const {
-        if (atom && atom <= size()) 
+        if (atom && atom <= size())
             return order[atom - 1];
         return nullptr;
-    } 
+    }
     void clear_atomizer() {
-        clear_hash(); 
-        order.clear(); 
-    } 
+        clear_hash();
+        order.clear();
+    }
     void SaveC2N(FILE* f) const { // we write sorted file
         for (ui32 i = 0; i < order.size(); i++)
             if (order[i])
@@ -197,4 +197,4 @@ public:
         clear_hash();
         order.clear();
     }
-}; 
+};

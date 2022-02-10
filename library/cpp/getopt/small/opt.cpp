@@ -3,9 +3,9 @@
 #include <util/system/progname.h>
 
 #include <ctype.h>
- 
+
 using namespace NLastGetopt;
- 
+
 namespace {
     struct TOptsNoDefault: public TOpts {
         TOptsNoDefault(const TStringBuf& optstring = TStringBuf())
@@ -34,15 +34,15 @@ void Opt::Init(int argc, char* argv[], const char* optString, const Ion* longOpt
         }
         opt->HasArg_ = EHasArg(o->has_arg);
         opt->UserValue(o);
-    } 
+    }
     Opts_->AllowSingleDashForLong_ = longOnly;
     Opts_->AllowPlusForLong_ = true;
     Opts_->AllowUnknownCharOptions_ = isOpen;
     Opts_->AllowUnknownLongOptions_ = false;
- 
+
     OptsParser_.Reset(new TOptsParser(Opts_.Get(), argc, argv));
-} 
- 
+}
+
 Opt::Opt(int argc, char* argv[], const char* optString, const Ion* longOptions, bool longOnly, bool isOpen) {
     Init(argc, argv, optString, longOptions, longOnly, isOpen);
 }
@@ -65,7 +65,7 @@ int Opt::Get(int* longOptionIndex) {
         bool r = OptsParser_->Next();
         Ind = (int)OptsParser_->Pos_;
         if (!r) {
-            return EOF; 
+            return EOF;
         } else {
             Arg = (char*)OptsParser_->CurVal();
             if (!OptsParser_->CurOpt()) {
@@ -78,16 +78,16 @@ int Opt::Get(int* longOptionIndex) {
                 }
                 char c = OptsParser_->CurOpt()->GetCharOr0();
                 return c != 0 ? c : ion->val;
-            } 
-        } 
+            }
+        }
     } catch (const NLastGetopt::TException&) {
         GotError_ = true;
         if (Err)
             Cerr << CurrentExceptionMessage() << Endl;
         return '?';
-    } 
-} 
- 
+    }
+}
+
 void Opt::DummyHelp(IOutputStream& os) {
     Opts_->PrintUsage(GetProgramName(), os);
 }

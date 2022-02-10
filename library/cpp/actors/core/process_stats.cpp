@@ -6,7 +6,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
-#include <util/datetime/uptime.h>
+#include <util/datetime/uptime.h> 
 #include <util/system/defaults.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
@@ -74,8 +74,8 @@ namespace NActors {
                 Stime /= tickPerMillisec;
                 CUtime /= tickPerMillisec;
                 CStime /= tickPerMillisec;
-                SystemUptime = ::Uptime();
-                Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec());
+                SystemUptime = ::Uptime(); 
+                Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec()); 
             }
 
             TFileInput statm("/proc/" + strPid + "/statm");
@@ -196,9 +196,9 @@ namespace {
             SysTime = ProcStatGroup->GetCounter("Process/SystemTime", true);
             MinorPageFaults = ProcStatGroup->GetCounter("Process/MinorPageFaults", true);
             MajorPageFaults = ProcStatGroup->GetCounter("Process/MajorPageFaults", true);
-            UptimeSeconds = ProcStatGroup->GetCounter("Process/UptimeSeconds", false);
+            UptimeSeconds = ProcStatGroup->GetCounter("Process/UptimeSeconds", false); 
             NumThreads = ProcStatGroup->GetCounter("Process/NumThreads", false);
-            SystemUptimeSeconds = ProcStatGroup->GetCounter("System/UptimeSeconds", false);
+            SystemUptimeSeconds = ProcStatGroup->GetCounter("System/UptimeSeconds", false); 
         }
 
         void UpdateCounters(const TProcStat& procStat) {
@@ -212,9 +212,9 @@ namespace {
             *SysTime = procStat.Stime;
             *MinorPageFaults = procStat.MinFlt;
             *MajorPageFaults = procStat.MajFlt;
-            *UptimeSeconds = procStat.Uptime.Seconds();
+            *UptimeSeconds = procStat.Uptime.Seconds(); 
             *NumThreads = procStat.NumThreads;
-            *SystemUptimeSeconds = procStat.Uptime.Seconds();
+            *SystemUptimeSeconds = procStat.Uptime.Seconds(); 
         }
 
     private:
@@ -227,9 +227,9 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr SysTime;
         NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
         NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
-        NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds;
+        NMonitoring::TDynamicCounters::TCounterPtr UptimeSeconds; 
         NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
-        NMonitoring::TDynamicCounters::TCounterPtr SystemUptimeSeconds;
+        NMonitoring::TDynamicCounters::TCounterPtr SystemUptimeSeconds; 
     };
 
 
@@ -243,9 +243,9 @@ namespace {
             AnonRssSize = registry.IntGauge({{"sensor", "process.AnonRssSize"}});
             FileRssSize = registry.IntGauge({{"sensor", "process.FileRssSize"}});
             CGroupMemLimit = registry.IntGauge({{"sensor", "process.CGroupMemLimit"}});
-            UptimeSeconds = registry.IntGauge({{"sensor", "process.UptimeSeconds"}});
+            UptimeSeconds = registry.IntGauge({{"sensor", "process.UptimeSeconds"}}); 
             NumThreads = registry.IntGauge({{"sensor", "process.NumThreads"}});
-            SystemUptimeSeconds = registry.IntGauge({{"sensor", "system.UptimeSeconds"}});
+            SystemUptimeSeconds = registry.IntGauge({{"sensor", "system.UptimeSeconds"}}); 
 
             UserTime = registry.Rate({{"sensor", "process.UserTime"}});
             SysTime = registry.Rate({{"sensor", "process.SystemTime"}});
@@ -258,9 +258,9 @@ namespace {
             AnonRssSize->Set(procStat.AnonRss);
             FileRssSize->Set(procStat.FileRss);
             CGroupMemLimit->Set(procStat.CGroupMemLim);
-            UptimeSeconds->Set(procStat.Uptime.Seconds());
+            UptimeSeconds->Set(procStat.Uptime.Seconds()); 
             NumThreads->Set(procStat.NumThreads);
-            SystemUptimeSeconds->Set(procStat.SystemUptime.Seconds());
+            SystemUptimeSeconds->Set(procStat.SystemUptime.Seconds()); 
 
             // it is ok here to reset and add metric value, because mutation
             // is performed in siglethreaded context
@@ -287,9 +287,9 @@ namespace {
         NMonitoring::TRate* SysTime;
         NMonitoring::TRate* MinorPageFaults;
         NMonitoring::TRate* MajorPageFaults;
-        NMonitoring::TIntGauge* UptimeSeconds;
+        NMonitoring::TIntGauge* UptimeSeconds; 
         NMonitoring::TIntGauge* NumThreads;
-        NMonitoring::TIntGauge* SystemUptimeSeconds;
+        NMonitoring::TIntGauge* SystemUptimeSeconds; 
     };
 } // namespace
 

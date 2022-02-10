@@ -1,5 +1,5 @@
 #pragma once
-#include "test_utils.h"
+#include "test_utils.h" 
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
@@ -178,7 +178,7 @@ public:
                 continue;
             }
 
-            AssertSuccessfullStreamingOperation(stream->Read(&resp), stream);
+            AssertSuccessfullStreamingOperation(stream->Read(&resp), stream); 
             if (resp.status() == Ydb::StatusIds::UNAVAILABLE) {
                 continue;
             }
@@ -223,16 +223,16 @@ public:
         return 0;
     }
 
-    ui32 Write(const TString& topic, const TVector<TString>& data, bool error = false, const TMaybe<TString>& ticket = {}) {
+    ui32 Write(const TString& topic, const TVector<TString>& data, bool error = false, const TMaybe<TString>& ticket = {}) { 
         return WriteImpl(topic, {data}, error, ticket);
     }
 
 private:
-    ui32 WriteImpl(const TString& topic, const TVector<TString>& data, bool error, const TMaybe<TString>& ticket) {
+    ui32 WriteImpl(const TString& topic, const TVector<TString>& data, bool error, const TMaybe<TString>& ticket) { 
         grpc::ClientContext context;
 
-        if (ticket)
-            context.AddMetadata("x-ydb-auth-ticket", *ticket);
+        if (ticket) 
+            context.AddMetadata("x-ydb-auth-ticket", *ticket); 
 
 
         auto stream = StubP_->StreamingWrite(&context);
@@ -300,20 +300,20 @@ private:
     }
 
     template <typename S>
-    void Flush(const TVector<TString>& data, S& stream, const TMaybe<TString>& ticket) {
+    void Flush(const TVector<TString>& data, S& stream, const TMaybe<TString>& ticket) { 
         Ydb::PersQueue::V1::StreamingWriteClientMessage  request;
         Ydb::PersQueue::V1::StreamingWriteServerMessage response;
 
-        if (ticket) {
-            request.mutable_update_token_request()->set_token(*ticket);
-            Cerr << "update user token request: " << request << Endl;
-            if (!stream->Write(request)) {
-                ythrow yexception() << "write fail";
-            }
-            UNIT_ASSERT(stream->Read(&response));
-            UNIT_ASSERT_C(response.server_message_case() == Ydb::PersQueue::V1::StreamingWriteServerMessage::kUpdateTokenResponse, response);
-        }
-
+        if (ticket) { 
+            request.mutable_update_token_request()->set_token(*ticket); 
+            Cerr << "update user token request: " << request << Endl; 
+            if (!stream->Write(request)) { 
+                ythrow yexception() << "write fail"; 
+            } 
+            UNIT_ASSERT(stream->Read(&response)); 
+            UNIT_ASSERT_C(response.server_message_case() == Ydb::PersQueue::V1::StreamingWriteServerMessage::kUpdateTokenResponse, response); 
+        } 
+ 
         TVector<ui64> allSeqNo;
         auto* mutableData = request.mutable_write_request();
         ui32 offset = 0;
@@ -329,8 +329,8 @@ private:
             mutableData->add_blocks_part_numbers(0);
             mutableData->add_blocks_message_counts(1);
             mutableData->add_blocks_uncompressed_sizes(d.size());
-            mutableData->add_blocks_headers(TString(1, '\0') /* RAW codec ID */);
-            mutableData->add_blocks_data(d);
+            mutableData->add_blocks_headers(TString(1, '\0') /* RAW codec ID */); 
+            mutableData->add_blocks_data(d); 
         }
 
         Cerr << "request: " << request << Endl;

@@ -1,14 +1,14 @@
-#pragma once
-#include "test_server.h"
+#pragma once 
+#include "test_server.h" 
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
 #include <library/cpp/logger/log.h>
 #include <util/system/tempfile.h>
+ 
+#define TEST_CASE_NAME (this->Name_) 
+ 
+namespace NPersQueue { 
 
-#define TEST_CASE_NAME (this->Name_)
-
-namespace NPersQueue {
-
-class SDKTestSetup {
+class SDKTestSetup { 
 protected:
     TString TestCaseName;
 
@@ -19,10 +19,10 @@ protected:
 
     TLog Log = TLog("cerr");
 
-public:
+public: 
     SDKTestSetup(const TString& testCaseName, bool start = true)
         : TestCaseName(testCaseName)
-    {
+    { 
         InitOptions();
         if (start) {
             Start();
@@ -31,14 +31,14 @@ public:
 
     void InitOptions() {
         Log.SetFormatter([testCaseName = TestCaseName](ELogPriority priority, TStringBuf message) {
-            return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl;
-        });
-        Server.GrpcServerOptions.SetGRpcShutdownDeadline(TDuration::Max());
-        // Default TTestServer value for 'MaxReadCookies' is 10. With this value the tests are flapping with two errors:
-        // 1. 'got more than 10 unordered cookies to commit 12'
-        // 2. 'got more than 10 uncommitted reads'
-        Server.ServerSettings.PQConfig.Clear();
-        Server.ServerSettings.PQConfig.SetEnabled(true);
+            return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl; 
+        }); 
+        Server.GrpcServerOptions.SetGRpcShutdownDeadline(TDuration::Max()); 
+        // Default TTestServer value for 'MaxReadCookies' is 10. With this value the tests are flapping with two errors: 
+        // 1. 'got more than 10 unordered cookies to commit 12' 
+        // 2. 'got more than 10 uncommitted reads' 
+        Server.ServerSettings.PQConfig.Clear(); 
+        Server.ServerSettings.PQConfig.SetEnabled(true); 
         Server.ServerSettings.PQConfig.SetRemoteClusterEnabledDelaySec(1);
         Server.ServerSettings.PQConfig.SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(1);
         Server.ServerSettings.PQClusterDiscoveryConfig.SetEnabled(true);
@@ -53,7 +53,7 @@ public:
     void Start(bool waitInit = true, bool addBrokenDatacenter = false) {
         Server.StartServer(false);
         //Server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
-        Server.AnnoyingClient->InitRoot();
+        Server.AnnoyingClient->InitRoot(); 
         if (DataCenters.empty()) {
             THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> dataCenters;
             dataCenters.emplace("dc1", NKikimr::NPersQueueTests::TPQTestClusterInfo{TStringBuilder() << "localhost:" << Server.GrpcPort, true});
@@ -64,33 +64,33 @@ public:
         } else {
             Server.AnnoyingClient->InitDCs(DataCenters, LocalDC);
         }
-        Server.AnnoyingClient->InitSourceIds();
+        Server.AnnoyingClient->InitSourceIds(); 
         CreateTopic(GetTestTopic(), GetLocalCluster());
         if (waitInit) {
             Server.WaitInit(GetTestTopic());
         }
-    }
-
+    } 
+ 
     TString GetTestTopic() const {
-        return "topic1";
-    }
-
+        return "topic1"; 
+    } 
+ 
     TString GetTestClient() const {
-        return "test-reader";
-    }
-
+        return "test-reader"; 
+    } 
+ 
     TString GetTestMessageGroupId() const {
-        return "test-message-group-id";
-    }
-
+        return "test-message-group-id"; 
+    } 
+ 
     TString GetLocalCluster() const {
         return LocalDC;
-    }
-
+    } 
+ 
     ui16 GetGrpcPort() const {
         return Server.GrpcPort;
     }
-
+ 
     NGrpc::TServerOptions& GetGrpcServerOptions() {
         return Server.GrpcServerOptions;
     }
@@ -102,11 +102,11 @@ public:
         Server.ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
     }
 
-
-    TLog& GetLog() {
-        return Log;
-    }
-
+ 
+    TLog& GetLog() { 
+        return Log; 
+    } 
+ 
     template <class TConsumerOrProducer>
     void Start(const THolder<TConsumerOrProducer>& obj) {
         auto startFuture = obj->Start();
@@ -198,5 +198,5 @@ public:
         UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
         Server.AnnoyingClient->KillTablet(*Server.CleverServer, describeResult->Record.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID());
     }
-};
-}
+}; 
+} 

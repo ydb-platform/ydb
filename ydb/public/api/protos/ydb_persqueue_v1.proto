@@ -5,17 +5,17 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
-package Ydb.PersQueue.V1;
+package Ydb.PersQueue.V1; 
 
 option java_package = "com.yandex.ydb.persqueue";
-
+ 
 option cc_enable_arenas = true;
 
-// NOTE:
-// * We use 'ms' suffix instead of google.protobuf.Timestamp and google.protobuf.Duration in order to utilize
-// packed encoding ('message' types can't be packed encoded). In non-repeated fields we use 'ms' for consistency.
-// * Any message with non-empty 'issues' property leads to streaming RPC termination.
-
+// NOTE: 
+// * We use 'ms' suffix instead of google.protobuf.Timestamp and google.protobuf.Duration in order to utilize 
+// packed encoding ('message' types can't be packed encoded). In non-repeated fields we use 'ms' for consistency. 
+// * Any message with non-empty 'issues' property leads to streaming RPC termination. 
+ 
 enum Codec {
     CODEC_UNSPECIFIED = 0;
     CODEC_RAW = 1;
@@ -24,189 +24,189 @@ enum Codec {
     CODEC_ZSTD = 4;
 }
 
-message SessionMetaValue {
-    map<string, string> value = 1;
+message SessionMetaValue { 
+    map<string, string> value = 1; 
+}
+
+/** 
+ * Represents range [start_offset, end_offset). 
+ */ 
+message OffsetsRange { 
+    int64 start_offset = 1; 
+    int64 end_offset = 2; 
 }
 
 /**
- * Represents range [start_offset, end_offset).
+ * Request for write session. Contains one of: 
+ *      InitRequest - handshake request. 
+ *      WriteRequest - portion of data to be written. 
+ *      UpdateTokenRequest - user credentials if update is needed. 
  */
-message OffsetsRange {
-    int64 start_offset = 1;
-    int64 end_offset = 2;
-}
+message StreamingWriteClientMessage { 
+    oneof client_message { 
+        InitRequest init_request = 1; 
+        WriteRequest write_request = 2; 
+        UpdateTokenRequest update_token_request = 3; 
+    } 
 
-/**
- * Request for write session. Contains one of:
- *      InitRequest - handshake request.
- *      WriteRequest - portion of data to be written.
- *      UpdateTokenRequest - user credentials if update is needed.
- */
-message StreamingWriteClientMessage {
-    oneof client_message {
-        InitRequest init_request = 1;
-        WriteRequest write_request = 2;
-        UpdateTokenRequest update_token_request = 3;
-    }
-
-
+ 
     // Handshake request that must be sent to server first.
-    message InitRequest {
+    message InitRequest { 
         // Path of topic to write to.
-        string topic = 1;
-        // message group identifier of client data stream a.k.a. sourceId.
-        string message_group_id = 2;
-        // Some user metadata attached to this write session.
-        map<string, string> session_meta = 3;
+        string topic = 1; 
+        // message group identifier of client data stream a.k.a. sourceId. 
+        string message_group_id = 2; 
+        // Some user metadata attached to this write session. 
+        map<string, string> session_meta = 3; 
         // Partition group to write to.
-        // Zero means any group.
-        int64 partition_group_id = 4;
+        // Zero means any group. 
+        int64 partition_group_id = 4; 
 
-        int64 max_supported_block_format_version = 5;
+        int64 max_supported_block_format_version = 5; 
 
-        string session_id = 100;
-        // 0 for first init message and incremental value for connect retries. Used for server logging.
-        int64 connection_attempt = 101;
-        // Opaque blob. Take last one from previous connect.
-        bytes connection_meta = 102;
-
-        // Optinal preferred cluster name. Sever will close session If preferred cluster is not server cluster and preferred cluster is enabled after delay TPQConfig::CloseClientSessionWithEnabledRemotePreferredClusterDelaySec
-        string preferred_cluster = 103;
-
-        // Sanity check option. When no writing activity is done in idle_timeout_sec seconds, then session will be destroyed. Zero means infinity.
-        int64 idle_timeout_ms = 200;
+        string session_id = 100; 
+        // 0 for first init message and incremental value for connect retries. Used for server logging. 
+        int64 connection_attempt = 101; 
+        // Opaque blob. Take last one from previous connect. 
+        bytes connection_meta = 102; 
+ 
+        // Optinal preferred cluster name. Sever will close session If preferred cluster is not server cluster and preferred cluster is enabled after delay TPQConfig::CloseClientSessionWithEnabledRemotePreferredClusterDelaySec 
+        string preferred_cluster = 103; 
+ 
+        // Sanity check option. When no writing activity is done in idle_timeout_sec seconds, then session will be destroyed. Zero means infinity. 
+        int64 idle_timeout_ms = 200; 
     }
 
-    // Represents portion of client messages.
-    message WriteRequest {
-        // Sequence numbers of messages in order that client will provide to server.
-        repeated int64 sequence_numbers = 2;
-        // Message creation timestamps for client messages.
-        // Same size as sequence_numbers.
-        repeated int64 created_at_ms = 3;
-        // Message creation timestamps for client messages.
-        // Same size as sequence_numbers.
-        repeated int64 sent_at_ms = 4;
-        // Client message sizes.
-        // Same size as sequence_numbers.
-        repeated int64 message_sizes = 5;
-
-        // Block must contain whole client message when it's size is not bigger that max_block_size.
-        // If message is bigger than max_block_size - it will be transferred as SIZE/max_block_size blocks. All of
-        // this blocks will be with block_count = 0 but not the last one - last one's block_count will be greater than 0;
-        // Blocks can be reordered upto max_flush_window_size of uncompressed data.
+    // Represents portion of client messages. 
+    message WriteRequest { 
+        // Sequence numbers of messages in order that client will provide to server. 
+        repeated int64 sequence_numbers = 2; 
+        // Message creation timestamps for client messages. 
+        // Same size as sequence_numbers. 
+        repeated int64 created_at_ms = 3; 
+        // Message creation timestamps for client messages. 
+        // Same size as sequence_numbers. 
+        repeated int64 sent_at_ms = 4; 
+        // Client message sizes. 
+        // Same size as sequence_numbers. 
+        repeated int64 message_sizes = 5; 
+ 
+        // Block must contain whole client message when it's size is not bigger that max_block_size. 
+        // If message is bigger than max_block_size - it will be transferred as SIZE/max_block_size blocks. All of 
+        // this blocks will be with block_count = 0 but not the last one - last one's block_count will be greater than 0; 
+        // Blocks can be reordered upto max_flush_window_size of uncompressed data. 
         // Each block contains concatenated client messages, compressed by chosen codec.
-        // If there is not full client message inside block, then all block contains only this part of message.
-        // blocks:      A A A B B B BCDE
-        // offset:      1 1 1 2 2 2 2
-        // part_number: 0 1 2 0 1 2 3
-        // count:       0 0 1 0 0 1 4
-
-        repeated int64 blocks_offsets = 6;
-        repeated int64 blocks_part_numbers = 7;
-        // How many complete messages and imcomplete messages end parts (one at most) this block contains
-        repeated int64 blocks_message_counts = 8;
-        repeated int64 blocks_uncompressed_sizes = 9;
-        // In block format version 0 each byte contains only block codec identifier
-        repeated bytes blocks_headers = 10;
-        repeated bytes blocks_data = 11;
+        // If there is not full client message inside block, then all block contains only this part of message. 
+        // blocks:      A A A B B B BCDE 
+        // offset:      1 1 1 2 2 2 2 
+        // part_number: 0 1 2 0 1 2 3 
+        // count:       0 0 1 0 0 1 4 
+ 
+        repeated int64 blocks_offsets = 6; 
+        repeated int64 blocks_part_numbers = 7; 
+        // How many complete messages and imcomplete messages end parts (one at most) this block contains 
+        repeated int64 blocks_message_counts = 8; 
+        repeated int64 blocks_uncompressed_sizes = 9; 
+        // In block format version 0 each byte contains only block codec identifier 
+        repeated bytes blocks_headers = 10; 
+        repeated bytes blocks_data = 11; 
     }
 
-    // In-session reauthentication and reauthorization, lets user increase session lifetime. You should wait for 'update_token_response' before sending next 'update_token_request'.
-    message UpdateTokenRequest {
-        string token = 1;
-    }
+    // In-session reauthentication and reauthorization, lets user increase session lifetime. You should wait for 'update_token_response' before sending next 'update_token_request'. 
+    message UpdateTokenRequest { 
+        string token = 1; 
+    } 
 }
 
 /**
- * Response for write session. Contains one of:
- *      InitResponse - correct handshake response.
- *      BatchWriteResponse - acknowledgment of storing client messages.
- *      UpdateTokenResponse - acknowledgment of reauthentication and reauthorization.
+ * Response for write session. Contains one of: 
+ *      InitResponse - correct handshake response. 
+ *      BatchWriteResponse - acknowledgment of storing client messages. 
+ *      UpdateTokenResponse - acknowledgment of reauthentication and reauthorization. 
  */
-message StreamingWriteServerMessage {
-    oneof server_message {
-        InitResponse init_response = 3;
-        BatchWriteResponse batch_write_response = 4;
-        UpdateTokenResponse update_token_response = 5;
-    }
+message StreamingWriteServerMessage { 
+    oneof server_message { 
+        InitResponse init_response = 3; 
+        BatchWriteResponse batch_write_response = 4; 
+        UpdateTokenResponse update_token_response = 5; 
+    } 
 
-    // Server status of response.
-    Ydb.StatusIds.StatusCode status = 1;
-
-    // Issues if any.
-    repeated Ydb.Issue.IssueMessage issues = 2;
-
+    // Server status of response. 
+    Ydb.StatusIds.StatusCode status = 1; 
+ 
+    // Issues if any. 
+    repeated Ydb.Issue.IssueMessage issues = 2; 
+ 
     // Response for handshake.
-    message InitResponse {
-        // Last persisted message's sequence number for this message group.
-        int64 last_sequence_number = 1;
+    message InitResponse { 
+        // Last persisted message's sequence number for this message group. 
+        int64 last_sequence_number = 1; 
         // Unique identifier of write session. Used for debug purposes.
         string session_id = 2;
         // Path of topic that matched for this write session. Used for debug purposes, will be the same as in Init request from client.
-        string topic = 3;
+        string topic = 3; 
         // Write session is established to this cluster. Client data will be in instance of topic in this cluster.
         string cluster = 4;
-        // Identifier of partition that is matched for this write session.
-        int64 partition_id = 5;
+        // Identifier of partition that is matched for this write session. 
+        int64 partition_id = 5; 
 
-        // Block (see StreamingWriteClientMessage.WriteRequest.blocks_data) format version supported by server or configured for a topic. Client must write data only with them.
-        int64 block_format_version = 6;
+        // Block (see StreamingWriteClientMessage.WriteRequest.blocks_data) format version supported by server or configured for a topic. Client must write data only with them. 
+        int64 block_format_version = 6; 
         // Client can only use compression codecs from this set to write messages to topic, session will be closed with BAD_REQUEST otherwise.
         repeated Codec supported_codecs = 10;
-
-        // Maximal flush window size choosed by server. Size of uncompressed data not sended to server must not be bigger than flush window size.
-        // In other words, this is maximal size of gap inside uncompressed data, which is not sended to server yet.
-        int64 max_flush_window_size = 7; // will be 2048kb
-        // How big blocks per stream could be(in uncompressed size). When block contains more than max_block_size of uncompressed data - block must be truncated.
-        int64 max_block_size = 8; // will be 512kb
-
-        // Opaque blob, used for fast reconnects.
-        bytes connection_meta = 9;
+ 
+        // Maximal flush window size choosed by server. Size of uncompressed data not sended to server must not be bigger than flush window size. 
+        // In other words, this is maximal size of gap inside uncompressed data, which is not sended to server yet. 
+        int64 max_flush_window_size = 7; // will be 2048kb 
+        // How big blocks per stream could be(in uncompressed size). When block contains more than max_block_size of uncompressed data - block must be truncated. 
+        int64 max_block_size = 8; // will be 512kb 
+ 
+        // Opaque blob, used for fast reconnects. 
+        bytes connection_meta = 9; 
     }
 
-    // Message that represents acknowledgment for sequence of client messages. This sequence is persisted together so write statistics is for messages batch.
-    message BatchWriteResponse {
-        // Sequence numbers of persisted client messages.
-        repeated int64 sequence_numbers = 1;
-        // Assigned partition offsets.
-        // Zero for skipped messages.
-        repeated int64 offsets = 2;
-        // Per message flag. False if message is written for the first time and True otherwise.
-        repeated bool already_written = 3;
-
-        // Assigned partition for all client messages inside this batch.
-        int64 partition_id = 4;
-
-        // Write statistics for this sequence of client messages.
-        WriteStatistics write_statistics = 5;
-    }
-
-    message UpdateTokenResponse {
-    }
-
+    // Message that represents acknowledgment for sequence of client messages. This sequence is persisted together so write statistics is for messages batch. 
+    message BatchWriteResponse { 
+        // Sequence numbers of persisted client messages. 
+        repeated int64 sequence_numbers = 1; 
+        // Assigned partition offsets. 
+        // Zero for skipped messages. 
+        repeated int64 offsets = 2; 
+        // Per message flag. False if message is written for the first time and True otherwise. 
+        repeated bool already_written = 3; 
+ 
+        // Assigned partition for all client messages inside this batch. 
+        int64 partition_id = 4; 
+ 
+        // Write statistics for this sequence of client messages. 
+        WriteStatistics write_statistics = 5; 
+    } 
+ 
+    message UpdateTokenResponse { 
+    } 
+ 
     // Message with write statistics.
-    message WriteStatistics {
+    message WriteStatistics { 
         // Time spent in persisting of data.
-        int64 persist_duration_ms = 1;
+        int64 persist_duration_ms = 1; 
         // Time spent in queue before persisting.
-        int64 queued_in_partition_duration_ms = 2;
+        int64 queued_in_partition_duration_ms = 2; 
         // Time spent awaiting for partition write quota.
-        int64 throttled_on_partition_duration_ms = 3;
-        // Time spent awaiting for topic write quota.
-        int64 throttled_on_topic_duration_ms = 4;
+        int64 throttled_on_partition_duration_ms = 3; 
+        // Time spent awaiting for topic write quota. 
+        int64 throttled_on_topic_duration_ms = 4; 
     }
-}
+} 
 
 
-message Path {
-    // Path of object (topic/consumer).
-    string path = 1;
-}
+message Path { 
+    // Path of object (topic/consumer). 
+    string path = 1; 
+} 
 
-message KeyValue {
-    string key = 1;
-    string value = 2;
+message KeyValue { 
+    string key = 1; 
+    string value = 2; 
 }
 
 /**
@@ -575,9 +575,9 @@ message StreamingReadServerMessageNew {
             // How many complete messages and imcomplete messages end parts (one at most) this block contains
             repeated int64 blocks_message_counts = 15;
             repeated int64 blocks_uncompressed_sizes = 16;
-            // In block format version 0 each byte contains only block codec identifier
-            repeated bytes blocks_headers = 17;
-            repeated bytes blocks_data = 18;
+            // In block format version 0 each byte contains only block codec identifier 
+            repeated bytes blocks_headers = 17; 
+            repeated bytes blocks_data = 18; 
 
             // Zero if this is not first portion of data after resume or provided by client cookie otherwise.
             int64 resume_cookie = 50;

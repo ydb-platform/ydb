@@ -141,7 +141,7 @@ public:
     TStringBuf ContentLength;
     TStringBuf TransferEncoding;
     TStringBuf LastModified;
-    TStringBuf ContentEncoding;
+    TStringBuf ContentEncoding; 
 
     TStringBuf Body;
 

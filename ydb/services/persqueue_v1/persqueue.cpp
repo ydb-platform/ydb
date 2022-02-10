@@ -71,9 +71,9 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
     {
-        using TBiRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage;
+        using TBiRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage; 
 
-        using TBiResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage;
+        using TBiResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage; 
 
         using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
                     TBiRequest,
@@ -82,7 +82,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     NKikimrServices::GRPC_SERVER>;
 
 
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingWrite,
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingWrite, 
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context));
                     },
@@ -114,7 +114,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ, \
+    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ, \ 
         [this](NGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
             ACTION; \

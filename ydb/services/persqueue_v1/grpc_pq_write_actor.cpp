@@ -14,7 +14,7 @@
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
-#include <util/string/printf.h>
+#include <util/string/printf.h> 
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -76,7 +76,7 @@ void FillChunkDataFromReq(
 namespace NGRpcProxy {
 namespace V1 {
 
-using namespace Ydb::PersQueue::V1;
+using namespace Ydb::PersQueue::V1; 
 
 static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
@@ -131,11 +131,11 @@ TWriteSessionActor::TWriteSessionActor(
     , NextRequestInited(false)
     , NextRequestCookie(0)
     , Token(nullptr)
-    , UpdateTokenInProgress(false)
-    , UpdateTokenAuthenticated(false)
+    , UpdateTokenInProgress(false) 
+    , UpdateTokenAuthenticated(false) 
     , ACLCheckInProgress(false)
     , FirstACLCheck(true)
-    , RequestNotChecked(false)
+    , RequestNotChecked(false) 
     , LastACLCheckTimestamp(TInstant::Zero())
     , LogSessionDeadline(TInstant::Zero())
     , BalancerTabletId(0)
@@ -191,27 +191,27 @@ TString WriteRequestToLog(const Ydb::PersQueue::V1::StreamingWriteClientMessage&
 
 void TWriteSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read done: success: " << ev->Get()->Success << " data: " << WriteRequestToLog(ev->Get()->Record));
-    if (!ev->Get()->Success) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
-        ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
-        return;
-    }
+    if (!ev->Get()->Success) { 
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed"); 
+        ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone()); 
+        return; 
+    } 
 
-    switch(ev->Get()->Record.client_message_case()) {
-        case StreamingWriteClientMessage::kInitRequest:
+    switch(ev->Get()->Record.client_message_case()) { 
+        case StreamingWriteClientMessage::kInitRequest: 
             ctx.Send(ctx.SelfID, new TEvPQProxy::TEvWriteInit(std::move(ev->Get()->Record), Request->GetStreamCtx()->GetPeerName()));
             break;
-        case StreamingWriteClientMessage::kWriteRequest:
+        case StreamingWriteClientMessage::kWriteRequest: 
             ctx.Send(ctx.SelfID, new TEvPQProxy::TEvWrite(std::move(ev->Get()->Record)));
             break;
-        case StreamingWriteClientMessage::kUpdateTokenRequest: {
-            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvUpdateToken(std::move(ev->Get()->Record)));
-            break;
-        }
-        case StreamingWriteClientMessage::CLIENT_MESSAGE_NOT_SET: {
-            CloseSession("'client_message' is not set", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return;
-        }
+        case StreamingWriteClientMessage::kUpdateTokenRequest: { 
+            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvUpdateToken(std::move(ev->Get()->Record))); 
+            break; 
+        } 
+        case StreamingWriteClientMessage::CLIENT_MESSAGE_NOT_SET: { 
+            CloseSession("'client_message' is not set", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+            return; 
+        } 
     }
 }
 
@@ -261,7 +261,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext&
 
 void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
     //Y_VERIFY(ACLCheckInProgress);
-
+ 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
     Y_VERIFY(ACL);
@@ -271,16 +271,16 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
             FirstACLCheck = false;
             DiscoverPartition(ctx);
         }
-        if (UpdateTokenInProgress && UpdateTokenAuthenticated) {
-            UpdateTokenInProgress = false;
-            StreamingWriteServerMessage serverMessage;
-            serverMessage.set_status(Ydb::StatusIds::SUCCESS);
-            serverMessage.mutable_update_token_response();
-            if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
-                LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
-                Die(ctx);
-            }
-        }
+        if (UpdateTokenInProgress && UpdateTokenAuthenticated) { 
+            UpdateTokenInProgress = false; 
+            StreamingWriteServerMessage serverMessage; 
+            serverMessage.set_status(Ydb::StatusIds::SUCCESS); 
+            serverMessage.mutable_update_token_response(); 
+            if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) { 
+                LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed"); 
+                Die(ctx); 
+            } 
+        } 
     } else {
         TString errorReason = Sprintf("access to topic '%s' denied for '%s' due to 'no WriteTopic rights', Marker# PQ1125",
             TopicConverter->GetClientsideName().c_str(),
@@ -297,10 +297,10 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    const auto& init = event->Request.init_request();
+    const auto& init = event->Request.init_request(); 
 
-    if (init.topic().empty() || init.message_group_id().empty()) {
-        CloseSession("no topic or message_group_id in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
+    if (init.topic().empty() || init.message_group_id().empty()) { 
+        CloseSession("no topic or message_group_id in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx); 
         return;
     }
 
@@ -315,7 +315,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     PeerName = event->PeerName;
 
-    SourceId = init.message_group_id();
+    SourceId = init.message_group_id(); 
     TString encodedSourceId;
     try {
         encodedSourceId = NPQ::NSourceIdEncoding::Encode(SourceId);
@@ -343,7 +343,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     InitCheckSchema(ctx, true);
 
-    PreferedPartition = init.partition_group_id() > 0 ? init.partition_group_id() - 1 : Max<ui32>();
+    PreferedPartition = init.partition_group_id() > 0 ? init.partition_group_id() - 1 : Max<ui32>(); 
 
     InitMeta = GetInitialDataChunk(init, TopicConverter->GetFullLegacyName(), PeerName); // ToDo[migration] - check?
 
@@ -353,11 +353,11 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
     SLITotal.Inc();
-
-    const auto& preferredCluster = init.preferred_cluster();
-    if (!preferredCluster.empty()) {
-        Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionSetPreferredCluster(Cookie, preferredCluster));
-    }
+ 
+    const auto& preferredCluster = init.preferred_cluster(); 
+    if (!preferredCluster.empty()) { 
+        Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionSetPreferredCluster(Cookie, preferredCluster)); 
+    } 
 }
 
 void TWriteSessionActor::SetupCounters()
@@ -442,8 +442,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
 
     if (Request->GetInternalToken().empty()) { // session without auth
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
-            Die(ctx);
+            Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials"); 
+            Die(ctx); 
             return;
         }
         Y_VERIFY(FirstACLCheck);
@@ -580,7 +580,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
     auto& record = ev->Get()->Record.GetRef();
 
     if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId " 
             << SourceId << " escaped " << EscapedSourceId << " discover partition race, retrying");
         DiscoverPartition(ctx);
         return;
@@ -609,7 +609,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
             if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
                 Partition = tt.GetOptional().GetUint32();
                 if (PreferedPartition < Max<ui32>() && Partition != PreferedPartition) {
-                    CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId " << (Partition + 1) << ", but client provided " << (PreferedPartition + 1) << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use another MessageGroupId, specify PartitionGroupId " << (Partition + 1) << ", or do not specify PartitionGroupId at all.",
+                    CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId " << (Partition + 1) << ", but client provided " << (PreferedPartition + 1) << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use another MessageGroupId, specify PartitionGroupId " << (Partition + 1) << ", or do not specify PartitionGroupId at all.", 
                         PersQueue::ErrorCode::BAD_REQUEST, ctx);
                     return;
                 }
@@ -618,7 +618,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
             }
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId " 
             << SourceId << " escaped " << EscapedSourceId << " hash " << Hash << " partition " << Partition << " partitions "
             << PartitionToTablet.size() << "(" << Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
 
@@ -728,7 +728,7 @@ void TWriteSessionActor::CloseSession(const TString& errorReason, const PersQueu
             ++(*GetServiceCounters(Counters, "pqproxy|writeSession")->GetCounter("Errors", true));
         }
 
-        StreamingWriteServerMessage result;
+        StreamingWriteServerMessage result; 
         result.set_status(ConvertPersQueueInternalCodeToStatus(errorCode));
         FillIssue(result.add_issues(), errorCode, errorReason);
 
@@ -879,7 +879,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
         stat->set_persist_duration_ms(
             Max((i64)res.GetWriteTimeMs(), stat->persist_duration_ms()));
     };
-
+ 
     ui32 partitionCmdWriteResultIndex = 0;
     // TODO: Send single batch write response for all user write requests up to some max size/count
     for (const auto& userWriteRequest : writeRequest->UserWriteRequests) {
@@ -887,7 +887,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
         result.set_status(Ydb::StatusIds::SUCCESS);
         auto batchWriteResponse = result.mutable_batch_write_response();
         batchWriteResponse->set_partition_id(Partition);
-
+ 
         for (size_t messageIndex = 0, endIndex = userWriteRequest->Request.write_request().sequence_numbers_size(); messageIndex != endIndex; ++messageIndex) {
             if (partitionCmdWriteResultIndex == resp.CmdWriteResultSize()) {
                 CloseSession("too less responses from server", PersQueue::ErrorCode::ERROR, ctx);
@@ -948,21 +948,21 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     Writes.clear();
 
     i64 diff = 0;
-    auto addData = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) {
+    auto addData = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) { 
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
         w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
-        w->SetSeqNo(writeRequest.sequence_numbers(messageIndex));
+        w->SetSeqNo(writeRequest.sequence_numbers(messageIndex)); 
         w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
-        w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));
+        w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex)); 
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
         w->SetClientDC(ClientDC);
     };
 
     for (const auto& write : writeRequest->UserWriteRequests) {
         diff -= write->Request.ByteSize();
-        const auto& writeRequest = write->Request.write_request();
-        for (i32 messageIndex = 0; messageIndex != writeRequest.sequence_numbers_size(); ++messageIndex) {
-            addData(writeRequest, messageIndex);
+        const auto& writeRequest = write->Request.write_request(); 
+        for (i32 messageIndex = 0; messageIndex != writeRequest.sequence_numbers_size(); ++messageIndex) { 
+            addData(writeRequest, messageIndex); 
         }
     }
 
@@ -982,48 +982,48 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     ++NumReserveBytesRequests;
 }
 
-void TWriteSessionActor::Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const TActorContext& ctx) {
-    if (State != ES_INITED) {
-        CloseSession("got 'update_token_request' but write session is not initialized", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-    if (UpdateTokenInProgress) {
-        CloseSession("got another 'update_token_request' while previous still in progress, only single token update is allowed at a time", PersQueue::ErrorCode::OVERLOAD, ctx);
-        return;
-    }
-
-    const auto& token = ev->Get()->Request.update_token_request().token();
-    if (token == Auth || (token.empty() && !AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol())) {
-        // Got same token or empty token with no non-empty token requirement, do not trigger any checks
-        StreamingWriteServerMessage serverMessage;
-        serverMessage.set_status(Ydb::StatusIds::SUCCESS);
-        serverMessage.mutable_update_token_response();
-        if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
-            Die(ctx);
-            return;
-        }
-    }
-    else if (token.empty()) {
-        Request->ReplyUnauthenticated("'token' in 'update_token_request' is empty");
-        Die(ctx);
-        return;
-    }
-    else {
-        UpdateTokenInProgress = true;
-        UpdateTokenAuthenticated = false;
-        Auth = token;
-        Request->RefreshToken(Auth, ctx, ctx.SelfID);
-    }
-
-    NextRequestInited = true;
-    if (!Request->GetStreamCtx()->Read()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
-        Die(ctx);
-        return;
-    }
-}
-
+void TWriteSessionActor::Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const TActorContext& ctx) { 
+    if (State != ES_INITED) { 
+        CloseSession("got 'update_token_request' but write session is not initialized", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+        return; 
+    } 
+    if (UpdateTokenInProgress) { 
+        CloseSession("got another 'update_token_request' while previous still in progress, only single token update is allowed at a time", PersQueue::ErrorCode::OVERLOAD, ctx); 
+        return; 
+    } 
+ 
+    const auto& token = ev->Get()->Request.update_token_request().token(); 
+    if (token == Auth || (token.empty() && !AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol())) { 
+        // Got same token or empty token with no non-empty token requirement, do not trigger any checks 
+        StreamingWriteServerMessage serverMessage; 
+        serverMessage.set_status(Ydb::StatusIds::SUCCESS); 
+        serverMessage.mutable_update_token_response(); 
+        if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) { 
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed"); 
+            Die(ctx); 
+            return; 
+        } 
+    } 
+    else if (token.empty()) { 
+        Request->ReplyUnauthenticated("'token' in 'update_token_request' is empty"); 
+        Die(ctx); 
+        return; 
+    } 
+    else { 
+        UpdateTokenInProgress = true; 
+        UpdateTokenAuthenticated = false; 
+        Auth = token; 
+        Request->RefreshToken(Auth, ctx, ctx.SelfID); 
+    } 
+ 
+    NextRequestInited = true; 
+    if (!Request->GetStreamCtx()->Read()) { 
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed"); 
+        Die(ctx); 
+        return; 
+    } 
+} 
+ 
 void TWriteSessionActor::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr &ev , const TActorContext& ctx) {
     Y_UNUSED(ctx);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token");
@@ -1031,10 +1031,10 @@ void TWriteSessionActor::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshToken
     if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
         Token = new NACLib::TUserToken(ev->Get()->InternalToken);
         Request->SetInternalToken(ev->Get()->InternalToken);
-        UpdateTokenAuthenticated = true;
-        if (!ACLCheckInProgress) {
+        UpdateTokenAuthenticated = true; 
+        if (!ACLCheckInProgress) { 
             InitCheckSchema(ctx);
-        }
+        } 
     } else {
         Request->ReplyUnauthenticated("refreshed token is invalid");
         Die(ctx);
@@ -1051,65 +1051,65 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
         return;
     }
 
-    const auto& writeRequest = ev->Get()->Request.write_request();
-    if (!AllEqual(writeRequest.sequence_numbers_size(), writeRequest.created_at_ms_size(), writeRequest.sent_at_ms_size(), writeRequest.message_sizes_size())) {
-        CloseSession(TStringBuilder() << "messages meta repeated fields do not have same size, 'sequence_numbers' size is " << writeRequest.sequence_numbers_size()
-            << ", 'message_sizes' size is " << writeRequest.message_sizes_size() << ", 'created_at_ms' size is " << writeRequest.created_at_ms_size()
-            << " and 'sent_at_ms' size is " << writeRequest.sent_at_ms_size(), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-    if (!AllEqual(writeRequest.blocks_offsets_size(), writeRequest.blocks_part_numbers_size(), writeRequest.blocks_message_counts_size(), writeRequest.blocks_uncompressed_sizes_size(), writeRequest.blocks_headers_size(), writeRequest.blocks_data_size())) {
-        CloseSession(TStringBuilder() << "blocks repeated fields do no have same size, 'blocks_offsets' size is " << writeRequest.blocks_offsets_size()
-            << ", 'blocks_part_numbers' size is " << writeRequest.blocks_part_numbers_size() << ", 'blocks_message_counts' size is " << writeRequest.blocks_message_counts_size()
-            << ", 'blocks_uncompressed_sizes' size is " << writeRequest.blocks_uncompressed_sizes_size() << ", 'blocks_headers' size is " << writeRequest.blocks_headers_size()
-            << " and 'blocks_data' size is " << writeRequest.blocks_data_size(), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-
-    const i32 messageCount = writeRequest.sequence_numbers_size();
-    const i32 blockCount = writeRequest.blocks_offsets_size();
-    if (messageCount == 0) {
-        CloseSession(TStringBuilder() << "messages meta repeated fields are empty, write request contains no messages", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-    if (messageCount != blockCount) {
-        CloseSession(TStringBuilder() << "messages meta repeated fields and blocks repeated fields do not have same size, messages meta fields size is " << messageCount
-            << " and blocks fields size is " << blockCount << ", only one message per block is supported in blocks format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-    auto dataCheck = [&](const StreamingWriteClientMessage::WriteRequest& data, const i32 messageIndex) -> bool {
-        if (data.sequence_numbers(messageIndex) <= 0) {
-            CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' items must be greater than 0. Value at position " << messageIndex << " is " << data.sequence_numbers(messageIndex), PersQueue::ErrorCode::BAD_REQUEST, ctx);
+    const auto& writeRequest = ev->Get()->Request.write_request(); 
+    if (!AllEqual(writeRequest.sequence_numbers_size(), writeRequest.created_at_ms_size(), writeRequest.sent_at_ms_size(), writeRequest.message_sizes_size())) { 
+        CloseSession(TStringBuilder() << "messages meta repeated fields do not have same size, 'sequence_numbers' size is " << writeRequest.sequence_numbers_size() 
+            << ", 'message_sizes' size is " << writeRequest.message_sizes_size() << ", 'created_at_ms' size is " << writeRequest.created_at_ms_size() 
+            << " and 'sent_at_ms' size is " << writeRequest.sent_at_ms_size(), PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+        return; 
+    } 
+    if (!AllEqual(writeRequest.blocks_offsets_size(), writeRequest.blocks_part_numbers_size(), writeRequest.blocks_message_counts_size(), writeRequest.blocks_uncompressed_sizes_size(), writeRequest.blocks_headers_size(), writeRequest.blocks_data_size())) { 
+        CloseSession(TStringBuilder() << "blocks repeated fields do no have same size, 'blocks_offsets' size is " << writeRequest.blocks_offsets_size() 
+            << ", 'blocks_part_numbers' size is " << writeRequest.blocks_part_numbers_size() << ", 'blocks_message_counts' size is " << writeRequest.blocks_message_counts_size() 
+            << ", 'blocks_uncompressed_sizes' size is " << writeRequest.blocks_uncompressed_sizes_size() << ", 'blocks_headers' size is " << writeRequest.blocks_headers_size() 
+            << " and 'blocks_data' size is " << writeRequest.blocks_data_size(), PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+        return; 
+    } 
+ 
+    const i32 messageCount = writeRequest.sequence_numbers_size(); 
+    const i32 blockCount = writeRequest.blocks_offsets_size(); 
+    if (messageCount == 0) { 
+        CloseSession(TStringBuilder() << "messages meta repeated fields are empty, write request contains no messages", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+        return; 
+    } 
+    if (messageCount != blockCount) { 
+        CloseSession(TStringBuilder() << "messages meta repeated fields and blocks repeated fields do not have same size, messages meta fields size is " << messageCount 
+            << " and blocks fields size is " << blockCount << ", only one message per block is supported in blocks format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+        return; 
+    } 
+    auto dataCheck = [&](const StreamingWriteClientMessage::WriteRequest& data, const i32 messageIndex) -> bool { 
+        if (data.sequence_numbers(messageIndex) <= 0) { 
+            CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' items must be greater than 0. Value at position " << messageIndex << " is " << data.sequence_numbers(messageIndex), PersQueue::ErrorCode::BAD_REQUEST, ctx); 
             return false;
         }
 
-        if (messageIndex > 0 && data.sequence_numbers(messageIndex) <= data.sequence_numbers(messageIndex - 1)) {
-            CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' are unsorted. Value " << data.sequence_numbers(messageIndex) << " at position " << messageIndex
-                << " is less than or equal to value " << data.sequence_numbers(messageIndex - 1) << " at position " << (messageIndex - 1), PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        if (messageIndex > 0 && data.sequence_numbers(messageIndex) <= data.sequence_numbers(messageIndex - 1)) { 
+            CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' are unsorted. Value " << data.sequence_numbers(messageIndex) << " at position " << messageIndex 
+                << " is less than or equal to value " << data.sequence_numbers(messageIndex - 1) << " at position " << (messageIndex - 1), PersQueue::ErrorCode::BAD_REQUEST, ctx); 
             return false;
         }
-
-        if (data.blocks_headers(messageIndex).size() != CODEC_ID_SIZE) {
-            CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex <<  " has incorrect size " << data.blocks_headers(messageIndex).size() << " [B]. Only headers of size " << CODEC_ID_SIZE << " [B] (with codec identifier) are supported in block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return false;
+ 
+        if (data.blocks_headers(messageIndex).size() != CODEC_ID_SIZE) { 
+            CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex <<  " has incorrect size " << data.blocks_headers(messageIndex).size() << " [B]. Only headers of size " << CODEC_ID_SIZE << " [B] (with codec identifier) are supported in block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+            return false; 
+        } 
+ 
+        const char& codecID = data.blocks_headers(messageIndex).front(); 
+        TString error; 
+        if (!ValidateWriteWithCodec(InitialPQTabletConfig, codecID, error)) { 
+            CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex << " is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+            return false; 
         }
-
-        const char& codecID = data.blocks_headers(messageIndex).front();
-        TString error;
-        if (!ValidateWriteWithCodec(InitialPQTabletConfig, codecID, error)) {
-            CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex << " is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return false;
-        }
-
-        if (data.blocks_message_counts(messageIndex) != 1) {
-            CloseSession(TStringBuilder() << "bad write request - 'blocks_message_counts' at position " << messageIndex << " is " << data.blocks_message_counts(messageIndex)
-                << ", only single message per block is supported by block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return false;
-        }
+ 
+        if (data.blocks_message_counts(messageIndex) != 1) { 
+            CloseSession(TStringBuilder() << "bad write request - 'blocks_message_counts' at position " << messageIndex << " is " << data.blocks_message_counts(messageIndex) 
+                << ", only single message per block is supported by block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx); 
+            return false; 
+        } 
         return true;
     };
-    for (i32 messageIndex = 0; messageIndex != messageCount; ++messageIndex) {
-        if (!dataCheck(writeRequest, messageIndex)) {
+    for (i32 messageIndex = 0; messageIndex != messageCount; ++messageIndex) { 
+        if (!dataCheck(writeRequest, messageIndex)) { 
             return;
         }
     }
@@ -1154,7 +1154,7 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
 void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
     Y_VERIFY(State == ES_INITED);
     ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
-    if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
+    if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) { 
         RequestNotChecked = false;
         InitCheckSchema(ctx);
     }

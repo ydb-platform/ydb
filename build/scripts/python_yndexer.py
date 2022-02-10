@@ -42,10 +42,10 @@ if __name__ == '__main__':
     timeout = int(sys.argv[2])
     output_file = sys.argv[3]
     input_file = sys.argv[4]
-    partition_count = sys.argv[5]
-    partition_index = sys.argv[6]
+    partition_count = sys.argv[5] 
+    partition_index = sys.argv[6] 
 
-    process = Process([yndexer, '-f', input_file, '-y', output_file, '-c', partition_count, '-i', partition_index])
+    process = Process([yndexer, '-f', input_file, '-y', output_file, '-c', partition_count, '-i', partition_index]) 
     result = process.wait(timeout=timeout)
 
     if result != 0:

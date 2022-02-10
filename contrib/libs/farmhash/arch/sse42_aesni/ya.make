@@ -8,7 +8,7 @@ OWNER(somov)
 
 NO_COMPILER_WARNINGS()
 
-IF (NOT MSVC OR CLANG_CL)
+IF (NOT MSVC OR CLANG_CL) 
     CFLAGS(
         -msse4.2
         -maes

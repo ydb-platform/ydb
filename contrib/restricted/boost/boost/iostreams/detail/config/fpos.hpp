@@ -40,7 +40,7 @@
 
 # endif
 
-#if defined(_LIBCPP_COMPILER_MSVC) || defined(_LIBCPP_COMPILER_CLANG)
+#if defined(_LIBCPP_COMPILER_MSVC) || defined(_LIBCPP_COMPILER_CLANG) 
 #undef BOOST_IOSTREAMS_HAS_DINKUMWARE_FPOS
 #endif
 

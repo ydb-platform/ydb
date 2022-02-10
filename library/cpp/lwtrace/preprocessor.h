@@ -172,9 +172,9 @@ namespace NLWTrace {
             /* ParamCount */ ::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::ParamCount,            \
             /* SerializeParams */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::SerializeParams, \
             /* CloneParams */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::CloneParams,         \
-            /* DestroyParams */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::DestroyParams,     \ 
-            /* SerializeToPb */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::SerializeToPb,     \ 
-            /* DeserializeFromPb */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::DeserializeFromPb\ 
+            /* DestroyParams */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::DestroyParams,     \
+            /* SerializeToPb */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::SerializeToPb,     \
+            /* DeserializeFromPb */ &::NLWTrace::TUserSignature<LWTRACE_EXPAND(LWTRACE_UNROLL types)>::DeserializeFromPb\
     }
 
 // Macro for TEvent POD structure static initialization

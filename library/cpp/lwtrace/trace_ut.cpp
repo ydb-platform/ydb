@@ -16,17 +16,17 @@ enum class EEnumClass {
     ValueD,
 };
 
-#define LWTRACE_UT_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                          \ 
-    PROBE(NoParam, GROUPS("Group"), TYPES(), NAMES())                                                    \ 
-    PROBE(IntParam, GROUPS("Group"), TYPES(ui32), NAMES("value"))                                        \ 
-    PROBE(StringParam, GROUPS("Group"), TYPES(TString), NAMES("value"))                                  \ 
-    PROBE(SymbolParam, GROUPS("Group"), TYPES(NLWTrace::TSymbol), NAMES("symbol"))                       \ 
-    PROBE(CheckParam, GROUPS("Group"), TYPES(NLWTrace::TCheck), NAMES("value"))                          \ 
+#define LWTRACE_UT_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                          \
+    PROBE(NoParam, GROUPS("Group"), TYPES(), NAMES())                                                    \
+    PROBE(IntParam, GROUPS("Group"), TYPES(ui32), NAMES("value"))                                        \
+    PROBE(StringParam, GROUPS("Group"), TYPES(TString), NAMES("value"))                                  \
+    PROBE(SymbolParam, GROUPS("Group"), TYPES(NLWTrace::TSymbol), NAMES("symbol"))                       \
+    PROBE(CheckParam, GROUPS("Group"), TYPES(NLWTrace::TCheck), NAMES("value"))                          \
     PROBE(EnumParams, GROUPS("Group"), TYPES(ESimpleEnum, EEnumClass), NAMES("simpleEnum", "enumClass")) \
-    PROBE(InstantParam, GROUPS("Group"), TYPES(TInstant), NAMES("value"))                                \ 
-    PROBE(DurationParam, GROUPS("Group"), TYPES(TDuration), NAMES("value"))                              \ 
-    PROBE(ProtoEnum, GROUPS("Group"), TYPES(NLWTrace::EOperatorType), NAMES("value"))                    \ 
-    PROBE(IntIntParams, GROUPS("Group"), TYPES(ui32, ui64), NAMES("value1", "value2"))                   \ 
+    PROBE(InstantParam, GROUPS("Group"), TYPES(TInstant), NAMES("value"))                                \
+    PROBE(DurationParam, GROUPS("Group"), TYPES(TDuration), NAMES("value"))                              \
+    PROBE(ProtoEnum, GROUPS("Group"), TYPES(NLWTrace::EOperatorType), NAMES("value"))                    \
+    PROBE(IntIntParams, GROUPS("Group"), TYPES(ui32, ui64), NAMES("value1", "value2"))                   \
     /**/
 
 LWTRACE_DECLARE_PROVIDER(LWTRACE_UT_PROVIDER)
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         using TPbEnumTraits = TParamTraits<EOperatorType>;
         TString str;
         TPbEnumTraits::ToString(TPbEnumTraits::ToStoreType(OT_EQ), &str);
-        UNIT_ASSERT_STRINGS_EQUAL(str, "OT_EQ (0)"); 
+        UNIT_ASSERT_STRINGS_EQUAL(str, "OT_EQ (0)");
     }
 
     Y_UNIT_TEST(Track) {
@@ -581,164 +581,164 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         } reader;
         mngr.ReadDepot("Query1", reader);
     }
- 
-    Y_UNIT_TEST(ShouldSerializeTracks) 
-    { 
-        TManager manager(*Singleton<TProbeRegistry>(), false); 
- 
-        TOrbit orbit; 
-        TTraceRequest req; 
-        req.SetIsTraced(true); 
-        manager.HandleTraceRequest(req, orbit); 
- 
-        LWTRACK(NoParam, orbit); 
-        LWTRACK(IntParam, orbit, 1); 
-        LWTRACK(StringParam, orbit, "str"); 
-        LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC); 
-        LWTRACK(InstantParam, orbit, TInstant::Seconds(42)); 
-        LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146)); 
+
+    Y_UNIT_TEST(ShouldSerializeTracks)
+    {
+        TManager manager(*Singleton<TProbeRegistry>(), false);
+
+        TOrbit orbit;
+        TTraceRequest req;
+        req.SetIsTraced(true);
+        manager.HandleTraceRequest(req, orbit);
+
+        LWTRACK(NoParam, orbit);
+        LWTRACK(IntParam, orbit, 1);
+        LWTRACK(StringParam, orbit, "str");
+        LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC);
+        LWTRACK(InstantParam, orbit, TInstant::Seconds(42));
+        LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146));
         LWTRACK(ProtoEnum, orbit, OT_EQ);
-        LWTRACK(IntIntParams, orbit, 1, 2); 
- 
-        TTraceResponse resp; 
-        orbit.Serialize(0, *resp.MutableTrace()); 
-        auto& r = resp.GetTrace(); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(8, r.EventsSize()); 
- 
-        const auto& p0 = r.GetEvents(0); 
-        UNIT_ASSERT_VALUES_EQUAL("NoParam", p0.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p0.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL(0 , p0.ParamsSize()); 
- 
-        const auto& p1 = r.GetEvents(1); 
-        UNIT_ASSERT_VALUES_EQUAL("IntParam", p1.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p1.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL(1, p1.GetParams(0).GetUintValue()); 
- 
-        const auto& p2 = r.GetEvents(2); 
-        UNIT_ASSERT_VALUES_EQUAL("StringParam", p2.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p2.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL("str", p2.GetParams(0).GetStrValue()); 
- 
-        const auto& p3 = r.GetEvents(3); 
-        UNIT_ASSERT_VALUES_EQUAL("EnumParams", p3.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p3.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL((ui32)ValueA, p3.GetParams(0).GetIntValue()); 
-        UNIT_ASSERT_VALUES_EQUAL((ui32)EEnumClass::ValueC, p3.GetParams(1).GetIntValue()); 
- 
-        const auto& p4 = r.GetEvents(4); 
-        UNIT_ASSERT_VALUES_EQUAL("InstantParam", p4.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p4.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL(42, p4.GetParams(0).GetDoubleValue()); 
- 
-        const auto& p5 = r.GetEvents(5); 
-        UNIT_ASSERT_VALUES_EQUAL("DurationParam", p5.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p5.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL(146, p5.GetParams(0).GetDoubleValue()); 
- 
-        const auto& p6 = r.GetEvents(6); 
-        UNIT_ASSERT_VALUES_EQUAL("ProtoEnum", p6.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p6.GetProvider()); 
+        LWTRACK(IntIntParams, orbit, 1, 2);
+
+        TTraceResponse resp;
+        orbit.Serialize(0, *resp.MutableTrace());
+        auto& r = resp.GetTrace();
+
+        UNIT_ASSERT_VALUES_EQUAL(8, r.EventsSize());
+
+        const auto& p0 = r.GetEvents(0);
+        UNIT_ASSERT_VALUES_EQUAL("NoParam", p0.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p0.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL(0 , p0.ParamsSize());
+
+        const auto& p1 = r.GetEvents(1);
+        UNIT_ASSERT_VALUES_EQUAL("IntParam", p1.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p1.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL(1, p1.GetParams(0).GetUintValue());
+
+        const auto& p2 = r.GetEvents(2);
+        UNIT_ASSERT_VALUES_EQUAL("StringParam", p2.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p2.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL("str", p2.GetParams(0).GetStrValue());
+
+        const auto& p3 = r.GetEvents(3);
+        UNIT_ASSERT_VALUES_EQUAL("EnumParams", p3.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p3.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL((ui32)ValueA, p3.GetParams(0).GetIntValue());
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EEnumClass::ValueC, p3.GetParams(1).GetIntValue());
+
+        const auto& p4 = r.GetEvents(4);
+        UNIT_ASSERT_VALUES_EQUAL("InstantParam", p4.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p4.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL(42, p4.GetParams(0).GetDoubleValue());
+
+        const auto& p5 = r.GetEvents(5);
+        UNIT_ASSERT_VALUES_EQUAL("DurationParam", p5.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p5.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL(146, p5.GetParams(0).GetDoubleValue());
+
+        const auto& p6 = r.GetEvents(6);
+        UNIT_ASSERT_VALUES_EQUAL("ProtoEnum", p6.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p6.GetProvider());
         UNIT_ASSERT_VALUES_EQUAL((int)OT_EQ, p6.GetParams(0).GetIntValue());
- 
-        const auto& p7 = r.GetEvents(7); 
-        UNIT_ASSERT_VALUES_EQUAL("IntIntParams", p7.GetName()); 
-        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p7.GetProvider()); 
-        UNIT_ASSERT_VALUES_EQUAL(1, p7.GetParams(0).GetUintValue()); 
-        UNIT_ASSERT_VALUES_EQUAL(2, p7.GetParams(1).GetUintValue()); 
-    } 
- 
-    Y_UNIT_TEST(ShouldDeserializeTracks) 
-    { 
-        TManager manager(*Singleton<TProbeRegistry>(), false); 
- 
-        TTraceResponse resp; 
-        auto& r = *resp.MutableTrace()->MutableEvents(); 
- 
-        auto& p0 = *r.Add(); 
-        p0.SetName("NoParam"); 
-        p0.SetProvider("LWTRACE_UT_PROVIDER"); 
- 
-        auto& p1 = *r.Add(); 
-        p1.SetName("IntParam"); 
-        p1.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p1param = *p1.MutableParams()->Add(); 
-        p1param.SetUintValue(1); 
- 
-        auto& p2 = *r.Add(); 
-        p2.SetName("StringParam"); 
-        p2.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p2param = *p2.MutableParams()->Add(); 
-        p2param.SetStrValue("str"); 
- 
-        auto& p3 = *r.Add(); 
-        p3.SetName("EnumParams"); 
-        p3.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p3param1 = *p3.MutableParams()->Add(); 
-        p3param1.SetUintValue((ui64)EEnumClass::ValueC); 
-        auto& p3param2 = *p3.MutableParams()->Add(); 
-        p3param2.SetIntValue((ui64)EEnumClass::ValueC); 
- 
-        auto& p4 = *r.Add(); 
-        p4.SetName("InstantParam"); 
-        p4.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p4param = *p4.MutableParams()->Add(); 
-        p4param.SetDoubleValue(42); 
- 
-        auto& p5 = *r.Add(); 
-        p5.SetName("DurationParam"); 
-        p5.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p5param = *p5.MutableParams()->Add(); 
-        p5param.SetDoubleValue(146); 
- 
-        auto& p6 = *r.Add(); 
-        p6.SetName("ProtoEnum"); 
-        p6.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p6param = *p6.MutableParams()->Add(); 
+
+        const auto& p7 = r.GetEvents(7);
+        UNIT_ASSERT_VALUES_EQUAL("IntIntParams", p7.GetName());
+        UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p7.GetProvider());
+        UNIT_ASSERT_VALUES_EQUAL(1, p7.GetParams(0).GetUintValue());
+        UNIT_ASSERT_VALUES_EQUAL(2, p7.GetParams(1).GetUintValue());
+    }
+
+    Y_UNIT_TEST(ShouldDeserializeTracks)
+    {
+        TManager manager(*Singleton<TProbeRegistry>(), false);
+
+        TTraceResponse resp;
+        auto& r = *resp.MutableTrace()->MutableEvents();
+
+        auto& p0 = *r.Add();
+        p0.SetName("NoParam");
+        p0.SetProvider("LWTRACE_UT_PROVIDER");
+
+        auto& p1 = *r.Add();
+        p1.SetName("IntParam");
+        p1.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p1param = *p1.MutableParams()->Add();
+        p1param.SetUintValue(1);
+
+        auto& p2 = *r.Add();
+        p2.SetName("StringParam");
+        p2.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p2param = *p2.MutableParams()->Add();
+        p2param.SetStrValue("str");
+
+        auto& p3 = *r.Add();
+        p3.SetName("EnumParams");
+        p3.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p3param1 = *p3.MutableParams()->Add();
+        p3param1.SetUintValue((ui64)EEnumClass::ValueC);
+        auto& p3param2 = *p3.MutableParams()->Add();
+        p3param2.SetIntValue((ui64)EEnumClass::ValueC);
+
+        auto& p4 = *r.Add();
+        p4.SetName("InstantParam");
+        p4.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p4param = *p4.MutableParams()->Add();
+        p4param.SetDoubleValue(42);
+
+        auto& p5 = *r.Add();
+        p5.SetName("DurationParam");
+        p5.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p5param = *p5.MutableParams()->Add();
+        p5param.SetDoubleValue(146);
+
+        auto& p6 = *r.Add();
+        p6.SetName("ProtoEnum");
+        p6.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p6param = *p6.MutableParams()->Add();
         p6param.SetIntValue((i64)OT_EQ);
- 
-        auto& p7 = *r.Add(); 
-        p7.SetName("IntIntParams"); 
-        p7.SetProvider("LWTRACE_UT_PROVIDER"); 
-        auto& p7param1 = *p7.MutableParams()->Add(); 
-        p7param1.SetIntValue(1); 
-        auto& p7param2 = *p7.MutableParams()->Add(); 
-        p7param2.SetIntValue(2); 
- 
-        TOrbit orbit; 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit).IsSuccess, 
-            true); 
-    } 
- 
-    Y_UNIT_TEST(ShouldDeserializeWhatSerialized) 
-    { 
-        TManager manager(*Singleton<TProbeRegistry>(), false); 
- 
-        TOrbit orbit; 
-        TTraceRequest req; 
-        req.SetIsTraced(true); 
-        manager.HandleTraceRequest(req, orbit); 
- 
-        LWTRACK(NoParam, orbit); 
-        LWTRACK(IntParam, orbit, 1); 
-        LWTRACK(StringParam, orbit, "str"); 
-        LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC); 
-        LWTRACK(InstantParam, orbit, TInstant::Seconds(42)); 
-        LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146)); 
+
+        auto& p7 = *r.Add();
+        p7.SetName("IntIntParams");
+        p7.SetProvider("LWTRACE_UT_PROVIDER");
+        auto& p7param1 = *p7.MutableParams()->Add();
+        p7param1.SetIntValue(1);
+        auto& p7param2 = *p7.MutableParams()->Add();
+        p7param2.SetIntValue(2);
+
+        TOrbit orbit;
+        UNIT_ASSERT_VALUES_EQUAL(
+            manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit).IsSuccess,
+            true);
+    }
+
+    Y_UNIT_TEST(ShouldDeserializeWhatSerialized)
+    {
+        TManager manager(*Singleton<TProbeRegistry>(), false);
+
+        TOrbit orbit;
+        TTraceRequest req;
+        req.SetIsTraced(true);
+        manager.HandleTraceRequest(req, orbit);
+
+        LWTRACK(NoParam, orbit);
+        LWTRACK(IntParam, orbit, 1);
+        LWTRACK(StringParam, orbit, "str");
+        LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC);
+        LWTRACK(InstantParam, orbit, TInstant::Seconds(42));
+        LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146));
         LWTRACK(ProtoEnum, orbit, OT_EQ);
-        LWTRACK(IntIntParams, orbit, 1, 2); 
- 
-        TTraceResponse resp; 
-        auto& r = *resp.MutableTrace(); 
-        orbit.Serialize(0, r); 
- 
-        TOrbit orbit1; 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit1).IsSuccess, 
-            true); 
-    } 
+        LWTRACK(IntIntParams, orbit, 1, 2);
+
+        TTraceResponse resp;
+        auto& r = *resp.MutableTrace();
+        orbit.Serialize(0, r);
+
+        TOrbit orbit1;
+        UNIT_ASSERT_VALUES_EQUAL(
+            manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit1).IsSuccess,
+            true);
+    }
 
     Y_UNIT_TEST(TrackForkJoin) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);

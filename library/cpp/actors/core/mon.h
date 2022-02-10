@@ -88,14 +88,14 @@ namespace NActors {
             {
             }
 
-            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method) 
-                : Query(query) 
-                , Method(method) 
-            { 
-            } 
- 
+            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method)
+                : Query(query)
+                , Method(method)
+            {
+            }
+
             TString Query;
-            HTTP_METHOD Method; 
+            HTTP_METHOD Method;
 
             TString PathInfo() const {
                 const size_t pos = Query.find('?');
@@ -126,11 +126,11 @@ namespace NActors {
             static IEventBase* Load(TEventSerializedData* bufs) {
                 return new TEvRemoteHttpInfo(bufs->GetString());
             }
- 
-            HTTP_METHOD GetMethod() const 
-            { 
-                return Method; 
-            } 
+
+            HTTP_METHOD GetMethod() const
+            {
+                return Method;
+            }
         };
 
         struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> {

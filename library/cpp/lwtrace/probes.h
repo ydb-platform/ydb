@@ -7,8 +7,8 @@
           TYPES(double, double, double, double),                         \
           NAMES("probeShare", "probeMinMs", "probeMaxMs", "probeAvgMs")) \
     PROBE(DeserializationError, GROUPS("LWTraceError"),                  \
-          TYPES(TString, TString),                                       \ 
-          NAMES("probeName", "providerName"))                            \ 
+          TYPES(TString, TString),                                       \
+          NAMES("probeName", "providerName"))                            \
     PROBE(Fork, GROUPS(),                                                \
           TYPES(ui64),                                                   \
           NAMES("spanId"))                                               \

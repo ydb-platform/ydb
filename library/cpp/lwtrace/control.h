@@ -3,7 +3,7 @@
 #include "custom_action.h"
 #include "event.h"
 #include "log.h"
-#include "log_shuttle.h" 
+#include "log_shuttle.h"
 #include "probe.h"
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
@@ -18,9 +18,9 @@
 #include <util/generic/vector.h>
 
 namespace NLWTrace {
- 
-    using TProbeMap = THashMap<std::pair<TString, TString>, TProbe*>; 
- 
+
+    using TProbeMap = THashMap<std::pair<TString, TString>, TProbe*>;
+
     // Interface for probe ownership management
     class IBox: public virtual TThrRefBase {
     private:
@@ -203,38 +203,38 @@ namespace NLWTrace {
         void ToProtobuf(TLogPb& pb) const;
     };
 
-    // Deserialization result. 
-    // Either IsSuccess is true or FailedEventNames contains event names 
-    // we were not able to deserialize. 
-    struct TTraceDeserializeStatus 
-    { 
-        bool IsSuccess = true; 
-        TVector<TString> FailedEventNames; 
- 
-        void AddFailedEventName(const TString& name) 
-        { 
-            IsSuccess = false; 
-            FailedEventNames.emplace_back(name); 
-        } 
-    }; 
- 
+    // Deserialization result.
+    // Either IsSuccess is true or FailedEventNames contains event names
+    // we were not able to deserialize.
+    struct TTraceDeserializeStatus
+    {
+        bool IsSuccess = true;
+        TVector<TString> FailedEventNames;
+
+        void AddFailedEventName(const TString& name)
+        {
+            IsSuccess = false;
+            FailedEventNames.emplace_back(name);
+        }
+    };
+
     // Just a registry of all active trace queries
     // Facade for all interactions with probes/traces
     class TManager: public TNonCopyable {
     private:
         TProbeRegistry& Registry;
         TMutex Mtx;
-        ui64 LastTraceIdx = 1; 
+        ui64 LastTraceIdx = 1;
         typedef THashMap<TString, TSession*> TTraces; // traceId -> TSession
         TTraces Traces;
         bool DestructiveActionsAllowed;
         TCustomActionFactory CustomActionFactory;
-        THolder<TRunLogShuttleActionExecutor<TCyclicDepot>> SerializingExecutor; 
+        THolder<TRunLogShuttleActionExecutor<TCyclicDepot>> SerializingExecutor;
 
     public:
-        static constexpr ui64 RemoteTraceIdx = 0; 
- 
-    public: 
+        static constexpr ui64 RemoteTraceIdx = 0;
+
+    public:
         TManager(TProbeRegistry& registry, bool allowDestructiveActions);
         ~TManager();
         bool HasTrace(const TString& id) const;
@@ -324,28 +324,28 @@ namespace NLWTrace {
                 return new T(probe, action, trace);
             });
         }
- 
-        TProbeMap GetProbesMap(); 
- 
-        void CreateTraceRequest(TTraceRequest& msg, TOrbit& orbit); 
- 
-        bool HandleTraceRequest( 
-            const TTraceRequest& msg, 
-            TOrbit& orbit); 
- 
-        TTraceDeserializeStatus HandleTraceResponse( 
-            const TTraceResponse& msg, 
-            const TProbeMap& probesMap, 
-            TOrbit& orbit, 
-            i64 timeOffset = 0, 
-            double timeScale = 1); 
- 
-        void CreateTraceResponse( 
-            TTraceResponse& msg, 
-            TOrbit& orbit); 
- 
-        bool IsTraced(TOrbit& orbit) { 
-            return orbit.HasShuttle(TManager::RemoteTraceIdx); 
-        } 
+
+        TProbeMap GetProbesMap();
+
+        void CreateTraceRequest(TTraceRequest& msg, TOrbit& orbit);
+
+        bool HandleTraceRequest(
+            const TTraceRequest& msg,
+            TOrbit& orbit);
+
+        TTraceDeserializeStatus HandleTraceResponse(
+            const TTraceResponse& msg,
+            const TProbeMap& probesMap,
+            TOrbit& orbit,
+            i64 timeOffset = 0,
+            double timeScale = 1);
+
+        void CreateTraceResponse(
+            TTraceResponse& msg,
+            TOrbit& orbit);
+
+        bool IsTraced(TOrbit& orbit) {
+            return orbit.HasShuttle(TManager::RemoteTraceIdx);
+        }
     };
 }

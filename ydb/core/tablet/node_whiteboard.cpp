@@ -56,8 +56,8 @@ public:
             }
             version = branch + '.' + version;
             SystemStateInfo.SetVersion(version);
-            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version); 
-            *versionCounter->GetCounter("version", false) = 1; 
+            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
+            *versionCounter->GetCounter("version", false) = 1;
         }
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ProcessStats.Fill(getpid());

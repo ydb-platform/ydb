@@ -6,11 +6,11 @@ namespace NActors {
     namespace NLog {
         TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                              EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
-                             EPriority defPriority, EPriority defSamplingPriority, 
-                             ui32 defSamplingRate, ui64 timeThresholdMs) 
+                             EPriority defPriority, EPriority defSamplingPriority,
+                             ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)
             , LoggerComponent(loggerComponent)
-            , TimeThresholdMs(timeThresholdMs) 
+            , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)
@@ -28,11 +28,11 @@ namespace NActors {
         }
 
         TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
-                             EPriority defPriority, EPriority defSamplingPriority, 
-                             ui32 defSamplingRate, ui64 timeThresholdMs) 
+                             EPriority defPriority, EPriority defSamplingPriority,
+                             ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)
             , LoggerComponent(loggerComponent)
-            , TimeThresholdMs(timeThresholdMs) 
+            , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)

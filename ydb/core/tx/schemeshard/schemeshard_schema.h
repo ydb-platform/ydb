@@ -840,7 +840,7 @@ struct Schema : NIceDb::Schema {
         struct TokenVersion: Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, VolumeConfig, AlterVersion, MountToken, TokenVersion>; 
+        using TColumns = TableColumns<PathId, VolumeConfig, AlterVersion, MountToken, TokenVersion>;
     };
 
     struct BlockStoreVolumeAlters : Table<24> {

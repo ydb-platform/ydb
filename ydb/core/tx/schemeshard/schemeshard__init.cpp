@@ -3683,9 +3683,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::BlockStorePartition:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT].Add(1);
                 break;
-            case ETabletType::BlockStorePartition2: 
-                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1); 
-                break; 
+            case ETabletType::BlockStorePartition2:
+                Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
+                break;
             case ETabletType::FileStore:
                 Self->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);
                 break;

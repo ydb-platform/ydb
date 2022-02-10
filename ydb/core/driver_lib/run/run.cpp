@@ -955,8 +955,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         NKikimrServices::LOGGER,
         (NActors::NLog::EPriority)logConfig.GetDefaultLevel(),
         (NActors::NLog::EPriority)logConfig.GetDefaultSamplingLevel(),
-        logConfig.GetDefaultSamplingRate(), 
-        logConfig.GetTimeThresholdMs())); 
+        logConfig.GetDefaultSamplingRate(),
+        logConfig.GetTimeThresholdMs()));
 
     LogSettings->Append(
         NActorsServices::EServiceCommon_MIN,

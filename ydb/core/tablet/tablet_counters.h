@@ -161,11 +161,11 @@ public:
         return *this;
     }
 
-    TTabletPercentileCounter& IncrementForRange(ui64 idx) { 
-        Values[idx] += 1; 
-        return *this; 
-    } 
- 
+    TTabletPercentileCounter& IncrementForRange(ui64 idx) {
+        Values[idx] += 1;
+        return *this;
+    }
+
     TTabletPercentileCounter& DecrementFor(ui64 what) {
         Y_VERIFY(Integral);
         ui32 index = FindSlot(what);
@@ -186,10 +186,10 @@ public:
         return Values[index];
     }
 
-    ui64 GetRangeBound(ui32 index) const { 
-        return Ranges[index].RangeVal; 
-    } 
- 
+    ui64 GetRangeBound(ui32 index) const {
+        return Ranges[index].RangeVal;
+    }
+
     TVector<TRangeDef> GetRanges() const {
         return TVector<TRangeDef>(Ranges, Ranges + RangeCount);
     }
@@ -198,10 +198,10 @@ public:
         return Integral;
     }
 
-    void PopulateFrom(const TTabletPercentileCounter& rp) { 
-        Populate(rp); 
-    } 
- 
+    void PopulateFrom(const TTabletPercentileCounter& rp) {
+        Populate(rp);
+    }
+
     void OutputHtml(IOutputStream &os, const char* name) const;
 
 private:

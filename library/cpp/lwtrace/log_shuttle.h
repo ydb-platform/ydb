@@ -3,8 +3,8 @@
 #include "log.h"
 #include "probe.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
- 
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
+
 #include <util/system/spinlock.h>
 
 namespace NLWTrace {
@@ -14,35 +14,35 @@ namespace NLWTrace {
     ////////////////////////////////////////////////////////////////////////////////
 
     struct THostTimeCalculator {
-        double K = 0; 
-        ui64 B = 0; 
- 
+        double K = 0;
+        ui64 B = 0;
+
         THostTimeCalculator() {
-            TInstant now = TInstant::Now(); 
-            ui64 tsNow = GetCycleCount(); 
-            K = 1000000000 / NHPTimer::GetClockRate(); 
-            B = now.NanoSeconds() - K * tsNow; 
-        } 
- 
+            TInstant now = TInstant::Now();
+            ui64 tsNow = GetCycleCount();
+            K = 1000000000 / NHPTimer::GetClockRate();
+            B = now.NanoSeconds() - K * tsNow;
+        }
+
         ui64 CyclesToEpochNanoseconds(ui64 cycles) const {
-            return K*cycles + B; 
-        } 
- 
+            return K*cycles + B;
+        }
+
         ui64 EpochNanosecondsToCycles(ui64 ns) const {
-            return (ns - B) / K; 
-        } 
-    }; 
- 
+            return (ns - B) / K;
+        }
+    };
+
     inline ui64 CyclesToEpochNanoseconds(ui64 cycles) {
-        return Singleton<THostTimeCalculator>()->CyclesToEpochNanoseconds(cycles); 
-    } 
- 
+        return Singleton<THostTimeCalculator>()->CyclesToEpochNanoseconds(cycles);
+    }
+
     inline ui64 EpochNanosecondsToCycles(ui64 ns) {
-        return Singleton<THostTimeCalculator>()->EpochNanosecondsToCycles(ns); 
-    } 
- 
-    //////////////////////////////////////////////////////////////////////////////// 
- 
+        return Singleton<THostTimeCalculator>()->EpochNanosecondsToCycles(ns);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+
     template <class TDepot>
     class TLogShuttle: public IShuttle {
     private:
@@ -62,10 +62,10 @@ namespace NLWTrace {
         {
         }
 
-        bool DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) override; 
+        bool DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) override;
         void DoEndOfTrack() override;
         void DoDrop() override;
-        void DoSerialize(TShuttleTrace& msg) override; 
+        void DoSerialize(TShuttleTrace& msg) override;
         bool DoFork(TShuttlePtr& child) override;
         bool DoJoin(const TShuttlePtr& child) override;
 
@@ -155,7 +155,7 @@ namespace NLWTrace {
     ////////////////////////////////////////////////////////////////////////////////
 
     template <class TDepot>
-    bool TLogShuttle<TDepot>::DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) { 
+    bool TLogShuttle<TDepot>::DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) {
         with_lock (Lock) {
             if (TrackLog.Items.size() >= MaxTrackLength) {
                 TrackLog.Truncated = true;
@@ -168,7 +168,7 @@ namespace NLWTrace {
             if ((item->SavedParamsCount = probe->Event.Signature.ParamCount) > 0) {
                 probe->Event.Signature.CloneParams(item->Params, params);
             }
-            item->TimestampCycles = timestamp ? timestamp : GetCycleCount(); 
+            item->TimestampCycles = timestamp ? timestamp : GetCycleCount();
         }
 
         return true;
@@ -204,25 +204,25 @@ namespace NLWTrace {
     }
 
     template <class TDepot>
-    void TLogShuttle<TDepot>::DoSerialize(TShuttleTrace& msg) 
-    { 
-        with_lock (Lock) 
-        { 
-            if (!GetTrackLog().Items.size()) { 
-                return ; 
-            } 
-            for (auto& record : GetTrackLog().Items) { 
-                auto *rec = msg.AddEvents(); 
-                rec->SetName(record.Probe->Event.Name); 
-                rec->SetProvider(record.Probe->Event.GetProvider()); 
-                rec->SetTimestampNanosec( 
-                    CyclesToEpochNanoseconds(record.TimestampCycles)); 
-                record.Probe->Event.Signature.SerializeToPb(record.Params, *rec->MutableParams()); 
-            } 
-        } 
-    } 
- 
-    template <class TDepot> 
+    void TLogShuttle<TDepot>::DoSerialize(TShuttleTrace& msg)
+    {
+        with_lock (Lock)
+        {
+            if (!GetTrackLog().Items.size()) {
+                return ;
+            }
+            for (auto& record : GetTrackLog().Items) {
+                auto *rec = msg.AddEvents();
+                rec->SetName(record.Probe->Event.Name);
+                rec->SetProvider(record.Probe->Event.GetProvider());
+                rec->SetTimestampNanosec(
+                    CyclesToEpochNanoseconds(record.TimestampCycles));
+                record.Probe->Event.Signature.SerializeToPb(record.Params, *rec->MutableParams());
+            }
+        }
+    }
+
+    template <class TDepot>
     TLogShuttle<TDepot>* TLogShuttleActionBase<TDepot>::Cast(const TShuttlePtr& shuttle) {
         return static_cast<TLogShuttle<TDepot>*>(shuttle.Get());
     }
@@ -247,7 +247,7 @@ namespace NLWTrace {
         , LastTrackId(lastTrackId)
         , LastSpanId(lastSpanId)
     {
-        ui64 size = Min<ui64>(Action.GetShuttlesCount() ? Action.GetShuttlesCount() : 1000, MaxShuttles); // Do not allow to allocate too much memory 
+        ui64 size = Min<ui64>(Action.GetShuttlesCount() ? Action.GetShuttlesCount() : 1000, MaxShuttles); // Do not allow to allocate too much memory
         AllShuttles.reserve(size);
         Parking.reserve(size);
         for (ui64 i = 0; i < size; i++) {
@@ -283,9 +283,9 @@ namespace NLWTrace {
 
     template <class TDepot>
     void TRunLogShuttleActionExecutor<TDepot>::RecordShuttle(TLogShuttle<TDepot>* shuttle) {
-        if (Depot == nullptr) { 
-            return; 
-        } 
+        if (Depot == nullptr) {
+            return;
+        }
         typename TDepot::TAccessor a(*Depot);
         if (TTrackLog* trackLog = a.Add()) {
             *trackLog = shuttle->GetTrackLog();

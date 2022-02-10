@@ -808,7 +808,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
-            const TString& mountToken, ui64 tokenVersion) 
+            const TString& mountToken, ui64 tokenVersion)
     {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
@@ -826,7 +826,7 @@ namespace NSchemeShardUT_Private {
     void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             const TString& mountToken, ui64 tokenVersion, const TVector<TEvSchemeShard::EStatus>& expectedResults)
     {
-        AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion); 
+        AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
     }
 

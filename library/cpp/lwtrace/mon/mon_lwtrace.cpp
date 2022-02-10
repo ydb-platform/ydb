@@ -511,9 +511,9 @@ struct TAdHocTraceConfig {
             }
             auto block = Cfg.GetBlocks(blockIdx);
             auto pdesc = block.GetProbeDesc();
-            if (pdesc.GetProvider()) { 
+            if (pdesc.GetProvider()) {
                 ss << "." << pdesc.GetProvider() << "." << pdesc.GetName();
-            } else if (pdesc.GetGroup()) { 
+            } else if (pdesc.GetGroup()) {
                 ss << ".Group." << pdesc.GetGroup();
             }
             // TODO[serxa]: handle predicate
@@ -525,10 +525,10 @@ struct TAdHocTraceConfig {
                     if (ls.GetIgnore()) {
                         ss << "-i";
                     }
-                    if (ls.GetShuttlesCount()) { 
+                    if (ls.GetShuttlesCount()) {
                         ss << "-s" << ls.GetShuttlesCount();
                     }
-                    if (ls.GetMaxTrackLength()) { 
+                    if (ls.GetMaxTrackLength()) {
                         ss << "-t" << ls.GetMaxTrackLength();
                     }
                 } else if (action.HasEditLogShuttleAction()) {
@@ -542,10 +542,10 @@ struct TAdHocTraceConfig {
                 }
             }
         }
-        if (Cfg.GetPerThreadLogSize()) { 
+        if (Cfg.GetPerThreadLogSize()) {
             ss << ".l" << Cfg.GetPerThreadLogSize();
         }
-        if (Cfg.GetLogDurationUs()) { 
+        if (Cfg.GetLogDurationUs()) {
             ui64 logDurationUs = Cfg.GetLogDurationUs();
             if (logDurationUs % (60 * 1000 * 1000) == 0)
                 ss << ".d" << logDurationUs / (60 * 1000 * 1000) << "m";

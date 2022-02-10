@@ -8,7 +8,7 @@ PEERDIR(
 
 SRCS(
     check.cpp
-    control.cpp 
+    control.cpp
     custom_action.cpp
     kill_action.cpp
     log_shuttle.cpp
@@ -23,7 +23,7 @@ SRCS(
 )
 
 END()
- 
+
 RECURSE(mon)
 
-RECURSE_FOR_TESTS(ut) 
+RECURSE_FOR_TESTS(ut)

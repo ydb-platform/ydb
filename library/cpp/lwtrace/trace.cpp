@@ -432,9 +432,9 @@ namespace NLWTrace {
 
     public:
         TLogActionExecutor(TProbe* probe, const TLogAction& action, TLog* log)
-            : LogParams(!action.GetDoNotLogParams()) 
+            : LogParams(!action.GetDoNotLogParams())
             , LogTimestamp(action.GetLogTimestamp())
-            , MaxRecords(action.GetMaxRecords() ? new intptr_t(action.GetMaxRecords()) : nullptr) 
+            , MaxRecords(action.GetMaxRecords() ? new intptr_t(action.GetMaxRecords()) : nullptr)
             , Records(0)
             , Probe(probe)
             , Log(log)
@@ -475,11 +475,11 @@ namespace NLWTrace {
             const TArgument& arg = op.GetArgument(argumentIdx);
             TArgumentDescription operand;
             operand.ParamIdx = size_t(-1);
-            if (arg.GetVariable()) { 
+            if (arg.GetVariable()) {
                 operand.Type = OT_VARIABLE;
-            } else if (arg.GetValue()) { 
+            } else if (arg.GetValue()) {
                 operand.Type = OT_LITERAL;
-            } else if (arg.GetParam()) { 
+            } else if (arg.GetParam()) {
                 operand.Type = OT_PARAMETER;
                 operand.ParamIdx = signature.FindParamIndex(arg.GetParam());
                 if (operand.ParamIdx == size_t(-1)) {
@@ -672,7 +672,7 @@ namespace NLWTrace {
             } else if (action.HasSleepAction()) {
                 if (destructiveActionsAllowed) {
                     const TSleepAction& sleepAction = action.GetSleepAction();
-                    if (sleepAction.GetNanoSeconds()) { 
+                    if (sleepAction.GetNanoSeconds()) {
                         ui64 nanoSeconds = sleepAction.GetNanoSeconds();
                         actExec.Reset(new NPrivate::TSleepActionExecutor(probe, nanoSeconds));
                     } else {
@@ -858,9 +858,9 @@ namespace NLWTrace {
         , Registry(registry)
         , StoreDuration(TDuration::MicroSeconds(query.GetLogDurationUs() * 11 / 10)) // +10% to try avoid truncation while reading multiple threads/traces
         , ReadDuration(TDuration::MicroSeconds(query.GetLogDurationUs()))
-        , CyclicLog(query.GetPerThreadLogSize() ? query.GetPerThreadLogSize() : 1000) 
+        , CyclicLog(query.GetPerThreadLogSize() ? query.GetPerThreadLogSize() : 1000)
         , DurationLog(StoreDuration)
-        , CyclicDepot(query.GetPerThreadLogSize() ? query.GetPerThreadLogSize() : 1000) 
+        , CyclicDepot(query.GetPerThreadLogSize() ? query.GetPerThreadLogSize() : 1000)
         , DurationDepot(StoreDuration)
         , LastTrackId(0)
         , LastSpanId(0)
@@ -879,7 +879,7 @@ namespace NLWTrace {
                     ythrow yexception() << "block #" << bi + 1 << " has no action";
                 }
                 const NProtoBuf::RepeatedPtrField<TAction>& actions = block.action();
-                if (pdesc.GetName() && pdesc.GetProvider()) { 
+                if (pdesc.GetName() && pdesc.GetProvider()) {
                     TProbeRegistry::TProbesAccessor probes(Registry);
                     bool found = false;
                     for (auto& kv : probes) {
@@ -894,7 +894,7 @@ namespace NLWTrace {
                         ythrow yexception() << "block #" << bi + 1 << " has no matching probe with name '"
                                             << pdesc.GetName() << "' provider '" << pdesc.GetProvider() << "'";
                     }
-                } else if (pdesc.GetGroup()) { 
+                } else if (pdesc.GetGroup()) {
                     bool found = false;
                     TProbeRegistry::TProbesAccessor probes(Registry);
                     for (auto& kv : probes) {

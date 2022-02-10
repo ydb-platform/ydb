@@ -2710,7 +2710,7 @@ void TSchemeShard::PersistBlockStoreVolumeMountToken(NIceDb::TNiceDb& db, TPathI
 {
     Y_VERIFY(IsLocalId(pathId));
     db.Table<Schema::BlockStoreVolumes>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::BlockStoreVolumes::MountToken>(volume->MountToken), 
+        NIceDb::TUpdate<Schema::BlockStoreVolumes::MountToken>(volume->MountToken),
         NIceDb::TUpdate<Schema::BlockStoreVolumes::TokenVersion>(volume->TokenVersion));
 }
 

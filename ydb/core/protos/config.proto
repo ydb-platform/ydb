@@ -287,7 +287,7 @@ message TLogConfig {
     optional string SysLogService = 11;
     optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
     optional TUAClientConfig UAClientConfig = 13;
-    optional uint64 TimeThresholdMs = 14 [default = 1000]; 
+    optional uint64 TimeThresholdMs = 14 [default = 1000];
 }
 
 message TCompileServiceConfig {

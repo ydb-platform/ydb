@@ -655,7 +655,7 @@ public:
         auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
         const auto& shard = context.SS->ShardInfos[shardIdx];
 
-        if (shard.TabletType == ETabletType::BlockStorePartition || 
+        if (shard.TabletType == ETabletType::BlockStorePartition ||
             shard.TabletType == ETabletType::BlockStorePartition2)
         {
             auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
@@ -713,8 +713,8 @@ public:
             }
         }
 
-        if (shard.TabletType == ETabletType::BlockStorePartition   || 
-            shard.TabletType == ETabletType::BlockStorePartition2 || 
+        if (shard.TabletType == ETabletType::BlockStorePartition   ||
+            shard.TabletType == ETabletType::BlockStorePartition2 ||
             shard.TabletType == ETabletType::RTMRPartition) {
             // Partitions should never be booted by local
             ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
@@ -1272,8 +1272,8 @@ public:
         }
 
         for (auto shard : txState->Shards) {
-            if (shard.TabletType == ETabletType::BlockStorePartition || 
-                shard.TabletType == ETabletType::BlockStorePartition2) { 
+            if (shard.TabletType == ETabletType::BlockStorePartition ||
+                shard.TabletType == ETabletType::BlockStorePartition2) {
                 continue;
             }
 

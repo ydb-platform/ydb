@@ -14,8 +14,8 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_enum_reflection.h>
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
- 
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
+
 #include <type_traits>
 
 namespace NLWTrace {
@@ -390,8 +390,8 @@ namespace NLWTrace {
         TParam Param[LWTRACE_MAX_PARAMS];
     };
 
-    using TSerializedParams = google::protobuf::RepeatedPtrField<NLWTrace::TTraceParam>; 
- 
+    using TSerializedParams = google::protobuf::RepeatedPtrField<NLWTrace::TTraceParam>;
+
     // Represents a common class for all function "signatures" (parameter types and names).
     // Provides non-virtual interface to handle the signature and (emulated) virtual interface to handle TParams corresponding to the signature
     struct TSignature {
@@ -403,8 +403,8 @@ namespace NLWTrace {
         void (*SerializeParamsFunc)(const TParams& params, TString* values);
         void (*CloneParamsFunc)(TParams& newParams, const TParams& oldParams);
         void (*DestroyParamsFunc)(TParams& params);
-        void (*SerializeToPbFunc)(const TParams& params, TSerializedParams& arr); 
-        bool (*DeserializeFromPbFunc)(TParams& params, const TSerializedParams& arr); 
+        void (*SerializeToPbFunc)(const TParams& params, TSerializedParams& arr);
+        bool (*DeserializeFromPbFunc)(TParams& params, const TSerializedParams& arr);
 
         // Virtual calls emulation
         void SerializeParams(const TParams& params, TString* values) const {
@@ -419,16 +419,16 @@ namespace NLWTrace {
             (*DestroyParamsFunc)(params);
         }
 
-        void SerializeToPb(const TParams& params, TSerializedParams& arr) const 
-        { 
-            (*SerializeToPbFunc)(params, arr); 
-        } 
- 
-        bool DeserializeFromPb(TParams& params, const TSerializedParams& arr) const 
-        { 
-            return (*DeserializeFromPbFunc)(params, arr); 
-        } 
- 
+        void SerializeToPb(const TParams& params, TSerializedParams& arr) const
+        {
+            (*SerializeToPbFunc)(params, arr);
+        }
+
+        bool DeserializeFromPb(TParams& params, const TSerializedParams& arr) const
+        {
+            return (*DeserializeFromPbFunc)(params, arr);
+        }
+
         void ToProtobuf(TEventPb& pb) const;
 
         size_t FindParamIndex(const TString& param) const {
@@ -564,118 +564,118 @@ namespace NLWTrace {
         }
     };
 
-    inline EParamTypePb ParamTypeToProtobuf(const char* paramType) { 
-#define FOREACH_PARAMTYPE_MACRO(n, t, v) \ 
-    if (strcmp(paramType, n) == 0) {     \ 
-        return PT_##v;                   \ 
-    }                                    \ 
-    /**/ 
-        FOREACH_PARAMTYPE(FOREACH_PARAMTYPE_MACRO) 
-#undef FOREACH_PARAMTYPE_MACRO 
-        return PT_UNKNOWN; 
-    } 
- 
-    template <typename T> 
-    inline void SaveParamToPb(TSerializedParams& msg, const TParam& param); 
- 
-    template <> 
-    inline void SaveParamToPb<TNil>(TSerializedParams& msg, const TParam& param) 
-    { 
-        Y_UNUSED(msg); 
-        Y_UNUSED(param); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<i64>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetIntValue(param.Get<typename TParamTraits<i64>::TStoreType>()); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<ui64>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetUintValue(param.Get<typename TParamTraits<ui64>::TStoreType>()); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<double>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetDoubleValue(param.Get<typename TParamTraits<double>::TStoreType>()); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<TString>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetStrValue(param.Get<typename TParamTraits<TString>::TStoreType>()); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<TSymbol>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetStrValue(*param.Get<typename TParamTraits<TSymbol>::TStoreType>().Str); 
-    } 
- 
-    template <> 
-    inline void SaveParamToPb<TCheck>(TSerializedParams& msg, const TParam& param) 
-    { 
-        msg.Add()->SetIntValue(param.Get<typename TParamTraits<TCheck>::TStoreType>().Value); 
-    } 
- 
-    template <typename T> 
-    inline void LoadParamFromPb(const TTraceParam& msg, TParam& param); 
- 
-    template <> 
-    inline void LoadParamFromPb<i64>(const TTraceParam& msg, TParam& param) 
-    { 
-        param.DefaultConstruct<i64>(); 
-        param.Get<i64>() = msg.GetIntValue(); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<ui64>(const TTraceParam& msg, TParam& param) 
-    { 
-        param.DefaultConstruct<ui64>(); 
-        param.Get<ui64>() = msg.GetUintValue(); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<double>(const TTraceParam& msg, TParam& param) 
-    { 
-        param.DefaultConstruct<double>(); 
-        param.Get<double>() = msg.GetDoubleValue(); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<TCheck>(const TTraceParam& msg, TParam& param) 
-    { 
-        param.CopyConstruct<TCheck>(TCheck(msg.GetIntValue())); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<TSymbol>(const TTraceParam& msg, TParam& param) 
-    { 
-        Y_UNUSED(msg); 
-        Y_UNUSED(param); 
-        static TString unsupported("unsupported"); 
-        // so far TSymbol deserialization is not supported 
-        // since it is not used for probes, it is ok 
-        param.CopyConstruct<TSymbol>(TSymbol(&unsupported)); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<TString>(const TTraceParam& msg, TParam& param) 
-    { 
-        param.DefaultConstruct<TString>(); 
-        param.Get<TString>() = msg.GetStrValue(); 
-    } 
- 
-    template <> 
-    inline void LoadParamFromPb<TNil>(const TTraceParam& msg, TParam& param) 
-    { 
-        Y_UNUSED(msg); 
-        Y_UNUSED(param); 
-    } 
- 
+    inline EParamTypePb ParamTypeToProtobuf(const char* paramType) {
+#define FOREACH_PARAMTYPE_MACRO(n, t, v) \
+    if (strcmp(paramType, n) == 0) {     \
+        return PT_##v;                   \
+    }                                    \
+    /**/
+        FOREACH_PARAMTYPE(FOREACH_PARAMTYPE_MACRO)
+#undef FOREACH_PARAMTYPE_MACRO
+        return PT_UNKNOWN;
+    }
+
+    template <typename T>
+    inline void SaveParamToPb(TSerializedParams& msg, const TParam& param);
+
+    template <>
+    inline void SaveParamToPb<TNil>(TSerializedParams& msg, const TParam& param)
+    {
+        Y_UNUSED(msg);
+        Y_UNUSED(param);
+    }
+
+    template <>
+    inline void SaveParamToPb<i64>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetIntValue(param.Get<typename TParamTraits<i64>::TStoreType>());
+    }
+
+    template <>
+    inline void SaveParamToPb<ui64>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetUintValue(param.Get<typename TParamTraits<ui64>::TStoreType>());
+    }
+
+    template <>
+    inline void SaveParamToPb<double>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetDoubleValue(param.Get<typename TParamTraits<double>::TStoreType>());
+    }
+
+    template <>
+    inline void SaveParamToPb<TString>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetStrValue(param.Get<typename TParamTraits<TString>::TStoreType>());
+    }
+
+    template <>
+    inline void SaveParamToPb<TSymbol>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetStrValue(*param.Get<typename TParamTraits<TSymbol>::TStoreType>().Str);
+    }
+
+    template <>
+    inline void SaveParamToPb<TCheck>(TSerializedParams& msg, const TParam& param)
+    {
+        msg.Add()->SetIntValue(param.Get<typename TParamTraits<TCheck>::TStoreType>().Value);
+    }
+
+    template <typename T>
+    inline void LoadParamFromPb(const TTraceParam& msg, TParam& param);
+
+    template <>
+    inline void LoadParamFromPb<i64>(const TTraceParam& msg, TParam& param)
+    {
+        param.DefaultConstruct<i64>();
+        param.Get<i64>() = msg.GetIntValue();
+    }
+
+    template <>
+    inline void LoadParamFromPb<ui64>(const TTraceParam& msg, TParam& param)
+    {
+        param.DefaultConstruct<ui64>();
+        param.Get<ui64>() = msg.GetUintValue();
+    }
+
+    template <>
+    inline void LoadParamFromPb<double>(const TTraceParam& msg, TParam& param)
+    {
+        param.DefaultConstruct<double>();
+        param.Get<double>() = msg.GetDoubleValue();
+    }
+
+    template <>
+    inline void LoadParamFromPb<TCheck>(const TTraceParam& msg, TParam& param)
+    {
+        param.CopyConstruct<TCheck>(TCheck(msg.GetIntValue()));
+    }
+
+    template <>
+    inline void LoadParamFromPb<TSymbol>(const TTraceParam& msg, TParam& param)
+    {
+        Y_UNUSED(msg);
+        Y_UNUSED(param);
+        static TString unsupported("unsupported");
+        // so far TSymbol deserialization is not supported
+        // since it is not used for probes, it is ok
+        param.CopyConstruct<TSymbol>(TSymbol(&unsupported));
+    }
+
+    template <>
+    inline void LoadParamFromPb<TString>(const TTraceParam& msg, TParam& param)
+    {
+        param.DefaultConstruct<TString>();
+        param.Get<TString>() = msg.GetStrValue();
+    }
+
+    template <>
+    inline void LoadParamFromPb<TNil>(const TTraceParam& msg, TParam& param)
+    {
+        Y_UNUSED(msg);
+        Y_UNUSED(param);
+    }
+
     // Class representing a specific signature
     template <LWTRACE_TEMPLATE_PARAMS>
     struct TUserSignature {
@@ -705,42 +705,42 @@ namespace NLWTrace {
             FOREACH_PARAMNUM(FOREACH_PARAMNUM_MACRO);
 #undef FOREACH_PARAMNUM_MACRO
         }
- 
-        // Implementation of virtual function (TSignature derived classes vtable emulation) 
-        inline static void SerializeToPb(const TParams& params, TSerializedParams& arr) 
-        { 
-#define FOREACH_PARAMNUM_MACRO(i)                                              \ 
-    SaveParamToPb<typename TParamTraits<TP##i>::TStoreType>(                   \ 
-        arr,                                                                   \ 
-        params.Param[i]);                                                      \ 
-// FOREACH_PARAMNUM_MACRO 
-            FOREACH_PARAMNUM(FOREACH_PARAMNUM_MACRO); 
-#undef FOREACH_PARAMNUM_MACRO 
-        } 
- 
-        // Implementation of virtual function (TSignature derived classes vtable emulation) 
-        inline static bool DeserializeFromPb(TParams& params, const TSerializedParams& arr) { 
-            if (arr.size() != ParamCount) { 
-                return false; 
-            } 
-            if (!ParamCount) { 
-                return true; 
-            } 
- 
-            int paramIdx = 0; 
-#define FOREACH_PARAMNUM_MACRO(i)                                              \ 
-    if (paramIdx >= arr.size()) {                                              \ 
-        return true;                                                           \ 
-    };                                                                         \ 
-    LoadParamFromPb<typename TParamTraits<TP##i>::TStoreType>(                 \ 
-        arr.Get(paramIdx),                                                     \ 
-        params.Param[paramIdx]);                                               \ 
-    ++paramIdx;                                                                \ 
-//  FOREACH_PARAMNUM_MACRO 
-            FOREACH_PARAMNUM(FOREACH_PARAMNUM_MACRO); 
-#undef FOREACH_PARAMNUM_MACRO 
-            return true; 
-        } 
+
+        // Implementation of virtual function (TSignature derived classes vtable emulation)
+        inline static void SerializeToPb(const TParams& params, TSerializedParams& arr)
+        {
+#define FOREACH_PARAMNUM_MACRO(i)                                              \
+    SaveParamToPb<typename TParamTraits<TP##i>::TStoreType>(                   \
+        arr,                                                                   \
+        params.Param[i]);                                                      \
+// FOREACH_PARAMNUM_MACRO
+            FOREACH_PARAMNUM(FOREACH_PARAMNUM_MACRO);
+#undef FOREACH_PARAMNUM_MACRO
+        }
+
+        // Implementation of virtual function (TSignature derived classes vtable emulation)
+        inline static bool DeserializeFromPb(TParams& params, const TSerializedParams& arr) {
+            if (arr.size() != ParamCount) {
+                return false;
+            }
+            if (!ParamCount) {
+                return true;
+            }
+
+            int paramIdx = 0;
+#define FOREACH_PARAMNUM_MACRO(i)                                              \
+    if (paramIdx >= arr.size()) {                                              \
+        return true;                                                           \
+    };                                                                         \
+    LoadParamFromPb<typename TParamTraits<TP##i>::TStoreType>(                 \
+        arr.Get(paramIdx),                                                     \
+        params.Param[paramIdx]);                                               \
+    ++paramIdx;                                                                \
+//  FOREACH_PARAMNUM_MACRO
+            FOREACH_PARAMNUM(FOREACH_PARAMNUM_MACRO);
+#undef FOREACH_PARAMNUM_MACRO
+            return true;
+        }
     };
 
     // Array of static strings pointers for names of parameter types in a specific signature

@@ -131,7 +131,7 @@ RECURSE(
     lang_detect
     lbfgs
     lcms2
-    lepton 
+    lepton
     leveldb
     libarchive
     libbpf

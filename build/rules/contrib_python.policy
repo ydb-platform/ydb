@@ -108,12 +108,12 @@ DENY .* -> contrib/libs/sophos
 # to start new projects on Py3
 ALLOW contrib/python/backports.tempfile ->  contrib/python/backports.weakref
 DENY .* ->  contrib/python/backports.weakref
- 
-ALLOW contrib/python/thrift/tests -> contrib/python/thrift 
-ALLOW contrib/python/jaeger-client -> contrib/python/thrift 
+
+ALLOW contrib/python/thrift/tests -> contrib/python/thrift
+ALLOW contrib/python/jaeger-client -> contrib/python/thrift
 ALLOW search/mon/wabbajack/libs/generated/iss3 -> contrib/python/thrift
 ALLOW search/mon/wabbajack/libs/modlib/api_wrappers/casher -> contrib/python/thrift
-DENY .* -> contrib/python/thrift 
+DENY .* -> contrib/python/thrift
 
 ALLOW antiadblock/libs/tornado_redis -> contrib/python/toredis
 ALLOW yabs/amazon/cache_proxy -> contrib/python/toredis

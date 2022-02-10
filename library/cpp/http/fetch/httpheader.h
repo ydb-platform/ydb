@@ -79,7 +79,7 @@ public:
 
 public:
     void Init() {
-        error = 0;
+        error = 0; 
         header_size = 0;
         entity_size = 0;
         content_length = -1;
@@ -90,9 +90,9 @@ public:
         compression_method = HTTP_COMPRESSION_UNSET;
         transfer_chunked = -1;
         connection_closed = HTTP_CONNECTION_UNDEFINED;
-        content_range_start = -1;
-        content_range_end = -1;
-        content_range_entity_length = -1;
+        content_range_start = -1; 
+        content_range_end = -1; 
+        content_range_entity_length = -1; 
         base.clear();
     }
 
@@ -153,7 +153,7 @@ public:
         retry_after = DEFAULT_RETRY_AFTER;
         x_robots_state = "xxxxx";
     }
-
+ 
     void Print() const {
         THttpBaseHeader::Print();
         printf("http_status: %" PRIi16 "\n", http_status);

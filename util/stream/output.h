@@ -290,9 +290,9 @@ static inline void Endl(IOutputStream& o) {
  * Flushing stream manipulator, basically the same as `std::flush`.
  */
 static inline void Flush(IOutputStream& o) {
-    o.Flush();
-}
-
+    o.Flush(); 
+} 
+ 
 /*
  * Also see format.h for additional manipulators.
  */

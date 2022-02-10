@@ -10,8 +10,8 @@
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/str_stl.h>
-#include <util/ysaveload.h>
-
+#include <util/ysaveload.h> 
+ 
 namespace NBitMapPrivate {
     // Returns number of bits set; result is in most significatnt byte
     inline ui64 ByteSums(ui64 x) {
@@ -275,7 +275,7 @@ namespace NBitMapPrivate {
             }
             return true;
         }
-
+ 
         Y_FORCE_INLINE bool ExpandBitSize(size_t bitSize, bool keepData = true) {
             return ExpandSize((bitSize + 8 * sizeof(TChunk) - 1) / (8 * sizeof(TChunk)), keepData);
         }
@@ -509,7 +509,7 @@ public:
     }
 
     Y_FORCE_INLINE TReference operator[](size_t pos) {
-        const bool fitStorage = Mask.ExpandBitSize(pos + 1);
+        const bool fitStorage = Mask.ExpandBitSize(pos + 1); 
         Y_ASSERT(fitStorage);
         return TReference(&Mask.Data[pos >> DivCount], ModMask & pos);
     }
@@ -519,7 +519,7 @@ public:
     }
 
     Y_FORCE_INLINE TThis& Set(size_t pos) {
-        const bool fitStorage = Mask.ExpandBitSize(pos + 1);
+        const bool fitStorage = Mask.ExpandBitSize(pos + 1); 
         Y_ASSERT(fitStorage);
         Mask.Data[pos >> DivCount] |= static_cast<TChunk>(1) << (pos & ModMask);
         return *this;
@@ -552,7 +552,7 @@ public:
     }
 
     Y_FORCE_INLINE TThis& Flip(size_t pos) {
-        const bool fitStorage = Mask.ExpandBitSize(pos + 1);
+        const bool fitStorage = Mask.ExpandBitSize(pos + 1); 
         Y_ASSERT(fitStorage);
         Mask.Data[pos >> DivCount] ^= static_cast<TChunk>(1) << (pos & ModMask);
         return *this;
@@ -617,8 +617,8 @@ public:
 
     Y_FORCE_INLINE void Reserve(size_t bitCount) {
         Y_VERIFY(Mask.ExpandBitSize(bitCount), "Exceeding bitmap storage capacity");
-    }
-
+    } 
+ 
     Y_FORCE_INLINE size_t ValueBitCount() const {
         size_t nonZeroChunk = Mask.GetChunkCapacity() - 1;
         while (nonZeroChunk != 0 && !Mask.Data[nonZeroChunk])
@@ -722,7 +722,7 @@ public:
     }
 
     TThis& Xor(const TThis& bitmap) {
-        Reserve(bitmap.Size());
+        Reserve(bitmap.Size()); 
         for (size_t i = 0; i < bitmap.Mask.GetChunkCapacity(); ++i)
             Mask.Data[i] ^= bitmap.Mask.Data[i];
         return *this;
@@ -957,34 +957,34 @@ public:
             count += ::NBitMapPrivate::CountBitsPrivate(Mask.Data[i]);
         return count;
     }
-
+ 
     void Save(IOutputStream* out) const {
-        ::Save(out, ui8(sizeof(TChunk)));
-        ::Save(out, ui64(Size()));
-        ::SavePodArray(out, Mask.Data, Mask.GetChunkCapacity());
-    }
-
+        ::Save(out, ui8(sizeof(TChunk))); 
+        ::Save(out, ui64(Size())); 
+        ::SavePodArray(out, Mask.Data, Mask.GetChunkCapacity()); 
+    } 
+ 
     void Load(IInputStream* inp) {
-        ui8 chunkSize = 0;
-        ::Load(inp, chunkSize);
+        ui8 chunkSize = 0; 
+        ::Load(inp, chunkSize); 
         Y_VERIFY(size_t(chunkSize) == sizeof(TChunk), "Chunk size is not the same");
-
-        ui64 bitCount64 = 0;
-        ::Load(inp, bitCount64);
-        size_t bitCount = size_t(bitCount64);
-        Reserve(bitCount);
-
-        size_t chunkCount = 0;
-        if (bitCount > 0) {
-            chunkCount = ((bitCount - 1) >> DivCount) + 1;
-            ::LoadPodArray(inp, Mask.Data, chunkCount);
-        }
-
-        if (chunkCount < Mask.GetChunkCapacity()) {
-            ::memset(Mask.Data + chunkCount, 0, (Mask.GetChunkCapacity() - chunkCount) * sizeof(TChunk));
-        }
+ 
+        ui64 bitCount64 = 0; 
+        ::Load(inp, bitCount64); 
+        size_t bitCount = size_t(bitCount64); 
+        Reserve(bitCount); 
+ 
+        size_t chunkCount = 0; 
+        if (bitCount > 0) { 
+            chunkCount = ((bitCount - 1) >> DivCount) + 1; 
+            ::LoadPodArray(inp, Mask.Data, chunkCount); 
+        } 
+ 
+        if (chunkCount < Mask.GetChunkCapacity()) { 
+            ::memset(Mask.Data + chunkCount, 0, (Mask.GetChunkCapacity() - chunkCount) * sizeof(TChunk)); 
+        } 
         Mask.Sanitize();
-    }
+    } 
 
     inline size_t Hash() const {
         THash<TChunk> chunkHasher;

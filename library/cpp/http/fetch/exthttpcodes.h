@@ -109,8 +109,8 @@ enum ExtHttpCodes {
 
     EXT_HTTP_FASTHOPS = 4000,
     EXT_HTTP_NODOC = 4001,
-
-    EXT_HTTP_MAX
+ 
+    EXT_HTTP_MAX 
 };
 
 enum HttpFlags {

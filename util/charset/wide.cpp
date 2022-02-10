@@ -602,9 +602,9 @@ void EscapeHtmlChars(TUtf16String& str) {
             case '&':
                 ent = &amp;
                 break;
-            case '\"':
-                ent = &quot;
-                break;
+            case '\"': 
+                ent = &quot; 
+                break; 
             default:
                 if (insertBr && (cs[i] == '\r' || cs[i] == '\n')) {
                     ent = &br;

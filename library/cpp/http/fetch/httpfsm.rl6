@@ -154,18 +154,18 @@ action set_content_length { setguarded(base_hd->content_length, I); }
 
 content_length  = "content-length"i def %beg_content_length int eoh %set_content_length;
 
-################# content-range ###################
+################# content-range ################### 
 action beg_content_range_start { guard(base_hd->content_range_start); I = -1; }
 action set_content_range_start { setguarded(base_hd->content_range_start, I); }
 action beg_content_range_end { guard(base_hd->content_range_end); I = -1; }
 action set_content_range_end { setguarded(base_hd->content_range_end, I); }
 action beg_content_range_el { guard(base_hd->content_range_entity_length); I = -1; }
 action set_content_range_el { setguarded(base_hd->content_range_entity_length, I); }
-
+ 
 content_range   = "content-range"i def "bytes"i sp %beg_content_range_start int '-' %set_content_range_start
                                                    %beg_content_range_end int '/' %set_content_range_end
                                                    %beg_content_range_el int eoh %set_content_range_el;
-
+ 
 ################# accept-ranges ###################
 action beg_accept_ranges {
     if (hd) {

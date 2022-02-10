@@ -31,10 +31,10 @@ PEERDIR(
     library/python/fs
 )
 
-IF (NOT CATBOOST_OPENSOURCE)
-    PEERDIR(
-        library/python/coredump_filter
-    )
-ENDIF()
-
+IF (NOT CATBOOST_OPENSOURCE) 
+    PEERDIR( 
+        library/python/coredump_filter 
+    ) 
+ENDIF() 
+ 
 END()

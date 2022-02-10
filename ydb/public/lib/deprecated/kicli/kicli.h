@@ -273,11 +273,11 @@ public:
         FacilityMsgBusProxy,
     };
 
-    TError() = default;
+    TError() = default; 
     TError(TError&&) = default;
-    TError(const TError&) = default;
+    TError(const TError&) = default; 
     TError& operator = (TError&&) = default;
-    TError& operator = (const TError&) = default;
+    TError& operator = (const TError&) = default; 
 
     bool Success() const;
     bool Error() const { return !Success(); }

@@ -796,7 +796,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             str << " Generation mismatch! Requested# " << intermediate->Generation;
             str << " Actual# " << StoredState.GetUserGeneration();
             str << " Marker# KV17";
-            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str());
+            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str()); 
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED);
             intermediate->Response.SetErrorReason(str.Str());
@@ -827,7 +827,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             str << " Writes# " << intermediate->Writes.size();
             str << " GetStatuses# " << intermediate->GetStatuses.size();
             str << " CopyRanges# " << intermediate->CopyRanges.size();
-            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str());
+            LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, str.Str()); 
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_INTERNALERROR);
             intermediate->Response.SetErrorReason(str.Str());
@@ -2536,7 +2536,7 @@ TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransacti
 void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info) {
-    LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
+    LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription); 
     Y_VERIFY(!intermediate->IsReplied);
     THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
     if (intermediate->HasCookie) {

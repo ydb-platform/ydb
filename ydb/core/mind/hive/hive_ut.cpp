@@ -27,7 +27,7 @@
 #include <util/stream/null.h>
 #include <util/string/printf.h>
 #include <util/string/subst.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -408,17 +408,17 @@ namespace {
 
 void FormatPDiskForTest(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
-    NPDisk::TKey chunkKey;
-    NPDisk::TKey logKey;
-    NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    NPDisk::TKey chunkKey; 
+    NPDisk::TKey logKey; 
+    NPDisk::TKey sysLogKey; 
+    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey)); 
+    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey)); 
+    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey)); 
 
-    NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
+    NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, 
         chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
-}
-
+} 
+ 
 void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {
     auto evTx = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, TTestTxConfig::SchemeShard);
     auto transaction = evTx->Record.AddTransaction();
@@ -473,22 +473,22 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return st_dev;
     }
 
-    template <typename KeyType, typename ValueType>
+    template <typename KeyType, typename ValueType> 
     static ValueType GetMinMaxDiff(const THashMap<KeyType, ValueType>& values) {
-        ValueType minVal = std::numeric_limits<ValueType>::max();
-        ValueType maxVal = std::numeric_limits<ValueType>::min();
-
-        if (values.empty()) {
-            return std::numeric_limits<ValueType>::max();
-        }
-
-        for (const auto& v : values) {
-            minVal = std::min(minVal, v.second);
-            maxVal = std::max(maxVal, v.second);
-        }
-        return maxVal - minVal;
-    }
-
+        ValueType minVal = std::numeric_limits<ValueType>::max(); 
+        ValueType maxVal = std::numeric_limits<ValueType>::min(); 
+ 
+        if (values.empty()) { 
+            return std::numeric_limits<ValueType>::max(); 
+        } 
+ 
+        for (const auto& v : values) { 
+            minVal = std::min(minVal, v.second); 
+            maxVal = std::max(maxVal, v.second); 
+        } 
+        return maxVal - minVal; 
+    } 
+ 
     void SendToLocal(TTestActorRuntime &runtime, ui32 nodeIndex, IEventBase* event) {
         TActorId local = MakeLocalID(runtime.GetNodeId(nodeIndex));
         runtime.Send(new IEventHandle(local, TActorId(), event), nodeIndex);
@@ -2878,7 +2878,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         static const int NUM_TABLETS = NUM_NODES * 3;
         TTestBasicRuntime runtime(NUM_NODES, false);
         Setup(runtime, true);
-        const int nodeBase = runtime.GetNodeId(0);
+        const int nodeBase = runtime.GetNodeId(0); 
         TActorId senderA = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2924,8 +2924,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 }
             }
             auto mmElements = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
-            UNIT_ASSERT_VALUES_EQUAL(mmElements.first, nodeTablets.begin());
-            UNIT_ASSERT_VALUES_EQUAL(mmElements.second, nodeTablets.end() - 1);
+            UNIT_ASSERT_VALUES_EQUAL(mmElements.first, nodeTablets.begin()); 
+            UNIT_ASSERT_VALUES_EQUAL(mmElements.second, nodeTablets.end() - 1); 
         }
 
         THashMap<ui64, ui64> tabletMetrics;
@@ -2971,8 +2971,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 }
             }
             auto mmElements = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
-            UNIT_ASSERT_VALUES_EQUAL(1, *mmElements.first);
-            UNIT_ASSERT_VALUES_EQUAL(7, *mmElements.second);
+            UNIT_ASSERT_VALUES_EQUAL(1, *mmElements.first); 
+            UNIT_ASSERT_VALUES_EQUAL(7, *mmElements.second); 
         }
 
         // creating NUM_TABLETS more tablets (with empty metrics)

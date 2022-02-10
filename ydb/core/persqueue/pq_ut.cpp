@@ -10,15 +10,15 @@
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/security/ticket_parser.h>
-
+ 
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/sanitizers.h>
-#include <util/system/valgrind.h>
-
+#include <util/system/sanitizers.h> 
+#include <util/system/valgrind.h> 
+ 
 
 namespace NKikimr {
 Y_UNIT_TEST_SUITE(TPQTest) {
@@ -1126,7 +1126,7 @@ Y_UNIT_TEST(TestWritePQ) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc); //important client, lifetimeseconds=0 - never delete
 
         TVector<std::pair<ui64, TString>> data, data1, data2;
-        activeZone = PlainOrSoSlow(true, false);
+        activeZone = PlainOrSoSlow(true, false); 
 
         TString ss{1024*1024, '_'};
         TString s1{131072, 'a'};
@@ -1190,7 +1190,7 @@ Y_UNIT_TEST(TestWritePQ) {
 
         data1.clear();
         data1.push_back({1, TString{200, 'a'}});
-        for (ui32 i = 1; i <= NUM_WRITES; ++i) {
+        for (ui32 i = 1; i <= NUM_WRITES; ++i) { 
             data1.front().first = i;
             CmdWrite(1, "sourceidx", data1, tc, false, {}, false, "", -1);
         }
@@ -1334,8 +1334,8 @@ Y_UNIT_TEST(TestWriteSplit) {
         const ui32 size  = PlainOrSoSlow(2*1024*1024, 1*1024*1024);
 
         TVector<std::pair<ui64, TString>> data;
-        data.push_back({1, TString{size, 'b'}});
-        data.push_back({2, TString{size, 'a'}});
+        data.push_back({1, TString{size, 'b'}}); 
+        data.push_back({2, TString{size, 'a'}}); 
         activeZone = PlainOrSoSlow(true, false);
         CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 40000);
         RestartTablet(tc);
@@ -1395,7 +1395,7 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
         PQTabletPrepare(11, 100 * 1024 * 1024, 0, {}, tc);
 
         TVector<std::pair<ui64, TString>> data;
-        activeZone = PlainOrSoSlow(true, false);
+        activeZone = PlainOrSoSlow(true, false); 
 
         TString s{32, 'c'};
         ui32 pp = 8 + 4 + 2 + 9;
@@ -1628,7 +1628,7 @@ Y_UNIT_TEST(TestSetClientOffset) {
         CmdSetOffset(0, "user1", 100, false, tc); //must be true , error
         CmdGetOffset(0, "user1", 0, tc); // must be -1
 
-        activeZone = PlainOrSoSlow(true, false);
+        activeZone = PlainOrSoSlow(true, false); 
 
         CmdSetOffset(0, "user1", 0, false, tc);
         CmdGetOffset(0, "user1", 0, tc);
@@ -1658,7 +1658,7 @@ Y_UNIT_TEST(TestReadSessions) {
         CmdSetOffset(0, "user1", 0, false, tc, "session1"); //all ok - session is set
         CmdSetOffset(0, "user1", 0, true, tc, "other_session"); //fails - session1 is active
 
-        activeZone = PlainOrSoSlow(true, false);
+        activeZone = PlainOrSoSlow(true, false); 
 
         CmdSetOffset(0, "user1", 0, false, tc, "session1");
 

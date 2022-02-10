@@ -15,12 +15,12 @@ class TMessageBusKeyValue
     using TBase = TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST>;
 public:
     NKikimrClient::TKeyValueRequest RequestProto;
-    ui64 TabletId;
+    ui64 TabletId; 
 
     TMessageBusKeyValue(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout)
         : TBase(msg, tabletId, withRetry, timeout, false)
         , RequestProto(static_cast<TBusKeyValue *>(msg.GetMessage())->Record)
-        , TabletId(tabletId)
+        , TabletId(tabletId) 
     {}
 
     void Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
@@ -36,25 +36,25 @@ public:
         request->Record = RequestProto;
         return request.Release();
     }
-
-     NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
+ 
+     NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx, 
             const TString& text = TString()) override {
-        LOG_WARN_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TMessageBusKeyValue TabletId# " << TabletId
-            << " status# " << status << " text# \"" << text << "\" Marker# MBKV2" << Endl);
-
+        LOG_WARN_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TMessageBusKeyValue TabletId# " << TabletId 
+            << " status# " << status << " text# \"" << text << "\" Marker# MBKV2" << Endl); 
+ 
         TAutoPtr<ResponseType> response(new ResponseType());
-        response->Record.SetStatus(status);
-        if (text) {
+        response->Record.SetStatus(status); 
+        if (text) { 
             response->Record.SetErrorReason(text);
-        } else {
-            TStringStream str;
-            str << "TMessageBusKeyValue unknown error, TabletId# " << TabletId;
-            str << " status# " << status;
-            str << " Marker# MBKV1" << Endl;
+        } else { 
+            TStringStream str; 
+            str << "TMessageBusKeyValue unknown error, TabletId# " << TabletId; 
+            str << " status# " << status; 
+            str << " Marker# MBKV1" << Endl; 
             response->Record.SetErrorReason(str.Str());
-        }
-        return response.Release();
-    }
+        } 
+        return response.Release(); 
+    } 
 };
 
 IActor* CreateMessageBusKeyValue(NKikimr::NMsgBusProxy::TBusMessageContext &msg) {

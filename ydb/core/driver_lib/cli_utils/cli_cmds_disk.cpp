@@ -13,14 +13,14 @@ public:
     {}
 
     bool IsVerbose;
-    bool LockDevice;
+    bool LockDevice; 
     ui64 MainKey;
     TString Path;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         IsVerbose = false;
-        LockDevice = false;
+        LockDevice = false; 
         MainKey = 0;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Disk path");
@@ -30,8 +30,8 @@ public:
             .Optional().StoreResult(&MainKey); // TODO: remove after migration
         config.Opts->AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
             .SetFlag(&IsVerbose);
-        config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional().NoArgument()
-            .SetFlag(&LockDevice);
+        config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional().NoArgument() 
+            .SetFlag(&LockDevice); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -88,10 +88,10 @@ public:
             }
             return 0;
         } else {
-            Cerr << "Could not read disk format info"
-                << " Path = " << Path
-                << " ErrorReason = " << info.ErrorReason
-                << Endl;
+            Cerr << "Could not read disk format info" 
+                << " Path = " << Path 
+                << " ErrorReason = " << info.ErrorReason 
+                << Endl; 
             return 1;
         }
     }

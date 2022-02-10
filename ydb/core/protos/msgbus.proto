@@ -28,25 +28,25 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 
 import "google/protobuf/descriptor.proto";
-
+ 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEnumValueHint {
-    message TEntry {
-        optional uint64 Value = 1;
-        optional string Name = 2;
-        optional string Man  = 3;
-    }
-
-    repeated TEntry Hints = 1;
-}
-
-extend google.protobuf.FieldOptions {
-    optional TEnumValueHint EnumValueHint = 70001;
-    optional string CommonDescription = 70002;
-}
-
+message TEnumValueHint { 
+    message TEntry { 
+        optional uint64 Value = 1; 
+        optional string Name = 2; 
+        optional string Man  = 3; 
+    } 
+ 
+    repeated TEntry Hints = 1; 
+} 
+ 
+extend google.protobuf.FieldOptions { 
+    optional TEnumValueHint EnumValueHint = 70001; 
+    optional string CommonDescription = 70002; 
+} 
+ 
 message TMsgBusRequestBase {
     optional uint32 ServerTimeoutMs = 1;
 }
@@ -63,7 +63,7 @@ message TFlatTxId {
     optional fixed64 SchemeShardTabletId = 2;
     optional uint64 PathId = 3;
 };
-
+ 
 message TResolveNodeResponse {
     optional string Host = 1;
     optional uint32 NodeId = 2;
@@ -71,92 +71,92 @@ message TResolveNodeResponse {
 
 // must start from TResponseBase
 message TResponse {
-    optional uint32 Status = 1 [
-        (CommonDescription) = "Generic msgbus status",
-        (EnumValueHint) = { Hints : [
-            {Value: 0 Name: "MSTATUS_UNKNOWN" Man: "Status unknown, must not be seen" },
-            {Value: 1 Name: "MSTATUS_OK" Man: "Request complete with full success" },
-            {Value: 128 Name: "MSTATUS_ERROR" Man: "Request failed because of client-side error" },
-            {Value: 129 Name: "MSTATUS_INPROGRESS" Man: "Request accepted and in progress" },
-            {Value: 130 Name: "MSTATUS_TIMEOUT" Man: "Request failed due to timeout, exact status unknown" },
-            {Value: 131 Name: "MSTATUS_NOTREADY" Man: "Not yet ready to process requests, try later" },
-            {Value: 132 Name: "MSTATUS_ABORTED" Man: "Request aborted, particular meaning depends on context" },
-            {Value: 133 Name: "MSTATUS_INTERNALERROR" Man: "Something unexpected happend on server-side" },
-            {Value: 134 Name: "MSTATUS_REJECTED" Man: "Request rejected for now, try later" }
-        ]}
+    optional uint32 Status = 1 [ 
+        (CommonDescription) = "Generic msgbus status", 
+        (EnumValueHint) = { Hints : [ 
+            {Value: 0 Name: "MSTATUS_UNKNOWN" Man: "Status unknown, must not be seen" }, 
+            {Value: 1 Name: "MSTATUS_OK" Man: "Request complete with full success" }, 
+            {Value: 128 Name: "MSTATUS_ERROR" Man: "Request failed because of client-side error" }, 
+            {Value: 129 Name: "MSTATUS_INPROGRESS" Man: "Request accepted and in progress" }, 
+            {Value: 130 Name: "MSTATUS_TIMEOUT" Man: "Request failed due to timeout, exact status unknown" }, 
+            {Value: 131 Name: "MSTATUS_NOTREADY" Man: "Not yet ready to process requests, try later" }, 
+            {Value: 132 Name: "MSTATUS_ABORTED" Man: "Request aborted, particular meaning depends on context" }, 
+            {Value: 133 Name: "MSTATUS_INTERNALERROR" Man: "Something unexpected happend on server-side" }, 
+            {Value: 134 Name: "MSTATUS_REJECTED" Man: "Request rejected for now, try later" } 
+        ]} 
     ]; // EResponseStatus from ydb/core/client/base/msgbus.h
-
+ 
     optional string ErrorReason = 400; // When present contains human-readable error description  (aka ProtobufError)
 
     optional fixed64 TxId = 2;
     optional fixed64 Step = 3;
     optional fixed64 TabletId = 4;
-
-    optional uint32 ProxyErrorCode = 5 [
-        (CommonDescription) = "Transaction proxy processing status",
-        (EnumValueHint) = { Hints : [
-            {Value: 0 Name: "Unknown" Man: "Status unknown, must not be seen" },
+ 
+    optional uint32 ProxyErrorCode = 5 [ 
+        (CommonDescription) = "Transaction proxy processing status", 
+        (EnumValueHint) = { Hints : [ 
+            {Value: 0 Name: "Unknown" Man: "Status unknown, must not be seen" }, 
             {Value: 1 Name: "WrongRequest" Man: "Not recognized or erroneous request, see error description fields for possible details" },
-            {Value: 2 Name: "EmptyAffectedSet" Man: "Program must touch at least one shard but touches none" },
-            {Value: 3 Name: "NotImplemented" Man: "Not yet implemented feature requested" },
-            {Value: 4 Name: "ResolveError" Man: "Some keys not resolved, see UnresolvedKeys for details" },
+            {Value: 2 Name: "EmptyAffectedSet" Man: "Program must touch at least one shard but touches none" }, 
+            {Value: 3 Name: "NotImplemented" Man: "Not yet implemented feature requested" }, 
+            {Value: 4 Name: "ResolveError" Man: "Some keys not resolved, see UnresolvedKeys for details" }, 
             {Value: 5 Name: "AccessDenied" Man: "Access denied for request" },
             {Value: 6 Name: "DomainLocalityError" Man: "Cross database transactions not allowed"},
             {Value: 16 Name: "ProxyNotReady" Man: "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s" },
-            {Value: 17 Name: "ProxyAccepted" Man: "Request accepted by proxy. Transitional status" },
-            {Value: 18 Name: "ProxyResolved" Man: "Request keys resolved to datashards. Transitional status" },
-            {Value: 19 Name: "ProxyPrepared" Man: "Request fragmets prepared on datashards. Transitional status" },
-            {Value: 20 Name: "ProxyShardNotAvailable" Man: "One or more of affected datashards not available, request execution cancelled" },
-            {Value: 21 Name: "ProxyShardTryLater" Man: "One or more of affected datashards are starting, try again" },
-            {Value: 22 Name: "ProxyShardOverloaded" Man: "One or more of affected datashards are overloaded, try again" },
+            {Value: 17 Name: "ProxyAccepted" Man: "Request accepted by proxy. Transitional status" }, 
+            {Value: 18 Name: "ProxyResolved" Man: "Request keys resolved to datashards. Transitional status" }, 
+            {Value: 19 Name: "ProxyPrepared" Man: "Request fragmets prepared on datashards. Transitional status" }, 
+            {Value: 20 Name: "ProxyShardNotAvailable" Man: "One or more of affected datashards not available, request execution cancelled" }, 
+            {Value: 21 Name: "ProxyShardTryLater" Man: "One or more of affected datashards are starting, try again" }, 
+            {Value: 22 Name: "ProxyShardOverloaded" Man: "One or more of affected datashards are overloaded, try again" }, 
             {Value: 23 Name: "ProxyShardUnknown" Man: "State of transaction on one or more datashards is unknown" },
-            {Value: 32 Name: "CoordinatorDeclined" Man: "Coordinator declines to plan transaction, try again" },
-            {Value: 33 Name: "CoordinatorOutdated" Man: "Coordinator was not able to plan transaction due to timing restrictions, try again" },
-            {Value: 34 Name: "CoordinatorAborted" Man: "Transaction aborted by coordinator" },
-            {Value: 35 Name: "CoordinatorPlanned" Man: "Transaction planned for execution by coordinator. Transitional status" },
-            {Value: 36 Name: "CoordinatorUnknown" Man: "Could not reach coordinator or coordinator pipe dropped before confirmation. Transaction status unknown" },
-            {Value: 48 Name: "ExecComplete" Man: "Success" },
-            {Value: 49 Name: "ExecAlready" Man: "Requested operation already applied" },
-            {Value: 50 Name: "ExecAborted" Man: "Request aborted, particular meaning depends on context" },
-            {Value: 51 Name: "ExecTimeout" Man: "Proxy got no execution reply in timeout period" },
-            {Value: 52 Name: "ExecError" Man: "Execution failed" },
+            {Value: 32 Name: "CoordinatorDeclined" Man: "Coordinator declines to plan transaction, try again" }, 
+            {Value: 33 Name: "CoordinatorOutdated" Man: "Coordinator was not able to plan transaction due to timing restrictions, try again" }, 
+            {Value: 34 Name: "CoordinatorAborted" Man: "Transaction aborted by coordinator" }, 
+            {Value: 35 Name: "CoordinatorPlanned" Man: "Transaction planned for execution by coordinator. Transitional status" }, 
+            {Value: 36 Name: "CoordinatorUnknown" Man: "Could not reach coordinator or coordinator pipe dropped before confirmation. Transaction status unknown" }, 
+            {Value: 48 Name: "ExecComplete" Man: "Success" }, 
+            {Value: 49 Name: "ExecAlready" Man: "Requested operation already applied" }, 
+            {Value: 50 Name: "ExecAborted" Man: "Request aborted, particular meaning depends on context" }, 
+            {Value: 51 Name: "ExecTimeout" Man: "Proxy got no execution reply in timeout period" }, 
+            {Value: 52 Name: "ExecError" Man: "Execution failed" }, 
             {Value: 53 Name: "ExecInProgress" Man: "Request accepted and now runs" },
             {Value: 55 Name: "ExecResultUnavailable" Man: "Execution results unavailable" },
             {Value: 56 Name: "ExecCancelled" Man: "Execution was cancelled" }
-        ]}
-    ]; // see tx_proxy.h - TResultStatus::EStatus
-
+        ]} 
+    ]; // see tx_proxy.h - TResultStatus::EStatus 
+ 
     optional bytes ProxyErrors = 6;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
 
-    optional uint32 ExecutionEngineStatus = 100 [
-        (CommonDescription) = "MiniKQL engine processing status, if OK - see ExecutionEngineResponseStatus",
-        (EnumValueHint) = { Hints : [
-            {Value: 0 Name: "Unknown" Man: "Status unknown, not filled probably" },
-            {Value: 1 Name: "Ok" Man: "Success" },
-            {Value: 2 Name: "SchemeChanged" Man: "Scheme or partitioning was changed b/w compilation and preparation" },
-            {Value: 3 Name: "IsReadonly" Man: "Update requested in read-only operation" },
-            {Value: 4 Name: "KeyError" Man: "Something wrong in data keys" },
-            {Value: 5 Name: "ProgramError" Man: "Malformed program" },
-            {Value: 6 Name: "TooManyShards" Man: "Too much datashards affected program" },
-            {Value: 7 Name: "TooManyData" Man: "Too much data affected by program" },
-            {Value: 8 Name: "SnapshotNotExist" Man: "Requested snapshot not exist" },
-            {Value: 9 Name: "SnapshotNotReady" Man: "Snapshot not online" }
-        ]}
-    ]; // Last operation status: see NMiniKql::IEngine::EResult.
-
-    optional uint32 ExecutionEngineResponseStatus = 101 [
-        (CommonDescription) = "MiniKQL engine execution status",
-        (EnumValueHint) = { Hints : [
-            {Value: 0 Name: "Unknown" Man: "Status unknown, not filled probably" },
-            {Value: 1 Name: "Error" Man: "Error" },
-            {Value: 2 Name: "Complete" Man: "Complete with success" },
-            {Value: 3 Name: "Abort" Man: "Complete with abort" }
-        ]}
-    ];  // Program "exit code": see NMiniKQL::IEngine::EStatus.
-
+    optional uint32 ExecutionEngineStatus = 100 [ 
+        (CommonDescription) = "MiniKQL engine processing status, if OK - see ExecutionEngineResponseStatus", 
+        (EnumValueHint) = { Hints : [ 
+            {Value: 0 Name: "Unknown" Man: "Status unknown, not filled probably" }, 
+            {Value: 1 Name: "Ok" Man: "Success" }, 
+            {Value: 2 Name: "SchemeChanged" Man: "Scheme or partitioning was changed b/w compilation and preparation" }, 
+            {Value: 3 Name: "IsReadonly" Man: "Update requested in read-only operation" }, 
+            {Value: 4 Name: "KeyError" Man: "Something wrong in data keys" }, 
+            {Value: 5 Name: "ProgramError" Man: "Malformed program" }, 
+            {Value: 6 Name: "TooManyShards" Man: "Too much datashards affected program" }, 
+            {Value: 7 Name: "TooManyData" Man: "Too much data affected by program" }, 
+            {Value: 8 Name: "SnapshotNotExist" Man: "Requested snapshot not exist" }, 
+            {Value: 9 Name: "SnapshotNotReady" Man: "Snapshot not online" } 
+        ]} 
+    ]; // Last operation status: see NMiniKql::IEngine::EResult. 
+ 
+    optional uint32 ExecutionEngineResponseStatus = 101 [ 
+        (CommonDescription) = "MiniKQL engine execution status", 
+        (EnumValueHint) = { Hints : [ 
+            {Value: 0 Name: "Unknown" Man: "Status unknown, not filled probably" }, 
+            {Value: 1 Name: "Error" Man: "Error" }, 
+            {Value: 2 Name: "Complete" Man: "Complete with success" }, 
+            {Value: 3 Name: "Abort" Man: "Complete with abort" } 
+        ]} 
+    ];  // Program "exit code": see NMiniKQL::IEngine::EStatus. 
+ 
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 103;
 
     optional bytes MiniKQLErrors = 104;

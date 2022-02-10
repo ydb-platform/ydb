@@ -1,11 +1,11 @@
 UNITTEST()
 
-OWNER(
-    alexvru
-    cthulhu
+OWNER( 
+    alexvru 
+    cthulhu 
     g:kikimr
-)
-
+) 
+ 
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)

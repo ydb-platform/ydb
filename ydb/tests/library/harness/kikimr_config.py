@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 import sys
 import itertools
 import os
-import tempfile
+import tempfile 
 import socket
 import six
 
@@ -18,13 +18,13 @@ from .util import LogLevels
 import yaml
 from library.python import resource
 
-
+ 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)
-
+ 
 
 def get_fqdn():
     hostname = socket.gethostname()
@@ -75,8 +75,8 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     return yaml_dict
 
 
-class KikimrConfigGenerator(object):
-    def __init__(
+class KikimrConfigGenerator(object): 
+    def __init__( 
             self,
             erasure=None,
             binary_path=None,
@@ -111,7 +111,7 @@ class KikimrConfigGenerator(object):
             auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
-    ):
+    ): 
         self._version = version
         self.use_log_files = use_log_files
         self.suppress_version_check = suppress_version_check
@@ -136,11 +136,11 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
 
-        if binary_path is None:
-            binary_path = kikimr_driver_path()
-        self.__binary_path = binary_path
+        if binary_path is None: 
+            binary_path = kikimr_driver_path() 
+        self.__binary_path = binary_path 
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
-        if nodes is None:
+        if nodes is None: 
             nodes = rings_count * erasure.min_fail_domains
         self._rings_count = rings_count
         self._enable_nbs = enable_nbs
@@ -163,7 +163,7 @@ class KikimrConfigGenerator(object):
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
             self._dcs = [1, 2, 3]
-
+ 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(get_additional_log_configs())
 
@@ -293,7 +293,7 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
-    @property
+    @property 
     def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')
 
@@ -310,9 +310,9 @@ class KikimrConfigGenerator(object):
         return self.__output_path
 
     @property
-    def binary_path(self):
-        return self.__binary_path
-
+    def binary_path(self): 
+        return self.__binary_path 
+ 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:
             for fpath, data in ((self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert), (self.grpc_tls_key_path, self.grpc_tls_key)):
@@ -351,7 +351,7 @@ class KikimrConfigGenerator(object):
                     result.append(full)
         return result
 
-    def all_node_ids(self):
+    def all_node_ids(self): 
         return self.__node_ids
 
     def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
@@ -380,8 +380,8 @@ class KikimrConfigGenerator(object):
 
         for dc in self._dcs:
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
-
-        for node_id in self.__node_ids:
+ 
+        for node_id in self.__node_ids: 
             datacenter_id = next(datacenter_id_generator)
 
             for pdisk_id in range(1, self.__number_of_pdisks_per_node + 1):

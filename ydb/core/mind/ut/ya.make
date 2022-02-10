@@ -17,16 +17,16 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
         cpu:4
         ram:32
     )
-ELSE()
+ELSE() 
     SPLIT_FACTOR(80)
-    TIMEOUT(600)
-    SIZE(MEDIUM)
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
     REQUIREMENTS(
         cpu:4
         ram:16
     )
-ENDIF()
-
+ENDIF() 
+ 
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

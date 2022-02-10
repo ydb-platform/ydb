@@ -2,7 +2,7 @@
 #include "helpers.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 using namespace NKikimr;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -26,8 +26,8 @@ protected:
         TSyncRunner::TReturnValue ret;
         TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerErrorAware;
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet, hndl));
-        UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0);
-        UNIT_ASSERT_EQUAL(ret.Status, NKikimrProto::OUT_OF_SPACE);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0); 
+        UNIT_ASSERT_EQUAL(ret.Status, NKikimrProto::OUT_OF_SPACE); 
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded until ORANGE ZONE");
     }
 
@@ -63,8 +63,8 @@ protected:
         TSyncRunner::TReturnValue ret;
         TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerYellowMoveZone;
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet, hndl));
-        UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0);
-        UNIT_ASSERT_VALUES_EQUAL(ret.Status, 0x28733642);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(ret.Status, 0x28733642); 
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded until YELLOW ZONE");
     }
 

@@ -97,7 +97,7 @@ void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactio
 }
 
 TCompactionPolicy::TCompactionPolicy()
-    : InMemSizeToSnapshot(4 * 1024 * 1024)
+    : InMemSizeToSnapshot(4 * 1024 * 1024) 
     , InMemStepsToSnapshot(300)
     , InMemForceStepsToSnapshot(500)
     , InMemForceSizeToSnapshot(16 * 1024 * 1024)

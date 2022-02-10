@@ -53,7 +53,7 @@
 #include <util/system/backtrace.h>
 #include <util/system/defaults.h>
 #include <util/system/event.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 #define RT_EXECUTOR_POOL 0
 
@@ -102,7 +102,7 @@ do { \
 } while(false)
 
 
-constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(1800000, 2400000);
+constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(1800000, 2400000); 
 static bool IsVerbose = false;
 static bool IsProfilerEnabled = true;
 
@@ -3445,8 +3445,8 @@ public:
     }
 };
 
-#define PROXY_UNIT_TEST(a) UNIT_TEST(a)
-
+#define PROXY_UNIT_TEST(a) UNIT_TEST(a) 
+ 
 class TBlobStorageProxyTest: public TTestBase {
     UNIT_TEST_SUITE(TBlobStorageProxyTest);
         PROXY_UNIT_TEST(TestGetMultipart);
@@ -3500,12 +3500,12 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestVGetNoData);
         PROXY_UNIT_TEST(TestProxyLongTailDiscover);
         PROXY_UNIT_TEST(TestProxyLongTailDiscoverMaxi);
-        PROXY_UNIT_TEST(TestProxyLongTailDiscoverSingleFailure);
+        PROXY_UNIT_TEST(TestProxyLongTailDiscoverSingleFailure); 
         PROXY_UNIT_TEST(TestProxyRestoreOnDiscoverBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetStripe);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror);
-        PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror3Plus2);
+        PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror3Plus2); 
         PROXY_UNIT_TEST(TestVBlockVPutVGet);
         PROXY_UNIT_TEST(TestEmptyDiscover);
         PROXY_UNIT_TEST(TestEmptyDiscoverMaxi);
@@ -3977,7 +3977,7 @@ public:
     }
 
     void TestCompactedGetMultipart() {
-        return;  // TODO https://st.yandex-team.ru/KIKIMR-2244
+        return;  // TODO https://st.yandex-team.ru/KIKIMR-2244 
         TTempDir tempDir;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
         TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());

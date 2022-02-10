@@ -7,8 +7,8 @@
 #include "hfunc.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/sanitizers.h>
-
+#include <util/system/sanitizers.h> 
+ 
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(ActorCoro) {
@@ -128,10 +128,10 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
     }
 
     Y_UNIT_TEST(Basic) {
-        if (NSan::TSanIsOn()) {
-            // TODO https://st.yandex-team.ru/DEVTOOLS-3154
-            return;
-        }
+        if (NSan::TSanIsOn()) { 
+            // TODO https://st.yandex-team.ru/DEVTOOLS-3154 
+            return; 
+        } 
         Check(MakeHolder<TEvEnough>());
     }
 

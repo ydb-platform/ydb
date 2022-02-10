@@ -10,12 +10,12 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-OWNER(
-    vvvv
+ 
+OWNER( 
+    vvvv 
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     compact_hash_ut.cpp
     mkql_alloc_ut.cpp

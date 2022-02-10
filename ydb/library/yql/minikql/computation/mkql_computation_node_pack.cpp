@@ -20,7 +20,7 @@
 #endif
 
 #include <util/system/yassert.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -639,7 +639,7 @@ TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const {
         Buffer.Proceed(delta);
         Buffer.Append((const char*)&length, sizeof(length));
     }
-    NSan::Unpoison(Buffer.Data() + delta, len - delta);
+    NSan::Unpoison(Buffer.Data() + delta, len - delta); 
     return TStringBuf(Buffer.Data() + delta, len - delta);
 }
 

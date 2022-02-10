@@ -1,18 +1,18 @@
 UNITTEST_FOR(ydb/core/tablet)
 
-OWNER(
-    vvvv
+OWNER( 
+    vvvv 
     g:kikimr
-)
+) 
+ 
+FORK_SUBTESTS() 
 
-FORK_SUBTESTS()
-
-SIZE(MEDIUM)
+SIZE(MEDIUM) 
 
 TIMEOUT(600)
 
 SPLIT_FACTOR(50)
-
+ 
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

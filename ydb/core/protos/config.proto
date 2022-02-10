@@ -314,7 +314,7 @@ message TBootstrap {
         SCHEMESHARD = 30;
         DATASHARD = 31;
         FLAT_SCHEMESHARD = 32;
-        KEYVALUEFLAT = 33;
+        KEYVALUEFLAT = 33; 
 
         JOBRUNNER_POOL_MANAGER = 40;
         FLAT_JOBRUNNER_POOL_MANAGER = 41;
@@ -536,7 +536,7 @@ message TMessageBusConfig {
 message TTabletsConfig {
 
     message TTablet {
-        optional string Type = 1;
+        optional string Type = 1; 
         repeated uint32 Node = 2;
         optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
         optional bool StandBy = 4;
@@ -547,7 +547,7 @@ message TTabletsConfig {
 }
 
 message TKQPConfig {
-    optional bool Enable = 1 [default = true];
+    optional bool Enable = 1 [default = true]; 
 
     repeated NKikimrKqp.TKqpSetting Settings = 10;
 }

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 from hamcrest import has_properties, contains_inanyorder, is_not
 import logging
 import time
@@ -9,7 +9,7 @@ from ydb.tests.library.common.types import TabletStates
 from ydb.tests.library.wardens import hive
 
 logger = logging.getLogger(__name__)
-
+ 
 
 def wait_tablets_state_by_id(
         client, state, tablet_ids=(), message='', timeout_seconds=120, skip_generations=None, generation_matcher=None):
@@ -18,11 +18,11 @@ def wait_tablets_state_by_id(
         skip_generations = {}
     if generation_matcher is None:
         generation_matcher = is_not
-
+ 
     def query_tablet_state():
-        return client.tablet_state(tablet_ids=tablet_ids)
+        return client.tablet_state(tablet_ids=tablet_ids) 
 
-    wait_for_and_assert(
+    wait_for_and_assert( 
         query_tablet_state,
         DynamicFieldsProtobufMatcher().TabletStateInfo(
             contains_inanyorder(*(
@@ -34,11 +34,11 @@ def wait_tablets_state_by_id(
                 for tablet_id in tablet_ids
             ))
         ),
-        message=message,
-        timeout_seconds=timeout_seconds,
-        log_progress=True
-    )
-    return None
+        message=message, 
+        timeout_seconds=timeout_seconds, 
+        log_progress=True 
+    ) 
+    return None 
 
 
 def collect_tablets_state(client, tablet_ids=()):

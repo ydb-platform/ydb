@@ -8,16 +8,16 @@ OWNER(
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND OR SANITIZER_TYPE)
-    TIMEOUT(1800)
+    TIMEOUT(1800) 
     SIZE(LARGE)
     SPLIT_FACTOR(20)
     TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
     SPLIT_FACTOR(10)
-ENDIF()
-
+ENDIF() 
+ 
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

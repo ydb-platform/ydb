@@ -585,7 +585,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 break; // must left as unchecked
             default:
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph::CheckReferences - blob " << response.Id
-                            << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status));
+                            << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status)); 
                 if (IntrospectionTrace) {
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(response.Status, msg->ErrorReason));
                 }
@@ -792,7 +792,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         case NKikimrProto::OK:
             if (FollowerCookie == 0 && msg->Latest.Generation() > BlockedGen) {
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph - Found entry beyond blocked generation"
-                    << " LastBlobID: " << msg->Latest.ToString() << ". Blocked: " << BlockedGen);
+                    << " LastBlobID: " << msg->Latest.ToString() << ". Blocked: " << BlockedGen); 
                 if (IntrospectionTrace) {
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorEntryBeyondBlocked>(msg->Latest, BlockedGen));
                 }
@@ -809,7 +809,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             return ReplyAndDie(msg->Status, msg->ErrorReason); // valid condition, nothing known in blob-storage
         default:
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvFindLatestLogEntryResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)); 
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
@@ -828,7 +828,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             return ReplyAndDie(NKikimrProto::RACE, msg->ErrorReason);
         default:
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::HandleDiscover TEvRangeResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
+                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status) 
                 << " Result# " << msg->Print(false));
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
@@ -852,7 +852,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             return ReplyAndDie(NKikimrProto::RACE, msg->ErrorReason);
         default:
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvGetResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
+                << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status) 
                 << " Result# " << msg->Print(false));
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));

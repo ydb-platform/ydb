@@ -3,13 +3,13 @@ PY23_LIBRARY()
 LICENSE(BSD-3-Clause)
 
 OWNER(g:python-contrib)
-
+ 
 VERSION(1.9.0)
 
-PEERDIR (
-    contrib/python/six
-)
-
+PEERDIR ( 
+    contrib/python/six 
+) 
+ 
 SRCDIR(
     contrib/python/PyHamcrest/src
 )
@@ -77,7 +77,7 @@ PY_SRCS(
 
 NO_LINT()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     tests

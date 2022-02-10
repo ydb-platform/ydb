@@ -38,7 +38,7 @@ void TestRun(TTest *test,
                         erasure);
     TVDiskSetup vdiskSetup;
     Conf.Prepare(&vdiskSetup);
-    bool success = Conf.Run<TTest>(test, timeout);
+    bool success = Conf.Run<TTest>(test, timeout); 
     Conf.Shutdown();
 
     UNIT_ASSERT(success);
@@ -76,7 +76,7 @@ IDataSetPtr DataSetSelector(EDataSet t, ui32 minHugeBlobSize) {
 Y_UNIT_TEST(TestName) {                                                                    \
     IDataSetPtr ds = DataSetSelector(g, 64u << 10u);                                            \
     ClassName test(ds, CompParam, VDiskNumParam);                                               \
-    TestRun<ClassName, Setup>(&test, TIMEOUT);                                   \
+    TestRun<ClassName, Setup>(&test, TIMEOUT);                                   \ 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskExtreme) {
 
     Y_UNIT_TEST(SimpleGetFromEmptyDB) {
         TSimpleGetFromEmptyDB test;
-        TestRun<TSimpleGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT);
+        TestRun<TSimpleGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put3GetFresh, TSimple3Put3Get, TFastVDiskSetup, false, 0, DG_3PUT)
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRange) {
 
     Y_UNIT_TEST(RangeGetFromEmptyDB) {
         TRangeGetFromEmptyDB test;
-        TestRun<TRangeGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT);
+        TestRun<TRangeGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardFresh, TSimple3PutRangeGetAllForward,
@@ -326,32 +326,32 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) {
 Y_UNIT_TEST_SUITE(TBsVDiskGC) {
     Y_UNIT_TEST(GCPutKeepIntoEmptyDB) {
         TGCPutKeepIntoEmptyDB test;
-        TestRun<TGCPutKeepIntoEmptyDB, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TGCPutKeepIntoEmptyDB, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     } // FIXME: Fresh???
 
     Y_UNIT_TEST(GCPutBarrierVDisk0NoSync) {
         TGCPutBarrierVDisk0 test;
-        TestRun<TGCPutBarrierVDisk0, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT);
+        TestRun<TGCPutBarrierVDisk0, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(GCPutBarrierSync) {
         TGCPutBarrier test;
-        TestRun<TGCPutBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TGCPutBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(GCPutKeepBarrierSync) {
         TGCPutKeepBarrier test;
-        TestRun<TGCPutKeepBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TGCPutKeepBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(GCPutManyBarriersNoSync) {
         TGCPutManyBarriers test;
-        TestRun<TGCPutManyBarriers, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT);
+        TestRun<TGCPutManyBarriers, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(TGCManyVPutsCompactGCAllTest) {
         TGCManyVPutsCompactGCAll test;
-        TestRun<TGCManyVPutsCompactGCAll, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TGCManyVPutsCompactGCAll, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(TGCManyVPutsDelTabletTest) {
@@ -373,14 +373,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
         TWriteUntilOrangeZone test;
         const ui32 chunkSize = 512u << 10u;
         const ui64 diskSize = 500ull << 20ull;
-        TestRun<TWriteUntilOrangeZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize);
+        TestRun<TWriteUntilOrangeZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize); 
     }
 
     Y_UNIT_TEST(WriteUntilYellowZone) {
         TWriteUntilYellowZone test;
         const ui32 chunkSize = 512u << 10u;
         const ui64 diskSize = 700ull << 20ull;
-        TestRun<TWriteUntilYellowZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize);
+        TestRun<TWriteUntilYellowZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize); 
     }
 }
 
@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskBrokenPDisk) {
 Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
     Y_UNIT_TEST(HandoffMoveDel) {
         TTestHandoffMoveDel test;
-        TestRun<TTestHandoffMoveDel, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TTestHandoffMoveDel, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 }
 
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
 Y_UNIT_TEST_SUITE(TBsHuge) {
     Y_UNIT_TEST(Simple) {
         THugeModuleTest test;
-        TestRun<THugeModuleTest, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<THugeModuleTest, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(SimpleErasureNone) {
@@ -447,22 +447,22 @@ Y_UNIT_TEST_SUITE(TBsHuge) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     Y_UNIT_TEST(StartStopNotEmptyDB) {
-        const ui32 numIterations = NValgrind::PlainOrUnderValgrind(10, 2);
+        const ui32 numIterations = NValgrind::PlainOrUnderValgrind(10, 2); 
         TConfiguration Conf;
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "====================== Initial step");
         TCheckDbIsEmptyManyPutGet test(true, false, MIDDLE_MSG_NUM, 100, UNK); // DB must be empty
-        bool success1 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT);
+        bool success1 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT); 
         UNIT_ASSERT(success1);
         Conf.Shutdown();
 
-        for (unsigned i = 0; i < numIterations; i++) {
+        for (unsigned i = 0; i < numIterations; i++) { 
             Conf.Prepare(&vdiskSetup, false);
             LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "====================== Iteration %u", i);
             TCheckDbIsEmptyManyPutGet test(false, false, 1000, 100, UNK); // DB must no be empty
-            bool success2 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT);
+            bool success2 = Conf.Run<TCheckDbIsEmptyManyPutGet>(&test, TIMEOUT); 
             UNIT_ASSERT(success2);
             Conf.Shutdown();
         }
@@ -654,12 +654,12 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
 Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
     Y_UNIT_TEST(ReplProxyData) {
         TTestReplProxyData test;
-        TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
     Y_UNIT_TEST(ReplProxyKeepBits) {
         TTestReplProxyKeepBits test;
-        TestRun<TTestReplProxyKeepBits, TFastVDiskSetupCompacted>(&test, TIMEOUT);
+        TestRun<TTestReplProxyKeepBits, TFastVDiskSetupCompacted>(&test, TIMEOUT); 
     }
 
 
@@ -673,13 +673,13 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TTestReplDataWriteAndSync testLoad(&dataSet);
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT); 
         UNIT_ASSERT(success1);
         Conf.Shutdown();
         Conf.PDisks->EraseDisk(3, 678);
         Conf.Prepare(&vdiskSetup, false);
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT); 
+        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT); 
         Conf.Shutdown();
         UNIT_ASSERT(success2);
     }
@@ -696,14 +696,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TTestReplDataWriteAndSync testLoad(&dataSet);
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT); 
         UNIT_ASSERT(success1);
         Conf.Shutdown();
         Conf.PDisks->EraseDisk(3, 678);
         TFastVDiskSetupWODisk2 vdiskSetupWODisk2;
         Conf.Prepare(&vdiskSetupWODisk2, false);
-        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT);
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+        TReadUntilSuccess testRead(&dataSet, 3, SMALL_TIMEOUT); 
+        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT); 
         Conf.Shutdown();
         UNIT_ASSERT(success2);
     }
@@ -807,7 +807,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
         TTestReplDataWriteAndSync testLoad(dataSetPtr.Get());
-        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
+        bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT); 
         UNIT_ASSERT(success1);
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "stopped writer");
         Conf.Shutdown();
@@ -820,9 +820,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting first read pass");
-        TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
+        TReadUntilSuccess testRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT); 
         TInstant begin = Now();
-        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT);
+        bool success2 = Conf.Run<TReadUntilSuccess>(&testRead, TIMEOUT); 
         TInstant end = Now();
         TDuration timedelta = end - begin;
         Conf.Shutdown();
@@ -836,9 +836,9 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
 
         LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
-        TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
+        TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT); 
         begin = Now();
-        bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT);
+        bool success3 = Conf.Run<TReadUntilSuccess>(&verifyRead, TIMEOUT); 
         end = Now();
         timedelta = end - begin;
         Conf.Shutdown();
@@ -850,7 +850,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         TNoVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TSyncLogTestWrite test;
-        bool success1 = Conf.Run<TSyncLogTestWrite>(&test, TIMEOUT, 1, false);
+        bool success1 = Conf.Run<TSyncLogTestWrite>(&test, TIMEOUT, 1, false); 
         Conf.Shutdown();
         UNIT_ASSERT(success1);
     }

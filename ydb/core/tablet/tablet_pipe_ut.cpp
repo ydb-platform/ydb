@@ -265,8 +265,8 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {
             Cout << "Got ping\n";
-            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, LastServerId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID); 
+            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, LastServerId); 
             ctx.Send(ev->Sender, new TEvents::TEvPong());
         }
 
@@ -366,7 +366,7 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {
             Cout << "Got ping\n";
-            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID); 
             ctx.Send(ev->Sender, new TEvents::TEvPong());
         }
 

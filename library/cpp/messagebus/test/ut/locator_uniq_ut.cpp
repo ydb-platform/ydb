@@ -15,8 +15,8 @@ protected:
 UNIT_TEST_SUITE_REGISTRATION(TLocatorRegisterUniqTest);
 
 void TLocatorRegisterUniqTest::TestRegister() {
-    ASSUME_IP_V4_ENABLED;
-
+    ASSUME_IP_V4_ENABLED; 
+ 
     NBus::TBusLocator locator;
     const char* serviceName = "TestService";
     const char* hostName = "192.168.0.42";

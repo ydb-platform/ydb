@@ -215,7 +215,7 @@ namespace {
 
             for (const TTest& test : Tests) {
                 LogInfo() << "Starting test " << test.Name << Endl;
-
+ 
                 TInstant started = TInstant::Now();
                 try {
                     test.Func();
@@ -226,7 +226,7 @@ namespace {
                 }
 
                 LogInfo() << "List size = " << List.GetSize() << Endl;
-
+ 
                 TDuration duration = TInstant::Now() - started;
                 LogInfo() << "test " << test.Name
                           << " duration: " << duration
@@ -276,8 +276,8 @@ namespace {
             for (size_t i = 0; i < Iterations; ++i) {
                 List.Insert(TListItem(Random.GetString(KeyLen), Random.GetString(ValueLen)));
             }
-        }
-
+        } 
+ 
         void TEST_LookupRandom() {
             for (size_t i = 0; i < Iterations; ++i) {
                 List.SeekTo(TListItem(Random.GetString(KeyLen), TStringBuf()));
@@ -296,7 +296,7 @@ namespace {
                             TGuard<TMutex> guard(Mutex);
                             List.Insert(TListItem(Random.GetString(KeyLen), Random.GetString(ValueLen)));
                         }
-                    }
+                    } 
                     TDuration duration = TInstant::Now() - started;
                     LogInfo()
                         << "Average time for producer = "

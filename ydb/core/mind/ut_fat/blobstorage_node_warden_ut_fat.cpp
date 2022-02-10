@@ -57,7 +57,7 @@ do { \
 } while(false)
 
 
-static bool IsVerbose = true;
+static bool IsVerbose = true; 
 
 static yexception LastException;
 

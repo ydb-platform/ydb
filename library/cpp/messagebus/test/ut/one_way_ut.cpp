@@ -65,9 +65,9 @@ struct NullClient : TBusClientHandlerError {
     }
 
     ~NullClient() override {
-        Session->Shutdown();
-    }
-
+        Session->Shutdown(); 
+    } 
+ 
     /// dispatch of requests is done here
     void Work() {
         int batch = 10;
@@ -107,9 +107,9 @@ public:
     }
 
     ~NullServer() override {
-        Session->Shutdown();
-    }
-
+        Session->Shutdown(); 
+    } 
+ 
     /// when message comes do not send reply, just acknowledge
     void OnMessage(TOnMessageContext& mess) override {
         TExampleRequest* fmess = static_cast<TExampleRequest*>(mess.GetMessage());

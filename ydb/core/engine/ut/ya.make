@@ -7,12 +7,12 @@ OWNER(
 
 ALLOCATOR(J)
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
-TIMEOUT(150)
+TIMEOUT(150) 
 
-SIZE(MEDIUM)
-
+SIZE(MEDIUM) 
+ 
 SRCS(
     mkql_engine_flat_host_ut.cpp
     mkql_engine_flat_ut.cpp

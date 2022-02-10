@@ -198,32 +198,32 @@ void NoCacheMemcpy(char* dst, const char* src, size_t size) noexcept {
     }
     memcpy(dst, src, size);
 }
-
-NO_SANITIZE_THREAD
-void NoWCacheMemcpy(char* dst, const char* src, size_t size) noexcept {
-    constexpr ui16 ITEMS_COUNT = 1024;
-    alignas(TMemoryLog::MemcpyAlignment) __m128 buf[ITEMS_COUNT];
-    while (size >= sizeof(buf)) {
-        memcpy(&buf, src, sizeof(buf));
-
-        for (ui16 i = 0; i < ITEMS_COUNT; ++i) {
-            _mm_stream_ps((float*)dst, buf[i]);
-            dst += sizeof(__m128);
-        }
-
-        size -= sizeof(buf);
-        src += sizeof(buf);
-    }
-
-    memcpy(&buf, src, size);
-    // no problem to copy few bytes more
-    size = AlignUp(size, sizeof(__m128));
-    for (ui16 i = 0; i < size / sizeof(__m128); ++i) {
-        _mm_stream_ps((float*)dst, buf[i]);
-        dst += sizeof(__m128);
-    }
-}
-
+ 
+NO_SANITIZE_THREAD 
+void NoWCacheMemcpy(char* dst, const char* src, size_t size) noexcept { 
+    constexpr ui16 ITEMS_COUNT = 1024; 
+    alignas(TMemoryLog::MemcpyAlignment) __m128 buf[ITEMS_COUNT]; 
+    while (size >= sizeof(buf)) { 
+        memcpy(&buf, src, sizeof(buf)); 
+ 
+        for (ui16 i = 0; i < ITEMS_COUNT; ++i) { 
+            _mm_stream_ps((float*)dst, buf[i]); 
+            dst += sizeof(__m128); 
+        } 
+ 
+        size -= sizeof(buf); 
+        src += sizeof(buf); 
+    } 
+ 
+    memcpy(&buf, src, size); 
+    // no problem to copy few bytes more 
+    size = AlignUp(size, sizeof(__m128)); 
+    for (ui16 i = 0; i < size / sizeof(__m128); ++i) { 
+        _mm_stream_ps((float*)dst, buf[i]); 
+        dst += sizeof(__m128); 
+    } 
+} 
+ 
 #endif
 
 NO_SANITIZE_THREAD
@@ -240,12 +240,12 @@ char* BareMemLogWrite(const char* begin, size_t msgSize, bool isLast) noexcept {
 #if defined(_x86_64_) || defined(_i386_)
     if (AlignDown(begin, TMemoryLog::MemcpyAlignment) == begin) {
         NoCacheMemcpy(buffer, begin, msgSize);
-    } else {
-        NoWCacheMemcpy(buffer, begin, msgSize);
-    }
-#else
-    memcpy(buffer, begin, msgSize);
-#endif
+    } else { 
+        NoWCacheMemcpy(buffer, begin, msgSize); 
+    } 
+#else 
+    memcpy(buffer, begin, msgSize); 
+#endif 
 
     if (lastMark) {
         TMemoryLog::ChangeLastMark(buffer + msgSize);
@@ -267,7 +267,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     // check for format for snprintf
     constexpr size_t prologSize = 48;
     alignas(TMemoryLog::MemcpyAlignment) char prolog[prologSize + 1];
-    Y_VERIFY(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog);
+    Y_VERIFY(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog); 
 
     int snprintfResult = snprintf(prolog, prologSize + 1,
                                   "TS %020" PRIu64 " TI %020" PRIu64 " ", GetCycleCountFast(), threadId);
@@ -288,18 +288,18 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     }
 
 #if defined(_x86_64_) || defined(_i386_)
-    // warning: copy prolog first to avoid corruption of the message
-    // by prolog tail
-    NoCacheMemcpy(buffer, prolog, prologSize);
+    // warning: copy prolog first to avoid corruption of the message 
+    // by prolog tail 
+    NoCacheMemcpy(buffer, prolog, prologSize); 
     if (AlignDown(begin + prologSize, TMemoryLog::MemcpyAlignment) == begin + prologSize) {
-        NoCacheMemcpy(buffer + prologSize, begin, msgSize);
+        NoCacheMemcpy(buffer + prologSize, begin, msgSize); 
     } else {
-        NoWCacheMemcpy(buffer + prologSize, begin, msgSize);
-    }
-#else
-    memcpy(buffer, prolog, prologSize);
-    memcpy(buffer + prologSize, begin, msgSize);
-#endif
+        NoWCacheMemcpy(buffer + prologSize, begin, msgSize); 
+    } 
+#else 
+    memcpy(buffer, prolog, prologSize); 
+    memcpy(buffer + prologSize, begin, msgSize); 
+#endif 
 
     if (addLF) {
         buffer[prologSize + msgSize] = '\n';
@@ -336,9 +336,9 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
 
     // alignment required by NoCacheMemcpy
     alignas(TMemoryLog::MemcpyAlignment) char buf[TMemoryLog::MAX_MESSAGE_SIZE];
-    Y_VERIFY(AlignDown(&buf, TMemoryLog::MemcpyAlignment) == &buf);
+    Y_VERIFY(AlignDown(&buf, TMemoryLog::MemcpyAlignment) == &buf); 
 
-    int prologSize = snprintf(buf,
+    int prologSize = snprintf(buf, 
                               TMemoryLog::MAX_MESSAGE_SIZE - 2,
                               "TS %020" PRIu64 " TI %020" PRIu64 " ",
                               GetCycleCountFast(),
@@ -350,7 +350,7 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     Y_VERIFY((ui32)prologSize <= TMemoryLog::MAX_MESSAGE_SIZE);
 
     int add = vsnprintf(
-        &buf[prologSize],
+        &buf[prologSize], 
         TMemoryLog::MAX_MESSAGE_SIZE - prologSize - 2,
         format, params);
 
@@ -360,8 +360,8 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     Y_VERIFY(add >= 0);
     auto totalSize = prologSize + add;
 
-    buf[totalSize++] = '\n';
+    buf[totalSize++] = '\n'; 
     Y_VERIFY((ui32)totalSize <= TMemoryLog::MAX_MESSAGE_SIZE);
 
-    return BareMemLogWrite(buf, totalSize) != nullptr;
+    return BareMemLogWrite(buf, totalSize) != nullptr; 
 }

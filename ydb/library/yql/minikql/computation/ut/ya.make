@@ -10,12 +10,12 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-OWNER(
-    vvvv
+ 
+OWNER( 
+    vvvv 
     g:kikimr
-)
-
+) 
+ 
 SRCS(
     mkql_computation_node_pack_ut.cpp
     mkql_computation_node_list_ut.cpp

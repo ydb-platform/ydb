@@ -1,11 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 from hamcrest import assert_that, equal_to
-
+ 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.common import msgbus_types
-
-
+ 
+ 
 class TestPDiskInfo(object):
     """
     See ticket https://st.yandex-team.ru/KIKIMR-1831
@@ -14,11 +14,11 @@ class TestPDiskInfo(object):
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
-
+ 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
-
+ 
     def test_read_disk_state(self):
         pdisk_infos = self.cluster.config.pdisks_info
         pdisk_paths = []

@@ -15,7 +15,7 @@
 #include <util/system/condvar.h>
 #include <util/string/printf.h>
 #include <util/system/file.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 namespace NKikimr {
 
@@ -135,13 +135,13 @@ TString CreateFile(const char *baseDir, ui32 dataSize) {
 }
 
 constexpr TDuration TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(120), TDuration::Seconds(360));
-
-void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedValue) {
-    TInstant finishTime = TInstant::Now() + maxDuration;
-    while (TInstant::Now() < finishTime) {
+ 
+void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedValue) { 
+    TInstant finishTime = TInstant::Now() + maxDuration; 
+    while (TInstant::Now() < finishTime) { 
         for (int i = 0; i < 100; ++i) {
             Sleep(TDuration::MilliSeconds(50));
-            TAtomicBase resultingCounter = AtomicGet(*counter);
+            TAtomicBase resultingCounter = AtomicGet(*counter); 
             if (resultingCounter >= expectedValue) {
                 return;
             }
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
                 generationSize *= 3;
             }
 
-            WaitForValue(&counter, 60000, expectedCounter);
+            WaitForValue(&counter, 60000, expectedCounter); 
 
             TAtomicBase resultingCounter = AtomicGet(counter);
 

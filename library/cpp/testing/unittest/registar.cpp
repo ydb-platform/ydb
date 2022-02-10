@@ -50,7 +50,7 @@ void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, boo
     if (::NUnitTest::ContinueOnFail || !fatalFailure) {
         return;
     }
-    throw TAssertException();
+    throw TAssertException(); 
 }
 
 void ::NUnitTest::SetRaiseErrorHandler(::NUnitTest::TRaiseErrorHandler handler) {

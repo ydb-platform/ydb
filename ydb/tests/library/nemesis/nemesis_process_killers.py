@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 import logging
-import random
+import random 
 from ydb.tests.library.nemesis.nemesis_core import AbstractNemesisNodeTerrorist
 from ydb.tests.library.nemesis.remote_execution import execute_command_with_output
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 DEFAULT_KILL_ALL_CHANCE = 0.3
 
@@ -36,7 +36,7 @@ class NemesisProcessKiller(AbstractNemesisNodeTerrorist):
         super(NemesisProcessKiller, self).__init__(cluster, act_interval, timeout=timeout,
                                                    ssh_user=ssh_user, remote_sudo_user=remote_sudo_user)
         self.__victims_procs = processes_affected
-        self.__kill_all_chance = kill_everything_chance
+        self.__kill_all_chance = kill_everything_chance 
         self._signal = signal
 
         self._command_for_victim = kill_cmd if processes_filters is None else kill_pid_cmd
@@ -95,16 +95,16 @@ class NemesisProcessSuspender(NemesisProcessKiller):
             kill_everything_chance=DEFAULT_KILL_ALL_CHANCE, processes_filters=None
     ):
 
-        super(NemesisProcessSuspender, self).__init__(
+        super(NemesisProcessSuspender, self).__init__( 
             cluster, processes_affected, act_interval, ssh_user, remote_sudo_user,
             kill_everything_chance, signal='SIGSTOP', processes_filters=processes_filters
-        )
+        ) 
         self.__to_unsuspend = []
 
     def __wake_all_suspended(self):
         for node, commands in self.__to_unsuspend:
             for command in commands:
-                self._remote_exec_method(self._full_command(node, command), timeout=self.timeout)
+                self._remote_exec_method(self._full_command(node, command), timeout=self.timeout) 
         self.__to_unsuspend = []
 
     def _pre_inject_fault(self, node, commands):
@@ -114,40 +114,40 @@ class NemesisProcessSuspender(NemesisProcessKiller):
 
     def extract_fault(self):
         self.__wake_all_suspended()
-
-
+ 
+ 
 def fake_execute_command(command):
     print("{}".format(command))
 
 
-class TestNemesisProcessSuspender(NemesisProcessSuspender):
+class TestNemesisProcessSuspender(NemesisProcessSuspender): 
     _remote_exec_method = fake_execute_command
-    """
-    >>> random.seed(123)
-    >>> n = TestNemesisProcessSuspender(range(8), range(2), 1)
-    >>> n.prepare_state()
-    >>> n.inject_fault()
+    """ 
+    >>> random.seed(123) 
+    >>> n = TestNemesisProcessSuspender(range(8), range(2), 1) 
+    >>> n.prepare_state() 
+    >>> n.inject_fault() 
     ['ssh', 0, 'killall', '-s', 'SIGSTOP', '0']
     ['ssh', 0, 'killall', '-s', 'SIGSTOP', '1']
-    >>> n.inject_fault()
+    >>> n.inject_fault() 
     ['ssh', 0, 'killall', '-s', 'SIGCONT', '0']
     ['ssh', 0, 'killall', '-s', 'SIGCONT', '1']
     ['ssh', 3, 'killall', '-s', 'SIGSTOP', '0']
     ['ssh', 3, 'killall', '-s', 'SIGSTOP', '1']
-    >>> n.inject_fault()
+    >>> n.inject_fault() 
     ['ssh', 3, 'killall', '-s', 'SIGCONT', '0']
     ['ssh', 3, 'killall', '-s', 'SIGCONT', '1']
     ['ssh', 7, 'killall', '-s', 'SIGSTOP', '0']
     ['ssh', 7, 'killall', '-s', 'SIGSTOP', '1']
-    >>> n.inject_fault()
+    >>> n.inject_fault() 
     ['ssh', 7, 'killall', '-s', 'SIGCONT', '0']
     ['ssh', 7, 'killall', '-s', 'SIGCONT', '1']
     ['ssh', 4, 'killall', '-s', 'SIGSTOP', '1']
-    >>> n.inject_fault()
+    >>> n.inject_fault() 
     ['ssh', 4, 'killall', '-s', 'SIGCONT', '1']
     ['ssh', 1, 'killall', '-s', 'SIGSTOP', '0']
-    >>> n.inject_fault()
+    >>> n.inject_fault() 
     ['ssh', 1, 'killall', '-s', 'SIGCONT', '0']
     ['ssh', 1, 'killall', '-s', 'SIGSTOP', '0']
     ['ssh', 1, 'killall', '-s', 'SIGSTOP', '1']
-    """
+    """ 

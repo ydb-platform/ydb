@@ -437,18 +437,18 @@ public:                       \
 
 #define UNIT_ASSERT_STRINGS_EQUAL(A, B) UNIT_ASSERT_STRINGS_EQUAL_C(A, B, "")
 
-#define UNIT_ASSERT_STRING_CONTAINS_C(A, B, C)                                                                                  \
-    do {                                                                                                                        \
+#define UNIT_ASSERT_STRING_CONTAINS_C(A, B, C)                                                                                  \ 
+    do {                                                                                                                        \ 
         const TString _a(A);                                                                                                    \
         const TString _b(B);                                                                                                    \
-        if (!_a.Contains(_b)) {                                                                                                 \
+        if (!_a.Contains(_b)) {                                                                                                 \ 
             auto&& msg = Sprintf("\"%s\" does not contain \"%s\", %s", ToString(_a).data(), ToString(_b).data(), (::TStringBuilder() << C).data()); \
-            UNIT_FAIL_IMPL("strings contains assertion failed", msg);                                                           \
-        }                                                                                                                       \
-    } while (false)
-
-#define UNIT_ASSERT_STRING_CONTAINS(A, B) UNIT_ASSERT_STRING_CONTAINS_C(A, B, "")
-
+            UNIT_FAIL_IMPL("strings contains assertion failed", msg);                                                           \ 
+        }                                                                                                                       \ 
+    } while (false) 
+ 
+#define UNIT_ASSERT_STRING_CONTAINS(A, B) UNIT_ASSERT_STRING_CONTAINS_C(A, B, "") 
+ 
 #define UNIT_ASSERT_NO_DIFF(A, B)                                                                                                              \
     do {                                                                                                                                       \
         const TString _a(A);                                                                                                                   \

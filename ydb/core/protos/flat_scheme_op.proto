@@ -894,7 +894,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
     }
 
-    optional string Name = 1; // mandatory
+    optional string Name = 1; // mandatory 
     optional uint64 PathId = 2;
     optional uint32 TotalGroupCount = 3; // mandatory
     message TPartitionToAdd {
@@ -904,9 +904,9 @@ message TPersQueueGroupDescription {
     repeated TPartitionToAdd PartitionsToAdd = 9;
     repeated uint32 PartitionsToDelete = 10;
     optional uint32 NextPartitionId = 11;
-    optional uint32 PartitionPerTablet = 4; // default = 10
-    optional NKikimrPQ.TPQTabletConfig PQTabletConfig = 5; // mandatory
-    repeated TPartition Partitions = 6; // do not set
+    optional uint32 PartitionPerTablet = 4; // default = 10 
+    optional NKikimrPQ.TPQTabletConfig PQTabletConfig = 5; // mandatory 
+    repeated TPartition Partitions = 6; // do not set 
     optional uint64 AlterVersion = 7;
     optional uint64 BalancerTabletID = 8;
 

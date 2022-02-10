@@ -24,14 +24,14 @@ class MessageBusStatus(enum.IntEnum):
     MSTATUS_INTERNALERROR = 133
     MSTATUS_REJECTED = 134
 
-    @staticmethod
-    def is_ok_status(status):
+    @staticmethod 
+    def is_ok_status(status): 
         return status in (
             MessageBusStatus.MSTATUS_OK,
             MessageBusStatus.MSTATUS_INPROGRESS
         )
 
-
+ 
 @enum.unique
 class EMessageStatus(enum.IntEnum):
     """
@@ -53,57 +53,57 @@ class EMessageStatus(enum.IntEnum):
     MESSAGE_SERVICE_TOOMANY = 13
     MESSAGE_SHUTDOWN = 14
     MESSAGE_DONT_ASK = 15
-
-
+ 
+ 
 @enum.unique
 class EReplyStatus(enum.IntEnum):
-    """
+    """ 
     See /arcadia/ydb/core/protos/base.proto
-    """
-    OK = 0
-    ERROR = 1
-    ALREADY = 2
-    TIMEOUT = 3
-    RACE = 4
-    NODATA = 5
-    BLOCKED = 6
-    NOTREADY = 7
-    OVERRUN = 8
-    TRYLATER = 9
-    TRYLATER_TIME = 10
-    TRYLATER_SIZE = 11
-    DEADLINE = 12
-    CORRUPTED = 13
-    UNKNOWN = 255
-
-
+    """ 
+    OK = 0 
+    ERROR = 1 
+    ALREADY = 2 
+    TIMEOUT = 3 
+    RACE = 4 
+    NODATA = 5 
+    BLOCKED = 6 
+    NOTREADY = 7 
+    OVERRUN = 8 
+    TRYLATER = 9 
+    TRYLATER_TIME = 10 
+    TRYLATER_SIZE = 11 
+    DEADLINE = 12 
+    CORRUPTED = 13 
+    UNKNOWN = 255 
+ 
+ 
 @enum.unique
 class TStorageStatusFlags(enum.IntEnum):
-    """
-    See /arcadia/kikimr/core/base/blobstorage.h
-    TStorageStatusFlags::EStatus
-    """
-    StatusIsValid = 1,
-    StatusDiskSpaceYellow = 1 << 1,
-    StatusDiskSpaceOrange = 1 << 2,
-    StatusDiskSpaceRed = 1 << 3
-
-
+    """ 
+    See /arcadia/kikimr/core/base/blobstorage.h 
+    TStorageStatusFlags::EStatus 
+    """ 
+    StatusIsValid = 1, 
+    StatusDiskSpaceYellow = 1 << 1, 
+    StatusDiskSpaceOrange = 1 << 2, 
+    StatusDiskSpaceRed = 1 << 3 
+ 
+ 
 @enum.unique
 class SchemeStatus(enum.IntEnum):
-    """
+    """ 
     See /arcadia/ydb/core/protos/flat_tx_scheme.proto
-    enum EStatus
-    """
-    StatusSuccess = 0
-    StatusAccepted = 1
-    StatusPathDoesNotExist = 2
-    StatusPathIsNotDirectory = 3
-    StatusAlreadyExists = 4
-    StatusSchemeError = 5
-    StatusNameConflict = 6
-    StatusInvalidParameter = 7
-    StatusMultipleModifications = 8
+    enum EStatus 
+    """ 
+    StatusSuccess = 0 
+    StatusAccepted = 1 
+    StatusPathDoesNotExist = 2 
+    StatusPathIsNotDirectory = 3 
+    StatusAlreadyExists = 4 
+    StatusSchemeError = 5 
+    StatusNameConflict = 6 
+    StatusInvalidParameter = 7 
+    StatusMultipleModifications = 8 
     ProxyShardNotAvailable = 13
 
 

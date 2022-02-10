@@ -48,10 +48,10 @@ class TestTabletSchemes(object):
         cls.cluster.stop()
 
     @classmethod
-    def setup_class(cls):
+    def setup_class(cls): 
         cls.cluster = kikimr_cluster_factory()
-        cls.cluster.start()
-        cls.client = cls.cluster.client
+        cls.cluster.start() 
+        cls.client = cls.cluster.client 
         cls.shard_index = itertools.count(start=1)
         cls.to_prepare = (
             TabletTypes.PERSQUEUE, TabletTypes.KEYVALUEFLAT, TabletTypes.FLAT_DATASHARD, TabletTypes.KESUS)

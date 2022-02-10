@@ -38,8 +38,8 @@ message TVDiskKind {
         LocalMode = 11;
         Extra2 = 22;
         Extra3 = 23;
-        Extra4 = 24;
-        Extra5 = 25;
+        Extra4 = 24; 
+        Extra5 = 25; 
     };
 
     optional EVDiskKind Kind = 1;

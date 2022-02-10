@@ -8,9 +8,9 @@ OWNER(
 TIMEOUT(600)
 
 SIZE(MEDIUM)
-
-FORK_SUBTESTS()
-
+ 
+FORK_SUBTESTS() 
+ 
 PEERDIR(
     ydb/core/client
     ydb/core/testlib

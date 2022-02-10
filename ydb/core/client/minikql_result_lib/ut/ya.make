@@ -2,12 +2,12 @@ UNITTEST_FOR(ydb/core/client/minikql_result_lib)
 
 OWNER(g:kikimr)
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
 TIMEOUT(300)
 
 SIZE(MEDIUM)
-
+ 
 SRCS(
     converter_ut.cpp
     objects_ut.cpp

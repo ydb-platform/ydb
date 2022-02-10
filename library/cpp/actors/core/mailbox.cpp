@@ -3,8 +3,8 @@
 
 #include <library/cpp/actors/util/datetime.h>
 
-#include <util/system/sanitizers.h>
-
+#include <util/system/sanitizers.h> 
+ 
 namespace NActors {
     TMailboxTable::TMailboxTable()
         : LastAllocatedLine(0)
@@ -178,7 +178,7 @@ namespace NActors {
             switch (x->MailboxType) {
                 case TMailboxType::Simple: {
                     TSimpleMailbox* const mailbox = TSimpleMailbox::Get(lineHint, x);
-#if (!defined(_tsan_enabled_))
+#if (!defined(_tsan_enabled_)) 
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->Queue.Push(ev.Release());
@@ -202,7 +202,7 @@ namespace NActors {
                         return false;
 
                     TRevolvingMailbox* const mailbox = TRevolvingMailbox::Get(lineHint, x);
-#if (!defined(_tsan_enabled_))
+#if (!defined(_tsan_enabled_)) 
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->QueueWriter.Push(ev.Release());

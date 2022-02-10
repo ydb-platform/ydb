@@ -115,88 +115,88 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TLogoBlobIdHashTest) {
         Y_UNIT_TEST(SimpleTest) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16).Hash());
-        }
-
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16).Hash()); 
+        } 
+ 
         Y_UNIT_TEST(SimpleTestPartIdDoesNotMatter) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId
-            ui32 partId = 1;
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash());
-
-            partId = 2;
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash());
-
-            partId = 3;
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash());
-        }
-
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId 
+            ui32 partId = 1; 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash()); 
+ 
+            partId = 2; 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash()); 
+ 
+            partId = 3; 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 101, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 100, 16, partId).Hash()); 
+        } 
+ 
          Y_UNIT_TEST(SimpleTestBlobSizeDoesNotMatter) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId
-            ui32 partId = 1;
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 32423523, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 43, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 54645, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 56650, 15, partId).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 0, 15, partId).Hash());
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId 
+            ui32 partId = 1; 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 32423523, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 43, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4061a4ef, TLogoBlobID(42, 1, 2, 0, 54645, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 56650, 15, partId).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 0, 15, partId).Hash()); 
             UNIT_ASSERT_VALUES_EQUAL(0x6b67039d, TLogoBlobID(42, 1, 1, 0, 58435455, 16, partId).Hash());
-        }
-
+        } 
+ 
         Y_UNIT_TEST(SimpleTestWithDifferentTabletId) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13330eae, TLogoBlobID(43, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13510deb, TLogoBlobID(44, 1, 1, 0, 100, 15).Hash());
-
-            UNIT_ASSERT_VALUES_EQUAL(0x136f0d29, TLogoBlobID(45, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x138d0c66, TLogoBlobID(46, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x13ab0ba4, TLogoBlobID(47, 1, 1, 0, 100, 15).Hash());
-        }
-
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13330eae, TLogoBlobID(43, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13510deb, TLogoBlobID(44, 1, 1, 0, 100, 15).Hash()); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(0x136f0d29, TLogoBlobID(45, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x138d0c66, TLogoBlobID(46, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x13ab0ba4, TLogoBlobID(47, 1, 1, 0, 100, 15).Hash()); 
+        } 
+ 
         Y_UNIT_TEST(SimpleTestWithDifferentSteps) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6da02590, TLogoBlobID(42, 3, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x1ae5b09f, TLogoBlobID(42, 4, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc82b3baf, TLogoBlobID(42, 5, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x7570c6bf, TLogoBlobID(42, 6, 1, 0, 100, 15).Hash());
-        }
-
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc05a9a80, TLogoBlobID(42, 2, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6da02590, TLogoBlobID(42, 3, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x1ae5b09f, TLogoBlobID(42, 4, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc82b3baf, TLogoBlobID(42, 5, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x7570c6bf, TLogoBlobID(42, 6, 1, 0, 100, 15).Hash()); 
+        } 
+ 
         Y_UNIT_TEST(SimpleTestWithDifferentChannel) {
-    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie
-            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc867dba4, TLogoBlobID(42, 1, 1, 2, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x231141be, TLogoBlobID(42, 1, 1, 3, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x4309a659, TLogoBlobID(42, 1, 1, 9, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x1854d729, TLogoBlobID(42, 1, 1, 17, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xbd6e95ea, TLogoBlobID(42, 1, 1, 64, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x67c81c65, TLogoBlobID(42, 1, 1, 128, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0xc271827f, TLogoBlobID(42, 1, 1, 129, 100, 15).Hash());
-            UNIT_ASSERT_VALUES_EQUAL(0x61d1c33f, TLogoBlobID(42, 1, 1, 255, 100, 15).Hash());
-        }
-
-    }
-
+    //      ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie 
+            UNIT_ASSERT_VALUES_EQUAL(0x13150f70, TLogoBlobID(42, 1, 1, 0, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x6dbe758a, TLogoBlobID(42, 1, 1, 1, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc867dba4, TLogoBlobID(42, 1, 1, 2, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x231141be, TLogoBlobID(42, 1, 1, 3, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x4309a659, TLogoBlobID(42, 1, 1, 9, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x1854d729, TLogoBlobID(42, 1, 1, 17, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xbd6e95ea, TLogoBlobID(42, 1, 1, 64, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x67c81c65, TLogoBlobID(42, 1, 1, 128, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0xc271827f, TLogoBlobID(42, 1, 1, 129, 100, 15).Hash()); 
+            UNIT_ASSERT_VALUES_EQUAL(0x61d1c33f, TLogoBlobID(42, 1, 1, 255, 100, 15).Hash()); 
+        } 
+ 
+    } 
+ 
 } // NKikimr

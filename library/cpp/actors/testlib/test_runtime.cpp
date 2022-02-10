@@ -12,7 +12,7 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
-
+ 
 #include <util/generic/maybe.h>
 #include <util/generic/bt_exception.h>
 #include <util/random/mersenne.h>
@@ -23,7 +23,7 @@ bool VERBOSE = false;
 const bool PRINT_EVENT_BODY = false;
 
 namespace {
-
+ 
     TString MakeClusterId() {
         pid_t pid = getpid();
         TStringBuilder uuid;
@@ -457,7 +457,7 @@ namespace NActors {
 
     TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
         : ScheduledCount(0)
-        , ScheduledLimit(100000)
+        , ScheduledLimit(100000) 
         , MainThreadId(TThread::CurrentThreadId())
         , ClusterUUID(MakeClusterId())
         , FirstNodeId(NextNodeId)
@@ -472,7 +472,7 @@ namespace NActors {
         , TimeProvider(new TTimeProvider(*this))
         , ShouldContinue()
         , CurrentTimestamp(0)
-        , DispatchTimeout(DEFAULT_DISPATCH_TIMEOUT)
+        , DispatchTimeout(DEFAULT_DISPATCH_TIMEOUT) 
         , ReschedulingDelay(TDuration::MicroSeconds(0))
         , ObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc)
         , ScheduledEventsSelectorFunc(&CollapsedTimeScheduledEventsSelector)
@@ -1832,12 +1832,12 @@ namespace NActors {
                 while (Context->Queue->Head()) {
                     HasReply = false;
                     ctx.ExecutorThread.Send(GetForwardedEvent().Release());
-                    int count = 100;
-                    while (!HasReply && count > 0) {
+                    int count = 100; 
+                    while (!HasReply && count > 0) { 
                         try {
                             Runtime->DispatchEvents(DelegateeOptions);
                         } catch (TEmptyEventQueueException&) {
-                            count--;
+                            count--; 
                             Cerr << "No reply" << Endl;
                         }
                     }

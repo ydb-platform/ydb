@@ -303,7 +303,7 @@ namespace NKikimr {
         }
 
         void Add(const TDiskBlob &addBlob) {
-            Y_VERIFY(!addBlob.GetParts().Empty());
+            Y_VERIFY(!addBlob.GetParts().Empty()); 
             AddImpl(addBlob, addBlob.GetParts());
         }
 

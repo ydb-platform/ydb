@@ -1,14 +1,14 @@
-# -*- coding: utf-8 -*-
-import logging
+# -*- coding: utf-8 -*- 
+import logging 
 import os
 import shutil
 import tempfile
-import time
+import time 
 import itertools
 from google.protobuf import text_format
 
 import ydb.tests.library.common.yatest_common as yatest_common
-
+ 
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
 from . import param_constants
@@ -20,31 +20,31 @@ import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from library.python import resource
 
-
+ 
 logger = logging.getLogger(__name__)
 
 
 def get_unique_path_for_current_test(output_path, sub_folder):
     test_name = yatest_common.context.test_name or ""
     test_name = test_name.replace(':', '_')
-
+ 
     return os.path.join(output_path, test_name, sub_folder)
+ 
 
-
-def ensure_path_exists(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
+def ensure_path_exists(path): 
+    if not os.path.isdir(path): 
+        os.makedirs(path) 
     return path
-
-
-def join(a, b):
-    if a is None:
-        a = ''
-    if b is None:
-        b = ''
-    return os.path.join(a, b)
-
-
+ 
+ 
+def join(a, b): 
+    if a is None: 
+        a = '' 
+    if b is None: 
+        b = '' 
+    return os.path.join(a, b) 
+ 
+ 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None):
@@ -52,9 +52,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_idx
         self.__cwd = None
-        self.__config_path = config_path
-        self.__cluster_name = cluster_name
-        self.__configurator = configurator
+        self.__config_path = config_path 
+        self.__cluster_name = cluster_name 
+        self.__configurator = configurator 
         self.__common_udfs_dir = udfs_dir
 
         self.__encryption_key = encryption_key
@@ -93,15 +93,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 )
             )
         return self.__cwd
-
-    @property
+ 
+    @property 
     def cms_config_cache_file_name(self):
         return self.__cms_config_cache_file_name
 
     @property
-    def command(self):
-        return self.__make_run_command()
-
+    def command(self): 
+        return self.__make_run_command() 
+ 
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
         if pdisk_path.startswith('SectorMap'):
@@ -111,7 +111,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             out.seek(disk_size - 1)
             out.write(b'\0')
 
-    def __make_run_command(self):
+    def __make_run_command(self): 
         command = [self.__configurator.binary_path, "server"]
         if self.__common_udfs_dir is not None:
             command.append("--udfs-dir={}".format(self.__common_udfs_dir))
@@ -166,38 +166,38 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return command
 
     def stop(self):
-        try:
-            super(KiKiMRNode, self).stop()
-        finally:
+        try: 
+            super(KiKiMRNode, self).stop() 
+        finally: 
             logger.info("Stopped node %s", self)
 
-    def kill(self):
+    def kill(self): 
         try:
             super(KiKiMRNode, self).kill()
             self.start()
         finally:
             logger.info("Killed node %s", self)
 
-    def send_signal(self, signal):
-        self.daemon.process.send_signal(signal)
-
-    @property
-    def host(self):
-        return 'localhost'
-
-    @property
+    def send_signal(self, signal): 
+        self.daemon.process.send_signal(signal) 
+ 
+    @property 
+    def host(self): 
+        return 'localhost' 
+ 
+    @property 
     def hostname(self):
         return kikimr_config.get_fqdn()
 
     @property
-    def port(self):
+    def port(self): 
         return self.grpc_port
-
-    @property
+ 
+    @property 
     def pid(self):
         return self.daemon.process.pid
 
-    def start(self):
+    def start(self): 
         try:
             super(KiKiMRNode, self).start()
         finally:
@@ -208,22 +208,22 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name=''):
         super(KiKiMR, self).__init__()
 
-        self.__tmpdir = tempfile.mkdtemp(prefix="kikimr_" + cluster_name + "_")
+        self.__tmpdir = tempfile.mkdtemp(prefix="kikimr_" + cluster_name + "_") 
         self.__common_udfs_dir = None
-        self.__cluster_name = cluster_name
+        self.__cluster_name = cluster_name 
         self.__configurator = kikimr_config.KikimrConfigGenerator() if configurator is None else configurator
         self.__port_allocator = self.__configurator.port_allocator
         self._nodes = {}
         self._slots = {}
-        self.__server = 'localhost'
-        self.__client = None
+        self.__server = 'localhost' 
+        self.__client = None 
         self.__storage_pool_id_allocator = itertools.count(1)
         self.__config_path = None
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
 
-    @property
+    @property 
     def config(self):
         return self.__configurator
 
@@ -236,22 +236,22 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return self._slots
 
     @property
-    def domain_name(self):
+    def domain_name(self): 
         return self.__configurator.domain_name
-
-    @property
-    def server(self):
-        return self.__server
-
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+ 
+    @property 
+    def server(self): 
+        return self.__server 
+ 
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True): 
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         full_command = [self.__configurator.binary_path]
-        if connect_to_server:
+        if connect_to_server: 
             full_command += ["--server={server}".format(server=server)]
-        full_command += cmd
-
-        logger.debug("Executing command = {}".format(full_command))
-        try:
+        full_command += cmd 
+ 
+        logger.debug("Executing command = {}".format(full_command)) 
+        try: 
             return yatest_common.execute(full_command)
         except yatest_common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
@@ -260,25 +260,25 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 out=e.execution_result.std_out,
                 err=e.execution_result.std_err
             ))
-            raise
-
+            raise 
+ 
     def start(self):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
-        try:
+        try: 
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run() 
             return self
 
-        except Exception:
+        except Exception: 
             logger.exception("KiKiMR start failed")
-            self.stop()
-            raise
+            self.stop() 
+            raise 
 
-    def __run(self):
-        self.__client = None
+    def __run(self): 
+        self.__client = None 
 
         self.__instantiate_udfs_dir()
         self.__write_configs()
@@ -286,10 +286,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for _ in self.__configurator.all_node_ids():
             self.__register_node()
 
-        for node_id in self.__configurator.all_node_ids():
-            self.__run_node(node_id)
+        for node_id in self.__configurator.all_node_ids(): 
+            self.__run_node(node_id) 
 
-        self.__wait_for_bs_controller_to_start()
+        self.__wait_for_bs_controller_to_start() 
         self.__add_bs_box()
 
         pools = {}
@@ -313,12 +313,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
         )
 
-    def __run_node(self, node_id):
+    def __run_node(self, node_id): 
         """
         :returns started KiKiMRNode instance
         Can be overriden.
         """
-        self.__format_disks(node_id)
+        self.__format_disks(node_id) 
         self._nodes[node_id].start()
         return self._nodes[node_id]
 
@@ -328,7 +328,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node_index,
             self.config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
-            cluster_name=self.__cluster_name,
+            cluster_name=self.__cluster_name, 
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
         )
@@ -381,7 +381,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def stop(self):
         saved_exceptions = []
-
+ 
         for slot in self.slots.values():
             exception = self.__stop_node(slot)
             if exception is not None:
@@ -396,9 +396,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         if saved_exceptions:
             raise daemon.SeveralDaemonErrors(saved_exceptions)
-
-    @property
-    def config_path(self):
+ 
+    @property 
+    def config_path(self): 
         if self.__config_path is None:
             self.__config_path = ensure_path_exists(
                 get_unique_path_for_current_test(
@@ -410,8 +410,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
         return self.__config_path
 
-    def __write_configs(self):
-        self.__configurator.write_proto_configs(self.config_path)
+    def __write_configs(self): 
+        self.__configurator.write_proto_configs(self.config_path) 
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -423,7 +423,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             os.symlink(udf_path, link_name)
         return self.__common_udfs_dir
 
-    def __format_disks(self, node_id):
+    def __format_disks(self, node_id): 
         for pdisk in self.__configurator.pdisks_info:
             if pdisk['node_id'] != node_id:
                 continue
@@ -503,37 +503,37 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self):
-        monitors = [node.monitor for node in self.nodes.values()]
+    def __wait_for_bs_controller_to_start(self): 
+        monitors = [node.monitor for node in self.nodes.values()] 
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240)
+        timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240) 
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
-        assert bs_controller_started
+        assert bs_controller_started 
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
-    def __init__(
+    def __init__( 
             self, node_id, host, port, mon_port, ic_port, mbus_port, configurator=None, slot_id=None):
         super(KikimrExternalNode, self).__init__(host)
-        self.__node_id = node_id
-        self.__host = host
-        self.__port = port
+        self.__node_id = node_id 
+        self.__host = host 
+        self.__port = port 
         self.__grpc_port = port
-        self.__mon_port = mon_port
-        self.__ic_port = ic_port
-        self.__configurator = configurator
+        self.__mon_port = mon_port 
+        self.__ic_port = ic_port 
+        self.__configurator = configurator 
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
         if slot_id is not None:
             self.__slot_id = "%s" % str(self.__ic_port)
         else:
             self.__slot_id = None
-
+ 
         self._can_update = None
         self.current_version_idx = 0
         self.versions = [
@@ -553,7 +553,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
                     self._can_update &= False
         return self._can_update
 
-    def start(self):
+    def start(self): 
         if self.__slot_id is None:
             return self.ssh_command("sudo start kikimr")
         return self.ssh_command(
@@ -568,7 +568,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
                 "ic={}".format(self.__ic_port),
             ]
         )
-
+ 
     def stop(self):
         if self.__slot_id is None:
             return self.ssh_command("sudo stop kikimr")
@@ -589,27 +589,27 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
     def cwd(self):
         assert False, "not supported"
 
-    @property
-    def mon_port(self):
-        return self.__mon_port
-
+    @property 
+    def mon_port(self): 
+        return self.__mon_port 
+ 
     @property
     def pid(self):
         return None
 
-    def is_alive(self):
-        # TODO implement check
-        return True
-
-    @property
-    def host(self):
-        return self.__host
-
-    @property
-    def port(self):
-        return self.__port
-
-    @property
+    def is_alive(self): 
+        # TODO implement check 
+        return True 
+ 
+    @property 
+    def host(self): 
+        return self.__host 
+ 
+    @property 
+    def port(self): 
+        return self.__port 
+ 
+    @property 
     def grpc_ssl_port(self):
         # TODO(gvit): support in clusters
         return None
@@ -623,13 +623,13 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         return self.__mbus_port
 
     @property
-    def ic_port(self):
-        return self.__ic_port
-
-    @property
-    def node_id(self):
-        return self.__node_id
-
+    def ic_port(self): 
+        return self.__ic_port 
+ 
+    @property 
+    def node_id(self): 
+        return self.__node_id 
+ 
     @property
     def logs_directory(self):
         folder = 'kikimr_%s' % self.__slot_id if self.__slot_id else 'kikimr'

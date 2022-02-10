@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(OutOfDiskSpace) {
-        return;  // TODO https://st.yandex-team.ru/KIKIMR-2279
+        return;  // TODO https://st.yandex-team.ru/KIKIMR-2279 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 

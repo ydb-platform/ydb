@@ -4,14 +4,14 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(1800)
+    TIMEOUT(1800) 
     SIZE(LARGE)
     TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
-
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
+ 
 OWNER(ddoarn cthulhu fomichev g:kikimr)
 
 PEERDIR(

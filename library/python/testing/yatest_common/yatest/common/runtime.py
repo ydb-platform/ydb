@@ -198,15 +198,15 @@ def get_param(key, default=None):
     return _get_ya_plugin_instance().get_param(key, default)
 
 
-def get_param_dict_copy():
-    """
-    Return copy of dictionary with all parameters. Changes to this dictionary do *not* change parameters.
-
-    :return: copy of dictionary with all parameters
-    """
-    return _get_ya_plugin_instance().get_param_dict_copy()
-
-
+def get_param_dict_copy(): 
+    """ 
+    Return copy of dictionary with all parameters. Changes to this dictionary do *not* change parameters. 
+ 
+    :return: copy of dictionary with all parameters 
+    """ 
+    return _get_ya_plugin_instance().get_param_dict_copy() 
+ 
+ 
 @not_test
 def test_output_path(path=None):
     """
@@ -317,11 +317,11 @@ class Context(object):
 
     @property
     def sanitize(self):
-        """
-        Detect if current test run is under sanitizer
-
-        :return: one of `None`, 'address', 'memory', 'thread', 'undefined'
-        """
+        """ 
+        Detect if current test run is under sanitizer 
+ 
+        :return: one of `None`, 'address', 'memory', 'thread', 'undefined' 
+        """ 
         return _get_ya_plugin_instance().get_context("sanitize")
 
     @property

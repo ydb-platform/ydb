@@ -1,51 +1,51 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import itertools
-import string
-from os.path import basename, dirname, join
-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
+import itertools 
+import string 
+from os.path import basename, dirname, join 
+ 
 from ydb.core.protos import msgbus_pb2
 from ydb.core.protos import flat_scheme_op_pb2
 from ydb.tests.library.common.protobuf import AbstractProtobufBuilder, build_protobuf_if_necessary
-
-
+ 
+ 
 DEFAULT_SIZE_TO_SPLIT = 10 ** 6
 
 
-class TPartitionConfig(AbstractProtobufBuilder):
-    """
+class TPartitionConfig(AbstractProtobufBuilder): 
+    """ 
     See /arcadia/ydb/core/protos/flat_scheme_op_pb2.proto
-    """
-
-    def __init__(self):
+    """ 
+ 
+    def __init__(self): 
         super(TPartitionConfig, self).__init__(flat_scheme_op_pb2.TPartitionConfig())
         self.with_partitioning_policy(DEFAULT_SIZE_TO_SPLIT)
-
-    def __ensure_has_compaction_policy(self):
-        if not self.protobuf.HasField('CompactionPolicy'):
+ 
+    def __ensure_has_compaction_policy(self): 
+        if not self.protobuf.HasField('CompactionPolicy'): 
             self.protobuf.CompactionPolicy.CopyFrom(flat_scheme_op_pb2.TCompactionPolicy())
-            # default values
-            self.protobuf.CompactionPolicy.ReadAheadHiThreshold = 67108864
-            self.protobuf.CompactionPolicy.ReadAheadLoThreshold = 16777216
-
-    def add_compaction_policy_generation(
-            self, generation_id,
-            size_to_compact, count_to_compact,
-            force_size_to_compact, force_count_to_compact,
-            compaction_broker_queue, keep_in_cache=False
-    ):
-        self.__ensure_has_compaction_policy()
-        self.protobuf.CompactionPolicy.Generation.add(
-            GenerationId=generation_id,
-            SizeToCompact=size_to_compact,
-            CountToCompact=count_to_compact,
-            ForceCountToCompact=force_count_to_compact,
-            ForceSizeToCompact=force_size_to_compact,
-            CompactionBrokerQueue=compaction_broker_queue,
-            KeepInCache=keep_in_cache,
-        )
-        return self
-
+            # default values 
+            self.protobuf.CompactionPolicy.ReadAheadHiThreshold = 67108864 
+            self.protobuf.CompactionPolicy.ReadAheadLoThreshold = 16777216 
+ 
+    def add_compaction_policy_generation( 
+            self, generation_id, 
+            size_to_compact, count_to_compact, 
+            force_size_to_compact, force_count_to_compact, 
+            compaction_broker_queue, keep_in_cache=False 
+    ): 
+        self.__ensure_has_compaction_policy() 
+        self.protobuf.CompactionPolicy.Generation.add( 
+            GenerationId=generation_id, 
+            SizeToCompact=size_to_compact, 
+            CountToCompact=count_to_compact, 
+            ForceCountToCompact=force_count_to_compact, 
+            ForceSizeToCompact=force_size_to_compact, 
+            CompactionBrokerQueue=compaction_broker_queue, 
+            KeepInCache=keep_in_cache, 
+        ) 
+        return self 
+ 
     def with_tx_read_size_limit(self, tx_read_size_limit):
         self.protobuf.TxReadSizeLimit = tx_read_size_limit
         return self
@@ -54,48 +54,48 @@ class TPartitionConfig(AbstractProtobufBuilder):
         self.protobuf.ExecutorCacheSize = executor_cache_size
         return self
 
-    def with_in_mem_size_to_snapshot(self, in_mem_size_to_snapshot):
-        self.__ensure_has_compaction_policy()
-        self.protobuf.CompactionPolicy.InMemSizeToSnapshot = in_mem_size_to_snapshot
-        return self
-
-    def with_in_mem_steps_to_snapshot(self, in_mem_steps_to_snapshot):
-        self.__ensure_has_compaction_policy()
-        self.protobuf.CompactionPolicy.InMemStepsToSnapshot = in_mem_steps_to_snapshot
-        return self
-
-    def with_in_mem_force_size_to_snapshot(self, in_mem_force_size_to_snapshot):
-        self.__ensure_has_compaction_policy()
-        self.protobuf.CompactionPolicy.InMemForceSizeToSnapshot = in_mem_force_size_to_snapshot
-        return self
-
-    def with_in_mem_force_steps_to_snapshot(self, in_mem_force_steps_to_snapshot):
-        self.__ensure_has_compaction_policy()
-        self.protobuf.CompactionPolicy.InMemForceStepsToSnapshot = in_mem_force_steps_to_snapshot
-        return self
-
+    def with_in_mem_size_to_snapshot(self, in_mem_size_to_snapshot): 
+        self.__ensure_has_compaction_policy() 
+        self.protobuf.CompactionPolicy.InMemSizeToSnapshot = in_mem_size_to_snapshot 
+        return self 
+ 
+    def with_in_mem_steps_to_snapshot(self, in_mem_steps_to_snapshot): 
+        self.__ensure_has_compaction_policy() 
+        self.protobuf.CompactionPolicy.InMemStepsToSnapshot = in_mem_steps_to_snapshot 
+        return self 
+ 
+    def with_in_mem_force_size_to_snapshot(self, in_mem_force_size_to_snapshot): 
+        self.__ensure_has_compaction_policy() 
+        self.protobuf.CompactionPolicy.InMemForceSizeToSnapshot = in_mem_force_size_to_snapshot 
+        return self 
+ 
+    def with_in_mem_force_steps_to_snapshot(self, in_mem_force_steps_to_snapshot): 
+        self.__ensure_has_compaction_policy() 
+        self.protobuf.CompactionPolicy.InMemForceStepsToSnapshot = in_mem_force_steps_to_snapshot 
+        return self 
+ 
     def with_followers(self, follower_count, allow_follower_promotion=True):
         self.protobuf.FollowerCount = follower_count
         self.protobuf.AllowFollowerPromotion = allow_follower_promotion
-        return self
-
-    def with_partitioning_policy(self, size_to_split_bytes):
-        if size_to_split_bytes is not None:
-            self.protobuf.PartitioningPolicy.SizeToSplit = size_to_split_bytes
-        return self
-
-
-class CreatePath(AbstractProtobufBuilder):
-    def __init__(self, work_dir, name=None):
+        return self 
+ 
+    def with_partitioning_policy(self, size_to_split_bytes): 
+        if size_to_split_bytes is not None: 
+            self.protobuf.PartitioningPolicy.SizeToSplit = size_to_split_bytes 
+        return self 
+ 
+ 
+class CreatePath(AbstractProtobufBuilder): 
+    def __init__(self, work_dir, name=None): 
         super(CreatePath, self).__init__(msgbus_pb2.TSchemeOperation())
-        if name is None:
-            name = basename(work_dir)
-            work_dir = dirname(work_dir)
-        self.protobuf.Transaction.ModifyScheme.WorkingDir = work_dir
+        if name is None: 
+            name = basename(work_dir) 
+            work_dir = dirname(work_dir) 
+        self.protobuf.Transaction.ModifyScheme.WorkingDir = work_dir 
         self.protobuf.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpMkDir
-        self.protobuf.Transaction.ModifyScheme.MkDir.Name = name
-
-
+        self.protobuf.Transaction.ModifyScheme.MkDir.Name = name 
+ 
+ 
 class RegisterTenant(AbstractProtobufBuilder):
     class Options(object):
         def __init__(self):
@@ -172,20 +172,20 @@ class RegisterTenant(AbstractProtobufBuilder):
         return self.protobuf.Transaction.ModifyScheme.SubDomain
 
 
-def list_of_create_path_builders_from_full_path(full_path):
-    list_of_dirs = [path for path in string.split(full_path, '/') if path]
-    ret = []
-    prev = ''
-    for dir_name in list_of_dirs:
-        current = join(prev, dir_name)
-        if prev:
-            ret.append(CreatePath(prev, dir_name))
-        else:
-            current = '/' + current
-        prev = current
-    return ret
-
-
+def list_of_create_path_builders_from_full_path(full_path): 
+    list_of_dirs = [path for path in string.split(full_path, '/') if path] 
+    ret = [] 
+    prev = '' 
+    for dir_name in list_of_dirs: 
+        current = join(prev, dir_name) 
+        if prev: 
+            ret.append(CreatePath(prev, dir_name)) 
+        else: 
+            current = '/' + current 
+        prev = current 
+    return ret 
+ 
+ 
 class AbstractTSchemeOperationRequest(AbstractProtobufBuilder):
     """
     See
@@ -194,7 +194,7 @@ class AbstractTSchemeOperationRequest(AbstractProtobufBuilder):
     """
     def __init__(self):
         super(AbstractTSchemeOperationRequest, self).__init__(msgbus_pb2.TSchemeOperation())
-
+ 
 
 class _DropPolicyOptions(object):
     def __init__(self):
@@ -303,20 +303,20 @@ class DropTopicRequest(AbstractTSchemeOperationRequest):
         self.__drop.Name = topic_name
         self.with_options(options or self.Options())
 
-    @property
+    @property 
     def __modify_scheme_transaction(self):
         return self.protobuf.Transaction.ModifyScheme
-
+ 
     @property
     def __drop(self):
         return self.__modify_scheme_transaction.Drop
-
+ 
     def with_options(self, options):
         assert isinstance(options, self.Options)
-
+ 
         if options.drop_policy is not None:
             self.__drop.WaitPolicy = options.drop_policy
-
+ 
         return self
 
 
@@ -449,19 +449,19 @@ class AlterTopicRequest(CreateTopicRequest):
         return self._modify_scheme_transaction.AlterPersQueueGroup
 
 
-class DropPath(AbstractProtobufBuilder):
+class DropPath(AbstractProtobufBuilder): 
     def __init__(self, work_dir, name=None, drop_policy=flat_scheme_op_pb2.EDropFailOnChanges):
         super(DropPath, self).__init__(msgbus_pb2.TSchemeOperation())
         if name is None:
             name = basename(work_dir)
             work_dir = dirname(work_dir)
-        self.protobuf.Transaction.ModifyScheme.WorkingDir = work_dir
+        self.protobuf.Transaction.ModifyScheme.WorkingDir = work_dir 
         self.protobuf.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpRmDir
-        self.protobuf.Transaction.ModifyScheme.Drop.Name = name
-        self.protobuf.Transaction.ModifyScheme.Drop.WaitPolicy = drop_policy
-
-
-class CreateTableRequest(AbstractTSchemeOperationRequest):
+        self.protobuf.Transaction.ModifyScheme.Drop.Name = name 
+        self.protobuf.Transaction.ModifyScheme.Drop.WaitPolicy = drop_policy 
+ 
+ 
+class CreateTableRequest(AbstractTSchemeOperationRequest): 
     class Options(object):
         ColumnStorage1 = flat_scheme_op_pb2.ColumnStorage1
         ColumnStorage2 = flat_scheme_op_pb2.ColumnStorage2
@@ -479,7 +479,7 @@ class CreateTableRequest(AbstractTSchemeOperationRequest):
                 }
                 self.__data_threshold = 0
                 self.__external_threshold = 0
-
+ 
             def appoint_syslog(self, pool_kind, allow_subsitude=False):
                 self.__targets['syslog'] = (pool_kind, allow_subsitude)
                 return self
@@ -582,40 +582,40 @@ class CreateTableRequest(AbstractTSchemeOperationRequest):
             return self
 
     def __init__(self, path, table_name=None, options=None, use_options=True):
-        super(CreateTableRequest, self).__init__()
-        self.__column_ids = itertools.count(start=1)
-
+        super(CreateTableRequest, self).__init__() 
+        self.__column_ids = itertools.count(start=1) 
+ 
         if table_name is None:
             table_name = basename(path)
             path = dirname(path)
 
         self.protobuf.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpCreateTable
-
-        self.protobuf.Transaction.ModifyScheme.WorkingDir = path
-        self.__create_table_protobuf.Name = table_name
-
+ 
+        self.protobuf.Transaction.ModifyScheme.WorkingDir = path 
+        self.__create_table_protobuf.Name = table_name 
+ 
         if use_options:
             self.with_options(
                 options or self.Options()
             )
 
-    @property
-    def __create_table_protobuf(self):
-        return self.protobuf.Transaction.ModifyScheme.CreateTable
-
+    @property 
+    def __create_table_protobuf(self): 
+        return self.protobuf.Transaction.ModifyScheme.CreateTable 
+ 
     def add_column(self, name, ptype, is_key=False, column_family=None):
         kwargs = {'Name': name, 'Type': str(ptype), 'Id': next(self.__column_ids)}
         if column_family is not None:
             kwargs['Family'] = column_family
         self.__create_table_protobuf.Columns.add(**kwargs)
-        if is_key:
-            self.__create_table_protobuf.KeyColumnNames.append(name)
-        return self
-
-    def with_partitions(self, uniform_partitions_count):
-        self.__create_table_protobuf.UniformPartitionsCount = uniform_partitions_count
-        return self
-
+        if is_key: 
+            self.__create_table_protobuf.KeyColumnNames.append(name) 
+        return self 
+ 
+    def with_partitions(self, uniform_partitions_count): 
+        self.__create_table_protobuf.UniformPartitionsCount = uniform_partitions_count 
+        return self 
+ 
     def with_column_family(self, id_, storage, column_cache, codec=0,
                            storage_config=None):
         family = self.__create_table_protobuf.PartitionConfig.ColumnFamilies.add(
@@ -629,10 +629,10 @@ class CreateTableRequest(AbstractTSchemeOperationRequest):
 
         return self
 
-    def with_partition_config(self, partition_config):
-        self.__create_table_protobuf.PartitionConfig.CopyFrom(build_protobuf_if_necessary(partition_config))
-        return self
-
+    def with_partition_config(self, partition_config): 
+        self.__create_table_protobuf.PartitionConfig.CopyFrom(build_protobuf_if_necessary(partition_config)) 
+        return self 
+ 
     def with_options(self, options):
         assert isinstance(options, self.Options)
 
@@ -647,7 +647,7 @@ class CreateTableRequest(AbstractTSchemeOperationRequest):
             self.add_column(name, ptype, is_key, column_family)
 
         return self
-
+ 
 
 class AlterTableRequest(AbstractTSchemeOperationRequest):
     def __init__(self, path, table_name):
@@ -690,21 +690,21 @@ class AlterTableRequest(AbstractTSchemeOperationRequest):
         return self
 
 
-class DropTableRequest(AbstractTSchemeOperationRequest):
+class DropTableRequest(AbstractTSchemeOperationRequest): 
     class Options(_DropPolicyOptions):
         pass
 
     def __init__(self, path, table_name=None, drop_policy=flat_scheme_op_pb2.EDropFailOnChanges, options=None):
-        super(DropTableRequest, self).__init__()
+        super(DropTableRequest, self).__init__() 
         self.protobuf.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpDropTable
-
+ 
         if table_name is None:
             table_name = basename(path)
             path = dirname(path)
-
+ 
         self.protobuf.Transaction.ModifyScheme.WorkingDir = path
         self.protobuf.Transaction.ModifyScheme.Drop.Name = table_name
-
+ 
         fixed_options = options or self.Options()
         fixed_options.with_drop_policy(drop_policy)
         self.with_options(fixed_options)
@@ -719,35 +719,35 @@ class DropTableRequest(AbstractTSchemeOperationRequest):
 
 
 class SchemeOperationStatus(AbstractProtobufBuilder):
-    def __init__(self, tx_id, scheme_shard_id, timeout_seconds=120):
+    def __init__(self, tx_id, scheme_shard_id, timeout_seconds=120): 
         super(SchemeOperationStatus, self).__init__(msgbus_pb2.TSchemeOperationStatus())
-        self.protobuf.FlatTxId.TxId = tx_id
-        self.protobuf.FlatTxId.SchemeShardTabletId = scheme_shard_id
-        self.protobuf.PollOptions.Timeout = timeout_seconds * 1000
-
-
+        self.protobuf.FlatTxId.TxId = tx_id 
+        self.protobuf.FlatTxId.SchemeShardTabletId = scheme_shard_id 
+        self.protobuf.PollOptions.Timeout = timeout_seconds * 1000 
+ 
+ 
 # make a synonym for old code
 TSchemeOperationStatus = SchemeOperationStatus
 
 
-class CopyTableRequest(AbstractTSchemeOperationRequest):
-    def __init__(self, source_table_full_name, destination_path, destination_name):
-        super(CopyTableRequest, self).__init__()
+class CopyTableRequest(AbstractTSchemeOperationRequest): 
+    def __init__(self, source_table_full_name, destination_path, destination_name): 
+        super(CopyTableRequest, self).__init__() 
         self.protobuf.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpCreateTable
-        self.__create_table_protobuf.CopyFromTable = source_table_full_name
-        self.protobuf.Transaction.ModifyScheme.WorkingDir = destination_path
-        self.__create_table_protobuf.Name = destination_name
-
-    @property
-    def __create_table_protobuf(self):
-        return self.protobuf.Transaction.ModifyScheme.CreateTable
-
+        self.__create_table_protobuf.CopyFromTable = source_table_full_name 
+        self.protobuf.Transaction.ModifyScheme.WorkingDir = destination_path 
+        self.__create_table_protobuf.Name = destination_name 
+ 
+    @property 
+    def __create_table_protobuf(self): 
+        return self.protobuf.Transaction.ModifyScheme.CreateTable 
+ 
     def with_partition_config(self, partition_config):
         self.__create_table_protobuf.PartitionConfig.CopyFrom(build_protobuf_if_necessary(partition_config))
         return self
+ 
 
-
-class SchemeDescribeRequest(AbstractProtobufBuilder):
+class SchemeDescribeRequest(AbstractProtobufBuilder): 
     class Options(object):
         def __init__(self):
             self.__partition_info = False
@@ -783,8 +783,8 @@ class SchemeDescribeRequest(AbstractProtobufBuilder):
 
     def __init__(self, full_path, options=None):
         super(SchemeDescribeRequest, self).__init__(msgbus_pb2.TSchemeDescribe())
-        self.protobuf.Path = full_path
-
+        self.protobuf.Path = full_path 
+ 
         options = options or self.Options()
         self.with_options(options)
 

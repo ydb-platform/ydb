@@ -18,7 +18,7 @@
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 #include <util/system/hp_timer.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -26,9 +26,9 @@ namespace NMiniKQL {
 #ifdef WITH_VALGRIND
 constexpr static size_t PERFORMANCE_COUNT = 0x1000;
 #else
-constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x4000000, 0x1000);
+constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x4000000, 0x1000); 
 #endif
-
+ 
 template<bool UseCodegen>
 class TMiniKQLComputationNodePackTest: public TTestBase {
 protected:
@@ -302,7 +302,7 @@ protected:
     {
         TValuePacker packer(false, type, UseCodegen);
         const THPTimer timer;
-        for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i)
+        for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i) 
             packer.Pack(uValue);
         Cout << timer.Passed() << Endl;
     }

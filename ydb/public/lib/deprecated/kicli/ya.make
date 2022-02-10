@@ -1,8 +1,8 @@
 LIBRARY()
 
-# See documentation
-# https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/
-
+# See documentation 
+# https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/ 
+ 
 OWNER(
     xenoxeno
     g:kikimr

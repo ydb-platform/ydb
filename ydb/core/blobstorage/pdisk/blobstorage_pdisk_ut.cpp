@@ -20,10 +20,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Warning!
-        // Kikimr Admins use Integer values of EState in their scripts!
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // Warning! 
+        // Kikimr Admins use Integer values of EState in their scripts! 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Initial == 0);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatRead == 1);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::InitialFormatReadError == 2);
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::OpenFileError == 11);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13);
-    }
+    } 
 
 struct TActorTestContext {
 private:
@@ -337,7 +337,7 @@ void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
             NKikimrProto::OK);
 
     vdisk.OwnerRound =  evInitRes->PDiskParams->OwnerRound;
-}
+} 
 
     Y_UNIT_TEST(TestPDiskManyOwnersInitiation) {
         TActorTestContext testCtx(false);

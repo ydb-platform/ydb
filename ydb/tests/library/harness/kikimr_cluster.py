@@ -1,31 +1,31 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 import os
 import itertools
 import logging
 import subprocess
 import time
-import pprint
+import pprint 
 from concurrent import futures
 
 import ydb.tests.library.common.yatest_common as yatest_common
-
+ 
 from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 from . import blockstore
 import yaml
-
+ 
 logger = logging.getLogger(__name__)
-
-DEFAULT_INTERCONNECT_PORT = 19001
+ 
+DEFAULT_INTERCONNECT_PORT = 19001 
 DEFAULT_MBUS_PORT = 2134
 DEFAULT_MON_PORT = 8765
 DEFAULT_GRPC_PORT = 2135
 
 
 def kikimr_cluster_factory(configurator=None, config_path=None):
-    logger.info("All test params = {}".format(pprint.pformat(yatest_common.get_param_dict_copy())))
+    logger.info("All test params = {}".format(pprint.pformat(yatest_common.get_param_dict_copy()))) 
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)
@@ -62,7 +62,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def add_storage_pool(self, erasure=None):
         raise NotImplementedError()
 
-    def start(self):
+    def start(self): 
         self._prepare_cluster()
 
         self._start()
@@ -70,7 +70,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
     def stop(self):
         return self
-
+ 
     def restart(self):
         self._stop()
         self._start()
@@ -181,9 +181,9 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._start()
 
-    @property
-    def nodes(self):
-        return {
+    @property 
+    def nodes(self): 
+        return { 
             node_id: KikimrExternalNode(
                 node_id=node_id,
                 host=host,
@@ -194,7 +194,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 configurator=None,
             ) for node_id, host in zip(itertools.count(start=1), self.__hosts)
         }
-
+ 
     @property
     def nbs(self):
         return {}

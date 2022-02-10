@@ -7,11 +7,11 @@ OWNER(
 
 DEPENDS(library/python/runtime_py3/test/traceback)
 
-PEERDIR(
-    contrib/python/parameterized
-    contrib/python/PyYAML
-)
-
+PEERDIR( 
+    contrib/python/parameterized 
+    contrib/python/PyYAML 
+) 
+ 
 PY_SRCS(
     TOP_LEVEL
     resources/__init__.py
@@ -22,7 +22,7 @@ TEST_SRCS(
     test_metadata.py
     test_resources.py
     test_traceback.py
-    test_arcadia_source_finder.py
+    test_arcadia_source_finder.py 
 )
 
 RESOURCE_FILES(

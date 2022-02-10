@@ -1,6 +1,6 @@
 OWNER(g:contrib g:ymake orivej)
 
-PY3_PROGRAM_BIN(pycc)
+PY3_PROGRAM_BIN(pycc) 
 
 ENABLE(PYBUILD_NO_PYC)
 

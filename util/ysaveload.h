@@ -421,7 +421,7 @@ public:
 };
 
 template <class T>
-struct TTupleSerializer {
+struct TTupleSerializer { 
     template <class F, class Tuple, size_t... Indices>
     static inline void ReverseUseless(F&& f, Tuple&& t, std::index_sequence<Indices...>) {
         ApplyToMany(
@@ -429,23 +429,23 @@ struct TTupleSerializer {
             // We need to do this trick because we don't want to break backward compatibility.
             // Tuples are being packed in reverse order.
             std::get<std::tuple_size<T>::value - Indices - 1>(std::forward<Tuple>(t))...);
-    }
-
+    } 
+ 
     static inline void Save(IOutputStream* stream, const T& t) {
         ReverseUseless([&](const auto& v) { ::Save(stream, v); }, t,
                        std::make_index_sequence<std::tuple_size<T>::value>{});
-    }
-
+    } 
+ 
     static inline void Load(IInputStream* stream, T& t) {
         ReverseUseless([&](auto& v) { ::Load(stream, v); }, t,
                        std::make_index_sequence<std::tuple_size<T>::value>{});
-    }
-};
-
-template <typename... TArgs>
+    } 
+}; 
+ 
+template <typename... TArgs> 
 struct TSerializer<std::tuple<TArgs...>>: TTupleSerializer<std::tuple<TArgs...>> {
-};
-
+}; 
+ 
 template <>
 class TSerializer<TBuffer> {
 public:

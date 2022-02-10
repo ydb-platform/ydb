@@ -1,6 +1,6 @@
 OWNER(torkve g:python-contrib)
 
-PY3_PROGRAM_BIN(protoc-gen-mypy)
+PY3_PROGRAM_BIN(protoc-gen-mypy) 
 
 PEERDIR(
     contrib/python/mypy-protobuf

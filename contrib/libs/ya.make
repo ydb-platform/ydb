@@ -29,7 +29,7 @@ RECURSE(
     cctools
     cctz
     cereal
-    ceres-solver 
+    ceres-solver
     chromaprint
     clang12
     clang12-rt
@@ -250,7 +250,7 @@ RECURSE(
     opencv/modules
     opencv/modules/python/src2
     openfst
-    opengv 
+    opengv
     openjpeg
     openldap
     openldap/libraries
@@ -283,7 +283,7 @@ RECURSE(
     psimd
     pthreadpool
     pugixml
-    pybind11 
+    pybind11
     pycxx
     python
     python/ut

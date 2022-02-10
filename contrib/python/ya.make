@@ -684,7 +684,7 @@ RECURSE(
     openapi-spec-validator
     opencv-python
     openpyxl
-    opensfm 
+    opensfm
     opentok
     opentracing
     opentracing-async-instrumentation

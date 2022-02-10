@@ -761,7 +761,7 @@ RECURSE(
     premailer
     preshed
     pretend
-    prettytable
+    prettytable 
     priority
     progressbar2
     prometheus-client
@@ -949,7 +949,7 @@ RECURSE(
     responses
     respx
     retry
-    retrying
+    retrying 
     rfc3986
     rfc3986-validator
     RPi.GPIO

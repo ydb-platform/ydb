@@ -178,9 +178,9 @@
         "cuda-check": {
             "description": "Run cuda-check"
         },
-        "sre": { 
-            "description": "Run sretool" 
-        }, 
+        "sre": {
+            "description": "Run sretool"
+        },
         "samogonctl": {
             "description": "Run Samogon Controller"
         },
@@ -3127,22 +3127,22 @@
                 }
             ]
         },
-        "sre": { 
-            "tools": { 
-                "sre": { 
-                    "bottle": "sre", 
-                    "executable": "sre" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "sre": {
+            "tools": {
+                "sre": {
+                    "bottle": "sre",
+                    "executable": "sre"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "samogonctl": {
             "tools": {
                 "samogonctl": {
@@ -5059,7 +5059,7 @@
         "bpftrace": {
             "tools": {
                 "bpftrace": {
-                    "bottle": "sre", 
+                    "bottle": "sre",
                     "executable": "bpftrace"
                 }
             },
@@ -6620,21 +6620,21 @@
                 ]
             }
         },
-        "sre": { 
-            "formula": { 
-                "sandbox_id": "1156434675", 
-                "match": "infra/rtc/sretools/sretools.tar.gz" 
-            }, 
-            "executable": { 
-                "sre": [ 
+        "sre": {
+            "formula": {
+                "sandbox_id": "1156434675",
+                "match": "infra/rtc/sretools/sretools.tar.gz"
+            },
+            "executable": {
+                "sre": [
                     "sretool"
-                ], 
-                "bpftrace": [ 
-                    "tools", 
-                    "bpftrace" 
-                ] 
-            } 
-        }, 
+                ],
+                "bpftrace": [
+                    "tools",
+                    "bpftrace"
+                ]
+            }
+        },
         "samogonctl": {
             "formula": {
                 "sandbox_id": 438053038,
@@ -7539,7 +7539,7 @@
         "bpftool": {
             "formula": {
                 "sandbox_id": [
-                    1130914217 
+                    1130914217
                 ],
                 "match": "infra/kernel/tools/bpftool/build/bpftool-static.tar.gz"
             },
@@ -7626,7 +7626,7 @@
                 "sandbox_id": [
                     1183844682
                 ],
-                "match": "infra/rsm/coroner/build/packages/coroner/pkg.json" 
+                "match": "infra/rsm/coroner/build/packages/coroner/pkg.json"
             },
             "executable": {
                 "coronerctl": [

@@ -107,7 +107,7 @@ enum EServiceKikimr {
     MINIKQL_ENGINE = 340;
     KQP_TASKS_RUNNER = 341;
 
-    // JOBRUNNER section - deprecated, left for compatibility with existing logger configuration
+    // JOBRUNNER section - deprecated, left for compatibility with existing logger configuration 
     JOBRUNNER = 350;
     JOBRUNNER_PROXY = 351;
     JOBRUNNER_CONTRACTOR = 352;
@@ -115,10 +115,10 @@ enum EServiceKikimr {
     FLAT_JOBRUNNER_POOL_MANAGER = 354;
 
     // EXECUTION_SERVICE section
-    EXECUTION_SERVICE = 360; // deprecated, left for compatibility reasons
-    EXECUTION_SERVICE_PROXY = 361; // deprecated, left for compatibility reasons
-    KWCALC_PROXY = 362; // deprecated, left for compatibility reasons
-    KWCALC_PROXY_WORKER = 363; // deprecated, left for compatibility reasons
+    EXECUTION_SERVICE = 360; // deprecated, left for compatibility reasons 
+    EXECUTION_SERVICE_PROXY = 361; // deprecated, left for compatibility reasons 
+    KWCALC_PROXY = 362; // deprecated, left for compatibility reasons 
+    KWCALC_PROXY_WORKER = 363; // deprecated, left for compatibility reasons 
     YQL_EXECUTION = 364;
     YAMR_PROXY = 365;
     YQL_KIKIMR_PROXY = 366;

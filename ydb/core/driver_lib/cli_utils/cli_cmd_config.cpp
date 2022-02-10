@@ -1,23 +1,23 @@
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
-#include "cli_cmd_config.h"
+#include "cli_cmd_config.h" 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <util/system/env.h>
-
-namespace NKikimr {
-namespace NDriverClient {
-
-        void TCliCmdConfig::ConfigureBaseLastGetopt(NLastGetopt::TOpts &opts) {
-            opts.AddHelpOption('h');
-
-            opts.AddLongOption('s', "server", "server address to connect")
+ 
+namespace NKikimr { 
+namespace NDriverClient { 
+ 
+        void TCliCmdConfig::ConfigureBaseLastGetopt(NLastGetopt::TOpts &opts) { 
+            opts.AddHelpOption('h'); 
+ 
+            opts.AddLongOption('s', "server", "server address to connect") 
                     .RequiredArgument("ADDR").StoreResult(&Address);
-
-            opts.SetFreeArgTitle(0, "mbus", "- use to override message bus client default settings");
-            opts.SetFreeArgsMin(0);
-            opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
-        }
-
-        void TCliCmdConfig::ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv) {
+ 
+            opts.SetFreeArgTitle(0, "mbus", "- use to override message bus client default settings"); 
+            opts.SetFreeArgsMin(0); 
+            opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER; 
+        } 
+ 
+        void TCliCmdConfig::ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv) { 
             if (Address.empty()) {
                 TString kikimrServer = GetEnv("KIKIMR_SERVER");
                 if (kikimrServer != nullptr) {
@@ -54,8 +54,8 @@ namespace NDriverClient {
 
                 ClientConfig = MsgBusClientConfig;
                 break;
-            }
-        }
-
-} // namespace NDriverClient
-} // namespace NKikimr
+            } 
+        } 
+ 
+} // namespace NDriverClient 
+} // namespace NKikimr 

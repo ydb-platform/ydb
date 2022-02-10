@@ -1,7 +1,7 @@
 #pragma once
-
-#include "cli_cmd_config.h"
-
+ 
+#include "cli_cmd_config.h" 
+ 
 #include <ydb/core/driver_lib/cli_base/cli.h>
 #include <ydb/core/driver_lib/run/factories.h>
 
@@ -9,9 +9,9 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
-#include <util/stream/file.h>
-#include <util/stream/format.h>
-#include <util/system/hostname.h>
+#include <util/stream/file.h> 
+#include <util/stream/format.h> 
+#include <util/system/hostname.h> 
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -19,10 +19,10 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 
-namespace NDriverClient {
-
+namespace NDriverClient { 
+ 
     void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response);
     void DumpSchemeErrorCode(IOutputStream &o, const NKikimrClient::TResponse &response);
 

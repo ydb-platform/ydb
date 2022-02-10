@@ -19,27 +19,27 @@ public:
 
 private:
     IInputStream& Slave_;
-    const char    Delim_;
+    const char    Delim_; 
 };
 
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
-// TCsvInputBuffer
-///////////////////////////////////////////////////////////////////////////////
-class TCsvInputBuffer {
-public:
-    TCsvInputBuffer(const TStringBuf& buffer, char delimiter = ';');
-
+// TCsvInputBuffer 
+/////////////////////////////////////////////////////////////////////////////// 
+class TCsvInputBuffer { 
+public: 
+    TCsvInputBuffer(const TStringBuf& buffer, char delimiter = ';'); 
+ 
     TVector<TString> ReadLine();
     TVector<TString> ReadLineWithEscaping();
-
-private:
-    TStringBuf Buffer_;
-    const char Delim_;
-};
-
-
-///////////////////////////////////////////////////////////////////////////////
+ 
+private: 
+    TStringBuf Buffer_; 
+    const char Delim_; 
+}; 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////////// 
 // TCsvOutputStream
 ///////////////////////////////////////////////////////////////////////////////
 class TCsvOutputStream: public IOutputStream {
@@ -60,12 +60,12 @@ public:
 
     inline TCsvOutputStream& operator<<(const TVector<TString>& values) {
         for(const TString& value: values) {
-            (*this) << value;
-        }
-        (*this) << Endl;
-        return *this;
-    }
-
+            (*this) << value; 
+        } 
+        (*this) << Endl; 
+        return *this; 
+    } 
+ 
 private:
     void DoWrite(const void* buf, size_t len) override final;
     void DoFlush() override;
@@ -73,8 +73,8 @@ private:
 private:
     IOutputStream& Slave_;
     bool WasNL_;
-    const char Delim_;
-    const bool QuoteItems_;
+    const char Delim_; 
+    const bool QuoteItems_; 
 };
 
 } // namspace NUtils

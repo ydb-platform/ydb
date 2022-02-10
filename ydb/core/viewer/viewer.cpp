@@ -92,37 +92,37 @@ public:
     }
 };
 
-void SetupPQVirtualHandlers(IViewer* viewer) {
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Root,
+void SetupPQVirtualHandlers(IViewer* viewer) { 
+    viewer->RegisterVirtualHandler( 
+        NKikimrViewer::EObjectType::Root, 
         [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseRoot(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Consumers,
+            return new NViewerPQ::TBrowseRoot(owner, browseContext); 
+        }); 
+    viewer->RegisterVirtualHandler( 
+        NKikimrViewer::EObjectType::Consumers, 
         [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseConsumers(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Consumer,
+            return new NViewerPQ::TBrowseConsumers(owner, browseContext); 
+        }); 
+    viewer->RegisterVirtualHandler( 
+        NKikimrViewer::EObjectType::Consumer, 
         [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseConsumer(owner, browseContext);
-        });
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Topic,
+            return new NViewerPQ::TBrowseConsumer(owner, browseContext); 
+        }); 
+    viewer->RegisterVirtualHandler( 
+        NKikimrViewer::EObjectType::Topic, 
         [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerPQ::TBrowseTopic(owner, browseContext);
-        });
-}
-
-void SetupDBVirtualHandlers(IViewer* viewer) {
-    viewer->RegisterVirtualHandler(
-        NKikimrViewer::EObjectType::Table,
+            return new NViewerPQ::TBrowseTopic(owner, browseContext); 
+        }); 
+} 
+ 
+void SetupDBVirtualHandlers(IViewer* viewer) { 
+    viewer->RegisterVirtualHandler( 
+        NKikimrViewer::EObjectType::Table, 
         [] (const TActorId& owner, const IViewer::TBrowseContext& browseContext) -> IActor* {
-            return new NViewerDB::TBrowseTable(owner, browseContext);
-        });
-}
-
+            return new NViewerDB::TBrowseTable(owner, browseContext); 
+        }); 
+} 
+ 
 class TViewer : public TActorBootstrapped<TViewer>, public IViewer {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -213,7 +213,7 @@ public:
         return KikimrRunConfig;
     }
 
-    void RegisterVirtualHandler(
+    void RegisterVirtualHandler( 
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
         VirtualHandlersByParentType.insert(std::make_pair(parentObjectType, TVirtualHandler(handler)));
@@ -228,24 +228,24 @@ public:
         return handlers;
     }
 
-    TContentHandler GetContentHandler(NKikimrViewer::EObjectType objectType) const override {
-        auto rec = ContentHandlers.find(objectType);
-        return (rec != ContentHandlers.end()) ? rec->second : (TContentHandler)nullptr;
-    }
-
-    void RegisterContentHandler(
-        NKikimrViewer::EObjectType objectType,
-        const TContentHandler& handler) override {
-        if (handler) {
-            ContentHandlers.emplace(objectType, handler);
-        }
-    }
-
+    TContentHandler GetContentHandler(NKikimrViewer::EObjectType objectType) const override { 
+        auto rec = ContentHandlers.find(objectType); 
+        return (rec != ContentHandlers.end()) ? rec->second : (TContentHandler)nullptr; 
+    } 
+ 
+    void RegisterContentHandler( 
+        NKikimrViewer::EObjectType objectType, 
+        const TContentHandler& handler) override { 
+        if (handler) { 
+            ContentHandlers.emplace(objectType, handler); 
+        } 
+    } 
+ 
 private:
     THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
-    std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
+    std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers; 
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -369,7 +369,7 @@ private:
                 response.Write(blob.data(), blob.size());
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             }
-            return true;
+            return true; 
         }
         return false;
     }
@@ -459,33 +459,33 @@ private:
     }
 };
 
-TString IViewer::TContentRequestContext::Dump() const
-{
-    auto typeToString = [] (int type) -> TString {
-        using namespace NKikimrViewer;
-        if (EObjectType_IsValid(type)) {
-            return EObjectType_Name((EObjectType)type);
-        } else {
-            return TStringBuilder() << "unknown (" << type << ")";
-        }
-    };
+TString IViewer::TContentRequestContext::Dump() const 
+{ 
+    auto typeToString = [] (int type) -> TString { 
+        using namespace NKikimrViewer; 
+        if (EObjectType_IsValid(type)) { 
+            return EObjectType_Name((EObjectType)type); 
+        } else { 
+            return TStringBuilder() << "unknown (" << type << ")"; 
+        } 
+    }; 
 
-    TStringBuilder result;
-    result << "Path = " << Path << Endl;
-    result << "Name = " << ObjectName << Endl;
-    result << "Type = " << typeToString(Type) << Endl;
-
-    result << "Limit = " << Limit << Endl;
-    result << "Offset = " << Offset << Endl;
-    result << "Key = " << Key << Endl;
-
-    result << "JsonSettings.EnumAsNumbers = " << JsonSettings.EnumAsNumbers << Endl;
-    result << "JsonSettings.UI64AsString = " << JsonSettings.UI64AsString << Endl;
-    result << "Timeout = " << Timeout.MilliSeconds() << " ms" << Endl;
-
-    return result;
-}
-
+    TStringBuilder result; 
+    result << "Path = " << Path << Endl; 
+    result << "Name = " << ObjectName << Endl; 
+    result << "Type = " << typeToString(Type) << Endl; 
+ 
+    result << "Limit = " << Limit << Endl; 
+    result << "Offset = " << Offset << Endl; 
+    result << "Key = " << Key << Endl; 
+ 
+    result << "JsonSettings.EnumAsNumbers = " << JsonSettings.EnumAsNumbers << Endl; 
+    result << "JsonSettings.UI64AsString = " << JsonSettings.UI64AsString << Endl; 
+    result << "Timeout = " << Timeout.MilliSeconds() << " ms" << Endl; 
+ 
+    return result; 
+} 
+ 
 ui32 CurrentMonitoringPort = 8765;
 
 IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig) {

@@ -1,18 +1,18 @@
-#pragma once
+#pragma once 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <util/generic/variant.h>
-
-namespace NKikimr {
-namespace NDriverClient {
-    struct TCliCmdConfig : TNonCopyable {
+ 
+namespace NKikimr { 
+namespace NDriverClient { 
+    struct TCliCmdConfig : TNonCopyable { 
         TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig;
         NMsgBusProxy::TMsgBusClientConfig MsgBusClientConfig;
         TString Address;
-
-        void ConfigureBaseLastGetopt(NLastGetopt::TOpts &opts);
-        void ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv);
+ 
+        void ConfigureBaseLastGetopt(NLastGetopt::TOpts &opts); 
+        void ConfigureMsgBusLastGetopt(const NLastGetopt::TOptsParseResult& res, int argc, char** argv); 
 
         template<typename TRequest>
         NBus::EMessageStatus SyncCall(TAutoPtr<TRequest> request, TAutoPtr<NBus::TBusMessage>& response) const {
@@ -48,7 +48,7 @@ namespace NDriverClient {
                 Y_FAIL("Client configuration is not provided");
             }
         }
-    };
-
-}
-}
+    }; 
+ 
+} 
+} 

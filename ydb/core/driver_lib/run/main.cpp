@@ -1,19 +1,19 @@
 #include "main.h"
-#include "driver.h"
+#include "driver.h" 
 
-// add support for base utils
+// add support for base utils 
 #include <ydb/core/driver_lib/base_utils/format_info.h>
 #include <ydb/core/driver_lib/base_utils/format_util.h>
 #include <ydb/core/driver_lib/base_utils/node_by_host.h>
 
-// add support for CLI utils
+// add support for CLI utils 
 #include <ydb/core/driver_lib/cli_utils/cli.h>
-
-// add support for running kikimr node
+ 
+// add support for running kikimr node 
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/driver_lib/run/config_parser.h>
 #include <ydb/core/driver_lib/run/run.h>
-
+ 
 // allocator info
 #include <library/cpp/malloc/api/malloc.h>
 
@@ -55,19 +55,19 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #ifndef _win_
         mlockall(MCL_CURRENT);
 #endif
-        using namespace NLastGetopt;
-        using TDriverModeParser = TCliCommands<EDriverMode>;
+        using namespace NLastGetopt; 
+        using TDriverModeParser = TCliCommands<EDriverMode>; 
 
-        NKikimrConfig::TAppConfig appConfig;
+        NKikimrConfig::TAppConfig appConfig; 
         TCommandConfig cmdConf;
-        TKikimrRunConfig runConfig(appConfig);
+        TKikimrRunConfig runConfig(appConfig); 
 
-        TRunCommandConfigParser configParser(runConfig);
-
-        TOpts opts = TOpts::Default();
+        TRunCommandConfigParser configParser(runConfig); 
+ 
+        TOpts opts = TOpts::Default(); 
         opts.SetTitle("KiKiMR client/server binary");
-
-        configParser.SetupGlobalOpts(opts);
+ 
+        configParser.SetupGlobalOpts(opts); 
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;
         mbusConfig.ConfigureLastGetopt(opts, "mb-");
         NDriverClient::HideOptions(opts);
@@ -83,32 +83,32 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
         opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
 
-        opts.AddHelpOption('h');
-        opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
-
-        TOptsParseResult res(&opts, argc, argv);
-
-        size_t freeArgsPos = res.GetFreeArgsPos();
-        argc -= freeArgsPos;
-        argv += freeArgsPos;
-
-        EDriverMode mode = TDriverModeParser::ParseCommand(*argv);
-
-        if (mode == EDM_NO) {
-            fprintf(stderr, "Unknown command '%s'\n\n", *argv);
+        opts.AddHelpOption('h'); 
+        opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER; 
+ 
+        TOptsParseResult res(&opts, argc, argv); 
+ 
+        size_t freeArgsPos = res.GetFreeArgsPos(); 
+        argc -= freeArgsPos; 
+        argv += freeArgsPos; 
+ 
+        EDriverMode mode = TDriverModeParser::ParseCommand(*argv); 
+ 
+        if (mode == EDM_NO) { 
+            fprintf(stderr, "Unknown command '%s'\n\n", *argv); 
             opts.PrintUsage(TString(""));
-            exit(1);
-        }
-
-        configParser.ParseGlobalOpts(res);
-
-        switch (mode) {
+            exit(1); 
+        } 
+ 
+        configParser.ParseGlobalOpts(res); 
+ 
+        switch (mode) { 
         case EDM_RUN:
-        {
-            configParser.ParseRunOpts(argc, argv);
-            configParser.ApplyParsedOptions();
+        { 
+            configParser.ParseRunOpts(argc, argv); 
+            configParser.ApplyParsedOptions(); 
             return MainRun(runConfig, factories);
-        }
+        } 
         case EDM_ADMIN:
         case EDM_DB:
         case EDM_TABLET:

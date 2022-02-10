@@ -10,17 +10,17 @@ namespace NKikimr {
 class TTabletStorageInfo;
 
 class TTabletSetupInfo : public TThrRefBase {
-public:
+public: 
     typedef std::function<IActor* (const TActorId &, TTabletStorageInfo*)> TTabletCreationFunc;
     using TPtr = TIntrusivePtr<TTabletSetupInfo>;
-
-private:
+ 
+private: 
     const TTabletCreationFunc Op;
     const TMailboxType::EType MailboxType;
     const TMailboxType::EType TabletMailboxType;
     const ui32 PoolId;
     const ui32 TabletPoolId;
-
+ 
 public:
     TTabletSetupInfo(TTabletCreationFunc op, TMailboxType::EType mailboxType, ui32 poolId, TMailboxType::EType tabletMailboxType, ui32 tabletPoolId)
         : Op(op)
@@ -47,12 +47,12 @@ IActor* CreateTabletFollower(const TActorId &launcher, TTabletStorageInfo *info,
                           ui32 followerID, TResourceProfilesPtr profiles = nullptr,
                           TSharedQuotaPtr txCacheQuota = nullptr);
 
-
-struct ITabletFactory: public virtual TThrRefBase {
-    virtual TIntrusivePtr<TTabletSetupInfo> CreateTablet(
+ 
+struct ITabletFactory: public virtual TThrRefBase { 
+    virtual TIntrusivePtr<TTabletSetupInfo> CreateTablet( 
         const TString& typeName,
-        const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
-        const TAppData& appData) = 0;
-};
-
+        const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, 
+        const TAppData& appData) = 0; 
+}; 
+ 
 }

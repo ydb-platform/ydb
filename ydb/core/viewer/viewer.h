@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/viewer/json/json.h>
-
+ 
 #include <ydb/core/tablet/defs.h>
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
@@ -79,48 +79,48 @@ public:
         {}
     };
 
-    struct TContentRequestContext {
-        // request settings
-        TJsonSettings JsonSettings;
-        TDuration Timeout = TDuration::MilliSeconds(10000);
+    struct TContentRequestContext { 
+        // request settings 
+        TJsonSettings JsonSettings; 
+        TDuration Timeout = TDuration::MilliSeconds(10000); 
         TString UserToken;
-
-        // filter
-        ui32 Limit = 50;
-        ui32 Offset = 0;
-        TString Key;
-
-        // path to object
-        TString Path;
-
-        // object type and location
-        NKikimrViewer::EObjectType Type = NKikimrViewer::Unknown;
-        TString ObjectName;
-
-        TString Dump() const;
-    };
-
+ 
+        // filter 
+        ui32 Limit = 50; 
+        ui32 Offset = 0; 
+        TString Key; 
+ 
+        // path to object 
+        TString Path; 
+ 
+        // object type and location 
+        NKikimrViewer::EObjectType Type = NKikimrViewer::Unknown; 
+        TString ObjectName; 
+ 
+        TString Dump() const; 
+    }; 
+ 
     using TContentHandler = std::function<IActor*(const TActorId&, const TContentRequestContext&)>;
-
+ 
     virtual const TKikimrRunConfig& GetKikimrRunConfig() const = 0;
     virtual TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString& path) const = 0;
     virtual void RegisterVirtualHandler(NKikimrViewer::EObjectType parentObjectType, TVirtualHandlerType handler) = 0;
-
-    // returns nullptr if no such handler
-    virtual TContentHandler GetContentHandler(NKikimrViewer::EObjectType objectType) const = 0;
-
-    virtual void RegisterContentHandler(
-        NKikimrViewer::EObjectType objectType,
-        const TContentHandler& handler) = 0;
+ 
+    // returns nullptr if no such handler 
+    virtual TContentHandler GetContentHandler(NKikimrViewer::EObjectType objectType) const = 0; 
+ 
+    virtual void RegisterContentHandler( 
+        NKikimrViewer::EObjectType objectType, 
+        const TContentHandler& handler) = 0; 
 
     TString GetHTTPOKJSON();
     TString GetHTTPGATEWAYTIMEOUT();
 };
 
-void SetupPQVirtualHandlers(IViewer* viewer);
-void SetupDBVirtualHandlers(IViewer* viewer);
-void SetupKqpContentHandler(IViewer* viewer);
-
+void SetupPQVirtualHandlers(IViewer* viewer); 
+void SetupDBVirtualHandlers(IViewer* viewer); 
+void SetupKqpContentHandler(IViewer* viewer); 
+ 
 template <typename RequestType>
 struct TJsonRequestSchema {
     static TString GetSchema() { return TString(); }

@@ -19,12 +19,12 @@ enum EObjectType {
     Consumers = 5;
     Operations = 6;
     Consumer = 7;
-    RtmrTables = 8;
-    RtmrOperations = 9; // flat list of operations
-    RtmrTable = 10;
-    RtmrOperation = 11;
-    RtmrTasks = 12; // flat list of tasks
-    RtmrTask = 13; // task is the group of operations, associated tables and some metadata
+    RtmrTables = 8; 
+    RtmrOperations = 9; // flat list of operations 
+    RtmrTable = 10; 
+    RtmrOperation = 11; 
+    RtmrTasks = 12; // flat list of tasks 
+    RtmrTask = 13; // task is the group of operations, associated tables and some metadata 
     RtmrVolume = 14;
     BlockStoreVolume = 15;
     Kesus = 16;
@@ -86,16 +86,16 @@ message TMetaCommonInfo {
     repeated TACE ACL = 17;
     TBackupInfo Backup = 18;
     TResources Resources = 19;
-
-    // RTMR-specific table stats
-    uint64 DistinctKeysCount = 20;
-    uint64 UpdatesCount = 21;
-    string LastKey = 22;
-    string TopKey = 23;
-    uint64 TopKeyBytesCount = 24;
-    string MinSubKey = 25;
-    string MaxSubKey = 26;
-    uint64 MinTimestamp = 27; // timestamp of the oldest entry in the table, milliseconds since epoch
+ 
+    // RTMR-specific table stats 
+    uint64 DistinctKeysCount = 20; 
+    uint64 UpdatesCount = 21; 
+    string LastKey = 22; 
+    string TopKey = 23; 
+    uint64 TopKeyBytesCount = 24; 
+    string MinSubKey = 25; 
+    string MaxSubKey = 26; 
+    uint64 MinTimestamp = 27; // timestamp of the oldest entry in the table, milliseconds since epoch 
 
     // Datashard-specific stats
     uint64 ImmediateTxCompleted = 30;
@@ -118,23 +118,23 @@ message TMetaColumnInfo {
 
 message TMetaTableInfo {
     repeated TMetaColumnInfo Schema = 1;
-
-    // RTMR-specific table information
-    /// Lifetime in seconds
-    uint32 Lifetime = 2;
-    /// Min absolute timestamp allowed
-    uint64 MinTimestamp = 3;
-    /// Keep last n records per key
-    uint32 MaxRecords = 4;
-    /// Keep only one last record per (key, subkey) pair
-    bool Unique = 5;
-    /// Specifies if table belongs to specific task; read-only
-    string TaskId = 6;
-    /// Arbitrary data associated with the table
-    map<string, string> Attrs = 7;
-
-    // RTMR-specific view information
-    repeated string SrcTables = 8;
+ 
+    // RTMR-specific table information 
+    /// Lifetime in seconds 
+    uint32 Lifetime = 2; 
+    /// Min absolute timestamp allowed 
+    uint64 MinTimestamp = 3; 
+    /// Keep last n records per key 
+    uint32 MaxRecords = 4; 
+    /// Keep only one last record per (key, subkey) pair 
+    bool Unique = 5; 
+    /// Specifies if table belongs to specific task; read-only 
+    string TaskId = 6; 
+    /// Arbitrary data associated with the table 
+    map<string, string> Attrs = 7; 
+ 
+    // RTMR-specific view information 
+    repeated string SrcTables = 8; 
 }
 
 message TMetaTopicLagInfo {
@@ -176,8 +176,8 @@ message TMetaTopicInfo {
     repeated TMetaTopicPartitionInfo Partitions = 10;
 }
 
-message TMetaRtmrOperationInfo {
-    message TSettings {
+message TMetaRtmrOperationInfo { 
+    message TSettings { 
             // Options passed to the operation instance
             string Options = 1;
             // Force pause between operation executions on one key; seconds
@@ -204,80 +204,80 @@ message TMetaRtmrOperationInfo {
             string LibraryName = 10;
             // Tolerance to failures during operation execution
             uint32 SuspendThreshold = 12;
-    };
-
-    message TStats {
-        uint64 In = 1;
-        uint64 Count = 2;
-        uint64 Out = 3;
-        double ExecuteTime = 4;
-        double ReadTime = 5;
-        double LoadStateTime = 6;
-        double SaveStateTime = 7;
-    };
-
-    message TSystemTableSummary {
-        string Type = 1;
-        string Name = 2;
-        uint32 Lifetime = 3; // Lifetime in seconds
-        uint64 DataSize = 4; // in bytes
+    }; 
+ 
+    message TStats { 
+        uint64 In = 1; 
+        uint64 Count = 2; 
+        uint64 Out = 3; 
+        double ExecuteTime = 4; 
+        double ReadTime = 5; 
+        double LoadStateTime = 6; 
+        double SaveStateTime = 7; 
+    }; 
+ 
+    message TSystemTableSummary { 
+        string Type = 1; 
+        string Name = 2; 
+        uint32 Lifetime = 3; // Lifetime in seconds 
+        uint64 DataSize = 4; // in bytes 
         uint64 Entries = 5;
         uint64 UpdatesCount = 6;
         uint64 UpdateTime = 7; // milliseconds since epoch
-    };
-
-    bool Enabled = 1;
-
-    // Unique operation name
-    string Name = 2;
-    // Operation instance name
-    string ClassName = 3;
-    // Species task to which this operation belongs; read-only
-    string TaskId = 4;
-
-    // List of tables/views to read data from; mandatory upon creation
-    repeated string SrcTables = 5;
-    // List of tables to write to
-    repeated string DstTables = 6;
-
-    // operation settings
-    string Mode = 7;
-    bool Incremental = 8;
-    bool Stateful = 9;
-    bool NoPreview = 10;
-    repeated string Flags = 11;
-
-    // Lifetime in seconds for operation state
-    uint32 StateLifetime = 12;
-    // Lifetime in seconds for operation results
-    uint32 ResultLifetime = 13;
-
-    TSettings Settings = 14;
-
-    TStats Stats = 15;
-
-    repeated TSystemTableSummary SystemTables = 16;
-}
-
-message TMetaRtmrTaskInfo {
-    string TaskId = 1;
-    // indicates that whole group of operations is either enabled or disabed
-    bool Enabled = 2;
-
-    // associated tables
-    repeated string OwnedTables = 3;
-    // associated operations
-    repeated string Operations = 4;
-}
-
+    }; 
+ 
+    bool Enabled = 1; 
+ 
+    // Unique operation name 
+    string Name = 2; 
+    // Operation instance name 
+    string ClassName = 3; 
+    // Species task to which this operation belongs; read-only 
+    string TaskId = 4; 
+ 
+    // List of tables/views to read data from; mandatory upon creation 
+    repeated string SrcTables = 5; 
+    // List of tables to write to 
+    repeated string DstTables = 6; 
+ 
+    // operation settings 
+    string Mode = 7; 
+    bool Incremental = 8; 
+    bool Stateful = 9; 
+    bool NoPreview = 10; 
+    repeated string Flags = 11; 
+ 
+    // Lifetime in seconds for operation state 
+    uint32 StateLifetime = 12; 
+    // Lifetime in seconds for operation results 
+    uint32 ResultLifetime = 13; 
+ 
+    TSettings Settings = 14; 
+ 
+    TStats Stats = 15; 
+ 
+    repeated TSystemTableSummary SystemTables = 16; 
+} 
+ 
+message TMetaRtmrTaskInfo { 
+    string TaskId = 1; 
+    // indicates that whole group of operations is either enabled or disabed 
+    bool Enabled = 2; 
+ 
+    // associated tables 
+    repeated string OwnedTables = 3; 
+    // associated operations 
+    repeated string Operations = 4; 
+} 
+ 
 message TMetaInfo {
     TMetaCommonInfo Common = 1;
     TMetaTableInfo Table = 2;
     TMetaTopicInfo Topic = 3;
     TMetaTopicConsumerInfo Consumer = 4;
     NKikimrTabletBase.TTabletCounters Counters = 9;
-    TMetaRtmrOperationInfo RtmrOperation = 10;
-    TMetaRtmrTaskInfo RtmrTask = 11;
+    TMetaRtmrOperationInfo RtmrOperation = 10; 
+    TMetaRtmrTaskInfo RtmrTask = 11; 
 }
 
 message TTenantResource {

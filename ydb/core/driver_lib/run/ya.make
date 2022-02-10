@@ -1,10 +1,10 @@
-LIBRARY(run)
-
+LIBRARY(run) 
+ 
 OWNER(
     ddoarn
     g:kikimr
 )
-
+ 
 IF (PROFILE_MEMORY_ALLOCATIONS)
     CFLAGS(
         -DPROFILE_MEMORY_ALLOCATIONS
@@ -17,31 +17,31 @@ IF (KIKIMR_UDF_DYNAMIC_LINK)
     )
 ENDIF()
 
-SRCS(
-    config.cpp
-    config.h
-    config_parser.cpp
-    config_parser.h
+SRCS( 
+    config.cpp 
+    config.h 
+    config_parser.cpp 
+    config_parser.h 
     driver.h
-    dummy.cpp
-    dummy.h
+    dummy.cpp 
+    dummy.h 
     factories.h
     factories.cpp
-    kikimr_services_initializers.cpp
-    kikimr_services_initializers.h
+    kikimr_services_initializers.cpp 
+    kikimr_services_initializers.h 
     log_backend.cpp
     log_backend.h
     main.h
     main.cpp
-    run.cpp
-    run.h
-    service_initializer.cpp
-    service_initializer.h
+    run.cpp 
+    run.h 
+    service_initializer.cpp 
+    service_initializer.h 
     version.cpp
     version.h
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     contrib/libs/protobuf
     library/cpp/actors/core
     library/cpp/actors/dnsresolver
@@ -148,11 +148,11 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/ydb
     ydb/services/yq
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     ut

@@ -56,7 +56,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NMon::TEvRemoteHttpInfoRes, Handle);
-            HFunc(NMon::TEvRemoteBinaryInfoRes, Handle);
+            HFunc(NMon::TEvRemoteBinaryInfoRes, Handle); 
             HFunc(NMon::TEvRemoteJsonInfoRes, Handle);
             CFunc(TEvents::TSystem::Wakeup, Wakeup);
         }
@@ -85,11 +85,11 @@ public:
         Detach(ctx);
     }
 
-    void Handle(NMon::TEvRemoteBinaryInfoRes::TPtr& ev, const TActorContext& ctx) {
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(ev->Get()->Blob, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Detach(ctx);
-    }
-
+    void Handle(NMon::TEvRemoteBinaryInfoRes::TPtr& ev, const TActorContext& ctx) { 
+        ctx.Send(Sender, new NMon::TEvHttpInfoRes(ev->Get()->Blob, 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        Detach(ctx); 
+    } 
+ 
     void Handle(NMon::TEvRemoteJsonInfoRes::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPOKJSON + ev->Get()->Json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Detach(ctx);

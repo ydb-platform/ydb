@@ -82,7 +82,7 @@ namespace NActors {
             EPriority DefPriority;
             EPriority DefSamplingPriority;
             ui32 DefSamplingRate;
-            bool UseLocalTimestamps;
+            bool UseLocalTimestamps; 
 
             enum ELogFormat {
                 PLAIN_FULL_FORMAT,
@@ -163,7 +163,7 @@ namespace NActors {
             bool IsValidComponent(EComponent component);
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
-            void SetUseLocalTimestamps(bool value);
+            void SetUseLocalTimestamps(bool value); 
 
         private:
             int SetLevelImpl(

@@ -764,8 +764,8 @@ struct Schema {
 
             auto Key(const KeyValuesType& keyValues) {
                 return KeyOperations<TableType, KeyValuesType>(*Database, keyValues);
-            }
-
+            } 
+ 
             template <typename... Keys>
             auto Range(Keys... keyValues) {
                 return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
@@ -876,8 +876,8 @@ struct Schema {
             template <std::size_t...I>
             static TArray Tuple2Array(const TConvertTuple& tuple, std::index_sequence<I...>) {
                 return {{static_cast<const TRawTypeValue&>(std::get<I>(tuple))...}};
-            }
-
+            } 
+ 
             static TArray Tuple2Array(const TConvertTuple& tuple) {
                 return Tuple2Array(tuple, std::make_index_sequence<sizeof...(ValuesTypes)>());
             }
@@ -1471,8 +1471,8 @@ struct Schema {
             KeyPrefixOperations(TToughDb& database, KeyValuesTypes... keyValues)
                 : Database(&database)
                 , KeyValues(keyValues...)
-            {}
-
+            {} 
+ 
             explicit KeyPrefixOperations(const ReverseOperations& rhs)
                 : Database(rhs.Database)
                 , KeyValues(rhs.KeyValues)

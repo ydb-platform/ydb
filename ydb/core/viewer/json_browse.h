@@ -117,7 +117,7 @@ public:
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NViewerEvents::TEvBrowseResponse, Handle);
+            HFunc(NViewerEvents::TEvBrowseResponse, Handle); 
             HFunc(NViewerEvents::TEvBrowseRequestSent, Handle);
             HFunc(NViewerEvents::TEvBrowseRequestCompleted, Handle);
             HFunc(NMon::TEvHttpInfoRes, Handle);
@@ -125,8 +125,8 @@ public:
         }
     }
 
-    void Handle(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) {
-        NViewerEvents::TEvBrowseResponse& event(*ev->Get());
+    void Handle(NViewerEvents::TEvBrowseResponse::TPtr &ev, const TActorContext &ctx) { 
+        NViewerEvents::TEvBrowseResponse& event(*ev->Get()); 
         if (!event.Error.empty()) {
             ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(event.Error, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return Die(ctx);

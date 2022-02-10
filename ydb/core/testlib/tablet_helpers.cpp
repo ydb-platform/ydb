@@ -1074,88 +1074,88 @@ namespace NKikimr {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
-
+ 
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
-    public:
+    public: 
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
             Y_UNUSED(type);
-            return nullptr;
-        }
-
-        using TTabletInfo = TFakeHiveTabletInfo;
-        using TState = TFakeHiveState;
-
+            return nullptr; 
+        } 
+ 
+        using TTabletInfo = TFakeHiveTabletInfo; 
+        using TState = TFakeHiveState; 
+ 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::HIVE_ACTOR;
         }
 
         TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state,
-                  TGetTabletCreationFunc getTabletCreationFunc)
-            : TActor<TFakeHive>(&TFakeHive::StateInit)
+                  TGetTabletCreationFunc getTabletCreationFunc) 
+            : TActor<TFakeHive>(&TFakeHive::StateInit) 
             , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-            , State(state)
-            , GetTabletCreationFunc(getTabletCreationFunc)
-        {
-        }
-
-        void OnActivateExecutor(const TActorContext &ctx) final {
-            Become(&TFakeHive::StateWork);
+            , State(state) 
+            , GetTabletCreationFunc(getTabletCreationFunc) 
+        { 
+        } 
+ 
+        void OnActivateExecutor(const TActorContext &ctx) final { 
+            Become(&TFakeHive::StateWork); 
 
             while (!InitialEventsQueue.empty()) {
                 TAutoPtr<IEventHandle> &ev = InitialEventsQueue.front();
                 ctx.ExecutorThread.Send(ev.Release());
                 InitialEventsQueue.pop_front();
             }
-        }
-
-        void OnDetach(const TActorContext &ctx) override {
-            Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
+        } 
+ 
+        void OnDetach(const TActorContext &ctx) override { 
+            Die(ctx); 
+        } 
+ 
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
             Y_UNUSED(ev);
-            Die(ctx);
-        }
-
+            Die(ctx); 
+        } 
+ 
         void Enqueue(STFUNC_SIG) override {
             Y_UNUSED(ctx);
             InitialEventsQueue.push_back(ev);
         }
 
-        void StateInit(STFUNC_SIG) {
-            StateInitImpl(ev, ctx);
-        }
-
-        void StateWork(STFUNC_SIG) {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                HFunc(TEvHive::TEvCreateTablet, Handle);
+        void StateInit(STFUNC_SIG) { 
+            StateInitImpl(ev, ctx); 
+        } 
+ 
+        void StateWork(STFUNC_SIG) { 
+            switch (ev->GetTypeRewrite()) { 
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+                HFunc(TEvHive::TEvCreateTablet, Handle); 
                 HFunc(TEvHive::TEvAdoptTablet, Handle);
                 HFunc(TEvHive::TEvDeleteTablet, Handle);
                 HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
                 HFunc(TEvHive::TEvRequestHiveInfo, Handle);
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
-            }
-        }
-
-        void BrokenState(STFUNC_SIG) {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-            }
-        }
-
-        void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
+                HFunc(TEvents::TEvPoisonPill, Handle); 
+            } 
+        } 
+ 
+        void BrokenState(STFUNC_SIG) { 
+            switch (ev->GetTypeRewrite()) { 
+                HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+            } 
+        } 
+ 
+        void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) { 
             Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
-            NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+            NKikimrProto::EReplyStatus status = NKikimrProto::OK; 
             const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const auto type = ev->Get()->Record.GetTabletType();
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
-            auto it = State->Tablets.find(key);
-            const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
+            auto it = State->Tablets.find(key); 
+            const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes; 
             TActorId bootstrapperActorId;
-            if (it == State->Tablets.end()) {
+            if (it == State->Tablets.end()) { 
                 if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                     // don't boot anything
                 } else if (auto x = GetTabletCreationFunc(type)) {
@@ -1191,19 +1191,19 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
-                }
-
-                if (status == NKikimrProto::OK) {
+                } 
+ 
+                if (status == NKikimrProto::OK) { 
                     ui64 tabletId = State->AllocateTabletId();
                     it = State->Tablets.insert(std::make_pair(key, TTabletInfo(type, tabletId, bootstrapperActorId))).first;
                     State->TabletIdToOwner[tabletId] = key;
-                }
-            } else {
-                if (it->second.Type != type) {
-                    status = NKikimrProto::ERROR;
-                }
-            }
-
+                } 
+            } else { 
+                if (it->second.Type != type) { 
+                    status = NKikimrProto::ERROR; 
+                } 
+            } 
+ 
             if (status == NKikimrProto::OK) {
                 auto& boundChannels = ev->Get()->Record.GetBindedChannels();
                 it->second.BoundChannels.assign(boundChannels.begin(), boundChannels.end());
@@ -1212,8 +1212,8 @@ namespace NKikimr {
 
             ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
                 key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
-        }
-
+        } 
+ 
         void TraceAdoptingCases(const std::pair<ui64, ui64> prevKey,
                                 const std::pair<ui64, ui64> newKey,
                                 const TTabletTypes::EType type,
@@ -1399,21 +1399,21 @@ namespace NKikimr {
             ctx.Send(waiter, response.Release());
         }
 
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
-            Become(&TThis::BrokenState);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-        }
-
-    private:
+            Become(&TThis::BrokenState); 
+            ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
+        } 
+ 
+    private: 
         TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op,
-            TBlobStorageGroupType::EErasureSpecies erasure) {
-            TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
-                TMailboxType::Simple, 0)));
+            TBlobStorageGroupType::EErasureSpecies erasure) { 
+            TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0, 
+                TMailboxType::Simple, 0))); 
             return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(
                 CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
-        }
-
+        } 
+ 
         void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TFakeHiveTabletInfo *info) {
             auto& tabletInfo = *response.AddTablets();
             tabletInfo.SetTabletID(tabletId);
@@ -1425,25 +1425,25 @@ namespace NKikimr {
             }
         }
 
-    private:
-        TState::TPtr State;
-        TGetTabletCreationFunc GetTabletCreationFunc;
+    private: 
+        TState::TPtr State; 
+        TGetTabletCreationFunc GetTabletCreationFunc; 
         TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
-    };
-
-    void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,
+    }; 
+ 
+    void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state, 
                       TGetTabletCreationFunc getTabletCreationFunc)
     {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::Hive), [=](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TFakeHive(tablet, info, state,
-                                 (getTabletCreationFunc == nullptr) ? &TFakeHive::DefaultGetTabletCreationFunc : getTabletCreationFunc);
-        });
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+            return new TFakeHive(tablet, info, state, 
+                                 (getTabletCreationFunc == nullptr) ? &TFakeHive::DefaultGetTabletCreationFunc : getTabletCreationFunc); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
 }

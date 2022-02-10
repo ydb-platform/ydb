@@ -100,7 +100,7 @@
 namespace NKikimr {
 
 namespace Tests {
-
+ 
 
 
     TServerSettings& TServerSettings::SetDomainName(const TString& value) {
@@ -143,7 +143,7 @@ namespace Tests {
     {
         if (Settings->SupportsRedirect && IsServerRedirected())
             return;
-
+ 
         if (init)
             Initialize();
     }
@@ -207,7 +207,7 @@ namespace Tests {
         SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
 
         CreateBootstrapTablets();
-        SetupStorage();
+        SetupStorage(); 
 
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
@@ -220,7 +220,7 @@ namespace Tests {
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }
-    }
+    } 
 
     void TServer::SetupMessageBus(ui16 port, const TString &tracePath) {
         if (port) {
@@ -242,7 +242,7 @@ namespace Tests {
                 ));
             }
         }
-    }
+    } 
 
     void TServer::EnableGRpc(const NGrpc::TServerOptions& options) {
         GRpcServer.reset(new NGrpc::TGRpcServer(options));
@@ -356,7 +356,7 @@ namespace Tests {
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
                                                                                   Settings->StoragePoolTypes);
         app.AddDomain(domain.Release());
-    }
+    } 
 
     void TServer::CreateBootstrapTablets() {
         const ui32 domainId = Settings->Domain;
@@ -549,7 +549,7 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-    }
+    } 
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
         TLocalConfig::TPtr localConfig = new TLocalConfig();
@@ -818,7 +818,7 @@ namespace Tests {
                 );
             NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, yqSharedResources);
         }
-    }
+    } 
 
     void TServer::SetupLogging() {
         Runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_WARN);
@@ -859,8 +859,8 @@ namespace Tests {
     }
 
     TTestActorRuntime* TServer::GetRuntime() const {
-        return Runtime.Get();
-    }
+        return Runtime.Get(); 
+    } 
 
     const TServerSettings &TServer::GetSettings() const {
         return *Settings;

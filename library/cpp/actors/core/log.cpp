@@ -650,13 +650,13 @@ namespace NActors {
     }
 
     const char* TLoggerActor::FormatLocalTimestamp(TInstant time, char* buf) {
-        struct tm localTime;
-        time.LocalTime(&localTime);
+        struct tm localTime; 
+        time.LocalTime(&localTime); 
         int r = strftime(buf, TimeBufSize, "%Y-%m-%d-%H-%M-%S", &localTime);
         Y_VERIFY(r != 0);
         return buf;
-    }
-
+    } 
+ 
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
                                               bool logPError, bool logCons) {
         int flags = 0;

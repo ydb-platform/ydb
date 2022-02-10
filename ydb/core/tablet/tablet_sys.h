@@ -14,7 +14,7 @@ namespace NKikimr {
 class TTablet : public TActor<TTablet> {
     using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo;
     using ETabletState = TTabletStateInfo::ETabletState;
-
+ 
     struct TStateStorageInfo {
         TActorId ProxyID;
 

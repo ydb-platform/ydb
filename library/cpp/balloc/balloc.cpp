@@ -285,24 +285,24 @@ extern "C" bool BallocDisabled() {
 extern "C" void DisableBalloc() {
     NBalloc::Disable();
 }
-
+ 
 extern "C" void EnableBalloc() {
     NBalloc::Enable();
 }
 
-extern "C" void* memalign(size_t alignment, size_t size) {
-    void* ptr;
-    int res = posix_memalign(&ptr, alignment, size);
-    return res ? nullptr : ptr;
-}
-
+extern "C" void* memalign(size_t alignment, size_t size) { 
+    void* ptr; 
+    int res = posix_memalign(&ptr, alignment, size); 
+    return res ? nullptr : ptr; 
+} 
+ 
 extern "C" void* valloc(size_t size) {
     return memalign(NBalloc::PAGE_ELEM, size);
 }
 
 #if !defined(_MSC_VER) && !defined(_freebsd_)
-// Workaround for pthread_create bug in linux.
-extern "C" void* __libc_memalign(size_t alignment, size_t size) {
-    return memalign(alignment, size);
-}
-#endif
+// Workaround for pthread_create bug in linux. 
+extern "C" void* __libc_memalign(size_t alignment, size_t size) { 
+    return memalign(alignment, size); 
+} 
+#endif 

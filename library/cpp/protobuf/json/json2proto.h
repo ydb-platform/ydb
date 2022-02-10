@@ -26,8 +26,8 @@ namespace NProtobufJson {
             FieldNameLowerCase,
             FieldNameUpperCase,
             FieldNameCamelCase,
-            FieldNameSnakeCase,     // ABC -> a_b_c,    UserID -> user_i_d
-            FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id
+            FieldNameSnakeCase,     // ABC -> a_b_c,    UserID -> user_i_d 
+            FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id 
         };
 
         enum EnumValueMode {
@@ -123,7 +123,7 @@ namespace NProtobufJson {
 
         /// Consider map to be an object, otherwise consider it to be an array of key/value objects
         bool MapAsObject = false;
-
+ 
         /// Throw exception if there is no required fields in json object.
         bool CheckRequiredFields = true;
 

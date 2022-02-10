@@ -280,14 +280,14 @@ public:
         return FailRequests->Size();
     }
 
-    const IThreadPool& GetRequestQueue() const {
-        return *Requests;
-    }
-
-    const IThreadPool& GetFailQueue() const {
-        return *FailRequests;
-    }
-
+    const IThreadPool& GetRequestQueue() const { 
+        return *Requests; 
+    } 
+ 
+    const IThreadPool& GetFailQueue() const { 
+        return *FailRequests; 
+    } 
+ 
     class TListenSocket: public IPollAble, public TIntrusiveListItem<TListenSocket> {
     public:
         inline TListenSocket(const TSocket& s, TImpl* parent)
@@ -406,7 +406,7 @@ public:
     {
     }
 
-    TImpl(THttpServer* parent, ICallBack* cb, const TOptions& options, IThreadFactory* factory)
+    TImpl(THttpServer* parent, ICallBack* cb, const TOptions& options, IThreadFactory* factory) 
         : TImpl(
               parent,
               cb,
@@ -460,25 +460,25 @@ public:
     TMutex StopMutex;
 
 private:
-    template <class TThreadPool_>
+    template <class TThreadPool_> 
     static THolder<IThreadPool> MakeThreadPool(IThreadFactory* factory, bool elastic, ICallBack* callback = nullptr, const TString& threadName = {}) {
-        if (!factory) {
-            factory = SystemThreadFactory();
-        }
-
-        THolder<IThreadPool> pool;
+        if (!factory) { 
+            factory = SystemThreadFactory(); 
+        } 
+ 
+        THolder<IThreadPool> pool; 
         const auto params = IThreadPool::TParams().SetFactory(factory).SetThreadName(threadName);
-        if (callback) {
+        if (callback) { 
             pool = MakeHolder<TThreadPoolBinder<TThreadPool_, THttpServer::ICallBack>>(callback, params);
         } else {
             pool = MakeHolder<TThreadPool_>(params);
         }
 
         if (elastic) {
-            pool = MakeHolder<TElasticQueue>(std::move(pool));
+            pool = MakeHolder<TElasticQueue>(std::move(pool)); 
         }
-
-        return pool;
+ 
+        return pool; 
     }
 };
 
@@ -539,14 +539,14 @@ size_t THttpServer::GetFailQueueSize() const {
     return Impl_->GetFailQueueSize();
 }
 
-const IThreadPool& THttpServer::GetRequestQueue() const {
-    return Impl_->GetRequestQueue();
-}
-
-const IThreadPool& THttpServer::GetFailQueue() const {
-    return Impl_->GetFailQueue();
-}
-
+const IThreadPool& THttpServer::GetRequestQueue() const { 
+    return Impl_->GetRequestQueue(); 
+} 
+ 
+const IThreadPool& THttpServer::GetFailQueue() const { 
+    return Impl_->GetFailQueue(); 
+} 
+ 
 bool THttpServer::MaxRequestsReached() const {
     return Impl_->MaxRequestsReached();
 }

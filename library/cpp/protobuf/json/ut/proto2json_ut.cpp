@@ -756,72 +756,72 @@ Y_UNIT_TEST(TestFieldNameMode) {
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
 
-    // snake_case
-    {
-        TString modelStr(R"_({"string":"value"})_");
-
-        TFlatOptional proto;
-        proto.SetString("value");
-        TStringStream jsonStr;
-        TProto2JsonConfig config;
-        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase;
-
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
-    {
-        TString modelStr(R"_({"one_string":"value"})_");
-
-        TFlatOptional proto;
-        proto.SetOneString("value");
-        TStringStream jsonStr;
-        TProto2JsonConfig config;
-        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase;
-
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
-    {
-        TString modelStr(R"_({"one_two_string":"value"})_");
-
-        TFlatOptional proto;
-        proto.SetOneTwoString("value");
-        TStringStream jsonStr;
-        TProto2JsonConfig config;
-        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase;
-
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
-    {
-        TString modelStr(R"_({"a_b_c":"value","user_i_d":"value"})_");
-
-        TFlatOptional proto;
-        proto.SetABC("value");
-        proto.SetUserID("value");
-        TStringStream jsonStr;
-        TProto2JsonConfig config;
-        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase;
-
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
-
-    // snake_case_dense
-    {
-        TString modelStr(R"_({"abc":"value","user_id":"value"})_");
-
-        TFlatOptional proto;
-        proto.SetABC("value");
-        proto.SetUserID("value");
-        TStringStream jsonStr;
-        TProto2JsonConfig config;
-        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCaseDense;
-
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
-
+    // snake_case 
+    { 
+        TString modelStr(R"_({"string":"value"})_"); 
+ 
+        TFlatOptional proto; 
+        proto.SetString("value"); 
+        TStringStream jsonStr; 
+        TProto2JsonConfig config; 
+        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase; 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config)); 
+        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr); 
+    } 
+    { 
+        TString modelStr(R"_({"one_string":"value"})_"); 
+ 
+        TFlatOptional proto; 
+        proto.SetOneString("value"); 
+        TStringStream jsonStr; 
+        TProto2JsonConfig config; 
+        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase; 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config)); 
+        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr); 
+    } 
+    { 
+        TString modelStr(R"_({"one_two_string":"value"})_"); 
+ 
+        TFlatOptional proto; 
+        proto.SetOneTwoString("value"); 
+        TStringStream jsonStr; 
+        TProto2JsonConfig config; 
+        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase; 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config)); 
+        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr); 
+    } 
+    { 
+        TString modelStr(R"_({"a_b_c":"value","user_i_d":"value"})_"); 
+ 
+        TFlatOptional proto; 
+        proto.SetABC("value"); 
+        proto.SetUserID("value"); 
+        TStringStream jsonStr; 
+        TProto2JsonConfig config; 
+        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCase; 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config)); 
+        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr); 
+    } 
+ 
+    // snake_case_dense 
+    { 
+        TString modelStr(R"_({"abc":"value","user_id":"value"})_"); 
+ 
+        TFlatOptional proto; 
+        proto.SetABC("value"); 
+        proto.SetUserID("value"); 
+        TStringStream jsonStr; 
+        TProto2JsonConfig config; 
+        config.FieldNameMode = TProto2JsonConfig::FieldNameSnakeCaseDense; 
+ 
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config)); 
+        UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr); 
+    } 
+ 
     // Original case, repeated
     {
         TString modelStr(R"_({"I32":[1,2]})_");
@@ -933,22 +933,22 @@ Y_UNIT_TEST(TestMap) {
 
 Y_UNIT_TEST(TestMapAsObject) {
     TMapType proto;
-
+ 
     auto& items = *proto.MutableItems();
     items["key1"] = "value1";
     items["key2"] = "value2";
     items["key3"] = "value3";
-
+ 
     TString modelStr(R"_({"Items":{"key3":"value3","key2":"value2","key1":"value1"}})_");
-
+ 
     TStringStream jsonStr;
     TProto2JsonConfig config;
     config.MapAsObject = true;
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
-
+ 
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapAsObject
-
+ 
 Y_UNIT_TEST(TestMapWTF) {
     TMapType proto;
 

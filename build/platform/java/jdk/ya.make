@@ -98,7 +98,7 @@ ELSEIF(JDK_VERSION == "8")
 ELSE()
     MESSAGE(FATAL_ERROR Unsupported JDK version)
 ENDIF()
- 
+
 IF(USE_SYSTEM_JDK)
     MESSAGE(WARNING System JDK $USE_SYSTEM_JDK will be used)
 ELSEIF(JDK_VERSION == "17")
@@ -297,15 +297,15 @@ ELSE()
 ENDIF()
 
 END()
- 
-RECURSE( 
-    jdk8 
-    jdk10 
-    jdk11 
-    jdk12 
-    jdk13 
-    jdk14 
-    jdk15 
-    jdk16 
+
+RECURSE(
+    jdk8
+    jdk10
+    jdk11
+    jdk12
+    jdk13
+    jdk14
+    jdk15
+    jdk16
     jdk17
-) 
+)

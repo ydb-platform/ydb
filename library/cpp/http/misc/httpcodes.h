@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include <util/generic/strbuf.h>
 
-enum HttpCodes { 
+enum HttpCodes {
     HTTP_CONTINUE = 100,
     HTTP_SWITCHING_PROTOCOLS = 101,
     HTTP_PROCESSING = 102,
- 
+
     HTTP_OK = 200,
     HTTP_CREATED = 201,
     HTTP_ACCEPTED = 202,
@@ -17,7 +17,7 @@ enum HttpCodes {
     HTTP_MULTI_STATUS = 207,
     HTTP_ALREADY_REPORTED = 208,
     HTTP_IM_USED = 226,
- 
+
     HTTP_MULTIPLE_CHOICES = 300,
     HTTP_MOVED_PERMANENTLY = 301,
     HTTP_FOUND = 302,
@@ -26,7 +26,7 @@ enum HttpCodes {
     HTTP_USE_PROXY = 305,
     HTTP_TEMPORARY_REDIRECT = 307,
     HTTP_PERMANENT_REDIRECT = 308,
- 
+
     HTTP_BAD_REQUEST = 400,
     HTTP_UNAUTHORIZED = 401,
     HTTP_PAYMENT_REQUIRED = 402,
@@ -57,7 +57,7 @@ enum HttpCodes {
     HTTP_TOO_MANY_REQUESTS = 429,
     HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE = 431,
     HTTP_UNAVAILABLE_FOR_LEGAL_REASONS = 451,
- 
+
     HTTP_INTERNAL_SERVER_ERROR = 500,
     HTTP_NOT_IMPLEMENTED = 501,
     HTTP_BAD_GATEWAY = 502,
@@ -71,10 +71,10 @@ enum HttpCodes {
     HTTP_NOT_EXTENDED = 510,
     HTTP_NETWORK_AUTHENTICATION_REQUIRED = 511,
     HTTP_UNASSIGNED_512 = 512,
- 
+
     HTTP_CODE_MAX
-}; 
- 
+};
+
 TStringBuf HttpCodeStrEx(int code) noexcept;
 
 inline TStringBuf HttpCodeStr(int code) noexcept {

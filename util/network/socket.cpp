@@ -281,7 +281,7 @@ void SetSocketTimeout(SOCKET s, long sec, long msec) {
     CheckedSetSockOpt(s, SOL_SOCKET, SO_RCVTIMEO, timeout, "recv timeout");
     CheckedSetSockOpt(s, SOL_SOCKET, SO_SNDTIMEO, timeout, "send timeout");
 #endif
-} 
+}
 
 void SetLinger(SOCKET s, bool on, unsigned len) {
 #ifdef SO_LINGER
@@ -551,7 +551,7 @@ static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
 
     return sendmsg(sock, &message, MSG_NOSIGNAL);
 }
-#endif 
+#endif
 
 void TSocketHolder::Close() noexcept {
     if (Fd_ != INVALID_SOCKET) {

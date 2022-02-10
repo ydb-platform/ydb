@@ -1,46 +1,46 @@
-/* 
- * Copyright (c) 1987, 1993 
- *      The Regents of the University of California.  All rights reserved. 
- * 
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
- * are met: 
- * 1. Redistributions of source code must retain the above copyright 
- *    notice, this list of conditions and the following disclaimer. 
- * 2. Redistributions in binary form must reproduce the above copyright 
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the distribution. 
- * 3. All advertising materials mentioning features or use of this software 
- *    must display the following acknowledgement: 
- *      This product includes software developed by the University of 
- *      California, Berkeley and its contributors. 
- * 4. Neither the name of the University nor the names of its contributors 
- *    may be used to endorse or promote products derived from this software 
- *    without specific prior written permission. 
- * 
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND 
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE 
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS 
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
- * SUCH DAMAGE. 
- */ 
- 
+/*
+ * Copyright (c) 1987, 1993
+ *      The Regents of the University of California.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by the University of
+ *      California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include "defaults.h"
 
-#include <sys/types.h> 
-#include <fcntl.h> 
-#include <errno.h> 
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <ctype.h> 
- 
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
 #ifdef _win32_
     #include "winint.h"
     #include <util/folder/dirut.h>
@@ -50,13 +50,13 @@
 
 #include <util/random/random.h>
 #include "sysstat.h"
- 
-static const unsigned char padchar[] = 
+
+static const unsigned char padchar[] =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
- 
-static int 
+
+static int
 GetTemp(char* path, int* doopen, int domkdir, int slen)
-{ 
+{
     char *start, *trv, *suffp;
     char* pad;
 #ifndef _win32_
@@ -64,12 +64,12 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
     int rval;
 #endif
     ui32 rand;
- 
+
     if (doopen != nullptr && domkdir) {
         errno = EINVAL;
         return (0);
     }
- 
+
     for (trv = path; *trv != '\0'; ++trv) {
         ;
     }
@@ -80,17 +80,17 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
         errno = EINVAL;
         return (0);
     }
- 
+
     /* Fill space with random characters */
     while (trv >= path && *trv == 'X') {
         rand = (RandomNumber<ui32>()) % (sizeof(padchar) - 1);
         *trv-- = padchar[rand];
     }
     start = trv + 1;
- 
+
     /*
-         * check the target directory. 
-         */ 
+         * check the target directory.
+         */
     if (doopen != nullptr || domkdir) {
         for (; trv > path; --trv) {
             if (*trv == '/') {
@@ -117,9 +117,9 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
 #endif
                 break;
             }
-        } 
+        }
     }
- 
+
     for (;;) {
         if (doopen) {
             if ((*doopen =
@@ -157,10 +157,10 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
                 *trv++ = *pad;
                 break;
             }
-        } 
+        }
     }
     /*NOTREACHED*/
-} 
+}
 
 extern "C" int mkstemps(char* path, int slen) {
     int fd;

@@ -1,5 +1,5 @@
-#include "httpcodes.h" 
- 
+#include "httpcodes.h"
+
 TStringBuf HttpCodeStrEx(int code) noexcept {
     switch (code) {
         case HTTP_CONTINUE:

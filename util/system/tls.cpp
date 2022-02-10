@@ -241,8 +241,8 @@ private:
 TKey::TKey(TDtor dtor)
     : Impl_(new TImpl(dtor))
 {
-} 
- 
+}
+
 TKey::TKey(TKey&&) noexcept = default;
 
 TKey::~TKey() = default;

@@ -353,7 +353,7 @@ public:
             if (val)
                 *Chunk |= static_cast<TChunk>(1) << Offset;
             else
-                *Chunk &= ~(static_cast<TChunk>(1) << Offset); 
+                *Chunk &= ~(static_cast<TChunk>(1) << Offset);
 
             return *this;
         }
@@ -479,15 +479,15 @@ public:
         return Xor(val);
     }
 
-    template <class T> 
+    template <class T>
     Y_FORCE_INLINE TThis& operator-=(const TBitMapOps<T>& bitmap) {
-        return SetDifference(bitmap); 
-    } 
- 
+        return SetDifference(bitmap);
+    }
+
     Y_FORCE_INLINE TThis& operator-=(const TChunk& val) {
-        return SetDifference(val); 
-    } 
- 
+        return SetDifference(val);
+    }
+
     Y_FORCE_INLINE TThis& operator<<=(size_t pos) {
         return LShift(pos);
     }
@@ -739,22 +739,22 @@ public:
         return *this;
     }
 
-    TThis& SetDifference(const TThis& bitmap) { 
-        for (size_t i = 0; i < Min(bitmap.Mask.GetChunkCapacity(), Mask.GetChunkCapacity()); ++i) 
-            Mask.Data[i] &= ~bitmap.Mask.Data[i]; 
-        return *this; 
-    } 
- 
-    template <class T> 
+    TThis& SetDifference(const TThis& bitmap) {
+        for (size_t i = 0; i < Min(bitmap.Mask.GetChunkCapacity(), Mask.GetChunkCapacity()); ++i)
+            Mask.Data[i] &= ~bitmap.Mask.Data[i];
+        return *this;
+    }
+
+    template <class T>
     Y_FORCE_INLINE TThis& SetDifference(const TBitMapOps<T>& bitmap) {
-        return SetDifference(TThis(bitmap)); 
-    } 
- 
+        return SetDifference(TThis(bitmap));
+    }
+
     Y_FORCE_INLINE TThis& SetDifference(const TChunk& val) {
-        Mask.Data[0] &= ~val; 
-        return *this; 
-    } 
- 
+        Mask.Data[0] &= ~val;
+        return *this;
+    }
+
     Y_FORCE_INLINE TThis& Flip() {
         for (size_t i = 0; i < Mask.GetChunkCapacity(); ++i)
             Mask.Data[i] = ~Mask.Data[i];
@@ -1055,22 +1055,22 @@ inline TBitMapOps<X> operator^(const typename TBitMapOps<X>::TChunk& x, const TB
     return TBitMapOps<X>(x).Xor(y);
 }
 
-template <class X, class Y> 
+template <class X, class Y>
 inline TBitMapOps<X> operator-(const TBitMapOps<X>& x, const TBitMapOps<Y>& y) {
-    return TBitMapOps<X>(x).SetDifference(y); 
-} 
- 
+    return TBitMapOps<X>(x).SetDifference(y);
+}
+
 template <class X>
 inline TBitMapOps<X> operator-(const TBitMapOps<X>& x, const typename TBitMapOps<X>::TChunk& y) {
-    return TBitMapOps<X>(x).SetDifference(y); 
-} 
- 
-template <class X> 
+    return TBitMapOps<X>(x).SetDifference(y);
+}
+
+template <class X>
 inline TBitMapOps<X> operator-(const typename TBitMapOps<X>::TChunk& x, const TBitMapOps<X>& y) {
-    return TBitMapOps<X>(x).SetDifference(y); 
-} 
- 
-template <class X> 
+    return TBitMapOps<X>(x).SetDifference(y);
+}
+
+template <class X>
 inline TBitMapOps<X> operator~(const TBitMapOps<X>& x) {
     return TBitMapOps<X>(x).Flip();
 }

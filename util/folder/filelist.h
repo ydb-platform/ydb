@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include <util/generic/buffer.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/flags.h>
- 
+
 class TFileEntitiesList {
-public: 
+public:
     enum EMaskFlag {
         EM_FILES = 1,
         EM_DIRS = 2,
@@ -23,27 +23,27 @@ public:
         : Mask(mask)
     {
         Clear();
-    } 
- 
-    void Clear() { 
+    }
+
+    void Clear() {
         Cur = nullptr;
         FileNamesSize = CurName = 0;
         FileNames.Clear();
         FileNames.Append("", 1);
-    } 
- 
+    }
+
     const char* Next() {
         return Cur = (CurName++ < FileNamesSize ? strchr(Cur, 0) + 1 : nullptr);
-    } 
- 
+    }
+
     size_t Size() {
         return FileNamesSize;
-    } 
- 
+    }
+
     inline void Fill(const TString& dirname, bool sort = false) {
         Fill(dirname, TStringBuf(), sort);
     }
- 
+
     inline void Fill(const TString& dirname, TStringBuf prefix, bool sort = false) {
         Fill(dirname, prefix, TStringBuf(), 1, sort);
     }
@@ -55,13 +55,13 @@ public:
         CurName = 0;
     }
 
-protected: 
+protected:
     TBuffer FileNames;
     size_t FileNamesSize, CurName;
     const char* Cur;
     EMask Mask;
-}; 
- 
+};
+
 Y_DECLARE_OPERATORS_FOR_FLAGS(TFileEntitiesList::EMask)
 
 class TFileList: public TFileEntitiesList {

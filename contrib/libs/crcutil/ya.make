@@ -51,7 +51,7 @@ IF (ARCH_I386 OR ARCH_X86_64)
         SRCS(
             multiword_128_64_gcc_amd64_sse2.cc
             multiword_64_64_gcc_amd64_asm.cc
-        ) 
+        )
     ENDIF()
     IF (OS_WINDOWS)
         SRCS(

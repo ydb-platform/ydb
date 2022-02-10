@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include <util/system/defaults.h>
- 
+
 #define FNV32INIT 2166136261U
-#define FNV32PRIME 16777619U 
+#define FNV32PRIME 16777619U
 #define FNV64INIT ULL(14695981039346656037)
-#define FNV64PRIME ULL(1099511628211) 
- 
+#define FNV64PRIME ULL(1099511628211)
+
 namespace NFnvPrivate {
     template <class It>
     constexpr ui32 FnvHash32(It b, It e, ui32 init) {
@@ -22,7 +22,7 @@ namespace NFnvPrivate {
         while (b != e) {
             init = (init * FNV64PRIME) ^ (unsigned char)*b++;
         }
- 
+
         return init;
     }
 

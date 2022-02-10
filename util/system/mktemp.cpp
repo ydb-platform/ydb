@@ -14,7 +14,7 @@
     #include <unistd.h>
     #include <stdlib.h>
 #endif
- 
+
 extern "C" int mkstemps(char* path, int slen);
 
 TString MakeTempName(const char* wrkDir, const char* prefix, const char* extension) {

@@ -250,4 +250,4 @@ const char* MimeNames[MIME_MAX] = {
     "woff2",   // MIME_WOFF2           // 44
     "ttf",     // MIME_TTF             // 45
     "webmanifest" // MIME_WEBMANIFEST // 46
-}; 
+};

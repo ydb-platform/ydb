@@ -56,7 +56,7 @@ public:
 
     Y_PURE_FUNCTION
     size_t PrintSize() const noexcept;
- 
+
     /** The same as Print* except that RFC-3986 reserved characters are escaped.
      * @param safe - set of characters to be skipped in escaping
      */

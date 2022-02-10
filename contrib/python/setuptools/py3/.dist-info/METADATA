@@ -1,26 +1,26 @@
 Metadata-Version: 2.1
-Name: setuptools
+Name: setuptools 
 Version: 59.7.0
-Summary: Easily download, build, install, upgrade, and uninstall Python packages
-Home-page: https://github.com/pypa/setuptools
-Author: Python Packaging Authority
-Author-email: distutils-sig@python.org
-License: UNKNOWN
+Summary: Easily download, build, install, upgrade, and uninstall Python packages 
+Home-page: https://github.com/pypa/setuptools 
+Author: Python Packaging Authority 
+Author-email: distutils-sig@python.org 
+License: UNKNOWN 
 Project-URL: Documentation, https://setuptools.pypa.io/
-Keywords: CPAN PyPI distutils eggs package management
-Platform: UNKNOWN
-Classifier: Development Status :: 5 - Production/Stable
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Programming Language :: Python :: 3
+Keywords: CPAN PyPI distutils eggs package management 
+Platform: UNKNOWN 
+Classifier: Development Status :: 5 - Production/Stable 
+Classifier: Intended Audience :: Developers 
+Classifier: License :: OSI Approved :: MIT License 
+Classifier: Programming Language :: Python :: 3 
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Classifier: Topic :: System :: Archiving :: Packaging
-Classifier: Topic :: System :: Systems Administration
-Classifier: Topic :: Utilities
+Classifier: Topic :: Software Development :: Libraries :: Python Modules 
+Classifier: Topic :: System :: Archiving :: Packaging 
+Classifier: Topic :: System :: Systems Administration 
+Classifier: Topic :: Utilities 
 Requires-Python: >=3.7
 License-File: LICENSE
-Provides-Extra: certs
+Provides-Extra: certs 
 Provides-Extra: docs
 Requires-Dist: sphinx ; extra == 'docs'
 Requires-Dist: jaraco.packaging (>=8.2) ; extra == 'docs'
@@ -30,7 +30,7 @@ Requires-Dist: pygments-github-lexers (==0.0.5) ; extra == 'docs'
 Requires-Dist: sphinx-inline-tabs ; extra == 'docs'
 Requires-Dist: sphinxcontrib-towncrier ; extra == 'docs'
 Requires-Dist: furo ; extra == 'docs'
-Provides-Extra: ssl
+Provides-Extra: ssl 
 Provides-Extra: testing
 Requires-Dist: pytest (>=6) ; extra == 'testing'
 Requires-Dist: pytest-checkdocs (>=2.4) ; extra == 'testing'
@@ -50,15 +50,15 @@ Requires-Dist: sphinx ; extra == 'testing'
 Requires-Dist: jaraco.path (>=3.2.0) ; extra == 'testing'
 Requires-Dist: pytest-black (>=0.3.7) ; (platform_python_implementation != "PyPy") and extra == 'testing'
 Requires-Dist: pytest-mypy ; (platform_python_implementation != "PyPy") and extra == 'testing'
-
+ 
 .. image:: https://raw.githubusercontent.com/pypa/setuptools/main/docs/images/banner-640x320.svg
    :align: center
 
 |
 
-.. image:: https://img.shields.io/pypi/v/setuptools.svg
+.. image:: https://img.shields.io/pypi/v/setuptools.svg 
    :target: `PyPI link`_
-
+ 
 .. image:: https://img.shields.io/pypi/pyversions/setuptools.svg
    :target: `PyPI link`_
 
@@ -74,7 +74,7 @@ Requires-Dist: pytest-mypy ; (platform_python_implementation != "PyPy") and extr
 
 .. image:: https://img.shields.io/readthedocs/setuptools/latest.svg
     :target: https://setuptools.pypa.io
-
+ 
 .. image:: https://img.shields.io/badge/skeleton-2021-informational
    :target: https://blog.jaraco.com/skeleton
 
@@ -84,18 +84,18 @@ Requires-Dist: pytest-mypy ; (platform_python_implementation != "PyPy") and extr
 .. image:: https://tidelift.com/badges/github/pypa/setuptools?style=flat
    :target: https://tidelift.com/subscription/pkg/pypi-setuptools?utm_source=pypi-setuptools&utm_medium=readme
 
-See the `Installation Instructions
-<https://packaging.python.org/installing/>`_ in the Python Packaging
-User's Guide for instructions on installing, upgrading, and uninstalling
-Setuptools.
-
-Questions and comments should be directed to the `distutils-sig
-mailing list <http://mail.python.org/pipermail/distutils-sig/>`_.
-Bug reports and especially tested patches may be
-submitted directly to the `bug tracker
-<https://github.com/pypa/setuptools/issues>`_.
-
-
+See the `Installation Instructions 
+<https://packaging.python.org/installing/>`_ in the Python Packaging 
+User's Guide for instructions on installing, upgrading, and uninstalling 
+Setuptools. 
+ 
+Questions and comments should be directed to the `distutils-sig 
+mailing list <http://mail.python.org/pipermail/distutils-sig/>`_. 
+Bug reports and especially tested patches may be 
+submitted directly to the `bug tracker 
+<https://github.com/pypa/setuptools/issues>`_. 
+ 
+ 
 Code of Conduct
 ===============
 
@@ -113,12 +113,12 @@ Setuptools and the maintainers of thousands of other packages are working with T
 
 `Learn more <https://tidelift.com/subscription/pkg/pypi-setuptools?utm_source=pypi-setuptools&utm_medium=referral&utm_campaign=github>`_.
 
-
+ 
 Security Contact
 ================
-
+ 
 To report a security vulnerability, please use the
 `Tidelift security contact <https://tidelift.com/security>`_.
 Tidelift will coordinate the fix and disclosure.
-
+ 
 

@@ -15,8 +15,8 @@ RESOURCE_FILES(
     PREFIX contrib/python/six/
     .dist-info/METADATA
     .dist-info/top_level.txt
-)
-
+) 
+ 
 NO_LINT()
 
 END()

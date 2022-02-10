@@ -177,13 +177,13 @@ static constexpr bool AreValuesDistinct(const TValues& values)
 #define ENUM__END_TRAITS(name) \
     }; \
     \
-    [[maybe_unused]] inline TEnumTraitsImpl_##name GetEnumTraitsImpl(name) \
+    [[maybe_unused]] inline TEnumTraitsImpl_##name GetEnumTraitsImpl(name) \ 
     { \
         return TEnumTraitsImpl_##name(); \
     } \
     \
     using ::ToString; \
-    [[maybe_unused]] inline TString ToString(name value) \
+    [[maybe_unused]] inline TString ToString(name value) \ 
     { \
         return ::NYT::TEnumTraits<name>::ToString(value); \
     }
@@ -324,13 +324,13 @@ bool TEnumIndexedVector<E, T, Min, Max>::IsDomainValue(E value)
 ////////////////////////////////////////////////////////////////////////////////
 
 #define ENUM__BINARY_BITWISE_OPERATOR(T, assignOp, op) \
-    [[maybe_unused]] inline constexpr T operator op (T lhs, T rhs) \
+    [[maybe_unused]] inline constexpr T operator op (T lhs, T rhs) \ 
     { \
         using TUnderlying = typename TEnumTraits<T>::TUnderlying; \
         return T(static_cast<TUnderlying>(lhs) op static_cast<TUnderlying>(rhs)); \
     } \
     \
-    [[maybe_unused]] inline T& operator assignOp (T& lhs, T rhs) \
+    [[maybe_unused]] inline T& operator assignOp (T& lhs, T rhs) \ 
     { \
         using TUnderlying = typename TEnumTraits<T>::TUnderlying; \
         lhs = T(static_cast<TUnderlying>(lhs) op static_cast<TUnderlying>(rhs)); \
@@ -338,20 +338,20 @@ bool TEnumIndexedVector<E, T, Min, Max>::IsDomainValue(E value)
     }
 
 #define ENUM__UNARY_BITWISE_OPERATOR(T, op) \
-    [[maybe_unused]] inline constexpr T operator op (T value) \
+    [[maybe_unused]] inline constexpr T operator op (T value) \ 
     { \
         using TUnderlying = typename TEnumTraits<T>::TUnderlying; \
         return T(op static_cast<TUnderlying>(value)); \
     }
 
 #define ENUM__BIT_SHIFT_OPERATOR(T, assignOp, op) \
-    [[maybe_unused]] inline constexpr T operator op (T lhs, size_t rhs) \
+    [[maybe_unused]] inline constexpr T operator op (T lhs, size_t rhs) \ 
     { \
         using TUnderlying = typename TEnumTraits<T>::TUnderlying; \
         return T(static_cast<TUnderlying>(lhs) op rhs); \
     } \
     \
-    [[maybe_unused]] inline T& operator assignOp (T& lhs, size_t rhs) \
+    [[maybe_unused]] inline T& operator assignOp (T& lhs, size_t rhs) \ 
     { \
         using TUnderlying = typename TEnumTraits<T>::TUnderlying; \
         lhs = T(static_cast<TUnderlying>(lhs) op rhs); \

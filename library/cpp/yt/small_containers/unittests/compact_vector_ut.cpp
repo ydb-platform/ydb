@@ -8,7 +8,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// TCompactVector unit tests.
+// TCompactVector unit tests. 
 //
 //===----------------------------------------------------------------------===//
 
@@ -267,43 +267,43 @@ TYPED_TEST(CompactVectorTest, PushPopTest) {
   }
 }
 
-TYPED_TEST(CompactVectorTest, InsertEnd)
-{
-    SCOPED_TRACE("InsertEnd");
-
-    TCompactVector<TString, 5> vector;
-    for (int index = 0; index < 10; ++index) {
-        vector.insert(vector.end(), ToString(index));
-    }
-    for (int index = 0; index < 10; ++index) {
-        EXPECT_EQ(vector[index], ToString(index));
-    }
-}
-
-TYPED_TEST(CompactVectorTest, ShrinkToSmall)
-{
-    SCOPED_TRACE("ShrinkToSmall");
-
-    TCompactVector<TString, 5> vector;
-    for (int index = 0; index < 10; ++index) {
-        vector.shrink_to_small();
-        vector.push_back(ToString(index));
-    }
-
-    for (int index = 0; index < 6; ++index) {
-        vector.pop_back();
-    }
-
-    EXPECT_EQ(std::ssize(vector), 4);
-    EXPECT_GE(static_cast<int>(vector.capacity()), 10);
-    vector.shrink_to_small();
-    EXPECT_EQ(std::ssize(vector), 4);
-    EXPECT_EQ(static_cast<int>(vector.capacity()), 5);
-    for (int index = 0; index < 4; ++index) {
-        EXPECT_EQ(vector[index], ToString(index));
-    }
-}
-
+TYPED_TEST(CompactVectorTest, InsertEnd) 
+{ 
+    SCOPED_TRACE("InsertEnd"); 
+ 
+    TCompactVector<TString, 5> vector; 
+    for (int index = 0; index < 10; ++index) { 
+        vector.insert(vector.end(), ToString(index)); 
+    } 
+    for (int index = 0; index < 10; ++index) { 
+        EXPECT_EQ(vector[index], ToString(index)); 
+    } 
+} 
+ 
+TYPED_TEST(CompactVectorTest, ShrinkToSmall) 
+{ 
+    SCOPED_TRACE("ShrinkToSmall"); 
+ 
+    TCompactVector<TString, 5> vector; 
+    for (int index = 0; index < 10; ++index) { 
+        vector.shrink_to_small(); 
+        vector.push_back(ToString(index)); 
+    } 
+ 
+    for (int index = 0; index < 6; ++index) { 
+        vector.pop_back(); 
+    } 
+ 
+    EXPECT_EQ(std::ssize(vector), 4); 
+    EXPECT_GE(static_cast<int>(vector.capacity()), 10); 
+    vector.shrink_to_small(); 
+    EXPECT_EQ(std::ssize(vector), 4); 
+    EXPECT_EQ(static_cast<int>(vector.capacity()), 5); 
+    for (int index = 0; index < 4; ++index) { 
+        EXPECT_EQ(vector[index], ToString(index)); 
+    } 
+} 
+ 
 // Clear test.
 TYPED_TEST(CompactVectorTest, ClearTest) {
   SCOPED_TRACE("ClearTest");

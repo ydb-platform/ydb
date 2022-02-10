@@ -1,4 +1,4 @@
-//===- llvm/unittest/ADT/SmallSetTest.cpp ---------------------------------===//
+//===- llvm/unittest/ADT/SmallSetTest.cpp ---------------------------------===// 
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// CompactSet unit tests.
+// CompactSet unit tests. 
 //
 //===----------------------------------------------------------------------===//
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/small_containers/compact_set.h> 
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -21,9 +21,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(CompactSetTest, Insert) {
+TEST(CompactSetTest, Insert) { 
 
-  TCompactSet<int, 4> s1;
+  TCompactSet<int, 4> s1; 
 
   for (int i = 0; i < 4; i++)
     s1.insert(i);
@@ -39,8 +39,8 @@ TEST(CompactSetTest, Insert) {
   EXPECT_EQ(0u, s1.count(4));
 }
 
-TEST(CompactSetTest, Grow) {
-  TCompactSet<int, 4> s1;
+TEST(CompactSetTest, Grow) { 
+  TCompactSet<int, 4> s1; 
 
   for (int i = 0; i < 8; i++)
     s1.insert(i);
@@ -53,8 +53,8 @@ TEST(CompactSetTest, Grow) {
   EXPECT_EQ(0u, s1.count(8));
 }
 
-TEST(CompactSetTest, Erase) {
-  TCompactSet<int, 4> s1;
+TEST(CompactSetTest, Erase) { 
+  TCompactSet<int, 4> s1; 
 
   for (int i = 0; i < 8; i++)
     s1.insert(i);
@@ -74,8 +74,8 @@ TEST(CompactSetTest, Erase) {
   EXPECT_EQ(0u, s1.count(8));
 }
 
-TEST(CompactSetTest, IteratorInt) {
-  TCompactSet<int, 4> s1;
+TEST(CompactSetTest, IteratorInt) { 
+  TCompactSet<int, 4> s1; 
 
   // Test the 'small' case.
   for (int i = 0; i < 3; i++)
@@ -99,10 +99,10 @@ TEST(CompactSetTest, IteratorInt) {
     EXPECT_EQ(i, V[i]);
 }
 
-TEST(CompactSetTest, IteratorString) {
-  // Test CompactSetIterator for TCompactSet with a type with non-trivial
+TEST(CompactSetTest, IteratorString) { 
+  // Test CompactSetIterator for TCompactSet with a type with non-trivial 
   // ctors/dtors.
-  TCompactSet<std::string, 2> s1;
+  TCompactSet<std::string, 2> s1; 
 
   s1.insert("str 1");
   s1.insert("str 2");
@@ -128,10 +128,10 @@ TEST(CompactSetTest, IteratorString) {
   EXPECT_EQ("str 4", V[3]);
 }
 
-TEST(CompactSetTest, IteratorIncMoveCopy) {
-  // Test CompactSetIterator for TCompactSet with a type with non-trivial
+TEST(CompactSetTest, IteratorIncMoveCopy) { 
+  // Test CompactSetIterator for TCompactSet with a type with non-trivial 
   // ctors/dtors.
-  TCompactSet<std::string, 2> s1;
+  TCompactSet<std::string, 2> s1; 
 
   s1.insert("str 1");
   s1.insert("str 2");
@@ -150,8 +150,8 @@ TEST(CompactSetTest, IteratorIncMoveCopy) {
 
 // These test weren't taken from llvm.
 
-TEST(CompactSetTest, Empty) {
-  TCompactSet<int, 10> v;
+TEST(CompactSetTest, Empty) { 
+  TCompactSet<int, 10> v; 
   EXPECT_TRUE(v.empty());
 
   auto data = {1, 2, 3, 4, 5};
@@ -180,8 +180,8 @@ TEST(CompactSetTest, Empty) {
   EXPECT_TRUE(v.empty());
 }
 
-TEST(CompactSetTest, ForEach) {
-  TCompactSet<int, 10> v;
+TEST(CompactSetTest, ForEach) { 
+  TCompactSet<int, 10> v; 
 
   auto data = {10, 9, 3, 4, 1, 5, 6, 8};
 

@@ -199,7 +199,7 @@ struct TDomainsInfo : public TThrRefBase {
         }
 
         static TVector<ui64> MakeCoordinatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
-            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxCoordinatorID(domainUid, uid); });
+            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxCoordinatorID(domainUid, uid); }); 
         }
 
         static TVector<ui64> MakeCoordinatorsIds(ui32 count, ui32 domainUid) {
@@ -207,7 +207,7 @@ struct TDomainsInfo : public TThrRefBase {
         }
 
         static TVector<ui64> MakeMediatrosIds(TVector<ui64> &&uids, ui32 domainUid) {
-            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxMediatorID(domainUid, uid); });
+            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxMediatorID(domainUid, uid); }); 
         }
 
         static TVector<ui64> MakeMediatrosIds(ui32 count, ui32 domainUid) {
@@ -215,7 +215,7 @@ struct TDomainsInfo : public TThrRefBase {
         }
 
         static TVector<ui64> MakeAllocatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
-            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxAllocatorID(domainUid, uid); });
+            return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxAllocatorID(domainUid, uid); }); 
         }
 
         static TVector<ui64> MakeAllocatorsIds(ui32 count, ui32 domainUid) {

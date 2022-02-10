@@ -9,7 +9,7 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/small_containers/compact_vector.h> 
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -297,16 +297,16 @@ struct TValueFormatter<std::vector<T, TAllocator>>
     }
 };
 
-// TCompactVector
-template <class T, unsigned N>
-struct TValueFormatter<TCompactVector<T, N>>
-{
-    static void Do(TStringBuilderBase* builder, const TCompactVector<T, N>& collection, TStringBuf /*format*/)
-    {
-        FormatRange(builder, collection, TDefaultFormatter());
-    }
-};
-
+// TCompactVector 
+template <class T, unsigned N> 
+struct TValueFormatter<TCompactVector<T, N>> 
+{ 
+    static void Do(TStringBuilderBase* builder, const TCompactVector<T, N>& collection, TStringBuf /*format*/) 
+    { 
+        FormatRange(builder, collection, TDefaultFormatter()); 
+    } 
+}; 
+ 
 // std::set
 template <class T>
 struct TValueFormatter<std::set<T>>

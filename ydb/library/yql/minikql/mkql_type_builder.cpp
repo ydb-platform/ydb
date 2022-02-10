@@ -486,7 +486,7 @@ public:
     }
 
     NUdf::ICallableTypeBuilder& Returns(
-            const NUdf::TType* type) override
+            const NUdf::TType* type) override 
     {
         ReturnType_ = const_cast<NMiniKQL::TType*>(
                     static_cast<const NMiniKQL::TType*>(type));
@@ -494,7 +494,7 @@ public:
     }
 
     NUdf::ICallableTypeBuilder& Returns(
-            const NUdf::ITypeBuilder& typeBuilder) override
+            const NUdf::ITypeBuilder& typeBuilder) override 
     {
         ReturnType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
         return *this;

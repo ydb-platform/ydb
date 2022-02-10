@@ -19,7 +19,7 @@ namespace NActors {
             ES_MON = 7,
             ES_INTERCONNECT_TCP = 8,
             ES_PROFILER = 9,
-            ES_YF = 10,
+            ES_YF = 10, 
             ES_HTTP = 11,
 
             ES_USERSPACE = 4096,

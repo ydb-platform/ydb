@@ -55,7 +55,7 @@ namespace NTxMediator {
             ctx.Send(bucket.ActiveActor, new TEv(step, tablet, tx));
         }
 
-        void Die(const TActorContext &ctx) override {
+        void Die(const TActorContext &ctx) override { 
             for (const TBucket &bucket : Buckets)
                 ctx.Send(bucket.ActiveActor, new TEvents::TEvPoisonPill());
             Buckets.clear();

@@ -695,7 +695,7 @@ namespace NActors {
             } while (!isOk);
         }
 
-        void ReopenLog() override {
+        void ReopenLog() override { 
         }
 
     private:

@@ -34,36 +34,36 @@ namespace {
 Y_UNIT_TEST_SUITE(TFlagsTest) {
     template <class Enum>
     void TestEnum() {
-        {
-            auto i = Enum::Test1 | Enum::Test2;
+        { 
+            auto i = Enum::Test1 | Enum::Test2; 
 
-            UNIT_ASSERT((std::is_same<decltype(i), TFlags<Enum>>::value));
-            UNIT_ASSERT((std::is_same<decltype(~i), TFlags<Enum>>::value));
-            UNIT_ASSERT(!(std::is_same<decltype(i), int>::value));
-            UNIT_ASSERT_VALUES_EQUAL(sizeof(Enum), sizeof(TFlags<Enum>));
+            UNIT_ASSERT((std::is_same<decltype(i), TFlags<Enum>>::value)); 
+            UNIT_ASSERT((std::is_same<decltype(~i), TFlags<Enum>>::value)); 
+            UNIT_ASSERT(!(std::is_same<decltype(i), int>::value)); 
+            UNIT_ASSERT_VALUES_EQUAL(sizeof(Enum), sizeof(TFlags<Enum>)); 
 
-            UNIT_ASSERT(i.HasFlags(Enum::Test1));
-            UNIT_ASSERT(i.HasFlags(Enum::Test4) == false);
-            UNIT_ASSERT(i.HasFlags(Enum::Test1 | Enum::Test4) == false);
-
-            i |= Enum::Test4;
-            i ^= Enum::Test2;
-            UNIT_ASSERT_EQUAL(i, Enum::Test4 | Enum::Test1);
-            UNIT_ASSERT_EQUAL(i & Enum::Test1, i & ~Enum::Test4);
-            UNIT_ASSERT(i & Enum::Test4);
-            UNIT_ASSERT_UNEQUAL(i, ~i);
-            UNIT_ASSERT_EQUAL(i, ~~i);
-        }
-        {
-            auto i = Enum::Test1 | Enum::Test2;
-            i.RemoveFlags(Enum::Test1);
-            UNIT_ASSERT_EQUAL(i, TFlags<Enum>(Enum::Test2));
-        }
-        {
-            auto i = Enum::Test1 | Enum::Test2;
-            i.RemoveFlags(Enum::Test1 | Enum::Test2);
-            UNIT_ASSERT_EQUAL(i, TFlags<Enum>());
-        }
+            UNIT_ASSERT(i.HasFlags(Enum::Test1)); 
+            UNIT_ASSERT(i.HasFlags(Enum::Test4) == false); 
+            UNIT_ASSERT(i.HasFlags(Enum::Test1 | Enum::Test4) == false); 
+ 
+            i |= Enum::Test4; 
+            i ^= Enum::Test2; 
+            UNIT_ASSERT_EQUAL(i, Enum::Test4 | Enum::Test1); 
+            UNIT_ASSERT_EQUAL(i & Enum::Test1, i & ~Enum::Test4); 
+            UNIT_ASSERT(i & Enum::Test4); 
+            UNIT_ASSERT_UNEQUAL(i, ~i); 
+            UNIT_ASSERT_EQUAL(i, ~~i); 
+        } 
+        { 
+            auto i = Enum::Test1 | Enum::Test2; 
+            i.RemoveFlags(Enum::Test1); 
+            UNIT_ASSERT_EQUAL(i, TFlags<Enum>(Enum::Test2)); 
+        } 
+        { 
+            auto i = Enum::Test1 | Enum::Test2; 
+            i.RemoveFlags(Enum::Test1 | Enum::Test2); 
+            UNIT_ASSERT_EQUAL(i, TFlags<Enum>()); 
+        } 
     }
 
     Y_UNIT_TEST(TestFlags) {

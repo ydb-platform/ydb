@@ -131,10 +131,10 @@ inline void AtomicSet(T* volatile& target, T* value) {
     AtomicSet(*AsAtomicPtr(&target), reinterpret_cast<TAtomicBase>(value));
 }
 
-using TNullPtr = decltype(nullptr);
-
+using TNullPtr = decltype(nullptr); 
+ 
 template <typename T>
-inline void AtomicSet(T* volatile& target, TNullPtr) {
+inline void AtomicSet(T* volatile& target, TNullPtr) { 
     AtomicSet(*AsAtomicPtr(&target), 0);
 }
 
@@ -144,7 +144,7 @@ inline T* AtomicSwap(T* volatile* target, T* exchange) {
 }
 
 template <typename T>
-inline T* AtomicSwap(T* volatile* target, TNullPtr) {
+inline T* AtomicSwap(T* volatile* target, TNullPtr) { 
     return reinterpret_cast<T*>(AtomicSwap(AsAtomicPtr(target), 0));
 }
 
@@ -159,7 +159,7 @@ inline T* AtomicGetAndCas(T* volatile* target, T* exchange, T* compare) {
 }
 
 template <typename T>
-inline bool AtomicCas(T* volatile* target, T* exchange, TNullPtr) {
+inline bool AtomicCas(T* volatile* target, T* exchange, TNullPtr) { 
     return AtomicCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), 0);
 }
 
@@ -169,7 +169,7 @@ inline T* AtomicGetAndCas(T* volatile* target, T* exchange, TNullPtr) {
 }
 
 template <typename T>
-inline bool AtomicCas(T* volatile* target, TNullPtr, T* compare) {
+inline bool AtomicCas(T* volatile* target, TNullPtr, T* compare) { 
     return AtomicCas(AsAtomicPtr(target), 0, reinterpret_cast<TAtomicBase>(compare));
 }
 
@@ -179,7 +179,7 @@ inline T* AtomicGetAndCas(T* volatile* target, TNullPtr, T* compare) {
 }
 
 template <typename T>
-inline bool AtomicCas(T* volatile* target, TNullPtr, TNullPtr) {
+inline bool AtomicCas(T* volatile* target, TNullPtr, TNullPtr) { 
     return AtomicCas(AsAtomicPtr(target), 0, 0);
 }
 

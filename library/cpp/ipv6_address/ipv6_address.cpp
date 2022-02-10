@@ -1,17 +1,17 @@
-#include "ipv6_address.h"
-#include "ipv6_address_p.h"
-
+#include "ipv6_address.h" 
+#include "ipv6_address_p.h" 
+ 
 #ifdef _unix_
-#include <netinet/in.h>
+#include <netinet/in.h> 
 #endif
-
-#include <util/network/address.h>
-#include <util/network/init.h>
-#include <util/string/cast.h>
-#include <util/string/split.h>
+ 
+#include <util/network/address.h> 
+#include <util/network/init.h> 
+#include <util/string/cast.h> 
+#include <util/string/split.h> 
 #include <util/system/byteorder.h>
-#include <util/ysaveload.h>
-
+#include <util/ysaveload.h> 
+ 
 #include <array>
 
 namespace {
@@ -40,79 +40,79 @@ void TIpv6Address::InitFrom(const in6_addr& addr) {
     const ui64 raw[2] = {SwapBytes(*ui64Ptr), SwapBytes(*(ui64Ptr + 1))};
     Ip = FromMemMSF(reinterpret_cast<const char*>(raw));
     Type_ = Ipv6;
-}
+} 
 void TIpv6Address::InitFrom(const in_addr& addr) {
     unsigned long swapped = SwapBytes(addr.s_addr);
     Ip = ui128{0, swapped};
-    Type_ = Ipv4;
-}
-
+    Type_ = Ipv4; 
+} 
+ 
 void TIpv6Address::InitFrom(const sockaddr_in6& Addr) {
-    InitFrom(Addr.sin6_addr);
-    ScopeId_ = Addr.sin6_scope_id;
-}
+    InitFrom(Addr.sin6_addr); 
+    ScopeId_ = Addr.sin6_scope_id; 
+} 
 void TIpv6Address::InitFrom(const sockaddr_in& Addr) {
-    InitFrom(Addr.sin_addr);
-}
-
+    InitFrom(Addr.sin_addr); 
+} 
+ 
 TIpv6Address::TIpv6Address(const NAddr::IRemoteAddr& addr) {
     if (addr.Addr()->sa_family == AF_INET) { // IPv4
         const sockaddr_in* Tmp = reinterpret_cast<const sockaddr_in*>(addr.Addr());
-        InitFrom(*Tmp);
-    } else { // IPv6
+        InitFrom(*Tmp); 
+    } else { // IPv6 
         const sockaddr_in6* Tmp = reinterpret_cast<const sockaddr_in6*>(addr.Addr());
-        InitFrom(*Tmp);
-    }
-}
+        InitFrom(*Tmp); 
+    } 
+} 
 TIpv6Address::TIpv6Address(const sockaddr_in6& Addr) {
-    InitFrom(Addr);
-}
+    InitFrom(Addr); 
+} 
 TIpv6Address::TIpv6Address(const sockaddr_in& Addr) {
-    InitFrom(Addr);
-}
+    InitFrom(Addr); 
+} 
 TIpv6Address::TIpv6Address(const in6_addr& addr, ui32 Scope) {
-    InitFrom(addr);
-    ScopeId_ = Scope;
-}
+    InitFrom(addr); 
+    ScopeId_ = Scope; 
+} 
 TIpv6Address::TIpv6Address(const in_addr& addr) {
-    InitFrom(addr);
-}
-
+    InitFrom(addr); 
+} 
+ 
 TIpv6Address TIpv6Address::FromString(TStringBuf str, bool& ok) noexcept {
     const TIpType ipType = FigureOutType(str);
-
+ 
     if (ipType == Ipv6) {
         ui32 scopeId = 0;
         if (size_t pos = str.find('%'); pos != TStringBuf::npos) {
             ::TryFromString(str.substr(pos + 1), scopeId);
             str.Trunc(pos);
-        }
-
+        } 
+ 
         const auto buf = AddrBuf<INET6_ADDRSTRLEN>(str);
-        in6_addr addr;
+        in6_addr addr; 
         if (inet_pton(AF_INET6, buf.data(), &addr) != 1) {
-            ok = false;
-            return TIpv6Address();
-        }
+            ok = false; 
+            return TIpv6Address(); 
+        } 
 
-        ok = true;
+        ok = true; 
         return TIpv6Address(addr, scopeId);
-    } else { // if (ipType == Ipv4) {
+    } else { // if (ipType == Ipv4) { 
         const auto buf = AddrBuf<INET_ADDRSTRLEN>(str);
-        in_addr addr;
+        in_addr addr; 
         if (inet_pton(AF_INET, buf.data(), &addr) != 1) {
-            ok = false;
-            return TIpv6Address();
-        }
+            ok = false; 
+            return TIpv6Address(); 
+        } 
 
-        ok = true;
+        ok = true; 
         return TIpv6Address(addr);
-    }
-}
-
+    } 
+} 
+ 
 TString TIpv6Address::ToString(bool* ok) const noexcept {
-    return ToString(true, ok);
-}
+    return ToString(true, ok); 
+} 
 TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
     TString result;
     bool isOk = true;
@@ -120,17 +120,17 @@ TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
     if (Type_ == TIpv6Address::Ipv4) {
         result.resize(INET_ADDRSTRLEN + 2);
         in_addr addr;
-        ToInAddr(addr);
+        ToInAddr(addr); 
         isOk = inet_ntop(AF_INET, &addr, result.begin(), INET_ADDRSTRLEN);
         result.resize(result.find('\0'));
     } else if (Type_ == TIpv6Address::Ipv6) {
         result.resize(INET6_ADDRSTRLEN + 2);
         in6_addr addr;
-        ToIn6Addr(addr);
+        ToIn6Addr(addr); 
         isOk = inet_ntop(AF_INET6, &addr, result.begin(), INET6_ADDRSTRLEN);
         result.resize(result.find('\0'));
         if (PrintScopeId)
-            result += "%" + ::ToString(ScopeId_);
+            result += "%" + ::ToString(ScopeId_); 
     } else {
         result = "null";
         isOk = true;
@@ -141,106 +141,106 @@ TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
     }
 
     return result;
-}
-
+} 
+ 
 void TIpv6Address::ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4,
                                         sockaddr_in6& sockAddrIPv6, // in
                                         const sockaddr*& sockAddrPtr,
                                         socklen_t& sockAddrSize,
                                         ui16 Port) const { // out
-
+ 
     if (Type_ == Ipv4) {
-        memset(&sockAddrIPv4, 0, sizeof(sockAddrIPv4));
-        sockAddrIPv4.sin_family = AF_INET;
+        memset(&sockAddrIPv4, 0, sizeof(sockAddrIPv4)); 
+        sockAddrIPv4.sin_family = AF_INET; 
         sockAddrIPv4.sin_port = htons(Port);
-        ToInAddr(sockAddrIPv4.sin_addr);
-
-        sockAddrSize = sizeof(sockAddrIPv4);
+        ToInAddr(sockAddrIPv4.sin_addr); 
+ 
+        sockAddrSize = sizeof(sockAddrIPv4); 
         sockAddrPtr = reinterpret_cast<sockaddr*>(&sockAddrIPv4);
-
+ 
     } else if (Type_ == Ipv6) {
-        memset(&sockAddrIPv6, 0, sizeof(sockAddrIPv6));
-        sockAddrIPv6.sin6_family = AF_INET6;
+        memset(&sockAddrIPv6, 0, sizeof(sockAddrIPv6)); 
+        sockAddrIPv6.sin6_family = AF_INET6; 
         sockAddrIPv6.sin6_port = htons(Port);
-        ToIn6Addr(sockAddrIPv6.sin6_addr);
-        sockAddrIPv6.sin6_scope_id = ScopeId_;
-        sockAddrIPv6.sin6_flowinfo = 0;
-
-        sockAddrSize = sizeof(sockAddrIPv6);
+        ToIn6Addr(sockAddrIPv6.sin6_addr); 
+        sockAddrIPv6.sin6_scope_id = ScopeId_; 
+        sockAddrIPv6.sin6_flowinfo = 0; 
+ 
+        sockAddrSize = sizeof(sockAddrIPv6); 
         sockAddrPtr = reinterpret_cast<sockaddr*>(&sockAddrIPv6);
-    } else
+    } else 
         Y_VERIFY(false);
-}
-
+} 
+ 
 void TIpv6Address::ToInAddr(in_addr& Addr4) const {
     Y_VERIFY(Type_ == TIpv6Address::Ipv4);
-
-    Zero(Addr4);
+ 
+    Zero(Addr4); 
     ui32 Value = GetLow(Ip);
     Y_VERIFY(Value == GetLow(Ip), " ");
     Y_VERIFY(GetHigh(Ip) == 0, " ");
-    Addr4.s_addr = SwapBytes(Value);
-}
+    Addr4.s_addr = SwapBytes(Value); 
+} 
 void TIpv6Address::ToIn6Addr(in6_addr& Addr6) const {
     Y_VERIFY(Type_ == TIpv6Address::Ipv6);
-
-    Zero(Addr6);
+ 
+    Zero(Addr6); 
     ui64 Raw[2] = {GetHigh(Ip), GetLow(Ip)};
     *Raw = SwapBytes(*Raw);
     Raw[1] = SwapBytes(1 [Raw]);
-    memcpy(&Addr6, Raw, sizeof(Raw));
-}
-
+    memcpy(&Addr6, Raw, sizeof(Raw)); 
+} 
+ 
 void TIpv6Address::Save(IOutputStream* out) const {
     ::Save(out, Ip);
-    ::Save(out, static_cast<ui8>(Type_));
-    ::Save(out, ScopeId_);
-}
+    ::Save(out, static_cast<ui8>(Type_)); 
+    ::Save(out, ScopeId_); 
+} 
 void TIpv6Address::Load(IInputStream* in) {
     ::Load(in, Ip);
-    ui8 num;
-    ::Load(in, num);
-    Type_ = static_cast<TIpType>(num);
-    ::Load(in, ScopeId_);
-}
-
-bool TIpv6Address::Isv4MappedTov6() const noexcept {
-    /// http://en.wikipedia.org/wiki/IPv6
-    /// Hybrid dual-stack IPv6/IPv4 implementations recognize a special class of addresses,
-    /// the IPv4-mapped IPv6 addresses.  In these addresses, the first 80 bits are zero, the next 16 bits are one,
-    /// and the remaining 32 bits are the IPv4 address.
-
+    ui8 num; 
+    ::Load(in, num); 
+    Type_ = static_cast<TIpType>(num); 
+    ::Load(in, ScopeId_); 
+} 
+ 
+bool TIpv6Address::Isv4MappedTov6() const noexcept { 
+    /// http://en.wikipedia.org/wiki/IPv6 
+    /// Hybrid dual-stack IPv6/IPv4 implementations recognize a special class of addresses, 
+    /// the IPv4-mapped IPv6 addresses.  In these addresses, the first 80 bits are zero, the next 16 bits are one, 
+    /// and the remaining 32 bits are the IPv4 address. 
+ 
     if (Type_ != Ipv6)
-        return false;
-
+        return false; 
+ 
     if (GetHigh(Ip) != 0)
-        return false; // First 64 bit are not zero -> it is not ipv4-mapped-ipv6 address
-
+        return false; // First 64 bit are not zero -> it is not ipv4-mapped-ipv6 address 
+ 
     const ui64 Low = GetLow(Ip) >> 32;
     if (Low != 0x0000ffff)
-        return false;
-
-    return true;
-}
-
-TIpv6Address TIpv6Address::TryToExtractIpv4From6() const noexcept {
+        return false; 
+ 
+    return true; 
+} 
+ 
+TIpv6Address TIpv6Address::TryToExtractIpv4From6() const noexcept { 
     if (Isv4MappedTov6() == false)
-        return TIpv6Address();
-
+        return TIpv6Address(); 
+ 
     const ui64 NewLow = GetLow(Ip) & 0x00000000ffffffff;
     TIpv6Address Result(ui128(0, NewLow), Ipv4);
-    return Result;
-}
-
-TIpv6Address TIpv6Address::Normalized() const noexcept {
+    return Result; 
+} 
+ 
+TIpv6Address TIpv6Address::Normalized() const noexcept { 
     if (Isv4MappedTov6() == false)
-        return *this;
-
-    TIpv6Address Result = TryToExtractIpv4From6();
+        return *this; 
+ 
+    TIpv6Address Result = TryToExtractIpv4From6(); 
     Y_VERIFY(Result.IsNull() == false);
-    return Result;
-}
-
+    return Result; 
+} 
+ 
 IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address::TIpType Type) noexcept {
     switch (Type) {
     case TIpv6Address::Ipv4:
@@ -250,188 +250,188 @@ IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address::TIpType Type) 
         Out << "Ipv6";
         return Out;
     default:
-        Out << "UnknownType";
-        return Out;
-    }
-}
-
+        Out << "UnknownType"; 
+        return Out; 
+    } 
+} 
+ 
 IOutputStream& operator<<(IOutputStream& out, const TIpv6Address& ipv6Address) noexcept {
     bool ok;
     const TString& strIp = ipv6Address.ToString(&ok);
     if (!ok) {
         return out << "Can not convert ip to string";
-    } else {
+    } else { 
         return out << strIp;
-    }
-}
-
-TString THostAddressAndPort::ToString() const noexcept {
-    TStringStream Str;
-    Str << *this;
-    return Str.Str();
-}
-
+    } 
+} 
+ 
+TString THostAddressAndPort::ToString() const noexcept { 
+    TStringStream Str; 
+    Str << *this; 
+    return Str.Str(); 
+} 
+ 
 IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAddressAndPort) noexcept {
-    Out << HostAddressAndPort.Ip << ":" << HostAddressAndPort.Port;
-    return Out;
-}
-
-namespace {
+    Out << HostAddressAndPort.Ip << ":" << HostAddressAndPort.Port; 
+    return Out; 
+} 
+ 
+namespace { 
     class TRemoteAddr: public NAddr::IRemoteAddr {
-    public:
+    public: 
         TRemoteAddr(const TIpv6Address& Address, TIpPort Port);
         const sockaddr* Addr() const override;
         socklen_t Len() const override;
-
-    private:
+ 
+    private: 
         sockaddr_in SockAddrIPv4;
         sockaddr_in6 SockAddrIPv6;
         const sockaddr* SockAddrPtr = nullptr;
         socklen_t SockAddrSize = 0;
-    };
-
+    }; 
+ 
     TRemoteAddr::TRemoteAddr(const TIpv6Address& Address, TIpPort Port) {
-        Address.ToSockaddrAndSocklen(SockAddrIPv4, SockAddrIPv6, SockAddrPtr, SockAddrSize, Port);
-    }
+        Address.ToSockaddrAndSocklen(SockAddrIPv4, SockAddrIPv6, SockAddrPtr, SockAddrSize, Port); 
+    } 
     const sockaddr* TRemoteAddr::Addr() const {
-        return SockAddrPtr;
-    }
-    socklen_t TRemoteAddr::Len() const {
-        return SockAddrSize;
-    }
-}
-
+        return SockAddrPtr; 
+    } 
+    socklen_t TRemoteAddr::Len() const { 
+        return SockAddrSize; 
+    } 
+} 
+ 
 NAddr::IRemoteAddr* ToIRemoteAddr(const TIpv6Address& Address, TIpPort Port) {
-    return new TRemoteAddr(Address, Port);
-}
-
+    return new TRemoteAddr(Address, Port); 
+} 
+ 
 std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromString(const TString& RawStr,
                                                                                   TIpPort DefaultPort,
                                                                                   bool& Ok) noexcept {
-    // Cout << "ParseHostAndMayBePortFromString: " << RawStr << ", Port: " << DefaultPort << Endl;
-
+    // Cout << "ParseHostAndMayBePortFromString: " << RawStr << ", Port: " << DefaultPort << Endl; 
+ 
     using TRes = std::tuple<THostAddressAndPort, TString, TIpPort>;
-
-    // ---------------------------------------------------------------------
-
-    const size_t BracketColPos = RawStr.find("]:");
+ 
+    // --------------------------------------------------------------------- 
+ 
+    const size_t BracketColPos = RawStr.find("]:"); 
     if (BracketColPos != TString::npos) {
-        // [ipv6]:port
+        // [ipv6]:port 
         if (!RawStr.StartsWith('[')) {
-            Ok = false;
-            return {};
-        }
+            Ok = false; 
+            return {}; 
+        } 
         const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.begin() + BracketColPos);
         const TStringBuf StrPort(RawStr.begin() + BracketColPos + 2, RawStr.end());
-
+ 
         bool IpConverted;
-        const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted);
+        const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted); 
         if (!IpConverted) {
-            Ok = false;
-            return {};
-        }
+            Ok = false; 
+            return {}; 
+        } 
         if (Ip.Type() != TIpv6Address::Ipv6) {
-            Ok = false;
-            return {};
-        }
+            Ok = false; 
+            return {}; 
+        } 
         TIpPort Port {};
         if (!::TryFromString(StrPort, Port)) {
-            Ok = false;
-            return {};
-        }
-
-        Ok = true;
-        TRes Res{{Ip, Port}, {}, {}};
-        return Res;
-    }
-
-    // ---------------------------------------------------------------------
-
+            Ok = false; 
+            return {}; 
+        } 
+ 
+        Ok = true; 
+        TRes Res{{Ip, Port}, {}, {}}; 
+        return Res; 
+    } 
+ 
+    // --------------------------------------------------------------------- 
+ 
     if (RawStr.StartsWith('[')) {
-        // [ipv6]
+        // [ipv6] 
         if (!RawStr.EndsWith(']')) {
-            Ok = false;
-            return {};
-        }
+            Ok = false; 
+            return {}; 
+        } 
         const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.end() - 1);
-
+ 
         bool IpConverted;
-        const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted);
+        const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted); 
         if (!IpConverted || Ip.Type() != TIpv6Address::Ipv6) {
-            Ok = false;
-            return {};
-        }
-
-        Ok = true;
-        TRes Res{{Ip, DefaultPort}, {}, {}};
-        return Res;
-    }
-
-    // ---------------------------------------------------------------------
-
+            Ok = false; 
+            return {}; 
+        } 
+ 
+        Ok = true; 
+        TRes Res{{Ip, DefaultPort}, {}, {}}; 
+        return Res; 
+    } 
+ 
+    // --------------------------------------------------------------------- 
+ 
     const size_t ColPos = RawStr.find(':');
     if (ColPos != TString::npos) {
-        // host:port
-        // ipv4:port
-        // ipv6
-
-        {
+        // host:port 
+        // ipv4:port 
+        // ipv6 
+ 
+        { 
             bool IpConverted;
-            const TIpv6Address Ipv6 = TIpv6Address::FromString(RawStr, IpConverted);
+            const TIpv6Address Ipv6 = TIpv6Address::FromString(RawStr, IpConverted); 
             if (IpConverted && Ipv6.Type() == TIpv6Address::Ipv6) {
-                // ipv6
-                Ok = true;
-                TRes Res{{Ipv6, DefaultPort}, {}, {}};
-                return Res;
-            }
-        }
-
+                // ipv6 
+                Ok = true; 
+                TRes Res{{Ipv6, DefaultPort}, {}, {}}; 
+                return Res; 
+            } 
+        } 
+ 
         const TStringBuf StrPort(RawStr.begin() + ColPos + 1, RawStr.end());
         TIpPort Port {};
         if (!::TryFromString(StrPort, Port)) {
-            Ok = false;
-            return {};
-        }
-
+            Ok = false; 
+            return {}; 
+        } 
+ 
         const TStringBuf StrIpv4OrHost(RawStr.begin(), RawStr.begin() + ColPos);
-        {
+        { 
             bool IpConverted;
-            const TIpv6Address Ipv4 = TIpv6Address::FromString(StrIpv4OrHost, IpConverted);
+            const TIpv6Address Ipv4 = TIpv6Address::FromString(StrIpv4OrHost, IpConverted); 
             if (IpConverted && Ipv4.Type() == TIpv6Address::Ipv4) {
-                // ipv4:port
-                Ok = true;
-                TRes Res{{Ipv4, Port}, {}, {}};
-                return Res;
-            }
-        }
-
-        {
-            // host:port
-            Ok = true;
+                // ipv4:port 
+                Ok = true; 
+                TRes Res{{Ipv4, Port}, {}, {}}; 
+                return Res; 
+            } 
+        } 
+ 
+        { 
+            // host:port 
+            Ok = true; 
             TRes Res{THostAddressAndPort{}, TString(StrIpv4OrHost), Port};
-            return Res;
-        }
-    }
-
-    // ---------------------------------------------------------------------
-
-    {
-        // ipv4
+            return Res; 
+        } 
+    } 
+ 
+    // --------------------------------------------------------------------- 
+ 
+    { 
+        // ipv4 
         bool IpConverted;
-        const TIpv6Address Ipv4 = TIpv6Address::FromString(RawStr, IpConverted);
+        const TIpv6Address Ipv4 = TIpv6Address::FromString(RawStr, IpConverted); 
         if (IpConverted && Ipv4.Type() == TIpv6Address::Ipv4) {
-            Ok = true;
-            TRes Res{{Ipv4, DefaultPort}, {}, {}};
-            return Res;
-        }
-    }
-
-    // ---------------------------------------------------------------------
-
-    {
-        // host
-        Ok = true;
+            Ok = true; 
+            TRes Res{{Ipv4, DefaultPort}, {}, {}}; 
+            return Res; 
+        } 
+    } 
+ 
+    // --------------------------------------------------------------------- 
+ 
+    { 
+        // host 
+        Ok = true; 
         TRes Res{THostAddressAndPort{}, TString(RawStr), DefaultPort};
-        return Res;
-    }
-}
+        return Res; 
+    } 
+} 

@@ -32,22 +32,22 @@
              0ull)                                                                               \
     )
 
-#define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
-    do {                                                                                                                       \
-        ::NActors::NLog::TSettings* mSettings = static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()); \
-        ::NActors::NLog::EPriority mPriority = static_cast<::NActors::NLog::EPriority>(priority);                              \
-        ::NActors::NLog::EComponent mComponent = static_cast<::NActors::NLog::EComponent>(component);                          \
-        if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) {                                              \
-            ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
-        }                                                                                                                      \
+#define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \ 
+    do {                                                                                                                       \ 
+        ::NActors::NLog::TSettings* mSettings = static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()); \ 
+        ::NActors::NLog::EPriority mPriority = static_cast<::NActors::NLog::EPriority>(priority);                              \ 
+        ::NActors::NLog::EComponent mComponent = static_cast<::NActors::NLog::EComponent>(component);                          \ 
+        if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) {                                              \ 
+            ::NActors::MemLogAdapter(                                                                                          \ 
+                actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \ 
+        }                                                                                                                      \ 
     } while (0) /**/
 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)  \
     LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "%s", [&]() { \
         TStringBuilder logStringBuilder;                                               \
         logStringBuilder << stream;                                                    \
-        return static_cast<TString>(logStringBuilder);                                 \
+        return static_cast<TString>(logStringBuilder);                                 \ 
     }().data())
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)

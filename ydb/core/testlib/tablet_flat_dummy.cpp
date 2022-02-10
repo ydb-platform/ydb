@@ -96,11 +96,11 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
             Execute(new TTxSchemeInit(this), ctx);
     }
 
-    void OnDetach(const TActorContext &ctx) override {
+    void OnDetach(const TActorContext &ctx) override { 
         Die(ctx);
     }
 
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
         Y_UNUSED(ev);
         Die(ctx);
     }

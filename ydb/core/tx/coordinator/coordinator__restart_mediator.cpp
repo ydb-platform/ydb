@@ -17,7 +17,7 @@ struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoor
 
     TTxType GetTxType() const override { return TXTYPE_RESTART_MEDIATOR; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override { 
         TMediator &mediator = Self->Mediator(MediatorId, ctx);
         if (mediator.GenCookie != GenCookie)
             return true;

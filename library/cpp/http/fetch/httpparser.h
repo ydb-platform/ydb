@@ -174,10 +174,10 @@ protected:
 
                 case hp_read_alive:
                     Header->entity_size += size;
-                    if (Header->entity_size >= Header->content_length) {
+                    if (Header->entity_size >= Header->content_length) { 
                         State = hp_eof;
                     }
-
+ 
                     TCheck::CheckDocPart(buf, size, Header);
                     if (isReader)
                         return size;
@@ -314,8 +314,8 @@ public:
             buf = Ptr;
             Ptr = (char*)Ptr + Chunk;
             Size -= Chunk;
-            if (State == hp_eof) {
-                Size = 0;
+            if (State == hp_eof) { 
+                Size = 0; 
                 Eoferr = 0;
             } else if (State == hp_error)
                 return Eoferr = -1;

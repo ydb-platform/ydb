@@ -1,14 +1,14 @@
-# This file is dual licensed under the terms of the Apache License, Version
-# 2.0, and the BSD License. See the LICENSE file in the root of this repository
-# for complete details.
-
-from __future__ import absolute_import, division, print_function
-
-INCLUDES = """
+# This file is dual licensed under the terms of the Apache License, Version 
+# 2.0, and the BSD License. See the LICENSE file in the root of this repository 
+# for complete details. 
+ 
+from __future__ import absolute_import, division, print_function 
+ 
+INCLUDES = """ 
 #include <string.h>
-"""
-
-TYPES = """
+""" 
+ 
+TYPES = """ 
 typedef struct {
     char *password;
     int length;
@@ -16,13 +16,13 @@ typedef struct {
     int error;
     int maxsize;
 } CRYPTOGRAPHY_PASSWORD_DATA;
-"""
-
-FUNCTIONS = """
+""" 
+ 
+FUNCTIONS = """ 
 int Cryptography_pem_password_cb(char *, int, int, void *);
-"""
-
-CUSTOMIZATIONS = """
+""" 
+ 
+CUSTOMIZATIONS = """ 
 typedef struct {
     char *password;
     int length;
@@ -49,4 +49,4 @@ int Cryptography_pem_password_cb(char *buf, int size,
         return 0;
     }
 }
-"""
+""" 

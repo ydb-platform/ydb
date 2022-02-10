@@ -1,24 +1,24 @@
-# This file is dual licensed under the terms of the Apache License, Version
-# 2.0, and the BSD License. See the LICENSE file in the root of this repository
-# for complete details.
-
-from __future__ import absolute_import, division, print_function
-
-
+# This file is dual licensed under the terms of the Apache License, Version 
+# 2.0, and the BSD License. See the LICENSE file in the root of this repository 
+# for complete details. 
+ 
+from __future__ import absolute_import, division, print_function 
+ 
+ 
 def cryptography_has_ec2m():
     return [
-        "EC_POINT_set_affine_coordinates_GF2m",
-        "EC_POINT_get_affine_coordinates_GF2m",
-        "EC_POINT_set_compressed_coordinates_GF2m",
+        "EC_POINT_set_affine_coordinates_GF2m", 
+        "EC_POINT_get_affine_coordinates_GF2m", 
+        "EC_POINT_set_compressed_coordinates_GF2m", 
     ]
-
+ 
 
 def cryptography_has_rsa_oaep_md():
     return [
-        "EVP_PKEY_CTX_set_rsa_oaep_md",
+        "EVP_PKEY_CTX_set_rsa_oaep_md", 
     ]
-
-
+ 
+ 
 def cryptography_has_rsa_oaep_label():
     return [
         "EVP_PKEY_CTX_set0_rsa_oaep_label",
@@ -27,12 +27,12 @@ def cryptography_has_rsa_oaep_label():
 
 def cryptography_has_ssl3_method():
     return [
-        "SSLv3_method",
-        "SSLv3_client_method",
-        "SSLv3_server_method",
+        "SSLv3_method", 
+        "SSLv3_client_method", 
+        "SSLv3_server_method", 
     ]
-
-
+ 
+ 
 def cryptography_has_102_verification():
     return [
         "X509_V_ERR_SUITE_B_INVALID_VERSION",
@@ -41,9 +41,9 @@ def cryptography_has_102_verification():
         "X509_V_ERR_SUITE_B_INVALID_SIGNATURE_ALGORITHM",
         "X509_V_ERR_SUITE_B_LOS_NOT_ALLOWED",
         "X509_V_ERR_SUITE_B_CANNOT_SIGN_P_384_WITH_P_256",
-        "X509_V_FLAG_SUITEB_128_LOS_ONLY",
-        "X509_V_FLAG_SUITEB_192_LOS",
-        "X509_V_FLAG_SUITEB_128_LOS",
+        "X509_V_FLAG_SUITEB_128_LOS_ONLY", 
+        "X509_V_FLAG_SUITEB_192_LOS", 
+        "X509_V_FLAG_SUITEB_128_LOS", 
     ]
 
 
@@ -53,30 +53,30 @@ def cryptography_has_110_verification_params():
 
 def cryptography_has_set_cert_cb():
     return [
-        "SSL_CTX_set_cert_cb",
-        "SSL_set_cert_cb",
+        "SSL_CTX_set_cert_cb", 
+        "SSL_set_cert_cb", 
     ]
 
 
 def cryptography_has_ssl_st():
     return [
-        "SSL_ST_BEFORE",
-        "SSL_ST_OK",
-        "SSL_ST_INIT",
-        "SSL_ST_RENEGOTIATE",
+        "SSL_ST_BEFORE", 
+        "SSL_ST_OK", 
+        "SSL_ST_INIT", 
+        "SSL_ST_RENEGOTIATE", 
     ]
 
 
 def cryptography_has_tls_st():
     return [
-        "TLS_ST_BEFORE",
-        "TLS_ST_OK",
+        "TLS_ST_BEFORE", 
+        "TLS_ST_OK", 
     ]
 
 
 def cryptography_has_scrypt():
     return [
-        "EVP_PBE_scrypt",
+        "EVP_PBE_scrypt", 
     ]
 
 
@@ -319,4 +319,4 @@ CONDITIONAL_NAMES = {
     "Cryptography_HAS_VERIFIED_CHAIN": cryptography_has_verified_chain,
     "Cryptography_HAS_SRTP": cryptography_has_srtp,
     "Cryptography_HAS_GET_PROTO_VERSION": cryptography_has_get_proto_version,
-}
+} 

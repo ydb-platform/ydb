@@ -94,12 +94,12 @@ struct TLogRecordPreprocessor;
 
 template <>
 struct TLogRecordPreprocessor<> {
-    inline static bool CheckLoggingContext(TLog& /*log*/, const TLogRecordContext& /*context*/) {
-        return true;
-    }
-
+    inline static bool CheckLoggingContext(TLog& /*log*/, const TLogRecordContext& /*context*/) { 
+        return true; 
+    } 
+ 
     inline static TSimpleSharedPtr<TLogElement> StartRecord(TLog& log, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) {
-        if (earlier)
+        if (earlier) 
             return earlier;
         TSimpleSharedPtr<TLogElement> result(new TLogElement(&log));
         *result << context.Priority;
@@ -109,10 +109,10 @@ struct TLogRecordPreprocessor<> {
 
 template <class H, class... R>
 struct TLogRecordPreprocessor<H, R...> {
-    inline static bool CheckLoggingContext(TLog& log, const TLogRecordContext& context) {
-        return H::CheckLoggingContext(log, context) && TLogRecordPreprocessor<R...>::CheckLoggingContext(log, context);
-    }
-
+    inline static bool CheckLoggingContext(TLog& log, const TLogRecordContext& context) { 
+        return H::CheckLoggingContext(log, context) && TLogRecordPreprocessor<R...>::CheckLoggingContext(log, context); 
+    } 
+ 
     inline static TSimpleSharedPtr<TLogElement> StartRecord(TLog& log, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) {
         TSimpleSharedPtr<TLogElement> first = H::StartRecord(log, context, earlier);
         return TLogRecordPreprocessor<R...>::StartRecord(log, context, first);
@@ -120,8 +120,8 @@ struct TLogRecordPreprocessor<H, R...> {
 };
 
 struct TLogFilter {
-    static bool CheckLoggingContext(TLog& log, const TLogRecordContext& context);
-    static TSimpleSharedPtr<TLogElement> StartRecord(TLog& log, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier);
+    static bool CheckLoggingContext(TLog& log, const TLogRecordContext& context); 
+    static TSimpleSharedPtr<TLogElement> StartRecord(TLog& log, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier); 
 };
 
 class TNullLog;
@@ -133,14 +133,14 @@ TSimpleSharedPtr<TLogElement> GetLoggerForce(TLog& log, const TLogRecordContext&
     return new TLogElement(&TLoggerOperator<TNullLog>::Log());
 }
 
-namespace NPrivateGlobalLogger {
-    struct TEatStream {
+namespace NPrivateGlobalLogger { 
+    struct TEatStream { 
         Y_FORCE_INLINE bool operator|(const IOutputStream&) const {
-            return true;
-        }
-    };
+            return true; 
+        } 
+    }; 
 }
-
+ 
 #define LOGGER_GENERIC_LOG_CHECKED(logger, preprocessor, level, message) (*GetLoggerForce<preprocessor>(logger, TLogRecordContext(__LOCATION__, message, level)))
 #define LOGGER_CHECKED_GENERIC_LOG(logger, preprocessor, level, message) \
     (preprocessor::CheckLoggingContext(logger, TLogRecordContext(__LOCATION__, message, level))) && NPrivateGlobalLogger::TEatStream() | (*(preprocessor::StartRecord(logger, TLogRecordContext(__LOCATION__, message, level), nullptr)))

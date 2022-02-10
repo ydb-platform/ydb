@@ -8,11 +8,11 @@ YA_ARG_PREFIX = '-Ya,'
 
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser() 
     parser.add_argument('--obj')
     parser.add_argument('--globals-lib')
-    parser.add_argument('--lib', required=True)
-    parser.add_argument('--arch', required=True)
+    parser.add_argument('--lib', required=True) 
+    parser.add_argument('--arch', required=True) 
     parser.add_argument('--build-root', default=None)
     parser.add_argument('--with-own-obj', action='store_true', default=False)
     parser.add_argument('--with-global-srcs', action='store_true', default=False)
@@ -46,8 +46,8 @@ def main():
     auto_input = groups['input']
 
     # Outputs
-    lib_output = args.lib
-    obj_output = args.obj
+    lib_output = args.lib 
+    obj_output = args.obj 
 
     # Dependencies
     global_srcs = groups['global_srcs']
@@ -69,10 +69,10 @@ def main():
     if args.with_global_srcs:
         do_archive += global_srcs
 
-    def call(c):
+    def call(c): 
         proc = subprocess.Popen(c, shell=False, stderr=sys.stderr, stdout=sys.stdout, cwd=args.build_root)
-        proc.communicate()
-        return proc.returncode
+        proc.communicate() 
+        return proc.returncode 
 
     if obj_output:
         link_res = call(do_link)

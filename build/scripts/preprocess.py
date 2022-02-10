@@ -44,5 +44,5 @@ def subst_headers(path, headers):
             f.write(prev)
 
 
-if __name__ == '__main__':
-    subst_headers(sys.argv[1], ['stack.hh', 'position.hh', 'location.hh'])
+if __name__ == '__main__': 
+    subst_headers(sys.argv[1], ['stack.hh', 'position.hh', 'location.hh']) 

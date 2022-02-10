@@ -1,26 +1,26 @@
 import os
-import importlib
+import importlib 
 import sys
-import inspect
+import inspect 
 
 from pytest import hookimpl
 
 from .fixtures import metrics, links  # noqa
-
-orig_getfile = inspect.getfile
-
-
-def getfile(object):
-    res = orig_getfile(object)
-    if inspect.ismodule(object):
-        if not res and getattr(object, '__orig_file__'):
-            res = object.__orig_file__
-    return res
-
-inspect.getfile = getfile
+ 
+orig_getfile = inspect.getfile 
+ 
+ 
+def getfile(object): 
+    res = orig_getfile(object) 
+    if inspect.ismodule(object): 
+        if not res and getattr(object, '__orig_file__'): 
+            res = object.__orig_file__ 
+    return res 
+ 
+inspect.getfile = getfile 
 conftest_modules = []
-
-
+ 
+ 
 @hookimpl(trylast=True)
 def pytest_load_initial_conftests(early_config, parser, args):
     conftests = filter(lambda name: name.endswith(".conftest"), sys.extra_modules)
@@ -45,6 +45,6 @@ def getconftestmodules(*args, **kwargs):
 
 
 def pytest_sessionstart(session):
-    # Override filesystem based relevant conftest discovery on the call path
-    assert session.config.pluginmanager
-    session.config.pluginmanager._getconftestmodules = getconftestmodules
+    # Override filesystem based relevant conftest discovery on the call path 
+    assert session.config.pluginmanager 
+    session.config.pluginmanager._getconftestmodules = getconftestmodules 

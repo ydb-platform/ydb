@@ -9,12 +9,12 @@
 #include <util/system/backtrace.h>
 #include <util/system/guard.h>
 #include <util/system/tls.h>
-#include <util/system/error.h>
+#include <util/system/error.h> 
 #include <util/string/cast.h>
 
-bool NUnitTest::ShouldColorizeDiff = true;
+bool NUnitTest::ShouldColorizeDiff = true; 
 bool NUnitTest::ContinueOnFail = false;
-
+ 
 TString NUnitTest::RandomString(size_t len, ui32 seed) {
     TReallyFastRng32 rand(seed);
     TString ret;
@@ -107,34 +107,34 @@ struct TDiffColorizer {
 };
 
 struct TTraceDiffFormatter {
-    bool Reverse = false;
-
+    bool Reverse = false; 
+ 
     explicit TTraceDiffFormatter(bool reverse = false)
-        : Reverse(reverse)
+        : Reverse(reverse) 
     {
     }
-
+ 
     TString Special(TStringBuf str) const {
         return ToString(str);
-    }
-
+    } 
+ 
     TString Common(TArrayRef<const char> str) const {
         return TString(str.begin(), str.end());
-    }
-
+    } 
+ 
     TString Left(TArrayRef<const char> str) const {
         return NUnitTest::GetFormatTag("good") +
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();
-    }
-
+    } 
+ 
     TString Right(TArrayRef<const char> str) const {
         return NUnitTest::GetFormatTag("bad") +
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();
-    }
-};
-
+    } 
+}; 
+ 
 TString NUnitTest::GetFormatTag(const char* name) {
     return Sprintf("[[%s]]", name);
 }
@@ -147,12 +147,12 @@ TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& deli
     TStringStream res;
     TVector<NDiff::TChunk<char>> chunks;
     NDiff::InlineDiff(chunks, s1, s2, delims);
-    if (NUnitTest::ShouldColorizeDiff) {
-        NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks);
+    if (NUnitTest::ShouldColorizeDiff) { 
+        NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks); 
     } else {
         res << NUnitTest::GetResetTag();
         NDiff::PrintChunks(res, TTraceDiffFormatter(reverse), chunks);
-    }
+    } 
     return res.Str();
 }
 
@@ -308,7 +308,7 @@ void NUnitTest::TTestBase::SetUp() {
 void NUnitTest::TTestBase::TearDown() {
 }
 
-void NUnitTest::TTestBase::AddError(const char* msg, const TString& backtrace, TTestContext* context) {
+void NUnitTest::TTestBase::AddError(const char* msg, const TString& backtrace, TTestContext* context) { 
     ++TestErrors_;
     const NUnitTest::ITestSuiteProcessor::TUnit unit = {Name()};
     const NUnitTest::ITestSuiteProcessor::TTest test = {&unit, CurrentSubtest_};
@@ -317,7 +317,7 @@ void NUnitTest::TTestBase::AddError(const char* msg, const TString& backtrace, T
     Processor()->Error(err);
 }
 
-void NUnitTest::TTestBase::AddError(const char* msg, TTestContext* context) {
+void NUnitTest::TTestBase::AddError(const char* msg, TTestContext* context) { 
     AddError(msg, TString(), context);
 }
 
@@ -334,17 +334,17 @@ bool NUnitTest::TTestBase::CheckAccessTest(const char* test) {
 void NUnitTest::TTestBase::BeforeTest(const char* func) {
     const NUnitTest::ITestSuiteProcessor::TUnit unit = {Name()};
     const NUnitTest::ITestSuiteProcessor::TTest test = {&unit, func};
-    rusage.Fill();
+    rusage.Fill(); 
     Processor()->BeforeTest(test);
 }
 
-void NUnitTest::TTestBase::Finish(const char* func, TTestContext* context) {
-    TRusage finishRusage = TRusage::Get();
+void NUnitTest::TTestBase::Finish(const char* func, TTestContext* context) { 
+    TRusage finishRusage = TRusage::Get(); 
     context->Metrics["ru_rss"] = finishRusage.MaxRss - rusage.MaxRss;
-    context->Metrics["ru_major_pagefaults"] = finishRusage.MajorPageFaults - rusage.MajorPageFaults;
-    context->Metrics["ru_utime"] = (finishRusage.Utime - rusage.Utime).MicroSeconds();
-    context->Metrics["ru_stime"] = (finishRusage.Stime - rusage.Stime).MicroSeconds();
-
+    context->Metrics["ru_major_pagefaults"] = finishRusage.MajorPageFaults - rusage.MajorPageFaults; 
+    context->Metrics["ru_utime"] = (finishRusage.Utime - rusage.Utime).MicroSeconds(); 
+    context->Metrics["ru_stime"] = (finishRusage.Stime - rusage.Stime).MicroSeconds(); 
+ 
     const NUnitTest::ITestSuiteProcessor::TUnit unit = {Name()};
     const NUnitTest::ITestSuiteProcessor::TTest test = {&unit, func};
     const NUnitTest::ITestSuiteProcessor::TFinish finish = {&test, context, TestErrors_ == 0};

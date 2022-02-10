@@ -2,8 +2,8 @@ from __future__ import print_function
 
 import os
 import sys
-import json
-import logging
+import json 
+import logging 
 import argparse
 
 from yatest_lib.ya import Ya
@@ -17,22 +17,22 @@ sanitizer_extra_checks = None
 
 
 def _setup_logging(level=logging.DEBUG):
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-
-    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(funcName)s: %(message)s'
-
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(log_format)
-    stdout_handler.setFormatter(formatter)
-    root_logger.addHandler(stdout_handler)
-
-
+    root_logger = logging.getLogger() 
+    root_logger.setLevel(level) 
+ 
+    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(funcName)s: %(message)s' 
+ 
+    stdout_handler = logging.StreamHandler(sys.stdout) 
+    stdout_handler.setLevel(logging.DEBUG) 
+    formatter = logging.Formatter(log_format) 
+    stdout_handler.setFormatter(formatter) 
+    root_logger.addHandler(stdout_handler) 
+ 
+ 
 def get_options():
     parser = argparse.ArgumentParser()
     parser.add_argument("--show-cwd", action="store_true", dest="show_cwd", default=False, help="show recipe cwd")
-    parser.add_argument("--test-debug", action="store_true", dest="test_debug", default=False, help="test debug mode")
+    parser.add_argument("--test-debug", action="store_true", dest="test_debug", default=False, help="test debug mode") 
     parser.add_argument("--test-stderr", action="store_true", dest="test_stderr", default=False, help="test stderr")
     parser.add_argument("--pdb", action="store_true", dest="pdb", default=False, help="run pdb on error")
     parser.add_argument("--sanitizer-extra-checks", dest="sanitizer_extra_checks", action="store_true", default=False, help="enables extra checks for tests built with sanitizers")
@@ -42,7 +42,7 @@ def get_options():
 
     global ya, sanitizer_extra_checks, collect_cores
     _setup_logging()
-
+ 
     context = {
         "test_stderr": args.test_stderr,
     }

@@ -8,7 +8,7 @@ _JAVA_DIR = []
 
 
 def get_java_path(jdk_dir):
-    # deprecated - to be deleted
+    # deprecated - to be deleted 
     java_paths = (os.path.join(jdk_dir, 'bin', 'java'), os.path.join(jdk_dir, 'bin', 'java.exe'))
 
     for p in java_paths:
@@ -25,11 +25,11 @@ def get_java_path(jdk_dir):
             return p
 
     return ''
-
-
-def get_build_java_dir(jdk_dir):
+ 
+ 
+def get_build_java_dir(jdk_dir): 
     versions = [8, 10, 11, 12, 13, 14, 15]
-
+ 
     if not _JAVA_DIR:
         for version in versions:
             jdk_tar_path = os.path.join(jdk_dir, "jdk{}.tar".format(version))

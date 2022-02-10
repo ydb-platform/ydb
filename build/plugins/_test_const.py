@@ -1,7 +1,7 @@
 # coding: utf-8
 import re
 import sys
-
+ 
 
 RESTART_TEST_INDICATOR = '##restart-test##'
 INFRASTRUCTURE_ERROR_INDICATOR = '##infrastructure-error##'
@@ -120,16 +120,16 @@ class TestRequirementsConstants(Enum):
 
 
 class TestSize(Enum):
-    Small = 'small'
-    Medium = 'medium'
-    Large = 'large'
-
+    Small = 'small' 
+    Medium = 'medium' 
+    Large = 'large' 
+ 
     DefaultTimeouts = {
-        Small: 60,
-        Medium: 600,
-        Large: 3600,
-    }
-
+        Small: 60, 
+        Medium: 600, 
+        Large: 3600, 
+    } 
+ 
     DefaultPriorities = {
         Small: -1,
         Medium: -2,
@@ -178,22 +178,22 @@ class TestSize(Enum):
         },
     }
 
-    @classmethod
-    def sizes(cls):
+    @classmethod 
+    def sizes(cls): 
         return cls.DefaultTimeouts.keys()
-
-    @classmethod
-    def get_default_timeout(cls, size):
+ 
+    @classmethod 
+    def get_default_timeout(cls, size): 
         if size in cls.DefaultTimeouts:
             return cls.DefaultTimeouts[size]
-        raise Exception("Unknown test size '{}'".format(size))
-
+        raise Exception("Unknown test size '{}'".format(size)) 
+ 
     @classmethod
     def get_default_priorities(cls, size):
         if size in cls.DefaultPriorities:
             return cls.DefaultPriorities[size]
         raise Exception("Unknown test size '{}'".format(size))
-
+ 
     @classmethod
     def get_default_requirements(cls, size):
         if size in cls.DefaultRequirements:
@@ -208,25 +208,25 @@ class TestSize(Enum):
 
 
 class TestRunExitCode(Enum):
-    Skipped = 2
+    Skipped = 2 
     Failed = 3
-    TimeOut = 10
+    TimeOut = 10 
     InfrastructureError = 12
-
-
+ 
+ 
 class YaTestTags(Enum):
-    Manual = "ya:manual"
-    Notags = "ya:notags"
-    Norestart = "ya:norestart"
-    Dirty = "ya:dirty"
-    Noretries = "ya:noretries"
-    Fat = "ya:fat"
-    RunWithAsserts = "ya:relwithdebinfo"
-    Privileged = "ya:privileged"
+    Manual = "ya:manual" 
+    Notags = "ya:notags" 
+    Norestart = "ya:norestart" 
+    Dirty = "ya:dirty" 
+    Noretries = "ya:noretries" 
+    Fat = "ya:fat" 
+    RunWithAsserts = "ya:relwithdebinfo" 
+    Privileged = "ya:privileged" 
     ExoticPlatform = "ya:exotic_platform"
     NotAutocheck = "ya:not_autocheck"
-
-
+ 
+ 
 class Status(object):
     GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(1, 8)
     SKIPPED = -100

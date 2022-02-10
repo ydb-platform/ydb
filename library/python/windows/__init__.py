@@ -3,7 +3,7 @@
 import os
 import stat
 import sys
-import shutil
+import shutil 
 import logging
 
 from six import reraise
@@ -11,22 +11,22 @@ from six import reraise
 import library.python.func
 import library.python.strings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
-
+ 
 ERRORS = {
     'SUCCESS': 0,
-    'PATH_NOT_FOUND': 3,
-    'ACCESS_DENIED': 5,
-    'SHARING_VIOLATION': 32,
+    'PATH_NOT_FOUND': 3, 
+    'ACCESS_DENIED': 5, 
+    'SHARING_VIOLATION': 32, 
     'INSUFFICIENT_BUFFER': 122,
     'DIR_NOT_EMPTY': 145,
 }
 
-RETRIABLE_FILE_ERRORS = (ERRORS['ACCESS_DENIED'], ERRORS['SHARING_VIOLATION'])
-RETRIABLE_DIR_ERRORS = (ERRORS['ACCESS_DENIED'], ERRORS['DIR_NOT_EMPTY'], ERRORS['SHARING_VIOLATION'])
+RETRIABLE_FILE_ERRORS = (ERRORS['ACCESS_DENIED'], ERRORS['SHARING_VIOLATION']) 
+RETRIABLE_DIR_ERRORS = (ERRORS['ACCESS_DENIED'], ERRORS['DIR_NOT_EMPTY'], ERRORS['SHARING_VIOLATION']) 
 
-
+ 
 # Check if on Windows
 @library.python.func.lazy
 def on_win():
@@ -145,7 +145,7 @@ if on_win():
         ei = None
         for t in xrange(tries):
             if t:
-                logger.debug('Diehard [errs %s]: try #%d in %s', ','.join(str(x) for x in winerrors), t, f)
+                logger.debug('Diehard [errs %s]: try #%d in %s', ','.join(str(x) for x in winerrors), t, f) 
             try:
                 return f(*args, **kwargs)
             except WindowsError as e:
@@ -285,14 +285,14 @@ if on_win():
     def set_error_mode(mode):
         return ctypes.windll.kernel32.SetErrorMode(mode)
 
-    @win_only
-    def rmtree(path):
-        def error_handler(func, handling_path, execinfo):
-            e = execinfo[1]
-            if e.winerror == ERRORS['PATH_NOT_FOUND']:
-                handling_path = "\\\\?\\" + handling_path  # handle path over 256 symbols
-                if os.path.exists(path):
-                    return func(handling_path)
+    @win_only 
+    def rmtree(path): 
+        def error_handler(func, handling_path, execinfo): 
+            e = execinfo[1] 
+            if e.winerror == ERRORS['PATH_NOT_FOUND']: 
+                handling_path = "\\\\?\\" + handling_path  # handle path over 256 symbols 
+                if os.path.exists(path): 
+                    return func(handling_path) 
             if e.winerror == ERRORS['ACCESS_DENIED']:
                 try:
                     # removing of r/w directory with read-only files in it yields ACCESS_DENIED
@@ -303,9 +303,9 @@ if on_win():
                 else:
                     # propagate true last error if this attempt fails
                     return func(handling_path)
-            raise e
-        shutil.rmtree(path, onerror=error_handler)
-
+            raise e 
+        shutil.rmtree(path, onerror=error_handler) 
+ 
     # Don't display the Windows GPF dialog if the invoked program dies.
     # http://msdn.microsoft.com/en-us/library/windows/desktop/ms680621.aspx
     @win_only

@@ -50,26 +50,26 @@ namespace {
 yabs_mx_calc_table_t yabs_mx_calc_table = {YABS_MX_CALC_VERSION, 10000, 0, yabs_funcs};
 """
 
-if __name__ == '__main__':
-    init = []
-    body = []
-    defs = {}
+if __name__ == '__main__': 
+    init = [] 
+    body = [] 
+    defs = {} 
 
-    for i in sys.argv[1:]:
-        name = i.replace('.', '_')
-        num = long(name.split('_')[1])
+    for i in sys.argv[1:]: 
+        name = i.replace('.', '_') 
+        num = long(name.split('_')[1]) 
 
-        init.append('(*this)[%s] = new TFml(ar.ObjectBlobByKey("%s"));' % (num, '/' + i))
+        init.append('(*this)[%s] = new TFml(ar.ObjectBlobByKey("%s"));' % (num, '/' + i)) 
 
-        f1 = 'static void yabs_%s(size_t count, const float** args, double* res) {Singleton<TFormulas>()->at(%s).DoCalcRelevs(args, res, count);}' % (name, num)
-        f2 = 'static size_t yabs_%s_factor_count() {return Singleton<TFormulas>()->at(%s).MaxFactorIndex() + 1;}' % (name, num)
+        f1 = 'static void yabs_%s(size_t count, const float** args, double* res) {Singleton<TFormulas>()->at(%s).DoCalcRelevs(args, res, count);}' % (name, num) 
+        f2 = 'static size_t yabs_%s_factor_count() {return Singleton<TFormulas>()->at(%s).MaxFactorIndex() + 1;}' % (name, num) 
 
-        body.append(f1)
-        body.append(f2)
+        body.append(f1) 
+        body.append(f2) 
 
-        d1 = 'yabs_%s' % name
-        d2 = 'yabs_%s_factor_count' % name
+        d1 = 'yabs_%s' % name 
+        d2 = 'yabs_%s_factor_count' % name 
 
-        defs[num] = '{%s, %s}' % (d1, d2)
+        defs[num] = '{%s, %s}' % (d1, d2) 
 
-    print tmpl % ('\n'.join(init), '\n\n'.join(body), ',\n'.join((defs.get(i, '{nullptr, nullptr}') for i in range(0, 10000))))
+    print tmpl % ('\n'.join(init), '\n\n'.join(body), ',\n'.join((defs.get(i, '{nullptr, nullptr}') for i in range(0, 10000)))) 

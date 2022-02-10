@@ -1,16 +1,16 @@
 OWNER(g:yatest)
-
+ 
 PY23_LIBRARY()
-
-PY_SRCS(
+ 
+PY_SRCS( 
     NAMESPACE
     yatest_lib
-    external.py
+    external.py 
     test_splitter.py
-    tools.py
+    tools.py 
     ya.py
-)
-
+) 
+ 
 PEERDIR(
     contrib/python/six
 )
@@ -21,6 +21,6 @@ IF(PYTHON2)
     )
 ENDIF()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(tests)

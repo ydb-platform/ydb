@@ -1,25 +1,25 @@
 import os
-import sys
+import sys 
 import time
 
 import __res
-
+ 
 FORCE_EXIT_TESTSFAILED_ENV = 'FORCE_EXIT_TESTSFAILED'
 
 
-def main():
+def main(): 
     import library.python.pytest.context as context
     context.Ctx["YA_PYTEST_START_TIMESTAMP"] = time.time()
 
     profile = None
     if '--profile-pytest' in sys.argv:
         sys.argv.remove('--profile-pytest')
-
+ 
         import pstats
         import cProfile
         profile = cProfile.Profile()
         profile.enable()
-
+ 
     # Reset influencing env. vars
     # For more info see library/python/testing/yatest_common/yatest/common/errors.py
     if FORCE_EXIT_TESTSFAILED_ENV in os.environ:
@@ -46,12 +46,12 @@ def main():
     m.setattr(_pytest.assertion.rewrite, "AssertionRewritingHook", rewrite.AssertionRewritingHook)
 
     prefix = '__tests__.'
-
+ 
     test_modules = [
         name[len(prefix):] for name in sys.extra_modules
         if name.startswith(prefix) and not name.endswith('.conftest')
     ]
-
+ 
     doctest_packages = __res.find("PY_DOCTEST_PACKAGES") or ""
     if isinstance(doctest_packages, bytes):
         doctest_packages = doctest_packages.decode('utf-8')
@@ -70,20 +70,20 @@ def main():
 
     def remove_user_site(paths):
         site_paths = ('site-packages', 'site-python')
-
+ 
         def is_site_path(path):
             for p in site_paths:
                 if path.find(p) != -1:
                     return True
             return False
-
+ 
         new_paths = list(paths)
         for p in paths:
             if is_site_path(p):
                 new_paths.remove(p)
-
+ 
         return new_paths
-
+ 
     sys.path = remove_user_site(sys.path)
     rc = pytest.main(plugins=[
         collection.CollectionPlugin(test_modules, doctest_modules),
@@ -91,10 +91,10 @@ def main():
         conftests,
     ])
 
-    if rc == 5:
-        # don't care about EXIT_NOTESTSCOLLECTED
-        rc = 0
-
+    if rc == 5: 
+        # don't care about EXIT_NOTESTSCOLLECTED 
+        rc = 0 
+ 
     if rc == 1 and yatest_runner and not listing_mode and not os.environ.get(FORCE_EXIT_TESTSFAILED_ENV) == '1':
         # XXX it's place for future improvements
         # Test wrapper should terminate with 0 exit code if there are common test failures
@@ -110,7 +110,7 @@ def main():
         ps.print_stats()
 
     sys.exit(rc)
-
-
-if __name__ == '__main__':
-    main()
+ 
+ 
+if __name__ == '__main__': 
+    main() 

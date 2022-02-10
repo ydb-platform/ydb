@@ -73,10 +73,10 @@ TString GetWorkPath() {
     return NPrivate::GetCwd();
 }
 
-TFsPath GetOutputPath() {
-    return GetWorkPath() + "/testing_out_stuff";
-}
-
+TFsPath GetOutputPath() { 
+    return GetWorkPath() + "/testing_out_stuff"; 
+} 
+ 
 const TString& GetRamDrivePath() {
     return NPrivate::GetTestEnv().RamDrivePath;
 }

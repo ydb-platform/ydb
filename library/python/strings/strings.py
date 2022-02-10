@@ -2,24 +2,24 @@ import locale
 import logging
 import six
 import sys
-import codecs
+import codecs 
 
 import library.python.func
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
-
+ 
 DEFAULT_ENCODING = 'utf-8'
 ENCODING_ERRORS_POLICY = 'replace'
 
 
-def left_strip(el, prefix):
-    """
-    Strips prefix at the left of el
-    """
-    if el.startswith(prefix):
-        return el[len(prefix):]
-    return el
+def left_strip(el, prefix): 
+    """ 
+    Strips prefix at the left of el 
+    """ 
+    if el.startswith(prefix): 
+        return el[len(prefix):] 
+    return el 
 
 
 # Explicit to-text conversion
@@ -49,8 +49,8 @@ def to_unicode(value, from_enc=DEFAULT_ENCODING):
         else:
             return value.decode(from_enc, errors=ENCODING_ERRORS_POLICY)
     return six.text_type(value)
-
-
+ 
+ 
 # Optional from_enc enables transcoding
 def to_str(value, to_enc=DEFAULT_ENCODING, from_enc=None):
     if isinstance(value, six.binary_type):
@@ -68,7 +68,7 @@ def _convert_deep(x, enc, convert, relaxed=True):
         return None
     if isinstance(x, (six.text_type, six.binary_type)):
         return convert(x, enc)
-    if isinstance(x, dict):
+    if isinstance(x, dict): 
         return {convert(k, enc): _convert_deep(v, enc, convert, relaxed) for k, v in six.iteritems(x)}
     if isinstance(x, list):
         return [_convert_deep(e, enc, convert, relaxed) for e in x]
@@ -77,9 +77,9 @@ def _convert_deep(x, enc, convert, relaxed=True):
 
     if relaxed:
         return x
-    raise TypeError('unsupported type')
-
-
+    raise TypeError('unsupported type') 
+ 
+ 
 def unicodize_deep(x, enc=DEFAULT_ENCODING, relaxed=True):
     return _convert_deep(x, enc, to_unicode, relaxed)
 
@@ -99,7 +99,7 @@ def locale_encoding():
         logger.debug('Cannot get system locale: %s', e)
         return None
     except ValueError as e:
-        logger.warn('Cannot get system locale: %s', e)
+        logger.warn('Cannot get system locale: %s', e) 
         return None
 
 
@@ -110,16 +110,16 @@ def fs_encoding():
 def guess_default_encoding():
     enc = locale_encoding()
     return enc if enc else DEFAULT_ENCODING
-
-
+ 
+ 
 @library.python.func.memoize()
-def get_stream_encoding(stream):
-    if stream.encoding:
-        try:
-            codecs.lookup(stream.encoding)
-            return stream.encoding
-        except LookupError:
-            pass
+def get_stream_encoding(stream): 
+    if stream.encoding: 
+        try: 
+            codecs.lookup(stream.encoding) 
+            return stream.encoding 
+        except LookupError: 
+            pass 
     return DEFAULT_ENCODING
 
 

@@ -10,8 +10,8 @@ ELSE()
     PEERDIR(contrib/python/traitlets/py3)
 ENDIF()
 
-NO_LINT()
-
+NO_LINT() 
+ 
 END()
 
 RECURSE(

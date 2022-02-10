@@ -10,8 +10,8 @@ SPLIT_FACTOR(40)
 
 TIMEOUT(300)
 
-SIZE(MEDIUM)
-
+SIZE(MEDIUM) 
+ 
 SRCS(
     codecs_ut.cpp
 )

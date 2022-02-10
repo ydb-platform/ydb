@@ -14,15 +14,15 @@ import library.python.func
 import library.python.strings
 import library.python.windows
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
-
-try:
-    WindowsError
-except NameError:
-    WindowsError = None
-
-
+ 
+try: 
+    WindowsError 
+except NameError: 
+    WindowsError = None 
+ 
+ 
 _diehard_win_tries = 10
 errorfix_win = library.python.windows.errorfix
 
@@ -127,10 +127,10 @@ def remove_dir(path):
     os.rmdir(path)
 
 
-def fix_path_encoding(path):
+def fix_path_encoding(path): 
     return library.python.strings.to_str(path, library.python.strings.fs_encoding())
-
-
+ 
+ 
 # File/directory remove
 # Non-atomic
 # Throws OSError, AssertionError
@@ -140,8 +140,8 @@ def remove_tree(path):
     def rmtree(path):
         if library.python.windows.on_win():
             library.python.windows.rmtree(path)
-        else:
-            shutil.rmtree(fix_path_encoding(path))
+        else: 
+            shutil.rmtree(fix_path_encoding(path)) 
 
     st = os.lstat(path)
     if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode):
@@ -161,7 +161,7 @@ def remove_tree_safe(path):
         if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode):
             os.remove(path)
         elif stat.S_ISDIR(st.st_mode):
-            shutil.rmtree(fix_path_encoding(path), ignore_errors=True)
+            shutil.rmtree(fix_path_encoding(path), ignore_errors=True) 
     # XXX
     except UnicodeDecodeError as e:
         logging.exception(u'remove_tree_safe with argument %s raise exception: %s', path, e)
@@ -196,11 +196,11 @@ def hardlink(src, lnk):
         os.link(src, lnk)
 
 
-@errorfix_win
-def hardlink_or_copy(src, lnk):
-    def should_fallback_to_copy(exc):
-        if WindowsError is not None and isinstance(exc, WindowsError) and exc.winerror == 1142:  # too many hardlinks
-            return True
+@errorfix_win 
+def hardlink_or_copy(src, lnk): 
+    def should_fallback_to_copy(exc): 
+        if WindowsError is not None and isinstance(exc, WindowsError) and exc.winerror == 1142:  # too many hardlinks 
+            return True 
         # cross-device hardlink or too many hardlinks, or some known WSL error
         if isinstance(exc, OSError) and exc.errno in (
             errno.EXDEV,
@@ -209,19 +209,19 @@ def hardlink_or_copy(src, lnk):
             errno.EACCES,
             errno.EPERM,
         ):
-            return True
-        return False
-
-    try:
-        hardlink(src, lnk)
-    except Exception as e:
+            return True 
+        return False 
+ 
+    try: 
+        hardlink(src, lnk) 
+    except Exception as e: 
         logger.debug('Failed to hardlink %s to %s with error %s, will copy it', src, lnk, repr(e))
-        if should_fallback_to_copy(e):
+        if should_fallback_to_copy(e): 
             copy2(src, lnk, follow_symlinks=False)
-        else:
-            raise
-
-
+        else: 
+            raise 
+ 
+ 
 # Atomic file/directory symlink (Unix only)
 # Dst must not exist
 # Throws OSError
@@ -259,7 +259,7 @@ def hardlink_tree(src, dst):
     if os.path.isfile(src):
         hardlink(src, dst)
         return
-    for dirpath, _, filenames in walk_relative(src):
+    for dirpath, _, filenames in walk_relative(src): 
         src_dirpath = os.path.join(src, dirpath) if dirpath != '.' else src
         dst_dirpath = os.path.join(dst, dirpath) if dirpath != '.' else dst
         os.mkdir(dst_dirpath)
@@ -270,20 +270,20 @@ def hardlink_tree(src, dst):
 # File copy
 # throws EnvironmentError (OSError, IOError)
 @errorfix_win
-def copy_file(src, dst, copy_function=shutil.copy2):
+def copy_file(src, dst, copy_function=shutil.copy2): 
     if os.path.isdir(dst):
         raise CustomFsError(errno.EISDIR, filename=dst)
-    copy_function(src, dst)
+    copy_function(src, dst) 
 
 
 # File/directory copy
 # throws EnvironmentError (OSError, IOError, shutil.Error)
 @errorfix_win
-def copy_tree(src, dst, copy_function=shutil.copy2):
+def copy_tree(src, dst, copy_function=shutil.copy2): 
     if os.path.isfile(src):
-        copy_file(src, dst, copy_function=copy_function)
+        copy_file(src, dst, copy_function=copy_function) 
         return
-    copytree3(src, dst, copy_function=copy_function)
+    copytree3(src, dst, copy_function=copy_function) 
 
 
 # File read
@@ -356,7 +356,7 @@ def get_tree_size(path, recursive=False, raise_all_errors=False):
             except OSError as e:
                 if raise_all_errors:
                     raise
-                logger.debug("Cannot calculate file size: %s", e)
+                logger.debug("Cannot calculate file size: %s", e) 
         if not recursive:
             break
     return total_size
@@ -447,25 +447,25 @@ def copytree3(
                 copy_function(srcname, dstname)
         # catch the Error from the recursive copytree3 so that we can
         # continue with other files
-        except shutil.Error as err:
+        except shutil.Error as err: 
             errors.extend(err.args[0])
-        except EnvironmentError as why:
+        except EnvironmentError as why: 
             errors.append((srcname, dstname, str(why)))
     try:
         shutil.copystat(src, dst)
-    except OSError as why:
+    except OSError as why: 
         if WindowsError is not None and isinstance(why, WindowsError):
             # Copying file access times may fail on Windows
             pass
         else:
             errors.extend((src, dst, str(why)))
     if errors:
-        raise shutil.Error(errors)
-
-
-def walk_relative(path, topdown=True, onerror=None, followlinks=False):
-    for dirpath, dirnames, filenames in os.walk(path, topdown=topdown, onerror=onerror, followlinks=followlinks):
-        yield os.path.relpath(dirpath, path), dirnames, filenames
+        raise shutil.Error(errors) 
+ 
+ 
+def walk_relative(path, topdown=True, onerror=None, followlinks=False): 
+    for dirpath, dirnames, filenames in os.walk(path, topdown=topdown, onerror=onerror, followlinks=followlinks): 
+        yield os.path.relpath(dirpath, path), dirnames, filenames 
 
 
 def supports_clone():

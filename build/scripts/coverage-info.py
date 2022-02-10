@@ -96,26 +96,26 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def combine_info_files(lcov, files, out_file):
-    chunk_size = 50
-    files = list(set(files))
+def combine_info_files(lcov, files, out_file): 
+    chunk_size = 50 
+    files = list(set(files)) 
 
-    for chunk in chunks(files, chunk_size):
-        combine_cmd = [lcov]
-        if os.path.exists(out_file):
-            chunk.append(out_file)
-        for trace in chunk:
-            assert os.path.exists(trace), "Trace file does not exist: {} (cwd={})".format(trace, os.getcwd())
-            combine_cmd += ["-a", os.path.abspath(trace)]
-        print >>sys.stderr, '## lcov', ' '.join(combine_cmd[1:])
-        out_file_tmp = "combined.tmp"
-        with open(out_file_tmp, "w") as stdout:
-            subprocess.check_call(combine_cmd, stdout=stdout)
-        if os.path.exists(out_file):
-            os.remove(out_file)
-        os.rename(out_file_tmp, out_file)
-
-
+    for chunk in chunks(files, chunk_size): 
+        combine_cmd = [lcov] 
+        if os.path.exists(out_file): 
+            chunk.append(out_file) 
+        for trace in chunk: 
+            assert os.path.exists(trace), "Trace file does not exist: {} (cwd={})".format(trace, os.getcwd()) 
+            combine_cmd += ["-a", os.path.abspath(trace)] 
+        print >>sys.stderr, '## lcov', ' '.join(combine_cmd[1:]) 
+        out_file_tmp = "combined.tmp" 
+        with open(out_file_tmp, "w") as stdout: 
+            subprocess.check_call(combine_cmd, stdout=stdout) 
+        if os.path.exists(out_file): 
+            os.remove(out_file) 
+        os.rename(out_file_tmp, out_file) 
+ 
+ 
 def probe_path_global(path, source_root, prefix_filter, exclude_files):
     if path.endswith('_ut.cpp'):
         return None
@@ -186,7 +186,7 @@ def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_exe
                 source_fname = gcda_name[:-len(GCDA_EXT)]
                 for suff in suffixes(source_fname):
                     if suff in fname2gcno:
-                        gcda_new_name = suff + GCDA_EXT
+                        gcda_new_name = suff + GCDA_EXT 
                         gcda_item.name = gcda_new_name
                         gcda_tf.extract(gcda_item)
                         if os.path.getsize(gcda_new_name) > 0:
@@ -196,9 +196,9 @@ def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_exe
                                 geninfo_executable,
                                 '--gcov-tool', gcov_tool,
                                 gcda_new_name,
-                                '-o', coverage_info + '.tmp'
+                                '-o', coverage_info + '.tmp' 
                             ]
-                            gen_info(geninfo_cmd, coverage_info)
+                            gen_info(geninfo_cmd, coverage_info) 
 
 
 def gen_cobertura(tool, output, combined_info):
@@ -251,9 +251,9 @@ def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filt
     print_stat(da, fnda, teamcity_stat_file)
 
     if lcov_args:
-        output_trace = "combined.info"
-        combine_info_files(os.path.join(source_root, 'devtools', 'lcov', 'lcov'), lcov_args, output_trace)
-        cmd = [os.path.join(source_root, 'devtools', 'lcov', 'genhtml'), '-p', source_root, '--ignore-errors', 'source', '-o', output_dir, output_trace]
+        output_trace = "combined.info" 
+        combine_info_files(os.path.join(source_root, 'devtools', 'lcov', 'lcov'), lcov_args, output_trace) 
+        cmd = [os.path.join(source_root, 'devtools', 'lcov', 'genhtml'), '-p', source_root, '--ignore-errors', 'source', '-o', output_dir, output_trace] 
         print >>sys.stderr, '## genhtml', ' '.join(cmd)
         subprocess.check_call(cmd)
         if lcov_cobertura:

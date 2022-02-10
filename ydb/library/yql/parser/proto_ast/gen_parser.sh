@@ -12,5 +12,5 @@ fi
 
 ANTLR3="./antlr3/antlr-3.5.2-complete-no-st3.jar"
 
-../../../../ya tool java -d64 -jar $ANTLR3 -lib ./ -language protobuf $1
-../../../../ya tool java -d64 -jar $ANTLR3 -lib ./ $1
+../../../../ya tool java -d64 -jar $ANTLR3 -lib ./ -language protobuf $1 
+../../../../ya tool java -d64 -jar $ANTLR3 -lib ./ $1 

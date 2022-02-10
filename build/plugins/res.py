@@ -48,8 +48,8 @@ def onfat_resource(unit, *args):
 
         unit.onrun_program(['tools/rescompiler', output] + part_args + inputs + ['OUT_NOAUTO', output])
         unit.onsrcs(['GLOBAL', output])
-
-
+ 
+ 
 def onresource_files(unit, *args):
     """
     @usage: RESOURCE_FILES([DONT_PARSE] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})

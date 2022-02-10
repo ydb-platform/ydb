@@ -83,7 +83,7 @@ static_assert(sizeof(wchar_t) == SIZEOF_WCHAR_T, "fixme 16");
 //TODO
 #endif
 """
-if __name__ == '__main__':
-    with open(sys.argv[2], 'w') as f:
-        f.write('#include <' + sys.argv[1] + '>\n\n')
-        f.write(data)
+if __name__ == '__main__': 
+    with open(sys.argv[2], 'w') as f: 
+        f.write('#include <' + sys.argv[1] + '>\n\n') 
+        f.write(data) 

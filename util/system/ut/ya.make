@@ -11,8 +11,8 @@ SPLIT_FACTOR(40)
 
 TIMEOUT(300)
 
-SIZE(MEDIUM)
-
+SIZE(MEDIUM) 
+ 
 IF (OS_DARWIN)
     SIZE(LARGE)
     TAG(ya:fat ya:force_sandbox ya:exotic_platform)

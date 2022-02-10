@@ -1,49 +1,49 @@
-# -*- coding: utf-8 -*-
-
-#   __
-#  /__)  _  _     _   _ _/   _
-# / (   (- (/ (/ (- _)  /  _)
-#          /
-
-"""
+# -*- coding: utf-8 -*- 
+ 
+#   __ 
+#  /__)  _  _     _   _ _/   _ 
+# / (   (- (/ (/ (- _)  /  _) 
+#          / 
+ 
+""" 
 Requests HTTP Library
-~~~~~~~~~~~~~~~~~~~~~
-
+~~~~~~~~~~~~~~~~~~~~~ 
+ 
 Requests is an HTTP library, written in Python, for human beings.
 Basic GET usage:
-
-   >>> import requests
-   >>> r = requests.get('https://www.python.org')
-   >>> r.status_code
-   200
+ 
+   >>> import requests 
+   >>> r = requests.get('https://www.python.org') 
+   >>> r.status_code 
+   200 
    >>> b'Python is a programming language' in r.content
-   True
-
-... or POST:
-
-   >>> payload = dict(key1='value1', key2='value2')
+   True 
+ 
+... or POST: 
+ 
+   >>> payload = dict(key1='value1', key2='value2') 
    >>> r = requests.post('https://httpbin.org/post', data=payload)
-   >>> print(r.text)
-   {
-     ...
-     "form": {
+   >>> print(r.text) 
+   { 
+     ... 
+     "form": { 
        "key1": "value1",
        "key2": "value2"
-     },
-     ...
-   }
-
-The other HTTP methods are supported - see `requests.api`. Full documentation
+     }, 
+     ... 
+   } 
+ 
+The other HTTP methods are supported - see `requests.api`. Full documentation 
 is at <https://requests.readthedocs.io>.
-
+ 
 :copyright: (c) 2017 by Kenneth Reitz.
-:license: Apache 2.0, see LICENSE for more details.
-"""
-
+:license: Apache 2.0, see LICENSE for more details. 
+""" 
+ 
 import urllib3
 import warnings
 from .exceptions import RequestsDependencyWarning
-
+ 
 try:
     from charset_normalizer import __version__ as charset_normalizer_version
 except ImportError:
@@ -106,7 +106,7 @@ except (AssertionError, ValueError):
 # Attempt to enable urllib3's fallback for SNI support
 # if the standard library doesn't support SNI or the
 # 'ssl' library isn't available.
-try:
+try: 
     try:
         import ssl
     except ImportError:
@@ -119,9 +119,9 @@ try:
         # Check cryptography version
         from cryptography import __version__ as cryptography_version
         _check_cryptography(cryptography_version)
-except ImportError:
-    pass
-
+except ImportError: 
+    pass 
+ 
 # urllib3's DependencyWarnings should be silenced.
 from urllib3.exceptions import DependencyWarning
 warnings.simplefilter('ignore', DependencyWarning)
@@ -130,23 +130,23 @@ from .__version__ import __title__, __description__, __url__, __version__
 from .__version__ import __build__, __author__, __author_email__, __license__
 from .__version__ import __copyright__, __cake__
 
-from . import utils
+from . import utils 
 from . import packages
-from .models import Request, Response, PreparedRequest
-from .api import request, get, head, post, patch, put, delete, options
-from .sessions import session, Session
-from .status_codes import codes
-from .exceptions import (
-    RequestException, Timeout, URLRequired,
+from .models import Request, Response, PreparedRequest 
+from .api import request, get, head, post, patch, put, delete, options 
+from .sessions import session, Session 
+from .status_codes import codes 
+from .exceptions import ( 
+    RequestException, Timeout, URLRequired, 
     TooManyRedirects, HTTPError, ConnectionError,
     FileModeWarning, ConnectTimeout, ReadTimeout, JSONDecodeError
-)
-
-# Set default logging handler to avoid "No handler found" warnings.
-import logging
+) 
+ 
+# Set default logging handler to avoid "No handler found" warnings. 
+import logging 
 from logging import NullHandler
-
-logging.getLogger(__name__).addHandler(NullHandler())
+ 
+logging.getLogger(__name__).addHandler(NullHandler()) 
 
 # FileModeWarnings go off per the default.
 warnings.simplefilter('default', FileModeWarning, append=True)

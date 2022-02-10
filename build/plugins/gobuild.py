@@ -172,7 +172,7 @@ def on_go_process_srcs(unit):
                 basedirs[basedir].append(f)
             for basedir in basedirs:
                 unit.onadd_check(['gofmt'] + basedirs[basedir])
-
+ 
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):
         cover_info = []

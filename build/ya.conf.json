@@ -3901,7 +3901,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "mvn": {
             "tools": {
                 "mvn": {
@@ -3930,13 +3930,13 @@
                 }
             ]
         },
-        "fast_diff": {
-            "tools": {
+        "fast_diff": { 
+            "tools": { 
                 "fast_diff": {
                     "bottle": "fast_diff",
                     "executable": "fast_diff"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3945,7 +3945,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "cuda": {
             "tools": {
                 "cuda": {
@@ -4284,14 +4284,14 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "allure_commandline": {
-            "tools": {
+            "tools": { 
                 "allure": {
                     "bottle": "allure_commandline",
                     "executable": "allure"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -7111,7 +7111,7 @@
                     "ant"
                 ]
             }
-        },
+        }, 
         "maven": {
             "formula": {
                 "sandbox_id": 39222824,
@@ -7125,10 +7125,10 @@
             }
         },
         "fast_diff": {
-            "formula": {
-                "sandbox_id": 42519064,
-                "match": "fast_diff"
-            }
+            "formula": { 
+                "sandbox_id": 42519064, 
+                "match": "fast_diff" 
+            } 
         },
         "kiwi_protos": {
             "formula": {
@@ -7137,7 +7137,7 @@
             }
         },
         "allure_commandline": {
-            "formula": {
+            "formula": { 
                 "sandbox_id": 569859192,
                 "match": "Allure Commandline"
             },
@@ -7146,7 +7146,7 @@
                     "bin",
                     "allure"
                 ]
-            }
+            } 
         },
         "ctags": {
             "formula": {

@@ -50,23 +50,23 @@ const size_t MAX_COMMENT_MESSAGE_LENGTH = 1024 * 1024; // 1 MB
 
 using namespace NUnitTest;
 
-class TNullTraceWriterProcessor: public ITestSuiteProcessor {
-};
-
-class TTraceWriterProcessor: public ITestSuiteProcessor {
-public:
+class TNullTraceWriterProcessor: public ITestSuiteProcessor { 
+}; 
+ 
+class TTraceWriterProcessor: public ITestSuiteProcessor { 
+public: 
     inline TTraceWriterProcessor(const char* traceFilePath, EOpenMode mode)
         : PrevTime(TInstant::Now())
     {
         TraceFile = new TUnbufferedFileOutput(TFile(traceFilePath, mode | WrOnly | Seq));
-    }
-
-private:
+    } 
+ 
+private: 
     TAutoPtr<TUnbufferedFileOutput> TraceFile;
     TString TraceFilePath;
-    TInstant PrevTime;
+    TInstant PrevTime; 
     TVector<TString> ErrorMessages;
-
+ 
     inline void Trace(const TString eventName, const NJson::TJsonValue eventValue) {
         NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE);
         json.BeginObject();
@@ -79,14 +79,14 @@ private:
 
         json.FlushTo(TraceFile.Get());
         *TraceFile << "\n";
-    }
-
+    } 
+ 
     inline void TraceSubtestFinished(const char* className, const char* subtestName, const char* status, const TString comment, const TTestContext* context) {
-        const TInstant now = TInstant::Now();
+        const TInstant now = TInstant::Now(); 
         NJson::TJsonValue event;
-        event.InsertValue("class", className);
-        event.InsertValue("subtest", subtestName);
-        event.InsertValue("status", status);
+        event.InsertValue("class", className); 
+        event.InsertValue("subtest", subtestName); 
+        event.InsertValue("status", status); 
         event.InsertValue("comment", comment.data());
         event.InsertValue("time", (now - PrevTime).SecondsFloat());
         if (context) {
@@ -94,17 +94,17 @@ private:
                 event["metrics"].InsertValue(metric.first, metric.second);
             }
         }
-        Trace("subtest-finished", event);
+        Trace("subtest-finished", event); 
 
-        PrevTime = now;
+        PrevTime = now; 
         TString marker = Join("", "\n###subtest-finished:", className, "::", subtestName, "\n");
         Cout << marker;
         Cout.Flush();
         Cerr << comment;
         Cerr << marker;
         Cerr.Flush();
-    }
-
+    } 
+ 
     virtual TString BuildComment(const char* message, const char* backTrace) {
         return NUnitTest::GetFormatTag("bad") +
                TString(message).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
@@ -117,28 +117,28 @@ private:
 
     void OnBeforeTest(const TTest* test) override {
         NJson::TJsonValue event;
-        event.InsertValue("class", test->unit->name);
-        event.InsertValue("subtest", test->name);
-        Trace("subtest-started", event);
+        event.InsertValue("class", test->unit->name); 
+        event.InsertValue("subtest", test->name); 
+        Trace("subtest-started", event); 
         TString marker = Join("", "\n###subtest-started:", test->unit->name, "::", test->name, "\n");
         Cout << marker;
         Cout.Flush();
         Cerr << marker;
         Cerr.Flush();
-    }
-
+    } 
+ 
     void OnUnitStart(const TUnit* unit) override {
         NJson::TJsonValue event;
-        event.InsertValue("class", unit->name);
-        Trace("test-started", event);
-    }
-
+        event.InsertValue("class", unit->name); 
+        Trace("test-started", event); 
+    } 
+ 
     void OnUnitStop(const TUnit* unit) override {
         NJson::TJsonValue event;
-        event.InsertValue("class", unit->name);
-        Trace("test-finished", event);
-    }
-
+        event.InsertValue("class", unit->name); 
+        Trace("test-finished", event); 
+    } 
+ 
     void OnError(const TError* descr) override {
         const TString comment = BuildComment(descr->msg, descr->BackTrace.data());
         ErrorMessages.push_back(comment);
@@ -161,20 +161,20 @@ private:
             TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "fail", msgs, descr->Context);
             ErrorMessages.clear();
         }
-    }
-};
-
+    } 
+}; 
+ 
 class TColoredProcessor: public ITestSuiteProcessor, public NColorizer::TColors {
 public:
     inline TColoredProcessor(const TString& appName)
         : PrintBeforeSuite_(true)
         , PrintBeforeTest_(true)
-        , PrintAfterTest_(true)
-        , PrintAfterSuite_(true)
+        , PrintAfterTest_(true) 
+        , PrintAfterSuite_(true) 
         , PrintTimes_(false)
-        , PrintSummary_(true)
+        , PrintSummary_(true) 
         , PrevTime_(TInstant::Now())
-        , ShowFails(true)
+        , ShowFails(true) 
         , Start(0)
         , End(Max<size_t>())
         , AppName(appName)
@@ -182,7 +182,7 @@ public:
         , IsForked(false)
         , Loop(false)
         , ForkExitedCorrectly(false)
-        , TraceProcessor(new TNullTraceWriterProcessor())
+        , TraceProcessor(new TNullTraceWriterProcessor()) 
     {
     }
 
@@ -217,30 +217,30 @@ public:
         PrintBeforeSuite_ = print;
     }
 
-    inline void SetPrintAfterSuite(bool print) {
-        PrintAfterSuite_ = print;
-    }
-
+    inline void SetPrintAfterSuite(bool print) { 
+        PrintAfterSuite_ = print; 
+    } 
+ 
     inline void SetPrintBeforeTest(bool print) {
         PrintBeforeTest_ = print;
     }
 
-    inline void SetPrintAfterTest(bool print) {
-        PrintAfterTest_ = print;
-    }
-
+    inline void SetPrintAfterTest(bool print) { 
+        PrintAfterTest_ = print; 
+    } 
+ 
     inline void SetPrintTimes(bool print) {
         PrintTimes_ = print;
     }
 
-    inline void SetPrintSummary(bool print) {
-        PrintSummary_ = print;
-    }
-
-    inline bool GetPrintSummary() {
-        return PrintSummary_;
-    }
-
+    inline void SetPrintSummary(bool print) { 
+        PrintSummary_ = print; 
+    } 
+ 
+    inline bool GetPrintSummary() { 
+        return PrintSummary_; 
+    } 
+ 
     inline void SetShowFails(bool show) {
         ShowFails = show;
     }
@@ -250,14 +250,14 @@ public:
     }
 
     inline void BeQuiet() {
-        SetPrintTimes(false);
-        SetPrintBeforeSuite(false);
-        SetPrintAfterSuite(false);
-        SetPrintBeforeTest(false);
-        SetPrintAfterTest(false);
-        SetPrintSummary(false);
-    }
-
+        SetPrintTimes(false); 
+        SetPrintBeforeSuite(false); 
+        SetPrintAfterSuite(false); 
+        SetPrintBeforeTest(false); 
+        SetPrintAfterTest(false); 
+        SetPrintSummary(false); 
+    } 
+ 
     inline void SetStart(size_t val) {
         Start = val;
     }
@@ -291,13 +291,13 @@ public:
         return Loop;
     }
 
-    inline void SetTraceProcessor(TAutoPtr<ITestSuiteProcessor> traceProcessor) {
-        TraceProcessor = traceProcessor;
-    }
-
+    inline void SetTraceProcessor(TAutoPtr<ITestSuiteProcessor> traceProcessor) { 
+        TraceProcessor = traceProcessor; 
+    } 
+ 
 private:
     void OnUnitStart(const TUnit* unit) override {
-        TraceProcessor->UnitStart(*unit);
+        TraceProcessor->UnitStart(*unit); 
         if (IsForked) {
             return;
         }
@@ -307,14 +307,14 @@ private:
     }
 
     void OnUnitStop(const TUnit* unit) override {
-        TraceProcessor->UnitStop(*unit);
+        TraceProcessor->UnitStop(*unit); 
         if (IsForked) {
             return;
         }
-        if (!PrintAfterSuite_) {
-            return;
-        }
-
+        if (!PrintAfterSuite_) { 
+            return; 
+        } 
+ 
         fprintf(stderr, "%s----->%s %s -> ok: %s%u%s",
                 LightBlueColor().data(), OldColor().data(), unit->name.data(),
                 LightGreenColor().data(), GoodTestsInCurrentUnit(), OldColor().data());
@@ -326,7 +326,7 @@ private:
     }
 
     void OnBeforeTest(const TTest* test) override {
-        TraceProcessor->BeforeTest(*test);
+        TraceProcessor->BeforeTest(*test); 
         if (IsForked) {
             return;
         }
@@ -336,29 +336,29 @@ private:
     }
 
     void OnError(const TError* descr) override {
-        TraceProcessor->Error(*descr);
+        TraceProcessor->Error(*descr); 
         if (!IsForked && ForkExitedCorrectly) {
             return;
         }
-        if (!PrintAfterTest_) {
-            return;
-        }
-
+        if (!PrintAfterTest_) { 
+            return; 
+        } 
+ 
         const TString err = Sprintf("[%sFAIL%s] %s::%s -> %s%s%s\n%s%s%s", LightRedColor().data(), OldColor().data(),
                                     descr->test->unit->name.data(),
                                     descr->test->name,
                                     LightRedColor().data(), descr->msg, OldColor().data(), LightCyanColor().data(), descr->BackTrace.data(), OldColor().data());
-        const TDuration test_duration = SaveTestDuration();
+        const TDuration test_duration = SaveTestDuration(); 
         if (ShowFails) {
-            if (PrintTimes_) {
+            if (PrintTimes_) { 
                 Fails.push_back(Sprintf("%s %s", test_duration.ToString().data(), err.data()));
-            } else {
-                Fails.push_back(err);
-            }
+            } else { 
+                Fails.push_back(err); 
+            } 
         }
         fprintf(stderr, "%s", err.data());
         NOTE_IN_VALGRIND(descr->test);
-        PrintTimes(test_duration);
+        PrintTimes(test_duration); 
         if (IsForked) {
             fprintf(stderr, "%s", ForkCorrectExitMsg);
         }
@@ -369,47 +369,47 @@ private:
         if (!IsForked && ForkExitedCorrectly) {
             return;
         }
-        if (!PrintAfterTest_) {
-            return;
-        }
-
+        if (!PrintAfterTest_) { 
+            return; 
+        } 
+ 
         if (descr->Success) {
             fprintf(stderr, "[%sgood%s] %s::%s\n", LightGreenColor().data(), OldColor().data(),
                     descr->test->unit->name.data(),
                     descr->test->name);
             NOTE_IN_VALGRIND(descr->test);
-            PrintTimes(SaveTestDuration());
+            PrintTimes(SaveTestDuration()); 
             if (IsForked) {
                 fprintf(stderr, "%s", ForkCorrectExitMsg);
             }
         }
     }
 
-    inline TDuration SaveTestDuration() {
-        const TInstant now = TInstant::Now();
-        TDuration d = now - PrevTime_;
-        PrevTime_ = now;
-        return d;
-    }
-
-    inline void PrintTimes(TDuration d) {
+    inline TDuration SaveTestDuration() { 
+        const TInstant now = TInstant::Now(); 
+        TDuration d = now - PrevTime_; 
+        PrevTime_ = now; 
+        return d; 
+    } 
+ 
+    inline void PrintTimes(TDuration d) { 
         if (!PrintTimes_) {
             return;
         }
 
-        Cerr << d << "\n";
+        Cerr << d << "\n"; 
     }
 
     void OnEnd() override {
-        TraceProcessor->End();
+        TraceProcessor->End(); 
         if (IsForked) {
             return;
         }
-
-        if (!PrintSummary_) {
-            return;
-        }
-
+ 
+        if (!PrintSummary_) { 
+            return; 
+        } 
+ 
         fprintf(stderr, "[%sDONE%s] ok: %s%u%s",
                 YellowColor().data(), OldColor().data(),
                 LightGreenColor().data(), GoodTests(), OldColor().data());
@@ -513,10 +513,10 @@ private:
 private:
     bool PrintBeforeSuite_;
     bool PrintBeforeTest_;
-    bool PrintAfterTest_;
-    bool PrintAfterSuite_;
+    bool PrintAfterTest_; 
+    bool PrintAfterSuite_; 
     bool PrintTimes_;
-    bool PrintSummary_;
+    bool PrintSummary_; 
     THashSet<TString> DisabledSuites_;
     THashSet<TString> EnabledSuites_;
     THashSet<TString> DisabledTests_;
@@ -532,7 +532,7 @@ private:
     bool Loop;
     static const char* const ForkCorrectExitMsg;
     bool ForkExitedCorrectly;
-    TAutoPtr<ITestSuiteProcessor> TraceProcessor;
+    TAutoPtr<ITestSuiteProcessor> TraceProcessor; 
 };
 
 const char* const TColoredProcessor::ForkCorrectExitMsg = "--END--";
@@ -616,12 +616,12 @@ static int DoUsage(const char* progname) {
          << "  --print-before-test   print each test name before running it\n"
          << "  --print-before-suite  print each test suite name before running it\n"
          << "  --show-fails          print a list of all failed tests at the end\n"
-         << "  --dont-show-fails     do not print a list of all failed tests at the end\n"
+         << "  --dont-show-fails     do not print a list of all failed tests at the end\n" 
          << "  --continue-on-fail    print a message and continue running test suite instead of break\n"
          << "  --print-times         print wall clock duration of each test\n"
-         << "  --fork-tests          run each test in a separate process\n"
-         << "  --trace-path          path to the trace file to be generated\n"
-         << "  --trace-path-append   path to the trace file to be appended\n";
+         << "  --fork-tests          run each test in a separate process\n" 
+         << "  --trace-path          path to the trace file to be generated\n" 
+         << "  --trace-path-append   path to the trace file to be appended\n"; 
     return 0;
 }
 
@@ -695,8 +695,8 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetPrintBeforeTest(true);
                 } else if (strcmp(name, "--show-fails") == 0) {
                     processor.SetShowFails(true);
-                } else if (strcmp(name, "--dont-show-fails") == 0) {
-                    processor.SetShowFails(false);
+                } else if (strcmp(name, "--dont-show-fails") == 0) { 
+                    processor.SetShowFails(false); 
                 } else if (strcmp(name, "--continue-on-fail") == 0) {
                     processor.SetContinueOnFail(true);
                 } else if (strcmp(name, "--print-times") == 0) {
@@ -713,15 +713,15 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.SetIsForked(true);
                 } else if (strcmp(name, "--loop") == 0) {
                     processor.SetLoop(true);
-                } else if (strcmp(name, "--trace-path") == 0) {
-                    ++i;
-                    processor.BeQuiet();
-                    NUnitTest::ShouldColorizeDiff = false;
-                    processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], CreateAlways));
+                } else if (strcmp(name, "--trace-path") == 0) { 
+                    ++i; 
+                    processor.BeQuiet(); 
+                    NUnitTest::ShouldColorizeDiff = false; 
+                    processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], CreateAlways)); 
                 } else if (strcmp(name, "--trace-path-append") == 0) {
-                    ++i;
-                    processor.BeQuiet();
-                    NUnitTest::ShouldColorizeDiff = false;
+                    ++i; 
+                    processor.BeQuiet(); 
+                    NUnitTest::ShouldColorizeDiff = false; 
                     processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], OpenAlways | ForAppend));
                 } else if (strcmp(name, "--list-path") == 0) {
                     ++i;
@@ -752,7 +752,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
         unsigned ret;
         for (;;) {
             ret = TTestFactory::Instance().Execute();
-            if (!processor.GetIsForked() && ret && processor.GetPrintSummary()) {
+            if (!processor.GetIsForked() && ret && processor.GetPrintSummary()) { 
                 Cerr << "SOME TESTS FAILED!!!!" << Endl;
             }
 

@@ -21,8 +21,8 @@
 #include <util/system/spinlock.h>
 #include <util/system/src_location.h>
 
-#include <util/system/rusage.h>
-
+#include <util/system/rusage.h> 
+ 
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -39,7 +39,7 @@ namespace NUnitTest {
         TTestBase* GetCurrentTest();
     }
 
-    extern bool ShouldColorizeDiff;
+    extern bool ShouldColorizeDiff; 
     extern bool ContinueOnFail;
     TString ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims = TString(), bool reverse = false);
     TString GetFormatTag(const char* name);
@@ -94,12 +94,12 @@ namespace NUnitTest {
             const TTest* test;
             const char* msg;
             TString BackTrace;
-            TTestContext* Context;
+            TTestContext* Context; 
         };
 
         struct TFinish {
             const TTest* test;
-            TTestContext* Context;
+            TTestContext* Context; 
             bool Success;
         };
 
@@ -186,7 +186,7 @@ namespace NUnitTest {
 
     class TTestBase {
         friend class TTestFactory;
-        TRusage rusage;
+        TRusage rusage; 
 
     public:
         TTestBase() noexcept;
@@ -202,9 +202,9 @@ namespace NUnitTest {
 
         virtual void TearDown();
 
-        void AddError(const char* msg, const TString& backtrace = TString(), TTestContext* context = nullptr);
+        void AddError(const char* msg, const TString& backtrace = TString(), TTestContext* context = nullptr); 
 
-        void AddError(const char* msg, TTestContext* context);
+        void AddError(const char* msg, TTestContext* context); 
 
         void RunAfterTest(std::function<void()> f); // function like atexit to run after current unit test
 
@@ -213,7 +213,7 @@ namespace NUnitTest {
 
         void BeforeTest(const char* func);
 
-        void Finish(const char* func, TTestContext* context);
+        void Finish(const char* func, TTestContext* context); 
 
         void AtStart();
 

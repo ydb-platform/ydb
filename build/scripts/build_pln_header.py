@@ -6,7 +6,7 @@ import os
 
 def BuildPlnHeader():
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: build_pln_header.py <absolute/path/to/OutFile>"
+        print >>sys.stderr, "Usage: build_pln_header.py <absolute/path/to/OutFile>" 
         sys.exit(1)
 
     print >>sys.stdout, "Build Pln Header..."

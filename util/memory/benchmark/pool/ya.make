@@ -1,10 +1,10 @@
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
+
 Y_BENCHMARK()
- 
-SRCS( 
-    main.cpp 
-) 
- 
-END() 
+
+SRCS(
+    main.cpp
+)
+
+END()

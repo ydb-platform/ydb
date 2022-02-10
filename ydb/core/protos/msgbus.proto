@@ -163,7 +163,7 @@ message TResponse {
     optional bytes DataShardErrors = 105;
     repeated fixed64 ComplainingDataShards = 106;
     repeated bytes UnresolvedKeys = 107; // text for each key
-    optional NKikimrQueryStats.TTxStats TxStats = 111; 
+    optional NKikimrQueryStats.TTxStats TxStats = 111;
 
     optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108;
     optional bool HadFollowerReads = 109;
@@ -227,12 +227,12 @@ message TResponse {
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
     }
     repeated TTabletInfo TabletInfo = 1001;
- 
-    // TTabletLocalSchemeTx 
-    optional NTabletFlatScheme.TSchemeChanges LocalDbScheme = 1010; 
- 
-    // TTabletCountersRequest 
-    optional NKikimrTabletBase.TTabletCounters TabletCounters = 1020; 
+
+    // TTabletLocalSchemeTx
+    optional NTabletFlatScheme.TSchemeChanges LocalDbScheme = 1010;
+
+    // TTabletCountersRequest
+    optional NKikimrTabletBase.TTabletCounters TabletCounters = 1020;
 
     // TBlobStorageConfigRequest
     optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030;
@@ -252,14 +252,14 @@ message TFakeConfigDummy {
     optional uint64 DataShardID = 1;
 }
 
-message TTabletCountersRequest { 
-    optional uint64 TabletID = 1; 
+message TTabletCountersRequest {
+    optional uint64 TabletID = 1;
     optional bool ConnectToFollower = 2;
- 
-    optional bool WithRetry = 10; 
-    optional uint64 Timeout = 11; 
-} 
- 
+
+    optional bool WithRetry = 10;
+    optional uint64 Timeout = 11;
+}
+
 message TLocalMKQL {
     message TProgram {
         optional bytes Bin = 1;
@@ -281,17 +281,17 @@ message TLocalMKQL {
     optional uint64 Timeout = 11;
 }
 
-message TLocalSchemeTx { 
-    optional uint64 TabletID = 1; 
+message TLocalSchemeTx {
+    optional uint64 TabletID = 1;
     optional bool ConnectToFollower = 2;
-    optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 3; 
-    optional bool DryRun = 4; 
+    optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 3;
+    optional bool DryRun = 4;
     optional string SecurityToken = 5;
- 
-    optional bool WithRetry = 10; 
-    optional uint64 Timeout = 11; 
-} 
- 
+
+    optional bool WithRetry = 10;
+    optional uint64 Timeout = 11;
+}
+
 message TSchemeNavigate {
     optional bytes Path = 1;
     optional uint32 ReadMaterializedFamily = 2;
@@ -652,27 +652,27 @@ message TSqsResponse {
     optional string ResourceId = 32;
     optional bool IsFifo = 33;
 }
- 
-message TS3ListingRequest { 
-    optional string SecurityToken = 1; 
- 
-    optional string TableName = 2; 
-    optional NKikimrMiniKQL.TParams KeyPrefix = 3; // A tuple representing all key columns that preceed path column 
-    optional string PathColumnPrefix = 4; 
-    optional string PathColumnDelimiter = 5; 
-    optional NKikimrMiniKQL.TParams StartAfterKeySuffix = 9; // A tuple representing key columns that succeed path column 
-    optional uint32 MaxKeys = 7; 
-    repeated string ColumnsToReturn = 8; 
-    optional uint32 Timeout = 10; // millisec 
-} 
- 
-message TS3ListingResponse { 
-    optional uint32 Status = 1; 
-    optional string Description = 2; 
-    optional NKikimrMiniKQL.TResult Result = 3;     // Every Contents row starts with key suffix with KeySuffixSize columns 
-    optional uint32 KeySuffixSize = 4;              // Number of key columns starting from path and up to the end 
-    optional uint32 ErrorCode = 5;                  // Extended error code from NTXProxy::TResultStatus::EStatus enum 
-} 
+
+message TS3ListingRequest {
+    optional string SecurityToken = 1;
+
+    optional string TableName = 2;
+    optional NKikimrMiniKQL.TParams KeyPrefix = 3; // A tuple representing all key columns that preceed path column
+    optional string PathColumnPrefix = 4;
+    optional string PathColumnDelimiter = 5;
+    optional NKikimrMiniKQL.TParams StartAfterKeySuffix = 9; // A tuple representing key columns that succeed path column
+    optional uint32 MaxKeys = 7;
+    repeated string ColumnsToReturn = 8;
+    optional uint32 Timeout = 10; // millisec
+}
+
+message TS3ListingResponse {
+    optional uint32 Status = 1;
+    optional string Description = 2;
+    optional NKikimrMiniKQL.TResult Result = 3;     // Every Contents row starts with key suffix with KeySuffixSize columns
+    optional uint32 KeySuffixSize = 4;              // Number of key columns starting from path and up to the end
+    optional uint32 ErrorCode = 5;                  // Extended error code from NTXProxy::TResultStatus::EStatus enum
+}
 
 message TInterconnectDebug {
     optional string Name = 1;

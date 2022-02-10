@@ -1,143 +1,143 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h>
- 
-// TODO: Bad dependency??? 
+
+// TODO: Bad dependency???
 #include <ydb/core/scheme/scheme_type_id.h>
- 
-#include <util/generic/deque.h> 
- 
-namespace NYdb { 
-namespace NClickhouseInternal { 
- 
-class TScanResult : public TStatus { 
-    friend class TScanClient; 
-    class TResultImpl; 
- 
-private: 
-    TScanResult(TResultImpl* impl, TStatus&& status); 
- 
-public: 
-    ~TScanResult(); 
-    TScanResult(TScanResult&& other); 
-    TScanResult& operator = (TScanResult&& other); 
- 
-    size_t GetBuffersCount() const; 
-    TString GetBuffer(size_t idx) const; 
-    bool IsEos() const; 
-    std::pair<TString, bool>GetLastKey() const; 
- 
-private: 
-    std::unique_ptr<TResultImpl> ResultImpl; 
-}; 
- 
-using TAsyncScanResult = NThreading::TFuture<TScanResult>; 
- 
- 
+
+#include <util/generic/deque.h>
+
+namespace NYdb {
+namespace NClickhouseInternal {
+
+class TScanResult : public TStatus {
+    friend class TScanClient;
+    class TResultImpl;
+
+private:
+    TScanResult(TResultImpl* impl, TStatus&& status);
+
+public:
+    ~TScanResult();
+    TScanResult(TScanResult&& other);
+    TScanResult& operator = (TScanResult&& other);
+
+    size_t GetBuffersCount() const;
+    TString GetBuffer(size_t idx) const;
+    bool IsEos() const;
+    std::pair<TString, bool>GetLastKey() const;
+
+private:
+    std::unique_ptr<TResultImpl> ResultImpl;
+};
+
+using TAsyncScanResult = NThreading::TFuture<TScanResult>;
+
+
 struct TScanSettings : public TOperationRequestSettings<TScanSettings> {
     FLUENT_SETTING(TString, SnapshotId);
-    FLUENT_SETTING(TString, Endpoint); 
+    FLUENT_SETTING(TString, Endpoint);
 };
- 
-class TScanClient { 
-    class TImpl; 
- 
-public: 
-    TScanClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings()); 
- 
-    TAsyncScanResult Scan( 
-            const TString& path, const TVector<TString>& columns, 
-            ui64 maxRows, ui64 maxBytes, 
-            const TString& fromKey, bool fromKeyInclusive, 
-            const TScanSettings& settings = TScanSettings()); 
- 
-private: 
-    std::shared_ptr<TImpl> Impl_; 
-}; 
- 
-// Makes table range scan by doing Scan requests one by one and keeping track of 
-// the last returned key 
-class TScanIterator { 
-public: 
+
+class TScanClient {
+    class TImpl;
+
+public:
+    TScanClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    TAsyncScanResult Scan(
+            const TString& path, const TVector<TString>& columns,
+            ui64 maxRows, ui64 maxBytes,
+            const TString& fromKey, bool fromKeyInclusive,
+            const TScanSettings& settings = TScanSettings());
+
+private:
+    std::shared_ptr<TImpl> Impl_;
+};
+
+// Makes table range scan by doing Scan requests one by one and keeping track of
+// the last returned key
+class TScanIterator {
+public:
     TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString& token, bool ssl, const TString& path, const TVector<TString>& columns,
                          const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
                          ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                          const TString& keyFrom = TString(), const TString& keyTo = TString(),
                          const TScanSettings& settings = TScanSettings());
-    TScanIterator(const TDriver& driver, const TString &database, const TString& token, const TString& path, const TVector<TString>& columns, 
-                         const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes, 
-                         ui64 maxRowsInRequest, ui64 maxBytesInRequest, 
+    TScanIterator(const TDriver& driver, const TString &database, const TString& token, const TString& path, const TVector<TString>& columns,
+                         const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
+                         ui64 maxRowsInRequest, ui64 maxBytesInRequest,
                          const TString& keyFrom = TString(), const TString& keyTo = TString(),
                          const TScanSettings& settings = TScanSettings());
-    TString GetBlocks(); 
- 
-private: 
-    void MakeRequest(); 
-    void WaitResult(); 
- 
-private: 
-    const TString Path; 
-    const TVector<TString> Columns; 
-    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes; 
-    const ui64 MaxRows; 
-    const ui64 MaxBytes; 
+    TString GetBlocks();
+
+private:
+    void MakeRequest();
+    void WaitResult();
+
+private:
+    const TString Path;
+    const TVector<TString> Columns;
+    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    const ui64 MaxRows;
+    const ui64 MaxBytes;
     const TScanSettings Settings;
-    TScanClient Connection; 
- 
-    TDeque<TString> Blocks; 
-    TAsyncScanResult NextResult; 
-    TString LastReadKey; 
-    bool LastReadKeyInclusive; 
-    TString EndKey; 
-    bool RequestsDone; 
-    int MaxRetries; 
-    int Retried; 
-}; 
- 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TGetShardLocationsResult : public TStatus { 
-    friend class TMetaClient; 
-    class TResultImpl; 
- 
-private: 
-    TGetShardLocationsResult(TResultImpl* impl, TStatus&& status); 
- 
-public: 
-    ~TGetShardLocationsResult(); 
-    TGetShardLocationsResult(TGetShardLocationsResult&& other); 
-    TGetShardLocationsResult& operator = (TGetShardLocationsResult&& other); 
- 
-    std::pair<TString, ui16> GetLocation(ui64 tabletId) const; 
- 
-private: 
-    std::unique_ptr<TResultImpl> ResultImpl; 
-}; 
- 
-class TDescribeTableResult : public TStatus { 
-    friend class TMetaClient; 
-    class TResultImpl; 
- 
-private: 
-    TDescribeTableResult(TResultImpl* impl, TStatus&& status); 
- 
-public: 
-    ~TDescribeTableResult(); 
-    TDescribeTableResult(TDescribeTableResult&& other); 
-    TDescribeTableResult& operator = (TDescribeTableResult&& other); 
- 
-    const Ydb::ClickhouseInternal::DescribeTableResult& GetDescription() const; 
- 
-private: 
-    std::unique_ptr<TResultImpl> ResultImpl; 
-}; 
- 
+    TScanClient Connection;
+
+    TDeque<TString> Blocks;
+    TAsyncScanResult NextResult;
+    TString LastReadKey;
+    bool LastReadKeyInclusive;
+    TString EndKey;
+    bool RequestsDone;
+    int MaxRetries;
+    int Retried;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetShardLocationsResult : public TStatus {
+    friend class TMetaClient;
+    class TResultImpl;
+
+private:
+    TGetShardLocationsResult(TResultImpl* impl, TStatus&& status);
+
+public:
+    ~TGetShardLocationsResult();
+    TGetShardLocationsResult(TGetShardLocationsResult&& other);
+    TGetShardLocationsResult& operator = (TGetShardLocationsResult&& other);
+
+    std::pair<TString, ui16> GetLocation(ui64 tabletId) const;
+
+private:
+    std::unique_ptr<TResultImpl> ResultImpl;
+};
+
+class TDescribeTableResult : public TStatus {
+    friend class TMetaClient;
+    class TResultImpl;
+
+private:
+    TDescribeTableResult(TResultImpl* impl, TStatus&& status);
+
+public:
+    ~TDescribeTableResult();
+    TDescribeTableResult(TDescribeTableResult&& other);
+    TDescribeTableResult& operator = (TDescribeTableResult&& other);
+
+    const Ydb::ClickhouseInternal::DescribeTableResult& GetDescription() const;
+
+private:
+    std::unique_ptr<TResultImpl> ResultImpl;
+};
+
 template<class TProtoResult>
 class TProtoResultWrapper : public TStatus {
     friend class TMetaClient;
- 
+
 private:
     TProtoResultWrapper(
             TStatus&& status,
@@ -218,37 +218,37 @@ private:
     TSnapshotHandle Handle;
 };
 
-using TAsyncGetShardLocationsResult = NThreading::TFuture<TGetShardLocationsResult>; 
-using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>; 
+using TAsyncGetShardLocationsResult = NThreading::TFuture<TGetShardLocationsResult>;
+using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
 using TAsyncCreateSnapshotResult = NThreading::TFuture<TCreateSnapshotResult>;
 using TAsyncRefreshSnapshotResult = NThreading::TFuture<TRefreshSnapshotResult>;
 using TAsyncDiscardSnapshotResult = NThreading::TFuture<TDiscardSnapshotResult>;
 using TAsyncCreateSnapshotHandleResult = NThreading::TFuture<TCreateSnapshotHandleResult>;
- 
- 
-struct TGetShardLocationsSettings : public TOperationRequestSettings<TGetShardLocationsSettings> {}; 
- 
+
+
+struct TGetShardLocationsSettings : public TOperationRequestSettings<TGetShardLocationsSettings> {};
+
 struct TSnapshotSettings : public TOperationRequestSettings<TSnapshotSettings> {
     FLUENT_SETTING_FLAG(IgnoreSystemViews);
 };
 
-class TMetaClient { 
+class TMetaClient {
     friend class TSnapshotHandleLifecycle;
 
-    class TImpl; 
- 
-public: 
-    TMetaClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings()); 
- 
-    TAsyncGetShardLocationsResult GetShardLocations( 
-            const TVector<ui64> tabletIds, 
-            const TGetShardLocationsSettings& settings = TGetShardLocationsSettings()); 
- 
-    TAsyncDescribeTableResult GetTableDescription( 
-            const TString& path, 
-            bool includePartitionsInfo, 
-            const TGetShardLocationsSettings& settings = TGetShardLocationsSettings()); 
- 
+    class TImpl;
+
+public:
+    TMetaClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    TAsyncGetShardLocationsResult GetShardLocations(
+            const TVector<ui64> tabletIds,
+            const TGetShardLocationsSettings& settings = TGetShardLocationsSettings());
+
+    TAsyncDescribeTableResult GetTableDescription(
+            const TString& path,
+            bool includePartitionsInfo,
+            const TGetShardLocationsSettings& settings = TGetShardLocationsSettings());
+
     TAsyncCreateSnapshotResult CreateSnapshot(
             const TVector<TString>& tables,
             const TSnapshotSettings& settings = TSnapshotSettings());
@@ -267,9 +267,9 @@ public:
             const TVector<TString>& tables,
             const TSnapshotSettings& settings = TSnapshotSettings());
 
-private: 
-    std::shared_ptr<TImpl> Impl_; 
-}; 
- 
-} // namespace NClickhouseInternal 
+private:
+    std::shared_ptr<TImpl> Impl_;
+};
+
+} // namespace NClickhouseInternal
 } // namespace NYdb

@@ -8,18 +8,18 @@
 #define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name))
 #define Y_GET_FUNC_OPTIONAL(dll, name) FUNC_##name((dll).SymOptional(#name))
 
-#ifdef _win32_ 
+#ifdef _win32_
     #define DEFAULT_DLLOPEN_FLAGS 0
-#else 
+#else
     #include <dlfcn.h>
- 
+
     #ifndef RTLD_GLOBAL
         #define RTLD_GLOBAL (0)
     #endif
- 
+
     #define DEFAULT_DLLOPEN_FLAGS (RTLD_NOW | RTLD_GLOBAL)
-#endif 
- 
+#endif
+
 class TDynamicLibrary {
 public:
     TDynamicLibrary() noexcept;

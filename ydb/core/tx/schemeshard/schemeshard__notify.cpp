@@ -1,26 +1,26 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/appdata.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NSchemeShard {
- 
-using namespace NTabletFlatExecutor; 
- 
+
+using namespace NTabletFlatExecutor;
+
 struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvNotifyTxCompletion::TPtr Ev;
-    TAutoPtr<IEventBase> Result; 
- 
+    TAutoPtr<IEventBase> Result;
+
     TTxNotifyCompletion(TSelf *self, TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev)
         : TRwTxBase(self)
-        , Ev(ev) 
-    {} 
- 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override { 
+        , Ev(ev)
+    {}
+
+    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
         auto rawTxId = Ev->Get()->Record.GetTxId();
- 
+
         if (Self->Operations.contains(TTxId(rawTxId))) {
             auto txId = TTxId(rawTxId);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -126,23 +126,23 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(rawTxId);
             return;
         }
- 
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "NotifyTxCompletion"
                        << " transaction is registered"
                        << ", txId: " << rawTxId
                        << ", at schemeshard: " << Self->TabletID());
-    } 
- 
-    void DoComplete(const TActorContext &ctx) override { 
-        if (Result) { 
-            ctx.Send(Ev->Sender, Result.Release()); 
-        } 
-    } 
-}; 
- 
+    }
+
+    void DoComplete(const TActorContext &ctx) override {
+        if (Result) {
+            ctx.Send(Ev->Sender, Result.Release());
+        }
+    }
+};
+
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev) {
-    return new TTxNotifyCompletion(this, ev); 
-} 
- 
-}} 
+    return new TTxNotifyCompletion(this, ev);
+}
+
+}}

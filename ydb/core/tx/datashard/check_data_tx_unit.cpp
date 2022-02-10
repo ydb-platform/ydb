@@ -156,10 +156,10 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 for (const auto& cell : key.Key->Range.From) {
                     keySize += cell.Size();
                 }
-                if (keySize > NLimits::MaxWriteKeySize) { 
+                if (keySize > NLimits::MaxWriteKeySize) {
                     TString err = TStringBuilder()
                         << "Operation " << *op << " writes key of " << keySize
-                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize 
+                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
                         << " bytes at " << DataShard.TabletID();
 
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
@@ -174,7 +174,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     if (col.Operation == TKeyDesc::EColumnOperation::Set ||
                         col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
                     {
-                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) { 
+                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
                             TString err = TStringBuilder()
                                 << "Transaction write value of " << col.ImmediateUpdateSize
                                 << " bytes is larger than the allowed threshold";

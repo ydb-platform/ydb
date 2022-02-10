@@ -1,28 +1,28 @@
-/* 
- * re_lexer.cpp -- implementation of Lexer class 
- * 
- * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>, 
- *                          Alexander Gololobov <agololobov@gmail.com> 
- * 
- * This file is part of Pire, the Perl Incompatible 
- * Regular Expressions library. 
- * 
- * Pire is free software: you can redistribute it and/or modify 
- * it under the terms of the GNU Lesser Public License as published by 
- * the Free Software Foundation, either version 3 of the License, or 
- * (at your option) any later version. 
+/*
+ * re_lexer.cpp -- implementation of Lexer class
  *
- * Pire is distributed in the hope that it will be useful, 
- * but WITHOUT ANY WARRANTY; without even the implied warranty of 
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
- * GNU Lesser Public License for more details. 
- * You should have received a copy of the GNU Lesser Public License 
- * along with Pire.  If not, see <http://www.gnu.org/licenses>. 
- */ 
- 
- 
-#include <ctype.h> 
-#include <stdexcept> 
+ * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>,
+ *                          Alexander Gololobov <agololobov@gmail.com>
+ *
+ * This file is part of Pire, the Perl Incompatible
+ * Regular Expressions library.
+ *
+ * Pire is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Pire is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ * You should have received a copy of the GNU Lesser Public License
+ * along with Pire.  If not, see <http://www.gnu.org/licenses>.
+ */
+
+
+#include <ctype.h>
+#include <stdexcept>
 
 #include <contrib/libs/pire/pire/stub/stl.h>
 #include <contrib/libs/pire/pire/stub/utf8.h>
@@ -32,24 +32,24 @@
 #include "re_lexer.h"
 #include "re_parser.h"
 #include "read_unicode.h"
- 
 
-namespace Pire { 
- 
-namespace Impl { 
+
+namespace Pire {
+
+namespace Impl {
     int yre_parse(Pire::Lexer& lexer);
-} 
- 
-Term Term::Character(wchar32 c) { Term::CharacterRange cr; cr.first.insert(Term::String(1, c)); cr.second = false; return Term(TokenTypes::Letters, cr); } 
-Term Term::Repetition(int lower, int upper) { return Term(TokenTypes::Count, RepetitionCount(lower, upper)); } 
-Term Term::Dot() { return Term(TokenTypes::Dot, DotTag()); } 
-Term Term::BeginMark() { return Term(TokenTypes::BeginMark, BeginTag()); } 
-Term Term::EndMark() { return Term(TokenTypes::EndMark, EndTag()); } 
- 
+}
+
+Term Term::Character(wchar32 c) { Term::CharacterRange cr; cr.first.insert(Term::String(1, c)); cr.second = false; return Term(TokenTypes::Letters, cr); }
+Term Term::Repetition(int lower, int upper) { return Term(TokenTypes::Count, RepetitionCount(lower, upper)); }
+Term Term::Dot() { return Term(TokenTypes::Dot, DotTag()); }
+Term Term::BeginMark() { return Term(TokenTypes::BeginMark, BeginTag()); }
+Term Term::EndMark() { return Term(TokenTypes::EndMark, EndTag()); }
+
 Lexer::~Lexer() = default;
- 
-wchar32 Lexer::GetChar() 
-{ 
+
+wchar32 Lexer::GetChar()
+{
     if (m_input.empty())
         return End;
     else if (m_input.front() == '\\') {
@@ -64,23 +64,23 @@ wchar32 Lexer::GetChar()
         m_input.pop_front();
         return ch;
     }
-} 
- 
-wchar32 Lexer::PeekChar() 
-{ 
+}
+
+wchar32 Lexer::PeekChar()
+{
     if (m_input.empty())
         return End;
     else
         return m_input.front();
-} 
- 
-void Lexer::UngetChar(wchar32 c) 
-{ 
+}
+
+void Lexer::UngetChar(wchar32 c)
+{
     if (c != End)
         m_input.push_front(c);
-} 
- 
-namespace { 
+}
+
+namespace {
     class CompareFeaturesByPriority: public ybinary_function<const Feature::Ptr&, const Feature::Ptr&, bool> {
     public:
         bool operator()(const Feature::Ptr& a, const Feature::Ptr& b) const
@@ -88,15 +88,15 @@ namespace {
             return a->Priority() < b->Priority();
         }
     };
-} 
- 
+}
+
 Lexer& Lexer::AddFeature(Feature::Ptr& feature)
-{ 
+{
     feature->m_lexer = this;
     m_features.insert(LowerBound(m_features.begin(), m_features.end(), feature, CompareFeaturesByPriority()), std::move(feature));
     return *this;
-} 
- 
+}
+
 Lexer& Lexer::AddFeature(Feature::Ptr&& feature)
 {
     feature->m_lexer = this;
@@ -104,8 +104,8 @@ Lexer& Lexer::AddFeature(Feature::Ptr&& feature)
     return *this;
 }
 
-Term Lexer::DoLex() 
-{ 
+Term Lexer::DoLex()
+{
     static const char* controls = "|().*+?^$\\";
     for (;;) {
         UngetChar(GetChar());
@@ -120,7 +120,7 @@ Term Lexer::DoLex()
             }
         }
         ch = GetChar();
- 
+
         if (ch == '|')
             return Term(TokenTypes::Or);
         else if (ch == '(') {
@@ -144,15 +144,15 @@ Term Lexer::DoLex()
         else
             return Term::Character(ch);
     }
-} 
- 
-Term Lexer::Lex() 
-{ 
+}
+
+Term Lexer::Lex()
+{
     Term t = DoLex();
- 
+
     for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
         (*i)->Alter(t);
- 
+
     if (t.Value().IsA<Term::CharacterRange>()) {
         const auto& chars = t.Value().As<Term::CharacterRange>();
         //std::cerr << "lex: type " << t.type() << "; chars = { " << join(chars.first.begin(), chars.first.end(), ", ") << " }" << std::endl;
@@ -186,25 +186,25 @@ Term Lexer::Lex()
     else if (type == TokenTypes::End)
         type = 0;
     return Term(type, t.Value());
-} 
+}
 
-void Lexer::Parenthesized(Fsm& fsm) 
-{ 
+void Lexer::Parenthesized(Fsm& fsm)
+{
     for (auto i = m_features.rbegin(), ie = m_features.rend(); i != ie; ++i)
         (*i)->Parenthesized(fsm);
-} 
- 
-wchar32 Feature::CorrectChar(wchar32 c, const char* controls) 
-{ 
+}
+
+wchar32 Feature::CorrectChar(wchar32 c, const char* controls)
+{
     bool ctrl = (strchr(controls, c & 0xFF) != 0);
     if ((c & ControlMask) == Control && ctrl)
         return c & ~ControlMask;
     if (c <= 0xFF && ctrl)
         return c | Control;
     return c;
-} 
- 
-namespace { 
+}
+
+namespace {
     class EnableUnicodeSequencesImpl : public UnicodeReader {
     public:
         bool Accepts(wchar32 c) const {
@@ -219,7 +219,7 @@ namespace {
     class CharacterRangeReader: public UnicodeReader {
     public:
         bool Accepts(wchar32 c) const { return c == '[' || c == (Control | '[') || c == (Control | ']'); }
- 
+
         Term Lex()
         {
             static const char* controls = "^[]-\\";
@@ -227,14 +227,14 @@ namespace {
             wchar32 ch = CorrectChar(GetChar(), controls);
             if (ch == '[' || ch == ']')
                 return Term::Character(ch);
- 
+
             Term::CharacterRange cs;
             ch = CorrectChar(GetChar(), controls);
             if (ch == (Control | '^')) {
                 cs.second = true;
                 ch = CorrectChar(GetChar(), controls);
             }
- 
+
             bool firstUnicode;
             wchar32 unicodeSymbol = 0;
 
@@ -281,15 +281,15 @@ namespace {
             }
             if (ch == End)
                 Error("Unexpected end of pattern");
- 
+
             return Term(TokenTypes::Letters, cs);
         }
     };
- 
+
     class RepetitionCountReader: public Feature {
     public:
         bool Accepts(wchar32 c) const { return c == '{' || c == (Control | '{') || c == (Control | '}'); }
- 
+
         Term Lex()
         {
             wchar32 ch = GetChar();
@@ -297,17 +297,17 @@ namespace {
                 return Term::Character(ch & ~ControlMask);
             ch = GetChar();
             int lower = 0, upper = 0;
- 
+
             if (!is_digit(ch))
                 Error("Wrong repetition count");
- 
+
             for (; is_digit(ch); ch = GetChar())
                 lower = lower * 10 + (ch - '0');
             if (ch == '}')
                 return Term::Repetition(lower, lower);
             else if (ch != ',')
                 Error("Wrong repetition count");
- 
+
             ch = GetChar();
             if (ch == '}')
                 return Term::Repetition(lower, Inf);
@@ -315,13 +315,13 @@ namespace {
                 Error("Wrong repetition count");
             for (; is_digit(ch); ch = GetChar())
                 upper = upper * 10 + (ch - '0');
- 
+
             if (ch != '}')
                 Error("Wrong repetition count");
             return Term::Repetition(lower, upper);
         }
     };
- 
+
     class CaseInsensitiveImpl: public Feature {
     public:
         void Alter(Term& t)
@@ -363,30 +363,30 @@ namespace {
             }
         }
     };
-} 
- 
-namespace Features { 
+}
+
+namespace Features {
     Feature::Ptr CaseInsensitive() { return Feature::Ptr(new CaseInsensitiveImpl); }
     Feature::Ptr CharClasses();
     Feature::Ptr AndNotSupport() { return Feature::Ptr(new AndNotSupportImpl); }
-}; 
- 
-void Lexer::InstallDefaultFeatures() 
-{ 
+};
+
+void Lexer::InstallDefaultFeatures()
+{
     AddFeature(Feature::Ptr(new CharacterRangeReader));
     AddFeature(Feature::Ptr(new RepetitionCountReader));
     AddFeature(Features::CharClasses());
     AddFeature(Feature::Ptr(new EnableUnicodeSequencesImpl));
-} 
- 
-Fsm Lexer::Parse() 
-{ 
+}
+
+Fsm Lexer::Parse()
+{
     if (!Impl::yre_parse(*this))
         return m_retval.As<Fsm>();
     else {
         Error("Syntax error in regexp");
         return Fsm(); // Make compiler happy
     }
-} 
- 
-} 
+}
+
+}

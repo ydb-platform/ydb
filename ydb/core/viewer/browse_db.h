@@ -168,16 +168,16 @@ public:
                     pbCommon.SetRowCount(pbTableStats.GetRowCount());
                     pbCommon.SetAccessTime(pbTableStats.GetLastAccessTime());
                     pbCommon.SetUpdateTime(pbTableStats.GetLastUpdateTime());
-                    pbCommon.SetImmediateTxCompleted(pbTableStats.GetImmediateTxCompleted()); 
-                    pbCommon.SetPlannedTxCompleted(pbTableStats.GetPlannedTxCompleted()); 
-                    pbCommon.SetTxRejectedByOverload(pbTableStats.GetTxRejectedByOverload()); 
-                    pbCommon.SetTxRejectedBySpace(pbTableStats.GetTxRejectedBySpace()); 
- 
-                    pbCommon.SetRowUpdates(pbTableStats.GetRowUpdates()); 
-                    pbCommon.SetRowDeletes(pbTableStats.GetRowDeletes()); 
-                    pbCommon.SetRowReads(pbTableStats.GetRowReads()); 
-                    pbCommon.SetRangeReads(pbTableStats.GetRangeReads()); 
-                    pbCommon.SetRangeReadRows(pbTableStats.GetRangeReadRows()); 
+                    pbCommon.SetImmediateTxCompleted(pbTableStats.GetImmediateTxCompleted());
+                    pbCommon.SetPlannedTxCompleted(pbTableStats.GetPlannedTxCompleted());
+                    pbCommon.SetTxRejectedByOverload(pbTableStats.GetTxRejectedByOverload());
+                    pbCommon.SetTxRejectedBySpace(pbTableStats.GetTxRejectedBySpace());
+
+                    pbCommon.SetRowUpdates(pbTableStats.GetRowUpdates());
+                    pbCommon.SetRowDeletes(pbTableStats.GetRowDeletes());
+                    pbCommon.SetRowReads(pbTableStats.GetRowReads());
+                    pbCommon.SetRangeReads(pbTableStats.GetRangeReads());
+                    pbCommon.SetRangeReadRows(pbTableStats.GetRangeReadRows());
                 }
                 if (pbPathDescription.HasTabletMetrics()) {
                     const auto& pbTabletMetrics(pbPathDescription.GetTabletMetrics());

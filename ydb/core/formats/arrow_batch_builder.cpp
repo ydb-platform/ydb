@@ -87,28 +87,28 @@ bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeId
     return status.ok();
 }
 
-void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) { 
-    NumBytes += cell.Size(); 
-    const ui32 ydbType = YdbSchema[colNum].second; 
-    auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType); 
-    Y_VERIFY(status.ok()); 
-} 
- 
-void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) { 
+void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
+    NumBytes += cell.Size();
+    const ui32 ydbType = YdbSchema[colNum].second;
+    auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
+    Y_VERIFY(status.ok());
+}
+
+void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
     ++NumRows;
- 
-    auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) { 
-        for (size_t i = 0; i < tuple.ColumnCount; ++i) { 
-            const ui32 ydbType = tuple.Types[i]; 
-            const ui32 colNum =  offsetInRow + i; 
-            Y_VERIFY(ydbType == YdbSchema[colNum].second); 
-            auto& cell = tuple.Columns[i]; 
-            AppendCell(cell, colNum); 
-        } 
-    }; 
- 
-    fnAppendTuple(key, 0); 
-    fnAppendTuple(value, key.ColumnCount); 
+
+    auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
+        for (size_t i = 0; i < tuple.ColumnCount; ++i) {
+            const ui32 ydbType = tuple.Types[i];
+            const ui32 colNum =  offsetInRow + i;
+            Y_VERIFY(ydbType == YdbSchema[colNum].second);
+            auto& cell = tuple.Columns[i];
+            AppendCell(cell, colNum);
+        }
+    };
+
+    fnAppendTuple(key, 0);
+    fnAppendTuple(value, key.ColumnCount);
 }
 
 void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstArrayRef<TCell>& value) {
@@ -117,11 +117,11 @@ void TArrowBatchBuilder::AddRow(const TConstArrayRef<TCell>& key, const TConstAr
     size_t offset = 0;
     for (size_t i = 0; i < key.size(); ++i, ++offset) {
         auto& cell = key[i];
-        AppendCell(cell, offset); 
+        AppendCell(cell, offset);
     }
     for (size_t i = 0; i < value.size(); ++i, ++offset) {
         auto& cell = value[i];
-        AppendCell(cell, offset); 
+        AppendCell(cell, offset);
     }
 }
 
@@ -147,9 +147,9 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize) { 
+std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize) {
     if (NumRows) {
-        auto status = BatchBuilder->Flush(reinitialize, &Batch); 
+        auto status = BatchBuilder->Flush(reinitialize, &Batch);
         Y_VERIFY(status.ok());
     }
     NumRows = NumBytes = 0;
@@ -158,7 +158,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitia
 
 TString TArrowBatchBuilder::Finish() {
     if (!Batch) {
-        FlushBatch(false); 
+        FlushBatch(false);
     }
 
     TString str = NArrow::SerializeBatch(Batch, WriteOptions);

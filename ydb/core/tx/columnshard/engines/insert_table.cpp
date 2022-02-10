@@ -20,12 +20,12 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, const TInsertedData& data) {
 TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
                                              const THashSet<TWriteId>& writeIds) {
     Y_VERIFY(!writeIds.empty());
-    Y_UNUSED(metaShard); 
+    Y_UNUSED(metaShard);
 
     TCounters counters;
-    for (auto writeId : writeIds) { 
-        auto* data = Inserted.FindPtr(writeId); 
-        Y_VERIFY(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId); 
+    for (auto writeId : writeIds) {
+        auto* data = Inserted.FindPtr(writeId);
+        Y_VERIFY(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
 
         NKikimrTxColumnShard::TLogicalMetadata meta;
         if (meta.ParseFromString(data->Metadata)) {
@@ -40,7 +40,7 @@ TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep,
         dbTable.Commit(*data);
 
         CommittedByPathId[data->PathId].emplace(std::move(*data));
-        Inserted.erase(writeId); 
+        Inserted.erase(writeId);
     }
 
     return counters;
@@ -134,7 +134,7 @@ void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data
     }
 
     dbTable.EraseCommitted(data);
-    CommittedByPathId[data.PathId].erase(data); 
+    CommittedByPathId[data.PathId].erase(data);
 }
 
 void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) {
@@ -156,16 +156,16 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
 }
 
 /// @note It must be stable
-TVector<TUnifiedBlobId> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const { 
-    const auto* committed = CommittedByPathId.FindPtr(pathId); 
- 
-    if (!committed) 
-        return {}; 
- 
-    TVector<TUnifiedBlobId> ret; 
-    ret.reserve(committed->size() / 2); 
+TVector<TUnifiedBlobId> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const {
+    const auto* committed = CommittedByPathId.FindPtr(pathId);
 
-    for (auto& data : *committed) { 
+    if (!committed)
+        return {};
+
+    TVector<TUnifiedBlobId> ret;
+    ret.reserve(committed->size() / 2);
+
+    for (auto& data : *committed) {
         if (snapLessOrEqual(data.ShardOrPlan, data.WriteTxId, plan, txId)) {
             ret.push_back(data.BlobId);
         }

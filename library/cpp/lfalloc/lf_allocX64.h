@@ -128,11 +128,11 @@ static bool TransparentHugePages = false; // force MADV_HUGEPAGE for large alloc
 static bool MapHugeTLB = false;           // force MAP_HUGETLB for small allocs
 static bool EnableDefrag = true;
 
-// Buffers that are larger than this size will not be filled with 0xcf 
-#ifndef DBG_FILL_MAX_SIZE 
-#define DBG_FILL_MAX_SIZE 0x01000000000000ULL 
-#endif 
- 
+// Buffers that are larger than this size will not be filled with 0xcf
+#ifndef DBG_FILL_MAX_SIZE
+#define DBG_FILL_MAX_SIZE 0x01000000000000ULL
+#endif
+
 template <class T>
 inline T* DoCas(T* volatile* target, T* exchange, T* compare) {
 #if defined(__has_builtin) && __has_builtin(__sync_val_compare_and_swap)
@@ -304,7 +304,7 @@ enum EMMapMode {
 #ifndef _MSC_VER
 inline void VerifyMmapResult(void* result) {
     if (Y_UNLIKELY(result == MAP_FAILED))
-        NMalloc::AbortFromCorruptedAllocator("negative size requested? or just out of mem"); 
+        NMalloc::AbortFromCorruptedAllocator("negative size requested? or just out of mem");
 }
 #endif
 
@@ -337,7 +337,7 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
         char* nextAllocPtr = prevAllocPtr + sz;
         if (uintptr_t(nextAllocPtr - (char*)nullptr) >= areaFinish) {
             if (Y_UNLIKELY(wrapped)) {
-                NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented"); 
+                NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented");
             }
             // wrap after all area is used
             DoCas(areaPtr, areaStart, prevAllocPtr);
@@ -368,15 +368,15 @@ static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
 #ifdef _MSC_VER
     char* largeBlock = (char*)VirtualAlloc(0, sz, MEM_RESERVE, PAGE_READWRITE);
     if (Y_UNLIKELY(largeBlock == nullptr))
-        NMalloc::AbortFromCorruptedAllocator("out of memory"); 
+        NMalloc::AbortFromCorruptedAllocator("out of memory");
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
-        NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken"); 
+        NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
 #if defined(_freebsd_) || !defined(_64_)
     char* largeBlock = (char*)mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     VerifyMmapResult(largeBlock);
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
-        NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken"); 
+        NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
 #else
     char* largeBlock = AllocWithMMapLinuxImpl(sz, mode);
     if (TransparentHugePages) {
@@ -453,7 +453,7 @@ static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
 #ifdef _MSC_VER
     char* pRes = (char*)VirtualAlloc(0, (pgCount + 1) * 4096ll, MEM_COMMIT, PAGE_READWRITE);
     if (Y_UNLIKELY(pRes == 0)) {
-        NMalloc::AbortFromCorruptedAllocator("out of memory"); 
+        NMalloc::AbortFromCorruptedAllocator("out of memory");
     }
 #else
 
@@ -784,7 +784,7 @@ static bool DefragmentMem() {
     int* nFreeCount = (int*)SystemAlloc(N_CHUNKS * sizeof(int));
     if (Y_UNLIKELY(!nFreeCount)) {
         //__debugbreak();
-        NMalloc::AbortFromCorruptedAllocator("debugbreak"); 
+        NMalloc::AbortFromCorruptedAllocator("debugbreak");
     }
     memset(nFreeCount, 0, N_CHUNKS * sizeof(int));
 
@@ -1004,7 +1004,7 @@ static Y_FORCE_INLINE void PutBlocksToGlobalFreeList(ptrdiff_t nSizeIdx, char** 
 //////////////////////////////////////////////////////////////////////////
 static TAtomic GlobalCounters[CT_MAX];
 const int MAX_LOCAL_UPDATES = 100;
-const intptr_t MAX_LOCAL_DELTA = 1*1024*1024; 
+const intptr_t MAX_LOCAL_DELTA = 1*1024*1024;
 
 struct TLocalCounter {
     intptr_t Value;
@@ -1019,7 +1019,7 @@ struct TLocalCounter {
 
     Y_FORCE_INLINE void Increment(size_t value) {
         Value += value;
-        if (++Updates > MAX_LOCAL_UPDATES || Value > MAX_LOCAL_DELTA) { 
+        if (++Updates > MAX_LOCAL_UPDATES || Value > MAX_LOCAL_DELTA) {
             Flush();
         }
     }
@@ -1344,13 +1344,13 @@ extern "C" bool SetProfileCurrentThread(bool newVal) {
     return prevVal;
 }
 
-static volatile bool ProfileAllThreads; 
-extern "C" bool SetProfileAllThreads(bool newVal) { 
-    bool prevVal = ProfileAllThreads; 
-    ProfileAllThreads = newVal; 
-    return prevVal; 
-} 
- 
+static volatile bool ProfileAllThreads;
+extern "C" bool SetProfileAllThreads(bool newVal) {
+    bool prevVal = ProfileAllThreads;
+    ProfileAllThreads = newVal;
+    return prevVal;
+}
+
 static volatile bool AllocationSamplingEnabled;
 extern "C" bool SetAllocationSamplingEnabled(bool newVal) {
     bool prevVal = AllocationSamplingEnabled;
@@ -1394,7 +1394,7 @@ PERTHREAD bool InAllocationCallback;
 static const int DBG_ALLOC_INVALID_COOKIE = -1;
 static inline int SampleAllocation(TAllocHeader* p, int sizeIdx) {
     int cookie = DBG_ALLOC_INVALID_COOKIE;
-    if (AllocationSamplingEnabled && (ProfileCurrentThread || ProfileAllThreads) && !InAllocationCallback) { 
+    if (AllocationSamplingEnabled && (ProfileCurrentThread || ProfileAllThreads) && !InAllocationCallback) {
         if (p->Size > AllocationSampleMaxSize || ++AllocationsCount % AllocationSampleRate == 0) {
             if (AllocationCallback) {
                 InAllocationCallback = true;
@@ -1556,7 +1556,7 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
         if (count == 0) {
             count = LFAllocNoCacheMultiple(nSizeIdx, buf);
             if (count == 0) {
-                NMalloc::AbortFromCorruptedAllocator("no way LFAllocNoCacheMultiple() can fail"); 
+                NMalloc::AbortFromCorruptedAllocator("no way LFAllocNoCacheMultiple() can fail");
             }
         }
         char** dstBuf = thr->FreePtrs[nSizeIdx] + freePtrIdx - 1;
@@ -1773,7 +1773,7 @@ static void DumpMemoryBlockUtilizationLocked() {
             nBadPages += page == 3;
             nTotalPages += page != 1;
         }
-        DebugTraceMMgr("entry = %lld; size = %lld; free = %lld; system %lld; utilisation = %g%%, fragmentation = %g%%\n", 
+        DebugTraceMMgr("entry = %lld; size = %lld; free = %lld; system %lld; utilisation = %g%%, fragmentation = %g%%\n",
                        k, nSize, cs.FreeCount * nSize, csGB.FreeCount * nSize,
                        (N_CHUNK_SIZE - cs.FreeCount * nSize) * 100.0f / N_CHUNK_SIZE, 100.0f * nBadPages / Y_ARRAY_SIZE(pages));
         nTotalAllocated += N_CHUNK_SIZE;
@@ -1781,10 +1781,10 @@ static void DumpMemoryBlockUtilizationLocked() {
         nTotalBadPages += nBadPages;
     }
     SystemFree(entries);
-    DebugTraceMMgr("Total allocated = %llu, free = %lld, system = %lld, locked for future use %lld, utilisation = %g, fragmentation = %g\n", 
+    DebugTraceMMgr("Total allocated = %llu, free = %lld, system = %lld, locked for future use %lld, utilisation = %g, fragmentation = %g\n",
                    nTotalAllocated, nTotalFree, nTotalGroupBlocks, nTotalLocked,
                    100.0f * (nTotalAllocated - nTotalFree) / nTotalAllocated, 100.0f * nTotalBadPages / nTotalPages);
-    DebugTraceMMgr("Total %lld bytes used, %lld bytes in used pages\n", nTotalUsed, nTotalPages * N_PAGE_SIZE); 
+    DebugTraceMMgr("Total %lld bytes used, %lld bytes in used pages\n", nTotalUsed, nTotalPages * N_PAGE_SIZE);
 
     for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx)
         globalFreeLists[nSizeIdx].ReturnWholeList(wholeLists[nSizeIdx]);
@@ -1850,7 +1850,7 @@ static const char* LFAlloc_GetParam(const char* param) {
 #if defined(LFALLOC_DBG)
         {"SetThreadAllocTag", (const char*)&SetThreadAllocTag},
         {"SetProfileCurrentThread", (const char*)&SetProfileCurrentThread},
-        {"SetProfileAllThreads", (const char*)&SetProfileAllThreads}, 
+        {"SetProfileAllThreads", (const char*)&SetProfileAllThreads},
         {"SetAllocationSamplingEnabled", (const char*)&SetAllocationSamplingEnabled},
         {"SetAllocationSampleRate", (const char*)&SetAllocationSampleRate},
         {"SetAllocationSampleMaxSize", (const char*)&SetAllocationSampleMaxSize},
@@ -1870,11 +1870,11 @@ static const char* LFAlloc_GetParam(const char* param) {
 
 static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_t size) {
     if (Y_UNLIKELY(alignment > 4096)) {
-        const char* error = "Larger alignment are not guaranteed with this implementation\n"; 
+        const char* error = "Larger alignment are not guaranteed with this implementation\n";
 #ifdef _win_
-        OutputDebugStringA(error); 
+        OutputDebugStringA(error);
 #endif
-        NMalloc::AbortFromCorruptedAllocator(error); 
+        NMalloc::AbortFromCorruptedAllocator(error);
     }
     size_t bigsize = size;
     if (bigsize <= alignment) {

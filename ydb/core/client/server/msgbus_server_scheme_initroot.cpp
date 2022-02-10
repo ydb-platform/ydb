@@ -12,21 +12,21 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 using namespace NSchemeShard;
- 
+
 class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>>;
     THolder<TBusSchemeInitRoot> Request;
     const bool WithRetry = true;
     TActorId PipeClient;
- 
+
     void ReplyWithResult(EResponseStatus status, TEvSchemeShard::TEvInitRootShardResult::EStatus ssStatus, const TActorContext &ctx) {
         TAutoPtr<TBusResponseStatus> response(new TBusResponseStatus(status));
         response->Record.SetSchemeStatus(ssStatus);
         SendReplyAutoPtr(response);
         Request.Destroy();
         Die(ctx);
-    } 
- 
+    }
+
     void Handle(TEvSchemeShard::TEvInitRootShardResult::TPtr& ev, const TActorContext& ctx) {
         const NKikimrTxScheme::TEvInitRootShardResult &record = ev->Get()->Record;
         const auto status = (TEvSchemeShard::TEvInitRootShardResult::EStatus)record.GetStatus();

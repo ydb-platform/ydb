@@ -351,7 +351,7 @@ public:
     const Ydb::Table::PartitioningSettings& GetProto() const;
 
     TMaybe<bool> GetPartitioningBySize() const;
-    TMaybe<bool> GetPartitioningByLoad() const; 
+    TMaybe<bool> GetPartitioningByLoad() const;
     ui64 GetPartitionSizeMb() const;
     ui64 GetMinPartitionsCount() const;
     ui64 GetMaxPartitionsCount() const;
@@ -510,7 +510,7 @@ public:
     ~TPartitioningSettingsBuilder();
 
     TPartitioningSettingsBuilder& SetPartitioningBySize(bool enabled);
-    TPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled); 
+    TPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled);
     TPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb);
     TPartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count);
     TPartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count);
@@ -611,11 +611,11 @@ public:
         return *this;
     }
 
-    TTablePartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) { 
-        Builder_.SetPartitioningByLoad(enabled); 
-        return *this; 
-    } 
- 
+    TTablePartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) {
+        Builder_.SetPartitioningByLoad(enabled);
+        return *this;
+    }
+
     TTablePartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) {
         Builder_.SetPartitionSizeMb(sizeMb);
         return *this;
@@ -774,7 +774,7 @@ class TBeginTransactionResult;
 class TCommitTransactionResult;
 class TKeepAliveResult;
 class TSessionPoolImpl;
-class TBulkUpsertResult; 
+class TBulkUpsertResult;
 class TScanQueryPartIterator;
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
@@ -786,7 +786,7 @@ using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
 using TAsyncKeepAliveResult = NThreading::TFuture<TKeepAliveResult>;
-using TAsyncBulkUpsertResult = NThreading::TFuture<TBulkUpsertResult>; 
+using TAsyncBulkUpsertResult = NThreading::TFuture<TBulkUpsertResult>;
 using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -890,7 +890,7 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(TString, FormatSettings, "");
 };
- 
+
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
     // Return query plan without actual query execution
     FLUENT_SETTING_DEFAULT(bool, Explain, false);
@@ -900,7 +900,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 };
 
 class TSession;
-struct TRetryState; 
+struct TRetryState;
 
 enum class EDataFormat {
     ApacheArrow = 1,
@@ -911,13 +911,13 @@ class TTableClient {
     friend class TSession;
     friend class TTransaction;
     friend class TSessionPoolImpl;
-    friend class TRetryOperationContext; 
+    friend class TRetryOperationContext;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
     using TOperationSyncFunc = std::function<TStatus(TSession session)>;
-    using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TTableClient& tableClient)>; 
-    using TOperationWithoutSessionSyncFunc = std::function<TStatus(TTableClient& tableClient)>; 
+    using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TTableClient& tableClient)>;
+    using TOperationWithoutSessionSyncFunc = std::function<TStatus(TTableClient& tableClient)>;
 
 public:
     TTableClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
@@ -945,49 +945,49 @@ public:
     //! Returns new type builder
     TTypeBuilder GetTypeBuilder();
 
-    TAsyncStatus RetryOperation(TOperationFunc&& operation, 
+    TAsyncStatus RetryOperation(TOperationFunc&& operation,
         const TRetryOperationSettings& settings = TRetryOperationSettings());
 
     template<typename TResult>
-    TAsyncStatus RetryOperation(std::function<NThreading::TFuture<TResult>(TSession session)>&& operation, 
-        const TRetryOperationSettings& settings = TRetryOperationSettings()); 
- 
-    template<typename TResult> 
+    TAsyncStatus RetryOperation(std::function<NThreading::TFuture<TResult>(TSession session)>&& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
+
+    template<typename TResult>
     TAsyncStatus RetryOperation(const std::function<NThreading::TFuture<TResult>(TSession session)>& operation,
         const TRetryOperationSettings& settings = TRetryOperationSettings());
 
     TStatus RetryOperationSync(const TOperationSyncFunc& operation,
         const TRetryOperationSettings& settings = TRetryOperationSettings());
 
-    TAsyncStatus RetryOperation(TOperationWithoutSessionFunc&& operation, 
-        const TRetryOperationSettings& settings = TRetryOperationSettings()); 
- 
-    template<typename TResult> 
-    TAsyncStatus RetryOperation(std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>&& operation, 
-        const TRetryOperationSettings& settings = TRetryOperationSettings()); 
- 
-    template<typename TResult> 
-    TAsyncStatus RetryOperation(const std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>& operation, 
-        const TRetryOperationSettings& settings = TRetryOperationSettings()); 
- 
-    TStatus RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, 
-        const TRetryOperationSettings& settings = TRetryOperationSettings()); 
- 
+    TAsyncStatus RetryOperation(TOperationWithoutSessionFunc&& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
+
+    template<typename TResult>
+    TAsyncStatus RetryOperation(std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>&& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
+
+    template<typename TResult>
+    TAsyncStatus RetryOperation(const std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
+
+    TStatus RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation,
+        const TRetryOperationSettings& settings = TRetryOperationSettings());
+
     //! Stop all client internal routines, drain session pools
     //! Sessions returned to the session pool after this call will be closed
     //! Using the client after call this method causes UB
     NThreading::TFuture<void> Stop();
 
-    //! Non-transactional fast bulk write. 
-    //! Interanlly it uses an implicit session and thus doesn't need a session to be passed. 
-    //! "rows" parameter must be a list of structs where each stuct represents one row. 
-    //! It must contain all key columns but not necessarily all non-key columns. 
-    //! Similar to UPSERT statement only values of specified columns will be updated. 
-    TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, 
-        const TBulkUpsertSettings& settings = TBulkUpsertSettings()); 
+    //! Non-transactional fast bulk write.
+    //! Interanlly it uses an implicit session and thus doesn't need a session to be passed.
+    //! "rows" parameter must be a list of structs where each stuct represents one row.
+    //! It must contain all key columns but not necessarily all non-key columns.
+    //! Similar to UPSERT statement only values of specified columns will be updated.
+    TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows,
+        const TBulkUpsertSettings& settings = TBulkUpsertSettings());
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
- 
+
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
         const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
 
@@ -995,10 +995,10 @@ public:
         const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
 
 private:
-    using TOperationWrapperSyncFunc = std::function<TStatus(TRetryState& retryState)>; 
-    TStatus RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings); 
- 
-private: 
+    using TOperationWrapperSyncFunc = std::function<TStatus(TRetryState& retryState)>;
+    TStatus RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings);
+
+private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
@@ -1304,11 +1304,11 @@ public:
         return *this;
     }
 
-    TAlterPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) { 
-        Builder_.SetPartitioningByLoad(enabled); 
-        return *this; 
-    } 
- 
+    TAlterPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) {
+        Builder_.SetPartitioningByLoad(enabled);
+        return *this;
+    }
+
     TAlterPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) {
         Builder_.SetPartitionSizeMb(sizeMb);
         return *this;
@@ -1444,8 +1444,8 @@ struct TPrepareDataQuerySettings : public TOperationRequestSettings<TPrepareData
 
 struct TExecDataQuerySettings : public TOperationRequestSettings<TExecDataQuerySettings> {
     FLUENT_SETTING_OPTIONAL(bool, KeepInQueryCache);
- 
-    FLUENT_SETTING_OPTIONAL(ECollectQueryStatsMode, CollectQueryStats); 
+
+    FLUENT_SETTING_OPTIONAL(ECollectQueryStatsMode, CollectQueryStats);
 };
 
 struct TExecSchemeQuerySettings : public TOperationRequestSettings<TExecSchemeQuerySettings> {};
@@ -1564,18 +1564,18 @@ private:
 
 template<typename TResult>
 TAsyncStatus TTableClient::RetryOperation(
-    std::function<NThreading::TFuture<TResult>(TSession session)>&& operation, 
-    const TRetryOperationSettings& settings) 
-{ 
-    return RetryOperation([operation = std::move(operation)] (TSession session) { 
-        return operation(session).Apply([] (const NThreading::TFuture<TResult>& result) { 
-            return NThreading::MakeFuture<TStatus>(result.GetValue()); 
-        }); 
-    }, settings); 
-} 
- 
-template<typename TResult> 
-TAsyncStatus TTableClient::RetryOperation( 
+    std::function<NThreading::TFuture<TResult>(TSession session)>&& operation,
+    const TRetryOperationSettings& settings)
+{
+    return RetryOperation([operation = std::move(operation)] (TSession session) {
+        return operation(session).Apply([] (const NThreading::TFuture<TResult>& result) {
+            return NThreading::MakeFuture<TStatus>(result.GetValue());
+        });
+    }, settings);
+}
+
+template<typename TResult>
+TAsyncStatus TTableClient::RetryOperation(
     const std::function<NThreading::TFuture<TResult>(TSession session)>& operation,
     const TRetryOperationSettings& settings)
 {
@@ -1586,30 +1586,30 @@ TAsyncStatus TTableClient::RetryOperation(
     }, settings);
 }
 
-template<typename TResult> 
-TAsyncStatus TTableClient::RetryOperation( 
-    std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>&& operation, 
-    const TRetryOperationSettings& settings) 
-{ 
-    return RetryOperation([operation = std::move(operation)] (TTableClient& tableClient) { 
-        return operation(tableClient).Apply([] (const NThreading::TFuture<TResult>& result) { 
-            return NThreading::MakeFuture<TStatus>(result.GetValue()); 
-        }); 
-    }, settings); 
-} 
- 
-template<typename TResult> 
-TAsyncStatus TTableClient::RetryOperation( 
-    const std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>& operation, 
-    const TRetryOperationSettings& settings) 
-{ 
-    return RetryOperation([operation] (TTableClient& tableClient) { 
-        return operation(tableClient).Apply([] (const NThreading::TFuture<TResult>& result) { 
-            return NThreading::MakeFuture<TStatus>(result.GetValue()); 
-        }); 
-    }, settings); 
-} 
- 
+template<typename TResult>
+TAsyncStatus TTableClient::RetryOperation(
+    std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>&& operation,
+    const TRetryOperationSettings& settings)
+{
+    return RetryOperation([operation = std::move(operation)] (TTableClient& tableClient) {
+        return operation(tableClient).Apply([] (const NThreading::TFuture<TResult>& result) {
+            return NThreading::MakeFuture<TStatus>(result.GetValue());
+        });
+    }, settings);
+}
+
+template<typename TResult>
+TAsyncStatus TTableClient::RetryOperation(
+    const std::function<NThreading::TFuture<TResult>(TTableClient& tableClient)>& operation,
+    const TRetryOperationSettings& settings)
+{
+    return RetryOperation([operation] (TTableClient& tableClient) {
+        return operation(tableClient).Apply([] (const NThreading::TFuture<TResult>& result) {
+            return NThreading::MakeFuture<TStatus>(result.GetValue());
+        });
+    }, settings);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
@@ -1714,7 +1714,7 @@ private:
 class TDataQueryResult : public TStatus {
 public:
     TDataQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets, const TMaybe<TTransaction>& transaction,
-        const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats); 
+        const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats);
 
     const TVector<TResultSet>& GetResultSets() const;
     TResultSet GetResultSet(size_t resultIndex) const;
@@ -1726,8 +1726,8 @@ public:
     TMaybe<TDataQuery> GetQuery() const;
     bool IsQueryFromCache() const;
 
-    const TMaybe<TQueryStats>& GetStats() const; 
- 
+    const TMaybe<TQueryStats>& GetStats() const;
+
     const TString GetQueryPlan() const;
 
 private:
@@ -1735,7 +1735,7 @@ private:
     TVector<TResultSet> ResultSets_;
     TMaybe<TDataQuery> DataQuery_;
     bool FromCache_;
-    TMaybe<TQueryStats> QueryStats_; 
+    TMaybe<TQueryStats> QueryStats_;
 };
 
 template<typename TPart>
@@ -1861,11 +1861,11 @@ private:
     ESessionStatus SessionStatus;
 };
 
-class TBulkUpsertResult : public TStatus { 
-public: 
-    explicit TBulkUpsertResult(TStatus&& status); 
-}; 
- 
+class TBulkUpsertResult : public TStatus {
+public:
+    explicit TBulkUpsertResult(TStatus&& status);
+};
+
 } // namespace NTable
 } // namespace NYdb
 

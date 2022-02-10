@@ -51,8 +51,8 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
      MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
          [this](NGrpc::IRequestContextBase *reqCtx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
-            ACTION; \ 
-         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \ 
+            ACTION; \
+         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \
          #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
      ADD_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {

@@ -267,7 +267,7 @@ namespace NKikimr {
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return DerivedActivityType; 
+            return DerivedActivityType;
         }
 
         TBaseHullDbCommitter(

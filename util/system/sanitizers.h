@@ -60,9 +60,9 @@ namespace NSan {
         return true;
 #else
         return false;
-#endif 
+#endif
     }
- 
+
     // Determines if tsan present
     inline constexpr static bool TSanIsOn() noexcept {
 #if defined(_tsan_enabled_)

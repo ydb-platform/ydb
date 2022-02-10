@@ -246,7 +246,7 @@ private:
 
         Flags |= FlagRegistered;
 
-        if (IncRequest()) { 
+        if (IncRequest()) {
             if (Counters) {
                 Counters->StartProcessing(0);
             }
@@ -591,7 +591,7 @@ private:
             if (Counters) {
                 Counters->FinishProcessing(0, 0, Status->ok(), 0, TDuration::Seconds(RequestTimer.Passed()));
             }
-            DecRequest(); 
+            DecRequest();
             flags = Flags.load(std::memory_order_acquire);
         }
 
@@ -610,20 +610,20 @@ private:
     }
 
 private:
-    bool IncRequest() { 
-        if (Limiter) { 
-            return Limiter->IncRequest(); 
-        } 
-        return true; 
-    } 
- 
-    void DecRequest() { 
-        if (Limiter) { 
-            Limiter->DecRequest(); 
-        } 
-    } 
- 
-private: 
+    bool IncRequest() {
+        if (Limiter) {
+            return Limiter->IncRequest();
+        }
+        return true;
+    }
+
+    void DecRequest() {
+        if (Limiter) {
+            Limiter->DecRequest();
+        }
+    }
+
+private:
     class TFacade : public IContext {
     public:
         explicit TFacade(TSelf* self)

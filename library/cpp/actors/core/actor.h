@@ -218,7 +218,7 @@ namespace NActors {
         TActorIdentity SelfActorId;
         i64 ElapsedTicks;
         ui64 HandledEvents;
- 
+
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
 
@@ -235,10 +235,10 @@ namespace NActors {
             INTERCONNECT_COMMON = 171,
             SELF_PING_ACTOR = 207,
             TEST_ACTOR_RUNTIME = 283,
-            INTERCONNECT_HANDSHAKE = 284, 
-            INTERCONNECT_POLLER = 285, 
-            INTERCONNECT_SESSION_KILLER = 286, 
-            ACTOR_SYSTEM_SCHEDULER_ACTOR = 312, 
+            INTERCONNECT_HANDSHAKE = 284,
+            INTERCONNECT_POLLER = 285,
+            INTERCONNECT_SESSION_KILLER = 286,
+            ACTOR_SYSTEM_SCHEDULER_ACTOR = 312,
             ACTOR_FUTURE_CALLBACK = 337,
             INTERCONNECT_MONACTOR = 362,
             INTERCONNECT_LOAD_ACTOR = 376,
@@ -418,10 +418,10 @@ namespace NActors {
         }
 
     protected:
-        //* Comment this function to find unmarked activities 
+        //* Comment this function to find unmarked activities
         static constexpr IActor::EActivityType ActorActivityType() {
             return EActorActivity::OTHER;
-        } //*/ 
+        } //*/
 
         // static constexpr char ActorName[] = "UNNAMED";
 

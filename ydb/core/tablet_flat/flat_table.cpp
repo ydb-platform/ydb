@@ -560,7 +560,7 @@ void TTable::AddSafe(TPartView partView)
 }
 
 TTable::TReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
-                        IPages* env, ui64 flg, 
+                        IPages* env, ui64 flg,
                         ui64 items, ui64 bytes,
                         EDirection direction,
                         TRowVersion snapshot) const
@@ -597,12 +597,12 @@ TTable::TReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef ta
                 } else {
                     ++res.Weeded;
                 }
-            } 
-        } 
-    } else { 
+            }
+        }
+    } else {
         const TCelled minKey(minKey_, *Scheme->Keys, false);
         const TCelled maxKey(maxKey_, *Scheme->Keys, false);
- 
+
         for (const auto& run : GetLevels()) {
             switch (direction) {
                 case EDirection::Forward:
@@ -755,7 +755,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
     return dbIter;
 }
 
-TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row, 
+TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                              ui64 flg, TRowVersion snapshot,
                              TDeque<TPartSimpleIt>& tempIterators) const noexcept
 {
@@ -789,7 +789,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                 it->Apply(row, CommittedTransactions);
             }
             result.Invisible += it->InvisibleRowSkips;
-        } 
+        }
     }
 
     // Frozen are sorted by epoch, apply in reverse order
@@ -868,15 +868,15 @@ void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegi
     str << "Frozen: [";
     for (const auto& it : Frozen) {
         str << it->Epoch;
-    } 
-    str << "]" << Endl 
+    }
+    str << "]" << Endl
         << "Parts: ["
-        << Endl; 
+        << Endl;
     for (const auto& fpIt: Flatten) {
-        str << "    "; 
+        str << "    ";
         NFmt::Ln(*fpIt.second);
-    } 
-    str << "]" << Endl; 
+    }
+    str << "]" << Endl;
     if (ColdParts) {
         str << "ColdParts: [" << Endl;
         for (const auto& it : ColdParts) {
@@ -892,13 +892,13 @@ void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegi
     for (const auto& it : Frozen) {
         str << "Frozen " << it->Epoch << " dump: " << Endl;
         it->DebugDump(str, reg);
-    } 
- 
+    }
+
     TDump dump(str, env, &reg);
 
     for (const auto &it: Flatten) dump.Part(*it.second);
-} 
- 
+}
+
 TKeyRangeCache* TTable::GetErasedKeysCache() const
 {
     return ErasedKeysCache.Get();

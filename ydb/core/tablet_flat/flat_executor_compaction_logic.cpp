@@ -2,15 +2,15 @@
 #include "flat_exec_broker.h"
 #include "flat_dbase_scheme.h"
 #include "flat_comp_create.h"
- 
+
 #include <ydb/core/base/appdata.h>
- 
+
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/cast.h>
 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
- 
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+
 TCompactionLogicState::TSnapRequest::~TSnapRequest()
 {}
 
@@ -37,15 +37,15 @@ void TCompactionLogic::Start() {
     auto result = ReflectSchemeChanges();
     Y_VERIFY(!result.StrategyChanges);
     State->Snapshots.clear();
-} 
- 
+}
+
 void TCompactionLogic::Stop() {
     for (auto &kv : State->Tables) {
         StopTable(kv.second);
     }
     State->Tables.clear();
-} 
- 
+}
+
 TCompactionLogicState::TSnapshotState TCompactionLogic::SnapToLog(ui32 tableId) {
     auto* info = State->Tables.FindPtr(tableId);
     Y_VERIFY(info);
@@ -264,8 +264,8 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     }
 
     return result;
-} 
- 
+}
+
 THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrSchemeOp::ECompactionStrategy strategy)
@@ -369,7 +369,7 @@ void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
     auto &mem = info->InMem;
     mem.EstimatedSize = size;
     mem.Steps += steps;
- 
+
     CheckInMemStats(table);
 }
 
@@ -412,8 +412,8 @@ void TCompactionLogic::CheckInMemStats(ui32 table) {
             mem.State = ECompactionState::PendingBackground;
         }
     }
-} 
- 
+}
+
 void TCompactionLogic::UpdateLogUsage(TArrayRef<const NRedo::TUsage> usage)
 {
     for (auto &one : usage) {
@@ -521,7 +521,7 @@ TCompactionLogic::HandleCompaction(
 {
     const ui32 tableId = params->Table;
     const auto edge = params->Edge;
- 
+
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo, "Unexpected CompleteCompaction for a dropped table");
 
@@ -579,7 +579,7 @@ TCompactionLogic::HandleCompaction(
             CheckInMemStats(tableId);
         }
     }
- 
+
     if (tableInfo->ForcedCompactionState == EForcedCompactionState::None) {
         if (tableInfo->ForcedCompactionQueued) {
             tableInfo->ForcedCompactionQueued = false;
@@ -706,28 +706,28 @@ ui32 TCompactionLogicState::TTableInfo::ComputeBackgroundPriority(
                     inMem.Steps * 100 / policy.InMemForceStepsToSnapshot);
 
     if (!perc || perc < bckgPolicy.Threshold)
-        return TCompactionLogic::BAD_PRIORITY; 
+        return TCompactionLogic::BAD_PRIORITY;
 
     return ComputeBackgroundPriority(inMem.CompactionTask, bckgPolicy, perc, now);
 }
 
-float TCompactionLogic::GetOverloadFactor() const { 
-    float overloadFactor = 0; 
-    for (const auto& ti : State->Tables) { 
+float TCompactionLogic::GetOverloadFactor() const {
+    float overloadFactor = 0;
+    for (const auto& ti : State->Tables) {
         overloadFactor = Max(overloadFactor, ti.second.InMem.OverloadFactor);
         overloadFactor = Max(overloadFactor, ti.second.Strategy->GetOverloadFactor());
-    } 
-    return overloadFactor; 
-} 
- 
-ui64 TCompactionLogic::GetBackingSize() const { 
-    ui64 size = 0; 
-    for (const auto& ti : State->Tables) { 
+    }
+    return overloadFactor;
+}
+
+ui64 TCompactionLogic::GetBackingSize() const {
+    ui64 size = 0;
+    for (const auto& ti : State->Tables) {
         size += ti.second.Strategy->GetBackingSize();
-    } 
-    return size; 
-} 
- 
+    }
+    return size;
+}
+
 ui64 TCompactionLogic::GetBackingSize(ui64 ownerTabletId) const {
     ui64 size = 0;
     for (const auto& ti : State->Tables) {
@@ -744,7 +744,7 @@ void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &sch
             DIV_CLASS("row") { out
                 << "InMem Size: " << xtable.second.InMem.EstimatedSize
                 << ", Changes: " << xtable.second.InMem.Steps
-                << ", Compaction state: " << xtable.second.InMem.State 
+                << ", Compaction state: " << xtable.second.InMem.State
                 << ", Backing size: " << xtable.second.Strategy->GetBackingSize()
                 << ", Log overhead size: " << xtable.second.InMem.LogOverheadSize
                 << ", count: " << xtable.second.InMem.LogOverheadCount;
@@ -767,4 +767,4 @@ void TCompactionLogic::OutputHtml(IOutputStream &out, const NTable::TScheme &sch
     }
 }
 
-}} 
+}}

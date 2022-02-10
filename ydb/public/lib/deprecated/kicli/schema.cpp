@@ -53,8 +53,8 @@ const TType TType::String4k(NScheme::NTypeIds::String4k);
 const TType TType::String2m(NScheme::NTypeIds::String2m);
 const TType TType::Yson(NScheme::NTypeIds::Yson);
 const TType TType::Json(NScheme::NTypeIds::Json);
-const TType TType::JsonDocument(NScheme::NTypeIds::JsonDocument); 
-const TType TType::Timestamp(NScheme::NTypeIds::Timestamp); 
+const TType TType::JsonDocument(NScheme::NTypeIds::JsonDocument);
+const TType TType::Timestamp(NScheme::NTypeIds::Timestamp);
 
 const TString& TType::GetName() const {
     return TypeName;
@@ -107,12 +107,12 @@ void TSchemaObject::Drop() {
     case EPathType::SolomonVolume:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume);
         break;
-    case EPathType::OlapStore: 
+    case EPathType::OlapStore:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore);
-        break; 
-    case EPathType::OlapTable: 
+        break;
+    case EPathType::OlapTable:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable);
-        break; 
+        break;
     case EPathType::Sequence:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
         break;
@@ -143,19 +143,19 @@ TSchemaObject TSchemaObject::MakeDirectory(const TString& name) {
 }
 
 TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns) {
-    return DoCreateTable(name, columns, nullptr); 
-} 
- 
+    return DoCreateTable(name, columns, nullptr);
+}
+
 TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns,
-                                         const TTablePartitionConfig& partitionConfig) 
-{ 
-    return DoCreateTable(name, columns, &partitionConfig); 
-} 
- 
+                                         const TTablePartitionConfig& partitionConfig)
+{
+    return DoCreateTable(name, columns, &partitionConfig);
+}
+
 TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TColumn>& columns,
-                                         const TTablePartitionConfig* partitionConfig) 
-{ 
-    NThreading::TFuture<TResult> future = Kikimr.CreateTable(*this, name, columns, partitionConfig); 
+                                         const TTablePartitionConfig* partitionConfig)
+{
+    NThreading::TFuture<TResult> future = Kikimr.CreateTable(*this, name, columns, partitionConfig);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
 
@@ -195,9 +195,9 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeSolomonVolume:
         return TSchemaObject::EPathType::SolomonVolume;
     case NKikimrSchemeOp::EPathTypeColumnStore:
-        return TSchemaObject::EPathType::OlapStore; 
+        return TSchemaObject::EPathType::OlapStore;
     case NKikimrSchemeOp::EPathTypeColumnTable:
-        return TSchemaObject::EPathType::OlapTable; 
+        return TSchemaObject::EPathType::OlapTable;
     case NKikimrSchemeOp::EPathTypeSequence:
         return TSchemaObject::EPathType::Sequence;
     case NKikimrSchemeOp::EPathTypeReplication:

@@ -37,18 +37,18 @@ namespace NActors {
             : TActor(&TMonRequest::StateFunc)
             , TargetActorId(targetActorId)
             , Request(request)
-            , Result(result) 
+            , Result(result)
             , AllowedSIDs(sids)
             , Authorizer(authorizer)
         {
         }
 
-        ~TMonRequest() { 
-            if (!Result.HasValue()) { 
-                Result.SetValue(nullptr); 
-            } 
-        } 
- 
+        ~TMonRequest() {
+            if (!Result.HasValue()) {
+                Result.SetValue(nullptr);
+            }
+        }
+
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvBootstrap, HandleBootstrap);
@@ -76,21 +76,21 @@ namespace NActors {
         }
 
         void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr &, const TActorContext &ctx) {
-            Die(ctx); 
+            Die(ctx);
         }
 
-        void HandleWakeup(TEvents::TEvWakeup::TPtr &, const TActorContext &ctx) { 
-            Result.SetValue(nullptr); 
-            Die(ctx); 
+        void HandleWakeup(TEvents::TEvWakeup::TPtr &, const TActorContext &ctx) {
+            Result.SetValue(nullptr);
+            Die(ctx);
         }
 
         void HandleUndelivered(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx) {
             ReplyActorUnavailableAndDie(ctx);
         }
 
-        void HandleInfoRes(NMon::IEvHttpInfoRes::TPtr &ev, const NActors::TActorContext &ctx) { 
+        void HandleInfoRes(NMon::IEvHttpInfoRes::TPtr &ev, const NActors::TActorContext &ctx) {
             Result.SetValue(THolder<NMon::IEvHttpInfoRes>(ev->Release().Release()));
-            Die(ctx); 
+            Die(ctx);
         }
 
         void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr &ev, const TActorContext &ctx) {
@@ -347,9 +347,9 @@ namespace NActors {
             auto future = promise.GetFuture();
 
             ActorSystem->Register(new TMonRequest(TargetActorId, request, promise, AllowedSIDs, Authorizer));
- 
+
             THttpResponsePtr result = future.ExtractValue(TDuration::Max());
- 
+
             if (result) {
                 Output(request, *result);
             } else {
@@ -391,7 +391,7 @@ namespace NActors {
     }
 
     TMon::~TMon() {
-        Stop(); 
+        Stop();
     }
 
     void TMon::Start() {

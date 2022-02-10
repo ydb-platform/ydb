@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h" 
+#include "defs.h"
 #include "db_wrapper.h"
 
 namespace NKikimr::NOlap {
@@ -13,7 +13,7 @@ struct TColumnRecord {
     ui16 Chunk;     // Number of blob for column ColumnName in Portion
     ui64 XPlanStep{0}; // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
     ui64 XTxId{0};
-    TBlobRange BlobRange; 
+    TBlobRange BlobRange;
     TString Metadata;
 
     bool operator == (const TColumnRecord& rec) const {
@@ -22,7 +22,7 @@ struct TColumnRecord {
     }
 
     TString SerializedBlobId() const {
-        return BlobRange.BlobId.SerializeBinary(); 
+        return BlobRange.BlobId.SerializeBinary();
     }
 
     bool Valid() const {
@@ -38,7 +38,7 @@ struct TColumnRecord {
     }
 
     bool ValidBlob() const {
-        return BlobRange.BlobId.IsValid() && BlobRange.Size; 
+        return BlobRange.BlobId.IsValid() && BlobRange.Size;
     }
 
     void SetSnapshot(const TSnapshot& snap) {
@@ -77,7 +77,7 @@ struct TColumnRecord {
         if (rec.XPlanStep) {
             out << '-' << rec.XPlanStep << ':' << (rec.XTxId == Max<ui64>() ? "max" : ToString(rec.XTxId));
         }
-        out << ',' << rec.BlobRange.ToString(); 
+        out << ',' << rec.BlobRange.ToString();
         out << '}';
         return out;
     }

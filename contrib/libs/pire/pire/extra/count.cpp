@@ -1,26 +1,26 @@
-/* 
- * count.cpp -- CountingScanner compiling routine 
- * 
- * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>, 
- *                          Alexander Gololobov <agololobov@gmail.com> 
- * 
- * This file is part of Pire, the Perl Incompatible 
- * Regular Expressions library. 
- * 
- * Pire is free software: you can redistribute it and/or modify 
- * it under the terms of the GNU Lesser Public License as published by 
- * the Free Software Foundation, either version 3 of the License, or 
- * (at your option) any later version. 
+/*
+ * count.cpp -- CountingScanner compiling routine
  *
- * Pire is distributed in the hope that it will be useful, 
- * but WITHOUT ANY WARRANTY; without even the implied warranty of 
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
- * GNU Lesser Public License for more details. 
- * You should have received a copy of the GNU Lesser Public License 
- * along with Pire.  If not, see <http://www.gnu.org/licenses>. 
- */ 
- 
- 
+ * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>,
+ *                          Alexander Gololobov <agololobov@gmail.com>
+ *
+ * This file is part of Pire, the Perl Incompatible
+ * Regular Expressions library.
+ *
+ * Pire is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Pire is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ * You should have received a copy of the GNU Lesser Public License
+ * along with Pire.  If not, see <http://www.gnu.org/licenses>.
+ */
+
+
 #include "count.h"
 
 #include <contrib/libs/pire/pire/fsm.h>
@@ -31,8 +31,8 @@
 #include <contrib/libs/pire/pire/stub/stl.h>
 
 #include <tuple>
- 
-namespace Pire { 
+
+namespace Pire {
 
 namespace Impl {
 
@@ -740,103 +740,103 @@ void CountingFsm::SwapTaskOutputs(CountingFsmTask& task) {
 
 }
 
-namespace { 
-	Pire::Fsm FsmForDot() { Pire::Fsm f; f.AppendDot(); return f; } 
-	Pire::Fsm FsmForChar(Pire::Char c) { Pire::Fsm f; f.AppendSpecial(c); return f; } 
-} 
- 
-CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep) 
-{ 
-	Fsm res = re; 
-	res.Surround(); 
-	Fsm sep_re = ((sep & ~res) /* | Fsm()*/) + re; 
-	sep_re.Determine(); 
- 
-	Fsm dup = sep_re; 
-	for (size_t i = 0; i < dup.Size(); ++i) 
-		dup.SetTag(i, Matched); 
-	size_t oldsize = sep_re.Size(); 
-	sep_re.Import(dup); 
-	for (Fsm::FinalTable::const_iterator i = sep_re.Finals().begin(), ie = sep_re.Finals().end(); i != ie; ++i) 
-		if (*i < oldsize) 
-			sep_re.Connect(*i, oldsize + *i); 
- 
-	sep_re |= (FsmForDot() | FsmForChar(Pire::BeginMark) | FsmForChar(Pire::EndMark)); 
- 
-	// Make a full Cartesian product of two sep_res 
-	sep_re.Determine(); 
-	sep_re.Unsparse(); 
+namespace {
+	Pire::Fsm FsmForDot() { Pire::Fsm f; f.AppendDot(); return f; }
+	Pire::Fsm FsmForChar(Pire::Char c) { Pire::Fsm f; f.AppendSpecial(c); return f; }
+}
+
+CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep)
+{
+	Fsm res = re;
+	res.Surround();
+	Fsm sep_re = ((sep & ~res) /* | Fsm()*/) + re;
+	sep_re.Determine();
+
+	Fsm dup = sep_re;
+	for (size_t i = 0; i < dup.Size(); ++i)
+		dup.SetTag(i, Matched);
+	size_t oldsize = sep_re.Size();
+	sep_re.Import(dup);
+	for (Fsm::FinalTable::const_iterator i = sep_re.Finals().begin(), ie = sep_re.Finals().end(); i != ie; ++i)
+		if (*i < oldsize)
+			sep_re.Connect(*i, oldsize + *i);
+
+	sep_re |= (FsmForDot() | FsmForChar(Pire::BeginMark) | FsmForChar(Pire::EndMark));
+
+	// Make a full Cartesian product of two sep_res
+	sep_re.Determine();
+	sep_re.Unsparse();
 	TSet<size_t> dead = sep_re.DeadStates();
- 
-	PIRE_IFDEBUG(Cdbg << "=== Original FSM ===" << Endl << sep_re << ">>> " << sep_re.Size() << " states, dead: [" << Join(dead.begin(), dead.end(), ", ") << "]" << Endl); 
- 
-	Fsm sq; 
- 
-	typedef ypair<size_t, size_t> NewState; 
+
+	PIRE_IFDEBUG(Cdbg << "=== Original FSM ===" << Endl << sep_re << ">>> " << sep_re.Size() << " states, dead: [" << Join(dead.begin(), dead.end(), ", ") << "]" << Endl);
+
+	Fsm sq;
+
+	typedef ypair<size_t, size_t> NewState;
 	TVector<NewState> states;
 	TMap<NewState, size_t> invstates;
- 
-	states.push_back(NewState(sep_re.Initial(), sep_re.Initial())); 
-	invstates.insert(ymake_pair(states.back(), states.size() - 1)); 
- 
-	// TODO: this loop reminds me a general determination task... 
-	for (size_t curstate = 0; curstate < states.size(); ++curstate) { 
- 
-		unsigned long tag = sep_re.Tag(states[curstate].first); 
-		if (tag) 
-			sq.SetTag(curstate, tag); 
-		sq.SetFinal(curstate, sep_re.IsFinal(states[curstate].first)); 
- 
-		PIRE_IFDEBUG(Cdbg << "State " << curstate << " = (" << states[curstate].first << ", " << states[curstate].second << ")" << Endl); 
-		for (Fsm::LettersTbl::ConstIterator lit = sep_re.Letters().Begin(), lie = sep_re.Letters().End(); lit != lie; ++lit) { 
- 
-			Char letter = lit->first; 
- 
-			const Fsm::StatesSet& mr = sep_re.Destinations(states[curstate].first, letter); 
-			const Fsm::StatesSet& br = sep_re.Destinations(states[curstate].second, letter); 
- 
-			if (mr.size() != 1) 
+
+	states.push_back(NewState(sep_re.Initial(), sep_re.Initial()));
+	invstates.insert(ymake_pair(states.back(), states.size() - 1));
+
+	// TODO: this loop reminds me a general determination task...
+	for (size_t curstate = 0; curstate < states.size(); ++curstate) {
+
+		unsigned long tag = sep_re.Tag(states[curstate].first);
+		if (tag)
+			sq.SetTag(curstate, tag);
+		sq.SetFinal(curstate, sep_re.IsFinal(states[curstate].first));
+
+		PIRE_IFDEBUG(Cdbg << "State " << curstate << " = (" << states[curstate].first << ", " << states[curstate].second << ")" << Endl);
+		for (Fsm::LettersTbl::ConstIterator lit = sep_re.Letters().Begin(), lie = sep_re.Letters().End(); lit != lie; ++lit) {
+
+			Char letter = lit->first;
+
+			const Fsm::StatesSet& mr = sep_re.Destinations(states[curstate].first, letter);
+			const Fsm::StatesSet& br = sep_re.Destinations(states[curstate].second, letter);
+
+			if (mr.size() != 1)
 				Y_ASSERT(!"Wrong transition size for main");
-			if (br.size() != 1) 
+			if (br.size() != 1)
 				Y_ASSERT(!"Wrong transition size for backup");
- 
-			NewState ns(*mr.begin(), *br.begin()); 
+
+			NewState ns(*mr.begin(), *br.begin());
 			PIRE_IFDEBUG(NewState savedNs = ns);
-			unsigned long outputs = 0; 
- 
-			PIRE_IFDEBUG(ystring dbgout); 
-			if (dead.find(ns.first) != dead.end()) { 
-				PIRE_IFDEBUG(dbgout = ((sep_re.Tag(ns.first) & Matched) ? ", ++cur" : ", max <- cur")); 
-				outputs = DeadFlag | (sep_re.Tag(ns.first) & Matched); 
-				ns.first = ns.second; 
-			} 
-			if (sep_re.IsFinal(ns.first) || (sep_re.IsFinal(ns.second) && !(sep_re.Tag(ns.first) & Matched))) 
-				ns.second = sep_re.Initial(); 
- 
-			PIRE_IFDEBUG(if (ns != savedNs) Cdbg << "Diverted transition to (" << savedNs.first << ", " << savedNs.second << ") on " << (char) letter << " to (" << ns.first << ", " << ns.second << ")" << dbgout << Endl); 
- 
+			unsigned long outputs = 0;
+
+			PIRE_IFDEBUG(ystring dbgout);
+			if (dead.find(ns.first) != dead.end()) {
+				PIRE_IFDEBUG(dbgout = ((sep_re.Tag(ns.first) & Matched) ? ", ++cur" : ", max <- cur"));
+				outputs = DeadFlag | (sep_re.Tag(ns.first) & Matched);
+				ns.first = ns.second;
+			}
+			if (sep_re.IsFinal(ns.first) || (sep_re.IsFinal(ns.second) && !(sep_re.Tag(ns.first) & Matched)))
+				ns.second = sep_re.Initial();
+
+			PIRE_IFDEBUG(if (ns != savedNs) Cdbg << "Diverted transition to (" << savedNs.first << ", " << savedNs.second << ") on " << (char) letter << " to (" << ns.first << ", " << ns.second << ")" << dbgout << Endl);
+
 			TMap<NewState, size_t>::iterator nsi = invstates.find(ns);
-			if (nsi == invstates.end()) { 
-				PIRE_IFDEBUG(Cdbg << "New state " << states.size() << " = (" << ns.first << ", " << ns.second << ")" << Endl); 
-				states.push_back(ns); 
-				nsi = invstates.insert(ymake_pair(states.back(), states.size() - 1)).first; 
-				sq.Resize(states.size()); 
-			} 
- 
+			if (nsi == invstates.end()) {
+				PIRE_IFDEBUG(Cdbg << "New state " << states.size() << " = (" << ns.first << ", " << ns.second << ")" << Endl);
+				states.push_back(ns);
+				nsi = invstates.insert(ymake_pair(states.back(), states.size() - 1)).first;
+				sq.Resize(states.size());
+			}
+
 			for (TVector<Char>::const_iterator li = lit->second.second.begin(), le = lit->second.second.end(); li != le; ++li)
-			sq.Connect(curstate, nsi->second, *li); 
-			if (outputs) 
-				sq.SetOutput(curstate, nsi->second, outputs); 
-		} 
-	} 
- 
-	sq.Determine(); 
- 
-	PIRE_IFDEBUG(Cdbg << "=== FSM ===" << Endl << sq << Endl); 
-	Init(sq.Size(), sq.Letters(), sq.Initial(), 1); 
-	BuildScanner(sq, *this); 
-} 
- 
+			sq.Connect(curstate, nsi->second, *li);
+			if (outputs)
+				sq.SetOutput(curstate, nsi->second, outputs);
+		}
+	}
+
+	sq.Determine();
+
+	PIRE_IFDEBUG(Cdbg << "=== FSM ===" << Endl << sq << Endl);
+	Init(sq.Size(), sq.Letters(), sq.Initial(), 1);
+	BuildScanner(sq, *this);
+}
+
 namespace Impl {
 template <class AdvancedScanner>
 AdvancedScanner MakeAdvancedCountingScanner(const Fsm& re, const Fsm& sep, bool* simple) {
@@ -848,7 +848,7 @@ AdvancedScanner MakeAdvancedCountingScanner(const Fsm& re, const Fsm& sep, bool*
 	if (simple) {
 		*simple = countingFsm.Simple();
 	}
- 
+
 	const auto& determined = countingFsm.Determined();
 	const auto& letters = countingFsm.Letters();
 
@@ -877,11 +877,11 @@ NoGlueLimitCountingScanner::NoGlueLimitCountingScanner(const Fsm& re, const Fsm&
 }
 
 
-namespace Impl { 
- 
+namespace Impl {
+
 template<class Scanner>
 class CountingScannerGlueTask: public ScannerGlueCommon<Scanner> {
-public: 
+public:
 	using typename ScannerGlueCommon<Scanner>::State;
 	using TAction = typename Scanner::Action;
 	using InternalState = typename Scanner::InternalState;
@@ -889,36 +889,36 @@ public:
 
 	CountingScannerGlueTask(const Scanner& lhs, const Scanner& rhs)
 		: ScannerGlueCommon<Scanner>(lhs, rhs, LettersEquality<Scanner>(lhs.m_letters, rhs.m_letters))
-	{ 
-	} 
+	{
+	}
 
 	void AcceptStates(const TVector<State>& states)
-	{ 
-		States = states; 
+	{
+		States = states;
 		this->SetSc(THolder<Scanner>(new Scanner));
 		this->Sc().Init(states.size(), this->Letters(), 0, this->Lhs().RegexpsCount() + this->Rhs().RegexpsCount());
 
-		for (size_t i = 0; i < states.size(); ++i) 
+		for (size_t i = 0; i < states.size(); ++i)
 			this->Sc().SetTag(i, this->Lhs().m_tags[this->Lhs().StateIdx(states[i].first)] | (this->Rhs().m_tags[this->Rhs().StateIdx(states[i].second)] << 3));
-	} 
+	}
 
-	void Connect(size_t from, size_t to, Char letter) 
-	{ 
+	void Connect(size_t from, size_t to, Char letter)
+	{
 		this->Sc().SetJump(from, letter, to,
 			Action(this->Lhs(), States[from].first, letter) | (Action(this->Rhs(), States[from].second, letter) << this->Lhs().RegexpsCount()));
-	} 
+	}
 
 protected:
 	TVector<State> States;
 	TAction Action(const Scanner& sc, InternalState state, Char letter) const
-	{ 
+	{
 		size_t state_index = sc.StateIdx(state);
 		size_t transition_index = sc.TransitionIndex(state_index, letter);
 		const auto& tr = sc.m_jumps[transition_index];
 		return tr.action;
-	} 
-}; 
- 
+	}
+};
+
 class NoGlueLimitCountingScannerGlueTask : public CountingScannerGlueTask<NoGlueLimitCountingScanner> {
 public:
 	using ActionIndex = NoGlueLimitCountingScanner::ActionIndex;
@@ -980,18 +980,18 @@ private:
 };
 
 
-} 
+}
 
-CountingScanner CountingScanner::Glue(const CountingScanner& lhs, const CountingScanner& rhs, size_t maxSize /* = 0 */) 
-{ 
+CountingScanner CountingScanner::Glue(const CountingScanner& lhs, const CountingScanner& rhs, size_t maxSize /* = 0 */)
+{
 	if (lhs.RegexpsCount() + rhs.RegexpsCount() > MAX_RE_COUNT) {
 		return CountingScanner();
 	}
 	static constexpr size_t DefMaxSize = 250000;
 	Impl::CountingScannerGlueTask<CountingScanner> task(lhs, rhs);
-	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize); 
-} 
- 
+	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize);
+}
+
 AdvancedCountingScanner AdvancedCountingScanner::Glue(const AdvancedCountingScanner& lhs, const AdvancedCountingScanner& rhs, size_t maxSize /* = 0 */)
 {
 	if (lhs.RegexpsCount() + rhs.RegexpsCount() > MAX_RE_COUNT) {
@@ -1000,7 +1000,7 @@ AdvancedCountingScanner AdvancedCountingScanner::Glue(const AdvancedCountingScan
 	static constexpr size_t DefMaxSize = 250000;
 	Impl::CountingScannerGlueTask<AdvancedCountingScanner> task(lhs, rhs);
 	return Impl::Determine(task, maxSize ? maxSize : DefMaxSize);
-} 
+}
 
 NoGlueLimitCountingScanner NoGlueLimitCountingScanner::Glue(const NoGlueLimitCountingScanner& lhs, const NoGlueLimitCountingScanner& rhs, size_t maxSize /* = 0 */)
 {

@@ -138,7 +138,7 @@ public:
 
 private:
     void Initialize(const TKikimrSettings& settings);
-    void WaitForKqpProxyInit(); 
+    void WaitForKqpProxyInit();
     void CreateSampleTables();
 
 private:
@@ -233,10 +233,10 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
 
 void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
 
-// KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have 
-// database name specified. Before that it returns errors. 
-// This method retries a simple query until it succeeds. 
-void WaitForKqpProxyInit(const NYdb::TDriver& driver); 
- 
+// KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
+// database name specified. Before that it returns errors.
+// This method retries a simple query until it succeeds.
+void WaitForKqpProxyInit(const NYdb::TDriver& driver);
+
 } // namespace NKqp
 } // namespace NKikimr

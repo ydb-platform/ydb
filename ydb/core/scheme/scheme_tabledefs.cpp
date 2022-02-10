@@ -2,11 +2,11 @@
 
 namespace NKikimr {
 
-bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const { 
+bool TTableRange::IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const {
     if (Point)
         return false;
 
-    const int compares = CompareBorders<true, false>(To, From, InclusiveTo, InclusiveFrom, cellTypeIds); 
+    const int compares = CompareBorders<true, false>(To, From, InclusiveTo, InclusiveFrom, cellTypeIds);
     return (compares < 0);
 }
 

@@ -20,7 +20,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/stream/file.h>
-#include <util/stream/zlib.h> 
+#include <util/stream/zlib.h>
 
 #include <algorithm>
 
@@ -142,9 +142,9 @@ using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
-//#define COORDINATOR_LOG_TO_FILE 
- 
-#ifdef COORDINATOR_LOG_TO_FILE 
+//#define COORDINATOR_LOG_TO_FILE
+
+#ifdef COORDINATOR_LOG_TO_FILE
 #define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
 do { \
     ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((actorCtxOrSystem).LoggerSettings()); \
@@ -157,10 +157,10 @@ do { \
     } \
 } while(0) \
 /**/
-#else 
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \ 
-    LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) 
-#endif 
+#else
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
+    LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)
+#endif
 
 #define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
 #define FLOG_DEBUG_S(actorCtxOrSystem, component, stream)  FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
@@ -418,12 +418,12 @@ private:
 
     bool Stopping = false;
 
-#ifdef COORDINATOR_LOG_TO_FILE 
+#ifdef COORDINATOR_LOG_TO_FILE
     // HACK
     TString DebugName;
     TFixedBufferFileOutput DebugLogFile;
-    TZLibCompress DebugLog; 
-#endif 
+    TZLibCompress DebugLog;
+#endif
 
     void Die(const TActorContext &ctx) override {
         for (TMediatorsIndex::iterator it = Mediators.begin(), end = Mediators.end(); it != end; ++it) {

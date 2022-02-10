@@ -1,13 +1,13 @@
-#include "msgbus_servicereq.h" 
+#include "msgbus_servicereq.h"
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
-namespace NKikimr { 
-namespace NMsgBusProxy { 
- 
-namespace { 
+namespace NKikimr {
+namespace NMsgBusProxy {
+
+namespace {
     const ui32 DefaultTimeout = 90000;
-} 
- 
+}
+
 template <typename ResponseType>
 class TMessageBusLocalEnumerateTablets: public TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS> {
     using TBase = TMessageBusLocalServiceRequest<TMessageBusLocalEnumerateTablets<ResponseType>, NKikimrServices::TActivity::FRONT_ENUMERATE_TABLETS>;
@@ -17,7 +17,7 @@ class TMessageBusLocalEnumerateTablets: public TMessageBusLocalServiceRequest<TM
     bool IsFiltered;
     bool IsOk;
     bool IsNodeIdPresent;
-public: 
+public:
     TMessageBusLocalEnumerateTablets(TBusMessageContext &msg, TDuration timeout)
         : TBase(msg, timeout)
         , DomainUid(0)
@@ -26,7 +26,7 @@ public:
         , IsFiltered(false)
         , IsOk(true)
         , IsNodeIdPresent(false)
-    { 
+    {
         const auto &record = static_cast<TBusLocalEnumerateTablets*>(msg.GetMessage())->Record;
         IsOk = IsOk && record.HasDomainUid();
         if (record.HasNodeId()) {
@@ -40,8 +40,8 @@ public:
                 TabletType = record.GetTabletType();
             }
         }
-    } 
- 
+    }
+
     void Handle(TEvLocal::TEvEnumerateTabletsResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvEnumerateTabletsResult &record = ev->Get()->Record;
         Y_VERIFY(record.HasStatus());
@@ -65,8 +65,8 @@ public:
             }
             TBase::SendReplyAndDie(response.Release(), ctx);
         }
-    } 
- 
+    }
+
     TActorId MakeServiceID(const TActorContext &ctx) {
         auto &domainsInfo = *AppData(ctx)->DomainsInfo;
         auto domainIt = domainsInfo.Domains.find(DomainUid);
@@ -79,17 +79,17 @@ public:
         ui32 hiveUid = domainsInfo.GetDefaultHiveUid(DomainUid);
         ui64 hiveId = domainsInfo.GetHive(hiveUid);
         return MakeLocalRegistrarID(nodeId, hiveId);
-    } 
- 
+    }
+
     TEvLocal::TEvEnumerateTablets* MakeReq(const TActorContext &ctx) {
         Y_UNUSED(ctx);
         if (IsFiltered) {
             return new TEvLocal::TEvEnumerateTablets(TabletType);
         }
         return new TEvLocal::TEvEnumerateTablets();
-    } 
- 
-    NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) { 
+    }
+
+    NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
         Y_UNUSED(ctx);
         Y_UNUSED(status);
         ui64 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
@@ -97,16 +97,16 @@ public:
         response->Record.SetStatus(MSTATUS_ERROR);
         response->Record.SetErrorReason(Sprintf("Invalid DomainUid# %" PRIu64 ", NodeId# %" PRIu64
             " or kikimr hive/domain/node configuration, Marker# LE3", (ui64)DomainUid, (ui64)nodeId));
-        return response.Release(); 
-    } 
- 
-    void HandleTimeout(const TActorContext &ctx) { 
+        return response.Release();
+    }
+
+    void HandleTimeout(const TActorContext &ctx) {
         Y_UNUSED(ctx);
         TAutoPtr<TBusResponse> response(new TBusResponseStatus(MSTATUS_TIMEOUT, ""));
         TBase::SendReplyAndDie(response.Release(), ctx);
-    } 
- 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         THolder<ResponseType> response(new ResponseType());
         ui64 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
@@ -115,28 +115,28 @@ public:
             ", Marker# LE2", (ui64)nodeId));
         TBase::SendReplyAndDie(response.Release(), ctx);
 
-    } 
- 
-    STFUNC(StateFunc) { 
-        switch (ev->GetTypeRewrite()) { 
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocal::TEvEnumerateTabletsResult, Handle);
-            HFunc(TEvents::TEvUndelivered, HandleUndelivered); 
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout); 
-        } 
-    } 
-}; 
- 
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+        }
+    }
+};
+
 IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg) {
     //const auto &record = static_cast<TBusLocalEnumerateTablets*>(msg.GetMessage())->Record;
     //const TDuration timeout = TDuration::MilliSeconds(record.HasTimeout() ? record.GetTimeout() : DefaultTimeout);
     const TDuration timeout = TDuration::MilliSeconds(DefaultTimeout);
- 
+
     if (msg.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS) {
         return new TMessageBusLocalEnumerateTablets<TBusLocalEnumerateTabletsResult>(msg, timeout);
     } else {
         return new TMessageBusLocalEnumerateTablets<TBusResponse>(msg, timeout);
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

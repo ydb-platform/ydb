@@ -73,25 +73,25 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/DirA/DirB/OlapStore", false, NLs::PathExist);
     }
 
-    Y_UNIT_TEST(CreateTable) { 
-        TTestBasicRuntime runtime; 
+    Y_UNIT_TEST(CreateTable) {
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
-        ui64 txId = 100; 
- 
-        TString olapSchema = R"( 
-            Name: "OlapStore" 
-            ColumnShardCount: 1 
-            SchemaPresets { 
-                Name: "default" 
-                Schema { 
-                    Columns { Name: "timestamp" Type: "Timestamp" } 
-                    Columns { Name: "data" Type: "Utf8" } 
-                    KeyColumnNames: "timestamp" 
+        ui64 txId = 100;
+
+        TString olapSchema = R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
                     Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                } 
-            } 
-        )"; 
- 
+                }
+            }
+        )";
+
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
 

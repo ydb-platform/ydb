@@ -154,7 +154,7 @@ message TPersQueueMetaRequest {
     }
 
     message TCmdDeleteTopic {
-        optional string Topic = 1; //mandatory 
+        optional string Topic = 1; //mandatory
     }
 
     message TCmdGetTopicMetadata {

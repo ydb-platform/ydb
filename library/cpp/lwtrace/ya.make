@@ -1,12 +1,12 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(serxa)
 
 PEERDIR(
     library/cpp/lwtrace/protos
 )
 
-SRCS( 
+SRCS(
     check.cpp
     control.cpp
     custom_action.cpp
@@ -20,9 +20,9 @@ SRCS(
     stderr_writer.cpp
     symbol.cpp
     trace.cpp
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE(mon)
 

@@ -19,7 +19,7 @@
 #include <util/string/printf.h>
 #include <typeinfo>
 
-bool VERBOSE = false; 
+bool VERBOSE = false;
 const bool PRINT_EVENT_BODY = false;
 
 namespace {
@@ -86,8 +86,8 @@ namespace NActors {
     public:
         static constexpr EActivityType ActorActivityType() {
             return TEST_ACTOR_RUNTIME;
-        } 
- 
+        }
+
         TEdgeActor(TTestActorRuntimeBase* runtime)
             : TActor(&TEdgeActor::StateFunc)
             , Runtime(runtime)
@@ -722,9 +722,9 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::SetVerbose(bool verbose) {
-        VERBOSE = verbose; 
-    } 
- 
+        VERBOSE = verbose;
+    }
+
     void TTestActorRuntimeBase::AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex) {
         Y_VERIFY(!IsInitialized);
         Y_VERIFY(nodeIndex < NodeCount);
@@ -1038,10 +1038,10 @@ namespace NActors {
 
     bool TTestActorRuntimeBase::DispatchEvents(const TDispatchOptions& options, TInstant simDeadline) {
         TGuard<TMutex> guard(Mutex);
-        return DispatchEventsInternal(options, simDeadline); 
-    } 
- 
-    // Mutex must be locked by caller! 
+        return DispatchEventsInternal(options, simDeadline);
+    }
+
+    // Mutex must be locked by caller!
     bool TTestActorRuntimeBase::DispatchEventsInternal(const TDispatchOptions& options, TInstant simDeadline) {
         TDispatchContext localContext;
         localContext.Options = &options;
@@ -1253,9 +1253,9 @@ namespace NActors {
             if (!localContext.FoundNonEmptyMailboxes.empty())
                 return true;
 
-            if (options.CustomFinalCondition && options.CustomFinalCondition()) 
-                return true; 
- 
+            if (options.CustomFinalCondition && options.CustomFinalCondition())
+                return true;
+
             if (options.FinalEvents.empty()) {
                 for (auto& mbox : currentMailboxes) {
                     if (!mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp)))
@@ -1755,8 +1755,8 @@ namespace NActors {
         public:
             static constexpr EActivityType ActorActivityType() {
                 return TEST_ACTOR_RUNTIME;
-            } 
- 
+            }
+
             TReplyActor(TStrandingActorDecorator* owner)
                 : TActor(&TReplyActor::StateFunc)
                 , Owner(owner)
@@ -1771,8 +1771,8 @@ namespace NActors {
 
         static constexpr EActivityType ActorActivityType() {
             return TEST_ACTOR_RUNTIME;
-        } 
- 
+        }
+
         TStrandingActorDecorator(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors,
             TSimpleSharedPtr<TStrandingActorDecoratorContext> context, TTestActorRuntimeBase* runtime,
             TReplyCheckerCreator createReplyChecker)

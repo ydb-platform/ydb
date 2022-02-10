@@ -8,22 +8,22 @@ namespace NKikimr::NColumnShard {
 class TWriteActor : public TActorBootstrapped<TWriteActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_WRITE_ACTOR; 
+        return NKikimrServices::TActivity::TX_COLUMNSHARD_WRITE_ACTOR;
     }
 
-    TWriteActor(ui64 tabletId, 
+    TWriteActor(ui64 tabletId,
                 const NOlap::TIndexInfo& indexInfo,
                 const TActorId& dstActor,
-                TBlobBatch&& blobBatch, 
-                bool blobGrouppingEnabled, 
+                TBlobBatch&& blobBatch,
+                bool blobGrouppingEnabled,
                 TAutoPtr<TEvColumnShard::TEvWrite> writeEv,
                 TAutoPtr<TEvPrivate::TEvWriteIndex> writeIndexEv,
                 const TInstant& deadline)
-        : TabletId(tabletId) 
+        : TabletId(tabletId)
         , IndexInfo(indexInfo)
         , DstActor(dstActor)
-        , BlobBatch(std::move(blobBatch)) 
-        , BlobGrouppingEnabled(blobGrouppingEnabled) 
+        , BlobBatch(std::move(blobBatch))
+        , BlobGrouppingEnabled(blobGrouppingEnabled)
         , WriteEv(writeEv)
         , WriteIndexEv(writeIndexEv)
         , Deadline(deadline)
@@ -46,25 +46,25 @@ public:
         }
 
 
-        if (status != NKikimrProto::OK) { 
+        if (status != NKikimrProto::OK) {
             LOG_S_WARN("Unsuccessful TEvPutResult for blob " << msg->Id.ToString()
                 << " status: " << status << " reason: " << msg->ErrorReason);
             SendResultAndDie(ctx, status);
-            return; 
-        } 
+            return;
+        }
 
         LOG_S_TRACE("TEvPutResult for blob " << msg->Id.ToString());
- 
-        BlobBatch.OnBlobWriteResult(ev); 
 
-        if (BlobBatch.AllBlobWritesCompleted()) { 
-            SendResultAndDie(ctx, NKikimrProto::OK); 
+        BlobBatch.OnBlobWriteResult(ev);
+
+        if (BlobBatch.AllBlobWritesCompleted()) {
+            SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        LOG_S_WARN("TEvWakeup: write timeout at tablet " << TabletId << " (write)"); 
+        LOG_S_WARN("TEvWakeup: write timeout at tablet " << TabletId << " (write)");
 
         SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
         return;
@@ -120,28 +120,28 @@ public:
 
         // Heavy operations inside. We cannot run them in tablet event handler.
         TString strError;
-        std::shared_ptr<arrow::RecordBatch> batch; 
-        { 
-            TCpuGuard guard(ResourceUsage); 
-            batch = IndexInfo.PrepareForInsert(srcData, meta, strError); 
-        } 
+        std::shared_ptr<arrow::RecordBatch> batch;
+        {
+            TCpuGuard guard(ResourceUsage);
+            batch = IndexInfo.PrepareForInsert(srcData, meta, strError);
+        }
         if (!batch) {
             LOG_S_DEBUG("Bad data to write (" << strError << ") at tablet " << TabletId);
             SendResultAndDie(ctx, NKikimrProto::ERROR);
             return;
         }
 
-        TString data; 
-        { 
-            TCpuGuard guard(ResourceUsage); 
-            data = NArrow::SerializeBatchNoCompression(batch); 
-        } 
-        if (data.size() > TLimits::MAX_BLOB_SIZE) { 
+        TString data;
+        {
+            TCpuGuard guard(ResourceUsage);
+            data = NArrow::SerializeBatchNoCompression(batch);
+        }
+        if (data.size() > TLimits::MAX_BLOB_SIZE) {
             LOG_S_DEBUG("Extracted data (" << data.size() << " bytes) is bigger than source ("
-                << srcData.size() << " bytes) and limit at tablet " << TabletId); 
+                << srcData.size() << " bytes) and limit at tablet " << TabletId);
 
-            SendResultAndDie(ctx, NKikimrProto::ERROR); 
-            return; 
+            SendResultAndDie(ctx, NKikimrProto::ERROR);
+            return;
         }
 
         record.SetData(data); // modify for TxWrite
@@ -155,22 +155,22 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD outMeta.SerializeToString(&meta);
         }
         record.MutableMeta()->SetLogicalMeta(meta);
- 
-        if (data.size() > WriteEv->MaxSmallBlobSize) { 
-            WriteEv->BlobId = DoSendWriteBlobRequest(data, ctx); 
-        } else { 
-            TUnifiedBlobId smallBlobId = BlobBatch.AddSmallBlob(data); 
-            Y_VERIFY(smallBlobId.IsSmallBlob()); 
-            WriteEv->BlobId = smallBlobId; 
-        } 
- 
-        Y_VERIFY(WriteEv->BlobId.BlobSize() == data.size()); 
- 
-        LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew()); 
- 
-        if (BlobBatch.AllBlobWritesCompleted()) { 
-            SendResultAndDie(ctx, NKikimrProto::OK); 
-        } 
+
+        if (data.size() > WriteEv->MaxSmallBlobSize) {
+            WriteEv->BlobId = DoSendWriteBlobRequest(data, ctx);
+        } else {
+            TUnifiedBlobId smallBlobId = BlobBatch.AddSmallBlob(data);
+            Y_VERIFY(smallBlobId.IsSmallBlob());
+            WriteEv->BlobId = smallBlobId;
+        }
+
+        Y_VERIFY(WriteEv->BlobId.BlobSize() == data.size());
+
+        LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew());
+
+        if (BlobBatch.AllBlobWritesCompleted()) {
+            SendResultAndDie(ctx, NKikimrProto::OK);
+        }
     }
 
     void SendMultiWriteRequest(const TActorContext& ctx) {
@@ -183,70 +183,70 @@ public:
         const TVector<TString>& blobs = WriteIndexEv->Blobs;
         Y_VERIFY(blobs.size() > 0);
         size_t blobsPos = 0;
- 
-        // Send accumulated data and update records with the blob Id 
-        auto fnFlushAcummultedBlob = [this, &ctx] (TString& accumulatedBlob, NOlap::TPortionInfo& portionInfo, 
-            TVector<std::pair<size_t, TString>>& recordsInBlob) 
-        { 
-            Y_VERIFY(accumulatedBlob.size() > 0); 
-            Y_VERIFY(recordsInBlob.size() > 0); 
-            auto blobId = DoSendWriteBlobRequest(accumulatedBlob, ctx); 
-            LOG_S_TRACE("Write Index Blob " << blobId << " with " << recordsInBlob.size() << " records"); 
-            for (const auto& rec : recordsInBlob) { 
-                size_t i = rec.first; 
-                const TString& recData = rec.second; 
-                auto& blobRange = portionInfo.Records[i].BlobRange; 
-                blobRange.BlobId = blobId; 
-                Y_VERIFY(blobRange.Offset + blobRange.Size <= accumulatedBlob.size()); 
-                Y_VERIFY(blobRange.Size == recData.size()); 
- 
-                if (WriteIndexEv->CacheData) { 
-                    // Save original (non-accumulted) blobs with the corresponding TBlobRanges in order to 
-                    // put them into cache at commit time 
-                    WriteIndexEv->IndexChanges->Blobs[blobRange] = recData; 
-                } 
-            } 
-            accumulatedBlob.clear(); 
-            recordsInBlob.clear(); 
-        }; 
- 
-        TString accumulatedBlob; 
-        TVector<std::pair<size_t, TString>> recordsInBlob; 
- 
-        for (auto& portionInfo : indexChanges->AppendedPortions) {
-            auto& records = portionInfo.Records; 
- 
-            accumulatedBlob.clear(); 
-            recordsInBlob.clear(); 
- 
-            for (size_t i = 0; i < records.size(); ++i, ++blobsPos) {
-                const TString& currentBlob = blobs[blobsPos]; 
-                Y_VERIFY(currentBlob.size()); 
- 
-                if ((accumulatedBlob.size() + currentBlob.size() > TLimits::MAX_BLOB_SIZE) || 
-                    (accumulatedBlob.size() && !BlobGrouppingEnabled)) 
-                { 
-                    fnFlushAcummultedBlob(accumulatedBlob, portionInfo, recordsInBlob); 
-                } 
- 
-                // Accumulate data chunks into a single blob and save record indices of these chunks 
-                records[i].BlobRange.Offset = accumulatedBlob.size(); 
-                records[i].BlobRange.Size = currentBlob.size(); 
-                accumulatedBlob.append(currentBlob); 
-                recordsInBlob.emplace_back(i, currentBlob); 
+
+        // Send accumulated data and update records with the blob Id
+        auto fnFlushAcummultedBlob = [this, &ctx] (TString& accumulatedBlob, NOlap::TPortionInfo& portionInfo,
+            TVector<std::pair<size_t, TString>>& recordsInBlob)
+        {
+            Y_VERIFY(accumulatedBlob.size() > 0);
+            Y_VERIFY(recordsInBlob.size() > 0);
+            auto blobId = DoSendWriteBlobRequest(accumulatedBlob, ctx);
+            LOG_S_TRACE("Write Index Blob " << blobId << " with " << recordsInBlob.size() << " records");
+            for (const auto& rec : recordsInBlob) {
+                size_t i = rec.first;
+                const TString& recData = rec.second;
+                auto& blobRange = portionInfo.Records[i].BlobRange;
+                blobRange.BlobId = blobId;
+                Y_VERIFY(blobRange.Offset + blobRange.Size <= accumulatedBlob.size());
+                Y_VERIFY(blobRange.Size == recData.size());
+
+                if (WriteIndexEv->CacheData) {
+                    // Save original (non-accumulted) blobs with the corresponding TBlobRanges in order to
+                    // put them into cache at commit time
+                    WriteIndexEv->IndexChanges->Blobs[blobRange] = recData;
+                }
             }
-            if (accumulatedBlob.size() != 0) { 
-                fnFlushAcummultedBlob(accumulatedBlob, portionInfo, recordsInBlob); 
-            } 
+            accumulatedBlob.clear();
+            recordsInBlob.clear();
+        };
+
+        TString accumulatedBlob;
+        TVector<std::pair<size_t, TString>> recordsInBlob;
+
+        for (auto& portionInfo : indexChanges->AppendedPortions) {
+            auto& records = portionInfo.Records;
+
+            accumulatedBlob.clear();
+            recordsInBlob.clear();
+
+            for (size_t i = 0; i < records.size(); ++i, ++blobsPos) {
+                const TString& currentBlob = blobs[blobsPos];
+                Y_VERIFY(currentBlob.size());
+
+                if ((accumulatedBlob.size() + currentBlob.size() > TLimits::MAX_BLOB_SIZE) ||
+                    (accumulatedBlob.size() && !BlobGrouppingEnabled))
+                {
+                    fnFlushAcummultedBlob(accumulatedBlob, portionInfo, recordsInBlob);
+                }
+
+                // Accumulate data chunks into a single blob and save record indices of these chunks
+                records[i].BlobRange.Offset = accumulatedBlob.size();
+                records[i].BlobRange.Size = currentBlob.size();
+                accumulatedBlob.append(currentBlob);
+                recordsInBlob.emplace_back(i, currentBlob);
+            }
+            if (accumulatedBlob.size() != 0) {
+                fnFlushAcummultedBlob(accumulatedBlob, portionInfo, recordsInBlob);
+            }
         }
         Y_VERIFY(blobsPos == blobs.size());
     }
 
-    TUnifiedBlobId DoSendWriteBlobRequest(const TString& data, const TActorContext& ctx) { 
-        ResourceUsage.Network += data.size(); 
-        return BlobBatch.SendWriteBlobRequest(data, Deadline, ctx); 
-    } 
- 
+    TUnifiedBlobId DoSendWriteBlobRequest(const TString& data, const TActorContext& ctx) {
+        ResourceUsage.Network += data.size();
+        return BlobBatch.SendWriteBlobRequest(data, Deadline, ctx);
+    }
+
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
@@ -257,39 +257,39 @@ public:
     }
 
 private:
-    ui64 TabletId; 
+    ui64 TabletId;
     NOlap::TIndexInfo IndexInfo;
     TActorId DstActor;
-    TBlobBatch BlobBatch; 
-    bool BlobGrouppingEnabled; 
+    TBlobBatch BlobBatch;
+    bool BlobGrouppingEnabled;
     TAutoPtr<TEvColumnShard::TEvWrite> WriteEv;
     TAutoPtr<TEvPrivate::TEvWriteIndex> WriteIndexEv;
     TInstant Deadline;
     THashSet<ui32> YellowMoveChannels;
     THashSet<ui32> YellowStopChannels;
-    TUsage ResourceUsage; 
+    TUsage ResourceUsage;
 
-    void SaveResourceUsage() { 
+    void SaveResourceUsage() {
         if (WriteEv) {
-            WriteEv->ResourceUsage.Add(ResourceUsage); 
+            WriteEv->ResourceUsage.Add(ResourceUsage);
         } else {
-            WriteIndexEv->ResourceUsage.Add(ResourceUsage); 
+            WriteIndexEv->ResourceUsage.Add(ResourceUsage);
         }
-        ResourceUsage = TUsage(); 
+        ResourceUsage = TUsage();
     }
 
     void SendResult(const TActorContext& ctx, NKikimrProto::EReplyStatus status) {
-        SaveResourceUsage(); 
+        SaveResourceUsage();
         if (WriteEv) {
-            LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew() << " Status: " << status); 
+            LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew() << " Status: " << status);
             WriteEv->PutStatus = status;
-            WriteEv->BlobBatch = std::move(BlobBatch); 
+            WriteEv->BlobBatch = std::move(BlobBatch);
             WriteEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
             WriteEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteEv.Release());
         } else {
             WriteIndexEv->PutStatus = status;
-            WriteIndexEv->BlobBatch = std::move(BlobBatch); 
+            WriteIndexEv->BlobBatch = std::move(BlobBatch);
             WriteIndexEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
             WriteIndexEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteIndexEv.Release());
@@ -297,16 +297,16 @@ private:
     }
 };
 
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable, 
-                        const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled, 
-                        TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline) { 
-    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, ev, {}, deadline); 
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+                        const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
+                        TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline) {
+    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, ev, {}, deadline);
 }
 
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable, 
-                        const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled, 
-                        TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline) { 
-    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, {}, ev, deadline); 
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+                        const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
+                        TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline) {
+    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, {}, ev, deadline);
 }
 
 }

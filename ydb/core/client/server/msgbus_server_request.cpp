@@ -72,13 +72,13 @@ public:
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
 
-        // Transaction protobuf structure might be very heavy (if it has a batch of parameters) 
-        // so we don't want to copy it, just move its contents 
+        // Transaction protobuf structure might be very heavy (if it has a batch of parameters)
+        // so we don't want to copy it, just move its contents
         record.MutableTransaction()->Swap(Request->Record.MutableTransaction());
 
         if (Request->Record.HasProxyFlags())
             record.SetProxyFlags(Request->Record.GetProxyFlags());
- 
+
         if (Request->Record.HasExecTimeoutPeriod())
             record.SetExecTimeoutPeriod(Request->Record.GetExecTimeoutPeriod());
         else {
@@ -114,7 +114,7 @@ public:
                 } else
                 if (mkqlTx.GetParams().HasProto()) {
                     try {
-                        TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "params"); 
+                        TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "params");
                         NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
                         NMiniKQL::TTypeEnvironment env(alloc);
                         NMiniKQL::TRuntimeNode node = NMiniKQL::ImportValueFromProto(mkqlTx.GetParams().GetProto(), env);
@@ -162,7 +162,7 @@ void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
     TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result));
 
     if (result.HasExecutionEngineEvaluatedResponse()) {
-        response->Record.MutableExecutionEngineEvaluatedResponse()->Swap(result.MutableExecutionEngineEvaluatedResponse()); 
+        response->Record.MutableExecutionEngineEvaluatedResponse()->Swap(result.MutableExecutionEngineEvaluatedResponse());
     }
     if (result.HasSerializedReadTableResponse()) {
         response->Record.SetSerializedReadTableResponse(result.GetSerializedReadTableResponse());
@@ -171,20 +171,20 @@ void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
         response->Record.SetProxyErrorCode(result.GetStatus());
     }
 
-    if (result.HasTxStats()) { 
-        response->Record.MutableTxStats()->Swap(result.MutableTxStats()); 
-    } 
- 
+    if (result.HasTxStats()) {
+        response->Record.MutableTxStats()->Swap(result.MutableTxStats());
+    }
+
     SendReplyAutoPtr(response);
- 
+
     FinishReply(ctx);
 }
 
 void TMessageBusServerRequest::FinishReply(const TActorContext &ctx)
 {
-    if (Proposal) 
-        AsyncDestroy(Proposal, ctx, AppData(ctx)->UserPoolId); 
- 
+    if (Proposal)
+        AsyncDestroy(Proposal, ctx, AppData(ctx)->UserPoolId);
+
     Die(ctx);
 }
 
@@ -309,7 +309,7 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
             ReplyWithResult(MSTATUS_ERROR, msg->Record, ctx);
         return;
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable:
-        if (!RetryResolve(ctx)) // TODO: retry if partitioning changed due to split/merge 
+        if (!RetryResolve(ctx)) // TODO: retry if partitioning changed due to split/merge
             ReplyWithResult(MSTATUS_REJECTED, msg->Record, ctx);
         return;
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:

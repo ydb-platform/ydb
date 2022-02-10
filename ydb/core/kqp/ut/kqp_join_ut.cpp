@@ -821,10 +821,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT t1.Value, t2.Value, t3.Value FROM `/Root/Join1_1` AS t1 
-            INNER JOIN `/Root/Join1_2` AS t2 
+            SELECT t1.Value, t2.Value, t3.Value FROM `/Root/Join1_1` AS t1
+            INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
-            LEFT JOIN `/Root/Join1_3_ui64` AS t3 
+            LEFT JOIN `/Root/Join1_3_ui64` AS t3
             ON t2.Key1 = t3.Value
             WHERE t1.Value == "Value5";
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();

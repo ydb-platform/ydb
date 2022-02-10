@@ -1,17 +1,17 @@
-#include "datashard_impl.h" 
+#include "datashard_impl.h"
 #include "operation.h"
 
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/util/pb.h>
- 
+
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
+
 class TDataShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
 
@@ -89,12 +89,12 @@ public:
                 stats.SetLastStatsUpdateTime(Self->LastDbStatsUpdateTime.ToStringLocalUpToSeconds());
                 stats.SetLastStatsReportTime(Self->LastDbStatsReportTime.ToStringLocalUpToSeconds());
             }
- 
-            auto *resourceMetrics = Self->Executor()->GetResourceMetrics(); 
-            if (resourceMetrics) { 
-                auto &metrics = *rec.MutableMetrics(); 
-                resourceMetrics->Fill(metrics); 
-            } 
+
+            auto *resourceMetrics = Self->Executor()->GetResourceMetrics();
+            if (resourceMetrics) {
+                auto &metrics = *rec.MutableMetrics();
+                resourceMetrics->Fill(metrics);
+            }
         }
 
         auto &info = *response->Record.MutableTabletInfo();
@@ -327,4 +327,4 @@ ITransaction *TDataShard::CreateTxGetOperation(TDataShard *self, TEvDataShard::T
     return new TTxGetOperation(self, ev);
 }
 
-}} 
+}}

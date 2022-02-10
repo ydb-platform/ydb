@@ -96,18 +96,18 @@ message TMetaCommonInfo {
     string MinSubKey = 25;
     string MaxSubKey = 26;
     uint64 MinTimestamp = 27; // timestamp of the oldest entry in the table, milliseconds since epoch
- 
-    // Datashard-specific stats 
-    uint64 ImmediateTxCompleted = 30; 
-    uint64 PlannedTxCompleted = 31; 
-    uint64 TxRejectedByOverload = 32; 
-    uint64 TxRejectedBySpace = 33; 
- 
-    uint64 RowUpdates = 34; 
-    uint64 RowDeletes = 35; 
-    uint64 RowReads = 36; 
-    uint64 RangeReads = 37; 
-    uint64 RangeReadRows = 38; 
+
+    // Datashard-specific stats
+    uint64 ImmediateTxCompleted = 30;
+    uint64 PlannedTxCompleted = 31;
+    uint64 TxRejectedByOverload = 32;
+    uint64 TxRejectedBySpace = 33;
+
+    uint64 RowUpdates = 34;
+    uint64 RowDeletes = 35;
+    uint64 RowReads = 36;
+    uint64 RangeReads = 37;
+    uint64 RangeReadRows = 38;
 }
 
 message TMetaColumnInfo {

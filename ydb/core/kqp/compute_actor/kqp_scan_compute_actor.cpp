@@ -81,7 +81,7 @@ public:
     {
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(!Meta.GetReads().empty());
-        YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView); 
+        YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
 
         KeyColumnTypes.assign(Meta.GetKeyColumnTypes().begin(), Meta.GetKeyColumnTypes().end());
     }

@@ -2948,8 +2948,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    } 
- 
+    }
+
     TUpdateResourcesActor(const TActorId& source, const TActorId& hive, const NKikimrHive::TTabletMetrics& metrics)
         : Source(source)
         , Hive(hive)
@@ -2991,8 +2991,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    } 
- 
+    }
+
     TCreateTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, TTabletTypes::EType type, ui32 channelsProfile, ui32 followers, THive* hive)
         : Source(source)
         , Event(new TEvHive::TEvCreateTablet())
@@ -3039,75 +3039,75 @@ public:
 };
 
 class TDeleteTabletActor : public TActorBootstrapped<TDeleteTabletActor> {
-private: 
-    ui64 FAKE_TXID = -1; 
- 
-public: 
+private:
+    ui64 FAKE_TXID = -1;
+
+public:
     TActorId Source;
-    TAutoPtr<TEvHive::TEvDeleteTablet> Event; 
+    TAutoPtr<TEvHive::TEvDeleteTablet> Event;
     THive* Hive;
- 
+
     TDeleteTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, THive* hive)
-        : Source(source) 
-        , Event(new TEvHive::TEvDeleteTablet()) 
-        , Hive(hive) 
-    { 
+        : Source(source)
+        , Event(new TEvHive::TEvDeleteTablet())
+        , Hive(hive)
+    {
         Event->Record.SetShardOwnerId(owner);
         Event->Record.AddShardLocalIdx(ownerIdx);
         Event->Record.SetTxId_Deprecated(FAKE_TXID);
-    } 
- 
+    }
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    } 
- 
+    }
+
     TDeleteTabletActor(const TActorId& source, ui64 tabletId, THive* hive)
-        : Source(source) 
-        , Event(new TEvHive::TEvDeleteTablet()) 
-        , Hive(hive) 
-    { 
-        ui64 owner = 0; 
-        ui64 ownerIdx = -1; 
-        for (auto it = hive->OwnerToTablet.begin(); it != hive->OwnerToTablet.end(); ++it) { 
-            if (it->second == tabletId) { 
-                owner = it->first.first; 
-                ownerIdx = it->first.second; 
-                break; 
-            } 
-        } 
- 
+        : Source(source)
+        , Event(new TEvHive::TEvDeleteTablet())
+        , Hive(hive)
+    {
+        ui64 owner = 0;
+        ui64 ownerIdx = -1;
+        for (auto it = hive->OwnerToTablet.begin(); it != hive->OwnerToTablet.end(); ++it) {
+            if (it->second == tabletId) {
+                owner = it->first.first;
+                ownerIdx = it->first.second;
+                break;
+            }
+        }
+
         Event->Record.SetShardOwnerId(owner);
         Event->Record.AddShardLocalIdx(ownerIdx);
         Event->Record.SetTxId_Deprecated(FAKE_TXID);
-    } 
- 
-private: 
-    void HandleTimeout(const TActorContext& ctx) { 
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"Timeout\"}")); 
-        Die(ctx); 
-    } 
- 
-    void Handle(TEvHive::TEvDeleteTabletReply::TPtr& ptr, const TActorContext& ctx) { 
-        TStringStream stream; 
-        stream << ptr->Get()->Record.AsJSON(); 
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str())); 
-        Die(ctx); 
-    } 
- 
-    STFUNC(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvHive::TEvDeleteTabletReply, Handle); 
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout); 
-        } 
-    } 
- 
-public: 
-    void Bootstrap(const TActorContext& ctx) { 
+    }
+
+private:
+    void HandleTimeout(const TActorContext& ctx) {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"Timeout\"}"));
+        Die(ctx);
+    }
+
+    void Handle(TEvHive::TEvDeleteTabletReply::TPtr& ptr, const TActorContext& ctx) {
+        TStringStream stream;
+        stream << ptr->Get()->Record.AsJSON();
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(stream.Str()));
+        Die(ctx);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvHive::TEvDeleteTabletReply, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+        }
+    }
+
+public:
+    void Bootstrap(const TActorContext& ctx) {
         ctx.Send(Hive->SelfId(), Event.Release());
-        Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup()); 
-    } 
-}; 
- 
+        Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup());
+    }
+};
+
 class TTxMonEvent_Groups : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -3396,19 +3396,19 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this));
         return;
     }
-    if (page == "DeleteTablet") { 
-        if (cgi.Has("owner") && cgi.Has("owner_idx")) { 
-            ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0); 
-            ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0); 
+    if (page == "DeleteTablet") {
+        if (cgi.Has("owner") && cgi.Has("owner_idx")) {
+            ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
+            ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
             ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
-        } else if (cgi.Has("tablet")) { 
-            TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0); 
+        } else if (cgi.Has("tablet")) {
+            TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
             ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
-        } else { 
-            ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}")); 
-        } 
-        return; 
-    } 
+        } else {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+        }
+        return;
+    }
     if (page == "Resources") {
         return Execute(new TTxMonEvent_Resources(ev->Sender, ev, this), ctx);
     }

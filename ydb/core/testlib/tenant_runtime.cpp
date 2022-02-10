@@ -195,8 +195,8 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecuted
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
-    } 
- 
+    }
+
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info,
                      TActorId sender, const TVector<std::pair<TString, ui64>> &subDomains)
         : TActor(&TThis::StateInit)
@@ -638,8 +638,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_ACTOR;
-    } 
- 
+    }
+
     TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TActorId sender,
               ui64 hiveId, const THashMap<TSubDomainKey, TString> &subDomainKeys)
         : TActor(&TThis::StateInit)

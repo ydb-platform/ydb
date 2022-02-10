@@ -31,21 +31,21 @@ public:
         : Self(self)
     {}
 
-    void Reset() { 
-        TxsInFly.clear(); 
-        SchemaOps.clear(); 
+    void Reset() {
+        TxsInFly.clear();
+        SchemaOps.clear();
         PlannedTxs.clear();
         DeadlineQueue.clear();
         ProposeDelayers.clear();
         PlanWaitingTxCount = 0;
-    } 
- 
+    }
+
     bool Load(NIceDb::TNiceDb& db);
 
     const THashMap<ui64, TOperation::TPtr> &GetTxsInFly() const { return TxsInFly; }
     ui64 TxInFly() const { return TxsInFly.size(); }
     void AddTxInFly(TOperation::TPtr op);
-    void RemoveTxInFly(ui64 txId); 
+    void RemoveTxInFly(ui64 txId);
     TOperation::TPtr FindTxInFly(ui64 txId) const
     {
         auto it = TxsInFly.find(txId);

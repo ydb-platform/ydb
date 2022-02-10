@@ -54,15 +54,15 @@ namespace NActors {
 #ifdef USE_ACTOR_CALLSTACK
             ev->Callstack = TCallstack::GetTlsCallstack();
             ev->Callstack.Trace();
-#endif 
+#endif
             Ctx.IncrementSentEvents();
             return ActorSystem->Send(ev);
         }
- 
+
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const {
             Ctx.GetCurrentStats(statsCopy);
         }
- 
+
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const { return Ctx.WorkerId; }
 

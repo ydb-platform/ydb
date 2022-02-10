@@ -42,8 +42,8 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::IMMEDIATE_CONTROL_BOARD;
-    } 
- 
+    }
+
     TImmediateControlActor(TIntrusivePtr<TControlBoard> board,
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
         : Board(board)

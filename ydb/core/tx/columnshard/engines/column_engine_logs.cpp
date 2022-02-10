@@ -49,11 +49,11 @@ ui64 ExtractTimestamp(const std::shared_ptr<TPredicate>& pkPredicate, const std:
 
 // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
 // They have const snapshot columns that do not break sorting inside batch.
-std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted, const TString& data) { 
+std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted, const TString& data) {
     auto schema = indexInfo.ArrowSchema();
-    Y_VERIFY(!data.empty(), "Blob data not present"); 
-    auto batch = NArrow::DeserializeBatch(data, schema); 
-    Y_VERIFY(batch, "Deserialization failed"); 
+    Y_VERIFY(!data.empty(), "Blob data not present");
+    auto batch = NArrow::DeserializeBatch(data, schema);
+    Y_VERIFY(batch, "Deserialization failed");
     i64 numRows = batch->num_rows();
 
     auto columns = indexInfo.MakeSpecialColumns(inserted, numRows);
@@ -331,7 +331,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, con
     /// * apply PK predicate before REPLACE
     IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0});
 
-    ui32 indexId = IndexInfo.GetId(); 
+    ui32 indexId = IndexInfo.GetId();
     GranulesTable = std::make_shared<TGranulesTable>(indexId);
     ColumnsTable = std::make_shared<TColumnsTable>(indexId);
     CountersTable = std::make_shared<TCountersTable>(indexId);
@@ -349,11 +349,11 @@ ui64 TColumnEngineForLogs::MemoryUsage() const {
         Counters.ColumnMetadataBytes;
 }
 
-const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const { 
-    return PathStats; 
-} 
+const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& TColumnEngineForLogs::GetStats() const {
+    return PathStats;
+}
 
-const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() { 
+const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
     Counters.Tables = PathGranules.size();
     Counters.Granules = Granules.size();
     Counters.EmptyGranules = EmptyGranules.size();
@@ -385,10 +385,10 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
                                               bool isErase, bool isLoad) const {
     ui64 columnRecords = portionInfo.Records.size();
     ui64 metadataBytes = 0;
-    THashSet<TUnifiedBlobId> blobs; 
+    THashSet<TUnifiedBlobId> blobs;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.Metadata.size();
-        blobs.insert(rec.BlobRange.BlobId); 
+        blobs.insert(rec.BlobRange.BlobId);
     }
 
     ui32 rows = portionInfo.NumRows();
@@ -411,9 +411,9 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
         case NOlap::TPortionMeta::SPLIT_COMPACTED:
             srcStats = &engineStats.SplitCompacted;
             break;
-        case NOlap::TPortionMeta::INACTIVE: 
-            srcStats = &engineStats.Inactive; 
-            break; 
+        case NOlap::TPortionMeta::INACTIVE:
+            srcStats = &engineStats.Inactive;
+            break;
     }
     Y_VERIFY(srcStats);
     auto* stats = portionInfo.IsActive() ? srcStats : &engineStats.Inactive;
@@ -581,8 +581,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<
             if (PathsGranulesOverloaded.count(pathId)) {
                 return {};
             }
- 
-            // FIXME: Copying all granules of a huge table might be heavy 
+
+            // FIXME: Copying all granules of a huge table might be heavy
             changes->PathToGranule[pathId] = PathGranules[pathId];
         } else {
             ++reserveGranules;
@@ -1251,7 +1251,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         auto& spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
         auto& portions = spg->Portions;
-        bool granuleHasDataForSnaphsot = false; 
+        bool granuleHasDataForSnaphsot = false;
 
         TMap<TSnapshot, TVector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
         for (auto& [snap, vec] : orderedPortions) {
@@ -1268,13 +1268,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     }
                 }
                 out->Portions.emplace_back(std::move(outPortion));
-                granuleHasDataForSnaphsot = true; 
+                granuleHasDataForSnaphsot = true;
             }
         }
- 
-        if (granuleHasDataForSnaphsot) { 
-            out->Granules.push_back(spg->Record); 
-        } 
+
+        if (granuleHasDataForSnaphsot) {
+            out->Granules.push_back(spg->Record);
+        }
     }
 
     return out;
@@ -1361,10 +1361,10 @@ TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
             minSnapshot = insertSnap;
         }
 
-        TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize()); 
-        auto* blobData = changes->Blobs.FindPtr(blobRange); 
-        Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str()); 
-        auto batch = AddSpecials(indexInfo, inserted, *blobData); 
+        TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize());
+        auto* blobData = changes->Blobs.FindPtr(blobRange);
+        Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str());
+        auto batch = AddSpecials(indexInfo, inserted, *blobData);
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), indexInfo.GetReplaceKey()));
     }
@@ -1396,7 +1396,7 @@ TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
 
 static std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(const TIndexInfo& indexInfo, ui64 granule,
                                                                const TVector<TPortionInfo>& portions,
-                                                               const THashMap<TBlobRange, TString>& blobs) { 
+                                                               const THashMap<TBlobRange, TString>& blobs) {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
 

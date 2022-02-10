@@ -155,7 +155,7 @@ message TEvQueryRequest {
 
 message TMkqlProfile {
     optional string Query = 1;
-    optional NKikimrQueryStats.TTxStats TxStats = 2; 
+    optional NKikimrQueryStats.TTxStats TxStats = 2;
 };
 
 message TTransformProfile {

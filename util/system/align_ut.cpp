@@ -1,13 +1,13 @@
-#include "align.h" 
- 
+#include "align.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
-class TAlignTest: public TTestBase { 
+class TAlignTest: public TTestBase {
     UNIT_TEST_SUITE(TAlignTest);
     UNIT_TEST(TestDown)
     UNIT_TEST(TestUp)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     inline void TestDown() {
         UNIT_ASSERT(AlignDown(0, 4) == 0);
@@ -30,6 +30,6 @@ private:
         UNIT_ASSERT(AlignUp(0, 8) == 0);
         UNIT_ASSERT(AlignUp(1, 8) == 8);
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TAlignTest); 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TAlignTest);

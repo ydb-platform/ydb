@@ -363,8 +363,8 @@ size_t TValue::Size() const {
         return Value.ListSize();
     if (Type.HasTuple())
         return Value.TupleSize();
-    if (Type.HasStruct()) 
-        return Value.StructSize(); 
+    if (Type.HasStruct())
+        return Value.StructSize();
     return 0;
 }
 
@@ -416,9 +416,9 @@ TString TValue::GetDataText() const {
     case NScheme::NTypeIds::Datetime:
         return ToString(Value.GetUint32());
     case NScheme::NTypeIds::Timestamp:
-        return ToString(Value.GetUint64()); 
+        return ToString(Value.GetUint64());
     case NScheme::NTypeIds::Interval:
-        return ToString(Value.GetInt64()); 
+        return ToString(Value.GetInt64());
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
     }
@@ -595,8 +595,8 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
             }
         case NScheme::NTypeIds::Uint64:
         case NScheme::NTypeIds::Int64:
-        case NScheme::NTypeIds::Timestamp: 
-        case NScheme::NTypeIds::Interval: 
+        case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Interval:
             return format.UI64AsString ? ("\"" + GetDataText() + "\"") : GetDataText();
         default:
             return GetDataText();

@@ -650,9 +650,9 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         &Service_, \
         CQ, \
         [this](NGrpc::IRequestContextBase* reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer()); \ 
-            ACTION; \ 
-        }, \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer()); \
+            ACTION; \
+        }, \
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
         "Coordination/" #NAME,             \
         logger, \

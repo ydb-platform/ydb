@@ -340,7 +340,7 @@ namespace NTable {
                 for (auto it : xrange(Annex.size()))
                     if (Annex[it].GId != *annex[it]) {
                         Y_FAIL("NRedo EvAnnex isn't match to assigned annex");
-                    } 
+                    }
 
             } else {
                 Annex.reserve(annex.size());

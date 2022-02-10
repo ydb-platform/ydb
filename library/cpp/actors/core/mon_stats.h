@@ -1,16 +1,16 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "actor.h" 
+#pragma once
+
+#include "defs.h"
+#include "actor.h"
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
-#include <util/system/hp_timer.h> 
- 
-namespace NActors { 
+#include <util/system/hp_timer.h>
+
+namespace NActors {
     struct TLogHistogram : public NMonitoring::IHistogramSnapshot {
         TLogHistogram() {
             memset(Buckets, 0, sizeof(Buckets));
         }
- 
+
         inline void Add(ui64 val, ui64 inc = 1) {
             size_t ind = 0;
 #if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7
@@ -27,15 +27,15 @@ namespace NActors {
             RelaxedStore(&TotalSamples, RelaxedLoad(&TotalSamples) + inc);
             RelaxedStore(&Buckets[ind], RelaxedLoad(&Buckets[ind]) + inc);
         }
- 
+
         void Aggregate(const TLogHistogram& other) {
             const ui64 inc = RelaxedLoad(&other.TotalSamples);
             RelaxedStore(&TotalSamples, RelaxedLoad(&TotalSamples) + inc);
             for (size_t i = 0; i < Y_ARRAY_SIZE(Buckets); ++i) {
                 Buckets[i] += RelaxedLoad(&other.Buckets[i]);
             }
-        } 
- 
+        }
+
         // IHistogramSnapshot
         ui32 Count() const override {
             return Y_ARRAY_SIZE(Buckets);
@@ -57,7 +57,7 @@ namespace NActors {
         ui64 TotalSamples = 0;
         ui64 Buckets[65];
     };
- 
+
     struct TExecutorPoolStats {
         ui64 MaxUtilizationTime = 0;
     };
@@ -86,7 +86,7 @@ namespace NActors {
         ui64 MailboxPushedOutBySoftPreemption = 0;
         ui64 MailboxPushedOutByTime = 0;
         ui64 MailboxPushedOutByEventCount = 0;
- 
+
         TExecutorThreadStats(size_t activityVecSize = 1) // must be not empty as 0 used as default
             : ElapsedTicksByActivity(activityVecSize)
             , ReceivedEventsByActivity(activityVecSize)
@@ -103,7 +103,7 @@ namespace NActors {
             for (size_t at = 0; at < otherSize; ++at)
                 self[at] += RelaxedLoad(&other[at]);
         }
- 
+
         void Aggregate(const TExecutorThreadStats& other) {
             SentEvents += RelaxedLoad(&other.SentEvents);
             ReceivedEvents += RelaxedLoad(&other.ReceivedEvents);
@@ -115,9 +115,9 @@ namespace NActors {
             ParkedTicks += RelaxedLoad(&other.ParkedTicks);
             BlockedTicks += RelaxedLoad(&other.BlockedTicks);
             MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
-            MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime); 
-            MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount); 
- 
+            MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
+            MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);
+
             ActivationTimeHistogram.Aggregate(other.ActivationTimeHistogram);
             EventDeliveryTimeHistogram.Aggregate(other.EventDeliveryTimeHistogram);
             EventProcessingCountHistogram.Aggregate(other.EventProcessingCountHistogram);
@@ -143,5 +143,5 @@ namespace NActors {
             return ActorsAliveByActivity.size();
         }
     };
- 
+
 }

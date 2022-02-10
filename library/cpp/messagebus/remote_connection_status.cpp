@@ -202,7 +202,7 @@ TString TRemoteConnectionStatus::PrintToString() const {
 
     p.AddRow("write buffer cap", LeftPad(WriterStatus.BufferSize, 12));
     p.AddRow("read buffer cap", LeftPad(ReaderStatus.BufferSize, 12));
- 
+
     p.AddRow("write buffer drops", LeftPad(WriterStatus.Incremental.BufferDrops, 10));
     p.AddRow("read buffer drops", LeftPad(ReaderStatus.Incremental.BufferDrops, 10));
 

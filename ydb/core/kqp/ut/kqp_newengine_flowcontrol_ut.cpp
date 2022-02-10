@@ -29,7 +29,7 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
     auto result = session.ExecuteDataQuery(R"(
-        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES 
+        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES
             (1u,   "Value-001",  "1"),
             (2u,   "Value-002",  "2"),
             (101u, "Value-101",  "101"),
@@ -75,10 +75,10 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
         .ProfileMode(NExperimental::EStreamQueryProfileMode::Full);
 
     auto result = db.ExecuteStreamQuery(R"(
-            $r = (select * from `/Root/FourShard` where Key > 201); 
+            $r = (select * from `/Root/FourShard` where Key > 201);
 
             SELECT l.Key as key, l.Text as text, r.Value1 as value
-            FROM `/Root/EightShard` AS l JOIN $r AS r ON l.Key = r.Key 
+            FROM `/Root/EightShard` AS l JOIN $r AS r ON l.Key = r.Key
             ORDER BY key, text, value
         )", settings).GetValueSync();
 
@@ -137,7 +137,7 @@ void SlowClient() {
 
         for (int q = 0; q < 100; ++q) {
             TStringBuilder query;
-            query << "REPLACE INTO [/Root/KeyValue] (Key, Value) VALUES (" << q << ", \"" << value << "\")"; 
+            query << "REPLACE INTO [/Root/KeyValue] (Key, Value) VALUES (" << q << ", \"" << value << "\")";
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -146,7 +146,7 @@ void SlowClient() {
 
     NExperimental::TStreamQueryClient db(kikimr.GetDriver());
 
-    auto it = db.ExecuteStreamQuery("SELECT Key, Value FROM `/Root/KeyValue`").GetValueSync(); 
+    auto it = db.ExecuteStreamQuery("SELECT Key, Value FROM `/Root/KeyValue`").GetValueSync();
     auto part = it.ReadNext().GetValueSync();
 
     auto counters = kikimr.GetTestServer().GetRuntime()->GetAppData(0).Counters;

@@ -26,7 +26,7 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
     auto result = session.ExecuteDataQuery(R"(
-        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES 
+        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES
             (1u,   "Value-001",  "1"),
             (2u,   "Value-002",  "2"),
             (101u, "Value-101",  "101"),
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key; 
+            SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key; 
+            SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            --SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key; 
+            --SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
             PRAGMA Kikimr.UseNewEngine = "false";
             DECLARE $value as Utf8;
             SELECT $value as value;
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT min(Message), max(Message) FROM `/Root/Logs` WHERE Ts > 1 and Ts <= 4 or App="ydb" GROUP BY App; 
+            SELECT min(Message), max(Message) FROM `/Root/Logs` WHERE Ts > 1 and Ts <= 4 or App="ydb" GROUP BY App;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -159,14 +159,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto it = db.StreamExecuteScanQuery(R"(
             $join = (
                 SELECT l.Key as Key, l.Text as Text, l.Data as Data, r.Value1 as Value1, r.Value2 as Value2
-                FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
+                FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key
             );
             SELECT Key, COUNT(*) AS Cnt
             FROM $join
             WHERE Cast(Data As Int64) < (Key - 100) and Value1 != 'Value-101'
             GROUP BY Key
             UNION ALL
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1) 
+            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4; 
+            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             PRAGMA Kikimr.OptEnablePredicateExtract = "false";
-            SELECT * FROM `/Root/Logs` WHERE App = "new_app_1" AND Host < "xyz" AND Ts = (42+7) Limit 10; 
+            SELECT * FROM `/Root/Logs` WHERE App = "new_app_1" AND Host < "xyz" AND Ts = (42+7) Limit 10;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Text; 
+            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Text;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/EightShard` ORDER BY Text LIMIT 10 OFFSET 15; 
+            SELECT * FROM `/Root/EightShard` ORDER BY Text LIMIT 10 OFFSET 15;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -299,14 +299,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto it = db.StreamExecuteScanQuery(R"(
             $foo = (
                 SELECT t1.Key AS Key
-                FROM `/Root/KeyValue` AS t1 
-                JOIN `/Root/KeyValue` AS t2 
+                FROM `/Root/KeyValue` AS t1
+                JOIN `/Root/KeyValue` AS t2
                 ON t1.Key = t2.Key
                 GROUP BY t1.Key
             );
             SELECT t1.Key AS Key
             FROM $foo AS Foo
-            JOIN `/Root/KeyValue` AS t1 
+            JOIN `/Root/KeyValue` AS t1
             ON t1.Key = Foo.Key
             ORDER BY Key
         )", settings).GetValueSync();
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            select count(*) from `/Root/KeyValue` AS t1 join `/Root/KeyValue` AS t2 on t1.Key = t2.Key; 
+            select count(*) from `/Root/KeyValue` AS t1 join `/Root/KeyValue` AS t2 on t1.Key = t2.Key;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -457,9 +457,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto result = session.ExplainDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
-            UPDATE `/Root/EightShard` SET Data=Data+1; 
-            UPDATE `/Root/EightShard` SET Data=Data-1 WHERE Key In (100,200,300); 
-            DELETE FROM `/Root/EightShard` WHERE Key > 350; 
+            UPDATE `/Root/EightShard` SET Data=Data+1;
+            UPDATE `/Root/EightShard` SET Data=Data-1 WHERE Key In (100,200,300);
+            DELETE FROM `/Root/EightShard` WHERE Key > 350;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

@@ -187,8 +187,8 @@ public:
     bool AccessRightsEffective;
     bool BackupInfo;
     bool Protobuf;
-    bool PartitionStats; 
-    bool Boundaries; 
+    bool PartitionStats;
+    bool Boundaries;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -198,8 +198,8 @@ public:
         AccessRightsEffective = false;
         BackupInfo = false;
         Protobuf = false;
-        PartitionStats = false; 
-        Boundaries = false; 
+        PartitionStats = false;
+        Boundaries = false;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Schema path or pathId (e.g. 72075186232623600/1225)");
         config.Opts->AddLongOption('t', "tree", "Show schema path tree").NoArgument().SetFlag(&Tree);
@@ -208,37 +208,37 @@ public:
         config.Opts->AddLongOption('e', "effacl", "Show effective acl information").NoArgument().SetFlag(&AccessRightsEffective);
         config.Opts->AddLongOption('b', "backup", "Show backup information").NoArgument().SetFlag(&BackupInfo);
         config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").NoArgument().SetFlag(&Protobuf);
-        config.Opts->AddLongOption('s', "stats", "Return partition stats").NoArgument().SetFlag(&PartitionStats); 
-        config.Opts->AddLongOption("boundaries", "Return boundaries").NoArgument().SetFlag(&Boundaries); 
+        config.Opts->AddLongOption('s', "stats", "Return partition stats").NoArgument().SetFlag(&PartitionStats);
+        config.Opts->AddLongOption("boundaries", "Return boundaries").NoArgument().SetFlag(&Boundaries);
     }
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Request = new NKikimrClient::TSchemeDescribe();
         Path = config.ParseResult->GetFreeArgs()[0];
-        if (Path.StartsWith('/')) { 
-            Request->SetPath(Path); 
-        } else { 
-            // treat path as PathId like '72075186232623600/1225' 
+        if (Path.StartsWith('/')) {
+            Request->SetPath(Path);
+        } else {
+            // treat path as PathId like '72075186232623600/1225'
             TVector<TString> fields;
-            Split(Path, "/", fields); 
-            if (fields.size() != 2) { 
-                Cerr << "Invaid path or pathId: " << Path << Endl; 
-                exit(1); 
-            } 
-            ui64 schemeshardId = FromString<ui64>(fields[0]); 
-            ui32 pathId = FromString<ui32>(fields[1]); 
-            Request->SetSchemeshardId(schemeshardId); 
-            Request->SetPathId(pathId); 
-        } 
-        auto options = Request->MutableOptions(); 
-        options->SetBackupInfo(BackupInfo); 
-        options->SetReturnPartitionStats(PartitionStats); 
-        options->SetReturnBoundaries(Boundaries); 
-        options->SetReturnPartitioningInfo(!Boundaries); 
-        options->SetShowPrivateTable(true); 
- 
-        Protobuf = Protobuf || PartitionStats || Boundaries; 
+            Split(Path, "/", fields);
+            if (fields.size() != 2) {
+                Cerr << "Invaid path or pathId: " << Path << Endl;
+                exit(1);
+            }
+            ui64 schemeshardId = FromString<ui64>(fields[0]);
+            ui32 pathId = FromString<ui32>(fields[1]);
+            Request->SetSchemeshardId(schemeshardId);
+            Request->SetPathId(pathId);
+        }
+        auto options = Request->MutableOptions();
+        options->SetBackupInfo(BackupInfo);
+        options->SetReturnPartitionStats(PartitionStats);
+        options->SetReturnBoundaries(Boundaries);
+        options->SetReturnPartitioningInfo(!Boundaries);
+        options->SetShowPrivateTable(true);
+
+        Protobuf = Protobuf || PartitionStats || Boundaries;
     }
 
     void PadString(TString& str, size_t size) {
@@ -261,10 +261,10 @@ public:
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
             type = "<column store>";
-            break; 
+            break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
             type = "<column table>";
-            break; 
+            break;
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
             break;
@@ -341,13 +341,13 @@ public:
             }
             case NKikimrSchemeOp::EPathTypePersQueueGroup: {
                 const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroup(path.GetPersQueueGroup());
-                for (ui32 pi = 0; pi < pqGroup.PartitionsSize(); ++pi) { 
-                    const auto& partition = pqGroup.GetPartitions(pi); 
+                for (ui32 pi = 0; pi < pqGroup.PartitionsSize(); ++pi) {
+                    const auto& partition = pqGroup.GetPartitions(pi);
                     TString partitionId = Sprintf("  %6" PRIu32 " ", partition.GetPartitionId());
-                    Cout << partitionId << "│" << partition.GetTabletId() << Endl; 
-                } 
+                    Cout << partitionId << "│" << partition.GetTabletId() << Endl;
+                }
                 break;
-            } 
+            }
             default:
                 break;
             }
@@ -476,10 +476,10 @@ public:
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
             type = "<column store>";
-            break; 
+            break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
             type = "<column table>";
-            break; 
+            break;
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
             break;
@@ -1330,124 +1330,124 @@ public:
 };
 
 
-class TClientCommandS3Listing: public TClientCommand { 
-public: 
-    TClientCommandS3Listing() 
-        : TClientCommand("s3-listing", {}, "S3 bucket listing") 
-    {} 
- 
-    virtual void Config(TConfig& config) override { 
-        TClientCommand::Config(config); 
-        config.Opts->AddLongOption("prefix-columns", "Key prefix with all columns that preceed path-column") 
-            .RequiredArgument("VALUE").StoreResult(&PrefixColumns); 
-        config.Opts->AddLongOption("path-prefix", "Path prefix") 
-            .RequiredArgument("STR").StoreResult(&PathPrefix).DefaultValue(""); 
-        config.Opts->AddLongOption("path-delimiter", "Path delimiter") 
-            .RequiredArgument("STR").StoreResult(&PathDelimiter).DefaultValue(""); 
-        config.Opts->AddLongOption("start-after", "Start after the specified suffix starting with path column") 
-            .RequiredArgument("STR").StoreResult(&StartAfter).DefaultValue(""); 
-        config.Opts->AddLongOption("max-keys", "Maximum number of key to return") 
-            .RequiredArgument("NUM").StoreResult(&MaxKeys).DefaultValue("1000"); 
-        config.Opts->AddLongOption("columns", "Comma separated list of columns to read") 
-            .RequiredArgument("NAMES").StoreResult(&Columns); 
+class TClientCommandS3Listing: public TClientCommand {
+public:
+    TClientCommandS3Listing()
+        : TClientCommand("s3-listing", {}, "S3 bucket listing")
+    {}
+
+    virtual void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+        config.Opts->AddLongOption("prefix-columns", "Key prefix with all columns that preceed path-column")
+            .RequiredArgument("VALUE").StoreResult(&PrefixColumns);
+        config.Opts->AddLongOption("path-prefix", "Path prefix")
+            .RequiredArgument("STR").StoreResult(&PathPrefix).DefaultValue("");
+        config.Opts->AddLongOption("path-delimiter", "Path delimiter")
+            .RequiredArgument("STR").StoreResult(&PathDelimiter).DefaultValue("");
+        config.Opts->AddLongOption("start-after", "Start after the specified suffix starting with path column")
+            .RequiredArgument("STR").StoreResult(&StartAfter).DefaultValue("");
+        config.Opts->AddLongOption("max-keys", "Maximum number of key to return")
+            .RequiredArgument("NUM").StoreResult(&MaxKeys).DefaultValue("1000");
+        config.Opts->AddLongOption("columns", "Comma separated list of columns to read")
+            .RequiredArgument("NAMES").StoreResult(&Columns);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "path to table");
-    } 
- 
-    virtual void Parse(TConfig& config) override { 
-        TClientCommand::Parse(config); 
-        Table = config.ParseResult->GetFreeArgs()[0]; 
-    } 
- 
-    virtual int Run(TConfig& config) override { 
-        auto handler = [this](NClient::TKikimr& kikimr) { 
-            TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> req(new NMsgBusProxy::TBusS3ListingRequest()); 
- 
-            req->Record.SetTableName(Table); 
-            req->Record.SetPathColumnPrefix(PathPrefix); 
-            req->Record.SetPathColumnDelimiter(PathDelimiter); 
-            req->Record.SetMaxKeys(MaxKeys); 
- 
-            if (PrefixColumns) { 
-                auto &value = *req->Record.MutableKeyPrefix()->MutableValue(); 
-                auto &type = *req->Record.MutableKeyPrefix()->MutableType(); 
-                type.SetKind(NKikimrMiniKQL::Tuple); 
-                for (auto &s : StringSplitter(PrefixColumns).Split(',').ToList<TString>()) { 
-                    *value.AddTuple()->MutableOptional()->MutableText() = s; 
-                    auto &elem = *type.MutableTuple()->AddElement(); 
-                    elem.SetKind(NKikimrMiniKQL::Optional); 
-                    auto &item = *elem.MutableOptional()->MutableItem(); 
-                    item.SetKind(NKikimrMiniKQL::Data); 
-                    item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id); 
-                } 
-            } 
- 
-            if (StartAfter) { 
-                auto &value = *req->Record.MutableStartAfterKeySuffix()->MutableValue(); 
-                auto &type = *req->Record.MutableStartAfterKeySuffix()->MutableType(); 
-                type.SetKind(NKikimrMiniKQL::Tuple); 
-                for (auto &s : StringSplitter(StartAfter).Split(',').ToList<TString>()) { 
-                    *value.AddTuple()->MutableOptional()->MutableText() = s; 
-                    auto &elem = *type.MutableTuple()->AddElement(); 
-                    elem.SetKind(NKikimrMiniKQL::Optional); 
-                    auto &item = *elem.MutableOptional()->MutableItem(); 
-                    item.SetKind(NKikimrMiniKQL::Data); 
-                    item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id); 
-                } 
-            } 
- 
-            if (Columns) { 
-                for (const auto& c : StringSplitter(Columns).Split(',').ToList<TString>()) { 
-                    req->Record.AddColumnsToReturn(c); 
-                } 
-            } 
- 
-            NThreading::TFuture<NClient::TResult> future = kikimr.ExecuteRequest(req.Release()); 
- 
-            return HandleResponse<NClient::TResult>(future, [](const NClient::TResult& result) -> int { 
-                PrintResponse(result); 
-                return 0; 
-            }); 
-        }; 
-        return InvokeThroughKikimr(config, std::move(handler)); 
-    } 
- 
-    static int PrintResponse(const NClient::TResult &result) { 
-        auto error = result.GetError(); 
-        if (!result.GetError().Success()) { 
-            Cerr << error.GetCode() << Endl 
-                 << error.GetMessage() << Endl; 
-            return 1; 
-        } 
- 
-        const NKikimrClient::TS3ListingResponse& response = result.GetResponse<NMsgBusProxy::TBusS3ListingResponse>().Record; 
- 
-        ui32 status = response.GetStatus(); 
-        if (status != NMsgBusProxy::MSTATUS_OK) { 
-            TString name; 
-            TString descr; 
-            NMsgBusProxy::ExplainResponseStatus(status, name, descr); 
-            Cerr << name << Endl 
-                 << descr << Endl 
-                 << response.GetDescription() << Endl; 
-            return 1; 
-        } 
- 
-        const NKikimrMiniKQL::TResult& res = response.GetResult(); 
-        auto resVal = NClient::TValue::Create(res.GetValue(), res.GetType()); 
-        Cout << resVal.GetValueText<NClient::TFormatJSON>() << Endl; 
-        return 0; 
-    } 
- 
-    TString Table; 
-    TString PrefixColumns; 
-    TString PathPrefix; 
-    TString PathDelimiter; 
-    TString StartAfter; 
-    ui32 MaxKeys; 
-    TString Columns; 
-}; 
- 
+    }
+
+    virtual void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+        Table = config.ParseResult->GetFreeArgs()[0];
+    }
+
+    virtual int Run(TConfig& config) override {
+        auto handler = [this](NClient::TKikimr& kikimr) {
+            TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> req(new NMsgBusProxy::TBusS3ListingRequest());
+
+            req->Record.SetTableName(Table);
+            req->Record.SetPathColumnPrefix(PathPrefix);
+            req->Record.SetPathColumnDelimiter(PathDelimiter);
+            req->Record.SetMaxKeys(MaxKeys);
+
+            if (PrefixColumns) {
+                auto &value = *req->Record.MutableKeyPrefix()->MutableValue();
+                auto &type = *req->Record.MutableKeyPrefix()->MutableType();
+                type.SetKind(NKikimrMiniKQL::Tuple);
+                for (auto &s : StringSplitter(PrefixColumns).Split(',').ToList<TString>()) {
+                    *value.AddTuple()->MutableOptional()->MutableText() = s;
+                    auto &elem = *type.MutableTuple()->AddElement();
+                    elem.SetKind(NKikimrMiniKQL::Optional);
+                    auto &item = *elem.MutableOptional()->MutableItem();
+                    item.SetKind(NKikimrMiniKQL::Data);
+                    item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
+                }
+            }
+
+            if (StartAfter) {
+                auto &value = *req->Record.MutableStartAfterKeySuffix()->MutableValue();
+                auto &type = *req->Record.MutableStartAfterKeySuffix()->MutableType();
+                type.SetKind(NKikimrMiniKQL::Tuple);
+                for (auto &s : StringSplitter(StartAfter).Split(',').ToList<TString>()) {
+                    *value.AddTuple()->MutableOptional()->MutableText() = s;
+                    auto &elem = *type.MutableTuple()->AddElement();
+                    elem.SetKind(NKikimrMiniKQL::Optional);
+                    auto &item = *elem.MutableOptional()->MutableItem();
+                    item.SetKind(NKikimrMiniKQL::Data);
+                    item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
+                }
+            }
+
+            if (Columns) {
+                for (const auto& c : StringSplitter(Columns).Split(',').ToList<TString>()) {
+                    req->Record.AddColumnsToReturn(c);
+                }
+            }
+
+            NThreading::TFuture<NClient::TResult> future = kikimr.ExecuteRequest(req.Release());
+
+            return HandleResponse<NClient::TResult>(future, [](const NClient::TResult& result) -> int {
+                PrintResponse(result);
+                return 0;
+            });
+        };
+        return InvokeThroughKikimr(config, std::move(handler));
+    }
+
+    static int PrintResponse(const NClient::TResult &result) {
+        auto error = result.GetError();
+        if (!result.GetError().Success()) {
+            Cerr << error.GetCode() << Endl
+                 << error.GetMessage() << Endl;
+            return 1;
+        }
+
+        const NKikimrClient::TS3ListingResponse& response = result.GetResponse<NMsgBusProxy::TBusS3ListingResponse>().Record;
+
+        ui32 status = response.GetStatus();
+        if (status != NMsgBusProxy::MSTATUS_OK) {
+            TString name;
+            TString descr;
+            NMsgBusProxy::ExplainResponseStatus(status, name, descr);
+            Cerr << name << Endl
+                 << descr << Endl
+                 << response.GetDescription() << Endl;
+            return 1;
+        }
+
+        const NKikimrMiniKQL::TResult& res = response.GetResult();
+        auto resVal = NClient::TValue::Create(res.GetValue(), res.GetType());
+        Cout << resVal.GetValueText<NClient::TFormatJSON>() << Endl;
+        return 0;
+    }
+
+    TString Table;
+    TString PrefixColumns;
+    TString PathPrefix;
+    TString PathDelimiter;
+    TString StartAfter;
+    ui32 MaxKeys;
+    TString Columns;
+};
+
 TClientCommandDb::TClientCommandDb()
     : TClientCommandTree("db", {}, "KiKiMR DB operations")
 {

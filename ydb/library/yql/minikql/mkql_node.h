@@ -280,82 +280,82 @@ class TTupleLiteral;
 class TResourceType;
 class TDataType;
 
- 
-// A non-owning reference to internalized string 
-// Created only by TTypeEnvironment::InternName 
-class TInternName { 
-public: 
-    TInternName() 
-    {} 
- 
-    TInternName(const TInternName& other) 
-        : StrBuf(other.StrBuf) 
-    {} 
- 
-    const TInternName& operator = (const TInternName& other) { 
-        StrBuf = other.StrBuf; 
-        return *this; 
-    } 
- 
-    size_t Hash() const { 
-        return (size_t)StrBuf.data(); 
-    } 
- 
-    operator bool() const { 
-        return (bool)StrBuf; 
-    } 
- 
-    const TStringBuf& Str() const { 
-        return StrBuf; 
-    } 
- 
-    // Optimized comparison (only by pointer) 
-    bool operator == (const TInternName& other) const { 
-        Y_VERIFY_DEBUG(StrBuf.data() != other.StrBuf.data() || StrBuf.size() == other.StrBuf.size(), 
-                       "Lengths must be equal if pointers are equal"); 
-        return StrBuf.data() == other.StrBuf.data(); 
-    } 
- 
-    bool operator != (const TInternName& other) const { 
-        return !this->operator ==(other); 
-    } 
- 
-    // Regular comparison (by content) 
-    bool operator == (const TStringBuf& other) const { 
-        return StrBuf == other; 
-    } 
- 
-    bool operator != (const TStringBuf& other) const { 
-        return !this->operator ==(other); 
-    } 
- 
-private: 
-    friend class TTypeEnvironment; 
- 
-    explicit TInternName(const TStringBuf& strBuf) 
-        : StrBuf(strBuf) 
-    {} 
- 
-private: 
-    TStringBuf StrBuf; 
-}; 
- 
-}} // namespaces 
- 
-template <> 
-struct THash<NKikimr::NMiniKQL::TInternName> { 
-    size_t operator ()(const NKikimr::NMiniKQL::TInternName& val) const { 
-        return val.Hash(); 
-    } 
-}; 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+
+// A non-owning reference to internalized string
+// Created only by TTypeEnvironment::InternName
+class TInternName {
+public:
+    TInternName()
+    {}
+
+    TInternName(const TInternName& other)
+        : StrBuf(other.StrBuf)
+    {}
+
+    const TInternName& operator = (const TInternName& other) {
+        StrBuf = other.StrBuf;
+        return *this;
+    }
+
+    size_t Hash() const {
+        return (size_t)StrBuf.data();
+    }
+
+    operator bool() const {
+        return (bool)StrBuf;
+    }
+
+    const TStringBuf& Str() const {
+        return StrBuf;
+    }
+
+    // Optimized comparison (only by pointer)
+    bool operator == (const TInternName& other) const {
+        Y_VERIFY_DEBUG(StrBuf.data() != other.StrBuf.data() || StrBuf.size() == other.StrBuf.size(),
+                       "Lengths must be equal if pointers are equal");
+        return StrBuf.data() == other.StrBuf.data();
+    }
+
+    bool operator != (const TInternName& other) const {
+        return !this->operator ==(other);
+    }
+
+    // Regular comparison (by content)
+    bool operator == (const TStringBuf& other) const {
+        return StrBuf == other;
+    }
+
+    bool operator != (const TStringBuf& other) const {
+        return !this->operator ==(other);
+    }
+
+private:
+    friend class TTypeEnvironment;
+
+    explicit TInternName(const TStringBuf& strBuf)
+        : StrBuf(strBuf)
+    {}
+
+private:
+    TStringBuf StrBuf;
+};
+
+}} // namespaces
+
+template <>
+struct THash<NKikimr::NMiniKQL::TInternName> {
+    size_t operator ()(const NKikimr::NMiniKQL::TInternName& val) const {
+        return val.Hash();
+    }
+};
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 class TTypeEnvironment : private TNonCopyable {
 public:
     explicit TTypeEnvironment(TScopedAlloc& alloc);
- 
+
     ~TTypeEnvironment();
 
     template <typename T>
@@ -367,18 +367,18 @@ public:
         return Arena.Alloc(size);
     }
 
-    TInternName InternName(const TStringBuf& name) const { 
+    TInternName InternName(const TStringBuf& name) const {
         auto it = NamesPool.find(name);
         if (it != NamesPool.end()) {
-            return TInternName(*it); 
+            return TInternName(*it);
         }
 
-        // Copy to arena and null-terminate 
-        char* data = (char*)AllocateBuffer(name.size()+1); 
-        memcpy(data, name.data(), name.size()); 
-        data[name.size()] = 0; 
+        // Copy to arena and null-terminate
+        char* data = (char*)AllocateBuffer(name.size()+1);
+        memcpy(data, name.data(), name.size());
+        data[name.size()] = 0;
 
-        return TInternName(*NamesPool.insert(TStringBuf(data, name.size())).first); 
+        return TInternName(*NamesPool.insert(TStringBuf(data, name.size())).first);
     }
 
     TTypeType* GetTypeOfType() const {
@@ -625,10 +625,10 @@ public:
 
     TStringBuf GetMemberName(ui32 index) const {
         Y_VERIFY_DEBUG(index < MembersCount);
-        return Members[index].first.Str(); 
+        return Members[index].first.Str();
     }
 
-    TInternName GetMemberNameStr(ui32 index) const { 
+    TInternName GetMemberNameStr(ui32 index) const {
         Y_VERIFY_DEBUG(index < MembersCount);
         return Members[index].first;
     }
@@ -642,7 +642,7 @@ public:
     TMaybe<ui32> FindMemberIndex(const TStringBuf& name) const;
 
 private:
-    TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env, bool validate = true); 
+    TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env, bool validate = true);
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
@@ -650,7 +650,7 @@ private:
 
 private:
     ui32 MembersCount;
-    std::pair<TInternName, TType*>* Members; 
+    std::pair<TInternName, TType*>* Members;
 };
 
 class TStructLiteral : public TNode {
@@ -939,10 +939,10 @@ public:
     bool IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged = false) const;
 
     TStringBuf GetName() const {
-        return Name.Str(); 
+        return Name.Str();
     }
 
-    TInternName GetNameStr() const { 
+    TInternName GetNameStr() const {
         return Name;
     }
 
@@ -972,7 +972,7 @@ public:
     }
 
 private:
-    TCallableType(const TInternName& name, TType* returnType, ui32 argumentsCount, TType** arguments, 
+    TCallableType(const TInternName& name, TType* returnType, ui32 argumentsCount, TType** arguments,
         TNode* payload, const TTypeEnvironment& env);
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
@@ -982,7 +982,7 @@ private:
 private:
     bool IsMergeDisabled0;
     ui32 ArgumentsCount;
-    TInternName Name; 
+    TInternName Name;
     TType* ReturnType;
     TType** Arguments;
     TNode* Payload;
@@ -1016,7 +1016,7 @@ public:
         return Result;
     }
 
-    void SetResult(TRuntimeNode result, const TTypeEnvironment& env); 
+    void SetResult(TRuntimeNode result, const TTypeEnvironment& env);
     ui32 GetUniqueId() const {
         return UniqueId;
     }
@@ -1189,17 +1189,17 @@ public:
     bool IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged = false) const;
 
     TStringBuf GetTag() const {
-        return Tag.Str(); 
+        return Tag.Str();
     }
 
-    TInternName GetTagStr() const { 
+    TInternName GetTagStr() const {
         return Tag;
     }
 
     static TResourceType* Create(const TStringBuf& tag, const TTypeEnvironment& env);
 
 private:
-    TResourceType(TTypeType* type, TInternName tag) 
+    TResourceType(TTypeType* type, TInternName tag)
         : TType(EKind::Resource, type)
         , Tag(tag)
     {}
@@ -1209,7 +1209,7 @@ private:
     void DoFreeze(const TTypeEnvironment& env);
 
 private:
-    TInternName const Tag; 
+    TInternName const Tag;
 };
 
 class TTaggedType : public TType {

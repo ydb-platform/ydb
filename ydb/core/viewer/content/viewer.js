@@ -1498,10 +1498,10 @@ function tabletTypeToSymbol(type) {
         return "TB";
     case "Kesus":
         return "K";
-    case "OlapShard": 
-        return "OS"; 
-    case "ColumnShard": 
-        return "CS"; 
+    case "OlapShard":
+        return "OS";
+    case "ColumnShard":
+        return "CS";
     case "SequenceShard":
         return "S";
     case "ReplicationController":
@@ -1902,10 +1902,10 @@ function getTabletTypeFromHiveTabletType(type) {
         return "KeyValue";
     case 20:
         return "PersQueue";
-    case 34: 
-        return "OlapShard"; 
-    case 35: 
-        return "ColumnShard"; 
+    case 34:
+        return "OlapShard";
+    case 35:
+        return "ColumnShard";
     }
     return type;
 }
@@ -2457,29 +2457,29 @@ function onTreeDataComplete(result, obj, cb) {
                 child.parent = result.Path;
                 child.text = result.PathDescription.Children[i].Name;
                 switch (result.PathDescription.Children[i].PathType) {
-                case 1:     // Directory 
+                case 1:     // Directory
                     child.children = true;
                     child.icon = "glyphicon glyphicon-folder-close schema-good";
                     break;
-                case 2:     // Table 
+                case 2:     // Table
                     child.children = true;
                     child.icon = "glyphicon glyphicon-list schema-good";
                     break;
-                case 3:     // PQ Group 
+                case 3:     // PQ Group
                     child.icon = "glyphicon glyphicon-sort-by-alphabet schema-good";
                     break;
-                case 4:     // SubDomain 
+                case 4:     // SubDomain
                     child.children = true;
                     child.icon = "glyphicon glyphicon-tasks schema-good";
                     break;
-                case 10:    // ExtSubDomain 
+                case 10:    // ExtSubDomain
                     child.children = true;
                     child.icon = "glyphicon glyphicon-asterisk schema-good";
                     break;
-                case 12:    // OlapStore 
-                    child.children = true; 
-                    child.icon = "glyphicon glyphicon-list schema-good"; 
-                    break; 
+                case 12:    // OlapStore
+                    child.children = true;
+                    child.icon = "glyphicon glyphicon-list schema-good";
+                    break;
                 }
                 child.data = function(obj1, cb1) { onTreeData(obj1, cb1); };
                 children.push(child);
@@ -2822,25 +2822,25 @@ function onTreeNodeComplete(result, obj) {
                 }
             }
         }
-        if (result.PathDescription.Self.PathType === 12) { 
-            var olapStore = result.PathDescription.OlapStoreDescription; 
-            if (olapStore !== undefined) { 
-                if (olapStore.OlapShards !== undefined) { 
-                    tabLen = olapStore.OlapShards.length; 
-                    for (var k = 0; k < tabLen; k++) { 
-                        tablet = String(olapStore.OlapShards[k]); 
-                        SchemaTabletElements[tablet] = null; 
-                    } 
-                } 
-                if (olapStore.ColumnShards !== undefined) { 
-                    tabLen = olapStore.ColumnShards.length; 
-                    for (var k = 0; k < tabLen; k++) { 
-                        tablet = String(olapStore.ColumnShards[k]); 
-                        SchemaTabletElements[tablet] = null; 
-                    } 
-                } 
-            } 
-        } 
+        if (result.PathDescription.Self.PathType === 12) {
+            var olapStore = result.PathDescription.OlapStoreDescription;
+            if (olapStore !== undefined) {
+                if (olapStore.OlapShards !== undefined) {
+                    tabLen = olapStore.OlapShards.length;
+                    for (var k = 0; k < tabLen; k++) {
+                        tablet = String(olapStore.OlapShards[k]);
+                        SchemaTabletElements[tablet] = null;
+                    }
+                }
+                if (olapStore.ColumnShards !== undefined) {
+                    tabLen = olapStore.ColumnShards.length;
+                    for (var k = 0; k < tabLen; k++) {
+                        tablet = String(olapStore.ColumnShards[k]);
+                        SchemaTabletElements[tablet] = null;
+                    }
+                }
+            }
+        }
     }
 
     if (result.PathDescription.Self.PathType === 7) {
@@ -2901,8 +2901,8 @@ function onTreeNodeComplete(result, obj) {
         onTreeNodeTabletsComplete();
     }
 
-    if (result.PathDescription !== undefined && result.PathDescription.Children !== undefined 
-        && result.PathDescription.Self.PathType !== 4 && result.PathDescription.Self.PathType !== 12) { 
+    if (result.PathDescription !== undefined && result.PathDescription.Children !== undefined
+        && result.PathDescription.Self.PathType !== 4 && result.PathDescription.Self.PathType !== 12) {
         onTreeNodeChildrenComplete(result.Path, result.PathDescription.Children);
     }
 
@@ -2982,62 +2982,62 @@ function onTreeNodeComplete(result, obj) {
             row.insertCell(-1).innerHTML = "Last Update";
             row.insertCell(-1).innerHTML = (new Date(Number(stats.LastUpdateTime))).toISOString();
         }
-        if (stats.ImmediateTxCompleted && Number(stats.ImmediateTxCompleted)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Immediate Tx Completed"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.ImmediateTxCompleted); 
-        } 
-        if (stats.PlannedTxCompleted && Number(stats.PlannedTxCompleted)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Planned Tx Completed"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.PlannedTxCompleted); 
-        } 
-        if (stats.TxRejectedByOverload && Number(stats.TxRejectedByOverload)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Tx Rejected by Overload"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.TxRejectedByOverload); 
-        } 
-        if (stats.TxRejectedBySpace && Number(stats.TxRejectedBySpace)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Tx Rejected by Space"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.TxRejectedBySpace); 
-        } 
-        if (stats.TxCompleteLagMsec && Number(stats.TxCompleteLagMsec)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Tx completion lag (msec)"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.TxCompleteLagMsec); 
-        } 
-        if (stats.InFlightTxCount && Number(stats.InFlightTxCount)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "In flight Tx count"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.InFlightTxCount); 
-        } 
- 
-        if (stats.RowUpdates && Number(stats.RowUpdates)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Row Updates"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.RowUpdates); 
-        } 
-        if (stats.RowDeletes && Number(stats.RowDeletes)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Row Deletes"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.RowDeletes); 
-        } 
-        if (stats.RowReads && Number(stats.RowReads)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Row Reads"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.RowReads); 
-        } 
-        if (stats.RangeReads && Number(stats.RangeReads)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Range Reads"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.RangeReads); 
-        } 
-        if (stats.RangeReadRows && Number(stats.RangeReadRows)) { 
-            row = tab.insertRow(-1); 
-            row.insertCell(-1).innerHTML = "Range Read Rows"; 
-            row.insertCell(-1).innerHTML = valueToNumber(stats.RangeReadRows); 
-        } 
+        if (stats.ImmediateTxCompleted && Number(stats.ImmediateTxCompleted)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Immediate Tx Completed";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.ImmediateTxCompleted);
+        }
+        if (stats.PlannedTxCompleted && Number(stats.PlannedTxCompleted)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Planned Tx Completed";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.PlannedTxCompleted);
+        }
+        if (stats.TxRejectedByOverload && Number(stats.TxRejectedByOverload)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Tx Rejected by Overload";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.TxRejectedByOverload);
+        }
+        if (stats.TxRejectedBySpace && Number(stats.TxRejectedBySpace)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Tx Rejected by Space";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.TxRejectedBySpace);
+        }
+        if (stats.TxCompleteLagMsec && Number(stats.TxCompleteLagMsec)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Tx completion lag (msec)";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.TxCompleteLagMsec);
+        }
+        if (stats.InFlightTxCount && Number(stats.InFlightTxCount)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "In flight Tx count";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.InFlightTxCount);
+        }
+
+        if (stats.RowUpdates && Number(stats.RowUpdates)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Row Updates";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.RowUpdates);
+        }
+        if (stats.RowDeletes && Number(stats.RowDeletes)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Row Deletes";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.RowDeletes);
+        }
+        if (stats.RowReads && Number(stats.RowReads)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Row Reads";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.RowReads);
+        }
+        if (stats.RangeReads && Number(stats.RangeReads)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Range Reads";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.RangeReads);
+        }
+        if (stats.RangeReadRows && Number(stats.RangeReadRows)) {
+            row = tab.insertRow(-1);
+            row.insertCell(-1).innerHTML = "Range Read Rows";
+            row.insertCell(-1).innerHTML = valueToNumber(stats.RangeReadRows);
+        }
     }
 
     if (result.PathDescription.PersQueueGroup !== undefined) {

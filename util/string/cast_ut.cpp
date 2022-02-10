@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         f = FromString<TFloat>(str);
         UNIT_ASSERT_DOUBLES_EQUAL(f, canonValue, eps);
     }
- 
+
     template <class TFloat>
     void BadFloatTester(const char* str) {
         const double eps = 10E-5;
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_EXCEPTION(f = FromString<TFloat>(str), TFromStringException);
         Y_UNUSED(f); // shut up compiler about 'assigned value that is not used'
     }
- 
+
     Y_UNIT_TEST(TestToFrom) {
         test1(bool, true);
         test1(bool, false);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         BadFloatTester<long double>("10e 2");
         BadFloatTester<long double>(""); // IGNIETFERRO-300
     }
- 
+
     Y_UNIT_TEST(TestLiteral) {
         UNIT_ASSERT_VALUES_EQUAL(ToString("abc"), TString("abc"));
     }

@@ -32,40 +32,40 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TSplitSettings { 
-    TControlWrapper SplitMergePartCountLimit; 
-    TControlWrapper FastSplitSizeThreshold; 
-    TControlWrapper FastSplitRowCountThreshold; 
-    TControlWrapper FastSplitCpuPercentageThreshold; 
-    TControlWrapper SplitByLoadEnabled; 
-    TControlWrapper SplitByLoadMaxShardsDefault; 
-    TControlWrapper MergeByLoadMinUptimeSec; 
-    TControlWrapper MergeByLoadMinLowLoadDurationSec; 
- 
-    TSplitSettings() 
-        : SplitMergePartCountLimit(2000, -1, 1000000) 
-        , FastSplitSizeThreshold(4*1000*1000, 100*1000, 4ll*1000*1000*1000) 
-        , FastSplitRowCountThreshold(100*1000, 1000, 1ll*1000*1000*1000) 
-        , FastSplitCpuPercentageThreshold(50, 1, 146) 
-        , SplitByLoadEnabled(1, 0, 1) 
-        , SplitByLoadMaxShardsDefault(50, 0, 10000) 
-        , MergeByLoadMinUptimeSec(10*60, 0, 4ll*1000*1000*1000) 
-        , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000) 
-    {} 
- 
-    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) { 
-        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShard_SplitMergePartCountLimit"); 
-        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShard_FastSplitSizeThreshold"); 
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShard_FastSplitRowCountThreshold"); 
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShard_FastSplitCpuPercentageThreshold"); 
- 
-        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShard_SplitByLoadEnabled"); 
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault"); 
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec"); 
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec"); 
-    } 
-}; 
- 
+struct TSplitSettings {
+    TControlWrapper SplitMergePartCountLimit;
+    TControlWrapper FastSplitSizeThreshold;
+    TControlWrapper FastSplitRowCountThreshold;
+    TControlWrapper FastSplitCpuPercentageThreshold;
+    TControlWrapper SplitByLoadEnabled;
+    TControlWrapper SplitByLoadMaxShardsDefault;
+    TControlWrapper MergeByLoadMinUptimeSec;
+    TControlWrapper MergeByLoadMinLowLoadDurationSec;
+
+    TSplitSettings()
+        : SplitMergePartCountLimit(2000, -1, 1000000)
+        , FastSplitSizeThreshold(4*1000*1000, 100*1000, 4ll*1000*1000*1000)
+        , FastSplitRowCountThreshold(100*1000, 1000, 1ll*1000*1000*1000)
+        , FastSplitCpuPercentageThreshold(50, 1, 146)
+        , SplitByLoadEnabled(1, 0, 1)
+        , SplitByLoadMaxShardsDefault(50, 0, 10000)
+        , MergeByLoadMinUptimeSec(10*60, 0, 4ll*1000*1000*1000)
+        , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShard_SplitMergePartCountLimit");
+        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShard_FastSplitSizeThreshold");
+        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShard_FastSplitRowCountThreshold");
+        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShard_FastSplitCpuPercentageThreshold");
+
+        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShard_SplitByLoadEnabled");
+        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault");
+        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec");
+        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec");
+    }
+};
+
 
 struct TBindingsRoomsChange {
     TChannelsBindings ChannelsBindings;
@@ -243,66 +243,66 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
         ui32 ShardState = NKikimrTxDataShard::Unknown;
- 
+
         // True when PartOwners has parts from other tablets
         bool HasBorrowed = false;
 
-        // Tablet actor started at 
-        TInstant StartTime; 
- 
-        void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) { 
-            CPU = rawCpuUsage; 
-            float percent = rawCpuUsage * 0.000001 * 100; 
-            if (percent >= 2) 
-                Last2PercentLoad = now; 
-            if (percent >= 5) 
-                Last5PercentLoad = now; 
-            if (percent >= 10) 
-                Last10PercentLoad = now; 
-            if (percent >= 20) 
-                Last20PercentLoad = now; 
-            if (percent >= 30) 
-                Last30PercentLoad = now; 
-        } 
- 
-        void SaveCpuUsageHistory(const TPartitionStats& oldStats) { 
-            Last2PercentLoad  = std::max(Last2PercentLoad,  oldStats.Last2PercentLoad); 
-            Last5PercentLoad  = std::max(Last5PercentLoad,  oldStats.Last5PercentLoad); 
-            Last10PercentLoad = std::max(Last10PercentLoad, oldStats.Last10PercentLoad); 
-            Last20PercentLoad = std::max(Last20PercentLoad, oldStats.Last20PercentLoad); 
-            Last30PercentLoad = std::max(Last30PercentLoad, oldStats.Last30PercentLoad); 
-        } 
- 
-        ui64 GetCurrentRawCpuUsage() const { 
-            return CPU; 
-        } 
- 
-        float GetLatestMaxCpuUsagePercent(TInstant since) const { 
-            // TODO: fix the case when stats were not collected yet 
- 
-            if (Last30PercentLoad > since) 
-                return 40; 
-            if (Last20PercentLoad > since) 
-                return 30; 
-            if (Last10PercentLoad > since) 
-                return 20; 
-            if (Last5PercentLoad > since) 
-                return 10; 
-            if (Last2PercentLoad > since) 
-                return 5; 
- 
-            return 2; 
-        } 
- 
-    private: 
-        ui64 CPU = 0; 
- 
-        // Latest timestamps when CPU usage exceeded 2%, 5%, 10%, 20%, 30% 
-        TInstant Last2PercentLoad; 
-        TInstant Last5PercentLoad; 
-        TInstant Last10PercentLoad; 
-        TInstant Last20PercentLoad; 
-        TInstant Last30PercentLoad; 
+        // Tablet actor started at
+        TInstant StartTime;
+
+        void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) {
+            CPU = rawCpuUsage;
+            float percent = rawCpuUsage * 0.000001 * 100;
+            if (percent >= 2)
+                Last2PercentLoad = now;
+            if (percent >= 5)
+                Last5PercentLoad = now;
+            if (percent >= 10)
+                Last10PercentLoad = now;
+            if (percent >= 20)
+                Last20PercentLoad = now;
+            if (percent >= 30)
+                Last30PercentLoad = now;
+        }
+
+        void SaveCpuUsageHistory(const TPartitionStats& oldStats) {
+            Last2PercentLoad  = std::max(Last2PercentLoad,  oldStats.Last2PercentLoad);
+            Last5PercentLoad  = std::max(Last5PercentLoad,  oldStats.Last5PercentLoad);
+            Last10PercentLoad = std::max(Last10PercentLoad, oldStats.Last10PercentLoad);
+            Last20PercentLoad = std::max(Last20PercentLoad, oldStats.Last20PercentLoad);
+            Last30PercentLoad = std::max(Last30PercentLoad, oldStats.Last30PercentLoad);
+        }
+
+        ui64 GetCurrentRawCpuUsage() const {
+            return CPU;
+        }
+
+        float GetLatestMaxCpuUsagePercent(TInstant since) const {
+            // TODO: fix the case when stats were not collected yet
+
+            if (Last30PercentLoad > since)
+                return 40;
+            if (Last20PercentLoad > since)
+                return 30;
+            if (Last10PercentLoad > since)
+                return 20;
+            if (Last5PercentLoad > since)
+                return 10;
+            if (Last2PercentLoad > since)
+                return 5;
+
+            return 2;
+        }
+
+    private:
+        ui64 CPU = 0;
+
+        // Latest timestamps when CPU usage exceeded 2%, 5%, 10%, 20%, 30%
+        TInstant Last2PercentLoad;
+        TInstant Last5PercentLoad;
+        TInstant Last10PercentLoad;
+        TInstant Last20PercentLoad;
+        TInstant Last30PercentLoad;
     };
 
     struct TStats {
@@ -530,7 +530,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats); 
+    void UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats);
 
     void RegisterSplitMegreOp(TOperationId txId, const TTxState& txState);
 
@@ -542,38 +542,38 @@ public:
         return SplitOpsInFlight;
     }
 
-    const THashMap<TShardIdx, ui64>& GetShard2PartitionIdx() const { 
-        return Shard2PartitionIdx; 
-    } 
- 
+    const THashMap<TShardIdx, ui64>& GetShard2PartitionIdx() const {
+        return Shard2PartitionIdx;
+    }
+
     ui64 GetExpectedPartitionCount() const {
         return ExpectedPartitionCount;
     }
 
-    bool TryAddShardToMerge(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge, 
-                            THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const; 
+    bool TryAddShardToMerge(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
+                            THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const;
 
-    bool CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const; 
+    bool CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const;
 
     bool CheckFastSplitForPartition(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
-    bool CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const; 
- 
-    bool IsSplitBySizeEnabled() const { 
-        return PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() != 0; 
-    } 
- 
-    bool IsMergeBySizeEnabled() const { 
+    bool CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
+
+    bool IsSplitBySizeEnabled() const {
+        return PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() != 0;
+    }
+
+    bool IsMergeBySizeEnabled() const {
         return IsSplitBySizeEnabled() && PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0;
-    } 
- 
-    bool IsSplitByLoadEnabled() const { 
-        return PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled(); 
-    } 
- 
-    bool IsMergeByLoadEnabled() const { 
-        return IsSplitByLoadEnabled(); 
-    } 
- 
+    }
+
+    bool IsSplitByLoadEnabled() const {
+        return PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled();
+    }
+
+    bool IsMergeByLoadEnabled() const {
+        return IsSplitByLoadEnabled();
+    }
+
     ui64 GetShardSizeToSplit() const {
         ui64 threshold = PartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
         return threshold == 0 ?
@@ -582,7 +582,7 @@ public:
     }
 
     ui64 GetSizeToMerge() const {
-        if (!IsMergeBySizeEnabled()) { 
+        if (!IsMergeBySizeEnabled()) {
             // Disable auto-merge by default
             return 0;
         } else {

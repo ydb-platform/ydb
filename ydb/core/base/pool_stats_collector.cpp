@@ -10,8 +10,8 @@
 #include <library/cpp/actors/helpers/pool_stats_collector.h>
 
 namespace NKikimr {
- 
-// Periodically collects stats from executor threads and exposes them as mon counters 
+
+// Periodically collects stats from executor threads and exposes them as mon counters
 class TStatsCollectingActor : public NActors::TStatsCollectingActor {
 public:
     TStatsCollectingActor(
@@ -23,44 +23,44 @@ public:
         MiniKQLPoolStats.Init(Counters.Get());
     }
 
-private: 
-    class TMiniKQLPoolStats { 
-    public: 
-        void Init(NMonitoring::TDynamicCounters* group) { 
-            CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc"); 
-            TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false); 
-        } 
- 
-        void Update() { 
-            *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize(); 
-        } 
- 
-    private: 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> CounterGroup; 
-        NMonitoring::TDynamicCounters::TCounterPtr TotalBytes; 
-    }; 
- 
+private:
+    class TMiniKQLPoolStats {
+    public:
+        void Init(NMonitoring::TDynamicCounters* group) {
+            CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc");
+            TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false);
+        }
+
+        void Update() {
+            *TotalBytes = TAlignedPagePool::GetGlobalPagePoolSize();
+        }
+
+    private:
+        TIntrusivePtr<NMonitoring::TDynamicCounters> CounterGroup;
+        NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+    };
+
     void OnWakeup(const TActorContext &ctx) override {
-        MiniKQLPoolStats.Update(); 
- 
+        MiniKQLPoolStats.Update();
+
         TVector<std::tuple<TString, double, ui32>> pools;
         for (const auto& pool : PoolCounters) {
             pools.emplace_back(pool.Name, pool.Usage, pool.Threads);
         }
 
         ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));
-    } 
- 
-private: 
-    TMiniKQLPoolStats MiniKQLPoolStats; 
-}; 
- 
- 
-IActor *CreateStatsCollector(ui32 intervalSec, 
-                             const TActorSystemSetup& setup, 
+    }
+
+private:
+    TMiniKQLPoolStats MiniKQLPoolStats;
+};
+
+
+IActor *CreateStatsCollector(ui32 intervalSec,
+                             const TActorSystemSetup& setup,
                              NMonitoring::TDynamicCounterPtr counters)
-{ 
+{
     return new TStatsCollectingActor(intervalSec, setup, counters);
-} 
- 
+}
+
 } // namespace NKikimr

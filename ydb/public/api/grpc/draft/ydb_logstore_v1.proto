@@ -1,17 +1,17 @@
-syntax = "proto3"; 
- 
-package Ydb.LogStore.V1; 
-option java_package = "com.yandex.ydb.logstore.v1"; 
- 
+syntax = "proto3";
+
+package Ydb.LogStore.V1;
+option java_package = "com.yandex.ydb.logstore.v1";
+
 import "ydb/public/api/protos/draft/ydb_logstore.proto";
- 
-service LogStoreService { 
-    rpc CreateLogStore(CreateLogStoreRequest) returns (CreateLogStoreResponse); 
-    rpc DescribeLogStore(DescribeLogStoreRequest) returns (DescribeLogStoreResponse); 
-    rpc DropLogStore(DropLogStoreRequest) returns (DropLogStoreResponse); 
- 
-    rpc CreateLogTable(CreateLogTableRequest) returns (CreateLogTableResponse); 
-    rpc DescribeLogTable(DescribeLogTableRequest) returns (DescribeLogTableResponse); 
-    rpc DropLogTable(DropLogTableRequest) returns (DropLogTableResponse); 
-    rpc AlterLogTable(AlterLogTableRequest) returns (AlterLogTableResponse); 
-} 
+
+service LogStoreService {
+    rpc CreateLogStore(CreateLogStoreRequest) returns (CreateLogStoreResponse);
+    rpc DescribeLogStore(DescribeLogStoreRequest) returns (DescribeLogStoreResponse);
+    rpc DropLogStore(DropLogStoreRequest) returns (DropLogStoreResponse);
+
+    rpc CreateLogTable(CreateLogTableRequest) returns (CreateLogTableResponse);
+    rpc DescribeLogTable(DescribeLogTableRequest) returns (DescribeLogTableResponse);
+    rpc DropLogTable(DropLogTableRequest) returns (DropLogTableResponse);
+    rpc AlterLogTable(AlterLogTableRequest) returns (AlterLogTableResponse);
+}

@@ -180,11 +180,11 @@ void TYqlServer::Initialize() {
 
     CreateBootstrapTablets();
     SetupStorage();
- 
+
     for (ui32 nodeIdx = 0; nodeIdx < GetSettings().NodeCount; ++nodeIdx) {
         SetupDomainLocalService(nodeIdx);
         SetupProxies(nodeIdx);
-    } 
+    }
     SetupLogging();
 }
 

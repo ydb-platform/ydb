@@ -39,7 +39,7 @@ public:
 
         Promise = NewPromise();
 
-        if (!Execute(mkql, MkqlExecuteResult.Future)) { 
+        if (!Execute(mkql, MkqlExecuteResult.Future)) {
             return TStatus::Error;
         }
 
@@ -137,7 +137,7 @@ private:
         }
 
         if (TransformCtx->QueryCtx->StatsMode == EKikimrStatsMode::Profile) {
-            MkqlExecuteResult.Program = mkql.GetProgramText(); 
+            MkqlExecuteResult.Program = mkql.GetProgramText();
         }
 
         future = Gateway->ExecuteMkqlPrepared(Cluster, mkql.GetProgram(), std::move(execParams),
@@ -193,7 +193,7 @@ private:
 
     ui32 CurrentMkqlIndex;
     bool AcquireLocks;
-    TMkqlExecuteResult MkqlExecuteResult; 
+    TMkqlExecuteResult MkqlExecuteResult;
     TPromise<void> Promise;
 };
 

@@ -331,9 +331,9 @@ void TestDrop(bool reboots) {
 
 }
 
-namespace NColumnShard { 
-extern bool gAllowLogBatchingDefaultValue; 
-} 
+namespace NColumnShard {
+extern bool gAllowLogBatchingDefaultValue;
+}
 
 Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(ExternalTTL) {
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(RebootExternalTTL) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false; 
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestTtl(true, false);
     }
 

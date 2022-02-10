@@ -7,9 +7,9 @@
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
-#include <util/system/hp_timer.h> 
+#include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
- 
+
 namespace NActors {
     class TChunkSerializer;
 
@@ -110,10 +110,10 @@ namespace NActors {
         // filled if feeded by interconnect session
         const TActorId InterconnectSession;
 
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ::NHPTimer::STime SendTime;
-#endif 
- 
+#endif
+
         static const size_t ChannelBits = 12;
         static const size_t ChannelShift = (sizeof(ui32) << 3) - ChannelBits;
 
@@ -174,9 +174,9 @@ namespace NActors {
             , Sender(sender)
             , Cookie(cookie)
             , TraceId(std::move(traceId))
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
             , SendTime(0)
-#endif 
+#endif
             , Event(ev)
             , RewriteRecipient(Recipient)
             , RewriteType(Type)
@@ -199,9 +199,9 @@ namespace NActors {
             , Sender(sender)
             , Cookie(cookie)
             , TraceId(std::move(traceId))
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
             , SendTime(0)
-#endif 
+#endif
             , Buffer(std::move(buffer))
             , RewriteRecipient(Recipient)
             , RewriteType(Type)
@@ -228,9 +228,9 @@ namespace NActors {
             , OriginScopeId(originScopeId)
             , TraceId(std::move(traceId))
             , InterconnectSession(session)
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
             , SendTime(0)
-#endif 
+#endif
             , Buffer(std::move(buffer))
             , RewriteRecipient(Recipient)
             , RewriteType(Type)

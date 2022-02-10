@@ -174,11 +174,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TSolomonVolumeDescription Description;
     };
 
-    struct TOlapStoreInfo : public TAtomicRefCount<TOlapStoreInfo> { 
-        EKind Kind = KindUnknown; 
+    struct TOlapStoreInfo : public TAtomicRefCount<TOlapStoreInfo> {
+        EKind Kind = KindUnknown;
         NKikimrSchemeOp::TColumnStoreDescription Description;
-    }; 
- 
+    };
+
     struct TOlapTableInfo : public TAtomicRefCount<TOlapTableInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TColumnTableDescription Description;
@@ -240,7 +240,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
         TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
-        TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo; 
+        TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo;
         TIntrusiveConstPtr<TOlapTableInfo> OlapTableInfo;
         TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
         TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
@@ -522,7 +522,7 @@ public:
         {}
     };
 };
- 
+
 inline TActorId MakeSchemeCacheID() {
     return TActorId(0, TStringBuf("SchmCcheSrv"));
 }

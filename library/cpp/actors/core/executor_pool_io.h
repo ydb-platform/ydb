@@ -26,7 +26,7 @@ namespace NActors {
 
     public:
         TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr,
-                        ui32 maxActivityType = 1); 
+                        ui32 maxActivityType = 1);
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg);
         ~TIOExecutorPool();
 

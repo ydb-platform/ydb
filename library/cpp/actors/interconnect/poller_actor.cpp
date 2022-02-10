@@ -246,10 +246,10 @@ namespace NActors {
         std::shared_ptr<TPollerThread> PollerThread;
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() { 
-            return IActor::INTERCONNECT_POLLER; 
-        } 
- 
+        static constexpr IActor::EActivityType ActorActivityType() {
+            return IActor::INTERCONNECT_POLLER;
+        }
+
         void Bootstrap() {
             PollerThread = std::make_shared<TPollerThread>(TlsActivationContext->ExecutorThread.ActorSystem);
             Become(&TPollerActor::StateFunc);

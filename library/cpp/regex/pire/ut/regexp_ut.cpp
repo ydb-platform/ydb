@@ -17,41 +17,41 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     }
 
     Y_UNIT_TEST(Boundaries) {
-        UNIT_ASSERT(!TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final()); 
-        UNIT_ASSERT(!TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final()); 
+        UNIT_ASSERT(!TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
+        UNIT_ASSERT(!TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
         UNIT_ASSERT(TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
         UNIT_ASSERT(!TMatcher(TFsm("qw$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
         UNIT_ASSERT(!TMatcher(TFsm("^qw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
- 
-        UNIT_ASSERT(TMatcher(TFsm("^aqwb$", TFsm::TOptions().SetSurround(true))) 
+
+        UNIT_ASSERT(TMatcher(TFsm("^aqwb$", TFsm::TOptions().SetSurround(true)))
                         .Match(TStringBuf("a"), true, false)
                         .Match(TStringBuf("q"), false, false)
                         .Match(TStringBuf("w"), false, false)
                         .Match(TStringBuf("b"), false, true)
                         .Final());
-    } 
- 
+    }
+
     Y_UNIT_TEST(Case) {
         UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true))).Match("Qw").Final());
         UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false))).Match("Qw").Final());
     }
- 
+
     Y_UNIT_TEST(UnicodeCase) {
         UNIT_ASSERT(TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(true))).Match("Ab").Final());
         UNIT_ASSERT(!TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(false))).Match("Ab").Final());
     }
 
     Y_UNIT_TEST(Utf) {
-        NRegExp::TFsmBase::TOptions opts; 
-        opts.Charset = CODES_UTF8; 
-        opts.Surround = true; 
-        UNIT_ASSERT(TMatcher(TFsm(".*", opts)).Match("wtf").Final()); 
-        UNIT_ASSERT(TMatcher(TFsm(".*", opts)).Match("чзн").Final()); 
-        UNIT_ASSERT(TMatcher(TFsm("ч.*", opts)).Match("чзн").Final()); 
-        UNIT_ASSERT(!TMatcher(TFsm("чзн", opts)).Match("чзх").Final()); 
-    } 
- 
+        NRegExp::TFsmBase::TOptions opts;
+        opts.Charset = CODES_UTF8;
+        opts.Surround = true;
+        UNIT_ASSERT(TMatcher(TFsm(".*", opts)).Match("wtf").Final());
+        UNIT_ASSERT(TMatcher(TFsm(".*", opts)).Match("чзн").Final());
+        UNIT_ASSERT(TMatcher(TFsm("ч.*", opts)).Match("чзн").Final());
+        UNIT_ASSERT(!TMatcher(TFsm("чзн", opts)).Match("чзх").Final());
+    }
+
     Y_UNIT_TEST(AndNot) {
         NRegExp::TFsmBase::TOptions opts;
         opts.AndNotSupport = true;
@@ -84,15 +84,15 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     }
 
     Y_UNIT_TEST(Glue) {
-        TFsm glued = 
-            TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true)) | 
-            TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false)) | 
-            TFsm("abc", TFsm::TOptions().SetCaseInsensitive(false)); 
-        UNIT_ASSERT(TMatcher(glued).Match("Qw").Final()); 
-        UNIT_ASSERT(TMatcher(glued).Match("Qw").Final()); 
-        UNIT_ASSERT(TMatcher(glued).Match("abc").Final()); 
-        UNIT_ASSERT(!TMatcher(glued).Match("Abc").Final()); 
-    } 
+        TFsm glued =
+            TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true)) |
+            TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false)) |
+            TFsm("abc", TFsm::TOptions().SetCaseInsensitive(false));
+        UNIT_ASSERT(TMatcher(glued).Match("Qw").Final());
+        UNIT_ASSERT(TMatcher(glued).Match("Qw").Final());
+        UNIT_ASSERT(TMatcher(glued).Match("abc").Final());
+        UNIT_ASSERT(!TMatcher(glued).Match("Abc").Final());
+    }
 
     Y_UNIT_TEST(Capture1) {
         TCapturingFsm fsm("here we have user_id=([a-z0-9]+);");

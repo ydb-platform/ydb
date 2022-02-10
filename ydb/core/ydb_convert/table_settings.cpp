@@ -83,33 +83,33 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
             return false;
         }
 
-        switch (partitioningSettings.partitioning_by_load()) { 
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
-        { 
-            break; 
-        } 
-        case Ydb::FeatureFlag::ENABLED: 
-        { 
-            auto &policy = *partitionConfig.MutablePartitioningPolicy(); 
-            policy.MutableSplitByLoadSettings()->SetEnabled(true); 
+        switch (partitioningSettings.partitioning_by_load()) {
+        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+        {
+            break;
+        }
+        case Ydb::FeatureFlag::ENABLED:
+        {
+            auto &policy = *partitionConfig.MutablePartitioningPolicy();
+            policy.MutableSplitByLoadSettings()->SetEnabled(true);
             if (!partitioningSettings.min_partitions_count()) {
                 policy.SetMinPartitionsCount(CalculateDefaultMinPartitions(proto));
             }
-            break; 
-        } 
-        case Ydb::FeatureFlag::DISABLED: 
-        { 
-            auto &policy = *partitionConfig.MutablePartitioningPolicy(); 
-            policy.MutableSplitByLoadSettings()->SetEnabled(false); 
-            break; 
-        } 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '" 
-                << (ui32)partitioningSettings.partitioning_by_load() << "'"; 
-            return false; 
-        } 
- 
+            break;
+        }
+        case Ydb::FeatureFlag::DISABLED:
+        {
+            auto &policy = *partitionConfig.MutablePartitioningPolicy();
+            policy.MutableSplitByLoadSettings()->SetEnabled(false);
+            break;
+        }
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '"
+                << (ui32)partitioningSettings.partitioning_by_load() << "'";
+            return false;
+        }
+
         if (partitioningSettings.min_partitions_count()) {
             auto &policy = *partitionConfig.MutablePartitioningPolicy();
             policy.SetMinPartitionsCount(partitioningSettings.min_partitions_count());
@@ -251,36 +251,36 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
             return false;
         }
 
-        switch (alterSettings.partitioning_by_load()) { 
-        case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
-        { 
-            changed = true; 
-            break; 
-        } 
-        case Ydb::FeatureFlag::ENABLED: 
-        { 
-            auto &policy = *partitionConfig.MutablePartitioningPolicy(); 
-            policy.MutableSplitByLoadSettings()->SetEnabled(true); 
+        switch (alterSettings.partitioning_by_load()) {
+        case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+        {
+            changed = true;
+            break;
+        }
+        case Ydb::FeatureFlag::ENABLED:
+        {
+            auto &policy = *partitionConfig.MutablePartitioningPolicy();
+            policy.MutableSplitByLoadSettings()->SetEnabled(true);
             if (!alterSettings.min_partitions_count()) {
                 policy.SetMinPartitionsCount(defaultMinPartitions);
             }
-            changed = true; 
-            break; 
-        } 
-        case Ydb::FeatureFlag::DISABLED: 
-        { 
-            auto &policy = *partitionConfig.MutablePartitioningPolicy(); 
-            policy.MutableSplitByLoadSettings()->SetEnabled(false); 
-            changed = true; 
-            break; 
-        } 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '" 
-                << (ui32)alterSettings.partitioning_by_load() << "'"; 
-            return false; 
-        } 
- 
+            changed = true;
+            break;
+        }
+        case Ydb::FeatureFlag::DISABLED:
+        {
+            auto &policy = *partitionConfig.MutablePartitioningPolicy();
+            policy.MutableSplitByLoadSettings()->SetEnabled(false);
+            changed = true;
+            break;
+        }
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown auto partitioning by load feature flag status: '"
+                << (ui32)alterSettings.partitioning_by_load() << "'";
+            return false;
+        }
+
         if (alterSettings.min_partitions_count()) {
             auto &policy = *partitionConfig.MutablePartitioningPolicy();
             policy.SetMinPartitionsCount(alterSettings.min_partitions_count());

@@ -69,17 +69,17 @@ private:
         for (auto& output : task.Outputs) {
             ValidateOutput(output);
         }
- 
+
         if (task.Meta.Writes) {
             YQL_ENSURE(task.Outputs.size() == 1, "Read-write tasks should have single output.");
         }
 
-        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId); 
-        if (stageInfo.Meta.TableKind == ETableKind::Olap) { 
-            YQL_ENSURE(task.Meta.Reads->size() == 1, 
-                       "OLAP scan task must read exactly 1 range from 1 columnshard"); 
-            YQL_ENSURE(!task.Meta.Writes, "OLAP writes are not supported yet"); 
-        } 
+        const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+            YQL_ENSURE(task.Meta.Reads->size() == 1,
+                       "OLAP scan task must read exactly 1 range from 1 columnshard");
+            YQL_ENSURE(!task.Meta.Writes, "OLAP writes are not supported yet");
+        }
     }
 
     bool IsDataExec() {

@@ -154,7 +154,7 @@ message TMiniKQLTransaction {
     optional bool FlatMKQL = 52 [default = true];
     optional bool LlvmRuntime = 53;
     optional uint64 PerShardKeysSizeLimitBytes = 54;
-    optional bool CollectStats = 55; 
+    optional bool CollectStats = 55;
     optional TLimits Limits = 56;
     optional uint64 SnapshotStep = 9;
     optional uint64 SnapshotTxId = 10;
@@ -171,7 +171,7 @@ message TTransaction {
     optional TMiniKQLTransaction MiniKQLTransaction = 4;
 
     optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags
-    optional string UserRequestId = 8; 
+    optional string UserRequestId = 8;
 
     optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10;
     repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11;
@@ -227,7 +227,7 @@ message TEvProposeTransactionStatus {
     optional TMiniKQLCompileResults MiniKQLCompileResults = 17;
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 18;
 
-    optional NKikimrQueryStats.TTxStats TxStats = 19; 
+    optional NKikimrQueryStats.TTxStats TxStats = 19;
     optional TTxProxyTimings Timings = 20;
     optional bool HadFollowerReads = 21;
 

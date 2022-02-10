@@ -161,46 +161,46 @@ public:
     }
 };
 
-class TClientCommandTabletSchemeTx : public TClientCommand { 
-public: 
-    TClientCommandTabletSchemeTx() 
-        : TClientCommand("scheme-tx", { "scheme" }) 
-    { 
-    } 
- 
-    TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> Request; 
+class TClientCommandTabletSchemeTx : public TClientCommand {
+public:
+    TClientCommandTabletSchemeTx()
+        : TClientCommand("scheme-tx", { "scheme" })
+    {
+    }
+
+    TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> Request;
     TString SchemeChanges;
- 
-    virtual void Config(TConfig& config) override { 
-        TClientCommand::Config(config); 
+
+    virtual void Config(TConfig& config) override {
+        TClientCommand::Config(config);
         config.Opts->AddLongOption("follower",     "connect to follower");
-        config.Opts->AddLongOption("dry-run",   "test changes without applying"); 
+        config.Opts->AddLongOption("dry-run",   "test changes without applying");
         config.SetFreeArgsNum(1, 1);
         SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes to apply");
-    } 
- 
-    virtual void Parse(TConfig& config) override { 
-        TClientCommand::Parse(config); 
- 
-        SchemeChanges = config.ParseResult->GetFreeArgs().at(0); 
- 
-        Request = new NMsgBusProxy::TBusTabletLocalSchemeTx; 
-        Request->Record.SetTabletID(config.TabletId); 
-        auto* schemeChanges = Request->Record.MutableSchemeChanges(); 
-        if (!google::protobuf::TextFormat::ParseFromString(SchemeChanges, schemeChanges)) { 
-            ythrow TWithBackTrace<yexception>() << "Invalid scheme changes protobuf passed"; 
-        } 
- 
+    }
+
+    virtual void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+
+        SchemeChanges = config.ParseResult->GetFreeArgs().at(0);
+
+        Request = new NMsgBusProxy::TBusTabletLocalSchemeTx;
+        Request->Record.SetTabletID(config.TabletId);
+        auto* schemeChanges = Request->Record.MutableSchemeChanges();
+        if (!google::protobuf::TextFormat::ParseFromString(SchemeChanges, schemeChanges)) {
+            ythrow TWithBackTrace<yexception>() << "Invalid scheme changes protobuf passed";
+        }
+
         if (config.ParseResult->Has("follower"))
             Request->Record.SetConnectToFollower(true);
-        Request->Record.SetDryRun(config.ParseResult->Has("dry-run")); 
-    } 
- 
-    virtual int Run(TConfig& config) override { 
-        return MessageBusCall(config, Request); 
-    } 
-}; 
- 
+        Request->Record.SetDryRun(config.ParseResult->Has("dry-run"));
+    }
+
+    virtual int Run(TConfig& config) override {
+        return MessageBusCall(config, Request);
+    }
+};
+
 class TClientCommandDrainNode : public TClientCommand {
 public:
     TClientCommandDrainNode()

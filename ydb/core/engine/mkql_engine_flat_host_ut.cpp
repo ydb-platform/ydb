@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
     Y_UNIT_TEST(ShardId) {
         NTable::TDatabase DB;
-        TEngineHostCounters hostCounters; 
+        TEngineHostCounters hostCounters;
         TUnversionedEngineHost host(DB, hostCounters, TEngineHostSettings(100));
         UNIT_ASSERT_VALUES_EQUAL(host.GetShardId(), 100);
     }
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
         { // Execute some minikql
             NTable::TDummyEnv env;
             DB.Begin(3, env);
-            TEngineHostCounters hostCounters; 
+            TEngineHostCounters hostCounters;
             TUnversionedEngineHost host(DB, hostCounters);
 
             // TODO: ... MINIKQL ...

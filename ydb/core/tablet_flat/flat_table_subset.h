@@ -56,7 +56,7 @@ namespace NTable {
         }
 
         ui64 MaxRows() const noexcept
-        { 
+        {
             ui64 rows = 0;
 
             for (const auto &memTable : Frozen)
@@ -71,8 +71,8 @@ namespace NTable {
             }
 
             return rows;
-        } 
- 
+        }
+
         TRowVersion MinRowVersion() const noexcept
         {
             TRowVersion minVersion = TRowVersion::Max();

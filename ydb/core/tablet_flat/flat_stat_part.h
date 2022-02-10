@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include "flat_part_iface.h"
-#include "flat_part_laid.h" 
+#include "flat_part_laid.h"
 #include "flat_page_frames.h"
 #include "util_basics.h"
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <util/draft/holder_vector.h> 
- 
-namespace NKikimr { 
-namespace NTable { 
- 
+#include <util/draft/holder_vector.h>
+
+namespace NKikimr {
+namespace NTable {
+
 /**
  * Helper for calculating small blobs size between a pair of rows
  */
@@ -92,36 +92,36 @@ private:
     TSmallVec<TPartGroupSizeHelper> GroupHelpers;
 };
 
-// Iterates over part index and calculates total row count and data size 
-// NOTE: we don't know row count for the last page so we also ignore its size 
-// This shouldn't be a problem for big parts with many pages 
-class TPartIndexIterator { 
-public: 
+// Iterates over part index and calculates total row count and data size
+// NOTE: we don't know row count for the last page so we also ignore its size
+// This shouldn't be a problem for big parts with many pages
+class TPartIndexIterator {
+public:
     TPartIndexIterator(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TKeyNulls> keys)
         : Part(std::move(part))
         , KeyColumns(std::move(keys))
-    { 
-        Pos = Part->Index->Begin(); 
-        End = Part->Index->End(); 
+    {
+        Pos = Part->Index->Begin();
+        End = Part->Index->End();
         AltGroups.reserve(Part->Scheme->Groups.size() - 1);
         for (ui32 group : xrange(size_t(1), Part->Scheme->Groups.size())) {
             AltGroups.emplace_back(Part.Get(), NPage::TGroupId(group));
         }
-        FillKey(); 
-    } 
- 
-    bool IsValid() const { 
-        return Pos != End; 
-    } 
- 
-    void Next() { 
-        Y_VERIFY(IsValid()); 
- 
+        FillKey();
+    }
+
+    bool IsValid() const {
+        return Pos != End;
+    }
+
+    void Next() {
+        Y_VERIFY(IsValid());
+
         auto curPageId = Pos->GetPageId();
         LastSize = CurrentSize;
         LastRowId = Pos->GetRowId();
-        CurrentSize += GetPageSize(curPageId); 
-        ++Pos; 
+        CurrentSize += GetPageSize(curPageId);
+        ++Pos;
         TRowId nextRowId = Pos ? Pos->GetRowId() : Max<TRowId>();
         for (auto& g : AltGroups) {
             while (g.Pos && g.Pos->GetRowId() < nextRowId) {
@@ -130,19 +130,19 @@ public:
                 ++g.Pos;
             }
         }
-        FillKey(); 
-    } 
- 
-    TDbTupleRef GetCurrentKey() const { 
+        FillKey();
+    }
+
+    TDbTupleRef GetCurrentKey() const {
         Y_VERIFY(KeyColumns->BasicTypes().size() == CurrentKey.size());
         return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
-    } 
- 
+    }
+
     ui64 GetLastRowId() const {
         return LastRowId;
     }
 
-    ui64 GetCurrentRowId() const { 
+    ui64 GetCurrentRowId() const {
         if (IsValid()) {
             return Pos->GetRowId();
         }
@@ -151,40 +151,40 @@ public:
             return endRowId;
         }
         return LastRowId;
-    } 
- 
+    }
+
     ui64 GetLastDataSize() const {
         return LastSize;
     }
 
-    ui64 GetCurrentDataSize() const { 
-        return CurrentSize; 
-    } 
- 
-private: 
+    ui64 GetCurrentDataSize() const {
+        return CurrentSize;
+    }
+
+private:
     ui64 GetPageSize(TPageId pageId, NPage::TGroupId groupId = { }) const {
         return Part->GetPageSize(pageId, groupId);
-    } 
- 
-    void FillKey() { 
-        CurrentKey.clear(); 
- 
-        if (!IsValid()) 
-            return; 
- 
-        ui32 keyIdx = 0; 
-        // Add columns that are present in the part 
+    }
+
+    void FillKey() {
+        CurrentKey.clear();
+
+        if (!IsValid())
+            return;
+
+        ui32 keyIdx = 0;
+        // Add columns that are present in the part
         for (;keyIdx < Part->Scheme->Groups[0].KeyTypes.size(); ++keyIdx) {
             CurrentKey.push_back(Pos->Cell(Part->Scheme->Groups[0].ColsKeyIdx[keyIdx]));
-        } 
- 
-        // Extend with default values if needed 
-        for (;keyIdx < KeyColumns->Defs.size(); ++keyIdx) { 
-            CurrentKey.push_back(KeyColumns->Defs[keyIdx]); 
-        } 
-    } 
- 
-private: 
+        }
+
+        // Extend with default values if needed
+        for (;keyIdx < KeyColumns->Defs.size(); ++keyIdx) {
+            CurrentKey.push_back(KeyColumns->Defs[keyIdx]);
+        }
+    }
+
+private:
     struct TGroupState {
         NPage::TIndex::TIter Pos;
         const NPage::TGroupId GroupId;
@@ -200,38 +200,38 @@ private:
     TIntrusiveConstPtr<TKeyNulls> KeyColumns;
     NPage::TIndex::TIter Pos;
     NPage::TIndex::TIter End;
-    TSmallVec<TCell> CurrentKey; 
-    ui64 CurrentSize = 0; 
-    ui64 LastRowId = 0; 
+    TSmallVec<TCell> CurrentKey;
+    ui64 CurrentSize = 0;
+    ui64 LastRowId = 0;
     ui64 LastSize = 0;
     TSmallVec<TGroupState> AltGroups;
-}; 
- 
-// This iterator skipps pages that are screened. Currently the logic is simple: 
-// if page start key is screened then we assume that the whole previous page is screened 
-// if page start key is not screened then the whole previous page is added to stats 
-class TScreenedPartIndexIterator { 
-public: 
+};
+
+// This iterator skipps pages that are screened. Currently the logic is simple:
+// if page start key is screened then we assume that the whole previous page is screened
+// if page start key is not screened then the whole previous page is added to stats
+class TScreenedPartIndexIterator {
+public:
     TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyNulls> keyColumns,
                             TIntrusiveConstPtr<NPage::TFrames> small)
         : PartIter(partView.Part, keyColumns)
         , Screen(std::move(partView.Screen))
         , Small(std::move(small))
-        , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1)) 
-    { 
-    } 
- 
-    bool IsValid() const { 
-        return PartIter.IsValid(); 
-    } 
- 
-    void Next() { 
-        Y_VERIFY(IsValid()); 
- 
+        , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
+    {
+    }
+
+    bool IsValid() const {
+        return PartIter.IsValid();
+    }
+
+    void Next() {
+        Y_VERIFY(IsValid());
+
         PrevRowCount = CurrentRowCount;
         PrevSize = CurrentSize;
         PartIter.Next();
- 
+
         ui64 rowCount = IncludedRows(PartIter.GetLastRowId(), PartIter.GetCurrentRowId());
         if (rowCount > 0) {
             // We try to count rows precisely, but data is only counted per-page
@@ -241,34 +241,34 @@ public:
                 CurrentSize += CalcSmallBytes();
             }
         }
-    } 
- 
-    TDbTupleRef GetCurrentKey() const { 
-        return PartIter.GetCurrentKey(); 
-    } 
- 
-    ui64 GetRowCountDelta() const { 
+    }
+
+    TDbTupleRef GetCurrentKey() const {
+        return PartIter.GetCurrentKey();
+    }
+
+    ui64 GetRowCountDelta() const {
         return CurrentRowCount - PrevRowCount;
-    } 
- 
-    ui64 GetDataSizeDelta() const { 
+    }
+
+    ui64 GetDataSizeDelta() const {
         return CurrentSize - PrevSize;
-    } 
- 
-private: 
+    }
+
+private:
     ui64 IncludedRows(TRowId beginRowId, TRowId endRowId) noexcept {
         if (!Screen) {
             // Include all rows
             return endRowId - beginRowId;
         }
- 
+
         TRowId rowId = beginRowId;
         ui64 rowCount = 0;
         while (rowId < endRowId) {
             // Skip screen holes before the current rowId
             while (CurrentHole.End <= rowId) {
                 CurrentHole = TScreen::Next(Screen, CurrentHoleIdx, 1);
-            } 
+            }
             TRowId next;
             if (rowId < CurrentHole.Begin) {
                 // Skip rows before the next begin
@@ -277,13 +277,13 @@ private:
                 // Include rows before the next end
                 next = Min(CurrentHole.End, endRowId);
                 rowCount += next - rowId;
-            } 
+            }
             rowId = next;
         }
- 
+
         return rowCount;
-    } 
- 
+    }
+
     ui64 CalcSmallBytes() noexcept {
         ui64 bytes = 0;
 
@@ -305,17 +305,17 @@ private:
         return bytes;
     }
 
-private: 
-    TPartIndexIterator PartIter; 
+private:
+    TPartIndexIterator PartIter;
     TIntrusiveConstPtr<TScreen> Screen;
     TIntrusiveConstPtr<NPage::TFrames> Small;    /* Inverted index for small blobs   */
-    size_t CurrentHoleIdx = 0; 
-    TScreen::THole CurrentHole; 
+    size_t CurrentHoleIdx = 0;
+    TScreen::THole CurrentHole;
     ui64 CurrentRowCount = 0;
-    ui64 PrevRowCount = 0; 
+    ui64 PrevRowCount = 0;
     ui64 CurrentSize = 0;
-    ui64 PrevSize = 0; 
+    ui64 PrevSize = 0;
     ui32 PrevSmallPage = 0;
-}; 
- 
-}} 
+};
+
+}}

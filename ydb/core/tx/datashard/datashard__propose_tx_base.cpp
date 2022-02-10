@@ -38,18 +38,18 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         // If tablet is in follower mode then we should sync scheme
         // before we build and check operation.
         if (Self->IsFollower()) {
-            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK; 
-            TString errMessage; 
- 
+            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+            TString errMessage;
+
             if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage))
                 return false;
- 
-            if (status != NKikimrTxDataShard::TError::OK) { 
-                auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind); 
+
+            if (status != NKikimrTxDataShard::TError::OK) {
+                auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
                 result.Reset(new TEvDataShard::TEvProposeTransactionResult(kind, Self->TabletID(), TxId,
                                                                        NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
-                result->AddError(status, errMessage); 
-            } 
+                result->AddError(status, errMessage);
+            }
         }
 
         if (result) {
@@ -147,8 +147,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         Y_FAIL();
     } catch (const TMemoryLimitExceededException &ex) {
         Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
-    } catch (const std::exception &e) { 
-        Y_FAIL("there must be no leaked exceptions: %s", e.what()); 
+    } catch (const std::exception &e) {
+        Y_FAIL("there must be no leaked exceptions: %s", e.what());
     } catch (...) {
         Y_FAIL("there must be no leaked exceptions");
     }

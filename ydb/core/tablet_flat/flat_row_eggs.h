@@ -53,10 +53,10 @@ namespace NTable {
         Outer   = 3,    /* ~ is packed out of rows page */
     };
 
-    enum EHint : ui64 { 
-        NoByKey = 0x1, 
-    }; 
- 
+    enum EHint : ui64 {
+        NoByKey = 0x1,
+    };
+
     struct TLargeObj {
         TLargeObj() = default;
 

@@ -66,7 +66,7 @@ private:
 
 } // namspace NKikimr
 
-inline IOutputStream& operator << (IOutputStream& out, const NKikimr::TRawTypeValue& v) { 
-    out << v.ToString(); 
-    return out; 
-} 
+inline IOutputStream& operator << (IOutputStream& out, const NKikimr::TRawTypeValue& v) {
+    out << v.ToString();
+    return out;
+}

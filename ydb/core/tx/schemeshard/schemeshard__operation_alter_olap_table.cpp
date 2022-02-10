@@ -47,38 +47,38 @@ TOlapTableInfo::TPtr ParseParams(
 
     if (alter.HasAlterTtlSettings()) {
         const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
-        if (tableInfo->Description.HasSchema()) { 
-            tableSchema = &tableInfo->Description.GetSchema(); 
-        } else { 
-            auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId()); 
-            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex); 
-            tableSchema = &presetProto.GetSchema(); 
-        } 
- 
+        if (tableInfo->Description.HasSchema()) {
+            tableSchema = &tableInfo->Description.GetSchema();
+        } else {
+            auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
+            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
+            tableSchema = &presetProto.GetSchema();
+        }
+
         THashSet<TString> knownTiers;
         for (const auto& tier : tableSchema->GetStorageTiers()) {
             knownTiers.insert(tier.GetName());
         }
 
-        THashMap<ui32, TOlapSchema::TColumn> columns; 
-        THashMap<TString, ui32> columnsByName; 
-        for (const auto& col : tableSchema->GetColumns()) { 
-            ui32 id = col.GetId(); 
-            TString name = col.GetName(); 
-            columns[id] = TOlapSchema::TColumn{id, name, static_cast<NScheme::TTypeId>(col.GetTypeId()), Max<ui32>()}; 
-            columnsByName[name] = id; 
-        } 
- 
+        THashMap<ui32, TOlapSchema::TColumn> columns;
+        THashMap<TString, ui32> columnsByName;
+        for (const auto& col : tableSchema->GetColumns()) {
+            ui32 id = col.GetId();
+            TString name = col.GetName();
+            columns[id] = TOlapSchema::TColumn{id, name, static_cast<NScheme::TTypeId>(col.GetTypeId()), Max<ui32>()};
+            columnsByName[name] = id;
+        }
+
         if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, knownTiers, errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr; 
-        } 
- 
+            return nullptr;
+        }
+
         if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr; 
-        } 
- 
+            return nullptr;
+        }
+
         *alterData->Description.MutableTtlSettings() = alter.GetAlterTtlSettings();
         alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
 #if 0

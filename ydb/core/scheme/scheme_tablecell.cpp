@@ -1,10 +1,10 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
- 
-#include <util/string/escape.h> 
- 
-namespace NKikimr { 
- 
+
+#include <util/string/escape.h>
+
+namespace NKikimr {
+
 void TOwnedCellVec::TData::operator delete(void* mem) {
     ::free(mem);
 }
@@ -62,12 +62,12 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
 
 TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry &reg) {
     NScheme::ITypeSP t = reg.GetType(typeId);
- 
-    if (!t.IsKnownType()) 
-        return Sprintf("Unknow typeId 0x%x", (ui32)typeId); 
- 
+
+    if (!t.IsKnownType())
+        return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
+
     TString res = t->GetName();
-    res += " : "; 
+    res += " : ";
 
     DbgPrintValue(res, r, typeId);
 
@@ -110,18 +110,18 @@ void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
             res += EscapeC(r.Data(), r.Size());
         }
     }
-} 
- 
+}
+
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {
     TString res = "(";
-    for (ui32 i = 0; i < row.ColumnCount; ++i) { 
-        res += DbgPrintCell(row.Columns[i], row.Types[i], typeRegistry); 
-        if (i < row.ColumnCount-1) 
-            res += ", "; 
-    } 
-    res += ")"; 
-    return res; 
-} 
- 
-} // namespace NKikimr 
- 
+    for (ui32 i = 0; i < row.ColumnCount; ++i) {
+        res += DbgPrintCell(row.Columns[i], row.Types[i], typeRegistry);
+        if (i < row.ColumnCount-1)
+            res += ", ";
+    }
+    res += ")";
+    return res;
+}
+
+} // namespace NKikimr
+

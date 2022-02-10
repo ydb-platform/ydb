@@ -214,8 +214,8 @@ class TTablet : public TActor<TTablet> {
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
-    TInstant BoostrapTime; 
-    TInstant ActivateTime; 
+    TInstant BoostrapTime;
+    TInstant ActivateTime;
     bool Leader;
     ui32 FollowerId;
     ui32 DiscoveredLastBlocked;

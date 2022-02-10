@@ -777,7 +777,7 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
         Y_VERIFY(jobCount >= 0, "decremented too much");
         Jobs.erase(job->JobStorageIterator);
 
-        if (AtomicGet(State) == STOPPED) { 
+        if (AtomicGet(State) == STOPPED) {
             if (jobCount == 0) {
                 ShutdownCondVar.BroadCast();
             }
@@ -804,11 +804,11 @@ void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageCon
 }
 
 void TBusModuleImpl::Shutdown() {
-    if (AtomicGet(State) != TBusModuleImpl::RUNNING) { 
-        AtomicSet(State, TBusModuleImpl::STOPPED); 
+    if (AtomicGet(State) != TBusModuleImpl::RUNNING) {
+        AtomicSet(State, TBusModuleImpl::STOPPED);
         return;
     }
-    AtomicSet(State, TBusModuleImpl::STOPPED); 
+    AtomicSet(State, TBusModuleImpl::STOPPED);
 
     for (auto& clientSession : ClientSessions) {
         clientSession->Shutdown();

@@ -31,17 +31,17 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TTableIn
     stats->SetPartCount(tableStats.PartCount);
 }
 
-static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TTableInfo::TPartitionStats& tableStats) { 
-    metrics->SetCPU(tableStats.GetCurrentRawCpuUsage()); 
-    metrics->SetMemory(tableStats.Memory); 
-    metrics->SetNetwork(tableStats.Network); 
-    metrics->SetStorage(tableStats.Storage); 
-    metrics->SetReadThroughput(tableStats.ReadThroughput); 
-    metrics->SetWriteThroughput(tableStats.WriteThroughput); 
-    metrics->SetReadIops(tableStats.ReadIops); 
-    metrics->SetWriteIops(tableStats.WriteIops); 
-} 
- 
+static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TTableInfo::TPartitionStats& tableStats) {
+    metrics->SetCPU(tableStats.GetCurrentRawCpuUsage());
+    metrics->SetMemory(tableStats.Memory);
+    metrics->SetNetwork(tableStats.Network);
+    metrics->SetStorage(tableStats.Storage);
+    metrics->SetReadThroughput(tableStats.ReadThroughput);
+    metrics->SetWriteThroughput(tableStats.WriteThroughput);
+    metrics->SetReadIops(tableStats.ReadIops);
+    metrics->SetWriteIops(tableStats.WriteIops);
+}
+
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
     FillChildDescr(descr, pathEl);
 
@@ -242,7 +242,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     {
         auto* metrics = Result->Record.MutablePathDescription()->MutableTabletMetrics();
-        FillTableMetrics(metrics, tableStats); 
+        FillTableMetrics(metrics, tableStats);
     }
 
     if (returnPartitionStats) {
@@ -253,8 +253,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             Y_VERIFY(stats);
             auto pbStats = pathDescription.AddTablePartitionStats();
             FillTableStats(pbStats, *stats);
-            auto pbMetrics = pathDescription.AddTablePartitionMetrics(); 
-            FillTableMetrics(pbMetrics, *stats); 
+            auto pbMetrics = pathDescription.AddTablePartitionMetrics();
+            FillTableMetrics(pbMetrics, *stats);
         }
     }
 
@@ -363,18 +363,18 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
         description->AddColumnShards(shardInfo->TabletID.GetValue());
     }
 }
- 
+
 void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapTableInfo::TPtr tableInfo = *Self->OlapTables.FindPtr(pathId);
     Y_VERIFY(tableInfo, "OlapTable not found");
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->OlapStorePathId);
     Y_VERIFY(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
- 
+
     auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Sharding);
- 
+
     if (!description->HasSchema() && description->HasSchemaPresetId()) {
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
         auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
@@ -382,7 +382,7 @@ void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
-    } 
+    }
 #if 0
     if (!description->HasTtlSettings() && description->HasTtlSettingsPresetId()) {
         auto& preset = storeInfo->TtlSettingsPresets.at(description->GetTtlSettingsPresetId());
@@ -820,7 +820,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeTable(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
-            DescribeDir(path); 
+            DescribeDir(path);
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:

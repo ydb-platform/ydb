@@ -39,9 +39,9 @@ void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Operations::IN, Ydb::Operations::OUT, TGRpcOperationService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \ 
-            ACTION; \ 
-        }, &Ydb::Operation::V1::OperationService::AsyncService::Request ## NAME, \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Operation::V1::OperationService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 
     ADD_REQUEST(GetOperation, GetOperationRequest, GetOperationResponse, {

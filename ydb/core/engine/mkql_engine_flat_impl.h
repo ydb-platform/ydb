@@ -20,7 +20,7 @@ namespace NMiniKQL {
             , Length(env.InternName(TStringBuf("Length")))
             , Arg(env.InternName(TStringBuf("Arg")))
         {
-            All.reserve(20); 
+            All.reserve(20);
             All.insert(Filter);
             All.insert(FilterNullMembers);
             All.insert(SkipNullMembers);
@@ -34,16 +34,16 @@ namespace NMiniKQL {
             All.insert(Arg);
         }
 
-        const TInternName Filter; 
-        const TInternName FilterNullMembers; 
+        const TInternName Filter;
+        const TInternName FilterNullMembers;
         const TInternName SkipNullMembers;
-        const TInternName FlatMap; 
-        const TInternName Map; 
-        const TInternName Member; 
-        const TInternName ToHashedDict; 
-        const TInternName DictItems; 
-        const TInternName Take; 
-        const TInternName Length; 
+        const TInternName FlatMap;
+        const TInternName Map;
+        const TInternName Member;
+        const TInternName ToHashedDict;
+        const TInternName DictItems;
+        const TInternName Take;
+        const TInternName Length;
         const TInternName Arg;
 
         THashSet<TInternName> All;
@@ -72,11 +72,11 @@ namespace NMiniKQL {
 
         TBuiltinStrings Builtins;
 
-        const TInternName SetResult; 
-        const TInternName Abort; 
-        const TInternName StepTxId; 
-        const TInternName AcquireLocks; 
-        const TInternName CombineByKeyMerge; 
+        const TInternName SetResult;
+        const TInternName Abort;
+        const TInternName StepTxId;
+        const TInternName AcquireLocks;
+        const TInternName CombineByKeyMerge;
         const TInternName Diagnostics;
         const TInternName PartialTake;
         const TInternName PartialSort;

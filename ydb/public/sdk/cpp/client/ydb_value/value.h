@@ -392,7 +392,7 @@ public:
     TDerived& BeginOptional();
     TDerived& EndOptional();
     TDerived& EmptyOptional(const TType& itemType);
-    TDerived& EmptyOptional(EPrimitiveType itemType); 
+    TDerived& EmptyOptional(EPrimitiveType itemType);
     TDerived& EmptyOptional();
 
     // List

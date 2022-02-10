@@ -482,8 +482,8 @@ namespace {
     void PrintPartitioningSettings(const NTable::TTableDescription& tableDescription) {
         const auto& settings = tableDescription.GetPartitioningSettings();
         const auto partBySize = settings.GetPartitioningBySize();
-        const auto partByLoad = settings.GetPartitioningByLoad(); 
-        if (!partBySize.Defined() && !partByLoad.Defined()) { 
+        const auto partByLoad = settings.GetPartitioningByLoad();
+        if (!partBySize.Defined() && !partByLoad.Defined()) {
             return;
         }
         const auto partitionSizeMb = settings.GetPartitionSizeMb();
@@ -491,8 +491,8 @@ namespace {
         const auto maxPartitions = settings.GetMaxPartitionsCount();
         Cout << Endl << "Auto partitioning settings: " << Endl;
         Cout << "Partitioning by size: " << (partBySize.GetRef() ? "true" : "false") << Endl;
-        Cout << "Partitioning by load: " << (partByLoad.GetRef() ? "true" : "false") << Endl; 
-        if (partBySize.Defined() && partitionSizeMb) { 
+        Cout << "Partitioning by load: " << (partByLoad.GetRef() ? "true" : "false") << Endl;
+        if (partBySize.Defined() && partitionSizeMb) {
             Cout << "Preferred partition size (Mb): " << partitionSizeMb << Endl;
         }
         if (minPartitions) {

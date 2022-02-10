@@ -47,7 +47,7 @@ struct TEvKqpSnapshot {
     };
 };
 
-NActors::IActor* CreateKqpSnapshotManager(const TString& database, TDuration queryTimeout); 
+NActors::IActor* CreateKqpSnapshotManager(const TString& database, TDuration queryTimeout);
 
 } // namespace NKqp
 } // namespace NKikimr

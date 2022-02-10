@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
                     NLs::HasOlapTableTtlSettingsVersion(2),
-                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300)))); 
+                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
             }
         });
     }

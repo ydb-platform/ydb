@@ -22,31 +22,31 @@ namespace NKikimr {
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
-        } 
- 
+        }
+
         TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
             : TActor<TFakeCoordinator>(&TFakeCoordinator::StateInit)
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , State(state)
-            , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig())) 
+            , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         {
         }
 
-        static NTabletPipe::TClientConfig GetPipeClientConfig() { 
-            NTabletPipe::TClientConfig config; 
-            config.CheckAliveness = true; 
+        static NTabletPipe::TClientConfig GetPipeClientConfig() {
+            NTabletPipe::TClientConfig config;
+            config.CheckAliveness = true;
             config.RetryPolicy = {
                 .RetryLimitCount = 3,
                 .MinRetryTime = TDuration::MilliSeconds(10),
                 .MaxRetryTime = TDuration::MilliSeconds(500),
                 .BackoffMultiplier = 2
             };
-            return config; 
-        } 
- 
+            return config;
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) final {
             Become(&TFakeCoordinator::StateWork);
-            SendQueued(ctx); 
+            SendQueued(ctx);
         }
 
         void OnDetach(const TActorContext &ctx) override {
@@ -110,12 +110,12 @@ namespace NKikimr {
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (!Pipes->OnConnect(ev)) {
-                if (ev->Get()->Dead) { 
-                    AckPlanStepsForDeadTablet(ev->Get()->TabletId); 
+                if (ev->Get()->Dead) {
+                    AckPlanStepsForDeadTablet(ev->Get()->TabletId);
                     AdvancePlan(ctx);
                 } else {
                     SendQueued(ctx, ev->Get()->TabletId);
-                } 
+                }
 
             }
         }
@@ -152,22 +152,22 @@ namespace NKikimr {
             }
         }
 
-        void AckPlanStepsForDeadTablet(ui64 tabletId) { 
-            auto pit = State->QueuedPlans.lower_bound(std::make_pair(tabletId, 0)); 
-            while (pit != State->QueuedPlans.end() && pit->first.first == tabletId) { 
+        void AckPlanStepsForDeadTablet(ui64 tabletId) {
+            auto pit = State->QueuedPlans.lower_bound(std::make_pair(tabletId, 0));
+            while (pit != State->QueuedPlans.end() && pit->first.first == tabletId) {
                 Cerr << "FAKE_COORDINATOR: forgetting step " << pit->first.second << " for dead tablet " << pit->first.first << Endl;
-                auto toErase = pit; 
-                ++pit; 
-                for (const auto& evPlan : toErase->second) { 
-                    for (const auto& mediatorTx : evPlan->Record.GetTransactions()) { 
-                        ui64 txId = mediatorTx.GetTxId(); 
-                        UnlinkTx(tabletId, txId); 
-                    } 
-                } 
-                State->QueuedPlans.erase(toErase); 
-            } 
-        } 
- 
+                auto toErase = pit;
+                ++pit;
+                for (const auto& evPlan : toErase->second) {
+                    for (const auto& mediatorTx : evPlan->Record.GetTransactions()) {
+                        ui64 txId = mediatorTx.GetTxId();
+                        UnlinkTx(tabletId, txId);
+                    }
+                }
+                State->QueuedPlans.erase(toErase);
+            }
+        }
+
         ui64 GetMinStep() const {
             ui64 minStep = Max<ui64>();
             for (auto& kv : State->QueuedPlans) {

@@ -330,8 +330,8 @@ struct TOptimizationFuncMapFiller {
         Map["Nth"] = &OptimizeNth;
         Map["Extend"] = &OptimizeExtend;
 
-        Provider = [&](TInternName name) { 
-            auto it = Map.find(name.Str()); 
+        Provider = [&](TInternName name) {
+            auto it = Map.find(name.Str());
             if (it != Map.end())
                 return it->second;
 

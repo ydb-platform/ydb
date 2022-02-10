@@ -21,9 +21,9 @@
 
 #include <util/system/type_name.h>
 #include <util/system/datetime.h>
- 
-LWTRACE_USING(ACTORLIB_PROVIDER) 
- 
+
+LWTRACE_USING(ACTORLIB_PROVIDER)
+
 namespace NActors {
     constexpr TDuration TExecutorThread::DEFAULT_TIME_PER_MAILBOX;
 
@@ -98,10 +98,10 @@ namespace NActors {
         }
     }
 
-    inline TString ActorTypeName(const IActor* actor, ui32 activityType) { 
-        return actor ? SafeTypeName(actor) : ("activityType_" + ToString(activityType) + " (destroyed)"); 
-    } 
- 
+    inline TString ActorTypeName(const IActor* actor, ui32 activityType) {
+        return actor ? SafeTypeName(actor) : ("activityType_" + ToString(activityType) + " (destroyed)");
+    }
+
     inline void LwTraceSlowDelivery(IEventHandle* ev, const IActor* actor, ui32 poolId, const TActorId& currentRecipient,
                                     double delivMs, double sinceActivationMs, ui32 eventsExecutedBefore) {
         const auto baseEv = (ev && ev->HasEvent()) ? ev->GetBase() : nullptr;
@@ -124,13 +124,13 @@ namespace NActors {
                 eventMs,
                 baseEv ? SafeTypeName(baseEv) : ToString(evTypeForTracing),
                 currentRecipient.ToString(),
-                ActorTypeName(actor, activityType)); 
+                ActorTypeName(actor, activityType));
     }
 
     template <typename TMailbox>
     void TExecutorThread::Execute(TMailbox* mailbox, ui32 hint) {
         Y_VERIFY_DEBUG(DyingActors.empty());
- 
+
         bool reclaimAsFree = false;
 
         NHPTimer::STime hpstart = GetCycleCountFast();
@@ -167,9 +167,9 @@ namespace NActors {
                         double sinceActivationMs = NHPTimer::GetSeconds(hpprev - hpstart) * 1000.0;
                         LwTraceSlowDelivery(ev.Get(), actor, Ctx.PoolId, CurrentRecipient, NHPTimer::GetSeconds(hpprev - ev->SendTime) * 1000.0, sinceActivationMs, executed);
                     }
- 
+
                     ui32 evTypeForTracing = ev->Type;
- 
+
                     ui32 activityType = actor->GetActivityType();
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
@@ -184,10 +184,10 @@ namespace NActors {
                         DropUnregistered();
                         actor = nullptr;
                     }
- 
+
                     if (mailbox->IsEmpty()) // was not-free and become free, we must reclaim mailbox
                         reclaimAsFree = true;
- 
+
                     hpnow = GetCycleCountFast();
                     NHPTimer::STime elapsed = Ctx.AddEventProcessingStats(hpprev, hpnow, activityType, CurrentActorScheduledEventsCounter);
                     if (elapsed > 1000000) {
@@ -197,9 +197,9 @@ namespace NActors {
                     // The actor might have been destroyed
                     if (actor)
                         actor->AddElapsedTicks(elapsed);
- 
+
                     CurrentRecipient = TActorId();
-                } else { 
+                } else {
                     TAutoPtr<IEventHandle> nonDelivered = ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {
                         ActorSystem->Send(nonDelivered);
@@ -207,7 +207,7 @@ namespace NActors {
                         Ctx.IncrementNonDeliveredEvents();
                     }
                     hpnow = GetCycleCountFast();
-                } 
+                }
 
                 hpprev = hpnow;
 
@@ -241,8 +241,8 @@ namespace NActors {
                             recipient.ToString(),
                             SafeTypeName(actor));
                     break;
-                } 
- 
+                }
+
                 if (executed + 1 == Ctx.EventsPerMailbox) {
                     AtomicStore(&mailbox->ScheduleMoment, hpnow);
                     Ctx.IncrementMailboxPushedOutByEventCount();
@@ -255,8 +255,8 @@ namespace NActors {
                             Ctx.WorkerId,
                             recipient.ToString(),
                             SafeTypeName(actor));
-                    break; 
-                } 
+                    break;
+                }
             } else {
                 if (executed == 0)
                     Ctx.IncrementEmptyMailboxActivation();
@@ -271,7 +271,7 @@ namespace NActors {
                         SafeTypeName(actor));
                 break; // empty queue, leave
             }
-        } 
+        }
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;

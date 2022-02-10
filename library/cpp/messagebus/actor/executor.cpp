@@ -18,7 +18,7 @@ using namespace NActor::NPrivate;
 namespace {
     struct THistoryInternal {
         struct TRecord {
-            TAtomic MaxQueueSize; 
+            TAtomic MaxQueueSize;
 
             TRecord()
                 : MaxQueueSize()
@@ -27,7 +27,7 @@ namespace {
 
             TExecutorHistory::THistoryRecord Capture() {
                 TExecutorHistory::THistoryRecord r;
-                r.MaxQueueSize = AtomicGet(MaxQueueSize); 
+                r.MaxQueueSize = AtomicGet(MaxQueueSize);
                 return r;
             }
         };
@@ -237,14 +237,14 @@ size_t TExecutor::GetWorkQueueSize() const {
     return WorkItems.Size();
 }
 
-using namespace NTSAN; 
- 
+using namespace NTSAN;
+
 ui32 TExecutor::GetMaxQueueSizeAndClear() const {
     ui32 max = 0;
     for (unsigned i = 0; i < WorkerThreads.size(); ++i) {
-        TExecutorWorkerThreadLocalData* wtls = RelaxedLoad(&WorkerThreads[i]->ThreadLocalData); 
-        max = Max<ui32>(max, RelaxedLoad(&wtls->MaxQueueSize)); 
-        RelaxedStore<ui32>(&wtls->MaxQueueSize, 0); 
+        TExecutorWorkerThreadLocalData* wtls = RelaxedLoad(&WorkerThreads[i]->ThreadLocalData);
+        max = Max<ui32>(max, RelaxedLoad(&wtls->MaxQueueSize));
+        RelaxedStore<ui32>(&wtls->MaxQueueSize, 0);
     }
     return max;
 }
@@ -269,7 +269,7 @@ TExecutorStatus TExecutor::GetStatusRecordInternal() const {
         ss << "work items:     " << GetWorkQueueSize() << "\n";
         ss << "workers:\n";
         for (unsigned i = 0; i < WorkerThreads.size(); ++i) {
-            ss << "-- " << AtomicGet(*AtomicGet(WorkerThreads[i]->WhatThreadDoesLocation)) << "\n"; 
+            ss << "-- " << AtomicGet(*AtomicGet(WorkerThreads[i]->WhatThreadDoesLocation)) << "\n";
         }
         r.Status = ss.Str();
     }
@@ -299,8 +299,8 @@ TAutoPtr<IWorkItem> TExecutor::DequeueWork() {
 
     auto& wtls = TlsRef(WorkerThreadLocalData);
 
-    if (queueSize > RelaxedLoad(&wtls.MaxQueueSize)) { 
-        RelaxedStore<ui32>(&wtls.MaxQueueSize, queueSize); 
+    if (queueSize > RelaxedLoad(&wtls.MaxQueueSize)) {
+        RelaxedStore<ui32>(&wtls.MaxQueueSize, queueSize);
     }
 
     return wi;

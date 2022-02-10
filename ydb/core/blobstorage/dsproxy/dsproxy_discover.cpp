@@ -414,9 +414,9 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         if (status == NKikimrProto::OK) {
             if (record.GetIsRangeOverflow() && !record.ResultSize()) {
                 A_LOG_CRIT_S("BSD40", "Handle TEvVGetResult inconsistent IsRangeOverflow set with ResultSize# 0");
-                replyStatus = NKikimrProto::ERROR; 
-                vDiskData.IsError = true; 
-            } 
+                replyStatus = NKikimrProto::ERROR;
+                vDiskData.IsError = true;
+            }
         } else {
             replyStatus = NKikimrProto::ERROR;
             vDiskData.IsError = true;

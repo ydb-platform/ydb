@@ -26,7 +26,7 @@
 #include <ydb/core/base/grpc_service_factory.h>
 
 #include <google/protobuf/text_format.h>
- 
+
 #include <functional>
 #include <algorithm>
 
@@ -102,7 +102,7 @@ namespace Tests {
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
-        TIntrusivePtr<TFormatFactory> Formats; 
+        TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
         TLoggerInitializer LoggerInitializer;
@@ -265,7 +265,7 @@ namespace Tests {
         struct TFlatQueryOptions {
             TString Params;
             bool IsQueryCompiled = false;
-            bool CollectStats = false; 
+            bool CollectStats = false;
         };
 
         struct TPathVersion {
@@ -276,7 +276,7 @@ namespace Tests {
         using TApplyIf = TVector<TPathVersion>;
 
         TClient(const TServerSettings& settings);
-        virtual ~TClient(); 
+        virtual ~TClient();
 
         const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> GetClient() const;
@@ -314,7 +314,7 @@ namespace Tests {
         }
 
         template <typename T>
-        NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) { 
+        NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) {
             NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT;
             const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS;
             PrepareRequest(msgHolder);
@@ -342,7 +342,7 @@ namespace Tests {
         TString StartTrace(const TString &path);
         void StopTrace();
 
-        // Flat DB operations 
+        // Flat DB operations
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);
         NMsgBusProxy::EResponseStatus MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
         NMsgBusProxy::EResponseStatus RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});
@@ -373,7 +373,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update);
         NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const TString& alter);
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update, const TString& userToken);
-        TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const TString& alter, const TString& userToken); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const TString& alter, const TString& userToken);
 
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
@@ -392,13 +392,13 @@ namespace Tests {
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
         bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
- 
-        // returns NMsgBusProxy::MSTATUS_* and the raw response 
+
+        // returns NMsgBusProxy::MSTATUS_* and the raw response
         ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
- 
+
         bool Compile(const TString &mkql, TString &compiled);
         bool LocalQuery(ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result);
-        bool LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& schemeChanges, bool dryRun, 
+        bool LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& schemeChanges, bool dryRun,
                            NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
         bool LocalSchemeTx(const ui64 tabletId, const TString& schemeChanges, bool dryRun,
                            NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
@@ -408,13 +408,13 @@ namespace Tests {
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
- 
+
 
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
 
-        // Helper functions 
+        // Helper functions
         TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
@@ -423,11 +423,11 @@ namespace Tests {
         ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId);
         bool TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting = false);
         TVector<ui32> GetFollowerNodes(TTestActorRuntime *runtime, ui64 tabletId);
-        void S3Listing(const TString& table, const TString& prefixColumnsPb, const TString &pathPrefix, 
-                       const TString &pathDelimiter, const TString& startAfterSuffixColumnsPb, 
-                       const TVector<TString>& columnsToReturn, ui32 maxKeys, ui32 timeoutMillisec, 
-                       NKikimrClient::TS3ListingResponse &res); 
- 
+        void S3Listing(const TString& table, const TString& prefixColumnsPb, const TString &pathPrefix,
+                       const TString &pathDelimiter, const TString& startAfterSuffixColumnsPb,
+                       const TVector<TString>& columnsToReturn, ui32 maxKeys, ui32 timeoutMillisec,
+                       NKikimrClient::TS3ListingResponse &res);
+
         void GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res);
         void GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res);
 
@@ -440,60 +440,60 @@ namespace Tests {
         THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
     protected:
-        template <class TMsg> 
+        template <class TMsg>
         TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
-            auto res = dynamic_cast<TMsg*>(msg); 
+            auto res = dynamic_cast<TMsg*>(msg);
             TString s;
-            ::google::protobuf::TextFormat::PrintToString(res->Record, &s); 
+            ::google::protobuf::TextFormat::PrintToString(res->Record, &s);
             if (s.size() > maxSz) {
-                s.resize(maxSz); 
-                s += "...\n(TRUNCATED)\n"; 
-            } 
-            return s; 
-        } 
- 
-        // Waits for kikimr server to become ready 
-        template <class TReq> 
-        NBus::EMessageStatus SendWhenReady(TAutoPtr<TReq> request, TAutoPtr<NBus::TBusMessage>& reply, const ui32 timeout = 5000) { 
-            TInstant deadline = TInstant::Now() + TDuration::MilliSeconds(timeout); 
-            NBus::EMessageStatus status = NBus::MESSAGE_UNKNOWN; 
-            // Server might not be ready 
-            do { 
-                TAutoPtr<TReq> msgCopy(new TReq()); 
-                msgCopy->Record = request->Record; 
-                status = SyncCall(msgCopy, reply); 
- 
-                if (status != NBus::MESSAGE_OK) 
-                    return status; 
- 
-                const NMsgBusProxy::TBusResponse* notReadyResp = dynamic_cast<const NMsgBusProxy::TBusResponse*>(reply.Get()); 
-                if (!notReadyResp) 
-                    break; 
- 
-                if (notReadyResp->Record.GetStatus() != NMsgBusProxy::MSTATUS_NOTREADY) 
+                s.resize(maxSz);
+                s += "...\n(TRUNCATED)\n";
+            }
+            return s;
+        }
+
+        // Waits for kikimr server to become ready
+        template <class TReq>
+        NBus::EMessageStatus SendWhenReady(TAutoPtr<TReq> request, TAutoPtr<NBus::TBusMessage>& reply, const ui32 timeout = 5000) {
+            TInstant deadline = TInstant::Now() + TDuration::MilliSeconds(timeout);
+            NBus::EMessageStatus status = NBus::MESSAGE_UNKNOWN;
+            // Server might not be ready
+            do {
+                TAutoPtr<TReq> msgCopy(new TReq());
+                msgCopy->Record = request->Record;
+                status = SyncCall(msgCopy, reply);
+
+                if (status != NBus::MESSAGE_OK)
+                    return status;
+
+                const NMsgBusProxy::TBusResponse* notReadyResp = dynamic_cast<const NMsgBusProxy::TBusResponse*>(reply.Get());
+                if (!notReadyResp)
                     break;
- 
-                // Retry if the server wasn't ready yet 
-                Sleep(TDuration::MilliSeconds(10)); 
-            } while (TInstant::Now() < deadline); 
- 
-            return status; 
-        } 
- 
-        // Waits for scheme operation to complete 
+
+                if (notReadyResp->Record.GetStatus() != NMsgBusProxy::MSTATUS_NOTREADY)
+                    break;
+
+                // Retry if the server wasn't ready yet
+                Sleep(TDuration::MilliSeconds(10));
+            } while (TInstant::Now() < deadline);
+
+            return status;
+        }
+
+        // Waits for scheme operation to complete
         NBus::EMessageStatus WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                             TAutoPtr<NBus::TBusMessage>& reply,
                                             TDuration timeout = TDuration::Seconds(1000));
         NBus::EMessageStatus SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
                                                    TAutoPtr<NBus::TBusMessage>& reply,
                                                    TDuration timeout = TDuration::Seconds(1000));
- 
-        ui32 NodeIdToIndex(TTestActorRuntime* runtime, ui32 id) { 
-            ui32 offset = runtime->GetNodeId(0); 
+
+        ui32 NodeIdToIndex(TTestActorRuntime* runtime, ui32 id) {
+            ui32 offset = runtime->GetNodeId(0);
             Y_VERIFY(id >= offset);
-            return id - offset; 
-        } 
- 
+            return id - offset;
+        }
+
         TAutoPtr<NMsgBusProxy::TBusResponse> LsImpl(const TString& path);
 
         static void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
@@ -504,7 +504,7 @@ namespace Tests {
             }
         }
 
-    protected: 
+    protected:
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
         const ui32 Domain;

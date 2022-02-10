@@ -145,9 +145,9 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Draft::Dummy::IN, Draft::Dummy::OUT, TGRpcYdbDummyService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \ 
-            ACTION; \ 
-        }, &Draft::Dummy::DummyService::AsyncService::Request ## NAME, \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Draft::Dummy::DummyService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("dummy", #NAME))->Run();
 
     ADD_REQUEST(Ping, PingRequest, PingResponse, {

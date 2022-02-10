@@ -252,10 +252,10 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             }
         });
     }
- 
+
     Y_UNIT_TEST(DropWithData) {
-        TTestWithReboots t; 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");

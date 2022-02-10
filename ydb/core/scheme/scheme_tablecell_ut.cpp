@@ -1,14 +1,14 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/vector.h> 
- 
-using namespace NActors; 
- 
-Y_UNIT_TEST_SUITE(Scheme) { 
- 
-    using namespace NKikimr; 
- 
+#include <util/generic/vector.h>
+
+using namespace NActors;
+
+Y_UNIT_TEST_SUITE(Scheme) {
+
+    using namespace NKikimr;
+
     Y_UNIT_TEST(EmptyOwnedCellVec) {
         TOwnedCellVec empty;
         UNIT_ASSERT_VALUES_EQUAL(empty.size(), 0u);
@@ -58,155 +58,155 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT_VALUES_EQUAL(moved[1].AsBuf(), TStringBuf(bigStrVal, sizeof(bigStrVal)));
     }
 
-    Y_UNIT_TEST(TSerializedCellVec) { 
-        ui64 intVal = 42; 
-        char smallStrVal[] = "str1"; 
-        char bigStrVal[] = 
-                "> You have requested to link your commit to an existing review request 849684\n" 
-                "> This review request is not ready yet to be merged, see its merge requirements below"; 
-        float floatVal = 0.42; 
-        double doubleVal = -0.0025; 
- 
-        TVector<TCell> cells; 
-        TVector<NScheme::TTypeId> types; 
- 
-        cells.push_back(TCell((const char*)&doubleVal, sizeof(doubleVal))); 
-        types.push_back(NScheme::NTypeIds::Double); 
-        cells.push_back(TCell(smallStrVal, sizeof(smallStrVal))); 
-        types.push_back(NScheme::NTypeIds::String); 
-        cells.push_back(TCell()); 
-        types.push_back(NScheme::NTypeIds::Utf8); 
-        cells.push_back(TCell(smallStrVal, sizeof(smallStrVal))); 
-        types.push_back(NScheme::NTypeIds::Utf8); 
-        cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal))); 
-        types.push_back(NScheme::NTypeIds::Float); 
-        cells.push_back(TCell()); 
-        types.push_back(NScheme::NTypeIds::Decimal); 
-        cells.push_back(TCell((const char*)&intVal, sizeof(ui64))); 
-        types.push_back(NScheme::NTypeIds::Uint64); 
-        cells.push_back(TCell()); 
-        types.push_back(NScheme::NTypeIds::Decimal); 
-        cells.push_back(TCell()); 
-        types.push_back(NScheme::NTypeIds::Uint8); 
-        cells.push_back(TCell(bigStrVal, sizeof(bigStrVal))); 
-        types.push_back(NScheme::NTypeIds::Utf8); 
-        cells.push_back(TCell()); 
-        types.push_back(NScheme::NTypeIds::Double); 
-        cells.push_back(TCell((const char*)&intVal, sizeof(i32))); 
-        types.push_back(NScheme::NTypeIds::Int32); 
- 
-        TSerializedCellVec vec(TSerializedCellVec::Serialize(cells)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(cells.size(), 12); 
-        UNIT_ASSERT_VALUES_EQUAL(types.size(), cells.size()); 
-        UNIT_ASSERT_VALUES_EQUAL(vec.GetCells().size(), cells.size()); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(cells[0].AsValue<double>(), doubleVal, 0.00001); 
-        UNIT_ASSERT_VALUES_EQUAL(cells[1].AsBuf().data(), smallStrVal); 
-        UNIT_ASSERT_VALUES_EQUAL(cells[3].AsBuf().data(), smallStrVal); 
-        UNIT_ASSERT_DOUBLES_EQUAL(cells[4].AsValue<float>(), floatVal, 0.00001); 
-        UNIT_ASSERT_VALUES_EQUAL(cells[6].AsValue<ui64>(), intVal); 
-        UNIT_ASSERT_VALUES_EQUAL(cells[9].AsBuf().data(), bigStrVal); 
-        UNIT_ASSERT_VALUES_EQUAL(cells[11].AsValue<i32>(), intVal); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec.GetCells().data(), cells.data(), 
-                                                         types.data(), 
-                                                         vec.GetCells().size(), cells.size()), 
-                                 0); 
- 
-        TSerializedCellVec vecCopy(vec); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vecCopy.GetCells().data(), cells.data(), 
-                                                         types.data(), 
-                                                         vecCopy.GetCells().size(), cells.size()), 
-                                 0); 
- 
- 
-        TSerializedCellVec vec2(std::move(vecCopy)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec2.GetCells().data(), cells.data(), 
-                                                         types.data(), 
-                                                         vec2.GetCells().size(), cells.size()), 
-                                 0); 
- 
-        TSerializedCellVec vec3; 
-        UNIT_ASSERT(vec3.GetCells().empty()); 
-        UNIT_ASSERT(vec3.GetBuffer().empty()); 
- 
-        TString buf = vec.GetBuffer(); 
-        UNIT_ASSERT(buf.size() > cells.size()*2); 
-        vec3.Parse(buf); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(), 
-                                                         types.data(), 
-                                                         vec3.GetCells().size(), cells.size()), 
-                                 0); 
- 
-        const int ITERATIONS = 1000;//10000000; 
- 
-        { 
-            TInstant start = TInstant::Now(); 
-            for (int i = 0; i < ITERATIONS; ++i) { 
-                TSerializedCellVec::Serialize(cells); 
-            } 
-            TInstant finish = TInstant::Now(); 
-            Cerr << "Serialize: " << finish - start << Endl; 
-        } 
- 
-        { 
-            TString buf = vec.GetBuffer(); 
-            TInstant start = TInstant::Now(); 
-                for (int i = 0; i < ITERATIONS; ++i) { 
-                vec3.Parse(buf); 
-            } 
-            TInstant finish = TInstant::Now(); 
-            Cerr << "Parse: " << finish - start << Endl; 
-        } 
- 
-        { 
-            TInstant start = TInstant::Now(); 
-            for (int i = 0; i < ITERATIONS; ++i) { 
-                vec3 = vec; 
-            } 
-            TInstant finish = TInstant::Now(); 
-            Cerr << "Copy: " << finish - start << Endl; 
-        } 
- 
-        { 
-            size_t unused = 0; 
-            TInstant start = TInstant::Now(); 
-            for (int i = 0; i < ITERATIONS; ++i) { 
-                TSerializedCellVec vec3(std::move(vec)); 
-                unused += vec3.GetCells().size(); 
-                if (unused % 10000 != 0) { 
-                    vec = std::move(vec3); 
-                } else { 
-                    vec = vec2; 
-                } 
-            } 
-            TInstant finish = TInstant::Now(); 
-            UNIT_ASSERT_VALUES_EQUAL(unused, ITERATIONS*cells.size()); 
-            Cerr << "Move: " << finish - start << Endl; 
-        } 
-    } 
- 
-    Y_UNIT_TEST(CellVecTryParse) { 
-        TSerializedCellVec vec; 
-        UNIT_ASSERT(!TSerializedCellVec::TryParse("\1", vec)); 
-        UNIT_ASSERT(!TSerializedCellVec::TryParse("\1\1", vec)); 
- 
-        const TString buf = TSerializedCellVec::Serialize({TCell(), TCell()}); 
-        UNIT_ASSERT_VALUES_EQUAL(buf.size(), 2 + 2*4); 
- 
-        { 
-            for (size_t i = 0; i < buf.size(); ++i) { 
-                TString hacked = buf; 
-                hacked[1] = hacked[i] + 1; 
-                UNIT_ASSERT(!TSerializedCellVec::TryParse(hacked, vec)); 
-            } 
-        } 
-    } 
- 
+    Y_UNIT_TEST(TSerializedCellVec) {
+        ui64 intVal = 42;
+        char smallStrVal[] = "str1";
+        char bigStrVal[] =
+                "> You have requested to link your commit to an existing review request 849684\n"
+                "> This review request is not ready yet to be merged, see its merge requirements below";
+        float floatVal = 0.42;
+        double doubleVal = -0.0025;
+
+        TVector<TCell> cells;
+        TVector<NScheme::TTypeId> types;
+
+        cells.push_back(TCell((const char*)&doubleVal, sizeof(doubleVal)));
+        types.push_back(NScheme::NTypeIds::Double);
+        cells.push_back(TCell(smallStrVal, sizeof(smallStrVal)));
+        types.push_back(NScheme::NTypeIds::String);
+        cells.push_back(TCell());
+        types.push_back(NScheme::NTypeIds::Utf8);
+        cells.push_back(TCell(smallStrVal, sizeof(smallStrVal)));
+        types.push_back(NScheme::NTypeIds::Utf8);
+        cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
+        types.push_back(NScheme::NTypeIds::Float);
+        cells.push_back(TCell());
+        types.push_back(NScheme::NTypeIds::Decimal);
+        cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
+        types.push_back(NScheme::NTypeIds::Uint64);
+        cells.push_back(TCell());
+        types.push_back(NScheme::NTypeIds::Decimal);
+        cells.push_back(TCell());
+        types.push_back(NScheme::NTypeIds::Uint8);
+        cells.push_back(TCell(bigStrVal, sizeof(bigStrVal)));
+        types.push_back(NScheme::NTypeIds::Utf8);
+        cells.push_back(TCell());
+        types.push_back(NScheme::NTypeIds::Double);
+        cells.push_back(TCell((const char*)&intVal, sizeof(i32)));
+        types.push_back(NScheme::NTypeIds::Int32);
+
+        TSerializedCellVec vec(TSerializedCellVec::Serialize(cells));
+
+        UNIT_ASSERT_VALUES_EQUAL(cells.size(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(types.size(), cells.size());
+        UNIT_ASSERT_VALUES_EQUAL(vec.GetCells().size(), cells.size());
+
+        UNIT_ASSERT_DOUBLES_EQUAL(cells[0].AsValue<double>(), doubleVal, 0.00001);
+        UNIT_ASSERT_VALUES_EQUAL(cells[1].AsBuf().data(), smallStrVal);
+        UNIT_ASSERT_VALUES_EQUAL(cells[3].AsBuf().data(), smallStrVal);
+        UNIT_ASSERT_DOUBLES_EQUAL(cells[4].AsValue<float>(), floatVal, 0.00001);
+        UNIT_ASSERT_VALUES_EQUAL(cells[6].AsValue<ui64>(), intVal);
+        UNIT_ASSERT_VALUES_EQUAL(cells[9].AsBuf().data(), bigStrVal);
+        UNIT_ASSERT_VALUES_EQUAL(cells[11].AsValue<i32>(), intVal);
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec.GetCells().data(), cells.data(),
+                                                         types.data(),
+                                                         vec.GetCells().size(), cells.size()),
+                                 0);
+
+        TSerializedCellVec vecCopy(vec);
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vecCopy.GetCells().data(), cells.data(),
+                                                         types.data(),
+                                                         vecCopy.GetCells().size(), cells.size()),
+                                 0);
+
+
+        TSerializedCellVec vec2(std::move(vecCopy));
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec2.GetCells().data(), cells.data(),
+                                                         types.data(),
+                                                         vec2.GetCells().size(), cells.size()),
+                                 0);
+
+        TSerializedCellVec vec3;
+        UNIT_ASSERT(vec3.GetCells().empty());
+        UNIT_ASSERT(vec3.GetBuffer().empty());
+
+        TString buf = vec.GetBuffer();
+        UNIT_ASSERT(buf.size() > cells.size()*2);
+        vec3.Parse(buf);
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(vec3.GetCells().data(), cells.data(),
+                                                         types.data(),
+                                                         vec3.GetCells().size(), cells.size()),
+                                 0);
+
+        const int ITERATIONS = 1000;//10000000;
+
+        {
+            TInstant start = TInstant::Now();
+            for (int i = 0; i < ITERATIONS; ++i) {
+                TSerializedCellVec::Serialize(cells);
+            }
+            TInstant finish = TInstant::Now();
+            Cerr << "Serialize: " << finish - start << Endl;
+        }
+
+        {
+            TString buf = vec.GetBuffer();
+            TInstant start = TInstant::Now();
+                for (int i = 0; i < ITERATIONS; ++i) {
+                vec3.Parse(buf);
+            }
+            TInstant finish = TInstant::Now();
+            Cerr << "Parse: " << finish - start << Endl;
+        }
+
+        {
+            TInstant start = TInstant::Now();
+            for (int i = 0; i < ITERATIONS; ++i) {
+                vec3 = vec;
+            }
+            TInstant finish = TInstant::Now();
+            Cerr << "Copy: " << finish - start << Endl;
+        }
+
+        {
+            size_t unused = 0;
+            TInstant start = TInstant::Now();
+            for (int i = 0; i < ITERATIONS; ++i) {
+                TSerializedCellVec vec3(std::move(vec));
+                unused += vec3.GetCells().size();
+                if (unused % 10000 != 0) {
+                    vec = std::move(vec3);
+                } else {
+                    vec = vec2;
+                }
+            }
+            TInstant finish = TInstant::Now();
+            UNIT_ASSERT_VALUES_EQUAL(unused, ITERATIONS*cells.size());
+            Cerr << "Move: " << finish - start << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(CellVecTryParse) {
+        TSerializedCellVec vec;
+        UNIT_ASSERT(!TSerializedCellVec::TryParse("\1", vec));
+        UNIT_ASSERT(!TSerializedCellVec::TryParse("\1\1", vec));
+
+        const TString buf = TSerializedCellVec::Serialize({TCell(), TCell()});
+        UNIT_ASSERT_VALUES_EQUAL(buf.size(), 2 + 2*4);
+
+        {
+            for (size_t i = 0; i < buf.size(); ++i) {
+                TString hacked = buf;
+                hacked[1] = hacked[i] + 1;
+                UNIT_ASSERT(!TSerializedCellVec::TryParse(hacked, vec));
+            }
+        }
+    }
+
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */
@@ -353,4 +353,4 @@ Y_UNIT_TEST_SUITE(Scheme) {
             }
         }
     }
-} 
+}

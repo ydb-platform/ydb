@@ -3,8 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
-#include <util/stream/file.h> 
- 
+#include <util/stream/file.h>
+
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
@@ -59,13 +59,13 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             }
 
             if (errors > 0) {
-                // DB is corrupt. Make a dump and stop 
-                const NScheme::TTypeRegistry& tr = *AppData(ctx)->TypeRegistry; 
+                // DB is corrupt. Make a dump and stop
+                const NScheme::TTypeRegistry& tr = *AppData(ctx)->TypeRegistry;
                 TString dbDumpFile = Sprintf("/tmp/coordinator_db_dump_%" PRIu64 ".%" PRIi32, Self->TabletID(), getpid());
                 TFixedBufferFileOutput out(dbDumpFile);
-                txc.DB.DebugDump(out, tr); 
-                out.Finish(); 
-                Cerr << "Coordinator DB dumped to " << dbDumpFile; 
+                txc.DB.DebugDump(out, tr);
+                out.Finish();
+                Cerr << "Coordinator DB dumped to " << dbDumpFile;
                 Sleep(TDuration::Seconds(10));
                 Y_FAIL("Transaction(s) not found!");
             }

@@ -42,8 +42,8 @@ private:
         TVector<size_t> checkColumnsMap;
         checkColumnsMap.resize(indexDesc.GetIndexColumns().size() + indexDesc.GetDataColumns().size());
 
-        THashMap<TString, size_t> indexColumns; 
- 
+        THashMap<TString, size_t> indexColumns;
+
         {
             size_t j = 0;
             for (size_t i = 0; i < indexDesc.GetIndexColumns().size(); i++, j++) {
@@ -66,17 +66,17 @@ private:
 
 
         TVector<size_t> pkColumnIdx;
-        size_t includedColumns = 0; // count of PK columns included in the index (before i-th PK column) 
+        size_t includedColumns = 0; // count of PK columns included in the index (before i-th PK column)
         for (size_t i = 0; i < TableDescription_.GetRef().GetPrimaryKeyColumns().size(); i++) {
             const auto& col = TableDescription_.GetRef().GetPrimaryKeyColumns()[i];
-            auto it = indexColumns.find(col); 
-            if (it != indexColumns.end()) { 
-                // PK column is included in the secondary index 
+            auto it = indexColumns.find(col);
+            if (it != indexColumns.end()) {
+                // PK column is included in the secondary index
                 pkColumnIdx.push_back(it->second);
-                ++includedColumns; 
+                ++includedColumns;
             } else {
                 settings.AppendColumns(col);
-                pkColumnIdx.push_back(checkColumnsMap.size() + i - includedColumns); 
+                pkColumnIdx.push_back(checkColumnsMap.size() + i - includedColumns);
             }
         }
 

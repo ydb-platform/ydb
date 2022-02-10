@@ -584,7 +584,7 @@ public:
     }
 
     NUdf::IFunctionArgTypesBuilder& Name(const NUdf::TStringRef& name) override {
-        Args_.back().Name_ = Env_.InternName(name); 
+        Args_.back().Name_ = Env_.InternName(name);
         return *this;
     }
 
@@ -1408,7 +1408,7 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
         for (const auto& arg : Args_) {
             builder.Add(arg.Type_);
             if (!arg.Name_.Str().empty()) {
-                builder.SetArgumentName(arg.Name_.Str()); 
+                builder.SetArgumentName(arg.Name_.Str());
             }
 
             if (arg.Flags_ != 0) {

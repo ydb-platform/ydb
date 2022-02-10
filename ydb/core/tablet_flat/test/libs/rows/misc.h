@@ -11,8 +11,8 @@ namespace NTest{
 
     class TGrowHeap: public TAtomicRefCount<TGrowHeap> {
     public:
-        explicit TGrowHeap(size_t bytes) 
-            : Pool(bytes, TMemoryPool::TLinearGrow::Instance()) 
+        explicit TGrowHeap(size_t bytes)
+            : Pool(bytes, TMemoryPool::TLinearGrow::Instance())
         {
 
         }

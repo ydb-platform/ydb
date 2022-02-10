@@ -281,15 +281,15 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 class TDataShardEngineHost : public TEngineHost {
 public:
     TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
-        : TEngineHost(db, counters, 
-            TEngineHostSettings(self->TabletID(), 
+        : TEngineHost(db, counters,
+            TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
-                self->ByKeyFilterDisabled(), 
-                self->GetKeyAccessSampler())) 
+                self->ByKeyFilterDisabled(),
+                self->GetKeyAccessSampler()))
         , Self(self)
         , DB(db)
         , LockTxId(lockTxId)
-        , Now(now) 
+        , Now(now)
     {}
 
     void SetWriteVersion(TRowVersion writeVersion) {
@@ -368,7 +368,7 @@ public:
 
         Self->SysLocksTable().SetLock(tableId, row, LockTxId);
 
-        Self->SetTableAccessTime(tableId, Now); 
+        Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
 
@@ -381,7 +381,7 @@ public:
 
         Self->SysLocksTable().SetLock(tableId, range, LockTxId);
 
-        Self->SetTableAccessTime(tableId, Now); 
+        Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
     }
@@ -446,7 +446,7 @@ public:
 
         Self->SysLocksTable().BreakLock(tableId, row);
 
-        Self->SetTableUpdateTime(tableId, Now); 
+        Self->SetTableUpdateTime(tableId, Now);
         TEngineHost::EraseRow(tableId, row);
     }
 
@@ -454,13 +454,13 @@ public:
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
         if (TSysTables::IsSystemTable(tableId))
             return DataShardSysTable(tableId).IsMyKey(row);
- 
+
         auto iter = Self->TableInfos.find(tableId.PathId.LocalPathId);
-        if (iter == Self->TableInfos.end()) { 
-            // TODO: can this happen? 
-            return false; 
-        } 
- 
+        if (iter == Self->TableInfos.end()) {
+            // TODO: can this happen?
+            return false;
+        }
+
         // Check row against range
         const TUserTable& info = *iter->second;
         return (ComparePointAndRange(row, info.GetTableRange(), info.KeyColumnTypes, info.KeyColumnTypes) == 0);
@@ -500,7 +500,7 @@ private:
     NTable::TDatabase& DB;
     const ui64& LockTxId;
     bool IsImmediateTx = false;
-    TInstant Now; 
+    TInstant Now;
     TRowVersion WriteVersion = TRowVersion::Max();
     TRowVersion ReadVersion = TRowVersion::Min();
     mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
@@ -517,11 +517,11 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
-        *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters); 
+        *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
 
     ui64 tabletId = self->TabletID();
     TraceMessage = Sprintf("Shard %" PRIu64 ", txid %" PRIu64, tabletId, stepTxId.second);
-    const TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem; 
+    const TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
     EngineSettings->LogErrorWriter = [actorSystem, this](const TString& message) {
         LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, TraceMessage
             << ", engine error: " << message);

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "grpc_request_base.h" 
+#include "grpc_request_base.h"
 #include "logger.h"
- 
+
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -123,10 +123,10 @@ public:
     virtual ~ICancelableContext() = default;
 };
 
-template <class TLimit> 
-class TInFlightLimiterImpl { 
+template <class TLimit>
+class TInFlightLimiterImpl {
 public:
-    explicit TInFlightLimiterImpl(const TLimit& limit) 
+    explicit TInFlightLimiterImpl(const TLimit& limit)
         : Limit_(limit)
     {}
 
@@ -154,13 +154,13 @@ public:
     }
 
 private:
-    const TLimit Limit_; 
+    const TLimit Limit_;
     TAtomic CurInFlightReqs_ = 0;
 };
 
-using TGlobalLimiter = TInFlightLimiterImpl<i64>; 
- 
- 
+using TGlobalLimiter = TInFlightLimiterImpl<i64>;
+
+
 class IGRpcService: public TThrRefBase {
 public:
     virtual grpc::Service* GetService() = 0;

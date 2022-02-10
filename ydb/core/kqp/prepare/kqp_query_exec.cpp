@@ -397,39 +397,39 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
     dstComputeTime.SetSum(txStats.GetComputeCpuTimeUsec());
     dstComputeTime.SetCnt(1);
 
-    { 
-        i64 cnt = 0; 
-        ui64 minCpu = Max<ui64>(); 
-        ui64 maxCpu = 0; 
-        ui64 sumCpu = 0; 
+    {
+        i64 cnt = 0;
+        ui64 minCpu = Max<ui64>();
+        ui64 maxCpu = 0;
+        ui64 sumCpu = 0;
         ui64 sumReadSets = 0;
         ui64 maxProgramSize = 0;
         ui64 maxReplySize = 0;
-        for (const auto& perShard : txStats.GetPerShardStats()) { 
-            ui64 cpu = perShard.GetCpuTimeUsec(); 
-            minCpu = Min(minCpu, cpu); 
-            maxCpu = Max(maxCpu, cpu); 
-            sumCpu += cpu; 
+        for (const auto& perShard : txStats.GetPerShardStats()) {
+            ui64 cpu = perShard.GetCpuTimeUsec();
+            minCpu = Min(minCpu, cpu);
+            maxCpu = Max(maxCpu, cpu);
+            sumCpu += cpu;
             sumReadSets += perShard.GetOutgoingReadSetsCount();
             maxProgramSize = Max(maxProgramSize, perShard.GetProgramSize());
             maxReplySize = Max(maxReplySize, perShard.GetReplySize());
-            ++cnt; 
-        } 
-        if (cnt) { 
+            ++cnt;
+        }
+        if (cnt) {
             auto& dstShardTime = *executionExtraStats.MutableShardsCpuTimeUs();
-            dstShardTime.SetMin(minCpu); 
-            dstShardTime.SetMax(maxCpu); 
-            dstShardTime.SetSum(sumCpu); 
-            dstShardTime.SetCnt(cnt); 
+            dstShardTime.SetMin(minCpu);
+            dstShardTime.SetMax(maxCpu);
+            dstShardTime.SetSum(sumCpu);
+            dstShardTime.SetCnt(cnt);
 
             dst.SetReadSetsCount(dst.GetReadSetsCount() + sumReadSets);
             dst.SetMaxShardProgramSize(Max(dst.GetMaxShardProgramSize(), maxProgramSize));
             dst.SetMaxShardReplySize(Max(dst.GetMaxShardReplySize(), maxReplySize));
 
             dstExec.SetCpuTimeUs(dstExec.GetCpuTimeUs() + sumCpu);
-        } 
-    } 
- 
+        }
+    }
+
     ui32 affectedShards = 0;
     for (auto& table : txStats.GetTableAccessStats()) {
         auto& dstTable = *dstExec.AddTables();

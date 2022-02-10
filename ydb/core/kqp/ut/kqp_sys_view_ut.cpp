@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT OwnerId, PartIdx, Path, PathId
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             ORDER BY PathId, PartIdx;
         )").GetValueSync();
 
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             WHERE OwnerId = 72057594046644480ul AND PathId > 5u AND PathId <= 9u
             ORDER BY PathId, PartIdx;
         )";
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         TString query = R"(
             SELECT OwnerId, PathId, PartIdx, Path
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             WHERE OwnerId = 72057594046644480ul AND PathId >= 6u AND PathId < 9u
             ORDER BY PathId, PartIdx;
         )";
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT OwnerId, PathId, PartIdx, Path
-            FROM `/Root/.sys/partition_stats` 
+            FROM `/Root/.sys/partition_stats`
             WHERE OwnerId = 72057594046644480ul AND PathId = 5u AND PartIdx > 1u AND PartIdx < 7u
             ORDER BY PathId, PartIdx;
         )").GetValueSync();
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT NodeId, Host
-            FROM `/Root/.sys/nodes`; 
+            FROM `/Root/.sys/nodes`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         auto query = Sprintf(R"(
             SELECT NodeId, Host
-            FROM `/Root/.sys/nodes` 
+            FROM `/Root/.sys/nodes`
             WHERE NodeId >= %du AND NodeId <= %du
         )", offset + 1, offset + 3);
 
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         auto query = Sprintf(R"(
             SELECT NodeId, Host
-            FROM `/Root/.sys/nodes` 
+            FROM `/Root/.sys/nodes`
             WHERE NodeId > %du AND NodeId < %du
         )", offset + 1, offset + 3);
 
@@ -254,19 +254,19 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             auto client = kikimr.GetTableClient();
             auto session = client.CreateSession().GetValueSync().GetSession();
             {
-                auto result = session.ExecuteDataQuery("SELECT 1;", 
-                    TTxControl::BeginTx().CommitTx()).GetValueSync(); 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            } 
-            { 
+                auto result = session.ExecuteDataQuery("SELECT 1;",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+            {
                 auto result = session.ExecuteDataQuery(Q_(R"(
-                    SELECT * FROM `/Root/TwoShard` 
+                    SELECT * FROM `/Root/TwoShard`
                 )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
             {
                 auto result = session.ExecuteDataQuery(Q_(R"(
-                    SELECT * FROM `/Root/EightShard` 
+                    SELECT * FROM `/Root/EightShard`
                 )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
@@ -303,12 +303,12 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
             UNIT_ASSERT(readBytesSet.contains(432)); // EightShard
         };
 
-        checkTable("`/Root/.sys/top_queries_by_read_bytes_one_minute`"); 
-        checkTable("`/Root/.sys/top_queries_by_read_bytes_one_hour`"); 
-        checkTable("`/Root/.sys/top_queries_by_duration_one_minute`"); 
-        checkTable("`/Root/.sys/top_queries_by_duration_one_hour`"); 
-        checkTable("`/Root/.sys/top_queries_by_cpu_time_one_minute`"); 
-        checkTable("`/Root/.sys/top_queries_by_cpu_time_one_hour`"); 
+        checkTable("`/Root/.sys/top_queries_by_read_bytes_one_minute`");
+        checkTable("`/Root/.sys/top_queries_by_read_bytes_one_hour`");
+        checkTable("`/Root/.sys/top_queries_by_duration_one_minute`");
+        checkTable("`/Root/.sys/top_queries_by_duration_one_hour`");
+        checkTable("`/Root/.sys/top_queries_by_cpu_time_one_minute`");
+        checkTable("`/Root/.sys/top_queries_by_cpu_time_one_hour`");
     }
 
     Y_UNIT_TEST(FailNavigate) {
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         auto client = kikimr.GetTableClient();
 
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT PathId FROM `/Root/.sys/partition_stats`; 
+            SELECT PathId FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         TTableClient client(driver);
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT PathId FROM `/Root/.sys/partition_stats`; 
+            SELECT PathId FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         TTableClient client(driver);
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT PathId FROM `/Root/.sys/partition_stats`; 
+            SELECT PathId FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

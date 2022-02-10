@@ -104,7 +104,7 @@ void TStructTypeBuilder::Reserve(ui32 size) {
 }
 
 TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type, ui32* index) {
-    Members.push_back(TStructMember(Env->InternName(name).Str(), type, index)); 
+    Members.push_back(TStructMember(Env->InternName(name).Str(), type, index));
     return *this;
 }
 
@@ -141,7 +141,7 @@ void TStructLiteralBuilder::Reserve(ui32 size) {
 
 TStructLiteralBuilder& TStructLiteralBuilder::Add(const TStringBuf& name, TRuntimeNode value) {
     TType* valueType = value.GetStaticType();
-    Members.push_back(TStructMember(Env->InternName(name).Str(), valueType)); 
+    Members.push_back(TStructMember(Env->InternName(name).Str(), valueType));
     Values.push_back(value);
     return *this;
 }
@@ -223,7 +223,7 @@ void TDictLiteralBuilder::Clear() {
 
 TCallableTypeBuilder::TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType)
     : Env(&env)
-    , Name(Env->InternName(name)) 
+    , Name(Env->InternName(name))
     , ReturnType(returnType)
     , OptionalArgsCount(0)
     , HasPayload(false)
@@ -273,7 +273,7 @@ TCallableType* TCallableTypeBuilder::Build() {
         payload = BuildCallableTypePayload(ArgNames, ArgFlags, FuncPayload, *Env);
     }
 
-    auto ret = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env); 
+    auto ret = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env);
     ret->SetOptionalArgumentsCount(OptionalArgsCount);
     return ret;
 }
@@ -289,7 +289,7 @@ void TCallableTypeBuilder::Clear() {
 
 TCallableBuilder::TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType, bool disableMerge)
     : Env(&env)
-    , Name(Env->InternName(name)) 
+    , Name(Env->InternName(name))
     , ReturnType(returnType)
     , DisableMerge(disableMerge)
     , OptionalArgsCount(0)
@@ -343,7 +343,7 @@ TCallable* TCallableBuilder::Build() {
         payload = BuildCallableTypePayload(ArgNames, ArgFlags, FuncPayload, *Env);
     }
 
-    auto type = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env); 
+    auto type = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env);
     type->SetOptionalArgumentsCount(OptionalArgsCount);
     if (DisableMerge)
         type->DisableMerge();

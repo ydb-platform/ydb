@@ -81,7 +81,7 @@ namespace {
 
 
     private:
-        void AddName(const TInternName& name) { 
+        void AddName(const TInternName& name) {
             auto iter = Names.emplace(name, 0);
             if (iter.second) {
                 NameOrder.emplace_back(name);
@@ -928,7 +928,7 @@ namespace {
             WriteVar32(node.GetCookie() - 1);
         }
 
-        void WriteName(TInternName name) { 
+        void WriteName(TInternName name) {
             auto it = Names.find(name);
             if (it == Names.end()) {
                 WriteVar32(name.Str().size() << 1);

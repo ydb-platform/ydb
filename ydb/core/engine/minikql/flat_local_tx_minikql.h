@@ -25,33 +25,33 @@ public:
         results.reserve(tables.size());
 
         for (auto& table : tables) {
-            TTableResult result(TTableResult::Ok); 
- 
+            TTableResult result(TTableResult::Ok);
+
             const ui32* tableId = Scheme.TableNames.FindPtr(table.TableName);
-            if (!tableId) { 
-                result = TTableResult(TTableResult::Error, "Unknown table " + table.TableName); 
-            } else { 
+            if (!tableId) {
+                result = TTableResult(TTableResult::Error, "Unknown table " + table.TableName);
+            } else {
                 const auto *tableInfo = Scheme.Tables.FindPtr(*tableId);
-                Y_VERIFY(tableInfo); 
+                Y_VERIFY(tableInfo);
 
-                result.KeyColumnCount = tableInfo->KeyColumns.size(); 
-                result.Table = table; 
-                result.TableId = new TTableId(TabletId, *tableId); 
+                result.KeyColumnCount = tableInfo->KeyColumns.size();
+                result.Table = table;
+                result.TableId = new TTableId(TabletId, *tableId);
 
-                for (const auto& column : table.ColumnNames) { 
-                    const ui32* columnId = tableInfo->ColumnNames.FindPtr(column); 
-                    if (!columnId) { 
-                        result = TTableResult(TTableResult::Error, "Unknown column " + table.TableName + ":" + column); 
-                        break; 
-                    } 
+                for (const auto& column : table.ColumnNames) {
+                    const ui32* columnId = tableInfo->ColumnNames.FindPtr(column);
+                    if (!columnId) {
+                        result = TTableResult(TTableResult::Error, "Unknown column " + table.TableName + ":" + column);
+                        break;
+                    }
 
                     const auto *columnInfo = tableInfo->Columns.FindPtr(*columnId);
-                    Y_VERIFY(columnInfo); 
+                    Y_VERIFY(columnInfo);
 
-                    auto insertResult = result.Columns.insert(std::make_pair(column, IDbSchemeResolver::TTableResult::TColumn 
+                    auto insertResult = result.Columns.insert(std::make_pair(column, IDbSchemeResolver::TTableResult::TColumn
                     {*columnId, (i32)columnInfo->KeyOrder, columnInfo->PType, 0}));
-                    Y_VERIFY(insertResult.second); 
-                } 
+                    Y_VERIFY(insertResult.second);
+                }
             }
 
             results.push_back(result);
@@ -102,7 +102,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         return true;
     }
 
-    bool PrepareParams(TTransactionContext &txc, const TAppData *appData) { 
+    bool PrepareParams(TTransactionContext &txc, const TAppData *appData) {
         Y_UNUSED(txc);
         if (SourceProgram.Params.Binary) {
             SerializedMiniKQLParams = SourceProgram.Program.Binary;
@@ -119,10 +119,10 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 return false;
             }
 
-            TAlignedPagePoolCounters counters(appData->Counters, "local_tx"); 
+            TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
             TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
-            auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, nullptr); 
+            auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, nullptr);
             future.Wait();
             NYql::TConvertResult compileResult = future.GetValue();
 
@@ -135,7 +135,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         return true;
     }
 
-    bool PrepareProgram(TTransactionContext &txc, const TAppData *appData) { 
+    bool PrepareProgram(TTransactionContext &txc, const TAppData *appData) {
         // simple case - everything prepared for us and no params
         if (SourceProgram.Program.Binary) {
             SerializedMiniKQLProgram = SourceProgram.Program.Binary;
@@ -152,18 +152,18 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             return false;
         }
 
-        TAlignedPagePoolCounters counters(appData->Counters, "local_tx"); 
+        TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
         TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TLocalDbSchemeResolver dbResolver(txc.DB.GetScheme(), TabletId);
         const auto unguard = Unguard(alloc);
-        auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, &dbResolver); 
+        auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, &dbResolver);
         future.Wait();
         NYql::TConvertResult compileResult = future.GetValue();
-        if (!compileResult.Errors.Empty()) { 
+        if (!compileResult.Errors.Empty()) {
             ProgramCompileResult->Errors.AddIssues(compileResult.Errors);
-            return false; 
-        } 
+            return false;
+        }
 
         ProgramCompileResult->CompiledProgram = SerializeRuntimeNode(compileResult.Node, typeEnv);
         SerializedMiniKQLProgram = ProgramCompileResult->CompiledProgram;
@@ -179,7 +179,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     bool MakeCompileResponse(const TActorContext &ctx) {
         TAutoPtr<TEvTablet::TEvLocalMKQLResponse> response = new TEvTablet::TEvLocalMKQLResponse();
         auto &record = response->Record;
-        record.SetOrigin(TabletId); 
+        record.SetOrigin(TabletId);
 
         if (ProgramCompileResult) {
             auto *compileResults = record.MutableCompileResults();
@@ -188,7 +188,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 compileResults->SetCompiledProgram(ProgramCompileResult->CompiledProgram);
             } else {
                 NYql::IssuesToMessage(ProgramCompileResult->Errors, compileResults->MutableProgramCompileErrors());
-                record.SetStatus(NKikimrProto::ERROR); 
+                record.SetStatus(NKikimrProto::ERROR);
             }
         } else {
             record.SetStatus(NKikimrProto::ERROR);
@@ -201,7 +201,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     bool MakeResponse(IEngineFlat *engine, const TActorContext &ctx) {
         TAutoPtr<TEvTablet::TEvLocalMKQLResponse> response = new TEvTablet::TEvLocalMKQLResponse();
         auto &record = response->Record;
-        record.SetOrigin(TabletId); 
+        record.SetOrigin(TabletId);
 
         record.SetStatus((EngineResultStatusCode == IEngineFlat::EResult::Ok && EngineResponseStatus != IEngineFlat::EStatus::Error) ? NKikimrProto::OK : NKikimrProto::ERROR);
         if (EngineResultStatusCode != IEngineFlat::EResult::Unknown)
@@ -230,7 +230,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         const auto functionRegistry = appData->FunctionRegistry;
 
         if (!SerializedMiniKQLProgram) {
-            if (!PrepareProgram(txc, appData)) 
+            if (!PrepareProgram(txc, appData))
                 return MakeCompileResponse(ctx);
 
             if (SourceProgram.CompileOnly)
@@ -238,18 +238,18 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         }
 
         if (!SerializedMiniKQLParams) {
-            if (!PrepareParams(txc, appData)) 
+            if (!PrepareParams(txc, appData))
                 return MakeResponse(nullptr, ctx);
         }
 
         try {
-            TAlignedPagePoolCounters poolCounters(appData->Counters, "local_tx"); 
- 
+            TAlignedPagePoolCounters poolCounters(appData->Counters, "local_tx");
+
             TEngineFlatSettings proxySettings(
                 IEngineFlat::EProtocol::V1,
                 functionRegistry,
-                *TAppData::RandomProvider, *TAppData::TimeProvider, 
-                nullptr, poolCounters 
+                *TAppData::RandomProvider, *TAppData::TimeProvider,
+                nullptr, poolCounters
             );
             proxySettings.EvaluateResultType = true;
             proxySettings.EvaluateResultValue = true;
@@ -287,21 +287,21 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 const TString shardProgram = shardData.Program;
                 proxyEngine->AfterShardProgramsExtracted();
 
-                TEngineHostCounters hostCounters; 
+                TEngineHostCounters hostCounters;
                 TLocalMiniKQLHost host(txc.DB, hostCounters, TEngineHostSettings(TabletId, false), Factory);
                 TEngineFlatSettings engineSettings(
                     IEngineFlat::EProtocol::V1,
                     functionRegistry,
-                    *TAppData::RandomProvider, *TAppData::TimeProvider, 
-                    &host, poolCounters 
+                    *TAppData::RandomProvider, *TAppData::TimeProvider,
+                    &host, poolCounters
                 );
                 TAutoPtr<IEngineFlat> engine = CreateEngineFlat(engineSettings);
                 EngineResultStatusCode = engine->AddProgram(TabletId, shardProgram);
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
-                IEngineFlat::TValidationInfo validationInfo; 
-                EngineResultStatusCode = engine->Validate(validationInfo); 
+                IEngineFlat::TValidationInfo validationInfo;
+                EngineResultStatusCode = engine->Validate(validationInfo);
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 

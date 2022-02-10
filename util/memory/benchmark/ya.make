@@ -1,7 +1,7 @@
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
-RECURSE( 
-    pool 
+
+RECURSE(
+    pool
     pool/metrics
-) 
+)

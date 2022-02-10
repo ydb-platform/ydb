@@ -78,19 +78,19 @@ public:
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
         ServerSettings->SetEnableYq(enableYq);
-        ServerSettings->Formats = new TFormatFactory; 
+        ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }
         ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TGRpcYdbDummyService>("dummy");
-        if (udfFrFactory) { 
-            ServerSettings->SetFrFactory(udfFrFactory); 
-        } 
+        if (udfFrFactory) {
+            ServerSettings->SetFrFactory(udfFrFactory);
+        }
         if (builder) {
             builder(*ServerSettings);;
         }
- 
+
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
 
@@ -130,20 +130,20 @@ public:
         return GRpcPort_;
     }
 
-    TPortManager& GetPortManager() { 
-        return PortManager; 
-    } 
- 
-    void ResetSchemeCache(TString path, ui32 nodeIndex = 0) { 
-        TTestActorRuntime* runtime = Server_->GetRuntime(); 
-        TClient annoyingClient(*ServerSettings); 
-        annoyingClient.RefreshPathCache(runtime, path, nodeIndex); 
-    } 
- 
-    TTestActorRuntime* GetRuntime() { 
-        return Server_->GetRuntime(); 
-    } 
- 
+    TPortManager& GetPortManager() {
+        return PortManager;
+    }
+
+    void ResetSchemeCache(TString path, ui32 nodeIndex = 0) {
+        TTestActorRuntime* runtime = Server_->GetRuntime();
+        TClient annoyingClient(*ServerSettings);
+        annoyingClient.RefreshPathCache(runtime, path, nodeIndex);
+    }
+
+    TTestActorRuntime* GetRuntime() {
+        return Server_->GetRuntime();
+    }
+
     Tests::TServer& GetServer() {
         return *Server_;
     }

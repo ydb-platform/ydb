@@ -157,18 +157,18 @@ public:
         bool NeedSizeCalculation() const { return !IsWrite && (IsResultPart || TargetShards); }
     };
 
-    struct TValidationInfo { 
+    struct TValidationInfo {
         TVector<TValidatedKey> Keys;
         ui32 ReadsCount;
         ui32 WritesCount;
         ui32 DynKeysCount;
-        bool HasOutReadsets; 
-        bool HasInReadsets; 
+        bool HasOutReadsets;
+        bool HasInReadsets;
         bool Loaded;
 
-        TValidationInfo() { 
-            Clear(); 
-        } 
+        TValidationInfo() {
+            Clear();
+        }
 
         TValidationInfo(TValidationInfo&&) = default;
         TValidationInfo(const TValidationInfo&) = delete;
@@ -181,12 +181,12 @@ public:
             ReadsCount = 0;
             WritesCount = 0;
             DynKeysCount = 0;
-            HasOutReadsets = false; 
-            HasInReadsets = false; 
+            HasOutReadsets = false;
+            HasInReadsets = false;
             Loaded = false;
         }
-    }; 
- 
+    };
+
     //-- error reporting
     virtual TString GetErrors() const noexcept = 0;
 
@@ -214,7 +214,7 @@ public:
     //-- datashard interface
     virtual EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly = false) noexcept = 0;
     virtual EResult ValidateKeys(TValidationInfo& validationInfo) = 0;
-    virtual EResult Validate(TValidationInfo& validationInfo) = 0; 
+    virtual EResult Validate(TValidationInfo& validationInfo) = 0;
 
     virtual EResult PrepareOutgoingReadsets() = 0;
     virtual ui32 GetOutgoingReadsetsCount() const noexcept = 0;
@@ -227,7 +227,7 @@ public:
     virtual ui64 GetExpectedIncomingReadsetOriginShard(ui32 index) const noexcept = 0;
     virtual void AddIncomingReadset(const TStringBuf& readset) noexcept = 0;
 
-    virtual EResult Cancel() = 0; 
+    virtual EResult Cancel() = 0;
     virtual EResult PinPages(ui64 pageFaultCount = 0) = 0;
     virtual EResult Execute() = 0;
     virtual TString GetShardReply(ui64 origin) const noexcept = 0;
@@ -255,7 +255,7 @@ namespace NMiniKQL {
         IRandomProvider& RandomProvider;
         ITimeProvider& TimeProvider;
         IEngineFlatHost* Host;
-        TAlignedPagePoolCounters AllocCounters; 
+        TAlignedPagePoolCounters AllocCounters;
         std::function<void(const char* operation, ui32 line, const TBackTrace*)> BacktraceWriter;
         std::function<void(const TString& message)> LogErrorWriter;
         bool ForceOnline;
@@ -268,15 +268,15 @@ namespace NMiniKQL {
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
-                IEngineFlatHost* host = nullptr, 
-                const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters() 
-                ) 
+                IEngineFlatHost* host = nullptr,
+                const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
+                )
             : Protocol(protocol)
             , FunctionRegistry(functionRegistry)
             , RandomProvider(randomProvider)
             , TimeProvider(timeProvider)
             , Host(host)
-            , AllocCounters(allocCounters) 
+            , AllocCounters(allocCounters)
             , ForceOnline(false)
         {
             Y_VERIFY(FunctionRegistry);

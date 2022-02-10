@@ -4,7 +4,7 @@
 #include "datashard_kqp.h"
 #include "datashard_locks.h"
 #include "datashard_impl.h"
-#include "datashard_failpoints.h" 
+#include "datashard_failpoints.h"
 #include "key_conflicts.h"
 
 #include <library/cpp/actors/core/memory_track.h>
@@ -27,9 +27,9 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , TxCacheUsage(0)
     , IsReleased(false)
     , IsReadOnly(true)
-    , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets()) 
-    , Cancelled(false) 
-    , ReceivedAt_(receivedAt) 
+    , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
+    , Cancelled(false)
+    , ReceivedAt_(receivedAt)
 {
     bool success = Tx.ParseFromArray(TxBody.data(), TxBody.size());
     if (!success) {
@@ -192,7 +192,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         ErrCode = ConvertErrCode(result);
     }
 
-    ComputeDeadline(); 
+    ComputeDeadline();
 }
 
 TValidatedDataTx::~TValidatedDataTx() {
@@ -268,16 +268,16 @@ ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidate
 }
 
 bool TValidatedDataTx::CanCancel() {
-    if (!IsTxReadOnly()) { 
-        return false; 
-    } 
- 
-    if (!AllowCancelROwithReadsets) { 
-        if (HasOutReadsets() || HasInReadsets()) { 
-            return false; 
-        } 
-    } 
- 
+    if (!IsTxReadOnly()) {
+        return false;
+    }
+
+    if (!AllowCancelROwithReadsets) {
+        if (HasOutReadsets() || HasInReadsets()) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -290,18 +290,18 @@ bool TValidatedDataTx::CheckCancelled() {
         return false;
     }
 
-    TInstant now = AppData()->TimeProvider->Now(); 
-    Cancelled = (now >= Deadline()); 
- 
-    Cancelled = Cancelled || gCancelTxFailPoint.Check(TabletId(), TxId()); 
- 
-    if (Cancelled) { 
-        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD, 
-            "CANCELLED TxId " << TxId() << " at " << TabletId()); 
-    } 
-    return Cancelled; 
-} 
- 
+    TInstant now = AppData()->TimeProvider->Now();
+    Cancelled = (now >= Deadline());
+
+    Cancelled = Cancelled || gCancelTxFailPoint.Check(TabletId(), TxId());
+
+    if (Cancelled) {
+        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD,
+            "CANCELLED TxId " << TxId() << " at " << TabletId());
+    }
+    return Cancelled;
+}
+
 void TValidatedDataTx::ReleaseTxData() {
     TxBody = "";
     auto lock = Tx.GetLockTxId();
@@ -321,14 +321,14 @@ void TValidatedDataTx::ComputeTxSize() {
     TxSize += Tx.ByteSize();
 }
 
-void TValidatedDataTx::ComputeDeadline() { 
-    Deadline_ = Tx.GetCancelDeadlineMs() ? TInstant::MilliSeconds(Tx.GetCancelDeadlineMs()) : TInstant::Max(); 
-    if (ReceivedAt_ && Tx.GetCancelAfterMs()) { 
-        // If local timeout is specified in CancelAfterMs then take it into account as well 
-        Deadline_ = Min(Deadline_, ReceivedAt_ + TDuration::MilliSeconds(Tx.GetCancelAfterMs())); 
-    } 
-} 
- 
+void TValidatedDataTx::ComputeDeadline() {
+    Deadline_ = Tx.GetCancelDeadlineMs() ? TInstant::MilliSeconds(Tx.GetCancelDeadlineMs()) : TInstant::Max();
+    if (ReceivedAt_ && Tx.GetCancelAfterMs()) {
+        // If local timeout is specified in CancelAfterMs then take it into account as well
+        Deadline_ = Min(Deadline_, ReceivedAt_ + TDuration::MilliSeconds(Tx.GetCancelAfterMs()));
+    }
+}
+
 //
 
 TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,

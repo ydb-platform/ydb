@@ -57,7 +57,7 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     YQL_ENSURE(!stageInfo.Meta.TablePath);
                     stageInfo.Meta.TableId = MakeTableId(op.GetTable());
                     stageInfo.Meta.TablePath = op.GetTable().GetPath();
-                    stageInfo.Meta.TableKind = ETableKind::Unknown; 
+                    stageInfo.Meta.TableKind = ETableKind::Unknown;
                     tables.insert(MakeTableId(op.GetTable()));
                 } else {
                     YQL_ENSURE(stageInfo.Meta.TableId == MakeTableId(op.GetTable()));

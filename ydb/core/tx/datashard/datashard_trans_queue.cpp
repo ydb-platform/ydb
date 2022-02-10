@@ -21,7 +21,7 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
 
-void TTransQueue::RemoveTxInFly(ui64 txId) { 
+void TTransQueue::RemoveTxInFly(ui64 txId) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end()) {
         if (!it->second->GetStep()) {
@@ -36,16 +36,16 @@ void TTransQueue::RemoveTxInFly(ui64 txId) {
 bool TTransQueue::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    // Load must be idempotent 
-    Y_VERIFY(TxsInFly.empty()); 
-    Y_VERIFY(SchemaOps.empty()); 
+    // Load must be idempotent
+    Y_VERIFY(TxsInFly.empty());
+    Y_VERIFY(SchemaOps.empty());
     Y_VERIFY(PlannedTxs.empty());
     Y_VERIFY(DeadlineQueue.empty());
     Y_VERIFY(ProposeDelayers.empty());
     Y_VERIFY(PlanWaitingTxCount == 0);
- 
-    TInstant now = AppData()->TimeProvider->Now(); 
- 
+
+    TInstant now = AppData()->TimeProvider->Now();
+
     THashSet<ui64> schemaTxs;
     {
         auto rowset = db.Table<Schema::TxMain>().Range().Select();
@@ -188,15 +188,15 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
 void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op) {
     using Schema = TDataShard::Schema;
 
-    // Auto-ack previous schema operation 
-    if (!SchemaOps.empty()) { 
-        Y_VERIFY(SchemaOps.begin()->first != op.TxId, "Duplicate Tx %" PRIu64 " wasn't properly handled", op.TxId); 
-        Y_VERIFY(SchemaOps.size() == 1, "Cannot have multiple un-Ack-ed previous schema operations"); 
-        Y_VERIFY(SchemaOps.begin()->second.Done, 
-            "Previous Tx %" PRIu64 " must be in state when it only waits for Ack", SchemaOps.begin()->first); 
-        RemoveSchemaOperation(db, SchemaOps.begin()->second.TxId); 
-    } 
- 
+    // Auto-ack previous schema operation
+    if (!SchemaOps.empty()) {
+        Y_VERIFY(SchemaOps.begin()->first != op.TxId, "Duplicate Tx %" PRIu64 " wasn't properly handled", op.TxId);
+        Y_VERIFY(SchemaOps.size() == 1, "Cannot have multiple un-Ack-ed previous schema operations");
+        Y_VERIFY(SchemaOps.begin()->second.Done,
+            "Previous Tx %" PRIu64 " must be in state when it only waits for Ack", SchemaOps.begin()->first);
+        RemoveSchemaOperation(db, SchemaOps.begin()->second.TxId);
+    }
+
     auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
     db.Table<Schema::SchemaOperations>().Key(op.TxId).Update(
         NIceDb::TUpdate<Schema::SchemaOperations::TxId>(op.TxId),
@@ -423,8 +423,8 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
     }
     for (ui64 txId : outdatedTxs) {
         RemoveTxInFly(txId);
-    } 
- 
+    }
+
     Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());
     return ECleanupStatus::Success;
 }

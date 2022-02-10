@@ -24,8 +24,8 @@ class TCmsRequestActor : public TMessageBusSecureRequest<TMessageBusServerReques
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    } 
- 
+    }
+
     TCmsRequestActor(NKikimrClient::TCmsRequest &request, NMsgBusProxy::TBusMessageContext &msg)
         : TBase(msg)
         , Request(request)

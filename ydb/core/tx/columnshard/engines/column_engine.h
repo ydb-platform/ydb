@@ -8,7 +8,7 @@
 #include "granules_table.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
- 
+
 namespace NKikimr::NOlap {
 
 struct TPredicate;
@@ -78,7 +78,7 @@ public:
         : Type(type)
     {}
 
-    void SetBlobs(THashMap<TBlobRange, TString>&& blobs) { 
+    void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
         Y_VERIFY(!blobs.empty());
         Blobs = std::move(blobs);
     }
@@ -93,7 +93,7 @@ public:
     TVector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
     TVector<TPortionInfo> PortionsToDrop;
     TVector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
-    THashMap<TBlobRange, TString> Blobs; 
+    THashMap<TBlobRange, TString> Blobs;
 
     bool IsInsert() const { return Type == INSERT; }
     bool IsCompaction() const { return Type == COMPACTION; }
@@ -146,12 +146,12 @@ public:
             }
             out << "; ";
         }
-        if (ui32 dropped = changes.PortionsToDrop.size()) { 
-            out << "drop " << dropped << " portions"; 
-            for (auto& portionInfo : changes.PortionsToDrop) { 
+        if (ui32 dropped = changes.PortionsToDrop.size()) {
+            out << "drop " << dropped << " portions";
+            for (auto& portionInfo : changes.PortionsToDrop) {
                 out << portionInfo;
-            } 
-        } 
+            }
+        }
         return out;
     }
 };
@@ -208,12 +208,12 @@ struct TSelectInfo {
         out.Granules = Granules.size();
         out.Portions = Portions.size();
 
-        THashSet<TUnifiedBlobId> uniqBlob; 
+        THashSet<TUnifiedBlobId> uniqBlob;
         for (auto& portionInfo : Portions) {
             out.Records += portionInfo.NumRecords();
             out.Rows += portionInfo.NumRows();
             for (auto& rec : portionInfo.Records) {
-                uniqBlob.insert(rec.BlobRange.BlobId); 
+                uniqBlob.insert(rec.BlobRange.BlobId);
             }
         }
         out.Blobs += uniqBlob.size();
@@ -293,8 +293,8 @@ public:
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO
     virtual void UpdateCompactionLimits(const TCompactionLimits& limits) = 0;
-    virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0; 
-    virtual const TColumnEngineStats& GetTotalStats() = 0; 
+    virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
+    virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
 };
 

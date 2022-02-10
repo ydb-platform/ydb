@@ -195,7 +195,7 @@ namespace NMonitoring {
 
     private:
         TRWMutex Lock;
-        TCounterPtr LookupCounter; // Counts lookups by name 
+        TCounterPtr LookupCounter; // Counts lookups by name
         TOnLookupPtr OnLookup = nullptr; // Called on each lookup if not nullptr, intended for lightweight tracing.
 
         typedef TIntrusivePtr<TCountableBase> TCountablePtr;
@@ -241,12 +241,12 @@ namespace NMonitoring {
 
         ~TDynamicCounters() override;
 
-        // This counter allows to track lookups by name within the whole subtree 
-        void SetLookupCounter(TCounterPtr lookupCounter) { 
+        // This counter allows to track lookups by name within the whole subtree
+        void SetLookupCounter(TCounterPtr lookupCounter) {
             TWriteGuard g(Lock);
-            LookupCounter = lookupCounter; 
-        } 
- 
+            LookupCounter = lookupCounter;
+        }
+
         void SetOnLookup(TOnLookupPtr onLookup) {
             TWriteGuard g(Lock);
             OnLookup = onLookup;

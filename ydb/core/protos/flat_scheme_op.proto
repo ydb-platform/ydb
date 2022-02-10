@@ -15,12 +15,12 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 
 
 package NKikimrSchemeOp;
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-message TMkDir { 
-    optional string Name = 1; 
-} 
- 
+option java_package = "ru.yandex.kikimr.proto";
+
+message TMkDir {
+    optional string Name = 1;
+}
+
 enum EDropWaitPolicy {
     EDropFailOnChanges = 0;
     EDropAbortChanges = 1; //depricated
@@ -53,8 +53,8 @@ enum EColumnStorage {
     ColumnStorage1Ext2 = 3;
     ColumnStorage2Ext1 = 4;
     ColumnStorage2Ext2 = 5;
-    ColumnStorage1Med2Ext2 = 6; 
-    ColumnStorage2Med2Ext2 = 7; 
+    ColumnStorage1Med2Ext2 = 6;
+    ColumnStorage2Med2Ext2 = 7;
     ColumnStorageTest_1_2_1k = 999;
 }
 
@@ -70,19 +70,19 @@ enum EMvccState {
     MvccDisabled = 2;
 }
 
-message TColumnDescription { 
-    optional string Name = 1; 
-    optional string Type = 2; 
-    optional uint32 TypeId = 3; 
-    optional uint32 Id = 4; 
+message TColumnDescription {
+    optional string Name = 1;
+    optional string Type = 2;
+    optional uint32 TypeId = 3;
+    optional uint32 Id = 4;
     optional uint32 Family = 5; // On default place column to default(0) family
     optional string FamilyName = 6; // set Family by name (0 - "default")
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
     }
     optional bool NotNull = 8;
-} 
- 
+}
+
 message TStorageSettings {
     optional string PreferredPoolKind = 1;
     optional bool AllowOtherKinds = 2 [default = true];
@@ -115,7 +115,7 @@ enum ECompactionStrategy {
     CompactionStrategySharded = 2;
 }
 
-message TCompactionPolicy { 
+message TCompactionPolicy {
     message TBackgroundPolicy {
         // How much (in %) of forced compaction criteria should be met to submit background task.
         optional uint32 Threshold = 1 [default = 101]; // no background compaction by default
@@ -130,14 +130,14 @@ message TCompactionPolicy {
         optional string ResourceBrokerTask = 5;
     }
 
-    message TGenerationPolicy { 
-        optional uint32 GenerationId = 1; 
-        optional uint64 SizeToCompact = 2; 
-        optional uint32 CountToCompact = 3; 
-        optional uint32 ForceCountToCompact = 4; // OR one of force limits happend 
-        optional uint64 ForceSizeToCompact = 5; 
+    message TGenerationPolicy {
+        optional uint32 GenerationId = 1;
+        optional uint64 SizeToCompact = 2;
+        optional uint32 CountToCompact = 3;
+        optional uint32 ForceCountToCompact = 4; // OR one of force limits happend
+        optional uint64 ForceSizeToCompact = 5;
         optional uint32 CompactionBrokerQueue = 6; // DEPRECATED
-        optional bool KeepInCache = 7; 
+        optional bool KeepInCache = 7;
         optional TBackgroundPolicy BackgroundCompactionPolicy = 8;
         optional string ResourceBrokerTask = 9;
         optional uint32 ExtraCompactionPercent = 10;
@@ -145,8 +145,8 @@ message TCompactionPolicy {
         optional uint32 ExtraCompactionExpPercent = 12;
         optional uint64 ExtraCompactionExpMaxSize = 13;
         optional uint64 UpliftPartSize = 14;
-    } 
- 
+    }
+
     message TShardPolicy {
         // Adjacent shards smaller than this will be merged
         optional uint64 MinShardSize = 1 [default = 33554432];
@@ -191,14 +191,14 @@ message TCompactionPolicy {
         optional uint64 MinSliceSizeToReuse = 14 [default = 524288];
     }
 
-    optional uint64 InMemSizeToSnapshot = 1; 
-    optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed 
-    optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed 
-    optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached 
+    optional uint64 InMemSizeToSnapshot = 1;
+    optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed
+    optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
+    optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached
     optional uint32 InMemCompactionBrokerQueue = 5 [default = 0]; // DEPRECATED
     optional uint64 ReadAheadHiThreshold = 6 [default = 67108864];
     optional uint64 ReadAheadLoThreshold = 7 [default = 16777216];
-    optional uint32 MinDataPageSize = 8 [default = 7168];   // 7KB is smallest optimal for 512 byte sectors 
+    optional uint32 MinDataPageSize = 8 [default = 7168];   // 7KB is smallest optimal for 512 byte sectors
     optional uint32 SnapBrokerQueue = 9 [default = 0]; // DEPRECATED
     optional uint32 BackupBrokerQueue = 11 [default = 1]; // DEPRECATED
     optional uint32 DefaultTaskPriority = 12 [default = 5];
@@ -212,33 +212,33 @@ message TCompactionPolicy {
     optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset];
     optional TShardPolicy ShardPolicy = 21;
     optional bool KeepEraseMarkers = 22;
- 
-    repeated TGenerationPolicy Generation = 10; 
-} 
- 
-message TFastSplitSettings { 
-    optional uint64 SizeThreshold = 1; 
-    optional uint64 RowCountThreshold = 2; 
-    optional uint32 CpuPercentageThreshold = 3; 
-} 
- 
-message TSplitByLoadSettings { 
-    optional bool Enabled = 1; 
-    optional uint32 CpuPercentageThreshold = 2; 
-    // TODO: optional uint32 KeySampleSize = 3; 
-    // TODO: optional uint32 KeySampleCollectTimeSec = 4; 
-} 
- 
-message TPartitioningPolicy { 
-    optional uint64 SizeToSplit = 1;    // Partition gets split when this threshold is exceeded 
- 
-    optional uint32 MinPartitionsCount = 2; 
-    optional uint32 MaxPartitionsCount = 3; 
- 
-    optional TFastSplitSettings FastSplitSettings = 4; 
-    optional TSplitByLoadSettings SplitByLoadSettings = 5; 
-} 
- 
+
+    repeated TGenerationPolicy Generation = 10;
+}
+
+message TFastSplitSettings {
+    optional uint64 SizeThreshold = 1;
+    optional uint64 RowCountThreshold = 2;
+    optional uint32 CpuPercentageThreshold = 3;
+}
+
+message TSplitByLoadSettings {
+    optional bool Enabled = 1;
+    optional uint32 CpuPercentageThreshold = 2;
+    // TODO: optional uint32 KeySampleSize = 3;
+    // TODO: optional uint32 KeySampleCollectTimeSec = 4;
+}
+
+message TPartitioningPolicy {
+    optional uint64 SizeToSplit = 1;    // Partition gets split when this threshold is exceeded
+
+    optional uint32 MinPartitionsCount = 2;
+    optional uint32 MaxPartitionsCount = 3;
+
+    optional TFastSplitSettings FastSplitSettings = 4;
+    optional TSplitByLoadSettings SplitByLoadSettings = 5;
+}
+
 message TPipelineConfig {
     optional uint32 NumActiveTx = 1 [default = 8];
     optional uint32 DataTxCacheSize = 2;
@@ -247,23 +247,23 @@ message TPipelineConfig {
     optional bool EnableSoftUpdates = 5;
 }
 
-message TPartitionConfig { 
+message TPartitionConfig {
     optional string NamedCompactionPolicy = 1; // One of the predefined policies
     optional TCompactionPolicy CompactionPolicy = 2; // Customized policy
     optional uint64 FollowerCount = 3;
     optional uint64 ExecutorCacheSize = 4; // Cache size for the whole tablet including all user and system tables
     optional bool AllowFollowerPromotion = 5 [default = true]; // if true followers can upgrade to leader, if false followers only handle reads
-    optional uint64 TxReadSizeLimit = 6; // Maximum size in bytes that is allowed to be read by a single Tx 
+    optional uint64 TxReadSizeLimit = 6; // Maximum size in bytes that is allowed to be read by a single Tx
     //optional bool CrossDataCenterFollowers = 7; // deprecated -> CrossDataCenterFollowerCount
     optional uint32 CrossDataCenterFollowerCount = 8; // deprecated -> FollowerGroups
-    optional uint32 ChannelProfileId = 9;   // for configuring erasure and disk categories 
-    optional TPartitioningPolicy PartitioningPolicy = 10; 
+    optional uint32 ChannelProfileId = 9;   // for configuring erasure and disk categories
+    optional TPartitioningPolicy PartitioningPolicy = 10;
     optional TPipelineConfig PipelineConfig = 11;
-    repeated TFamilyDescription ColumnFamilies = 12; 
+    repeated TFamilyDescription ColumnFamilies = 12;
     optional string ResourceProfile = 13;
     optional bool DisableStatisticsCalculation = 14; // KIKIMR-3861 hotfix
     optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check
-    optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC 
+    optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC
     repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
     optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows
     optional uint32 EraseCacheMinRows = 19; // Minimum number of erased rows worth caching (default 16)
@@ -273,13 +273,13 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
-} 
- 
-message TSplitBoundary { 
-    optional NKikimrMiniKQL.TValue KeyPrefix = 1; // A tuple representing full key or key prefix 
-    optional bytes SerializedKeyPrefix = 2;       // Or same as above but already serialized 
-} 
- 
+}
+
+message TSplitBoundary {
+    optional NKikimrMiniKQL.TValue KeyPrefix = 1; // A tuple representing full key or key prefix
+    optional bytes SerializedKeyPrefix = 2;       // Or same as above but already serialized
+}
+
 message TShardIdx {
     optional uint64 OwnerId = 1;
     optional uint64 LocalId = 2;
@@ -319,27 +319,27 @@ message TTTLSettings {
     }
 }
 
-message TTableDescription { 
-    optional string Name = 1; 
+message TTableDescription {
+    optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
-    repeated TColumnDescription Columns = 3; 
-    repeated string KeyColumnNames = 4; 
-    repeated uint32 KeyColumnIds = 5; 
-    optional uint32 UniformPartitionsCount = 6;     // Describes uniform partitioning on first key column into 
-                                                    // N ranges. The first key column must be of integer type 
- 
-    optional TPartitionConfig PartitionConfig = 7; 
+    repeated TColumnDescription Columns = 3;
+    repeated string KeyColumnNames = 4;
+    repeated uint32 KeyColumnIds = 5;
+    optional uint32 UniformPartitionsCount = 6;     // Describes uniform partitioning on first key column into
+                                                    // N ranges. The first key column must be of integer type
+
+    optional TPartitionConfig PartitionConfig = 7;
     repeated TColumnDescription DropColumns = 8;
     optional string Path = 9;
- 
+
     // It shouldn't be there
-    optional bytes PartitionRangeBegin = 20; 
-    optional bytes PartitionRangeEnd = 21; 
-    optional bool PartitionRangeBeginIsInclusive = 22; 
-    optional bool PartitionRangeEndIsInclusive = 23; 
- 
-    optional string CopyFromTable = 30; 
-    repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split 
+    optional bytes PartitionRangeBegin = 20;
+    optional bytes PartitionRangeEnd = 21;
+    optional bool PartitionRangeBeginIsInclusive = 22;
+    optional bool PartitionRangeEndIsInclusive = 23;
+
+    optional string CopyFromTable = 30;
+    repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
 
     repeated TIndexDescription TableIndexes = 32;
 
@@ -354,8 +354,8 @@ message TTableDescription {
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
-} 
- 
+}
+
 message TCompressionOptions {
     optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
@@ -469,7 +469,7 @@ message TColumnDataLifeCycle {
             uint32 ExpireAfterSeconds = 2;
             uint64 ExpireAfterBytes = 4;
         }
-        optional TTTLSettings.EUnit ColumnUnit = 3; 
+        optional TTTLSettings.EUnit ColumnUnit = 3;
     }
 
     message TStorageTier {
@@ -1014,16 +1014,16 @@ message TModifyACL {
     optional string NewOwner = 3;
 }
 
-message TSplitMergeTablePartitions { 
-    optional uint64 TxId = 1; 
-    optional string TablePath = 2; 
+message TSplitMergeTablePartitions {
+    optional uint64 TxId = 1;
+    optional string TablePath = 2;
     optional uint64 TableLocalId = 3;
-    repeated uint64 SourceTabletId = 4; 
-    repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts) 
-    optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path 
+    repeated uint64 SourceTabletId = 4;
+    repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
+    optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
-} 
- 
+}
+
 message TUserAttribute {
     optional string Key = 1;
     optional string Value = 2;
@@ -1066,9 +1066,9 @@ message TReplicationDescription {
     optional uint64 ControllerId = 5; // replication controller's tablet id
 }
 
-enum EOperationType { 
-    ESchemeOpMkDir = 1; 
-    ESchemeOpCreateTable = 2; 
+enum EOperationType {
+    ESchemeOpMkDir = 1;
+    ESchemeOpCreateTable = 2;
     ESchemeOpCreatePersQueueGroup = 3;
     ESchemeOpDropTable = 4;
     ESchemeOpDropPersQueueGroup = 5;
@@ -1076,7 +1076,7 @@ enum EOperationType {
     ESchemeOpAlterPersQueueGroup = 7;
     ESchemeOpModifyACL = 8;
     ESchemeOpRmDir = 9;
-    ESchemeOpSplitMergeTablePartitions = 10; 
+    ESchemeOpSplitMergeTablePartitions = 10;
     ESchemeOpBackup = 11;
     ESchemeOpCreateSubDomain = 12;
     ESchemeOpDropSubDomain = 13;
@@ -1172,8 +1172,8 @@ enum EOperationType {
     ESchemeOpCreateReplication = 76;
     ESchemeOpAlterReplication = 77;
     ESchemeOpDropReplication = 78;
-} 
- 
+}
+
 message TApplyIf {
     optional uint64 PathId = 1;
     optional uint64 PathVersion = 2;
@@ -1217,22 +1217,22 @@ message TDropIndex {
     optional string IndexName = 2;
 }
 
-// Request for scheme modification 
-// Has only one of the operations 
-message TModifyScheme { 
-    optional string WorkingDir = 1; 
-    optional EOperationType OperationType = 2; 
+// Request for scheme modification
+// Has only one of the operations
+message TModifyScheme {
+    optional string WorkingDir = 1;
+    optional EOperationType OperationType = 2;
     optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
 
-    optional TMkDir MkDir = 3; 
-    optional TTableDescription CreateTable = 4; 
+    optional TMkDir MkDir = 3;
+    optional TTableDescription CreateTable = 4;
     optional TPersQueueGroupDescription CreatePersQueueGroup = 5;
     optional TPersQueueGroupDescription AlterPersQueueGroup = 6;
     optional TDrop Drop = 7;
     optional TModifyACL ModifyACL = 8;
     optional TTableDescription AlterTable = 9;
-    optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10; 
+    optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
     optional TBackupTask Backup = 11;
     optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
     optional TRtmrVolumeDescription CreateRtmrVolume = 13;
@@ -1273,8 +1273,8 @@ message TModifyScheme {
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
     optional TReplicationDescription Replication = 52;
-} 
- 
+}
+
 // "Script", used by client to parse text files with multiple DDL commands
 message TModifyScript {
     repeated TModifyScheme ModifyScheme = 1;
@@ -1284,34 +1284,34 @@ message TDescribeOptions {
     optional bool ReturnPartitioningInfo = 1 [default = true];
     optional bool ReturnPartitionConfig = 2 [default = true];
     optional bool BackupInfo = 3 [default = false];
-    optional bool ReturnPartitionStats = 4 [default = false]; 
+    optional bool ReturnPartitionStats = 4 [default = false];
     optional bool ReturnChildren = 5 [default = true];
-    optional bool ReturnBoundaries = 6 [default = false]; 
+    optional bool ReturnBoundaries = 6 [default = false];
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
 }
 
-// Request to read scheme for a specific path 
-// Path can be specified in two ways: 
-// 1. full path 
-// 2. (schemeshard id, path id) pair that is unique within the whole system 
-message TDescribePath { 
-    optional string Path = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 SchemeshardId = 3; 
+// Request to read scheme for a specific path
+// Path can be specified in two ways:
+// 1. full path
+// 2. (schemeshard id, path id) pair that is unique within the whole system
+message TDescribePath {
+    optional string Path = 1;
+    optional uint64 PathId = 2;
+    optional uint64 SchemeshardId = 3;
 
     optional bool ReturnPartitioningInfo = 4 [default = true]; // deprecated
     optional bool ReturnPartitionConfig = 5 [default = true]; //  deprecated
     optional bool BackupInfo = 6 [default = false];           //  deprecated
 
     optional TDescribeOptions Options = 7;
-} 
- 
+}
+
 // Must be sync with Ydb::EntryType
-enum EPathType { 
+enum EPathType {
     EPathTypeInvalid = 0;
-    EPathTypeDir = 1; 
-    EPathTypeTable = 2; 
+    EPathTypeDir = 1;
+    EPathTypeTable = 2;
     EPathTypePersQueueGroup = 3;
     EPathTypeSubDomain = 4;
     EPathTypeRtmrVolume = 5;
@@ -1326,8 +1326,8 @@ enum EPathType {
     EPathTypeCdcStream = 14;
     EPathTypeSequence = 15;
     EPathTypeReplication = 16;
-} 
- 
+}
+
 enum EPathSubType {
     EPathSubTypeEmpty = 0;
     EPathSubTypeSyncIndexImplTable = 1;
@@ -1341,7 +1341,7 @@ enum EPathState {
     EPathStateCreate = 3;
     EPathStateAlter = 4;
     EPathStateDrop = 5;
-    EPathStateCopying = 6; 
+    EPathStateCopying = 6;
     EPathStateBackup = 7;
     EPathStateUpgrade = 8;
     EPathStateMigrated = 9;
@@ -1378,15 +1378,15 @@ message TPathVersion {
     optional uint64 ReplicationVersion = 25;
 }
 
-// Describes single path 
-message TDirEntry { 
-    optional string Name = 1; 
-    optional uint64 PathId = 2; 
+// Describes single path
+message TDirEntry {
+    optional string Name = 1;
+    optional uint64 PathId = 2;
     optional uint64 SchemeshardId = 3; // PathOwnerId
-    optional EPathType PathType = 4; 
-    optional bool CreateFinished = 5; 
-    optional uint64 CreateTxId = 6; 
-    optional uint64 CreateStep = 7; 
+    optional EPathType PathType = 4;
+    optional bool CreateFinished = 5;
+    optional uint64 CreateTxId = 6;
+    optional uint64 CreateStep = 7;
     optional uint64 ParentPathId = 8; // parentPathOwnerId ?
     optional EPathState PathState = 9;
     optional string Owner = 10;
@@ -1397,16 +1397,16 @@ message TDirEntry {
     optional TPathVersion Version = 15;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
-} 
- 
-// Describes single partition (range or point) of a table 
-message TTablePartition { 
-    optional bytes EndOfRangeKeyPrefix = 1;     // Serialize/deserialize using TSerializedCellVec 
-    optional bool IsPoint = 2; 
-    optional bool IsInclusive = 3; 
-    optional uint64 DatashardId = 4; 
-} 
- 
+}
+
+// Describes single partition (range or point) of a table
+message TTablePartition {
+    optional bytes EndOfRangeKeyPrefix = 1;     // Serialize/deserialize using TSerializedCellVec
+    optional bool IsPoint = 2;
+    optional bool IsInclusive = 3;
+    optional uint64 DatashardId = 4;
+}
+
 message TShardError {
     optional uint64 ShardId = 1;
     optional string Explain = 2;
@@ -1433,26 +1433,26 @@ message TLastBackupResult {
     optional uint64 TxId = 7;
 };
 
-// Result for TDescribePath request 
-message TPathDescription { 
-    optional TDirEntry Self = 1;                    // info about the path itself 
-    repeated TDirEntry Children = 2;                // for directory 
-    optional TTableDescription Table = 3;           // for table 
-    repeated TTablePartition TablePartitions = 4;   // for table 
+// Result for TDescribePath request
+message TPathDescription {
+    optional TDirEntry Self = 1;                    // info about the path itself
+    repeated TDirEntry Children = 2;                // for directory
+    optional TTableDescription Table = 3;           // for table
+    repeated TTablePartition TablePartitions = 4;   // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
-    optional NKikimrTableStats.TTableStats TableStats = 8; 
+    optional NKikimrTableStats.TTableStats TableStats = 8;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
     optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;
     optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume
     optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12;
     optional TKesusDescription Kesus = 13;
     optional TSolomonVolumeDescription SolomonDescription = 14;
-    repeated NKikimrTableStats.TTableStats TablePartitionStats = 15; 
+    repeated NKikimrTableStats.TTableStats TablePartitionStats = 15;
     repeated TUserAttribute UserAttributes = 16;
     optional TIndexDescription TableIndex = 17;
-    repeated NKikimrTabletBase.TMetrics TablePartitionMetrics = 18; 
+    repeated NKikimrTabletBase.TMetrics TablePartitionMetrics = 18;
     repeated uint64 AbandonedTenantsSchemeShards = 19;
     optional TFileStoreDescription FileStoreDescription = 20;
     optional TColumnStoreDescription ColumnStoreDescription = 21;
@@ -1460,12 +1460,12 @@ message TPathDescription {
     optional TCdcStreamDescription CdcStreamDescription = 23;
     optional TSequenceDescription SequenceDescription = 24;
     optional TReplicationDescription ReplicationDescription = 25;
-} 
- 
-// For persisting AlterTable Tx description in Schemeshard internal DB 
-message TAlterExtraData { 
-    optional TPartitionConfig PartitionConfig = 1; 
-} 
+}
+
+// For persisting AlterTable Tx description in Schemeshard internal DB
+message TAlterExtraData {
+    optional TPartitionConfig PartitionConfig = 1;
+}
 
 message TResourceProfile {
     // Here is how tablet resource profile with specified NAME and TYPE is searched:

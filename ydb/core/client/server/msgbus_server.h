@@ -4,7 +4,7 @@
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
-#include "msgbus_server_pq_metacache.h" 
+#include "msgbus_server_pq_metacache.h"
 
 namespace NMonitoring {
     class TBusNgMonPage;
@@ -280,9 +280,9 @@ IActor* CreateMessageBusServerProxy(
 );
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
-IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg); 
+IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg); 
+IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
 IActor* CreateMessageBusBSAdm(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
@@ -305,7 +305,7 @@ IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
-IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg); 
+IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);

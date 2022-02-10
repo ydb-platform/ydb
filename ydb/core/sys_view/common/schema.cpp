@@ -38,9 +38,9 @@ public:
         } else if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
             if (!DomainSystemViews.contains(maybeSystemViewName) &&
-                !SubDomainSystemViews.contains(maybeSystemViewName) && 
-                !OlapStoreSystemViews.contains(maybeSystemViewName) && 
-                !OlapTableSystemViews.contains(maybeSystemViewName)) 
+                !SubDomainSystemViews.contains(maybeSystemViewName) &&
+                !OlapStoreSystemViews.contains(maybeSystemViewName) &&
+                !OlapTableSystemViews.contains(maybeSystemViewName))
             {
                 return false;
             }
@@ -61,12 +61,12 @@ public:
         case ETarget::SubDomain:
             view = SubDomainSystemViews.FindPtr(viewName);
             break;
-        case ETarget::OlapStore: 
-            view = OlapStoreSystemViews.FindPtr(viewName); 
-            break; 
-        case ETarget::OlapTable: 
-            view = OlapTableSystemViews.FindPtr(viewName); 
-            break; 
+        case ETarget::OlapStore:
+            view = OlapStoreSystemViews.FindPtr(viewName);
+            break;
+        case ETarget::OlapTable:
+            view = OlapTableSystemViews.FindPtr(viewName);
+            break;
         }
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
@@ -86,18 +86,18 @@ public:
                 result.push_back(name);
             }
             break;
-        case ETarget::OlapStore: 
-            result.reserve(OlapStoreSystemViews.size()); 
-            for (const auto& [name, _] : OlapStoreSystemViews) { 
-                result.push_back(name); 
-            } 
-            break; 
-        case ETarget::OlapTable: 
-            result.reserve(OlapTableSystemViews.size()); 
-            for (const auto& [name, _] : OlapTableSystemViews) { 
-                result.push_back(name); 
-            } 
-            break; 
+        case ETarget::OlapStore:
+            result.reserve(OlapStoreSystemViews.size());
+            for (const auto& [name, _] : OlapStoreSystemViews) {
+                result.push_back(name);
+            }
+            break;
+        case ETarget::OlapTable:
+            result.reserve(OlapTableSystemViews.size());
+            for (const auto& [name, _] : OlapTableSystemViews) {
+                result.push_back(name);
+            }
+            break;
         }
         return result;
     }
@@ -179,16 +179,16 @@ private:
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
     }
 
-    template <typename Table> 
-    void RegisterOlapStoreSystemView(const TStringBuf& name) { 
-        TSchemaFiller<Table>::Fill(OlapStoreSystemViews[name]); 
-    } 
- 
-    template <typename Table> 
-    void RegisterOlapTableSystemView(const TStringBuf& name) { 
-        TSchemaFiller<Table>::Fill(OlapTableSystemViews[name]); 
-    } 
- 
+    template <typename Table>
+    void RegisterOlapStoreSystemView(const TStringBuf& name) {
+        TSchemaFiller<Table>::Fill(OlapStoreSystemViews[name]);
+    }
+
+    template <typename Table>
+    void RegisterOlapTableSystemView(const TStringBuf& name) {
+        TSchemaFiller<Table>::Fill(OlapTableSystemViews[name]);
+    }
+
     void RegisterSystemViews() {
         RegisterSystemView<Schema::PartitionStats>(PartitionStatsName);
 
@@ -213,16 +213,16 @@ private:
         RegisterDomainSystemView<Schema::Tablets>(TabletsName);
 
         RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
- 
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName); 
-        RegisterOlapTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName); 
+
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
+        RegisterOlapTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
     }
 
 private:
     THashMap<TString, TSchema> DomainSystemViews;
     THashMap<TString, TSchema> SubDomainSystemViews;
-    THashMap<TString, TSchema> OlapStoreSystemViews; 
-    THashMap<TString, TSchema> OlapTableSystemViews; 
+    THashMap<TString, TSchema> OlapStoreSystemViews;
+    THashMap<TString, TSchema> OlapTableSystemViews;
 };
 
 ISystemViewResolver* CreateSystemViewResolver() {

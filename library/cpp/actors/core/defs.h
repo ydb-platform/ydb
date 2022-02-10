@@ -6,12 +6,12 @@
 #include <util/generic/hash.h>
 #include <util/string/printf.h>
 
-// Enables collection of 
-//    event send/receive counts 
-//    activation time histograms 
-//    event processing time histograms 
-#define ACTORSLIB_COLLECT_EXEC_STATS 
- 
+// Enables collection of
+//    event send/receive counts
+//    activation time histograms
+//    event processing time histograms
+#define ACTORSLIB_COLLECT_EXEC_STATS
+
 namespace NActors {
     using TPoolId = ui8;
     using TPoolsMask = ui64;

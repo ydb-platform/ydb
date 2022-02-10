@@ -2,7 +2,7 @@
 
 #include "align.h"
 #include "defaults.h"
-#include "compiler.h" 
+#include "compiler.h"
 #include "sanitizers.h"
 
 #include <util/generic/array_ref.h>

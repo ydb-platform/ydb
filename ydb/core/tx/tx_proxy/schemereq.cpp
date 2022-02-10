@@ -159,19 +159,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpBackup:
             return *modifyScheme.MutableBackup()->MutableTableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpCreateSubDomain:
         case NKikimrSchemeOp::ESchemeOpAlterSubDomain:
         case NKikimrSchemeOp::ESchemeOpCreateExtSubDomain:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomain:
             return *modifyScheme.MutableSubDomain()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
             return *modifyScheme.MutableCreateRtmrVolume()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume:
             return *modifyScheme.MutableCreateBlockStoreVolume()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
             return *modifyScheme.MutableAlterBlockStoreVolume()->MutableName();
 
@@ -224,16 +224,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterSolomonVolume:
             return *modifyScheme.MutableAlterSolomonVolume()->MutableName();
- 
+
         case NKikimrSchemeOp::ESchemeOpDropLock:
             Y_FAIL("no implementation for ESchemeOpDropLock");
- 
+
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable:
             Y_FAIL("no implementation for ESchemeOpFinalizeBuildIndexImplTable");
- 
+
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
             Y_FAIL("no implementation for ESchemeOpInitiateBuildIndexImplTable");
- 
+
         case NKikimrSchemeOp::ESchemeOpDropIndex:
             return *modifyScheme.MutableDropIndex()->MutableTableName();
 
@@ -308,8 +308,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
             return *modifyScheme.MutableReplication()->MutableName();
         }
-    } 
- 
+    }
+
     static bool IsCreateRequest(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         switch (modifyScheme.GetOperationType()) {
         // Tenants are always created using cluster's root as working dir, skip it

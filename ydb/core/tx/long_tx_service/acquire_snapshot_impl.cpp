@@ -38,7 +38,7 @@ namespace NLongTxService {
     private:
         void PassAway() override {
             Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-            TActor::PassAway(); 
+            TActor::PassAway();
         }
 
     private:

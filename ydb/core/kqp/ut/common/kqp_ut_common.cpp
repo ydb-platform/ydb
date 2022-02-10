@@ -122,8 +122,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     DriverConfig = NYdb::TDriverConfig()
         .SetEndpoint(Endpoint)
-        .SetDatabase("/" + settings.DomainRoot) 
-        .SetDiscoveryMode(NYdb::EDiscoveryMode::Async) 
+        .SetDatabase("/" + settings.DomainRoot)
+        .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
         .SetAuthToken(settings.AuthToken);
     Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
 
@@ -196,16 +196,16 @@ void TKikimrRunner::CreateSampleTables() {
     )");
 
     Client->CreateTable("/Root", R"(
-        Name: "Logs" 
-        Columns { Name: "App", Type: "Utf8" } 
-        Columns { Name: "Message", Type: "Utf8" } 
-        Columns { Name: "Ts", Type: "Int64" } 
-        Columns { Name: "Host", Type: "Utf8" } 
-        KeyColumnNames: ["App", "Ts", "Host"], 
-        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "a" } } } } 
-        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "b" } } } } 
+        Name: "Logs"
+        Columns { Name: "App", Type: "Utf8" }
+        Columns { Name: "Message", Type: "Utf8" }
+        Columns { Name: "Ts", Type: "Int64" }
+        Columns { Name: "Host", Type: "Utf8" }
+        KeyColumnNames: ["App", "Ts", "Host"],
+        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "a" } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "b" } } } }
     )");
- 
+
     Client->CreateTable("/Root", R"(
         Name: "BatchUpload"
         Columns {
@@ -237,27 +237,27 @@ void TKikimrRunner::CreateSampleTables() {
     )");
 
     // TODO: Reuse driver (YDB-626)
-    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root")); 
+    NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root"));
     NYdb::NTable::TTableClient client(driver);
     auto session = client.CreateSession().GetValueSync().GetSession();
 
     AssertSuccessResult(session.ExecuteSchemeQuery(R"(
         --!syntax_v1
 
-        CREATE TABLE `KeyValue` ( 
+        CREATE TABLE `KeyValue` (
             Key Uint64,
             Value String,
             PRIMARY KEY (Key)
         );
 
-        CREATE TABLE `KeyValue2` ( 
+        CREATE TABLE `KeyValue2` (
             Key String,
             Value String,
             PRIMARY KEY (Key)
         );
 
 
-        CREATE TABLE `Test` ( 
+        CREATE TABLE `Test` (
             Group Uint32,
             Name String,
             Amount Uint64,
@@ -265,7 +265,7 @@ void TKikimrRunner::CreateSampleTables() {
             PRIMARY KEY (Group, Name)
         );
 
-        CREATE TABLE `Join1` ( 
+        CREATE TABLE `Join1` (
             Key Int32,
             Fk21 Uint32,
             Fk22 String,
@@ -276,7 +276,7 @@ void TKikimrRunner::CreateSampleTables() {
             PARTITION_AT_KEYS = (5)
         );
 
-        CREATE TABLE `Join2` ( 
+        CREATE TABLE `Join2` (
             Key1 Uint32,
             Key2 String,
             Name String,
@@ -291,7 +291,7 @@ void TKikimrRunner::CreateSampleTables() {
     AssertSuccessResult(session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
 
-        REPLACE INTO `TwoShard` (Key, Value1, Value2) VALUES 
+        REPLACE INTO `TwoShard` (Key, Value1, Value2) VALUES
             (1u, "One", -1),
             (2u, "Two", 0),
             (3u, "Three", 1),
@@ -299,7 +299,7 @@ void TKikimrRunner::CreateSampleTables() {
             (4000000002u, "BigTwo", 0),
             (4000000003u, "BigThree", 1);
 
-        REPLACE INTO `EightShard` (Key, Text, Data) VALUES 
+        REPLACE INTO `EightShard` (Key, Text, Data) VALUES
             (101u, "Value1",  1),
             (201u, "Value1",  2),
             (301u, "Value1",  3),
@@ -325,31 +325,31 @@ void TKikimrRunner::CreateSampleTables() {
             (703u, "Value3",  2),
             (803u, "Value3",  3);
 
-        REPLACE INTO `KeyValue` (Key, Value) VALUES 
+        REPLACE INTO `KeyValue` (Key, Value) VALUES
             (1u, "One"),
             (2u, "Two");
 
-        REPLACE INTO `KeyValue2` (Key, Value) VALUES 
+        REPLACE INTO `KeyValue2` (Key, Value) VALUES
             ("1", "One"),
             ("2", "Two");
 
-        REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES 
+        REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
             (1u, "Anna", 3500ul, "None"),
             (1u, "Paul", 300ul, "None"),
             (2u, "Tony", 7200ul, "None");
- 
-        REPLACE INTO `Logs` (App, Ts, Host, Message) VALUES 
-            ("apache", 0, "front-42", " GET /index.html HTTP/1.1"), 
-            ("nginx", 1, "nginx-10", "GET /index.html HTTP/1.1"), 
-            ("nginx", 2, "nginx-23", "PUT /form HTTP/1.1"), 
-            ("nginx", 3, "nginx-23", "GET /cat.jpg HTTP/1.1"), 
+
+        REPLACE INTO `Logs` (App, Ts, Host, Message) VALUES
+            ("apache", 0, "front-42", " GET /index.html HTTP/1.1"),
+            ("nginx", 1, "nginx-10", "GET /index.html HTTP/1.1"),
+            ("nginx", 2, "nginx-23", "PUT /form HTTP/1.1"),
+            ("nginx", 3, "nginx-23", "GET /cat.jpg HTTP/1.1"),
             ("kikimr-db", 1, "kikimr-db-10", "Write Data"),
             ("kikimr-db", 2, "kikimr-db-21", "Read Data"),
             ("kikimr-db", 3, "kikimr-db-21", "Stream Read Data"),
             ("kikimr-db", 4, "kikimr-db-53", "Discover"),
-            ("ydb", 0, "ydb-1000", "some very very very very long string"); 
+            ("ydb", 0, "ydb-1000", "some very very very very long string");
 
-        REPLACE INTO `Join1` (Key, Fk21, Fk22, Value) VALUES 
+        REPLACE INTO `Join1` (Key, Fk21, Fk22, Value) VALUES
             (1, 101, "One", "Value1"),
             (2, 102, "Two", "Value1"),
             (3, 103, "One", "Value2"),
@@ -360,7 +360,7 @@ void TKikimrRunner::CreateSampleTables() {
             (8, 108, "One", "Value5"),
             (9, 101, "Two", "Value1");
 
-        REPLACE INTO `Join2` (Key1, Key2, Name, Value2) VALUES 
+        REPLACE INTO `Join2` (Key1, Key2, Name, Value2) VALUES
             (101, "One",   "Name1", "Value21"),
             (101, "Two",   "Name1", "Value22"),
             (101, "Three", "Name3", "Value23"),
@@ -402,8 +402,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
 
     Client->InitRootScheme(settings.DomainRoot);
 
-    NKikimr::NKqp::WaitForKqpProxyInit(GetDriver()); 
- 
+    NKikimr::NKqp::WaitForKqpProxyInit(GetDriver());
+
     if (settings.WithSampleTables) {
         CreateSampleTables();
     }
@@ -820,13 +820,13 @@ void CreateSampleTablesWithIndex(TSession& session) {
     auto result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
 
-        REPLACE INTO `KeyValue` (Key, Value) VALUES 
+        REPLACE INTO `KeyValue` (Key, Value) VALUES
             (3u,   "Three"),
             (4u,   "Four"),
             (10u,  "Ten"),
             (NULL, "Null Value");
 
-        REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES 
+        REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
             (1u, "Jack",     100500ul, "Just Jack"),
             (3u, "Harry",    5600ul,   "Not Potter"),
             (3u, "Joshua",   8202ul,   "Very popular name in GB"),
@@ -857,25 +857,25 @@ void CreateSampleTablesWithIndex(TSession& session) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void WaitForKqpProxyInit(const NYdb::TDriver& driver) { 
-    NYdb::NTable::TTableClient client(driver); 
- 
-    while (true) { 
+void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
+    NYdb::NTable::TTableClient client(driver);
+
+    while (true) {
         auto it = client.RetryOperationSync([=](TSession session) {
             return session.ExecuteDataQuery(R"(
                         PRAGMA kikimr.UseNewEngine = "true";
                         SELECT 1;
                     )",
-                    TTxControl::BeginTx().CommitTx() 
-                ).GetValueSync(); 
-        }); 
- 
-        if (it.IsSuccess()) { 
-            break; 
-        } 
-        Sleep(TDuration::MilliSeconds(100)); 
-    } 
-} 
- 
+                    TTxControl::BeginTx().CommitTx()
+                ).GetValueSync();
+        });
+
+        if (it.IsSuccess()) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+}
+
 } // namspace NKqp
 } // namespace NKikimr

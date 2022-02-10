@@ -425,8 +425,8 @@ TSerializedTableRange MakeKeyRange(const TVector<NUdf::TDataTypeId>& keyColumnTy
     return serialized;
 }
 
-namespace { 
- 
+namespace {
+
 void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shardInfoMap, bool read) {
     for (ui64 i = 0; i < stageInfo.Meta.ShardKey->Partitions.size(); ++i) {
         auto& partition = stageInfo.Meta.ShardKey->Partitions[i];

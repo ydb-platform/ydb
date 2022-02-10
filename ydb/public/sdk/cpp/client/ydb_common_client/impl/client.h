@@ -52,7 +52,7 @@ protected:
 
     template<typename TService, typename TRequest, typename TResponse>
     NThreading::TFuture<TStatus> RunSimple(
-        TRequest&& request, 
+        TRequest&& request,
         TAsyncRequest<TService, TRequest, TResponse> rpc,
         const TRpcRequestSettings& requestSettings = {},
         TDuration timeout = TDuration::Zero(),
@@ -67,7 +67,7 @@ protected:
             };
 
         Connections_->RunDeferred<TService, TRequest, TResponse>(
-            std::move(request), 
+            std::move(request),
             extractor,
             rpc,
             DbDriverState_,

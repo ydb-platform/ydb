@@ -1,8 +1,8 @@
 #include "columnshard_impl.h"
 #include "columnshard_txs.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h" 
-#include "blob_cache.h" 
+#include "blob_manager_db.h"
+#include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -15,9 +15,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
 
     txc.DB.NoMoreReadsForTx();
 
-    ui64 blobsWritten = 0; 
-    ui64 bytesWritten = 0; 
- 
+    ui64 blobsWritten = 0;
+    ui64 bytesWritten = 0;
+
     auto changes = Ev->Get()->IndexChanges;
     Y_VERIFY(changes);
 
@@ -28,8 +28,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
             snapshot = {Self->LastPlannedStep, Self->LastPlannedTxId};
         }
 
-        TBlobGroupSelector dsGroupSelector(Self->Info()); 
-        NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector); 
+        TBlobGroupSelector dsGroupSelector(Self->Info());
+        NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         ok = Self->PrimaryIndex->ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
         if (ok) {
             LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString()
@@ -38,16 +38,16 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
             TBlobManagerDb blobManagerDb(txc.DB);
             for (const auto& cmtd : Ev->Get()->IndexChanges->DataToIndex) {
                 Self->InsertTable->EraseCommitted(dbWrap, cmtd);
-                Self->BlobManager->DeleteBlob(cmtd.BlobId, blobManagerDb); 
+                Self->BlobManager->DeleteBlob(cmtd.BlobId, blobManagerDb);
             }
 
             const auto& switchedPortions = Ev->Get()->IndexChanges->SwitchedPortions;
             Self->IncCounter(COUNTER_PORTIONS_DEACTIVATED, switchedPortions.size());
 
-            THashSet<TUnifiedBlobId> blobsDeactivated; 
+            THashSet<TUnifiedBlobId> blobsDeactivated;
             for (auto& portionInfo : switchedPortions) {
                 for (auto& rec : portionInfo.Records) {
-                    blobsDeactivated.insert(rec.BlobRange.BlobId); 
+                    blobsDeactivated.insert(rec.BlobRange.BlobId);
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
             }
@@ -70,46 +70,46 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                     case NOlap::TPortionMeta::SPLIT_COMPACTED:
                         Self->IncCounter(COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                         break;
-                    case NOlap::TPortionMeta::INACTIVE: 
-                        Y_FAIL("Unexpected inactive case"); 
-                        break; 
+                    case NOlap::TPortionMeta::INACTIVE:
+                        Y_FAIL("Unexpected inactive case");
+                        break;
                 }
- 
-                // Put newly created blobs into cache 
-                if (Ev->Get()->CacheData) { 
-                    for (const auto& columnRec : portionInfo.Records) { 
-                        const auto* blob = Ev->Get()->IndexChanges->Blobs.FindPtr(columnRec.BlobRange); 
-                        Y_VERIFY_DEBUG(blob, "Column data must be passed if CacheData is set"); 
-                        if (blob) { 
-                            Y_VERIFY(columnRec.BlobRange.Size == blob->Size()); 
-                            NBlobCache::AddRangeToCache(columnRec.BlobRange, *blob); 
-                        } 
-                    } 
-                } 
+
+                // Put newly created blobs into cache
+                if (Ev->Get()->CacheData) {
+                    for (const auto& columnRec : portionInfo.Records) {
+                        const auto* blob = Ev->Get()->IndexChanges->Blobs.FindPtr(columnRec.BlobRange);
+                        Y_VERIFY_DEBUG(blob, "Column data must be passed if CacheData is set");
+                        if (blob) {
+                            Y_VERIFY(columnRec.BlobRange.Size == blob->Size());
+                            NBlobCache::AddRangeToCache(columnRec.BlobRange, *blob);
+                        }
+                    }
+                }
             }
 
             const auto& portionsToDrop = Ev->Get()->IndexChanges->PortionsToDrop;
-            THashSet<TUnifiedBlobId> blobsToDrop; 
+            THashSet<TUnifiedBlobId> blobsToDrop;
             Self->IncCounter(COUNTER_PORTIONS_ERASED, portionsToDrop.size());
             for (const auto& portionInfo : portionsToDrop) {
                 for (const auto& rec : portionInfo.Records) {
-                    blobsToDrop.insert(rec.BlobRange.BlobId); 
+                    blobsToDrop.insert(rec.BlobRange.BlobId);
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
             }
 
             Self->IncCounter(COUNTER_BLOBS_ERASED, blobsToDrop.size());
             for (const auto& blobId : blobsToDrop) {
-                Self->BlobManager->DeleteBlob(blobId, blobManagerDb); 
+                Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
             }
 
-            blobsWritten = Ev->Get()->BlobBatch.GetBlobCount(); 
-            bytesWritten = Ev->Get()->BlobBatch.GetTotalSize(); 
+            blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();
+            bytesWritten = Ev->Get()->BlobBatch.GetTotalSize();
             if (blobsWritten) {
                 Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
             }
- 
+
             Self->UpdateInsertTableCounters();
             Self->UpdateIndexCounters();
         } else {
@@ -125,7 +125,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
 
     if (changes->IsInsert()) {
         Self->ActiveIndexing = false;
- 
+
         Self->IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
         Self->IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
         Self->IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
@@ -144,8 +144,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
             Self->IncCounter(COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
             Self->IncCounter(COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
         }
-    } else if (changes->IsCleanup()) { 
-        Self->ActiveCleanup = false; 
+    } else if (changes->IsCleanup()) {
+        Self->ActiveCleanup = false;
 
         Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
@@ -153,7 +153,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
 
         Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
     }
- 
+
     Self->UpdateResourceMetrics(Ev->Get()->ResourceUsage);
     return true;
 }

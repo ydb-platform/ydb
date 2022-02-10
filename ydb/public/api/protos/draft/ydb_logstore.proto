@@ -1,148 +1,148 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package Ydb.LogStore; 
-option java_package = "com.yandex.ydb.logstore"; 
-option java_outer_classname = "LogStoreProtos"; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.LogStore;
+option java_package = "com.yandex.ydb.logstore";
+option java_outer_classname = "LogStoreProtos";
+
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_table.proto";
-import "google/protobuf/empty.proto"; 
- 
-message ColumnMeta { 
-    string name = 1; 
-    Type type = 2; 
-} 
- 
-message Schema { 
-    repeated ColumnMeta columns = 1;    // Columns (name, type) 
-    repeated string primary_key = 2;    // List of columns used as primary key 
-} 
- 
-message SchemaPreset { 
-    string name = 1; 
-    Schema schema = 2; 
-} 
- 
-message TtlSettingsPreset { 
-    string name = 1; 
-    Ydb.Table.TtlSettings ttl_settings = 2; 
-} 
- 
-message CreateLogStoreRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-    uint32 column_shard_count = 3; 
-    repeated SchemaPreset schema_presets = 4; 
-    // repeated TtlSettingsPreset ttl_settings_presets = 5; // Unimplemented 
-} 
- 
-message CreateLogStoreResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message DescribeLogStoreRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-} 
- 
-message DescribeLogStoreResult { 
-    Ydb.Scheme.Entry self = 1;  // Description of scheme object 
- 
-    uint32 column_shard_count = 2; 
-    repeated SchemaPreset schema_presets = 3; 
-    // repeated TtlSettingsPreset ttl_settings_presets = 4; // Unimplemented 
-} 
- 
-message DescribeLogStoreResponse { 
-    // Holds DescribeLogStoreResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message DropLogStoreRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-} 
- 
-message DropLogStoreResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message CreateLogTableRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-    oneof schema_specification { 
-        string schema_preset_name = 3;          // From LogStore 
-        Schema schema = 4; 
-    }; 
-    oneof ttl_specification { 
-        Ydb.Table.TtlSettings ttl_settings = 5; 
-        // string ttl_settings_preset_name = 6;    // Unimplemented for now 
-    }; 
- 
-    // Specifies the desired number of ColumnShards for this table 
-    uint32 column_shard_count = 7; 
- 
-    repeated string sharding_columns = 8; 
-} 
- 
-message CreateLogTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message DescribeLogTableRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-} 
- 
-message DescribeLogTableResult { 
-    Ydb.Scheme.Entry self = 1;  // Description of scheme object 
- 
-    string schema_preset_name = 2; 
-    Schema schema = 3; 
-    string ttl_settings_preset_name = 4; 
-    Ydb.Table.TtlSettings ttl_settings = 5; 
- 
-    // Specifies the desired number of ColumnShards for this table 
-    uint32 column_shard_count = 6; 
- 
-    repeated string sharding_columns = 7; 
-} 
- 
-message DescribeLogTableResponse { 
-    // Holds DescribeLogTableResult in case of successful call 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message DropLogTableRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
-} 
- 
-message DropLogTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message AlterLogTableRequest { 
-    Ydb.Operations.OperationParams operation_params = 1; 
- 
-    string path = 2;        // Full path 
- 
-    oneof ttl_action { 
-        google.protobuf.Empty drop_ttl_settings = 3; 
-        Ydb.Table.TtlSettings set_ttl_settings = 4; 
-        // string set_ttl_preset_name = 5;    // Unimplemened for now 
-    } 
-} 
- 
-message AlterLogTableResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
+import "google/protobuf/empty.proto";
+
+message ColumnMeta {
+    string name = 1;
+    Type type = 2;
+}
+
+message Schema {
+    repeated ColumnMeta columns = 1;    // Columns (name, type)
+    repeated string primary_key = 2;    // List of columns used as primary key
+}
+
+message SchemaPreset {
+    string name = 1;
+    Schema schema = 2;
+}
+
+message TtlSettingsPreset {
+    string name = 1;
+    Ydb.Table.TtlSettings ttl_settings = 2;
+}
+
+message CreateLogStoreRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+    uint32 column_shard_count = 3;
+    repeated SchemaPreset schema_presets = 4;
+    // repeated TtlSettingsPreset ttl_settings_presets = 5; // Unimplemented
+}
+
+message CreateLogStoreResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeLogStoreRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+}
+
+message DescribeLogStoreResult {
+    Ydb.Scheme.Entry self = 1;  // Description of scheme object
+
+    uint32 column_shard_count = 2;
+    repeated SchemaPreset schema_presets = 3;
+    // repeated TtlSettingsPreset ttl_settings_presets = 4; // Unimplemented
+}
+
+message DescribeLogStoreResponse {
+    // Holds DescribeLogStoreResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropLogStoreRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+}
+
+message DropLogStoreResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateLogTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+    oneof schema_specification {
+        string schema_preset_name = 3;          // From LogStore
+        Schema schema = 4;
+    };
+    oneof ttl_specification {
+        Ydb.Table.TtlSettings ttl_settings = 5;
+        // string ttl_settings_preset_name = 6;    // Unimplemented for now
+    };
+
+    // Specifies the desired number of ColumnShards for this table
+    uint32 column_shard_count = 7;
+
+    repeated string sharding_columns = 8;
+}
+
+message CreateLogTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeLogTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+}
+
+message DescribeLogTableResult {
+    Ydb.Scheme.Entry self = 1;  // Description of scheme object
+
+    string schema_preset_name = 2;
+    Schema schema = 3;
+    string ttl_settings_preset_name = 4;
+    Ydb.Table.TtlSettings ttl_settings = 5;
+
+    // Specifies the desired number of ColumnShards for this table
+    uint32 column_shard_count = 6;
+
+    repeated string sharding_columns = 7;
+}
+
+message DescribeLogTableResponse {
+    // Holds DescribeLogTableResult in case of successful call
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropLogTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+}
+
+message DropLogTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AlterLogTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+
+    oneof ttl_action {
+        google.protobuf.Empty drop_ttl_settings = 3;
+        Ydb.Table.TtlSettings set_ttl_settings = 4;
+        // string set_ttl_preset_name = 5;    // Unimplemened for now
+    }
+}
+
+message AlterLogTableResponse {
+    Ydb.Operations.Operation operation = 1;
+}

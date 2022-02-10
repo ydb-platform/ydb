@@ -13,8 +13,8 @@ class TWalleListTasksAdapter : public TActorBootstrapped<TWalleListTasksAdapter>
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_WALLE_REQ;
-    } 
- 
+    }
+
     TWalleListTasksAdapter(TEvCms::TEvWalleListTasksRequest::TPtr &event, const TCmsStatePtr state)
         : RequestEvent(event)
         , State(state)

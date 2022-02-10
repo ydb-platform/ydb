@@ -2,7 +2,7 @@
 #include "columnshard_ttl.h"
 #include "columnshard_txs.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h" 
+#include "blob_manager_db.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
 
@@ -16,7 +16,7 @@ void TTxInit::SetDefaults() {
     Self->CurrentSchemeShardId = 0;
     Self->LastSchemaSeqNo = { };
     Self->ProcessingParams.reset();
-    Self->LastWriteId = TWriteId{0}; 
+    Self->LastWriteId = TWriteId{0};
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
     Self->BasicTxInfo.clear();
@@ -34,8 +34,8 @@ void TTxInit::SetDefaults() {
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 {
     // Load InsertTable
-    TBlobGroupSelector dsGroupSelector(Self->Info()); 
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector); 
+    TBlobGroupSelector dsGroupSelector(Self->Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     if (!Self->InsertTable->Load(dbTable, AppData(ctx)->TimeProvider->Now())) {
         return false;
     }
@@ -53,8 +53,8 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     ready = ready & Schema::Precharge<Schema::TableInfo>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::TableVersionInfo>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme()); 
-    ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme()); 
+    ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
 
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
@@ -103,7 +103,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
                     TColumnShard::TCommitMeta meta;
                     meta.MetaShard = body.GetTxInitiator();
                     for (auto& id : body.GetWriteIds()) {
-                        meta.AddWriteId(TWriteId{id}); 
+                        meta.AddWriteId(TWriteId{id});
                     }
 
                     Self->CommitsInFlight.emplace(txId, std::move(meta));
@@ -280,7 +280,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             return false;
 
         while (!rowset.EndOfSet()) {
-            const TWriteId writeId = TWriteId{rowset.GetValue<Schema::LongTxWrites::WriteId>()}; 
+            const TWriteId writeId = TWriteId{rowset.GetValue<Schema::LongTxWrites::WriteId>()};
             NKikimrLongTxService::TLongTxId proto;
             Y_VERIFY(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
@@ -295,10 +295,10 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     for (const auto& pr : Self->CommitsInFlight) {
         ui64 txId = pr.first;
         if (pr.second.MetaShard == 0) {
-            for (TWriteId writeId : pr.second.WriteIds) { 
+            for (TWriteId writeId : pr.second.WriteIds) {
                 Y_VERIFY(Self->LongTxWrites.contains(writeId),
-                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist", 
-                    Self->TabletID(), txId, writeId); 
+                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
+                    Self->TabletID(), txId, writeId);
                 Self->AddLongTxWrite(writeId, txId);
             }
         }
@@ -306,21 +306,21 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     // Load primary index
     if (Self->PrimaryIndex) {
-        TBlobGroupSelector dsGroupSelector(Self->Info()); 
-        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector); 
+        TBlobGroupSelector dsGroupSelector(Self->Info());
+        NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
         if (!Self->PrimaryIndex->Load(idxDB, Self->PathsToDrop)) {
             return false;
         }
     }
 
-    // Initialize the BlobManager 
-    { 
-        TBlobManagerDb blobManagerDb(txc.DB); 
-        if (!Self->BlobManager->LoadState(blobManagerDb)) { 
-            return false; 
-        } 
-    } 
- 
+    // Initialize the BlobManager
+    {
+        TBlobManagerDb blobManagerDb(txc.DB);
+        if (!Self->BlobManager->LoadState(blobManagerDb)) {
+            return false;
+        }
+    }
+
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
     Self->UpdateResourceMetrics({});
@@ -377,35 +377,35 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
-    bool isCreate = txc.DB.GetScheme().IsEmpty(); 
+    bool isCreate = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
- 
-    if (isCreate) { 
-        txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue); 
-        txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500)); 
-        txc.DB.Alter().SetExecutorCacheSize(500000); 
-    } 
- 
-    // Enable compression for the SmallBlobs table 
-    const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId); 
-    if (!smallBlobsDefaultColumnFamily || 
-        smallBlobsDefaultColumnFamily->Codec != NTable::TAlter::ECodec::LZ4) 
-    { 
-        txc.DB.Alter().SetFamily(Schema::SmallBlobs::TableId, 0, 
-            NTable::TAlter::ECache::None, NTable::TAlter::ECodec::LZ4); 
-    } 
- 
-    // SmallBlobs table has compaction policy suitable for a big table 
-    const auto* smallBlobsTable = txc.DB.GetScheme().GetTableInfo(Schema::SmallBlobs::TableId); 
-    NLocalDb::TCompactionPolicyPtr bigTableCompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy(); 
-    bigTableCompactionPolicy->MinDataPageSize = 32 * 1024; 
-    if (!smallBlobsTable || 
-        !smallBlobsTable->CompactionPolicy || 
-        smallBlobsTable->CompactionPolicy->Generations.size() != bigTableCompactionPolicy->Generations.size()) 
-    { 
-        txc.DB.Alter().SetCompactionPolicy(Schema::SmallBlobs::TableId, *bigTableCompactionPolicy); 
-    } 
- 
+
+    if (isCreate) {
+        txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
+        txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
+        txc.DB.Alter().SetExecutorCacheSize(500000);
+    }
+
+    // Enable compression for the SmallBlobs table
+    const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);
+    if (!smallBlobsDefaultColumnFamily ||
+        smallBlobsDefaultColumnFamily->Codec != NTable::TAlter::ECodec::LZ4)
+    {
+        txc.DB.Alter().SetFamily(Schema::SmallBlobs::TableId, 0,
+            NTable::TAlter::ECache::None, NTable::TAlter::ECodec::LZ4);
+    }
+
+    // SmallBlobs table has compaction policy suitable for a big table
+    const auto* smallBlobsTable = txc.DB.GetScheme().GetTableInfo(Schema::SmallBlobs::TableId);
+    NLocalDb::TCompactionPolicyPtr bigTableCompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+    bigTableCompactionPolicy->MinDataPageSize = 32 * 1024;
+    if (!smallBlobsTable ||
+        !smallBlobsTable->CompactionPolicy ||
+        smallBlobsTable->CompactionPolicy->Generations.size() != bigTableCompactionPolicy->Generations.size())
+    {
+        txc.DB.Alter().SetCompactionPolicy(Schema::SmallBlobs::TableId, *bigTableCompactionPolicy);
+    }
+
     return true;
 }
 

@@ -23,7 +23,7 @@ public:
         }
 
         TGuard<TMutex> guard(Mutex);
-        while (AtomicGet(Locked) == 1) { 
+        while (AtomicGet(Locked) == 1) {
             CondVar.WaitI(Mutex);
         }
     }
@@ -39,7 +39,7 @@ public:
         }
 
         TGuard<TMutex> guard(Mutex);
-        AtomicSet(Locked, 0); 
+        AtomicSet(Locked, 0);
         CondVar.BroadCast();
     }
 

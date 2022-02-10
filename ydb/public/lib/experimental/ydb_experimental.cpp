@@ -1,5 +1,5 @@
-#include "ydb_experimental.h" 
- 
+#include "ydb_experimental.h"
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -8,13 +8,13 @@
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
- 
-namespace NYdb { 
-namespace NExperimental { 
- 
+
+namespace NYdb {
+namespace NExperimental {
+
 using namespace NThreading;
 
- 
+
 TStreamPartStatus::TStreamPartStatus(TStatus&& status)
     : TStatus(std::move(status))
 {}
@@ -42,7 +42,7 @@ public:
         StreamProcessor_->Cancel();
     }
 
-    bool IsFinished() const { 
+    bool IsFinished() const {
         return Finished_;
     }
 

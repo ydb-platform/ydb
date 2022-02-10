@@ -77,8 +77,8 @@ namespace NActors {
                            TAffinity* affinity = nullptr,
                            TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                            ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX,
-                           int realtimePriority = 0, 
-                           ui32 maxActivityType = 1); 
+                           int realtimePriority = 0,
+                           ui32 maxActivityType = 1);
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg);
         ~TBasicExecutorPool();
 

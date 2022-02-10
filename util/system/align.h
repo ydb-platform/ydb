@@ -15,9 +15,9 @@ static inline T AlignUp(T len, T align) noexcept {
     const T alignedResult = AlignDown(len + (align - 1), align);
     Y_ASSERT(alignedResult >= len); // check for overflow
     return alignedResult;
-} 
- 
-template <class T> 
+}
+
+template <class T>
 static inline T AlignUpSpace(T len, T align) noexcept {
     Y_ASSERT(IsPowerOf2(align));       // align should be power of 2
     return ((T)0 - len) & (align - 1); // AlignUp(len, align) - len;

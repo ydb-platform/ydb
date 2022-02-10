@@ -995,80 +995,80 @@ void TransformerStatsFromProto(const NKikimrKqp::TTransformProfile& proto, IGrap
 }
 
 void KikimrReadOpStatsToYson(const NKikimrQueryStats::TReadOpStats& opStats, NYson::TYsonWriter& writer) {
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("Count"); 
-    writer.OnUint64Scalar(opStats.GetCount()); 
-    writer.OnKeyedItem("Rows"); 
-    writer.OnUint64Scalar(opStats.GetRows()); 
-    writer.OnKeyedItem("Bytes"); 
-    writer.OnUint64Scalar(opStats.GetBytes()); 
-    writer.OnEndMap(); 
-} 
- 
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Count");
+    writer.OnUint64Scalar(opStats.GetCount());
+    writer.OnKeyedItem("Rows");
+    writer.OnUint64Scalar(opStats.GetRows());
+    writer.OnKeyedItem("Bytes");
+    writer.OnUint64Scalar(opStats.GetBytes());
+    writer.OnEndMap();
+}
+
 void KikimrWriteOpStatsToYson(const NKikimrQueryStats::TWriteOpStats& opStats, NYson::TYsonWriter& writer) {
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("Count"); 
-    writer.OnUint64Scalar(opStats.GetCount()); 
-    writer.OnKeyedItem("Rows"); 
-    writer.OnUint64Scalar(opStats.GetRows()); 
-    writer.OnKeyedItem("Bytes"); 
-    writer.OnUint64Scalar(opStats.GetBytes()); 
-    writer.OnEndMap(); 
-} 
- 
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Count");
+    writer.OnUint64Scalar(opStats.GetCount());
+    writer.OnKeyedItem("Rows");
+    writer.OnUint64Scalar(opStats.GetRows());
+    writer.OnKeyedItem("Bytes");
+    writer.OnUint64Scalar(opStats.GetBytes());
+    writer.OnEndMap();
+}
+
 void KikimrTxStatsToYson(const NKikimrQueryStats::TTxStats& txStats, NYson::TYsonWriter& writer) {
-    writer.OnBeginMap(); 
-    writer.OnKeyedItem("TableAccessStats"); 
- 
-    writer.OnBeginList(); 
-    for (auto& tableStats : txStats.GetTableAccessStats()) { 
-        writer.OnListItem(); 
-        writer.OnBeginMap(); 
- 
-        writer.OnKeyedItem("TableInfo"); 
-        { 
-            writer.OnBeginMap(); 
-            writer.OnKeyedItem("SchemeshardId"); 
-            writer.OnUint64Scalar(tableStats.GetTableInfo().GetSchemeshardId()); 
-            writer.OnKeyedItem("PathId"); 
-            writer.OnUint64Scalar(tableStats.GetTableInfo().GetPathId()); 
-            writer.OnKeyedItem("Name"); 
-            writer.OnStringScalar(tableStats.GetTableInfo().GetName()); 
-            writer.OnEndMap(); 
-        } 
- 
-        if (tableStats.HasSelectRow()) { 
-            writer.OnKeyedItem("SelectRow"); 
-            KikimrReadOpStatsToYson(tableStats.GetSelectRow(), writer); 
-        } 
- 
-        if (tableStats.HasSelectRange()) { 
-            writer.OnKeyedItem("SelectRange"); 
-            KikimrReadOpStatsToYson(tableStats.GetSelectRange(), writer); 
-        } 
- 
-        if (tableStats.HasUpdateRow()) { 
-            writer.OnKeyedItem("UpdateRow"); 
-            KikimrWriteOpStatsToYson(tableStats.GetUpdateRow(), writer); 
-        } 
- 
-        if (tableStats.HasEraseRow()) { 
-            writer.OnKeyedItem("EraseRow"); 
-            KikimrWriteOpStatsToYson(tableStats.GetEraseRow(), writer); 
-        } 
- 
-        writer.OnEndMap(); 
-    } 
-    writer.OnEndList(); 
- 
-    if (txStats.HasDurationUs()) { 
-        writer.OnKeyedItem("DurationUs"); 
-        writer.OnUint64Scalar(txStats.GetDurationUs()); 
-    } 
- 
-    writer.OnEndMap(); 
-} 
- 
+    writer.OnBeginMap();
+    writer.OnKeyedItem("TableAccessStats");
+
+    writer.OnBeginList();
+    for (auto& tableStats : txStats.GetTableAccessStats()) {
+        writer.OnListItem();
+        writer.OnBeginMap();
+
+        writer.OnKeyedItem("TableInfo");
+        {
+            writer.OnBeginMap();
+            writer.OnKeyedItem("SchemeshardId");
+            writer.OnUint64Scalar(tableStats.GetTableInfo().GetSchemeshardId());
+            writer.OnKeyedItem("PathId");
+            writer.OnUint64Scalar(tableStats.GetTableInfo().GetPathId());
+            writer.OnKeyedItem("Name");
+            writer.OnStringScalar(tableStats.GetTableInfo().GetName());
+            writer.OnEndMap();
+        }
+
+        if (tableStats.HasSelectRow()) {
+            writer.OnKeyedItem("SelectRow");
+            KikimrReadOpStatsToYson(tableStats.GetSelectRow(), writer);
+        }
+
+        if (tableStats.HasSelectRange()) {
+            writer.OnKeyedItem("SelectRange");
+            KikimrReadOpStatsToYson(tableStats.GetSelectRange(), writer);
+        }
+
+        if (tableStats.HasUpdateRow()) {
+            writer.OnKeyedItem("UpdateRow");
+            KikimrWriteOpStatsToYson(tableStats.GetUpdateRow(), writer);
+        }
+
+        if (tableStats.HasEraseRow()) {
+            writer.OnKeyedItem("EraseRow");
+            KikimrWriteOpStatsToYson(tableStats.GetEraseRow(), writer);
+        }
+
+        writer.OnEndMap();
+    }
+    writer.OnEndList();
+
+    if (txStats.HasDurationUs()) {
+        writer.OnKeyedItem("DurationUs");
+        writer.OnUint64Scalar(txStats.GetDurationUs());
+    }
+
+    writer.OnEndMap();
+}
+
 void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer) {
     writer.OnBeginMap();
     if (kqlProfile.HasQuery()) {
@@ -1080,16 +1080,16 @@ void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYson
     writer.OnBeginList();
     for (auto& mkql : kqlProfile.GetMkqlProfiles()) {
         writer.OnListItem();
-        writer.OnBeginMap(); 
-        writer.OnKeyedItem("Query"); 
+        writer.OnBeginMap();
+        writer.OnKeyedItem("Query");
         writer.OnStringScalar(mkql.HasQuery() ? mkql.GetQuery() : "");
- 
-        if (mkql.HasTxStats()) { 
-            writer.OnKeyedItem("TxStats"); 
-            KikimrTxStatsToYson(mkql.GetTxStats(), writer); 
-        } 
- 
-        writer.OnEndMap(); 
+
+        if (mkql.HasTxStats()) {
+            writer.OnKeyedItem("TxStats");
+            KikimrTxStatsToYson(mkql.GetTxStats(), writer);
+        }
+
+        writer.OnEndMap();
     }
     writer.OnEndList();
 

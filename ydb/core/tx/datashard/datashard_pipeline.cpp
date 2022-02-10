@@ -44,7 +44,7 @@ TPipeline::~TPipeline()
 bool TPipeline::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    Y_VERIFY(!SchemaTx); 
+    Y_VERIFY(!SchemaTx);
     LOAD_SYS_UI64(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
     LOAD_SYS_UI64(db, Schema::Sys_LastPlannedTx, LastPlannedTx.TxId);
     LOAD_SYS_UI64(db, Schema::Sys_LastCompleteStep, LastCompleteTx.Step);
@@ -133,8 +133,8 @@ TDuration TPipeline::CleanupTimeout() const {
 ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     bool foundExpired = false;
     TOperation::TPtr op;
-    ui64 step = 0; 
-    ui64 txId = 0; 
+    ui64 step = 0;
+    ui64 txId = 0;
     while (!op) {
         Self->TransQueue.GetPlannedTxId(step, txId);
 
@@ -157,10 +157,10 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx)
             db.NoMoreReadsForTx();
             foundExpired = true;
 
-            // Local DB Tx doesn't see it's own updates, so if we erase a row we must move to the next key 
-            ++txId; 
-            if (txId == 0) 
-                ++step; 
+            // Local DB Tx doesn't see it's own updates, so if we erase a row we must move to the next key
+            ++txId;
+            if (txId == 0)
+                ++step;
         }
     }
 

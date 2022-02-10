@@ -46,16 +46,16 @@ enum ECumulativeCounters {
     COUNTER_ACK_SENT_DELAYED = 20                         [(CounterOpts) = {Name: "AckSentDelayed"}];
     COUNTER_CANCEL_TX_NOTFOUND = 21                       [(CounterOpts) = {Name: "CancelTxNotFound"}];
     COUNTER_MINIKQL_PROGRAM_SIZE = 22                     [(CounterOpts) = {Name: "MiniKQLProgramSize"}];
-    COUNTER_ENGINE_HOST_SELECT_ROW = 23                   [(CounterOpts) = {Name: "EngineHostRowReads"}]; 
-    COUNTER_ENGINE_HOST_SELECT_RANGE = 24                 [(CounterOpts) = {Name: "EngineHostRangeReads"}]; 
-    COUNTER_ENGINE_HOST_UPDATE_ROW = 25                   [(CounterOpts) = {Name: "EngineHostRowUpdates"}]; 
-    COUNTER_ENGINE_HOST_ERASE_ROW = 26                    [(CounterOpts) = {Name: "EngineHostRowErases"}]; 
-    COUNTER_PREPARE_CANCELLED = 27                        [(CounterOpts) = {Name: "PrepareCancelled"}]; 
-    COUNTER_READSET_SENT_COUNT = 28                       [(CounterOpts) = {Name: "ReadsetSentCount"}]; 
-    COUNTER_READSET_SENT_SIZE = 29                        [(CounterOpts) = {Name: "ReadsetSentSize"}]; 
-    COUNTER_READSET_RECEIVED_COUNT = 30                   [(CounterOpts) = {Name: "ReadsetReceivedCount"}]; 
-    COUNTER_READSET_RECEIVED_SIZE = 31                    [(CounterOpts) = {Name: "ReadsetReceivedSize"}]; 
-    COUNTER_TX_RESULT_SIZE = 32                           [(CounterOpts) = {Name: "TxResultSize"}]; 
+    COUNTER_ENGINE_HOST_SELECT_ROW = 23                   [(CounterOpts) = {Name: "EngineHostRowReads"}];
+    COUNTER_ENGINE_HOST_SELECT_RANGE = 24                 [(CounterOpts) = {Name: "EngineHostRangeReads"}];
+    COUNTER_ENGINE_HOST_UPDATE_ROW = 25                   [(CounterOpts) = {Name: "EngineHostRowUpdates"}];
+    COUNTER_ENGINE_HOST_ERASE_ROW = 26                    [(CounterOpts) = {Name: "EngineHostRowErases"}];
+    COUNTER_PREPARE_CANCELLED = 27                        [(CounterOpts) = {Name: "PrepareCancelled"}];
+    COUNTER_READSET_SENT_COUNT = 28                       [(CounterOpts) = {Name: "ReadsetSentCount"}];
+    COUNTER_READSET_SENT_SIZE = 29                        [(CounterOpts) = {Name: "ReadsetSentSize"}];
+    COUNTER_READSET_RECEIVED_COUNT = 30                   [(CounterOpts) = {Name: "ReadsetReceivedCount"}];
+    COUNTER_READSET_RECEIVED_SIZE = 31                    [(CounterOpts) = {Name: "ReadsetReceivedSize"}];
+    COUNTER_TX_RESULT_SIZE = 32                           [(CounterOpts) = {Name: "TxResultSize"}];
     COUNTER_LOCKS_REJECTED = 33                           [(CounterOpts) = {Name: "LocksRejected"}];
     COUNTER_LOCKS_ACQUIRED = 34                           [(CounterOpts) = {Name: "LocksAcquired"}];
     COUNTER_LOCKS_EVICTED = 35                            [(CounterOpts) = {Name: "LocksEvicted"}];
@@ -73,26 +73,26 @@ enum ECumulativeCounters {
     COUNTER_TX_WAIT_READ_SETS = 47                        [(CounterOpts) = {Name: "TxWaitReadSets"}];
     COUNTER_TX_WAIT_RESOURCE = 48                         [(CounterOpts) = {Name: "TxWaitResource"}];
     COUNTER_LOCKS_WHOLE_SHARD = 49                        [(CounterOpts) = {Name: "LocksWholeShard"}];
-    COUNTER_ENGINE_HOST_SELECT_ROW_BYTES = 50             [(CounterOpts) = {Name: "EngineHostRowReadBytes"}]; 
-    COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS = 51            [(CounterOpts) = {Name: "EngineHostRangeReadRows"}]; 
-    COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES = 52           [(CounterOpts) = {Name: "EngineHostRangeReadBytes"}]; 
-    COUNTER_ENGINE_HOST_UPDATE_ROW_BYTES = 53             [(CounterOpts) = {Name: "EngineHostRowUpdateBytes"}]; 
-    COUNTER_ENGINE_HOST_ERASE_ROW_BYTES = 54              [(CounterOpts) = {Name: "EngineHostRowEraseBytes"}]; 
-    COUNTER_PLANNED_TX_COMPLETE = 55                      [(CounterOpts) = {Name: "PlannedTxComplete"}]; 
-    COUNTER_PREPARE_OUT_OF_SPACE = 56                     [(CounterOpts) = {Name: "PrepareOutOfSpace"}]; 
-    COUNTER_IMMEDIATE_TX_CANCELLED = 57                   [(CounterOpts) = {Name: "ImmediateTxCancelled"}]; 
-    COUNTER_PLANNED_TX_CANCELLED = 58                     [(CounterOpts) = {Name: "PlannedTxCancelled"}]; 
-    COUNTER_UPLOAD_ROWS = 59                              [(CounterOpts) = {Name: "UploadRows"}]; 
-    COUNTER_UPLOAD_ROWS_BYTES = 60                        [(CounterOpts) = {Name: "UploadRowsBytes"}]; 
-    COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS = 61       [(CounterOpts) = {Name: "EngineHostRangeReadDeletedRowSkips"}]; 
-    COUNTER_READ_COLUMNS_ROWS = 62                        [(CounterOpts) = {Name: "ReadColumnsRows"}]; 
-    COUNTER_READ_COLUMNS_BYTES = 63                       [(CounterOpts) = {Name: "ReadColumnsBytes"}]; 
-    COUNTER_SCANNED_ROWS = 64                             [(CounterOpts) = {Name: "ScannedRows"}]; 
-    COUNTER_SCANNED_BYTES = 65                            [(CounterOpts) = {Name: "ScannedBytes"}]; 
+    COUNTER_ENGINE_HOST_SELECT_ROW_BYTES = 50             [(CounterOpts) = {Name: "EngineHostRowReadBytes"}];
+    COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS = 51            [(CounterOpts) = {Name: "EngineHostRangeReadRows"}];
+    COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES = 52           [(CounterOpts) = {Name: "EngineHostRangeReadBytes"}];
+    COUNTER_ENGINE_HOST_UPDATE_ROW_BYTES = 53             [(CounterOpts) = {Name: "EngineHostRowUpdateBytes"}];
+    COUNTER_ENGINE_HOST_ERASE_ROW_BYTES = 54              [(CounterOpts) = {Name: "EngineHostRowEraseBytes"}];
+    COUNTER_PLANNED_TX_COMPLETE = 55                      [(CounterOpts) = {Name: "PlannedTxComplete"}];
+    COUNTER_PREPARE_OUT_OF_SPACE = 56                     [(CounterOpts) = {Name: "PrepareOutOfSpace"}];
+    COUNTER_IMMEDIATE_TX_CANCELLED = 57                   [(CounterOpts) = {Name: "ImmediateTxCancelled"}];
+    COUNTER_PLANNED_TX_CANCELLED = 58                     [(CounterOpts) = {Name: "PlannedTxCancelled"}];
+    COUNTER_UPLOAD_ROWS = 59                              [(CounterOpts) = {Name: "UploadRows"}];
+    COUNTER_UPLOAD_ROWS_BYTES = 60                        [(CounterOpts) = {Name: "UploadRowsBytes"}];
+    COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS = 61       [(CounterOpts) = {Name: "EngineHostRangeReadDeletedRowSkips"}];
+    COUNTER_READ_COLUMNS_ROWS = 62                        [(CounterOpts) = {Name: "ReadColumnsRows"}];
+    COUNTER_READ_COLUMNS_BYTES = 63                       [(CounterOpts) = {Name: "ReadColumnsBytes"}];
+    COUNTER_SCANNED_ROWS = 64                             [(CounterOpts) = {Name: "ScannedRows"}];
+    COUNTER_SCANNED_BYTES = 65                            [(CounterOpts) = {Name: "ScannedBytes"}];
     COUNTER_PROPOSE_QUEUE_EV = 66                         [(CounterOpts) = {Name: "TxProposeQueueEvents"}];
-    COUNTER_BULK_UPSERT_SUCCESS = 67                      [(CounterOpts) = {Name: "BulkUpsertSuccess"}]; 
-    COUNTER_BULK_UPSERT_ERROR = 68                        [(CounterOpts) = {Name: "BulkUpsertError"}]; 
-    COUNTER_BULK_UPSERT_OVERLOADED = 69                   [(CounterOpts) = {Name: "BulkUpsertOverloaded"}]; 
+    COUNTER_BULK_UPSERT_SUCCESS = 67                      [(CounterOpts) = {Name: "BulkUpsertSuccess"}];
+    COUNTER_BULK_UPSERT_ERROR = 68                        [(CounterOpts) = {Name: "BulkUpsertError"}];
+    COUNTER_BULK_UPSERT_OVERLOADED = 69                   [(CounterOpts) = {Name: "BulkUpsertOverloaded"}];
     COUNTER_ERASE_ROWS_SUCCESS = 70                       [(CounterOpts) = {Name: "EraseRowsSuccess"}];
     COUNTER_ERASE_ROWS_ERROR = 71                         [(CounterOpts) = {Name: "EraseRowsError"}];
     COUNTER_ERASE_ROWS_OVERLOADED = 72                    [(CounterOpts) = {Name: "EraseRowsOverloaded"}];
@@ -191,28 +191,28 @@ enum EPercentileCounters {
                                                                 Ranges { Value: 67108864    Name: "134217728"   }
                                                                 Ranges { Value: 134217728   Name: "inf"         }
                                                           }];
- 
-    COUNTER_SELECT_ROWS_PER_REQUEST = 11                  [(CounterOpts) = {Name: "SelectRowsPerRequest", 
-                                                              Ranges: { Value: 0        Name: "0"}, 
-                                                              Ranges: { Value: 1        Name: "1"}, 
-                                                              Ranges: { Value: 2        Name: "10"}, 
-                                                              Ranges: { Value: 11       Name: "100"} 
-                                                              Ranges: { Value: 101      Name: "1000"} 
-                                                              Ranges: { Value: 1001     Name: "10000"} 
-                                                              Ranges: { Value: 10001    Name: "100000"} 
-                                                              Ranges: { Value: 100001   Name: "inf"} 
-                                                          }]; 
- 
-    COUNTER_RANGE_READ_ROWS_PER_REQUEST = 12              [(CounterOpts) = {Name: "RangeReadRowsPerRequest", 
-                                                              Ranges: { Value: 0        Name: "0"}, 
-                                                              Ranges: { Value: 1        Name: "1"}, 
-                                                              Ranges: { Value: 2        Name: "10"}, 
-                                                              Ranges: { Value: 11       Name: "100"} 
-                                                              Ranges: { Value: 101      Name: "1000"} 
-                                                              Ranges: { Value: 1001     Name: "10000"} 
-                                                              Ranges: { Value: 10001    Name: "100000"} 
-                                                              Ranges: { Value: 100001   Name: "inf"} 
-                                                          }]; 
+
+    COUNTER_SELECT_ROWS_PER_REQUEST = 11                  [(CounterOpts) = {Name: "SelectRowsPerRequest",
+                                                              Ranges: { Value: 0        Name: "0"},
+                                                              Ranges: { Value: 1        Name: "1"},
+                                                              Ranges: { Value: 2        Name: "10"},
+                                                              Ranges: { Value: 11       Name: "100"}
+                                                              Ranges: { Value: 101      Name: "1000"}
+                                                              Ranges: { Value: 1001     Name: "10000"}
+                                                              Ranges: { Value: 10001    Name: "100000"}
+                                                              Ranges: { Value: 100001   Name: "inf"}
+                                                          }];
+
+    COUNTER_RANGE_READ_ROWS_PER_REQUEST = 12              [(CounterOpts) = {Name: "RangeReadRowsPerRequest",
+                                                              Ranges: { Value: 0        Name: "0"},
+                                                              Ranges: { Value: 1        Name: "1"},
+                                                              Ranges: { Value: 2        Name: "10"},
+                                                              Ranges: { Value: 11       Name: "100"}
+                                                              Ranges: { Value: 101      Name: "1000"}
+                                                              Ranges: { Value: 1001     Name: "10000"}
+                                                              Ranges: { Value: 10001    Name: "100000"}
+                                                              Ranges: { Value: 100001   Name: "inf"}
+                                                          }];
 
     COUNTER_PLAN_QUEUE_LATENCY_MS = 13                    [(CounterOpts) = {Name: "PlanQueueLatencyMs",
                                                               Ranges: { Value: 0        Name: "0"},
@@ -354,37 +354,37 @@ enum ETxTypes {
     TXTYPE_PROGRESS_START = 5                             [(TxTypeOpts) = {Name: "TxProgressStart"}];
     TXTYPE_PROGRESS_WAIT = 6                              [(TxTypeOpts) = {Name: "TxProgressWait"}];
     TXTYPE_PROGRESS_COMPLETE = 7                          [(TxTypeOpts) = {Name: "TxProgressComplete"}];
-    TXTYPE_GET_STARD_STATE = 8                            [(TxTypeOpts) = {Name: "TxGetShardState"}]; 
-    TXTYPE_PROGRESS_RESEND_RS = 9                         [(TxTypeOpts) = {Name: "TxProgressResendRS"}]; 
-    TXTYPE_CANCEL_TX_PROPOSAL = 10                        [(TxTypeOpts) = {Name: "TxCancelTxProposal"}]; 
-    TXTYPE_CANCEL_BACKUP = 11                             [(TxTypeOpts) = {Name: "TxCancelBackup"}]; 
-    TXTYPE_MONITORING = 12                                [(TxTypeOpts) = {Name: "TxMonitoring"}]; 
-    TXTYPE_SCHEMA_CHANGED = 13                            [(TxTypeOpts) = {Name: "TxSchemaChanged"}]; 
-    TXTYPE_INIT_SPLIT_MERGE_DESTINATION = 14              [(TxTypeOpts) = {Name: "TxInitSplitMergeDestination"}]; 
-    TXTYPE_SPLIT_TRANSFER_SNAPSHOT = 15                   [(TxTypeOpts) = {Name: "TxSplitTransferSnapshot"}]; 
-    TXTYPE_GET_TABLE_STATS = 16                           [(TxTypeOpts) = {Name: "TxGetTableStats"}]; 
-    TXTYPE_INITIATE_BORROWED_PARTS_RETURN = 17            [(TxTypeOpts) = {Name: "TxInitiateBorrowedPartsReturn"}]; 
-    TXTYPE_RETURN_BORROWED_PART = 18                      [(TxTypeOpts) = {Name: "TxReturnBorrowedPart"}]; 
-    TXTYPE_RETURN_BORROWED_PART_ACK = 19                  [(TxTypeOpts) = {Name: "TxReturnBorrowedPartAck"}]; 
-    TXTYPE_GO_OFFLINE = 20                                [(TxTypeOpts) = {Name: "TxGoOffline"}]; 
-    TXTYPE_SPLIT = 21                                     [(TxTypeOpts) = {Name: "TxSplit"}]; 
-    TXTYPE_START_SPLIT = 22                               [(TxTypeOpts) = {Name: "TxStartSplit"}]; 
-    TXTYPE_SPLIT_SNASHOT_COMPLETE = 23                    [(TxTypeOpts) = {Name: "TxSplitSnapshotComplete"}]; 
-    TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK = 24               [(TxTypeOpts) = {Name: "TxTransferSnapshotAck"}]; 
-    TXTYPE_SPLIT_PARTITIONING_CHANGED = 25                [(TxTypeOpts) = {Name: "TxSplitPartitioningChanged"}]; 
-    TXTYPE_INIT_SCHEMA = 26                               [(TxTypeOpts) = {Name: "TxInitSchema"}]; 
-    TXTYPE_COPY_TABLE_SNAPSHOT_COMPLETE = 27              [(TxTypeOpts) = {Name: "TxCopyTableSnapshotComplete"}]; 
-    TXTYPE_FULL_SCAN_COMPLETE = 28                        [(TxTypeOpts) = {Name: "TxFullScanComplete"}]; 
+    TXTYPE_GET_STARD_STATE = 8                            [(TxTypeOpts) = {Name: "TxGetShardState"}];
+    TXTYPE_PROGRESS_RESEND_RS = 9                         [(TxTypeOpts) = {Name: "TxProgressResendRS"}];
+    TXTYPE_CANCEL_TX_PROPOSAL = 10                        [(TxTypeOpts) = {Name: "TxCancelTxProposal"}];
+    TXTYPE_CANCEL_BACKUP = 11                             [(TxTypeOpts) = {Name: "TxCancelBackup"}];
+    TXTYPE_MONITORING = 12                                [(TxTypeOpts) = {Name: "TxMonitoring"}];
+    TXTYPE_SCHEMA_CHANGED = 13                            [(TxTypeOpts) = {Name: "TxSchemaChanged"}];
+    TXTYPE_INIT_SPLIT_MERGE_DESTINATION = 14              [(TxTypeOpts) = {Name: "TxInitSplitMergeDestination"}];
+    TXTYPE_SPLIT_TRANSFER_SNAPSHOT = 15                   [(TxTypeOpts) = {Name: "TxSplitTransferSnapshot"}];
+    TXTYPE_GET_TABLE_STATS = 16                           [(TxTypeOpts) = {Name: "TxGetTableStats"}];
+    TXTYPE_INITIATE_BORROWED_PARTS_RETURN = 17            [(TxTypeOpts) = {Name: "TxInitiateBorrowedPartsReturn"}];
+    TXTYPE_RETURN_BORROWED_PART = 18                      [(TxTypeOpts) = {Name: "TxReturnBorrowedPart"}];
+    TXTYPE_RETURN_BORROWED_PART_ACK = 19                  [(TxTypeOpts) = {Name: "TxReturnBorrowedPartAck"}];
+    TXTYPE_GO_OFFLINE = 20                                [(TxTypeOpts) = {Name: "TxGoOffline"}];
+    TXTYPE_SPLIT = 21                                     [(TxTypeOpts) = {Name: "TxSplit"}];
+    TXTYPE_START_SPLIT = 22                               [(TxTypeOpts) = {Name: "TxStartSplit"}];
+    TXTYPE_SPLIT_SNASHOT_COMPLETE = 23                    [(TxTypeOpts) = {Name: "TxSplitSnapshotComplete"}];
+    TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK = 24               [(TxTypeOpts) = {Name: "TxTransferSnapshotAck"}];
+    TXTYPE_SPLIT_PARTITIONING_CHANGED = 25                [(TxTypeOpts) = {Name: "TxSplitPartitioningChanged"}];
+    TXTYPE_INIT_SCHEMA = 26                               [(TxTypeOpts) = {Name: "TxInitSchema"}];
+    TXTYPE_COPY_TABLE_SNAPSHOT_COMPLETE = 27              [(TxTypeOpts) = {Name: "TxCopyTableSnapshotComplete"}];
+    TXTYPE_FULL_SCAN_COMPLETE = 28                        [(TxTypeOpts) = {Name: "TxFullScanComplete"}];
     TXTYPE_STREAM_RESPONSE_QUOTA = 29                     [(TxTypeOpts) = {Name: "TxStreamResponseQuota"}];
     TXTYPE_UNDELIVERED = 30                               [(TxTypeOpts) = {Name: "TxUndelivered"}];
     TXTYPE_DISCONNECTED = 31                              [(TxTypeOpts) = {Name: "TxDisconnected"}];
-    TXTYPE_S3_LISTING = 32                                [(TxTypeOpts) = {Name: "TxS3Listing"}]; 
-    TXTYPE_INITIATE_STATS_UPDATE = 33                     [(TxTypeOpts) = {Name: "TTxInitiateStatsUpdate"}]; 
+    TXTYPE_S3_LISTING = 32                                [(TxTypeOpts) = {Name: "TxS3Listing"}];
+    TXTYPE_INITIATE_STATS_UPDATE = 33                     [(TxTypeOpts) = {Name: "TTxInitiateStatsUpdate"}];
     TXTYPE_CHECK_IN_READ_SETS = 34                        [(TxTypeOpts) = {Name: "TTxCheckInReadSets"}];
     TXTYPE_REMOVE_OLD_IN_READ_SETS = 35                   [(TxTypeOpts) = {Name: "TTxRemoveOldInReadSets"}];
-    TXTYPE_UPLOAD_ROWS = 36                               [(TxTypeOpts) = {Name: "TTxUploadRows"}]; 
+    TXTYPE_UPLOAD_ROWS = 36                               [(TxTypeOpts) = {Name: "TTxUploadRows"}];
     TXTYPE_STORE_TABLE_PATH = 37                          [(TxTypeOpts) = {Name: "TTxStoreTablePath"}];
-    TXTYPE_READ_COLUMNS = 38                              [(TxTypeOpts) = {Name: "TTxReadColumns"}]; 
+    TXTYPE_READ_COLUMNS = 38                              [(TxTypeOpts) = {Name: "TTxReadColumns"}];
     TXTYPE_PROPOSE = 39                                   [(TxTypeOpts) = {Name: "TxPropose"}];
     TXTYPE_STORE_SCAN_STATE = 40                          [(TxTypeOpts) = {Name: "TxStoreScanState"}];
     TXTYPE_INIT_SCHEMA_DEFAULTS = 41                      [(TxTypeOpts) = {Name: "TxInitSchemaDefaults"}];
@@ -395,7 +395,7 @@ enum ETxTypes {
     TXTYPE_GET_S3_UPLOAD_ID = 46                          [(TxTypeOpts) = {Name: "TxGetS3UploadId"}];
     TXTYPE_STORE_S3_UPLOAD_ID = 47                        [(TxTypeOpts) = {Name: "TxStoreS3UploadId"}];
     TXTYPE_ERASE_ROWS = 48                                [(TxTypeOpts) = {Name: "TxEraseRows"}];
-    TXTYPE_RELEASE_SNAPSHOT_REFERENCE = 49                [(TxTypeOpts) = {Name: "TxReleaseSnaphotReference"}]; 
+    TXTYPE_RELEASE_SNAPSHOT_REFERENCE = 49                [(TxTypeOpts) = {Name: "TxReleaseSnaphotReference"}];
     TXTYPE_STOP_GUARD = 50                                [(TxTypeOpts) = {Name: "TxStopGuard"}];
     TXTYPE_GET_S3_DOWNLOAD_INFO = 51                      [(TxTypeOpts) = {Name: "TxGetS3DownloadInfo"}];
     TXTYPE_STORE_S3_DOWNLOAD_INFO = 52                    [(TxTypeOpts) = {Name: "TxStoreS3DownloadInfo"}];

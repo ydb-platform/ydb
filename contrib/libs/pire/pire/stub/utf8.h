@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/charset/codepage.h>
-#include <util/charset/unidata.h> 
+#include <util/charset/unidata.h>
 
 inline wchar32 to_lower(wchar32 c) {
     return ToLower(c);

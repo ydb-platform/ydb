@@ -640,9 +640,9 @@ DEF_FLT_SPEC(long double)
 
 #undef DEF_FLT_SPEC
 
-// Using StrToD for float and double because it is faster than sscanf. 
+// Using StrToD for float and double because it is faster than sscanf.
 // Exception-free, specialized for float types
-template <> 
+template <>
 bool TryFromStringImpl<double>(const char* data, size_t len, double& result) {
     if (!len) {
         return false;
@@ -680,19 +680,19 @@ bool TryFromStringImpl<long double>(const char* data, size_t len, long double& r
 
 // Exception-throwing, specialized for float types
 template <>
-double FromStringImpl<double>(const char* data, size_t len) { 
+double FromStringImpl<double>(const char* data, size_t len) {
     double d = 0.0;
     if (!TryFromStringImpl(data, len, d)) {
         ythrow TFromStringException() << TStringBuf("cannot parse float(") << TStringBuf(data, len) << TStringBuf(")");
-    } 
-    return d; 
-} 
- 
-template <> 
-float FromStringImpl<float>(const char* data, size_t len) { 
+    }
+    return d;
+}
+
+template <>
+float FromStringImpl<float>(const char* data, size_t len) {
     return static_cast<float>(FromStringImpl<double>(data, len));
-} 
- 
+}
+
 double StrToD(const char* b, const char* e, char** se) {
     struct TCvt: public StringToDoubleConverter {
         inline TCvt()

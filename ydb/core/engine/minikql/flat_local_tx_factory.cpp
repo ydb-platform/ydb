@@ -2,7 +2,7 @@
 
 #include "flat_local_minikql_program.h"
 #include "flat_local_tx_minikql.h"
-#include "flat_local_tx_read_columns.h" 
+#include "flat_local_tx_read_columns.h"
 #include "flat_local_tx_scheme.h"
 
 namespace NKikimr {
@@ -23,10 +23,10 @@ TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &
 }
 
 TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalReadColumns::TPtr &ev)
-{ 
-    return new TFlatLocalReadColumns(ev->Sender, ev); 
-} 
- 
+{
+    return new TFlatLocalReadColumns(ev->Sender, ev);
+}
+
 TRowVersion TMiniKQLFactory::GetWriteVersion(const TTableId& tableId) const
 {
     Y_UNUSED(tableId);

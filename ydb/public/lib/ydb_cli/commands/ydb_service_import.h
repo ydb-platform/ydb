@@ -62,7 +62,7 @@ protected:
     ui32 SkipRows = 0;
     bool Header = false;
     TString BytesPerRequest;
-    ui64 MaxInFlightRequests = 1; 
+    ui64 MaxInFlightRequests = 1;
 };
 
 class TCommandImportFromTsv : public TCommandImportFromCsv {

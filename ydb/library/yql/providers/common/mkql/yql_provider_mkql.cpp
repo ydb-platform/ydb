@@ -1149,8 +1149,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto schemeType = ParseDataType(node, node.Tail().Content());
         return ctx.ProgramBuilder.FromBytes(arg, schemeType);
-    }); 
- 
+    });
+
     AddCallable("Convert", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);

@@ -2788,12 +2788,12 @@ TDerived& TValueBuilderBase<TDerived>::EmptyOptional(const TType& itemType) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyOptional(EPrimitiveType itemType) { 
-    Impl_->EmptyOptional(itemType); 
-    return static_cast<TDerived&>(*this); 
-} 
- 
-template<typename TDerived> 
+TDerived& TValueBuilderBase<TDerived>::EmptyOptional(EPrimitiveType itemType) {
+    Impl_->EmptyOptional(itemType);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::EmptyOptional() {
     Impl_->EmptyOptional();
     return static_cast<TDerived&>(*this);

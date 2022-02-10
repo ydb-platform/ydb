@@ -355,7 +355,7 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
         batchBuilder.AddRow(key, value);
     }
 
-    return batchBuilder.FlushBatch(false); 
+    return batchBuilder.FlushBatch(false);
 }
 
 std::vector<TDataRow> TestRows() {

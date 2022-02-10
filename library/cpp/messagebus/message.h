@@ -155,7 +155,7 @@ namespace NBus {
     inline bool IsVersionNegotiation(const NBus::TBusHeader& header) {
         return header.Id == 0 && header.Size == sizeof(TBusHeader);
     }
- 
+
     //////////////////////////////////////////////////////////
     /// \brief Base class for all messages passed in the system
 

@@ -113,14 +113,14 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 // Check that all write ids actually exist
                 bool failed = false;
                 for (ui64 writeId : body.GetWriteIds()) {
-                    if (!Self->LongTxWrites.contains(TWriteId{writeId})) { 
+                    if (!Self->LongTxWrites.contains(TWriteId{writeId})) {
                         statusMessage = TStringBuilder()
                             << "Commit TxId# " << txId << " references WriteId# " << writeId
                             << " that no longer exists";
                         failed = true;
                         break;
                     }
-                    auto& lw = Self->LongTxWrites[TWriteId{writeId}]; 
+                    auto& lw = Self->LongTxWrites[TWriteId{writeId}];
                     if (lw.PreparedTxId != 0) {
                         statusMessage = TStringBuilder()
                             << "Commit TxId# " << txId << " references WriteId# " << writeId
@@ -132,13 +132,13 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
             }
 
-            minStep = Self->GetAllowedStep(); 
-            maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds(); 
+            minStep = Self->GetAllowedStep();
+            maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds();
 
             TColumnShard::TCommitMeta meta;
             meta.MetaShard = body.GetTxInitiator();
-            for (ui64 wId : body.GetWriteIds()) { 
-                TWriteId writeId{wId}; 
+            for (ui64 wId : body.GetWriteIds()) {
+                TWriteId writeId{wId};
                 meta.AddWriteId(writeId);
                 if (meta.MetaShard == 0) {
                     Self->AddLongTxWrite(writeId, txId);

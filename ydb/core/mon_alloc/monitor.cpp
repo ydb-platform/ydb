@@ -109,14 +109,14 @@ namespace NKikimr {
 
                 // update counters
                 for (const auto& [tagName, tagStats] : stats) {
-                    const auto& total = tagStats.Total; 
-                    TPerTagCounters& perTag = PerTag[tagName]; 
- 
-                    if (total.Count == 0 && total.Size == 0 && !perTag.Total.Count) { 
-                        // Skip the tag that didn't have any allocations so far 
-                        continue; 
-                    } 
- 
+                    const auto& total = tagStats.Total;
+                    TPerTagCounters& perTag = PerTag[tagName];
+
+                    if (total.Count == 0 && total.Size == 0 && !perTag.Total.Count) {
+                        // Skip the tag that didn't have any allocations so far
+                        continue;
+                    }
+
                     auto tagCounters = CounterGroup->GetSubgroup("tag", tagName);
                     if (!perTag.Total.Count) {
                         perTag.Total.Init(tagCounters->GetSubgroup("bucket", "total"));
@@ -127,14 +127,14 @@ namespace NKikimr {
                     for (int sizeIdx = 0; sizeIdx < numSizes; ++sizeIdx) {
                         const auto sizeName = ToString(sizeIdx);
 
-                        const auto& bucket = tagStats.Buckets[sizeIdx]; 
+                        const auto& bucket = tagStats.Buckets[sizeIdx];
                         TMemCounters& bySize = perTag.BySize[sizeName];
- 
-                        if (bucket.Count == 0 && bucket.Size == 0 && !bySize.Count) { 
-                            // Skip the bucket that didn't have any allocations so far 
-                            continue; 
-                        } 
- 
+
+                        if (bucket.Count == 0 && bucket.Size == 0 && !bySize.Count) {
+                            // Skip the bucket that didn't have any allocations so far
+                            continue;
+                        }
+
                         if (!bySize.Count) {
                             bySize.Init(tagCounters->GetSubgroup("bucket", sizeName));
                         }

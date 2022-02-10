@@ -28,7 +28,7 @@ namespace NKikimr {
             EvServerDestroyed,
             EvActivate,
             EvShutdown,
-            EvClientRetry, 
+            EvClientRetry,
             EvClientCheckDelay,
             EvClientShuttingDown,
             EvMessage, // replacement for EvSend
@@ -210,10 +210,10 @@ namespace NKikimr {
         struct TEvShutdown : public TEventLocal<TEvShutdown, EvShutdown> {
             TEvShutdown() {}
         };
- 
-        struct TEvClientRetry : public TEventLocal<TEvClientRetry, EvClientRetry> { 
-            TEvClientRetry() {} 
-        }; 
+
+        struct TEvClientRetry : public TEventLocal<TEvClientRetry, EvClientRetry> {
+            TEvClientRetry() {}
+        };
 
         struct TEvClientCheckDelay : public TEventLocal<TEvClientCheckDelay, EvClientCheckDelay> {
             TEvClientCheckDelay() {}
@@ -303,8 +303,8 @@ namespace NKikimr {
 
             // Cleanup resources after reset
             virtual void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) = 0;
- 
-            virtual bool IsActive() const = 0; 
+
+            virtual bool IsActive() const = 0;
             virtual bool IsStopped() const = 0;
         };
 

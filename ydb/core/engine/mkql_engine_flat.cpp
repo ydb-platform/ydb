@@ -57,7 +57,7 @@ TStructLiteral& GetPgmMyReadsStruct(TStructLiteral& pgmStruct) {
     return static_cast<TStructLiteral&>(*myReadsNode.GetNode());
 }
 
-const TStructLiteral& GetPgmShardsForReadStruct(const TStructLiteral& pgmStruct) { 
+const TStructLiteral& GetPgmShardsForReadStruct(const TStructLiteral& pgmStruct) {
     TRuntimeNode shardsForReadNode = pgmStruct.GetValue(3);
     MKQL_ENSURE(shardsForReadNode.IsImmediate() && shardsForReadNode.GetNode()->GetType()->IsStruct(),
         "ShardsForRead: Expected immediate struct");
@@ -254,11 +254,11 @@ public:
         , AreIncomingReadsetsPrepared(false)
         , IsExecuted(false)
         , ReadOnlyOriginPrograms(true)
-        , IsCancelled(false) 
+        , IsCancelled(false)
     {
         Ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, Env);
         ResultType = Env.GetEmptyStruct()->GetType();
-        Alloc.DisableStrictAllocationCheck(); 
+        Alloc.DisableStrictAllocationCheck();
         Alloc.Release();
     }
 
@@ -392,10 +392,10 @@ public:
             Y_VERIFY(key->Status == TKeyDesc::EStatus::Ok, "Some DB keys are not resolved correctly");
             AddShards(affectedShardSet, *key);
             if (affectedShardSet.size() > limits.ShardCount) {
-                AddError("PrepareShardPrograms", __LINE__, 
+                AddError("PrepareShardPrograms", __LINE__,
                          Sprintf("too many affected shards: %u (max allowed %u)", (ui32)affectedShardSet.size(), limits.ShardCount).data());
                 return EResult::TooManyShards;
-            } 
+            }
 
             if (key->RowOperation == TKeyDesc::ERowOperation::Update || key->RowOperation == TKeyDesc::ERowOperation::Erase) {
                 AddShards(writeSet, *key);
@@ -559,33 +559,33 @@ public:
         Status = EStatus::Error;
     }
 
-    // Temporary check for KIKIMR-7112 
-    bool CheckValidUint8InKey(TKeyDesc& desc) const { 
-        if (!desc.Range.Point) { 
-            for (NScheme::TTypeId typeId : desc.KeyColumnTypes) { 
-                if (typeId == NScheme::NTypeIds::Uint8) { 
-                    AddError("Validate", __LINE__, "Bad shard program: dynamic keys with Uint8 columns are currently prohibited"); 
-                    return false; 
-                } 
-            } 
-        } else { 
-            if (desc.Range.From.size() > desc.KeyColumnTypes.size()) { 
-                AddError("Validate", __LINE__, "Bad shard program: key size is greater that specified in schema"); 
-                return false; 
-            } 
-            for (size_t i = 0; i < desc.Range.From.size(); ++i) { 
-                if (desc.KeyColumnTypes[i] != NScheme::NTypeIds::Uint8) 
-                    continue; 
-                const TCell& c = desc.Range.From[i]; 
-                if (!c.IsNull() && c.AsValue<ui8>() > 127) { 
-                    AddError("Validate", __LINE__, "Bad shard program: keys with Uint8 column values >127 are currently prohibited"); 
-                    return false; 
-                } 
-            } 
-        } 
-        return true; 
-    } 
- 
+    // Temporary check for KIKIMR-7112
+    bool CheckValidUint8InKey(TKeyDesc& desc) const {
+        if (!desc.Range.Point) {
+            for (NScheme::TTypeId typeId : desc.KeyColumnTypes) {
+                if (typeId == NScheme::NTypeIds::Uint8) {
+                    AddError("Validate", __LINE__, "Bad shard program: dynamic keys with Uint8 columns are currently prohibited");
+                    return false;
+                }
+            }
+        } else {
+            if (desc.Range.From.size() > desc.KeyColumnTypes.size()) {
+                AddError("Validate", __LINE__, "Bad shard program: key size is greater that specified in schema");
+                return false;
+            }
+            for (size_t i = 0; i < desc.Range.From.size(); ++i) {
+                if (desc.KeyColumnTypes[i] != NScheme::NTypeIds::Uint8)
+                    continue;
+                const TCell& c = desc.Range.From[i];
+                if (!c.IsNull() && c.AsValue<ui8>() > 127) {
+                    AddError("Validate", __LINE__, "Bad shard program: keys with Uint8 column values >127 are currently prohibited");
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     void BuildResult() noexcept override {
         Y_VERIFY(AreShardProgramsExtracted, "AfterShardProgramsExtracted must be called first");
         Y_VERIFY(!IsResultBuilt, "BuildResult is already called");
@@ -795,7 +795,7 @@ public:
         return result;
     }
 
-    EResult Validate(TValidationInfo& validationInfo) override { 
+    EResult Validate(TValidationInfo& validationInfo) override {
         Y_VERIFY(!IsProgramValidated, "Validate is already called");
         Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
         Y_VERIFY(Settings.Host, "Host is not set");
@@ -873,15 +873,15 @@ public:
             return EResult::ProgramError;
         }
 
-        // Extract reads that are included in the reply 
+        // Extract reads that are included in the reply
         THashSet<TStringBuf> replyIds;
-        const auto& replyStruct = static_cast<const TStructLiteral&>(*replyPgm.GetNode()); 
-        for (ui32 j = 0, f = replyStruct.GetValuesCount(); j < f; ++j) { 
-            TStringBuf uniqId(replyStruct.GetType()->GetMemberName(j)); 
-            // Save the id of read operation that is included in reply 
-            replyIds.insert(uniqId); 
-        } 
- 
+        const auto& replyStruct = static_cast<const TStructLiteral&>(*replyPgm.GetNode());
+        for (ui32 j = 0, f = replyStruct.GetValuesCount(); j < f; ++j) {
+            TStringBuf uniqId(replyStruct.GetType()->GetMemberName(j));
+            // Save the id of read operation that is included in reply
+            replyIds.insert(uniqId);
+        }
+
         auto writePgm = runPgmStruct.GetValue(1);
         auto listType = writePgm.GetStaticType();
         if (listType->GetKind() != TType::EKind::List) {
@@ -895,28 +895,28 @@ public:
             return EResult::ProgramError;
         }
 
-        // Extract reads that are included in out readsets 
+        // Extract reads that are included in out readsets
         THashMap<TStringBuf, THashSet<ui64>> readTargets;
-        const ui64 myShardId = Settings.Host->GetShardId(); 
-        auto shardsToWriteNode = pgmStruct.GetValue(4); 
-        MKQL_ENSURE(shardsToWriteNode.IsImmediate() && shardsToWriteNode.GetNode()->GetType()->IsStruct(), 
-            "Expected immediate struct"); 
-        const auto& shardsToWriteStruct = static_cast<const TStructLiteral&>(*shardsToWriteNode.GetNode()); 
-        for (ui32 i = 0, e = shardsToWriteStruct.GetValuesCount(); i < e; ++i) { 
-            TStringBuf uniqId(shardsToWriteStruct.GetType()->GetMemberName(i)); 
-            auto shardsList = AS_VALUE(TListLiteral, shardsToWriteStruct.GetValue(i)); 
-            auto itemType = shardsList->GetType()->GetItemType(); 
-            MKQL_ENSURE(itemType->IsData() && static_cast<TDataType*>(itemType)->GetSchemeType() 
+        const ui64 myShardId = Settings.Host->GetShardId();
+        auto shardsToWriteNode = pgmStruct.GetValue(4);
+        MKQL_ENSURE(shardsToWriteNode.IsImmediate() && shardsToWriteNode.GetNode()->GetType()->IsStruct(),
+            "Expected immediate struct");
+        const auto& shardsToWriteStruct = static_cast<const TStructLiteral&>(*shardsToWriteNode.GetNode());
+        for (ui32 i = 0, e = shardsToWriteStruct.GetValuesCount(); i < e; ++i) {
+            TStringBuf uniqId(shardsToWriteStruct.GetType()->GetMemberName(i));
+            auto shardsList = AS_VALUE(TListLiteral, shardsToWriteStruct.GetValue(i));
+            auto itemType = shardsList->GetType()->GetItemType();
+            MKQL_ENSURE(itemType->IsData() && static_cast<TDataType*>(itemType)->GetSchemeType()
                         == NUdf::TDataType<ui64>::Id, "Bad shard list");
             for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) {
                 ui64 shard = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>();
-                if (shard != myShardId) { 
-                    // Save the target shard id for the read operation 
-                    readTargets[uniqId].insert(shard); 
-                } 
-            } 
-        } 
- 
+                if (shard != myShardId) {
+                    // Save the target shard id for the read operation
+                    readTargets[uniqId].insert(shard);
+                }
+            }
+        }
+
         validationInfo.Clear();
         EResult result;
         {
@@ -930,7 +930,7 @@ public:
 
             {
                 for (ui32 i = 0; i < validationInfo.ReadsCount; ++i) {
-                    TStringBuf uniqId(myReadsStruct->GetType()->GetMemberName(i)); 
+                    TStringBuf uniqId(myReadsStruct->GetType()->GetMemberName(i));
                     TRuntimeNode item = myReadsStruct->GetValue(i);
                     if (!item.GetNode()->GetType()->IsCallable()) {
                         AddError("Validate", __LINE__, "Bad shard program");
@@ -941,23 +941,23 @@ public:
                     Y_VERIFY(desc);
                     Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Read);
                     TValidatedKey validKey(std::move(desc), false);
- 
-                    auto targetIt = readTargets.find(uniqId); 
+
+                    auto targetIt = readTargets.find(uniqId);
                     if (replyIds.contains(uniqId) || targetIt != readTargets.end()) {
-                        // Is this read result included in the reply? 
+                        // Is this read result included in the reply?
                         if (replyIds.contains(uniqId)) {
                             validKey.IsResultPart = true;
-                        } 
-                        // Is this read result included into outgoing read sets? 
-                        if (targetIt != readTargets.end()) { 
+                        }
+                        // Is this read result included into outgoing read sets?
+                        if (targetIt != readTargets.end()) {
                             // TODO: can't we move them?
                             for (ui64 shard : targetIt->second) {
                                 validKey.TargetShards.insert(shard);
-                                validationInfo.HasOutReadsets = true; 
-                            } 
-                        } 
-                    } 
- 
+                                validationInfo.HasOutReadsets = true;
+                            }
+                        }
+                    }
+
                     validationInfo.Keys.emplace_back(std::move(validKey));
                 }
             }
@@ -974,12 +974,12 @@ public:
                     Y_VERIFY(desc);
                     Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Update ||
                              desc->RowOperation == TKeyDesc::ERowOperation::Erase);
-                    if (!desc->Range.Point) { 
+                    if (!desc->Range.Point) {
                         ++validationInfo.DynKeysCount;
-                    } 
-                    if (!CheckValidUint8InKey(*desc)) { 
-                        return EResult::ProgramError; 
-                    } 
+                    }
+                    if (!CheckValidUint8InKey(*desc)) {
+                        return EResult::ProgramError;
+                    }
 
                     validationInfo.Keys.emplace_back(TValidatedKey(std::move(desc), true));
                 }
@@ -996,23 +996,23 @@ public:
                 default:
                     return result;
             }
- 
-            // Check if we expect incoming readsets 
-            auto& shardForRead = GetPgmShardsForReadStruct(pgmStruct); 
-            for (ui32 i = 0; i < shardForRead.GetValuesCount() && !validationInfo.HasInReadsets; ++i) { 
-                auto shardsList = AS_VALUE(TListLiteral, shardForRead.GetValue(i)); 
-                auto itemType = shardsList->GetType()->GetItemType(); 
-                MKQL_ENSURE(itemType->IsData() && static_cast<TDataType*>(itemType)->GetSchemeType() 
-                            == NUdf::TDataType<ui64>::Id, "Bad shard list"); 
- 
-                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) { 
-                    ui64 shard = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>(); 
-                    if (shard != myShardId) { 
-                        validationInfo.HasInReadsets = true; 
-                        break; 
-                    } 
-                } 
-            } 
+
+            // Check if we expect incoming readsets
+            auto& shardForRead = GetPgmShardsForReadStruct(pgmStruct);
+            for (ui32 i = 0; i < shardForRead.GetValuesCount() && !validationInfo.HasInReadsets; ++i) {
+                auto shardsList = AS_VALUE(TListLiteral, shardForRead.GetValue(i));
+                auto itemType = shardsList->GetType()->GetItemType();
+                MKQL_ENSURE(itemType->IsData() && static_cast<TDataType*>(itemType)->GetSchemeType()
+                            == NUdf::TDataType<ui64>::Id, "Bad shard list");
+
+                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) {
+                    ui64 shard = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>();
+                    if (shard != myShardId) {
+                        validationInfo.HasInReadsets = true;
+                        break;
+                    }
+                }
+            }
         }
 
         try {
@@ -1046,29 +1046,29 @@ public:
     }
 
     EResult PinPages(ui64 pageFaultCount) override {
-        Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine"); 
-        Y_VERIFY(Settings.Host, "Host is not set"); 
- 
-        if (IsCancelled) { 
-            // Do nothing and quickly proceed 
-            return EResult::Ok; 
-        } 
- 
+        Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
+        Y_VERIFY(Settings.Host, "Host is not set");
+
+        if (IsCancelled) {
+            // Do nothing and quickly proceed
+            return EResult::Ok;
+        }
+
         TGuard<TScopedAlloc> allocGuard(Alloc);
- 
+
         TVector<THolder<TKeyDesc>> prechargeKeys;
-        // iterate over all ProgramPerOrigin (for merged datashards) 
-        for (const auto& pi : ProgramPerOrigin) { 
-            auto pgm = pi.second; 
-            MKQL_ENSURE(pgm.IsImmediate() && pgm.GetStaticType()->IsStruct(), "Expected immediate struct"); 
-            const auto& pgmStruct = static_cast<const TStructLiteral&>(*pgm.GetNode()); 
-            MKQL_ENSURE(pgmStruct.GetValuesCount() == 5, "Expected 5 members"); // AllReads, MyKeys, Run, ShardsForRead, ShardsToWrite 
- 
-            auto myKeys = pgmStruct.GetValue(1); 
-            MKQL_ENSURE(myKeys.IsImmediate() && myKeys.GetNode()->GetType()->IsStruct(), "Expected immediate struct"); 
-            const auto& myKeysStruct = static_cast<const TStructLiteral&>(*myKeys.GetNode()); 
-            MKQL_ENSURE(myKeysStruct.GetValuesCount() == 2, "Expected 2 members"); 
- 
+        // iterate over all ProgramPerOrigin (for merged datashards)
+        for (const auto& pi : ProgramPerOrigin) {
+            auto pgm = pi.second;
+            MKQL_ENSURE(pgm.IsImmediate() && pgm.GetStaticType()->IsStruct(), "Expected immediate struct");
+            const auto& pgmStruct = static_cast<const TStructLiteral&>(*pgm.GetNode());
+            MKQL_ENSURE(pgmStruct.GetValuesCount() == 5, "Expected 5 members"); // AllReads, MyKeys, Run, ShardsForRead, ShardsToWrite
+
+            auto myKeys = pgmStruct.GetValue(1);
+            MKQL_ENSURE(myKeys.IsImmediate() && myKeys.GetNode()->GetType()->IsStruct(), "Expected immediate struct");
+            const auto& myKeysStruct = static_cast<const TStructLiteral&>(*myKeys.GetNode());
+            MKQL_ENSURE(myKeysStruct.GetValuesCount() == 2, "Expected 2 members");
+
             // 0 - reads, 1 - writes
             for (ui32 opId = 0; opId <= 1; ++opId) {
                 auto myOps = myKeysStruct.GetValue(opId);
@@ -1077,18 +1077,18 @@ public:
                 auto myOpsStruct = static_cast<TStructLiteral*>(myOps.GetNode());
                 for (ui32 i = 0, e = myOpsStruct->GetValuesCount(); i < e; ++i) {
                     TRuntimeNode item = myOpsStruct->GetValue(i);
-                    Y_VERIFY(item.GetNode()->GetType()->IsCallable(), "Bad shard program"); 
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env); 
-                    Y_VERIFY(desc); 
-                    prechargeKeys.emplace_back(std::move(desc)); 
-                } 
-            } 
-        } 
- 
+                    Y_VERIFY(item.GetNode()->GetType()->IsCallable(), "Bad shard program");
+                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
+                    Y_VERIFY(desc);
+                    prechargeKeys.emplace_back(std::move(desc));
+                }
+            }
+        }
+
         Settings.Host->PinPages(prechargeKeys, pageFaultCount);
-        return EResult::Ok; 
-    } 
- 
+        return EResult::Ok;
+    }
+
     EResult PrepareOutgoingReadsets() override {
         Y_VERIFY(!AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is already called");
         Y_VERIFY(Settings.Host, "Host is not set");
@@ -1122,48 +1122,48 @@ public:
                             == NUdf::TDataType<ui64>::Id, "Bad shard list type.");
 
                         if (shardsList->GetItemsCount() > 0) {
-                            if(!IsCancelled) { 
-                                TRuntimeNode item = myReads.GetValue(readIdx); 
-                                MKQL_ENSURE(item.GetNode()->GetType()->IsCallable(), "Expected callable"); 
-                                auto callable = static_cast<TCallable*>(item.GetNode()); 
+                            if(!IsCancelled) {
+                                TRuntimeNode item = myReads.GetValue(readIdx);
+                                MKQL_ENSURE(item.GetNode()->GetType()->IsCallable(), "Expected callable");
+                                auto callable = static_cast<TCallable*>(item.GetNode());
 
-                                NUdf::TUnboxedValue readValue; 
-                                auto name = callable->GetType()->GetNameStr(); 
-                                if (name == Strings.SelectRow) { 
-                                    readValue = PerformLocalSelectRow(*callable, *Settings.Host, holderFactory, Env); 
-                                } 
-                                else if (name == Strings.SelectRange) { 
-                                    readValue = PerformLocalSelectRange(*callable, *Settings.Host, holderFactory, Env); 
-                                } 
-                                else { 
-                                    THROW TWithBackTrace<yexception>() << "Unknown callable: " 
-                                        << callable->GetType()->GetName(); 
-                                } 
-
-                                ui32 readCallableId = FromString<ui32>(readName); 
-                                MKQL_ENSURE(readCallableId == callable->GetUniqueId(), 
-                                    "Invalid struct member name:" << myReads.GetType()->GetMemberName(readIdx)); 
-
-                                auto returnType = GetActualReturnType(*callable, Env, Strings); 
-                                TValuePacker packer(false, returnType); 
-                                readResults.emplace_back(TString(packer.Pack(readValue))); 
-                                const TStringBuf& readValueStr = readResults.back(); 
-
-                                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) { 
-                                    ui64 shardId = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>(); 
-                                    if (shardId != myShardId) { 
-                                        auto& results = resultsPerTarget[shardId]; 
-                                        results.AddResult(callable->GetUniqueId(), readValueStr, Env); 
-                                    } 
+                                NUdf::TUnboxedValue readValue;
+                                auto name = callable->GetType()->GetNameStr();
+                                if (name == Strings.SelectRow) {
+                                    readValue = PerformLocalSelectRow(*callable, *Settings.Host, holderFactory, Env);
                                 }
-                            } else { 
-                                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) { 
-                                    ui64 shardId = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>(); 
-                                    if (shardId != myShardId) { 
-                                        // TODO: Pass special 'Tx was Cancelled' flag in the readset so that target shard can cancel this Tx as well 
-                                        resultsPerTarget[shardId]; 
-                                    } 
-                                } 
+                                else if (name == Strings.SelectRange) {
+                                    readValue = PerformLocalSelectRange(*callable, *Settings.Host, holderFactory, Env);
+                                }
+                                else {
+                                    THROW TWithBackTrace<yexception>() << "Unknown callable: "
+                                        << callable->GetType()->GetName();
+                                }
+
+                                ui32 readCallableId = FromString<ui32>(readName);
+                                MKQL_ENSURE(readCallableId == callable->GetUniqueId(),
+                                    "Invalid struct member name:" << myReads.GetType()->GetMemberName(readIdx));
+
+                                auto returnType = GetActualReturnType(*callable, Env, Strings);
+                                TValuePacker packer(false, returnType);
+                                readResults.emplace_back(TString(packer.Pack(readValue)));
+                                const TStringBuf& readValueStr = readResults.back();
+
+                                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) {
+                                    ui64 shardId = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>();
+                                    if (shardId != myShardId) {
+                                        auto& results = resultsPerTarget[shardId];
+                                        results.AddResult(callable->GetUniqueId(), readValueStr, Env);
+                                    }
+                                }
+                            } else {
+                                for (ui32 shardIndex = 0; shardIndex < shardsList->GetItemsCount(); ++shardIndex) {
+                                    ui64 shardId = AS_VALUE(TDataLiteral, shardsList->GetItems()[shardIndex])->AsValue().Get<ui64>();
+                                    if (shardId != myShardId) {
+                                        // TODO: Pass special 'Tx was Cancelled' flag in the readset so that target shard can cancel this Tx as well
+                                        resultsPerTarget[shardId];
+                                    }
+                                }
                             }
                         }
 
@@ -1279,23 +1279,23 @@ public:
         IncomingReadsets.push_back(TString(readset));
     }
 
-    EResult Cancel() override { 
-        IsCancelled = true; 
-        Errors = "Tx was cancelled"; 
-        return EResult::Ok; 
-    } 
- 
+    EResult Cancel() override {
+        IsCancelled = true;
+        Errors = "Tx was cancelled";
+        return EResult::Ok;
+    }
+
     EResult Execute() override {
         Y_VERIFY(!IsExecuted, "Execute is already called");
         Y_VERIFY(Settings.Host, "Host is not set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
-        if (IsCancelled) { 
-            IsExecuted = true; 
-            Status = EStatus::Error; 
-            return EResult::Cancelled; 
-        } 
- 
+        if (IsCancelled) {
+            IsExecuted = true;
+            Status = EStatus::Error;
+            return EResult::Cancelled;
+        }
+
         if (Status == EStatus::Error) {
             IsExecuted = true;
             return EResult::ProgramError;
@@ -1642,7 +1642,7 @@ private:
         TRuntimeNode specializedProgram = TRuntimeNode(builder.Build(), true);
 
         auto lpoProvider = GetLiteralPropagationOptimizationFuncProvider();
-        auto funcProvider = [&](TInternName name) { 
+        auto funcProvider = [&](TInternName name) {
             auto lpoFunc = lpoProvider(name);
             if (lpoFunc)
                 return lpoFunc;
@@ -1879,7 +1879,7 @@ private:
 
                     // Walk through Member callable, required as SelectRange returns a struct
                     if (input->GetType()->GetNameStr() == Strings.Builtins.Member) {
-                        input = getCallableForPushdown(input->GetInput(0), TInternName()); 
+                        input = getCallableForPushdown(input->GetInput(0), TInternName());
                         if (!input) {
                             return;
                         }
@@ -1917,7 +1917,7 @@ private:
                        name == Strings.Builtins.FlatMap)
             {
                 // Push computation of map callables down to datashards
-                auto input = getCallableForPushdown(callable->GetInput(0), TInternName()); 
+                auto input = getCallableForPushdown(callable->GetInput(0), TInternName());
                 if (!input) {
                     continue;
                 }
@@ -1953,7 +1953,7 @@ private:
                     continue;
                 }
 
-                auto input = getCallableForPushdown(callable->GetInput(0), TInternName()); 
+                auto input = getCallableForPushdown(callable->GetInput(0), TInternName());
                 if (!input) {
                     continue;
                 }
@@ -1985,7 +1985,7 @@ private:
                     continue;
                 }
 
-                auto input = getCallableForPushdown(callable->GetInput(0), TInternName()); 
+                auto input = getCallableForPushdown(callable->GetInput(0), TInternName());
                 if (!input) {
                     continue;
                 }
@@ -1994,7 +1994,7 @@ private:
             }
         }
 
-        auto secondPass = [&](TInternName name) { 
+        auto secondPass = [&](TInternName name) {
             if (name == Strings.CombineByKeyMerge) {
                 return TCallableVisitFunc([this](TCallable& callable, const TTypeEnvironment& env) {
                     Y_UNUSED(env);
@@ -2062,7 +2062,7 @@ private:
         };
 
         auto lpoProvider = GetLiteralPropagationOptimizationFuncProvider();
-        auto funcProvider = [&](TInternName name) { 
+        auto funcProvider = [&](TInternName name) {
             auto lpoFunc = lpoProvider(name);
             if (lpoFunc)
                 return lpoFunc;
@@ -2127,7 +2127,7 @@ private:
     THolder<IComputationGraph> ResultGraph;
     THashMap<TString, NUdf::TUnboxedValue> ResultValues;
     bool ReadOnlyOriginPrograms;
-    bool IsCancelled; 
+    bool IsCancelled;
 };
 
 }
@@ -2139,14 +2139,14 @@ TAutoPtr<IEngineFlat> CreateEngineFlat(const TEngineFlatSettings& settings) {
 
 } // namespace NMiniKQL
 } // namespace NKikimr
- 
-template<> 
+
+template<>
 void Out<NKikimr::NMiniKQL::IEngineFlat::EStatus>(IOutputStream& o, NKikimr::NMiniKQL::IEngineFlat::EStatus status) {
-    using namespace NKikimr::NMiniKQL; 
-    switch (status) { 
-        case IEngineFlat::EStatus::Unknown:   o << "Unknown"; break; 
-        case IEngineFlat::EStatus::Error:     o << "Error"; break; 
-        case IEngineFlat::EStatus::Complete:  o << "Complete"; break; 
-        case IEngineFlat::EStatus::Aborted:   o << "Aborted"; break; 
-    } 
-} 
+    using namespace NKikimr::NMiniKQL;
+    switch (status) {
+        case IEngineFlat::EStatus::Unknown:   o << "Unknown"; break;
+        case IEngineFlat::EStatus::Error:     o << "Error"; break;
+        case IEngineFlat::EStatus::Complete:  o << "Complete"; break;
+        case IEngineFlat::EStatus::Aborted:   o << "Aborted"; break;
+    }
+}

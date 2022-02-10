@@ -51,9 +51,9 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
     return tx;
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, 
-                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes); 
- 
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram,
+                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes);
+
 class TShardDeleter {
     struct TPerHiveDeletions {
         TActorId PipeToHive;

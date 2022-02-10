@@ -94,8 +94,8 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
     if (result) {
         result->Record.SetProposeLatency(duration.MilliSeconds());
 
-        DataShard.FillExecutionStats(op->GetExecutionProfile(), *result); 
- 
+        DataShard.FillExecutionStats(op->GetExecutionProfile(), *result);
+
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId()))
             DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
     }

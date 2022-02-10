@@ -233,13 +233,13 @@ namespace NActors {
         void Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...);
 
         static void Throttle(const NLog::TSettings& settings);
- 
+
     private:
         TIntrusivePtr<NLog::TSettings> Settings;
         std::shared_ptr<TLogBackend> LogBackend;
         ui64 IgnoredCount = 0;
         ui64 PassedCount = 0;
-        static TAtomic IsOverflow; 
+        static TAtomic IsOverflow;
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
 

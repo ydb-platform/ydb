@@ -62,14 +62,14 @@ enum EServiceKikimr {
 
     // SCHEMESHARD section
     SCHEMESHARD_DESCRIBE = 295;
-    FLAT_TX_SCHEMESHARD = 296; 
+    FLAT_TX_SCHEMESHARD = 296;
     SHEME_SHARD = 700; // stillborn tag
 
     // OLAP section
     TX_OLAPSHARD = 331;
     TX_COLUMNSHARD = 332;
-    BLOB_CACHE = 333; 
-    TX_COLUMNSHARD_SCAN = 334; 
+    BLOB_CACHE = 333;
+    TX_COLUMNSHARD_SCAN = 334;
 
     // BLOBSTORAGE again
     BS_HANDOFF = 298;
@@ -161,7 +161,7 @@ enum EServiceKikimr {
 
     // PERSQUEUE section
     PERSQUEUE = 440;
-    PQ_METACACHE = 441; 
+    PQ_METACACHE = 441;
     PQ_READ_PROXY = 442;
     PQ_WRITE_PROXY = 443;
     PQ_MIRRORER = 446;
@@ -304,7 +304,7 @@ enum EServiceKikimr {
     // Replication
     REPLICATION_CONTROLLER = 1200;
 };
- 
+
 message TActivity {
 
     // Must be consistent with IActor::EActorActivity in ActorLib's part.
@@ -790,10 +790,10 @@ message TActivity {
         IMPORT_S3_DOWNLOADER_ACTOR = 475;
         MEMORY_TRACKER = 476;
         TX_COLUMNSHARD_ACTOR = 477;
-        TX_COLUMNSHARD_WRITE_ACTOR = 496; 
-        TX_COLUMNSHARD_READ_ACTOR = 497; 
-        TX_COLUMNSHARD_INDEXING_ACTOR = 498; 
-        TX_COLUMNSHARD_COMPACTION_ACTOR = 499; 
+        TX_COLUMNSHARD_WRITE_ACTOR = 496;
+        TX_COLUMNSHARD_READ_ACTOR = 497;
+        TX_COLUMNSHARD_INDEXING_ACTOR = 498;
+        TX_COLUMNSHARD_COMPACTION_ACTOR = 499;
         SCHEME_BOARD_MONITORING_ACTOR = 478;
         SCHEME_BOARD_INFO_REQUESTER_ACTOR = 479;
         METERING_WRITER_ACTOR = 480;
@@ -808,7 +808,7 @@ message TActivity {
         KQP_LITERAL_EXECUTER_ACTOR = 489;
         FILESTORE_SERVICE_PROXY = 490;
         TX_DATASHARD_SOURCE_OFFSETS_SERVER = 491;
-        KQP_OLAP_SCAN = 492; 
+        KQP_OLAP_SCAN = 492;
         KQP_DATA_EXECUTER_ACTOR = 493;
         KQP_NODE_SERVICE = 494;
         TX_DATASHARD_SOURCE_OFFSETS_CLIENT = 500;
@@ -822,7 +822,7 @@ message TActivity {
         YQL_RUN_ACTOR = 517;
         YQL_GET_HISTORY_REQUEST_ACTOR = 518;
         YQL_GET_RESULT_DATA_ACTOR = 519;
-        BLOB_CACHE_ACTOR = 520; 
+        BLOB_CACHE_ACTOR = 520;
         MONITORING_SERVICE = 521;
         MONITORING_REQUEST = 522;
         ACTOR_SERVICE_CACHE = 523;
@@ -868,4 +868,4 @@ message TActivity {
         REPLICATION_CONTROLLER_DST_CREATOR = 562;
         BLOCKSTORE_STATS_SERVICE = 563;
     };
-}; 
+};

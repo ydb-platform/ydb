@@ -1,4 +1,4 @@
-#include "msgbus_server_persqueue.h" 
+#include "msgbus_server_persqueue.h"
 #include "msgbus_server_pq_metacache.h"
 
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
@@ -9,13 +9,13 @@
 #include <ydb/core/base/counters.h>
 
 #include <ydb/core/base/appdata.h>
- 
+
 namespace NKikimr::NMsgBusProxy {
- 
+
 using namespace NYdb::NTable;
- 
+
 namespace NPqMetaCacheV2 {
- 
+
 IActor* CreateSchemeCache(NActors::TActorSystem* ActorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
     auto appData = ActorSystem->AppData<TAppData>();
     auto cacheCounters = GetServiceCounters(counters, "pqproxy|schemecache");
@@ -45,8 +45,8 @@ public:
         , VersionCheckInterval(versionCheckInterval)
         , Generation(std::make_shared<TAtomicCounter>())
     {
-    } 
- 
+    }
+
     void Bootstrap(const TActorContext& ctx) {
         if (ClientWrapper == nullptr) {
             auto* driver = AppData(ctx)->YdbDriver;

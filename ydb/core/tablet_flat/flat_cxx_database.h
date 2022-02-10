@@ -57,7 +57,7 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    template <typename ElementType> 
+    template <typename ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
@@ -187,7 +187,7 @@ public:
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
-    template <typename ElementType> 
+    template <typename ElementType>
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
@@ -198,7 +198,7 @@ public:
         return TVector<ElementType>(begin, end);
     }
 
-    template <typename ElementType> 
+    template <typename ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
@@ -233,8 +233,8 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui6
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval> { typedef i64 Type; };
 
 /// only for compatibility with old code
-template <NScheme::TTypeId ValType> 
-class TConvertTypeValue : public TRawTypeValue { 
+template <NScheme::TTypeId ValType>
+class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
         : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType)
@@ -470,15 +470,15 @@ template <typename ColumnType, typename VectorType>
 struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
-    TConvertValue(const TRawTypeValue& value) { 
+    TConvertValue(const TRawTypeValue& value) {
         Y_VERIFY(value.Type() == NScheme::NTypeIds::String);
         Y_VERIFY(value.Size() % sizeof(VectorType) == 0);
-        const size_t count = value.Size() / sizeof(VectorType); 
-        Value.reserve(count); 
-        for (TUnalignedMemoryIterator<VectorType> it(value.Data(), value.Size()); !it.AtEnd(); it.Next()) { 
-            Value.emplace_back(it.Cur()); 
-        } 
-        Y_VERIFY(Value.size() == count); 
+        const size_t count = value.Size() / sizeof(VectorType);
+        Value.reserve(count);
+        for (TUnalignedMemoryIterator<VectorType> it(value.Data(), value.Size()); !it.AtEnd(); it.Next()) {
+            Value.emplace_back(it.Cur());
+        }
+        Y_VERIFY(Value.size() == count);
     }
 
     operator const TVector<VectorType>&() const {
@@ -641,7 +641,7 @@ struct Schema {
         using Precharge = AutoPrecharge;
 
         template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false>
-        struct Column { 
+        struct Column {
             constexpr static TColumnId ColumnId = _ColumnId;
             constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
@@ -655,8 +655,8 @@ struct Schema {
         template <typename...>
         struct TableColumns;
 
-        template <typename T> 
-        struct TableColumns<T> { 
+        template <typename T>
+        struct TableColumns<T> {
             using Type = typename T::Type;
             using TupleType = std::tuple<typename T::Type>;
             using RealTupleType = std::tuple<typename NSchemeTypeMapper<T::ColumnType>::Type>;
@@ -683,8 +683,8 @@ struct Schema {
             }
         };
 
-        template <typename T, typename... Ts> 
-        struct TableColumns<T, Ts...> : TableColumns<Ts...> { 
+        template <typename T, typename... Ts>
+        struct TableColumns<T, Ts...> : TableColumns<Ts...> {
             using Type = std::tuple<typename T::Type, typename Ts::Type...>;
             using TupleType = std::tuple<typename T::Type, typename Ts::Type...>;
             using RealTupleType = std::tuple<typename NSchemeTypeMapper<T::ColumnType>::Type, typename NSchemeTypeMapper<Ts::ColumnType>::Type...>;
@@ -733,7 +733,7 @@ struct Schema {
         template <typename, typename, typename, typename> class RangeKeyOperations;
 
         template <typename IteratorType, typename TableType, typename... KeyColumns>
-        class TableSelector { 
+        class TableSelector {
         protected:
             using KeyColumnsType = std::tuple<KeyColumns...>;
             using KeyValuesType = std::tuple<typename KeyColumns::Type...>;
@@ -766,12 +766,12 @@ struct Schema {
                 return KeyOperations<TableType, KeyValuesType>(*Database, keyValues);
             }
 
-            template <typename... Keys> 
+            template <typename... Keys>
             auto Range(Keys... keyValues) {
                 return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
             }
 
-            template <typename... Keys> 
+            template <typename... Keys>
             auto Prefix(Keys... keyValues) {
                 return KeyPrefixOperations<IteratorType, TableType, typename first_n_of<sizeof...(Keys), KeyValuesType>::type>(*Database, keyValues...);
             }
@@ -820,18 +820,18 @@ struct Schema {
         template <typename... KeyColumnsTypes>
         struct TableKey : TableColumns<KeyColumnsTypes...> {
         private:
-            template <typename... Ts> 
-            struct TableKeyMaterializer; 
+            template <typename... Ts>
+            struct TableKeyMaterializer;
 
-            template <typename T> 
-            struct TableKeyMaterializer<T> { 
+            template <typename T>
+            struct TableKeyMaterializer<T> {
                 static void Materialize(TToughDb& database) {
                     database.Alter().AddColumnToKey(TableId, T::ColumnId);
                 }
             };
 
-            template <typename T, typename... Ts> 
-            struct TableKeyMaterializer<T, Ts...> : TableKeyMaterializer<Ts...> { 
+            template <typename T, typename... Ts>
+            struct TableKeyMaterializer<T, Ts...> : TableKeyMaterializer<Ts...> {
                 static void Materialize(TToughDb& database) {
                     TableKeyMaterializer<T>::Materialize(database);
                     TableKeyMaterializer<Ts...>::Materialize(database);
@@ -1045,8 +1045,8 @@ struct Schema {
                         return nullptr;
                     }
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
-                } 
- 
+                }
+
                 static bool Precharge(TToughDb& database, NTable::TTagsRef columns) {
                     return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction);
                 }
@@ -1257,7 +1257,7 @@ struct Schema {
             class EqualKeyIterator
                 : public KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>
             {
-            public: 
+            public:
                 using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
                 using Iterator = KeyIterator<NTable::TTableIt, EqualKeyIterator<TableType, KeyValuesType>>;
 
@@ -1296,25 +1296,25 @@ struct Schema {
             template <typename TableType, typename KeyIterator, typename... ColumnTypes>
             class Rowset {
             public:
-                template <typename... Cs> 
-                static Columns<Cs...> GetColumns(Columns<Cs...>) { return Columns<Cs...>(); } 
-                template <typename... Cs> 
-                static Columns<Cs...> GetColumns(Columns<TableColumns<Cs...>>) { return Columns<Cs...>(); } 
-                using ColumnsType = decltype(GetColumns(Columns<ColumnTypes...>())); 
- 
+                template <typename... Cs>
+                static Columns<Cs...> GetColumns(Columns<Cs...>) { return Columns<Cs...>(); }
+                template <typename... Cs>
+                static Columns<Cs...> GetColumns(Columns<TableColumns<Cs...>>) { return Columns<Cs...>(); }
+                using ColumnsType = decltype(GetColumns(Columns<ColumnTypes...>()));
+
                 template <typename... Args>
                 Rowset(TToughDb& database, Args&&... args)
                     : Iterator(database, std::forward<Args>(args)...)
                 {}
- 
-                bool IsReady() const { 
+
+                bool IsReady() const {
                     return Iterator.IsReady();
-                } 
- 
-                bool IsValid() const { 
+                }
+
+                bool IsValid() const {
                     return Iterator.IsValid();
-                } 
- 
+                }
+
                 bool IsOk() const {
                     return Iterator.IsReady() && Iterator.IsValid();
                 }
@@ -1327,34 +1327,34 @@ struct Schema {
                     return Iterator.Next();
                 }
 
-                template <typename... ColumnType> 
+                template <typename... ColumnType>
                 auto GetValue() const {
                     Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
                     Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
-                    typename Columns<ColumnType...>::Type value(GetColumnValue<ColumnType>()...); 
-                    return value; 
-                } 
- 
-                template <typename ColumnType> 
+                    typename Columns<ColumnType...>::Type value(GetColumnValue<ColumnType>()...);
+                    return value;
+                }
+
+                template <typename ColumnType>
                 auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
                     Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
                     Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
-                    typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue); 
-                    return value; 
-                } 
- 
+                    typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
+                    return value;
+                }
+
                 auto GetKey() const {
                     return ColumnsValueTuple<typename TableType::TKey::KeyColumnsType>::Get(*this);
-                } 
- 
-                template <typename ColumnType> 
-                bool HaveValue() const { 
+                }
+
+                template <typename ColumnType>
+                bool HaveValue() const {
                     size_t index = GetIndex<ColumnType>();
                     TDbTupleRef tuple = Iterator.GetValues();
                     auto& cell = tuple.Columns[index];
-                    return !cell.IsNull(); 
-                } 
- 
+                    return !cell.IsNull();
+                }
+
                 TString DbgPrint(const NScheme::TTypeRegistry& typeRegistry) {
                     Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
                     Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
@@ -1366,7 +1366,7 @@ struct Schema {
                     return ColumnType::Default;
                 }
 
-                template <typename ColumnType> 
+                template <typename ColumnType>
                 static typename ColumnType::Type GetNullValue(SFINAE::general) {
                     return typename ColumnType::Type();
                 }
@@ -1392,7 +1392,7 @@ struct Schema {
                 }
 
                 template <typename ColumnType>
-                typename ColumnType::Type GetColumnValue() const { 
+                typename ColumnType::Type GetColumnValue() const {
                     size_t index = GetIndex<ColumnType>();
                     TDbTupleRef tuple = Iterator.GetValues();
                     auto& cell = tuple.Columns[index];
@@ -1400,17 +1400,17 @@ struct Schema {
                     if (cell.IsNull())
                         return GetNullValue<ColumnType>(SFINAE::special());
                     return TConvert<ColumnType, typename ColumnType::Type>::Convert(TRawTypeValue(cell.Data(), cell.Size(), type));
-                } 
- 
+                }
+
                 KeyIterator Iterator;
-            }; 
+            };
         };
- 
+
         template <typename IteratorType, typename TableType>
         class AnyKeyOperations: public Operations {
         public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
- 
+
             template <typename KeyIterator, typename... Columns>
             using Rowset = typename Operations::template Rowset<KeyIterator, Columns...>;
             using Iterator = typename Operations::template AnyKeyIterator<IteratorType, TableType>;
@@ -1515,7 +1515,7 @@ struct Schema {
 
         template <typename IteratorType, typename TableType, typename... KeyValuesTypes>
         class GreaterOrEqualKeyOperations<IteratorType, TableType, std::tuple<KeyValuesTypes...>>: public Operations {
-        public: 
+        public:
             using KeyColumnsType = typename TableType::TKey::KeyColumnsType;
             using KeyValuesType = typename first_n_of<sizeof...(KeyValuesTypes), typename TableType::TKey::RealKeyValuesType>::type;
 
@@ -1555,11 +1555,11 @@ struct Schema {
                 return RangeKeyOperations<IteratorType, TableType, MinKeyValuesType, MaxKeyValuesType>(*Database, KeyValues, keyValues...);
             }
 
-            template <typename... ColumnTypes> 
+            template <typename... ColumnTypes>
             auto Select() {
                 return Rowset<TableType, Iterator, ColumnTypes...>(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
-            } 
- 
+            }
+
             auto Select() {
                 return Rowset<TableType, Iterator, typename TableType::TColumns>(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
             }
@@ -1782,7 +1782,7 @@ struct Schema {
                 return Update(TNull<ColumnTypes>()...);
             }
 
-            template <typename... UpdateTypes> 
+            template <typename... UpdateTypes>
             KeyOperations& Update(const UpdateTypes&... updates) {
                 std::array<TUpdateOp, sizeof...(UpdateTypes)> update_ops = {{updates...}};
                 Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), update_ops);
@@ -1845,8 +1845,8 @@ struct Schema {
         }
     };
 
-    template <typename Type, typename... Types> 
-    struct SchemaTables: SchemaTables<Types...> { 
+    template <typename Type, typename... Types>
+    struct SchemaTables: SchemaTables<Types...> {
         static bool Precharge(TToughDb& database) {
             return SchemaTables<Type>::Precharge(database) & SchemaTables<Types...>::Precharge(database);
         }
@@ -1866,8 +1866,8 @@ struct Schema {
         }
     };
 
-    template <typename Type> 
-    struct SchemaTables<Type> { 
+    template <typename Type>
+    struct SchemaTables<Type> {
         static TString GetTableName(const TString& typeName) {
             return typeName.substr(typeName.rfind(':') + 1);
         }
@@ -1979,87 +1979,87 @@ public:
         }
     }
 
-    void NoMoreReadsForTx() { 
-        return Database.NoMoreReadsForTx(); 
-    } 
- 
+    void NoMoreReadsForTx() {
+        return Database.NoMoreReadsForTx();
+    }
+
 protected:
     TToughDb& Database;
 };
 
-namespace NHelpers { 
- 
-// Fills NTable::TScheme::TTableSchema from static NIceDb::Schema 
-template <class TTable> 
-struct TStaticSchemaFiller { 
-    template <typename...> 
-    struct TFiller; 
- 
-    template <typename Column> 
-    struct TFiller<Column> { 
-        static void Fill(NTable::TScheme::TTableSchema& schema) { 
-            schema.Columns[Column::ColumnId] = NTable::TColumn( 
-                TTable::template TableColumns<Column>::GetColumnName(), 
-                Column::ColumnId, 
-                Column::ColumnType); 
-        } 
-    }; 
- 
-    template <typename Column, typename... Columns> 
-    struct TFiller<Column, Columns...> { 
-        static void Fill(NTable::TScheme::TTableSchema& schema) { 
-            TFiller<Column>::Fill(schema); 
-            TFiller<Columns...>::Fill(schema); 
-        } 
-    }; 
- 
-    template <typename... Columns> 
-    using TColumnsType = typename TTable::template TableColumns<Columns...>; 
- 
-    template <typename... Columns> 
-    static void FillColumns(NTable::TScheme::TTableSchema& schema, TColumnsType<Columns...>) { 
-        TFiller<Columns...>::Fill(schema); 
-    } 
- 
-    template <typename...> 
-    struct TKeyFiller; 
- 
-    template <typename Key> 
-    struct TKeyFiller<Key> { 
-        static void Fill(NTable::TScheme::TTableSchema& schema, i32 index) { 
-            schema.KeyColumns.push_back(Key::ColumnId); 
-            auto& column = schema.Columns[Key::ColumnId]; 
-            column.KeyOrder = index; 
-        } 
-    }; 
- 
-    template <typename Key, typename... Keys> 
-    struct TKeyFiller<Key, Keys...> { 
-        static void Fill(NTable::TScheme::TTableSchema& schema, i32 index) { 
-            TKeyFiller<Key>::Fill(schema, index); 
-            TKeyFiller<Keys...>::Fill(schema, index + 1); 
-        } 
-    }; 
- 
-    template <typename... Keys> 
-    using TKeysType = typename TTable::template TableKey<Keys...>; 
- 
-    template <typename... Keys> 
-    static void FillKeys(NTable::TScheme::TTableSchema& schema, TKeysType<Keys...>) { 
-        TKeyFiller<Keys...>::Fill(schema, 0); 
-    } 
- 
-    static void Fill(NTable::TScheme::TTableSchema& schema) { 
-        FillColumns(schema, typename TTable::TColumns()); 
-        FillKeys(schema, typename TTable::TKey()); 
- 
-        for (const auto& c : schema.Columns) { 
-            schema.ColumnNames[c.second.Name] = c.second.Id; 
-        } 
-    } 
-}; 
- 
-} // namespace NHelpers 
- 
+namespace NHelpers {
+
+// Fills NTable::TScheme::TTableSchema from static NIceDb::Schema
+template <class TTable>
+struct TStaticSchemaFiller {
+    template <typename...>
+    struct TFiller;
+
+    template <typename Column>
+    struct TFiller<Column> {
+        static void Fill(NTable::TScheme::TTableSchema& schema) {
+            schema.Columns[Column::ColumnId] = NTable::TColumn(
+                TTable::template TableColumns<Column>::GetColumnName(),
+                Column::ColumnId,
+                Column::ColumnType);
+        }
+    };
+
+    template <typename Column, typename... Columns>
+    struct TFiller<Column, Columns...> {
+        static void Fill(NTable::TScheme::TTableSchema& schema) {
+            TFiller<Column>::Fill(schema);
+            TFiller<Columns...>::Fill(schema);
+        }
+    };
+
+    template <typename... Columns>
+    using TColumnsType = typename TTable::template TableColumns<Columns...>;
+
+    template <typename... Columns>
+    static void FillColumns(NTable::TScheme::TTableSchema& schema, TColumnsType<Columns...>) {
+        TFiller<Columns...>::Fill(schema);
+    }
+
+    template <typename...>
+    struct TKeyFiller;
+
+    template <typename Key>
+    struct TKeyFiller<Key> {
+        static void Fill(NTable::TScheme::TTableSchema& schema, i32 index) {
+            schema.KeyColumns.push_back(Key::ColumnId);
+            auto& column = schema.Columns[Key::ColumnId];
+            column.KeyOrder = index;
+        }
+    };
+
+    template <typename Key, typename... Keys>
+    struct TKeyFiller<Key, Keys...> {
+        static void Fill(NTable::TScheme::TTableSchema& schema, i32 index) {
+            TKeyFiller<Key>::Fill(schema, index);
+            TKeyFiller<Keys...>::Fill(schema, index + 1);
+        }
+    };
+
+    template <typename... Keys>
+    using TKeysType = typename TTable::template TableKey<Keys...>;
+
+    template <typename... Keys>
+    static void FillKeys(NTable::TScheme::TTableSchema& schema, TKeysType<Keys...>) {
+        TKeyFiller<Keys...>::Fill(schema, 0);
+    }
+
+    static void Fill(NTable::TScheme::TTableSchema& schema) {
+        FillColumns(schema, typename TTable::TColumns());
+        FillKeys(schema, typename TTable::TKey());
+
+        for (const auto& c : schema.Columns) {
+            schema.ColumnNames[c.second.Name] = c.second.Id;
+        }
+    }
+};
+
+} // namespace NHelpers
+
 }
 }

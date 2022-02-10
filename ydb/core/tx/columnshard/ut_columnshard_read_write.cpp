@@ -118,8 +118,8 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
         }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_columns(), colNames.size()); 
-    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_rows(), rowsCount); 
+    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_columns(), colNames.size());
+    UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_rows(), rowsCount);
     UNIT_ASSERT(batch->ValidateFull().ok());
     return true;
 }
@@ -223,8 +223,8 @@ void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>&
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
-    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG); 
- 
+    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
 
@@ -1118,15 +1118,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
             auto batchStats = scan->ArrowBatch;
             UNIT_ASSERT(batchStats);
-            // Cerr << batchStats->ToString() << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 4); 
+            // Cerr << batchStats->ToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 4);
 
             for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
-                auto paths = batchStats->GetColumnByName("PathId"); 
-                auto kinds = batchStats->GetColumnByName("Kind"); 
-                auto rows = batchStats->GetColumnByName("Rows"); 
-                auto bytes = batchStats->GetColumnByName("Bytes"); 
-                auto rawBytes = batchStats->GetColumnByName("RawBytes"); 
+                auto paths = batchStats->GetColumnByName("PathId");
+                auto kinds = batchStats->GetColumnByName("Kind");
+                auto rows = batchStats->GetColumnByName("Rows");
+                auto bytes = batchStats->GetColumnByName("Bytes");
+                auto rawBytes = batchStats->GetColumnByName("RawBytes");
 
                 ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
                 ui32 kind = static_cast<arrow::UInt32Array&>(*kinds).Value(i);
@@ -1150,359 +1150,359 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             }
         }
     }
- 
-    Y_UNIT_TEST(ReadStale) { 
-        TTestBasicRuntime runtime; 
-        TTester::Setup(runtime); 
- 
-        TActorId sender = runtime.AllocateEdgeActor(); 
+
+    Y_UNIT_TEST(ReadStale) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
- 
-        TDispatchOptions options; 
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot)); 
-        runtime.DispatchEvents(options); 
- 
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
         ui64 metaShard = TTestTxConfig::TxTablet1;
-        ui64 writeId = 0; 
-        ui64 tableId = 1; 
-        ui64 planStep = 1000000; 
-        ui64 txId = 100; 
- 
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 planStep = 1000000;
+        ui64 txId = 100;
+
         SetupSchema(runtime, sender, tableId);
-        TAutoPtr<IEventHandle> handle; 
- 
-        // Write some test data to adavnce the time 
-        { 
-            std::pair<ui64, ui64> triggerPortion = {1, 1000}; 
-            TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema); 
- 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData)); 
- 
+        TAutoPtr<IEventHandle> handle;
+
+        // Write some test data to adavnce the time
+        {
+            std::pair<ui64, ui64> triggerPortion = {1, 1000};
+            TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
+
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
             ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId); 
-        } 
- 
-        TDuration staleness = TDuration::Minutes(6); 
- 
-        // Try to read snapshot that is too old 
-        { 
-            { 
-                auto request = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep - staleness.MilliSeconds(), Max<ui64>(), tableId); 
-                request->Record.AddColumnNames("timestamp"); 
-                request->Record.AddColumnNames("message"); 
- 
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        TDuration staleness = TDuration::Minutes(6);
+
+        // Try to read snapshot that is too old
+        {
+            {
+                auto request = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep - staleness.MilliSeconds(), Max<ui64>(), tableId);
+                request->Record.AddColumnNames("timestamp");
+                request->Record.AddColumnNames("message");
+
                 ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
-            } 
- 
-            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle); 
-            UNIT_ASSERT(event); 
- 
-            auto& response = event->Record; 
+            }
+
+            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+            UNIT_ASSERT(event);
+
+            auto& response = event->Record;
             UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetTxInitiator(), metaShard); 
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), (ui32)NKikimrTxColumnShard::EResultStatus::ERROR); 
-        } 
- 
-        // Try to scan snapshot that is too old 
-        { 
-            { 
-                auto request = std::make_unique<TEvColumnShard::TEvScan>(); 
-                request->Record.SetTxId(1000); 
-                request->Record.SetScanId(1); 
-                request->Record.SetLocalPathId(tableId); 
-                request->Record.SetTablePath("test_olap_table"); 
-                request->Record.MutableSnapshot()->SetStep(planStep - staleness.MilliSeconds()); 
-                request->Record.MutableSnapshot()->SetTxId(Max<ui64>()); 
- 
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTxInitiator(), metaShard);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), (ui32)NKikimrTxColumnShard::EResultStatus::ERROR);
+        }
+
+        // Try to scan snapshot that is too old
+        {
+            {
+                auto request = std::make_unique<TEvColumnShard::TEvScan>();
+                request->Record.SetTxId(1000);
+                request->Record.SetScanId(1);
+                request->Record.SetLocalPathId(tableId);
+                request->Record.SetTablePath("test_olap_table");
+                request->Record.MutableSnapshot()->SetStep(planStep - staleness.MilliSeconds());
+                request->Record.MutableSnapshot()->SetTxId(Max<ui64>());
+
                 ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
-            } 
- 
-            auto event = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanError>(handle); 
-            UNIT_ASSERT(event); 
- 
-            auto& response = event->Record; 
-            // Cerr << response << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST); 
-            UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1); 
-            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot 640000:18446744073709551615 too old"); 
-        } 
-    } 
- 
-    // Private events of different actors reuse the same ES_PRIVATE range 
-    // So in order to capture the right private event we need to check its type via dynamic_cast 
-    template <class TPrivateEvent> 
-    TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle> &ev) { 
-        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) { 
-            return nullptr; 
-        } 
-        return dynamic_cast<TPrivateEvent*>(ev->GetBase()); 
-    } 
- 
-    void TestCompactionGC(bool enableSmallBlobs) { 
-        TTestBasicRuntime runtime; 
-        TTester::Setup(runtime); 
- 
-        runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG); 
- 
-        TActorId sender = runtime.AllocateEdgeActor(); 
+            }
+
+            auto event = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanError>(handle);
+            UNIT_ASSERT(event);
+
+            auto& response = event->Record;
+            // Cerr << response << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot 640000:18446744073709551615 too old");
+        }
+    }
+
+    // Private events of different actors reuse the same ES_PRIVATE range
+    // So in order to capture the right private event we need to check its type via dynamic_cast
+    template <class TPrivateEvent>
+    TPrivateEvent* TryGetPrivateEvent(TAutoPtr<IEventHandle> &ev) {
+        if (ev->GetTypeRewrite() != TPrivateEvent::EventType) {
+            return nullptr;
+        }
+        return dynamic_cast<TPrivateEvent*>(ev->GetBase());
+    }
+
+    void TestCompactionGC(bool enableSmallBlobs) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+
+        TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD), &CreateColumnShard);
- 
-        TDispatchOptions options; 
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot)); 
-        runtime.DispatchEvents(options); 
- 
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
         ui64 metaShard = TTestTxConfig::TxTablet1;
-        ui64 writeId = 0; 
-        ui64 tableId = 1; 
- 
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+
         SetupSchema(runtime, sender, tableId);
-        TAutoPtr<IEventHandle> handle; 
- 
-        bool blockReadFinished = true; 
-        THashSet<ui64> inFlightReads; 
-        ui64 addedPortions = 0; 
-        THashSet<ui64> oldPortions; 
-        THashSet<ui64> deletedPortions; 
-        THashSet<TString> deletedBlobs; 
-        THashSet<TString> delayedBlobs; 
-        ui64 compactionsHappened = 0; 
-        ui64 cleanupsHappened = 0; 
- 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) { 
-            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) { 
-                Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl; 
-                inFlightReads.insert(msg->RequestCookie); 
-                if (blockReadFinished) { 
-                    return true; 
-                } 
-            } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) { 
-                // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl; 
- 
-                if (!msg->IndexChanges->AppendedPortions.empty()) { 
-                    Cerr << "Added portions:"; 
-                    for (const auto& portion : msg->IndexChanges->AppendedPortions) { 
-                        ++addedPortions; 
-                        ui64 portionId = addedPortions; 
-                        Cerr << " " << portionId << "(" << portion.Records[0].Portion << ")"; 
-                    } 
-                    Cerr << Endl; 
-                } 
-                if (msg->IndexChanges->CompactionInfo) { 
-                    ++compactionsHappened; 
-                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->ApplySnapshot 
-                        << " old portions:"; 
-                    ui64 srcGranule{0}; 
+        TAutoPtr<IEventHandle> handle;
+
+        bool blockReadFinished = true;
+        THashSet<ui64> inFlightReads;
+        ui64 addedPortions = 0;
+        THashSet<ui64> oldPortions;
+        THashSet<ui64> deletedPortions;
+        THashSet<TString> deletedBlobs;
+        THashSet<TString> delayedBlobs;
+        ui64 compactionsHappened = 0;
+        ui64 cleanupsHappened = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) {
+                Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl;
+                inFlightReads.insert(msg->RequestCookie);
+                if (blockReadFinished) {
+                    return true;
+                }
+            } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl;
+
+                if (!msg->IndexChanges->AppendedPortions.empty()) {
+                    Cerr << "Added portions:";
+                    for (const auto& portion : msg->IndexChanges->AppendedPortions) {
+                        ++addedPortions;
+                        ui64 portionId = addedPortions;
+                        Cerr << " " << portionId << "(" << portion.Records[0].Portion << ")";
+                    }
+                    Cerr << Endl;
+                }
+                if (msg->IndexChanges->CompactionInfo) {
+                    ++compactionsHappened;
+                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->ApplySnapshot
+                        << " old portions:";
+                    ui64 srcGranule{0};
                     for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {
                         ui64 granule = portionInfo.Granule();
-                        Y_VERIFY(!srcGranule || srcGranule == granule); 
-                        srcGranule = granule; 
+                        Y_VERIFY(!srcGranule || srcGranule == granule);
+                        srcGranule = granule;
                         ui64 portionId = portionInfo.Portion();
                         Cerr << " " << portionId;
                         oldPortions.insert(portionId);
-                    } 
-                    Cerr << Endl; 
-                } 
-                if (!msg->IndexChanges->PortionsToDrop.empty()) { 
-                    ++cleanupsHappened; 
-                    Cerr << "Cleanup older than snaphsot "<< msg->IndexChanges->InitSnapshot 
-                        << " old portions:"; 
-                    for (const auto& portion : msg->IndexChanges->PortionsToDrop) { 
-                        ui64 portionId = portion.Records[0].Portion; 
-                        Cerr << " " << portionId; 
-                        deletedPortions.insert(portionId); 
-                    } 
-                    Cerr << Endl; 
-                } 
-            } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) { 
-                bool matchedEvent = false; 
-                { 
-                    TString prefixes[2] = {"Delay Delete Blob ", "Delay Delete Small Blob "}; 
-                    for (TString prefix : prefixes) { 
-                        size_t pos = msg->Line.find(prefix); 
-                        if (pos != TString::npos) { 
-                            TString blobId = msg->Line.substr(pos + prefix.size()); 
-                            Cerr << "Delayed delete: " << blobId << Endl; 
-                            delayedBlobs.insert(blobId); 
-                            matchedEvent = true; 
-                            break; 
-                        } 
-                    } 
-                } 
-                if (!matchedEvent){ 
-                    TString prefix = "Delete Small Blob "; 
-                    size_t pos = msg->Line.find(prefix); 
-                    if (pos != TString::npos) { 
-                        TString blobId = msg->Line.substr(pos + prefix.size()); 
-                        Cerr << "Delete small blob: " << blobId << Endl; 
-                        deletedBlobs.insert(blobId); 
-                        delayedBlobs.erase(blobId); 
-                        matchedEvent = true; 
-                    } 
-                } 
-            } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) { 
-                // Extract and save all DoNotKeep blobIds 
-                Cerr << "GC for channel " << msg->Channel; 
-                if (msg->DoNotKeep) { 
-                    Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " "); 
-                    for (const auto& blobId : *msg->DoNotKeep) { 
-                        deletedBlobs.insert(blobId.ToString()); 
-                        delayedBlobs.erase(TUnifiedBlobId(0, blobId).ToStringNew()); 
-                    } 
-                } 
-                Cerr << Endl; 
-            } 
-            return false; 
-        }; 
-        runtime.SetEventFilter(captureEvents); 
- 
-        // Enable/Disable small blobs 
-        { 
-            TAtomic unused; 
-            TAtomic maxSmallBlobSize = enableSmallBlobs ? 1000000 : 0; 
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxSmallBlobSize",maxSmallBlobSize, unused); 
-        } 
- 
-        // Disable GC batching so that deleted blobs get collected without a delay 
-        { 
-            TAtomic unusedPrev; 
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unusedPrev); 
-        } 
- 
-        // Write different keys: grow on compaction 
- 
+                    }
+                    Cerr << Endl;
+                }
+                if (!msg->IndexChanges->PortionsToDrop.empty()) {
+                    ++cleanupsHappened;
+                    Cerr << "Cleanup older than snaphsot "<< msg->IndexChanges->InitSnapshot
+                        << " old portions:";
+                    for (const auto& portion : msg->IndexChanges->PortionsToDrop) {
+                        ui64 portionId = portion.Records[0].Portion;
+                        Cerr << " " << portionId;
+                        deletedPortions.insert(portionId);
+                    }
+                    Cerr << Endl;
+                }
+            } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) {
+                bool matchedEvent = false;
+                {
+                    TString prefixes[2] = {"Delay Delete Blob ", "Delay Delete Small Blob "};
+                    for (TString prefix : prefixes) {
+                        size_t pos = msg->Line.find(prefix);
+                        if (pos != TString::npos) {
+                            TString blobId = msg->Line.substr(pos + prefix.size());
+                            Cerr << "Delayed delete: " << blobId << Endl;
+                            delayedBlobs.insert(blobId);
+                            matchedEvent = true;
+                            break;
+                        }
+                    }
+                }
+                if (!matchedEvent){
+                    TString prefix = "Delete Small Blob ";
+                    size_t pos = msg->Line.find(prefix);
+                    if (pos != TString::npos) {
+                        TString blobId = msg->Line.substr(pos + prefix.size());
+                        Cerr << "Delete small blob: " << blobId << Endl;
+                        deletedBlobs.insert(blobId);
+                        delayedBlobs.erase(blobId);
+                        matchedEvent = true;
+                    }
+                }
+            } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) {
+                // Extract and save all DoNotKeep blobIds
+                Cerr << "GC for channel " << msg->Channel;
+                if (msg->DoNotKeep) {
+                    Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
+                    for (const auto& blobId : *msg->DoNotKeep) {
+                        deletedBlobs.insert(blobId.ToString());
+                        delayedBlobs.erase(TUnifiedBlobId(0, blobId).ToStringNew());
+                    }
+                }
+                Cerr << Endl;
+            }
+            return false;
+        };
+        runtime.SetEventFilter(captureEvents);
+
+        // Enable/Disable small blobs
+        {
+            TAtomic unused;
+            TAtomic maxSmallBlobSize = enableSmallBlobs ? 1000000 : 0;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxSmallBlobSize",maxSmallBlobSize, unused);
+        }
+
+        // Disable GC batching so that deleted blobs get collected without a delay
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unusedPrev);
+        }
+
+        // Write different keys: grow on compaction
+
         static const ui32 triggerPortionSize = 75 * 1000;
-        std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize}; 
-        TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema); 
+        std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
+        TString triggerData = MakeTestBlob(triggerPortion, testYdbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
         UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::MAX_BLOB_SIZE);
- 
-        ui64 planStep = 5000000; 
-        ui64 txId = 1000; 
- 
-        // Ovewrite the same data multiple times to produce multiple portions at different timestamps 
+
+        ui64 planStep = 5000000;
+        ui64 txId = 1000;
+
+        // Ovewrite the same data multiple times to produce multiple portions at different timestamps
         ui32 numWrites = 14; // trigger split granule compaction by GranuleBlobSplitSize
-        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) { 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData)); 
- 
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
             ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId); 
-        } 
- 
-        // Do a small write that is not indexed so that we will get a committed blob in read request 
-        { 
-            TString smallData = MakeTestBlob({0, 2}, testYdbSchema); 
-            UNIT_ASSERT(smallData.size() < 100 * 1024); 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, smallData)); 
- 
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Do a small write that is not indexed so that we will get a committed blob in read request
+        {
+            TString smallData = MakeTestBlob({0, 2}, testYdbSchema);
+            UNIT_ASSERT(smallData.size() < 100 * 1024);
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, smallData));
+
             ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId); 
-            ++writeId; 
-            ++planStep; 
-            ++txId; 
-        } 
- 
-        --planStep; 
-        --txId; 
- 
+            PlanCommit(runtime, sender, planStep, txId);
+            ++writeId;
+            ++planStep;
+            ++txId;
+        }
+
+        --planStep;
+        --txId;
+
         UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 2); // we catch it twice per action
 
-        ui64 previousCompactionsHappened = compactionsHappened; 
-        ui64 previousCleanupsHappened = cleanupsHappened; 
- 
-        // Send a request that reads the latest version 
-        // This request is expected to read at least 1 committed blob and several index portions 
-        // These committed blob and portions must not be deleted by the BlobManager until the read request finishes 
-        auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId); 
-        Proto(read.get()).AddColumnNames("timestamp"); 
-        Proto(read.get()).AddColumnNames("message"); 
- 
+        ui64 previousCompactionsHappened = compactionsHappened;
+        ui64 previousCleanupsHappened = cleanupsHappened;
+
+        // Send a request that reads the latest version
+        // This request is expected to read at least 1 committed blob and several index portions
+        // These committed blob and portions must not be deleted by the BlobManager until the read request finishes
+        auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
+        Proto(read.get()).AddColumnNames("timestamp");
+        Proto(read.get()).AddColumnNames("message");
+
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
- 
+
         ui32 expected = 0;
         ui32 num = 0;
         while (!expected || num < expected) {
-            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle); 
-            UNIT_ASSERT(event); 
- 
-            auto& resRead = Proto(event); 
+            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+            UNIT_ASSERT(event);
+
+            auto& resRead = Proto(event);
             UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard); 
-            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS); 
+            UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
 
             if (resRead.GetFinished()) {
                 expected = resRead.GetBatch() + 1;
                 UNIT_ASSERT(resRead.HasMeta());
             }
-            UNIT_ASSERT(resRead.GetData().size() > 0); 
+            UNIT_ASSERT(resRead.GetData().size() > 0);
 
             ++num;
             UNIT_ASSERT(num < 10);
-        } 
- 
-        // We captured EvReadFinished event and dropped is so the columnshard still thinks that 
-        // read request is in progress and keeps the portions 
- 
-        // Advance the time in order to trigger GC 
-        TDuration delay = TDuration::Minutes(6); 
-        planStep += delay.MilliSeconds(); 
+        }
+
+        // We captured EvReadFinished event and dropped is so the columnshard still thinks that
+        // read request is in progress and keeps the portions
+
+        // Advance the time in order to trigger GC
+        TDuration delay = TDuration::Minutes(6);
+        planStep += delay.MilliSeconds();
         numWrites = 10; // trigger in granule compaction by size
-        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) { 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData)); 
- 
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
             ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId); 
-        } 
- 
-        Cerr << "Compactions happened: " << compactionsHappened << Endl; 
-        Cerr << "Cleanups happened: " << cleanupsHappened << Endl; 
-        Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl; 
-        Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl; 
- 
-        // Check that GC happened but it didn't collect some old poritons 
-        UNIT_ASSERT_GT(compactionsHappened, previousCompactionsHappened); 
-        UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened); 
-        UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because the are in use by read"); 
-        UNIT_ASSERT_GT_C(delayedBlobs.size(), 0, "Read request is expected to have at least one committed blob, which deletion must be delayed"); 
-        previousCompactionsHappened = compactionsHappened; 
-        previousCleanupsHappened = cleanupsHappened; 
- 
-        // Send EvReadFinished to release kept portions 
-        blockReadFinished = false; 
-        UNIT_ASSERT_VALUES_EQUAL(inFlightReads.size(), 1); 
-        { 
-            auto read = std::make_unique<NColumnShard::TEvPrivate::TEvReadFinished>(*inFlightReads.begin()); 
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        Cerr << "Compactions happened: " << compactionsHappened << Endl;
+        Cerr << "Cleanups happened: " << cleanupsHappened << Endl;
+        Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
+        Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl;
+
+        // Check that GC happened but it didn't collect some old poritons
+        UNIT_ASSERT_GT(compactionsHappened, previousCompactionsHappened);
+        UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
+        UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because the are in use by read");
+        UNIT_ASSERT_GT_C(delayedBlobs.size(), 0, "Read request is expected to have at least one committed blob, which deletion must be delayed");
+        previousCompactionsHappened = compactionsHappened;
+        previousCleanupsHappened = cleanupsHappened;
+
+        // Send EvReadFinished to release kept portions
+        blockReadFinished = false;
+        UNIT_ASSERT_VALUES_EQUAL(inFlightReads.size(), 1);
+        {
+            auto read = std::make_unique<NColumnShard::TEvPrivate::TEvReadFinished>(*inFlightReads.begin());
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
-        } 
- 
-        // Advance the time and trigger some more compactions and cleanups 
-        planStep += 2*delay.MilliSeconds(); 
+        }
+
+        // Advance the time and trigger some more compactions and cleanups
+        planStep += 2*delay.MilliSeconds();
         numWrites = 10;
-        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) { 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData)); 
- 
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
             ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId); 
-        } 
- 
-        Cerr << "Compactions happened: " << compactionsHappened << Endl; 
-        Cerr << "Cleanups happened: " << cleanupsHappened << Endl; 
-        Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl; 
-        Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl; 
- 
-        // Check that previously kept portions are collected 
-        UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened); 
-        UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened); 
-        UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished"); 
-        UNIT_ASSERT_VALUES_EQUAL_C(delayedBlobs.size(), 0, "All previously delayed deletions must now happen"); 
-    } 
- 
-    Y_UNIT_TEST(CompactionGC) { 
-        TestCompactionGC(false); 
-    } 
- 
-    Y_UNIT_TEST(CompactionGCWithSmallBlobs) { 
-        TestCompactionGC(true); 
-    } 
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        Cerr << "Compactions happened: " << compactionsHappened << Endl;
+        Cerr << "Cleanups happened: " << cleanupsHappened << Endl;
+        Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
+        Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl;
+
+        // Check that previously kept portions are collected
+        UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened);
+        UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
+        UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
+        UNIT_ASSERT_VALUES_EQUAL_C(delayedBlobs.size(), 0, "All previously delayed deletions must now happen");
+    }
+
+    Y_UNIT_TEST(CompactionGC) {
+        TestCompactionGC(false);
+    }
+
+    Y_UNIT_TEST(CompactionGCWithSmallBlobs) {
+        TestCompactionGC(true);
+    }
 }
 
 }

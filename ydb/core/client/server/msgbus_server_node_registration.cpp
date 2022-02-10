@@ -23,8 +23,8 @@ class TNodeRegistrationActor : public TActorBootstrapped<TNodeRegistrationActor>
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    } 
- 
+    }
+
     TNodeRegistrationActor(NKikimrClient::TNodeRegistrationRequest &request, NMsgBusProxy::TBusMessageContext &msg)
         : TMessageBusSessionIdentHolder(msg)
         , Request(request)

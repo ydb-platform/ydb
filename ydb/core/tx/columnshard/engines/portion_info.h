@@ -6,13 +6,13 @@
 namespace NKikimr::NOlap {
 
 struct TPortionMeta {
-    // NOTE: These values are persisted in LocalDB so they must be stable 
+    // NOTE: These values are persisted in LocalDB so they must be stable
     enum EProduced : ui32 {
         UNSPECIFIED = 0,
         INSERTED = 1,
         COMPACTED = 2,
         SPLIT_COMPACTED = 3,
-        INACTIVE = 4 
+        INACTIVE = 4
     };
 
     struct TColumnMeta {
@@ -171,10 +171,10 @@ struct TPortionInfo {
 
     std::shared_ptr<arrow::Table> Assemble(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data) const; 
+                                           const THashMap<TBlobRange, TString>& data) const;
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data) const; 
+                                           const THashMap<TBlobRange, TString>& data) const;
 
     TString AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                               const std::shared_ptr<arrow::Field>& field,

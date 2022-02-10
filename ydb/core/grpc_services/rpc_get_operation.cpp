@@ -67,7 +67,7 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
 
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
- 
+
     void Bootstrap(const TActorContext &ctx) {
         const auto req = Request->GetProtoRequest();
 

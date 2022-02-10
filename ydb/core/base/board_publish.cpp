@@ -49,8 +49,8 @@ class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublish
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BOARD_REPLICA_PUBLISH_ACTOR;
-    } 
- 
+    }
+
     TBoardReplicaPublishActor(const TString &path, const TString &payload, TActorId replica, TActorId publishActor)
         : Path(path)
         , Payload(payload)
@@ -148,8 +148,8 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BOARD_PUBLISH_ACTOR;
-    } 
- 
+    }
+
     TBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg)
         : Path(path)
         , Payload(payload)

@@ -21,11 +21,11 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
-    if (deadline && deadline < AppData()->TimeProvider->Now()) { 
-        SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded"); 
+    if (deadline && deadline < AppData()->TimeProvider->Now()) {
+        SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");
         return true;
-    } 
- 
+    }
+
     const ui64 tableId = record.GetTableId();
     const TTableId fullTableId(self->GetPathOwnerId(), tableId);
     const ui64 localTableId = self->GetLocalTableId(fullTableId);
@@ -101,32 +101,32 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size() ||
             valueCells.GetCells().size() != valueCols.size())
         {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cell count doesn't match row scheme"); 
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cell count doesn't match row scheme");
             return true;
         }
 
         key.clear();
         size_t ki = 0;
-        ui64 keyBytes = 0; 
+        ui64 keyBytes = 0;
         for (const auto& kt : tableInfo.KeyColumnTypes) {
-            const TCell& c = keyCells.GetCells()[ki]; 
-            if (kt == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) { 
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited"); 
+            const TCell& c = keyCells.GetCells()[ki];
+            if (kt == NScheme::NTypeIds::Uint8 && !c.IsNull() && c.AsValue<ui8>() > 127) {
+                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Keys with Uint8 column values >127 are currently prohibited");
                 return true;
-            } 
- 
-            keyBytes += c.Size(); 
-            key.emplace_back(TRawTypeValue(c.AsRef(), kt)); 
+            }
+
+            keyBytes += c.Size();
+            key.emplace_back(TRawTypeValue(c.AsRef(), kt));
             ++ki;
         }
 
-        if (keyBytes > NLimits::MaxWriteKeySize) { 
-            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, 
-                     Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64, 
-                             keyBytes, NLimits::MaxWriteKeySize)); 
+        if (keyBytes > NLimits::MaxWriteKeySize) {
+            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                     Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
+                             keyBytes, NLimits::MaxWriteKeySize));
             return true;
-        } 
- 
+        }
+
         if (readForTableShadow) {
             rowState.Init(tagsForSelect.size());
 
@@ -148,13 +148,13 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         value.clear();
         size_t vi = 0;
         for (const auto& vt : valueCols) {
-            if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) { 
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, 
-                         Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64, 
-                                 valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize)); 
+            if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
+                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                         Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
+                                 valueCells.GetBuffer().Size(), NLimits::MaxWriteValueSize));
                 return true;
-            } 
- 
+            }
+
             bool allowUpdate = true;
             if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetOp(vi) != NTable::ECellOp::Empty) {
                 // We don't want to overwrite columns that already has some value
@@ -212,11 +212,11 @@ template <typename TEvRequest, typename TEvResponse>
 void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) {
     Y_VERIFY(Result);
 
-    if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) { 
-        self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS); 
-    } else { 
-        self->IncCounter(COUNTER_BULK_UPSERT_ERROR); 
-    } 
+    if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
+        self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS);
+    } else {
+        self->IncCounter(COUNTER_BULK_UPSERT_ERROR);
+    }
 
     ctx.Send(Ev->Sender, std::move(Result));
 }

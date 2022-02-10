@@ -14,7 +14,7 @@
 #include "flat_exec_commit.h"
 #include "flat_exec_read.h"
 #include "flat_executor_misc.h"
-#include "flat_executor_compaction_logic.h" 
+#include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
@@ -320,9 +320,9 @@ class TExecutor
 {
     using ELnLev = NUtil::ELnLev;
 
-    friend class TExecutorCompactionLogic; 
+    friend class TExecutorCompactionLogic;
     class TTxExecutorDbMon;
- 
+
     static constexpr ui64 PostponeTransactionMemThreshold = 250*1024*1024;
 
     struct TEvPrivate {
@@ -404,7 +404,7 @@ class TExecutor
     TLoadBlobQueue PendingBlobQueue;
 
     // Used control number of in flight events to the counter aggregator
-    TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight; 
+    TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
 
     TTabletCountersWithTxTypes* AppTxCounters = nullptr;
 
@@ -438,8 +438,8 @@ class TExecutor
 
     TActorContext OwnerCtx() const;
 
-    TControlWrapper LogFlushDelayOverrideUsec; 
- 
+    TControlWrapper LogFlushDelayOverrideUsec;
+
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
@@ -627,9 +627,9 @@ public:
     // database interface
     const NTable::TScheme& Scheme() const noexcept override;
     ui64 TabletId() const { return Owner->TabletID(); }
- 
+
     float GetRejectProbability() const override;
- 
+
     TActorId GetLauncher() const { return Launcher; }
 };
 

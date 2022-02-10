@@ -28,14 +28,14 @@ bool ParseBinPBFromFile(const TString &path, T *pb) {
     return ok;
 }
 
-// Deserialize persisted protobuf without checking size limit (size should have checked before saving) 
-template <class TProto> 
+// Deserialize persisted protobuf without checking size limit (size should have checked before saving)
+template <class TProto>
 bool ParseFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
     google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
     input.SetTotalBytesLimit(str.size());
-    return proto.ParseFromCodedStream(&input) && input.ConsumedEntireMessage(); 
+    return proto.ParseFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
- 
+
 template<typename TProto>
 struct TProtoBox : public TProto {
     TProtoBox(TArrayRef<const char> plain) {
@@ -50,7 +50,7 @@ bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
     google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
     input.SetTotalBytesLimit(str.size());
     return proto.MergeFromCodedStream(&input) && input.ConsumedEntireMessage();
-} 
+}
 
 inline TString SingleLineProto(const NProtoBuf::Message& message) {
     NProtoBuf::TextFormat::Printer p;

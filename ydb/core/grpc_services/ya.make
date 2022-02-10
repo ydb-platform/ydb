@@ -8,12 +8,12 @@ OWNER(
 SRCS(
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
-    grpc_mon.cpp 
+    grpc_mon.cpp
     grpc_publisher_service_actor.cpp
     grpc_request_proxy.cpp
     local_rate_limiter.cpp
     operation_helpers.cpp
-    resolve_local_db_table.cpp 
+    resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
@@ -42,29 +42,29 @@ SRCS(
     rpc_explain_data_query.cpp
     rpc_forget_operation.cpp
     rpc_get_operation.cpp
-    rpc_get_shard_locations.cpp 
+    rpc_get_shard_locations.cpp
     rpc_import.cpp
     rpc_import_data.cpp
     rpc_keep_alive.cpp
-    rpc_kh_describe.cpp 
+    rpc_kh_describe.cpp
     rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp
     rpc_list_operations.cpp
     rpc_login.cpp
-    rpc_load_rows.cpp 
-    rpc_log_store.cpp 
+    rpc_load_rows.cpp
+    rpc_log_store.cpp
     rpc_long_tx.cpp
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
     rpc_prepare_data_query.cpp
     rpc_rate_limiter_api.cpp
-    rpc_read_columns.cpp 
+    rpc_read_columns.cpp
     rpc_read_table.cpp
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
     rpc_rollback_transaction.cpp
-    rpc_s3_listing.cpp 
+    rpc_s3_listing.cpp
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp

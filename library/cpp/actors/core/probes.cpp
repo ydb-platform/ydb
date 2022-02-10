@@ -1,10 +1,10 @@
-#include "probes.h" 
- 
+#include "probes.h"
+
 #include "actorsystem.h"
 
 #include <util/string/builder.h>
 
-LWTRACE_DEFINE_PROVIDER(ACTORLIB_PROVIDER); 
+LWTRACE_DEFINE_PROVIDER(ACTORLIB_PROVIDER);
 
 namespace NActors {
     TVector<NLWTrace::TDashboard> LWTraceDashboards(TActorSystemSetup* setup) {

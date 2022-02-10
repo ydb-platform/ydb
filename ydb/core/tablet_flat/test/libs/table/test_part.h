@@ -81,11 +81,11 @@ namespace NTest {
 
             return { true, Get(part, room, ref) };
         }
- 
+
         const TSharedData* TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override
-        { 
+        {
             return Get(part, groupId.Index, ref);
-        } 
+        }
 
     private:
         const TSharedData* Get(const TPart *part, ui32 room, ui32 ref) const

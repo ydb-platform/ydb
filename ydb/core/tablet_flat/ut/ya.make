@@ -1,5 +1,5 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
- 
+
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
@@ -12,23 +12,23 @@ ELSE()
 ENDIF()
 
 OWNER(g:kikimr)
- 
-SRCS( 
+
+SRCS(
     datetime_ut.cpp
     decimal_ut.cpp
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp
     flat_executor_ut.cpp
-    flat_executor_database_ut.cpp 
-    flat_executor_gclogic_ut.cpp 
+    flat_executor_database_ut.cpp
+    flat_executor_gclogic_ut.cpp
     flat_range_cache_ut.cpp
     flat_row_versions_ut.cpp
     flat_sausagecache_ut.cpp
     flat_table_part_ut.cpp
-    flat_test_db.h 
-    flat_test_db.cpp 
-    flat_test_db_helpers.h 
+    flat_test_db.h
+    flat_test_db.cpp
+    flat_test_db_helpers.h
     shared_handle_ut.cpp
     ut_self.cpp
     ut_iterator.cpp
@@ -52,19 +52,19 @@ SRCS(
     ut_slice.cpp
     ut_slice_loader.cpp
     ut_versions.cpp
-) 
- 
+)
+
 RESOURCE(
     ../test/data/002_full_part.pages abi/002_full_part.pages
     ../test/data/008_basics_db.redo abi/008_basics_db.redo
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/resource
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
     ydb/library/yql/public/udf/service/exception_policy
-) 
- 
-END() 
+)
+
+END()

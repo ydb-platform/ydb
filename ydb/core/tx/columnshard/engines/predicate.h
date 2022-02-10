@@ -26,7 +26,7 @@ struct TPredicate {
     }
 
     std::string ToString() const {
-        return Empty() ? "()" : Batch->schema()->ToString(); 
+        return Empty() ? "()" : Batch->schema()->ToString();
     }
 
     TPredicate() = default;

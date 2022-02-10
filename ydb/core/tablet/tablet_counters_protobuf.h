@@ -186,9 +186,9 @@ public:
             return Ranges[idx];
         } else {
             if (idx < TxOffset) {
-                if (!AppGlobalRanges.empty()) 
+                if (!AppGlobalRanges.empty())
                     return AppGlobalRanges;
-            } else if (!TxGlobalRanges.empty()) { 
+            } else if (!TxGlobalRanges.empty()) {
                 return TxGlobalRanges;
             }
         }

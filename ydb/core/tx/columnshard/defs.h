@@ -76,11 +76,11 @@ struct TCompactionLimits {
 struct TUsage {
     ui64 CPUExecTime{};
     ui64 Network{};
- 
-    void Add(const TUsage& other) { 
-        CPUExecTime += other.CPUExecTime; 
-        Network += other.Network; 
-    } 
+
+    void Add(const TUsage& other) {
+        CPUExecTime += other.CPUExecTime;
+        Network += other.Network;
+    }
 };
 
 class TCpuGuard {
@@ -98,20 +98,20 @@ private:
     THPTimer CpuTimer;
 };
 
- 
-// A helper to resolve DS groups where a tablet's blob ids 
-class TBlobGroupSelector : public NOlap::IBlobGroupSelector { 
-private: 
-    TIntrusiveConstPtr<TTabletStorageInfo> TabletInfo; 
- 
-public: 
-    explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo) 
-        : TabletInfo(tabletInfo) 
-    {} 
- 
-    ui32 GetGroup(const TLogoBlobID& blobId) const override { 
-        return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation()); 
-    } 
-}; 
- 
+
+// A helper to resolve DS groups where a tablet's blob ids
+class TBlobGroupSelector : public NOlap::IBlobGroupSelector {
+private:
+    TIntrusiveConstPtr<TTabletStorageInfo> TabletInfo;
+
+public:
+    explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo)
+        : TabletInfo(tabletInfo)
+    {}
+
+    ui32 GetGroup(const TLogoBlobID& blobId) const override {
+        return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation());
+    }
+};
+
 }

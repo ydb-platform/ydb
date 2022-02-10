@@ -1,10 +1,10 @@
-#include "localdb.h" 
+#include "localdb.h"
 #include "compile_time_flags.h"
 
 #include <ydb/core/protos/resource_broker.pb.h>
 
 namespace NKikimr {
-namespace NLocalDb { 
+namespace NLocalDb {
 
 TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy()
     : Threshold(101)
@@ -100,12 +100,12 @@ TCompactionPolicy::TCompactionPolicy()
     : InMemSizeToSnapshot(4 * 1024 * 1024)
     , InMemStepsToSnapshot(300)
     , InMemForceStepsToSnapshot(500)
-    , InMemForceSizeToSnapshot(16 * 1024 * 1024) 
+    , InMemForceSizeToSnapshot(16 * 1024 * 1024)
     , InMemCompactionBrokerQueue(0)
     , InMemResourceBrokerTask(LegacyQueueIdToTaskName(0))
-    , ReadAheadHiThreshold(64 * 1024 * 1024) 
-    , ReadAheadLoThreshold(16 * 1024 * 1024) 
-    , MinDataPageSize(7*1024) 
+    , ReadAheadHiThreshold(64 * 1024 * 1024)
+    , ReadAheadLoThreshold(16 * 1024 * 1024)
+    , MinDataPageSize(7*1024)
     , SnapshotCompactionBrokerQueue(0)
     , SnapshotResourceBrokerTask(LegacyQueueIdToTaskName(0))
     , BackupCompactionBrokerQueue(1)
@@ -117,8 +117,8 @@ TCompactionPolicy::TCompactionPolicy()
     , DroppedRowsPercentToCompact(50)
     , CompactionStrategy(NKikimrSchemeOp::CompactionStrategyUnset)
     , KeepEraseMarkers(false)
-{} 
- 
+{}
+
 TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb)
     : InMemSizeToSnapshot(policyPb.HasInMemSizeToSnapshot() ? policyPb.GetInMemSizeToSnapshot() : 4 * 1024 * 1024)
     , InMemStepsToSnapshot(policyPb.HasInMemStepsToSnapshot() ? policyPb.GetInMemStepsToSnapshot() : 300)
@@ -147,27 +147,27 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
         SnapshotResourceBrokerTask = LegacyQueueIdToTaskName(SnapshotCompactionBrokerQueue);
     if (!BackupResourceBrokerTask || IsLegacyQueueIdTaskName(BackupResourceBrokerTask))
         BackupResourceBrokerTask = ScanTaskName;
-    Generations.reserve(policyPb.GenerationSize()); 
-    for (ui32 i = 0; i < policyPb.GenerationSize(); ++i) { 
-        const auto& g = policyPb.GetGeneration(i); 
+    Generations.reserve(policyPb.GenerationSize());
+    for (ui32 i = 0; i < policyPb.GenerationSize(); ++i) {
+        const auto& g = policyPb.GetGeneration(i);
         Y_VERIFY_DEBUG(g.GetGenerationId() == i);
         Generations.emplace_back(g);
-    } 
+    }
     if (policyPb.HasShardPolicy()) {
         ShardPolicy.CopyFrom(policyPb.GetShardPolicy());
     }
 }
 
 void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const {
-    policyPb.SetInMemSizeToSnapshot(InMemSizeToSnapshot); 
-    policyPb.SetInMemStepsToSnapshot(InMemStepsToSnapshot); 
-    policyPb.SetInMemForceStepsToSnapshot(InMemForceStepsToSnapshot); 
-    policyPb.SetInMemForceSizeToSnapshot(InMemForceSizeToSnapshot); 
+    policyPb.SetInMemSizeToSnapshot(InMemSizeToSnapshot);
+    policyPb.SetInMemStepsToSnapshot(InMemStepsToSnapshot);
+    policyPb.SetInMemForceStepsToSnapshot(InMemForceStepsToSnapshot);
+    policyPb.SetInMemForceSizeToSnapshot(InMemForceSizeToSnapshot);
     policyPb.SetInMemCompactionBrokerQueue(InMemCompactionBrokerQueue);
     policyPb.SetInMemResourceBrokerTask(InMemResourceBrokerTask);
-    policyPb.SetReadAheadHiThreshold(ReadAheadHiThreshold); 
-    policyPb.SetReadAheadLoThreshold(ReadAheadLoThreshold); 
-    policyPb.SetMinDataPageSize(MinDataPageSize); 
+    policyPb.SetReadAheadHiThreshold(ReadAheadHiThreshold);
+    policyPb.SetReadAheadLoThreshold(ReadAheadLoThreshold);
+    policyPb.SetMinDataPageSize(MinDataPageSize);
     policyPb.SetSnapBrokerQueue(SnapshotCompactionBrokerQueue);
     policyPb.SetSnapshotResourceBrokerTask(SnapshotResourceBrokerTask);
     policyPb.SetBackupBrokerQueue(BackupCompactionBrokerQueue);
@@ -187,13 +187,13 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
         policyPb.MutableShardPolicy()->CopyFrom(ShardPolicy);
     }
 
-    for (ui32 i = 0; i < Generations.size(); ++i) { 
+    for (ui32 i = 0; i < Generations.size(); ++i) {
         auto &g = *policyPb.AddGeneration();
-        g.SetGenerationId(i); 
+        g.SetGenerationId(i);
         Generations[i].Serialize(g);
-    } 
-} 
- 
+    }
+}
+
 TCompactionPolicyPtr CreateDefaultTablePolicy() {
     TCompactionPolicyPtr policy = new TCompactionPolicy;
 #if KIKIMR_DEFAULT_SHARDED_COMPACTION
@@ -203,9 +203,9 @@ TCompactionPolicyPtr CreateDefaultTablePolicy() {
     return policy;
 }
 
-TCompactionPolicyPtr CreateDefaultUserTablePolicy() { 
-    TCompactionPolicyPtr userPolicy = new TCompactionPolicy(); 
-    userPolicy->Generations.reserve(3); 
+TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
+    TCompactionPolicyPtr userPolicy = new TCompactionPolicy();
+    userPolicy->Generations.reserve(3);
     userPolicy->Generations.push_back({0, 8, 8, 128 * 1024 * 1024,
                 LegacyQueueIdToTaskName(1), true});
     userPolicy->Generations.push_back({40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024,
@@ -215,18 +215,18 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
 #if KIKIMR_DEFAULT_SHARDED_COMPACTION
     userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
 #endif
-    return userPolicy; 
+    return userPolicy;
 }
 
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err) {
-    if (newPolicy.Generations.size() < oldPolicy.Generations.size()) { 
+    if (newPolicy.Generations.size() < oldPolicy.Generations.size()) {
         err = Sprintf("Decreasing number of levels in compaction policy in not supported, old level count %u, new level count %u",
-           (ui32)oldPolicy.Generations.size(), (ui32)newPolicy.Generations.size()); 
-        return false; 
-    } 
-    return true; 
-} 
- 
+           (ui32)oldPolicy.Generations.size(), (ui32)newPolicy.Generations.size());
+        return false;
+    }
+    return true;
+}
+
 TString LegacyQueueIdToTaskName(ui32 id)
 {
     switch (id) {
@@ -264,4 +264,4 @@ const TString KqpResourceManagerTaskName = "kqp_query";
 const TString KqpResourceManagerQueue = "queue_kqp_resource_manager";
 const TString LegacyQueueIdTaskNamePrefix = "compaction_gen";
 
-}} 
+}}

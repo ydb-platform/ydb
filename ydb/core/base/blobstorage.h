@@ -1041,7 +1041,7 @@ struct TEvBlobStorage {
             , ReportDetailedPartMap(reportDetailedPartMap)
         {
             Y_VERIFY(QuerySize > 0, "can't execute empty get queries");
-            VerifySameTabletId(); 
+            VerifySameTabletId();
         }
 
         TEvGet(const TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline,
@@ -1094,7 +1094,7 @@ struct TEvBlobStorage {
         TString ToString() const {
             return Print(false);
         }
- 
+
         ui32 CalculateSize() const {
             return sizeof(*this) + QuerySize * sizeof(TQuery);
         }
@@ -1102,14 +1102,14 @@ struct TEvBlobStorage {
         std::unique_ptr<TEvGetResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
 
-    private: 
-        void VerifySameTabletId() const { 
-            for (ui32 i = 1; i < QuerySize; ++i) { 
-                Y_VERIFY(Queries[i].Id.TabletID() == Queries[0].Id.TabletID(), 
-                        "Trying to request blobs for different tablets in one request: %" PRIu64 ", %" PRIu64, 
-                        Queries[0].Id.TabletID(), Queries[i].Id.TabletID()); 
-            } 
-        } 
+    private:
+        void VerifySameTabletId() const {
+            for (ui32 i = 1; i < QuerySize; ++i) {
+                Y_VERIFY(Queries[i].Id.TabletID() == Queries[0].Id.TabletID(),
+                        "Trying to request blobs for different tablets in one request: %" PRIu64 ", %" PRIu64,
+                        Queries[0].Id.TabletID(), Queries[i].Id.TabletID());
+            }
+        }
     };
 
     struct TEvGetResult : public TEventLocal<TEvGetResult, EvGetResult> {

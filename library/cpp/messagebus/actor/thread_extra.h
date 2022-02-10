@@ -2,28 +2,28 @@
 
 #include <util/thread/singleton.h>
 
-namespace NTSAN { 
+namespace NTSAN {
     template <typename T>
     inline void RelaxedStore(volatile T* a, T x) {
         static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value");
-#ifdef _win_ 
+#ifdef _win_
         *a = x;
-#else 
+#else
         __atomic_store_n(a, x, __ATOMIC_RELAXED);
-#endif 
+#endif
     }
- 
+
     template <typename T>
     inline T RelaxedLoad(volatile T* a) {
-#ifdef _win_ 
+#ifdef _win_
         return *a;
-#else 
+#else
         return __atomic_load_n(a, __ATOMIC_RELAXED);
-#endif 
+#endif
     }
- 
-} 
- 
+
+}
+
 void SetCurrentThreadName(const char* name);
 
 namespace NThreadExtra {

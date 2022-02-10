@@ -427,7 +427,7 @@ public:
 
     void Timeout(const TActorContext& ctx) {
         ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx); 
+        Die(ctx);
     }
 };
 

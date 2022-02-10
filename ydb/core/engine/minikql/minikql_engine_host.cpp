@@ -8,16 +8,16 @@
 #include <ydb/core/tx/datashard/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 using TScheme = NTable::TScheme;
 
 void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInfo,
-    const TArrayRef<const TCell>& row,  TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes) 
+    const TArrayRef<const TCell>& row,  TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes)
 {
-    ui64 bytes = 0; 
+    ui64 bytes = 0;
     key.reserve(row.size());
     for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
@@ -25,25 +25,25 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
         NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
         if (cell.IsNull()) {
             key.emplace_back();
-            bytes += 1; 
+            bytes += 1;
         } else {
             key.emplace_back(cell.Data(), cell.Size(), vtype);
-            bytes += cell.Size(); 
+            bytes += cell.Size();
         }
     }
-    if (keyDataBytes) 
-        *keyDataBytes = bytes; 
+    if (keyDataBytes)
+        *keyDataBytes = bytes;
 }
 
-TEngineHost::TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters, const TEngineHostSettings& settings) 
+TEngineHost::TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters, const TEngineHostSettings& settings)
     : Db(db)
     , Scheme(db.GetScheme())
-    , Settings(settings) 
-    , Counters(counters) 
+    , Settings(settings)
+    , Counters(counters)
 {}
 
 ui64 TEngineHost::GetShardId() const {
-    return Settings.ShardId; 
+    return Settings.ShardId;
 }
 
 const TScheme::TTableInfo* TEngineHost::GetTableInfo(const TTableId& tableId) const {
@@ -51,7 +51,7 @@ const TScheme::TTableInfo* TEngineHost::GetTableInfo(const TTableId& tableId) co
 }
 
 bool TEngineHost::IsReadonly() const {
-    return Settings.IsReadonly; 
+    return Settings.IsReadonly;
 }
 
 
@@ -121,27 +121,27 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
 
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
     NTable::TSizeEnv env;
- 
+
     for (const TKeyDesc* ki : keys) {
-        DoCalculateReadSize(*ki, env); 
-    } 
- 
-    return env.GetSize(); 
+        DoCalculateReadSize(*ki, env);
+    }
+
+    return env.GetSize();
 }
 
 void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env) const {
-    if (TSysTables::IsSystemTable(key.TableId)) 
-        return; 
-    if (key.RowOperation != TKeyDesc::ERowOperation::Read) 
-        return; 
-    ui64 localTid = LocalTableId(key.TableId); 
-    Y_VERIFY(localTid, "table not exist"); 
-    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid); 
-    TSmallVec<TRawTypeValue> keyFrom; 
-    TSmallVec<TRawTypeValue> keyTo; 
-    ConvertKeys(tableInfo, key.Range.From, keyFrom); 
-    ConvertKeys(tableInfo, key.Range.To, keyTo); 
- 
+    if (TSysTables::IsSystemTable(key.TableId))
+        return;
+    if (key.RowOperation != TKeyDesc::ERowOperation::Read)
+        return;
+    ui64 localTid = LocalTableId(key.TableId);
+    Y_VERIFY(localTid, "table not exist");
+    const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+    TSmallVec<TRawTypeValue> keyFrom;
+    TSmallVec<TRawTypeValue> keyTo;
+    ConvertKeys(tableInfo, key.Range.From, keyFrom);
+    ConvertKeys(tableInfo, key.Range.To, keyTo);
+
     TSmallVec<NTable::TTag> tags;
     for (const auto& column : key.Columns) {
         if (Y_LIKELY(column.Operation == TKeyDesc::EColumnOperation::Read)) {
@@ -149,39 +149,39 @@ void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env
         }
     }
 
-    Db.CalculateReadSize(env, localTid, 
-                               keyFrom, 
-                               keyTo, 
+    Db.CalculateReadSize(env, localTid,
+                               keyFrom,
+                               keyTo,
                                tags,
-                               0, 
+                               0,
                                key.RangeLimits.ItemsLimit, key.RangeLimits.BytesLimit,
                                key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward);
-} 
- 
-ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const { 
-    if (TSysTables::IsSystemTable(key.TableId)) 
-        return 0; 
- 
-    ui64 localTid = LocalTableId(key.TableId); 
-    Y_VERIFY(localTid, "table not exist"); 
-    if (key.Range.Point) { 
-        return Db.EstimateRowSize(localTid); 
-    } else { 
+}
+
+ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
+    if (TSysTables::IsSystemTable(key.TableId))
+        return 0;
+
+    ui64 localTid = LocalTableId(key.TableId);
+    Y_VERIFY(localTid, "table not exist");
+    if (key.Range.Point) {
+        return Db.EstimateRowSize(localTid);
+    } else {
         NTable::TSizeEnv env;
-        DoCalculateReadSize(key, env); 
-        ui64 size = env.GetSize(); 
- 
-        if (key.RangeLimits.ItemsLimit != 0) { 
-            ui64 rowSize = Db.EstimateRowSize(localTid); 
-            size = Min(size, rowSize*key.RangeLimits.ItemsLimit); 
-        } 
-        if (key.RangeLimits.BytesLimit != 0) { 
-            size = Min(size, key.RangeLimits.BytesLimit); 
-        } 
-        return size; 
-    } 
-} 
- 
+        DoCalculateReadSize(key, env);
+        ui64 size = env.GetSize();
+
+        if (key.RangeLimits.ItemsLimit != 0) {
+            ui64 rowSize = Db.EstimateRowSize(localTid);
+            size = Min(size, rowSize*key.RangeLimits.ItemsLimit);
+        }
+        if (key.RangeLimits.BytesLimit != 0) {
+            size = Min(size, key.RangeLimits.BytesLimit);
+        }
+        return size;
+    }
+}
+
 void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) {
     ui64 limitMultiplier = 1;
     if (pageFaultCount >= 2) {
@@ -200,9 +200,9 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         }
     };
 
-    bool ret = true; 
-    for (const auto& ki : keys) { 
-        const TKeyDesc& key = *ki; 
+    bool ret = true;
+    for (const auto& ki : keys) {
+        const TKeyDesc& key = *ki;
         if (TSysTables::IsSystemTable(key.TableId))
             continue;
 
@@ -225,17 +225,17 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         }
 
         if (columnOpFilter.empty()) {
-            continue; 
+            continue;
         }
 
-        ui64 localTid = LocalTableId(key.TableId); 
-        Y_VERIFY(localTid, "table not exist"); 
-        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid); 
-        TSmallVec<TRawTypeValue> keyFrom; 
-        TSmallVec<TRawTypeValue> keyTo; 
-        ConvertKeys(tableInfo, key.Range.From, keyFrom); 
-        ConvertKeys(tableInfo, key.Range.To, keyTo); 
- 
+        ui64 localTid = LocalTableId(key.TableId);
+        Y_VERIFY(localTid, "table not exist");
+        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
+        TSmallVec<TRawTypeValue> keyFrom;
+        TSmallVec<TRawTypeValue> keyTo;
+        ConvertKeys(tableInfo, key.Range.From, keyFrom);
+        ConvertKeys(tableInfo, key.Range.To, keyTo);
+
         TSmallVec<NTable::TTag> tags;
         for (const auto& column : key.Columns) {
             if (columnOpFilter.contains(column.Operation)) {
@@ -243,22 +243,22 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
             }
         }
 
-        bool ready =  Db.Precharge(localTid, 
+        bool ready =  Db.Precharge(localTid,
                                    keyFrom,
-                                   key.Range.Point ? keyFrom : keyTo, 
+                                   key.Range.Point ? keyFrom : keyTo,
                                    tags,
-                                   Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0, 
+                                   Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
                                    adjustLimit(key.RangeLimits.ItemsLimit),
                                    adjustLimit(key.RangeLimits.BytesLimit),
                                    key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
                                    GetReadVersion(key.TableId));
-        ret &= ready; 
-    } 
- 
-    if (!ret) 
-        throw TNotReadyTabletException(); 
-} 
- 
+        ret &= ready;
+    }
+
+    if (!ret)
+        throw TNotReadyTabletException();
+}
+
 NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
     TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
     const THolderFactory& holderFactory)
@@ -275,7 +275,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     ui64 localTid = LocalTableId(tableId);
     Y_VERIFY(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
-    TSmallVec<TRawTypeValue> key; 
+    TSmallVec<TRawTypeValue> key;
     ConvertKeys(tableInfo, row, key);
 
     TSmallVec<NTable::TTag> tags;
@@ -292,9 +292,9 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     if (key.size() != Db.GetScheme().GetTableInfo(localTid)->KeyColumns.size())
         throw TSchemeErrorTabletException();
 
-    Counters.NSelectRow++; 
-    Settings.KeyAccessSampler->AddSample(tableId, row); 
- 
+    Counters.NSelectRow++;
+    Settings.KeyAccessSampler->AddSample(tableId, row);
+
     NTable::TSelectStats stats;
     ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
     const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId));
@@ -315,10 +315,10 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto rowResult = holderFactory.CreateDirectArrayHolder(tags.size(), rowItems);
 
-    ui64 rowBytes = 0; 
+    ui64 rowBytes = 0;
     for (ui32 i = 0; i < tags.size(); ++i) {
         rowItems[i] = GetCellValue(dbRow.Get(i), cellTypes[i]);
-        rowBytes += dbRow.Get(i).IsNull() ? 1 : dbRow.Get(i).Size(); 
+        rowBytes += dbRow.Get(i).IsNull() ? 1 : dbRow.Get(i).Size();
     }
     for (ui32 i = 0; i < systemColumnTags.size(); ++i) {
         switch (systemColumnTags[i]) {
@@ -329,11 +329,11 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
             ythrow yexception() << "Unknown system column tag: " << systemColumnTags[i];
         }
     }
-    rowBytes = std::max(rowBytes, (ui64)8); 
+    rowBytes = std::max(rowBytes, (ui64)8);
 
-    Counters.SelectRowBytes += rowBytes; 
+    Counters.SelectRowBytes += rowBytes;
     Counters.SelectRowRows++;
- 
+
     return std::move(rowResult);
 }
 
@@ -487,7 +487,7 @@ public:
             , Bytes(0)
             , SystemColumnTags(systemColumnTags)
             , ShardId(shardId) {}
- 
+
         bool Next(NUdf::TUnboxedValue& value) override {
             bool truncated = false;
 
@@ -546,7 +546,7 @@ public:
                 TDbTupleRef rowValues = Iter->GetValues();
                 ui64 rowSize = 0;
                 for (ui32 i = 0; i < rowValues.ColumnCount; ++i) {
-                    rowSize += rowValues.Columns[i].IsNull() ? 1 : rowValues.Columns[i].Size(); 
+                    rowSize += rowValues.Columns[i].IsNull() ? 1 : rowValues.Columns[i].Size();
                 }
                 // Some per-row overhead to deal with the case when no columns were requested
                 rowSize = std::max(rowSize, (ui64)8);
@@ -555,7 +555,7 @@ public:
                 Bytes += rowSize;
                 List.EngineHost.GetCounters().SelectRangeRows++;
                 List.EngineHost.GetCounters().SelectRangeBytes += rowSize;
-                List.KeyAccessSampler->AddSample(List.TableId, tuple.Cells()); 
+                List.KeyAccessSampler->AddSample(List.TableId, tuple.Cells());
 
                 if (HasCurrent && CurrentRowValue.UniqueBoxed()) {
                     CurrentRow()->Reuse(rowValues);
@@ -625,14 +625,14 @@ public:
 
 public:
     TSelectRangeLazyRowsList(NTable::TDatabase& db, const TScheme& scheme, const THolderFactory& holderFactory,
-        const TTableId& tableId, ui64 localTid, const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range, 
+        const TTableId& tableId, ui64 localTid, const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range,
         ui64 itemsLimit, ui64 bytesLimit, bool reverse, TEngineHost& engineHost
-        , const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler) 
+        , const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler)
         : TCustomListValue(&holderFactory.GetMemInfo())
         , Db(db)
         , Scheme(scheme)
         , HolderFactory(holderFactory)
-        , TableId(tableId) 
+        , TableId(tableId)
         , LocalTid(localTid)
         , Tags(tags)
         , SystemColumnTags(systemColumnTags)
@@ -643,8 +643,8 @@ public:
         , RangeHolder(range)
         , Reverse(reverse)
         , EngineHost(engineHost)
-        , KeyAccessSampler(keyAccessSampler) 
-    {} 
+        , KeyAccessSampler(keyAccessSampler)
+    {}
 
     NUdf::TUnboxedValue GetListIterator() const override {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTid);
@@ -708,7 +708,7 @@ private:
     NTable::TDatabase& Db;
     const TScheme& Scheme;
     const THolderFactory& HolderFactory;
-    TTableId TableId; 
+    TTableId TableId;
     ui64 LocalTid;
     TSmallVec<NTable::TTag> Tags;
     TSmallVec<NTable::TTag> SystemColumnTags;
@@ -723,17 +723,17 @@ private:
     mutable TMaybe<TString> FirstKey;
     mutable TMaybe<ui64> SizeBytes;
     TEngineHost& EngineHost;
-    IKeyAccessSampler::TPtr KeyAccessSampler; 
+    IKeyAccessSampler::TPtr KeyAccessSampler;
 };
 
 class TSelectRangeResult : public TComputationValue<TSelectRangeResult> {
 public:
-    TSelectRangeResult(NTable::TDatabase& db, const TScheme& scheme, const THolderFactory& holderFactory, const TTableId& tableId, ui64 localTid, 
+    TSelectRangeResult(NTable::TDatabase& db, const TScheme& scheme, const THolderFactory& holderFactory, const TTableId& tableId, ui64 localTid,
         const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range,
         ui64 itemsLimit, ui64 bytesLimit, bool reverse, TEngineHost& engineHost,
-        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler) 
+        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler)
         : TComputationValue(&holderFactory.GetMemInfo())
-        , List(NUdf::TUnboxedValuePod(new TSelectRangeLazyRowsList(db, scheme, holderFactory, tableId, localTid, tags, 
+        , List(NUdf::TUnboxedValuePod(new TSelectRangeLazyRowsList(db, scheme, holderFactory, tableId, localTid, tags,
             skipNullKeys, range, itemsLimit, bytesLimit, reverse, engineHost, systemColumnTags, shardId, keyAccessSampler))) {}
 
 private:
@@ -842,9 +842,9 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
         }
     }
 
-    Counters.NSelectRange++; 
- 
-    return NUdf::TUnboxedValuePod(new TSelectRangeResult(Db, Scheme, holderFactory, tableId, localTid, tags, 
+    Counters.NSelectRange++;
+
+    return NUdf::TUnboxedValuePod(new TSelectRangeResult(Db, Scheme, holderFactory, tableId, localTid, tags,
         skipNullKeysFlags, range, itemsLimit, bytesLimit, reverse, *this, systemColumnTags, GetShardId(),
         Settings.KeyAccessSampler));
 }
@@ -854,11 +854,11 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     ui64 localTid = LocalTableId(tableId);
     Y_VERIFY(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
-    TSmallVec<TRawTypeValue> key; 
-    ui64 keyBytes = 0; 
+    TSmallVec<TRawTypeValue> key;
+    ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
-    ui64 valueBytes = 0; 
+    ui64 valueBytes = 0;
     TSmallVec<NTable::TUpdateOp> ops;
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
@@ -866,7 +866,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
-        valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size(); 
+        valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 
     if (auto collector = GetChangeCollector(tableId)) {
@@ -882,10 +882,10 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     }
 
     Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
- 
-    Settings.KeyAccessSampler->AddSample(tableId, row); 
-    Counters.NUpdateRow++; 
-    Counters.UpdateRowBytes += keyBytes + valueBytes; 
+
+    Settings.KeyAccessSampler->AddSample(tableId, row);
+    Counters.NUpdateRow++;
+    Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
 // Erases the single row.
@@ -893,10 +893,10 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     ui64 localTid = LocalTableId(tableId);
     Y_VERIFY(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
-    TSmallVec<TRawTypeValue> key; 
-    ui64 keyBytes = 0; 
+    TSmallVec<TRawTypeValue> key;
+    ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
- 
+
     if (auto collector = GetChangeCollector(tableId)) {
         collector->SetWriteVersion(GetWriteVersion(tableId));
         if (collector->NeedToReadKeys()) {
@@ -911,9 +911,9 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
 
     Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
 
-    Settings.KeyAccessSampler->AddSample(tableId, row); 
-    Counters.NEraseRow++; 
-    Counters.EraseRowBytes += keyBytes + 8; 
+    Settings.KeyAccessSampler->AddSample(tableId, row);
+    Counters.NEraseRow++;
+    Counters.EraseRowBytes += keyBytes + 8;
 }
 
 // Check that table is erased
@@ -936,8 +936,8 @@ ui64 TEngineHost::LocalTableId(const TTableId& tableId) const {
     return tableId.PathId.LocalPathId;
 }
 
-void TEngineHost::ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row, 
-    TSmallVec<TRawTypeValue>& key) const 
+void TEngineHost::ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
+    TSmallVec<TRawTypeValue>& key) const
 {
     ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 }

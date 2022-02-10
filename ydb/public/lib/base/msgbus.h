@@ -65,7 +65,7 @@ enum {
     MTYPE_CLIENT_GET_REQUEST = 10454,
     MTYPE_CLIENT_GET_RESPONSE = 10455,
     MTYPE_CLIENT_DB_QUERY = 10456,
-    MTYPE_CLIENT_TABLET_COUNTERS_REQUEST = 10457, 
+    MTYPE_CLIENT_TABLET_COUNTERS_REQUEST = 10457,
     MTYPE_CLIENT_CANCEL_BACKUP = 10458,
     MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST = 10459,
     MTYPE_CLIENT_DRAIN_NODE = 10460,
@@ -81,8 +81,8 @@ enum {
     MTYPE_CLIENT_SQS_RESPONSE = 10470,
     MTYPE_CLIENT_WHOAMI = 10471,
     MTYPE_CLIENT_STREAM_REQUEST = 10472,
-    MTYPE_CLIENT_S3_LISTING_REQUEST = 10474, 
-    MTYPE_CLIENT_S3_LISTING_RESPONSE = 10475, 
+    MTYPE_CLIENT_S3_LISTING_REQUEST = 10474,
+    MTYPE_CLIENT_S3_LISTING_RESPONSE = 10475,
     MTYPE_CLIENT_INTERCONNECT_DEBUG = 10476,
     MTYPE_CLIENT_CONSOLE_REQUEST = 10477,
     MTYPE_CLIENT_CONSOLE_RESPONSE = 10478,
@@ -116,7 +116,7 @@ struct TBusMessageBusTraceRequest : TBusMessage<TBusMessageBusTraceRequest, NKik
 struct TBusMessageBusTraceStatus : TBusMessage<TBusMessageBusTraceStatus, NKikimrClient::TMessageBusTraceStatus, MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS> {};
 struct TBusTabletKillRequest : TBusMessage<TBusTabletKillRequest, NKikimrClient::TTabletKillRequest, MTYPE_CLIENT_TABLET_KILL_REQUEST> {};
 struct TBusTabletStateRequest : TBusMessage<TBusTabletStateRequest, NKikimrClient::TTabletStateRequest, MTYPE_CLIENT_TABLET_STATE_REQUEST> {};
-struct TBusTabletCountersRequest : TBusMessage<TBusTabletCountersRequest, NKikimrClient::TTabletCountersRequest, MTYPE_CLIENT_TABLET_COUNTERS_REQUEST> {}; 
+struct TBusTabletCountersRequest : TBusMessage<TBusTabletCountersRequest, NKikimrClient::TTabletCountersRequest, MTYPE_CLIENT_TABLET_COUNTERS_REQUEST> {};
 struct TBusTabletLocalMKQL : TBusMessage<TBusTabletLocalMKQL, NKikimrClient::TLocalMKQL, MTYPE_CLIENT_LOCAL_MINIKQL> {};
 struct TBusTabletLocalSchemeTx : TBusMessage<TBusTabletLocalSchemeTx, NKikimrClient::TLocalSchemeTx, MTYPE_CLIENT_LOCAL_SCHEME_TX> {};
 struct TBusSchemeOperation : TBusMessage<TBusSchemeOperation, NKikimrClient::TSchemeOperation, MTYPE_CLIENT_FLAT_TX_REQUEST> {};
@@ -145,8 +145,8 @@ struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, 
 struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
 struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
 struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {};
-struct TBusS3ListingRequest : TBusMessage<TBusS3ListingRequest, NKikimrClient::TS3ListingRequest, MTYPE_CLIENT_S3_LISTING_REQUEST> {}; 
-struct TBusS3ListingResponse : TBusMessage<TBusS3ListingResponse, NKikimrClient::TS3ListingResponse, MTYPE_CLIENT_S3_LISTING_RESPONSE> {}; 
+struct TBusS3ListingRequest : TBusMessage<TBusS3ListingRequest, NKikimrClient::TS3ListingRequest, MTYPE_CLIENT_S3_LISTING_REQUEST> {};
+struct TBusS3ListingResponse : TBusMessage<TBusS3ListingResponse, NKikimrClient::TS3ListingResponse, MTYPE_CLIENT_S3_LISTING_RESPONSE> {};
 struct TBusInterconnectDebug : TBusMessage<TBusInterconnectDebug, NKikimrClient::TInterconnectDebug, MTYPE_CLIENT_INTERCONNECT_DEBUG> {};
 struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {};
 struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
@@ -213,9 +213,9 @@ public:
         RegisterType(new TBusPersQueue);
         RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);
-        RegisterType(new TBusTabletCountersRequest); 
+        RegisterType(new TBusTabletCountersRequest);
         RegisterType(new TBusTabletLocalMKQL);
-        RegisterType(new TBusTabletLocalSchemeTx); 
+        RegisterType(new TBusTabletLocalSchemeTx);
         RegisterType(new TBusSchemeOperation);
         RegisterType(new TBusSchemeOperationStatus);
         RegisterType(new TBusSchemeDescribe);
@@ -240,8 +240,8 @@ public:
         RegisterType(new TBusChooseProxy);
         RegisterType(new TBusWhoAmI);
         RegisterType(new TBusStreamRequest);
-        RegisterType(new TBusS3ListingRequest); 
-        RegisterType(new TBusS3ListingResponse); 
+        RegisterType(new TBusS3ListingRequest);
+        RegisterType(new TBusS3ListingResponse);
         RegisterType(new TBusInterconnectDebug);
         RegisterType(new TBusConsoleRequest);
         RegisterType(new TBusConsoleResponse);

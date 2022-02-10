@@ -142,8 +142,8 @@ class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
-    } 
- 
+    }
+
     TListEndpointsRPC(TEvListEndpointsRequest::TPtr &msg, TActorId cacheId)
         : Request(msg->Release().Release())
         , CacheId(cacheId)

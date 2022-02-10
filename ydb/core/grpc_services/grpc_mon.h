@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/base/defs.h>
- 
-#include <util/generic/string.h> 
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
+
+#include <util/generic/string.h>
+
+namespace NKikimr {
+namespace NGRpcService {
+
 TActorId GrpcMonServiceId();
-IActor* CreateGrpcMonService(); 
- 
+IActor* CreateGrpcMonService();
+
 void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress);
 void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress, const TString& buildInfo);
- 
-}} 
+
+}}

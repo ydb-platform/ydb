@@ -36,8 +36,8 @@ SRCS(
     interconnect_channels.h
     kikimr_issue.cpp
     kikimr_issue.h
-    localdb.cpp 
-    localdb.h 
+    localdb.cpp
+    localdb.h
     location.h
     logoblob.cpp
     logoblob.h

@@ -16,9 +16,9 @@ namespace NActors {
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
         , MailboxTable(new TMailboxTable)
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
-        , Stats(maxActivityType) 
-#endif 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+        , Stats(maxActivityType)
+#endif
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
@@ -47,9 +47,9 @@ namespace NActors {
 
     bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
         Y_VERIFY_DEBUG(ev->GetRecipientRewrite().PoolID() == PoolId);
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
-#endif 
+#endif
         return MailboxTable->SendTo(ev, this);
     }
 
@@ -59,21 +59,21 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
-#endif 
+#endif
         AtomicIncrement(ActorRegistrations);
- 
+
         // first step - find good enough mailbox
         ui32 hint = 0;
         TMailboxHeader* mailbox = nullptr;
 
         if (revolvingWriteCounter == 0)
             revolvingWriteCounter = AtomicIncrement(RegisterRevolvingCounter);
- 
+
         {
             ui32 hintBackoff = 0;
 
@@ -122,7 +122,7 @@ namespace NActors {
             default:
                 Y_FAIL();
         }
- 
+
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
         if (elapsed > 1000000) {
             LWPROBE(SlowRegisterNew, PoolId, NHPTimer::GetSeconds(elapsed) * 1000.0);
@@ -133,14 +133,14 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
-#endif 
+#endif
         AtomicIncrement(ActorRegistrations);
- 
+
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
 

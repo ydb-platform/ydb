@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include "blob_manager.h" 
+#include "blob_manager.h"
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -8,9 +8,9 @@
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
-// TODO: temporarily reuse datashard TEvScan (KIKIMR-11069) 
+// TODO: temporarily reuse datashard TEvScan (KIKIMR-11069)
 #include <ydb/core/tx/datashard/datashard.h>
- 
+
 namespace NKikimr {
 
 struct TEvColumnShard {
@@ -20,8 +20,8 @@ struct TEvColumnShard {
         EvProposeTransactionResult,
         EvNotifyTxCompletion,
         EvNotifyTxCompletionResult,
-        EvReadBlobRanges, 
-        EvReadBlobRangesResult, 
+        EvReadBlobRanges,
+        EvReadBlobRangesResult,
 
         EvWrite = EvProposeTransaction + 256,
         EvRead,
@@ -127,22 +127,22 @@ struct TEvColumnShard {
         }
     };
 
-    // Read small blobs from the tablet 
-    struct TEvReadBlobRanges : public TEventPB<TEvReadBlobRanges, 
-                                                NKikimrTxColumnShard::TEvReadBlobRanges, 
-                                                TEvColumnShard::EvReadBlobRanges> 
-    { 
-    }; 
- 
-    struct TEvReadBlobRangesResult : public TEventPB<TEvReadBlobRangesResult, 
-                                                NKikimrTxColumnShard::TEvReadBlobRangesResult, 
-                                                TEvColumnShard::EvReadBlobRangesResult> 
-    { 
-        explicit TEvReadBlobRangesResult(ui64 tabletId = 0) { 
-            Record.SetTabletId(tabletId); 
-        } 
-    }; 
- 
+    // Read small blobs from the tablet
+    struct TEvReadBlobRanges : public TEventPB<TEvReadBlobRanges,
+                                                NKikimrTxColumnShard::TEvReadBlobRanges,
+                                                TEvColumnShard::EvReadBlobRanges>
+    {
+    };
+
+    struct TEvReadBlobRangesResult : public TEventPB<TEvReadBlobRangesResult,
+                                                NKikimrTxColumnShard::TEvReadBlobRangesResult,
+                                                TEvColumnShard::EvReadBlobRangesResult>
+    {
+        explicit TEvReadBlobRangesResult(ui64 tabletId = 0) {
+            Record.SetTabletId(tabletId);
+        }
+    };
+
     struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
 
@@ -176,12 +176,12 @@ struct TEvColumnShard {
         }
 
         NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
-        NColumnShard::TUnifiedBlobId BlobId; 
-        NColumnShard::TBlobBatch BlobBatch; 
+        NColumnShard::TUnifiedBlobId BlobId;
+        NColumnShard::TBlobBatch BlobBatch;
         NColumnShard::TUsage ResourceUsage;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
-        ui64 MaxSmallBlobSize; 
+        ui64 MaxSmallBlobSize;
     };
 
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,
@@ -234,7 +234,7 @@ struct TEvColumnShard {
             Record.CopyFrom(ev.Record);
         }
     };
- 
+
     using TEvScan = TEvDataShard::TEvKqpScan;
 };
 

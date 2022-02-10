@@ -1,8 +1,8 @@
 #include "columnshard_impl.h"
 #include "columnshard_txs.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h" 
-#include "blob_cache.h" 
+#include "blob_manager_db.h"
+#include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -39,14 +39,14 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
             writeId = (ui64)Self->GetLongTxWrite(db, longTxId);
         }
- 
+
         ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
         TInstant time = TInstant::Seconds(writeUnixTime);
 
         // First write wins
-        TBlobGroupSelector dsGroupSelector(Self->Info()); 
-        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector); 
-        ok = Self->InsertTable->Insert(dbTable, NOlap::TInsertedData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time)); 
+        TBlobGroupSelector dsGroupSelector(Self->Info());
+        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+        ok = Self->InsertTable->Insert(dbTable, NOlap::TInsertedData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time));
         if (ok) {
             auto newAborted = Self->InsertTable->AbortOld(dbTable, time);
             for (auto& writeId : newAborted) {
@@ -57,15 +57,15 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             // It's not optimal but correct.
             TBlobManagerDb blobManagerDb(txc.DB);
             auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)
-            for (auto& [abortedWriteId, abortedData] : allAborted) { 
-                Self->InsertTable->EraseAborted(dbTable, abortedData); 
-                Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb); 
+            for (auto& [abortedWriteId, abortedData] : allAborted) {
+                Self->InsertTable->EraseAborted(dbTable, abortedData);
+                Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
             }
 
-            // Put new data into cache 
-            Y_VERIFY(logoBlobId.BlobSize() == data.size()); 
-            NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data); 
- 
+            // Put new data into cache
+            Y_VERIFY(logoBlobId.BlobSize() == data.size());
+            NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
+
             Self->UpdateInsertTableCounters();
 
             ui64 blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();

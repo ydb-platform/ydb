@@ -193,7 +193,7 @@ namespace Tests {
 
         app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
         app.SetFnRegistry(Settings->FrFactory);
-        app.SetFormatsFactory(Settings->Formats); 
+        app.SetFormatsFactory(Settings->Formats);
 
         if (Settings->Formats) {
             NKikHouse::RegisterFormat(*Settings->Formats);
@@ -252,33 +252,33 @@ namespace Tests {
         auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(Settings->AppConfig);
         auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
-        auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled); 
-        system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon); 
+        auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
+        system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
 
         GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
 
-        auto& appData = Runtime->GetAppData(); 
- 
-        // Setup discovery for typically used services on the node 
-        { 
-            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription(); 
-            desc->Address = options.Host; 
-            desc->Port = options.Port; 
-            desc->Ssl = !options.SslData.Empty(); 
- 
-            TVector<TString> rootDomains; 
-            for (auto &domain : appData.DomainsInfo->Domains) { 
-                rootDomains.emplace_back("/" + domain.second->Name); 
-            } 
-            desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end()); 
- 
+        auto& appData = Runtime->GetAppData();
+
+        // Setup discovery for typically used services on the node
+        {
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            desc->Address = options.Host;
+            desc->Port = options.Port;
+            desc->Ssl = !options.SslData.Empty();
+
+            TVector<TString> rootDomains;
+            for (auto &domain : appData.DomainsInfo->Domains) {
+                rootDomains.emplace_back("/" + domain.second->Name);
+            }
+            desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
+
             TVector<TString> grpcServices = {"yql", "clickhouse_internal", "datastreams", "table_service", "scripting", "experimental", "discovery", "pqcd", "pq", "pqv1" };
-            desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end()); 
- 
-            system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId); 
-        } 
- 
+            desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
+
+            system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
+
         auto future = grpcService->Prepare(
             system,
             NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
@@ -311,9 +311,9 @@ namespace Tests {
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId)); 
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId)); 
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId));
@@ -328,7 +328,7 @@ namespace Tests {
                 GRpcServer->AddService(service);
             }
         }
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId));
         GRpcServer->Start();
     }
@@ -936,7 +936,7 @@ namespace Tests {
     }
 
     bool TClient::LoadTypes() {
-        TAutoPtr<NMsgBusProxy::TBusTypesRequest> request(new NMsgBusProxy::TBusTypesRequest()); 
+        TAutoPtr<NMsgBusProxy::TBusTypesRequest> request(new NMsgBusProxy::TBusTypesRequest());
         if (TypesEtag.Defined()) {
             request->Record.SetETag(*TypesEtag.Get());
         }
@@ -1024,7 +1024,7 @@ namespace Tests {
 #ifndef NDEBUG
         Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
-        return reply; 
+        return reply;
     }
 
     void TClient::InitRootScheme() {
@@ -1040,7 +1040,7 @@ namespace Tests {
 
 
     void TClient::ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path) {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest()); 
+        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(command);
         if (path)
             request->Record.SetPath(path);
@@ -1049,7 +1049,7 @@ namespace Tests {
     }
 
     TString TClient::StartTrace(const TString &path) {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest()); 
+        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START);
         if (path)
             request->Record.SetPath(path);
@@ -1064,7 +1064,7 @@ namespace Tests {
     }
 
     void TClient::StopTrace() {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest()); 
+        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
         request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP);
         TAutoPtr<NBus::TBusMessage> reply;
         UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
@@ -1075,7 +1075,7 @@ namespace Tests {
                                         TDuration timeout)
     {
         auto deadline = TInstant::Now() + timeout;
- 
+
         NBus::EMessageStatus status;
         const NKikimrClient::TResponse* response = nullptr;
         do {
@@ -1087,15 +1087,15 @@ namespace Tests {
 #ifndef NDEBUG
             Cerr << "waiting..." << Endl;
 #endif
-            status = SyncCall(msg, reply); 
-            if (status != NBus::MESSAGE_OK) { 
-                const char *description = NBus::MessageStatusDescription(status); 
-                Cerr << description << Endl; 
-                return status; 
-            } 
+            status = SyncCall(msg, reply);
+            if (status != NBus::MESSAGE_OK) {
+                const char *description = NBus::MessageStatusDescription(status);
+                Cerr << description << Endl;
+                return status;
+            }
             if (reply->GetHeader()->Type != NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
-                break; 
-            } 
+                break;
+            }
             response = &static_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
         } while (response->GetStatus() == NMsgBusProxy::MSTATUS_INPROGRESS && deadline >= TInstant::Now());
 
@@ -1109,7 +1109,7 @@ namespace Tests {
 
         if (status != NBus::MESSAGE_OK) {
             return status;
-        } 
+        }
 
         const NMsgBusProxy::TBusResponse* flatResponse = dynamic_cast<const NMsgBusProxy::TBusResponse*>(reply.Get());
         if (!flatResponse)
@@ -1117,9 +1117,9 @@ namespace Tests {
 
         const NKikimrClient::TResponse* response = &flatResponse->Record;
 
-        if (response->HasErrorReason()) { 
+        if (response->HasErrorReason()) {
             Cerr << "reason: " << response->GetErrorReason() << Endl;
-        } 
+        }
 
         if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {
             return status;
@@ -1127,25 +1127,25 @@ namespace Tests {
 
         NKikimrClient::TFlatTxId txId = response->GetFlatTxId();
         return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout);
-    } 
- 
+    }
+
     NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
-        auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme(); 
-        mkDirTx->SetWorkingDir(parent); 
+        auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme();
+        mkDirTx->SetWorkingDir(parent);
         mkDirTx->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
-        mkDirTx->MutableMkDir()->SetName(name); 
+        mkDirTx->MutableMkDir()->SetName(name);
         SetApplyIf(*mkDirTx, applyIf);
-        TAutoPtr<NBus::TBusMessage> reply; 
-        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply); 
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
 #ifndef NDEBUG
         Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
-    } 
- 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::RmDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {
         NMsgBusProxy::TBusSchemeOperation* request(new NMsgBusProxy::TBusSchemeOperation());
         auto* mkDirTx = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1326,13 +1326,13 @@ namespace Tests {
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
         op->MutableCreateTable()->CopyFrom(table);
-        TAutoPtr<NBus::TBusMessage> reply; 
+        TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
-    } 
- 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::CreateTableWithUniformShardedIndex(const TString& parent,
         const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, const TVector<TString> indexColumns, TDuration timeout)
     {
@@ -1502,24 +1502,24 @@ namespace Tests {
         op->SetWorkingDir(parent);
         op->MutableAlterTable()->CopyFrom(alter);
         TAutoPtr<NBus::TBusMessage> reply;
-        if (userToken) { 
-            request->Record.SetSecurityToken(userToken); 
-        } 
+        if (userToken) {
+            request->Record.SetSecurityToken(userToken);
+        }
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release()); 
-    } 
- 
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const TString& alter, const TString& userToken) { 
+        return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
+    }
+
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const TString& alter, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table); 
-        UNIT_ASSERT(parseOk); 
-        return AlterTable(parent, table, userToken); 
-    } 
- 
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
+        UNIT_ASSERT(parseOk);
+        return AlterTable(parent, table, userToken);
+    }
+
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> reply = AlterTable(parent, alter, TString()); 
-        const NKikimrClient::TResponse &response = reply->Record; 
+        TAutoPtr<NMsgBusProxy::TBusResponse> reply = AlterTable(parent, alter, TString());
+        const NKikimrClient::TResponse &response = reply->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
@@ -1553,7 +1553,7 @@ namespace Tests {
         NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
     NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) {
@@ -1609,17 +1609,17 @@ namespace Tests {
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
-        request->Record.SetPath(path); 
-        request->Record.MutableOptions()->SetShowPrivateTable(true); 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        NBus::EMessageStatus msgStatus = SendWhenReady(request, reply); 
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
+        request->Record.SetPath(path);
+        request->Record.MutableOptions()->SetShowPrivateTable(true);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
 #ifndef NDEBUG
         Cerr << "TClient::Ls: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
-    } 
- 
+    }
+
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::Ls(const TString& path) {
         return LsImpl(path).Release();
     }
@@ -1813,16 +1813,16 @@ namespace Tests {
     bool TClient::LocalQuery(const ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result) {
         TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> request = new NMsgBusProxy::TBusTabletLocalMKQL();
         request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
-        request->Record.SetWithRetry(true); 
+        request->Record.SetWithRetry(true);
         auto *mkql = request->Record.MutableProgram();
         mkql->MutableProgram()->SetText(pgmText);
 
         TAutoPtr<NBus::TBusMessage> reply;
-        auto status = SyncCall(request, reply); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        auto status = SyncCall(request, reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
 
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
 
         if (response.HasExecutionEngineEvaluatedResponse())
             result.CopyFrom(response.GetExecutionEngineEvaluatedResponse());
@@ -1830,49 +1830,49 @@ namespace Tests {
         return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
     }
 
-    bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun, 
+    bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun,
                                 NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> request = new NMsgBusProxy::TBusTabletLocalSchemeTx(); 
+        TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> request = new NMsgBusProxy::TBusTabletLocalSchemeTx();
         request->Record.SetTabletID(ChangeStateStorage(tabletId, Domain));
-        request->Record.SetDryRun(dryRun); 
-        auto *schemeChanges = request->Record.MutableSchemeChanges(); 
-        schemeChanges->CopyFrom(changes); 
- 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        auto status = SyncCall(request, reply); 
-        UNIT_ASSERT_EQUAL(status, NBus::MESSAGE_OK); 
- 
+        request->Record.SetDryRun(dryRun);
+        auto *schemeChanges = request->Record.MutableSchemeChanges();
+        schemeChanges->CopyFrom(changes);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        auto status = SyncCall(request, reply);
+        UNIT_ASSERT_EQUAL(status, NBus::MESSAGE_OK);
+
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        UNIT_ASSERT_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
- 
-        err = response.GetErrorReason(); 
-        scheme.CopyFrom(response.GetLocalDbScheme()); 
- 
+        UNIT_ASSERT_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+        err = response.GetErrorReason();
+        scheme.CopyFrom(response.GetLocalDbScheme());
+
         return err.empty();
-    } 
- 
+    }
+
     bool TClient::LocalSchemeTx(const ui64 tabletId, const TString &schemeChangesStr, bool dryRun,
                                 NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        NTabletFlatScheme::TSchemeChanges schemeChanges; 
-        ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges); 
-        return LocalSchemeTx(tabletId, schemeChanges, dryRun, scheme, err); 
-    } 
- 
+        NTabletFlatScheme::TSchemeChanges schemeChanges;
+        ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges);
+        return LocalSchemeTx(tabletId, schemeChanges, dryRun, scheme, err);
+    }
+
     bool TClient::Compile(const TString &mkql, TString &compiled) {
         TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
-        auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction(); 
-        mkqlTx->MutableProgram()->SetText(mkql); 
-        mkqlTx->SetFlatMKQL(true); 
+        auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
+        mkqlTx->MutableProgram()->SetText(mkql);
+        mkqlTx->SetFlatMKQL(true);
         mkqlTx->SetMode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        NBus::EMessageStatus msgStatus = SyncCall(request, reply); 
-        UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK); 
- 
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus msgStatus = SyncCall(request, reply);
+        UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
+
         const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         if (!response.HasMiniKQLCompileResults())
             return false;
- 
+
         const auto &compileRes = response.GetMiniKQLCompileResults();
         if (compileRes.ProgramCompileErrorsSize()) {
             NYql::TIssues issues;
@@ -1901,8 +1901,8 @@ namespace Tests {
                 if (opts.Params)
                     mkqlTx->MutableParams()->SetText(opts.Params);
                 mkqlTx->SetFlatMKQL(true);
-                if (opts.CollectStats) 
-                    mkqlTx->SetCollectStats(true); 
+                if (opts.CollectStats)
+                    mkqlTx->SetCollectStats(true);
             }
 
             TAutoPtr<NBus::TBusMessage> reply;
@@ -1912,7 +1912,7 @@ namespace Tests {
             NMsgBusProxy::TBusResponse * ret = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get());
             ui32 responseStatus = ret->Record.GetStatus();
             if (responseStatus == NMsgBusProxy::MSTATUS_NOTREADY ||
-                responseStatus == NMsgBusProxy::MSTATUS_TIMEOUT || 
+                responseStatus == NMsgBusProxy::MSTATUS_TIMEOUT ||
                 responseStatus == NMsgBusProxy::MSTATUS_INPROGRESS)
                 continue;
 
@@ -1922,33 +1922,33 @@ namespace Tests {
 
         UNIT_ASSERT(retryCnt > 0);
         return response.GetStatus();
-    } 
+    }
 
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
         NKikimrClient::TResponse response;
-        FlatQueryRaw(query, opts, response); 
- 
+        FlatQueryRaw(query, opts, response);
+
         if (!response.GetDataShardErrors().empty()) {
             Cerr << "DataShardErrors:" << Endl << response.GetDataShardErrors() << Endl;
-        } 
+        }
         if (!response.GetMiniKQLErrors().empty()) {
             Cerr << "MiniKQLErrors:" << Endl << response.GetMiniKQLErrors() << Endl;
-        } 
-        if (response.HasProxyErrorCode()) { 
-            if (response.GetProxyErrorCode() != TEvTxUserProxy::TResultStatus::ExecComplete) 
-                Cerr << "proxy error code: " << static_cast<TEvTxUserProxy::TResultStatus::EStatus>(response.GetProxyErrorCode()) << Endl; 
+        }
+        if (response.HasProxyErrorCode()) {
+            if (response.GetProxyErrorCode() != TEvTxUserProxy::TResultStatus::ExecComplete)
+                Cerr << "proxy error code: " << static_cast<TEvTxUserProxy::TResultStatus::EStatus>(response.GetProxyErrorCode()) << Endl;
             if (expectedResponse.HasProxyErrorCode()) {
                 UNIT_ASSERT_VALUES_EQUAL(response.GetProxyErrorCode(), expectedResponse.GetProxyErrorCode());
             }
-        } 
-        if (response.HasProxyErrors()) { 
-            Cerr << "proxy errors: " << response.GetProxyErrors() << Endl; 
-        } 
-        if (response.UnresolvedKeysSize() > 0) { 
-            for (size_t i = 0, end = response.UnresolvedKeysSize(); i < end; ++i) { 
-                Cerr << response.GetUnresolvedKeys(i) << Endl; 
-            } 
-        } 
+        }
+        if (response.HasProxyErrors()) {
+            Cerr << "proxy errors: " << response.GetProxyErrors() << Endl;
+        }
+        if (response.UnresolvedKeysSize() > 0) {
+            for (size_t i = 0, end = response.UnresolvedKeysSize(); i < end; ++i) {
+                Cerr << response.GetUnresolvedKeys(i) << Endl;
+            }
+        }
         if (response.HasMiniKQLCompileResults()) {
             const auto &compileRes = response.GetMiniKQLCompileResults();
             if (compileRes.ProgramCompileErrorsSize()) {
@@ -1969,24 +1969,24 @@ namespace Tests {
         if (response.HasHadFollowerReads() && response.GetHadFollowerReads()) {
             Cerr << "had follower reads" << Endl;
         }
- 
+
         if (expectedResponse.HasStatus()) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), expectedResponse.GetStatus());
         }
         if (expectedResponse.GetStatus() != NMsgBusProxy::MSTATUS_OK)
             return false;
 
-        UNIT_ASSERT(response.HasTxId()); 
+        UNIT_ASSERT(response.HasTxId());
         UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete)
             || response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Aborted));
- 
-        if (response.HasExecutionEngineEvaluatedResponse()) { 
-            result.Swap(response.MutableExecutionEngineEvaluatedResponse()); 
-        } 
- 
+
+        if (response.HasExecutionEngineEvaluatedResponse()) {
+            result.Swap(response.MutableExecutionEngineEvaluatedResponse());
+        }
+
         return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
-    } 
- 
+    }
+
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, ui32 expectedStatus) {
         NKikimrClient::TResponse expectedResponse;
         expectedResponse.SetStatus(expectedStatus);
@@ -2008,46 +2008,46 @@ namespace Tests {
     TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
-        TAutoPtr<IEventHandle> handle; 
-        // Timeout for DEBUG purposes only 
-        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle); 
+        TAutoPtr<IEventHandle> handle;
+        // Timeout for DEBUG purposes only
+        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
         TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
 #ifndef NDEBUG
-        Cerr << res << Endl; 
+        Cerr << res << Endl;
 #endif
-        return res; 
-    } 
- 
+        return res;
+    }
+
     TString TClient::MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up) {
-        ui32 nodeId = runtime->GetNodeId(nodeIdx); 
+        ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
-        while (TInstant::Now() <= deadline) { 
+        while (TInstant::Now() <= deadline) {
             TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
             if (!res.empty() && !res.Contains("Error"))
-                return res; 
+                return res;
 
-        } 
-        UNIT_ASSERT_C(false, "Failed to mark node in hive"); 
+        }
+        UNIT_ASSERT_C(false, "Failed to mark node in hive");
         return TString();
-    } 
- 
+    }
+
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
-        ui32 nodeId = runtime->GetNodeId(nodeIdx); 
+        ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
-    } 
- 
+    }
+
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
         TActorId edge = runtime->AllocateEdgeActor();
-        NTabletPipe::TClientConfig clientConfig; 
+        NTabletPipe::TClientConfig clientConfig;
         clientConfig.AllowFollower = !leader;
         clientConfig.ForceFollower = !leader;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
-        TAutoPtr<IEventHandle> handle; 
+        TAutoPtr<IEventHandle> handle;
         const TInstant deadline = TInstant::Now() + timeout;
-        bool res = false; 
+        bool res = false;
 
         try {
             while (TInstant::Now() <= deadline) {
@@ -2059,13 +2059,13 @@ namespace Tests {
                     res = (ev->Status == NKikimrProto::OK);
                     break;
                 }
-            } 
+            }
         } catch (TEmptyEventQueueException &) {}
 
         runtime->Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
-        return res; 
-    } 
- 
+        return res;
+    }
+
     bool TClient::WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
         TActorId edge = runtime->AllocateEdgeActor();
         NTabletPipe::TClientConfig clientConfig;
@@ -2112,46 +2112,46 @@ namespace Tests {
     }
 
     void TClient::GetTabletInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, bool returnFollowers, NKikimrHive::TEvResponseHiveInfo& res) {
-        TAutoPtr<TEvHive::TEvRequestHiveInfo> ev(new TEvHive::TEvRequestHiveInfo); 
-        ev->Record.SetTabletID(tabletId); 
+        TAutoPtr<TEvHive::TEvRequestHiveInfo> ev(new TEvHive::TEvRequestHiveInfo);
+        ev->Record.SetTabletID(tabletId);
         ev->Record.SetReturnFollowers(returnFollowers);
- 
+
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TActorId edge = runtime->AllocateEdgeActor();
-        runtime->SendToPipe(hive, edge, ev.Release()); 
-        TAutoPtr<IEventHandle> handle; 
-        TEvHive::TEvResponseHiveInfo* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle); 
-        res.Swap(&response->Record); 
-    } 
- 
+        runtime->SendToPipe(hive, edge, ev.Release());
+        TAutoPtr<IEventHandle> handle;
+        TEvHive::TEvResponseHiveInfo* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        res.Swap(&response->Record);
+    }
+
     ui32 TClient::GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId) {
-        NKikimrHive::TEvResponseHiveInfo res; 
-        GetTabletInfoFromHive(runtime, tabletId, false, res); 
-        // Cerr << res << Endl; 
- 
-        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) { 
+        NKikimrHive::TEvResponseHiveInfo res;
+        GetTabletInfoFromHive(runtime, tabletId, false, res);
+        // Cerr << res << Endl;
+
+        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
             if (tablet.GetTabletID() == tabletId && tablet.GetNodeID() != 0) {
-                return NodeIdToIndex(runtime, tablet.GetNodeID()); 
-            } 
-        } 
- 
+                return NodeIdToIndex(runtime, tablet.GetNodeID());
+            }
+        }
+
         return Max<ui32>();
-    } 
- 
+    }
+
     bool TClient::TabletExistsInHive(TTestActorRuntime* runtime, ui64 tabletId, bool evenInDeleting) {
-        NKikimrHive::TEvResponseHiveInfo res; 
-        GetTabletInfoFromHive(runtime, tabletId, false, res); 
-        // Cerr << res << Endl; 
- 
-        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) { 
-            if (tablet.GetTabletID() == tabletId) { 
+        NKikimrHive::TEvResponseHiveInfo res;
+        GetTabletInfoFromHive(runtime, tabletId, false, res);
+        // Cerr << res << Endl;
+
+        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
+            if (tablet.GetTabletID() == tabletId) {
                 return evenInDeleting || tablet.GetState() != (ui32)NHive::ETabletState::Deleting;
-            } 
-        } 
- 
-        return false; 
-    } 
- 
+            }
+        }
+
+        return false;
+    }
+
     void TClient::GetTabletStorageInfoFromHive(TTestActorRuntime* runtime, ui64 tabletId, NKikimrHive::TEvGetTabletStorageInfoResult& res) {
         TAutoPtr<TEvHive::TEvGetTabletStorageInfo> ev(new TEvHive::TEvGetTabletStorageInfo(tabletId));
 
@@ -2178,51 +2178,51 @@ namespace Tests {
     }
 
     TVector<ui32> TClient::GetFollowerNodes(TTestActorRuntime* runtime, ui64 tabletId) {
-        NKikimrHive::TEvResponseHiveInfo res; 
-        GetTabletInfoFromHive(runtime, tabletId, true, res); 
-        // Cerr << res << Endl; 
- 
+        NKikimrHive::TEvResponseHiveInfo res;
+        GetTabletInfoFromHive(runtime, tabletId, true, res);
+        // Cerr << res << Endl;
+
         TVector<ui32> followerNodes;
-        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) { 
+        for (const NKikimrHive::TTabletInfo& tablet : res.GetTablets()) {
             if (tablet.GetTabletID() == tabletId && tablet.HasFollowerID()) {
                 followerNodes.push_back(NodeIdToIndex(runtime, tablet.GetNodeID()));
-            } 
-        } 
- 
+            }
+        }
+
         return followerNodes;
-    } 
- 
-    void TClient::S3Listing(const TString& table, const TString& prefixColumnsPb, 
-                            const TString& pathPrefix, const TString& pathDelimiter, 
-                            const TString& startAfterSuffixColumnsPb, 
+    }
+
+    void TClient::S3Listing(const TString& table, const TString& prefixColumnsPb,
+                            const TString& pathPrefix, const TString& pathDelimiter,
+                            const TString& startAfterSuffixColumnsPb,
                             const TVector<TString>& columnsToReturn, ui32 maxKeys,
-                            ui32 timeoutMillisec, 
-                            NKikimrClient::TS3ListingResponse& res) { 
-        TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> request = new NMsgBusProxy::TBusS3ListingRequest(); 
-        request->Record.SetTableName(table); 
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(prefixColumnsPb, request->Record.MutableKeyPrefix()); 
-        UNIT_ASSERT_C(parseOk, "Failed to parse prefix columns: " + prefixColumnsPb); 
-        request->Record.SetPathColumnPrefix(pathPrefix); 
-        request->Record.SetPathColumnDelimiter(pathDelimiter); 
-        if (!startAfterSuffixColumnsPb.empty()) { 
-            parseOk = ::google::protobuf::TextFormat::ParseFromString(startAfterSuffixColumnsPb, request->Record.MutableStartAfterKeySuffix()); 
-            UNIT_ASSERT_C(parseOk, "Failed to parse suffix columns: " + startAfterSuffixColumnsPb); 
-        } 
-        request->Record.SetMaxKeys(maxKeys); 
-        request->Record.SetTimeout(timeoutMillisec); 
-        for (const TString& c : columnsToReturn) { 
-            request->Record.AddColumnsToReturn(c); 
-        } 
- 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        auto status = SyncCall(request, reply); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
- 
-        NKikimrClient::TS3ListingResponse& response = dynamic_cast<NMsgBusProxy::TBusS3ListingResponse*>(reply.Get())->Record; 
- 
-        res.Swap(&response); 
-    } 
- 
+                            ui32 timeoutMillisec,
+                            NKikimrClient::TS3ListingResponse& res) {
+        TAutoPtr<NMsgBusProxy::TBusS3ListingRequest> request = new NMsgBusProxy::TBusS3ListingRequest();
+        request->Record.SetTableName(table);
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(prefixColumnsPb, request->Record.MutableKeyPrefix());
+        UNIT_ASSERT_C(parseOk, "Failed to parse prefix columns: " + prefixColumnsPb);
+        request->Record.SetPathColumnPrefix(pathPrefix);
+        request->Record.SetPathColumnDelimiter(pathDelimiter);
+        if (!startAfterSuffixColumnsPb.empty()) {
+            parseOk = ::google::protobuf::TextFormat::ParseFromString(startAfterSuffixColumnsPb, request->Record.MutableStartAfterKeySuffix());
+            UNIT_ASSERT_C(parseOk, "Failed to parse suffix columns: " + startAfterSuffixColumnsPb);
+        }
+        request->Record.SetMaxKeys(maxKeys);
+        request->Record.SetTimeout(timeoutMillisec);
+        for (const TString& c : columnsToReturn) {
+            request->Record.AddColumnsToReturn(c);
+        }
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        auto status = SyncCall(request, reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+
+        NKikimrClient::TS3ListingResponse& response = dynamic_cast<NMsgBusProxy::TBusS3ListingResponse*>(reply.Get())->Record;
+
+        res.Swap(&response);
+    }
+
     ui64 TClient::GetKesusTabletId(const TString& kesusPath) {
         auto describeResult = Ls(kesusPath);
         UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasKesus(), describeResult->Record);

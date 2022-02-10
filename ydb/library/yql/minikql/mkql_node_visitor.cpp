@@ -581,7 +581,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
                     result.Freeze();
                     if (result.GetNode() != node) {
                         if (InPlace) {
-                            callable.SetResult(result, env); 
+                            callable.SetResult(result, env);
                             wereChanges = true;
                         } else {
                             TNode* wrappedResult = TCallable::Create(result, callable.GetType(), env);

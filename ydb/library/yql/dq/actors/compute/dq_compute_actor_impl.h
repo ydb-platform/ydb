@@ -250,7 +250,7 @@ protected:
             ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
             CA_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
         }
- 
+
         ReportStats(now);
     }
 

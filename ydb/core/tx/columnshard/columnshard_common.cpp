@@ -28,9 +28,9 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TS
     bool ok = batchBuilder.Start(columns);
     Y_VERIFY(ok);
 
-    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size())); 
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size()));
 
-    auto batch = batchBuilder.FlushBatch(false); 
+    auto batch = batchBuilder.FlushBatch(false);
     Y_VERIFY(batch);
     Y_VERIFY(batch->num_columns() == (int)cells.size());
     Y_VERIFY(batch->num_rows() == 1);
@@ -38,15 +38,15 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TS
 }
 
 struct TContext {
-    const IColumnResolver& ColumnResolver; 
+    const IColumnResolver& ColumnResolver;
     THashMap<ui32, TString> Sources;
 
-    explicit TContext(const IColumnResolver& columnResolver) 
-        : ColumnResolver(columnResolver) 
+    explicit TContext(const IColumnResolver& columnResolver)
+        : ColumnResolver(columnResolver)
     {}
 
     std::string GetName(ui32 columnId) {
-        TString name = ColumnResolver.GetColumnName(columnId, false); 
+        TString name = ColumnResolver.GetColumnName(columnId, false);
         if (name.Empty()) {
             name = ToString(columnId);
         } else {
@@ -260,13 +260,13 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         rightCells.reserve(size);
         rightColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
-            if (!cells[i].IsNull()) { 
-                rightCells.push_back(cells[i]); 
-                rightColumns.push_back(columns[i]); 
+            if (!cells[i].IsNull()) {
+                rightCells.push_back(cells[i]);
+                rightColumns.push_back(columns[i]);
                 rightTrailingNull = false;
             } else {
                 rightTrailingNull = true;
-            } 
+            }
         }
     }
 
@@ -284,7 +284,7 @@ void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const N
 {
     using TId = NKikimrSSA::TProgram::TCommand;
 
-    TContext info(columnResolver); 
+    TContext info(columnResolver);
     auto step = std::make_shared<NArrow::TProgramStep>();
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {

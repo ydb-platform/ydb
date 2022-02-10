@@ -59,7 +59,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> CacheCounters;
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
-    TRequestControls RequestControls; 
+    TRequestControls RequestControls;
 
     void Die(const TActorContext &ctx) override {
         ctx.Send(Services.SchemeCache, new TEvents::TEvPoisonPill());
@@ -237,8 +237,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                     " TxId# " << txid <<
                     " ProcessProposeTransaction");
 
-        RequestControls.Reqister(ctx); 
- 
+        RequestControls.Reqister(ctx);
+
         // process scheme transactions
         const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
         if (ev->Get()->HasSchemeProposal()) {
@@ -262,7 +262,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         if (ev->Get()->HasMakeProposal()) {
             // todo: in-fly and shutdown
             Y_VERIFY_DEBUG(txid != 0);
-            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls)); 
+            const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls));
             TxProxyMon->MakeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                          "actor# " << SelfId() <<

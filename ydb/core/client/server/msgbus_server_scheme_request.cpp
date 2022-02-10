@@ -121,15 +121,15 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
             pqgroup->MutablePQTabletConfig()->MergeFrom(cmd.GetConfig());
     }
 
-    if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdDeleteTopic()) { 
-        const auto& cmd = Request->Record.GetMetaRequest().GetCmdDeleteTopic(); 
-        auto *transaction = record.MutableTransaction()->MutableModifyScheme(); 
+    if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdDeleteTopic()) {
+        const auto& cmd = Request->Record.GetMetaRequest().GetCmdDeleteTopic();
+        auto *transaction = record.MutableTransaction()->MutableModifyScheme();
         transaction->SetWorkingDir(TopicPrefix(ctx));
         transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-        auto *pqgroup = transaction->MutableDrop(); 
-        pqgroup->SetName(cmd.GetTopic()); 
-    } 
- 
+        auto *pqgroup = transaction->MutableDrop();
+        pqgroup->SetName(cmd.GetTopic());
+    }
+
     req->Record.SetUserToken(TBase::GetSerializedToken());
 
     ctx.Send(MakeTxProxyID(), req.Release());
@@ -212,10 +212,10 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(ERespo
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {
     TEvBusProxy::TEvPersQueue *msg = ev->Get();
     const auto& rec = static_cast<TBusPersQueue *>(msg->MsgContext.GetMessage())->Record;
-    if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic() 
-                                 || rec.GetMetaRequest().HasCmdChangeTopic() 
-                                 || rec.GetMetaRequest().HasCmdDeleteTopic())) { 
-        ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId); 
+    if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic()
+                                 || rec.GetMetaRequest().HasCmdChangeTopic()
+                                 || rec.GetMetaRequest().HasCmdDeleteTopic())) {
+        ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId);
         return;
     }
     ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache, PQReadSessionsInfoWorkerFactory));

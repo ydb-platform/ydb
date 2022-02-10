@@ -13,16 +13,16 @@ namespace NMiniKQL {
 class THolderFactory;
 
 NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory);
- 
-// NOTE: TCell's can reference memomry from tupleValue 
-bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType, 
-                    const NKikimrMiniKQL::TValue& tupleValue, 
-                    const TConstArrayRef<NScheme::TTypeId>& expectedTypes, 
-                    bool allowCastFromString, 
+
+// NOTE: TCell's can reference memomry from tupleValue
+bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
+                    const NKikimrMiniKQL::TValue& tupleValue,
+                    const TConstArrayRef<NScheme::TTypeId>& expectedTypes,
+                    bool allowCastFromString,
                     TVector<TCell>& key,
-                    TString& errStr); 
- 
-bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr); 
- 
+                    TString& errStr);
+
+bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue& val, TString& errStr);
+
 } // namspace NMiniKQL
 } // namspace NKikimr

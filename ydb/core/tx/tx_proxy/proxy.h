@@ -263,47 +263,47 @@ namespace NTxProxy {
 
     struct TSchemeCacheConfig;
 
-    struct TRequestControls { 
-    private: 
-        bool Registered; 
- 
-    public: 
-        TControlWrapper PerRequestDataSizeLimit; 
-        TControlWrapper PerShardIncomingReadSetSizeLimit; 
-        TControlWrapper DefaultTimeoutMs; 
-        TControlWrapper MaxShardCount; 
-        TControlWrapper MaxReadSetCount; 
- 
-        TRequestControls() 
-            : Registered(false) 
-            , PerRequestDataSizeLimit(53687091200, 0, Max<i64>()) 
-            , PerShardIncomingReadSetSizeLimit(209715200, 0, 5368709120) 
-            , DefaultTimeoutMs(600000, 0, 3600000) 
-            , MaxShardCount(10000, 0, 1000000) 
+    struct TRequestControls {
+    private:
+        bool Registered;
+
+    public:
+        TControlWrapper PerRequestDataSizeLimit;
+        TControlWrapper PerShardIncomingReadSetSizeLimit;
+        TControlWrapper DefaultTimeoutMs;
+        TControlWrapper MaxShardCount;
+        TControlWrapper MaxReadSetCount;
+
+        TRequestControls()
+            : Registered(false)
+            , PerRequestDataSizeLimit(53687091200, 0, Max<i64>())
+            , PerShardIncomingReadSetSizeLimit(209715200, 0, 5368709120)
+            , DefaultTimeoutMs(600000, 0, 3600000)
+            , MaxShardCount(10000, 0, 1000000)
             , MaxReadSetCount(1000000, 0, 100000000)
-        {} 
- 
-        void Reqister(const TActorContext &ctx) { 
-            if (Registered) { 
-                return; 
-            } 
- 
-            AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit, 
-                                                     "TxLimitControls.PerRequestDataSizeLimit"); 
-            AppData(ctx)->Icb->RegisterSharedControl(PerShardIncomingReadSetSizeLimit, 
-                                                     "TxLimitControls.PerShardIncomingReadSetSizeLimit"); 
-            AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs, 
-                                                     "TxLimitControls.DefaultTimeoutMs"); 
-            AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount, 
-                                                     "TxLimitControls.MaxShardCount"); 
-            AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount, 
-                                                     "TxLimitControls.MaxReadSetCount"); 
- 
-            Registered = true; 
-        } 
-    }; 
- 
-    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls); 
+        {}
+
+        void Reqister(const TActorContext &ctx) {
+            if (Registered) {
+                return;
+            }
+
+            AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit,
+                                                     "TxLimitControls.PerRequestDataSizeLimit");
+            AppData(ctx)->Icb->RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
+                                                     "TxLimitControls.PerShardIncomingReadSetSizeLimit");
+            AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
+                                                     "TxLimitControls.DefaultTimeoutMs");
+            AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount,
+                                                     "TxLimitControls.MaxShardCount");
+            AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount,
+                                                     "TxLimitControls.MaxReadSetCount");
+
+            Registered = true;
+        }
+    };
+
+    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
     IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);

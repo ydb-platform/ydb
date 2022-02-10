@@ -22,7 +22,7 @@ struct TTableStrings {
         , UpdateRow(env.InternName(TStringBuf("UpdateRow")))
         , EraseRow(env.InternName(TStringBuf("EraseRow")))
     {
-        All.reserve(10); 
+        All.reserve(10);
         All.insert(SelectRow);
         All.insert(SelectRange);
         All.insert(UpdateRow);
@@ -32,10 +32,10 @@ struct TTableStrings {
         DbWrites.insert(EraseRow);
     }
 
-    const TInternName SelectRow; 
-    const TInternName SelectRange; 
-    const TInternName UpdateRow; 
-    const TInternName EraseRow; 
+    const TInternName SelectRow;
+    const TInternName SelectRange;
+    const TInternName UpdateRow;
+    const TInternName EraseRow;
 
     THashSet<TInternName> All;
     THashSet<TInternName> DbWrites;

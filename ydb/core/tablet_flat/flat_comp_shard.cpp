@@ -1780,7 +1780,7 @@ namespace NCompShard {
         auto cmpFullyInside = [&nulls](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto left = a.Slice.LastKey.GetCells();
             if (Y_UNLIKELY(!left)) {
-                return false; // +inf 
+                return false; // +inf
             }
             if (int cmp = ComparePartKeys(left, boundary.GetCells(), nulls)) {
                 return cmp < 0;
@@ -1792,7 +1792,7 @@ namespace NCompShard {
         auto cmpFullyOutside = [&nulls](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto right = a.Slice.FirstKey.GetCells();
             if (Y_UNLIKELY(!right)) {
-                return false; // -inf 
+                return false; // -inf
             }
             return ComparePartKeys(boundary.GetCells(), right, nulls) <= 0;
         };
@@ -1825,7 +1825,7 @@ namespace NCompShard {
         auto cmpSplitFullyInside = [&nulls](const TSplitItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto left = a.Slice.LastKey.GetCells();
             if (Y_UNLIKELY(!left)) {
-                return false; // +inf 
+                return false; // +inf
             }
             if (int cmp = ComparePartKeys(left, boundary.GetCells(), nulls)) {
                 return cmp < 0;

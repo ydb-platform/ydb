@@ -39,17 +39,17 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \ 
-            ACTION; \ 
-        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
 #define ADD_BYTES_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \ 
-            ACTION; \ 
-        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
     ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, {
@@ -109,9 +109,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(DescribeTableOptions, DescribeTableOptionsRequest, DescribeTableOptionsResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTableOptionsRequest(ctx));
     })
-    ADD_REQUEST(BulkUpsert, BulkUpsertRequest, BulkUpsertResponse, { 
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvBulkUpsertRequest(ctx)); 
-    }) 
+    ADD_REQUEST(BulkUpsert, BulkUpsertRequest, BulkUpsertResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvBulkUpsertRequest(ctx));
+    })
     ADD_REQUEST(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvStreamExecuteScanQueryRequest(ctx));
     })

@@ -77,7 +77,7 @@ namespace NTxProxy {
     \
     XX(BackupTxIdNotExists, 80) \
     XX(TxIdIsNotABackup, 81) \
- 
+
     struct TResultStatus {
         enum EStatus {
             TXUSERPROXY_RESULT_STATUS_MAP(ENUM_VALUE_GEN)

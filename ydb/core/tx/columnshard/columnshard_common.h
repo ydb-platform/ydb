@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/ssa.pb.h>
@@ -10,22 +10,22 @@ namespace NKikimr::NOlap {
 
 namespace NKikimr::NColumnShard {
 
-using NOlap::TWriteId; 
- 
+using NOlap::TWriteId;
+
 std::pair<NOlap::TPredicate, NOlap::TPredicate>
 RangePredicates(const TSerializedTableRange& range, const TVector<std::pair<TString, NScheme::TTypeId>>& columns);
 
-class IColumnResolver { 
-public: 
-    virtual ~IColumnResolver() = default; 
-    virtual TString GetColumnName(ui32 id, bool required = true) const = 0; 
-}; 
- 
+class IColumnResolver {
+public:
+    virtual ~IColumnResolver() = default;
+    virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
+};
+
 // Describes read/scan request
 struct TReadDescription {
     // Table
     ui64 PathId = 0;
-    TString TableName; 
+    TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
     // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
@@ -48,7 +48,7 @@ struct TReadDescription {
     ui64 PlanStep = 0;
     ui64 TxId = 0;
 
-    void AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program); 
+    void AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
 };
 
 }

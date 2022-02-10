@@ -16,10 +16,10 @@ namespace NKikimr::NOlap {
 
 using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
-enum class TWriteId : ui64 {}; 
- 
-inline TWriteId operator ++(TWriteId& w) { w = TWriteId{ui64(w) + 1}; return w; } 
- 
+enum class TWriteId : ui64 {};
+
+inline TWriteId operator ++(TWriteId& w) { w = TWriteId{ui64(w) + 1}; return w; }
+
 struct TSnapshot {
     ui64 PlanStep{0};
     ui64 TxId{0};
@@ -47,10 +47,10 @@ struct TSnapshot {
     static TSnapshot Max() {
         return TSnapshot{(ui64)-1ll, (ui64)-1ll};
     }
- 
-    friend IOutputStream& operator << (IOutputStream& out, const TSnapshot& s) { 
-        return out << "{" << s.PlanStep << "," << s.TxId << "}"; 
-    } 
+
+    friend IOutputStream& operator << (IOutputStream& out, const TSnapshot& s) {
+        return out << "{" << s.PlanStep << "," << s.TxId << "}";
+    }
 };
 
 inline bool snapLess(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txId2) {
@@ -61,20 +61,20 @@ inline bool snapLessOrEqual(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txI
     return TSnapshot{planStep1, txId1} <= TSnapshot{planStep2, txId2};
 }
 
- 
-class IBlobGroupSelector { 
-protected: 
-    virtual ~IBlobGroupSelector() = default; 
-public: 
-    virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0; 
-}; 
- 
+
+class IBlobGroupSelector {
+protected:
+    virtual ~IBlobGroupSelector() = default;
+public:
+    virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
+};
+
 }
- 
-template<> 
-struct THash<NKikimr::NOlap::TWriteId> { 
-    inline size_t operator()(const NKikimr::NOlap::TWriteId x) const noexcept { 
-        return THash<ui64>()(ui64(x)); 
-    } 
-}; 
- 
+
+template<>
+struct THash<NKikimr::NOlap::TWriteId> {
+    inline size_t operator()(const NKikimr::NOlap::TWriteId x) const noexcept {
+        return THash<ui64>()(ui64(x));
+    }
+};
+

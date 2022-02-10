@@ -169,8 +169,8 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
     TCacheCache<TPage, TPage::TWeight> Cache;
 
-    TControlWrapper SizeOverride; 
- 
+    TControlWrapper SizeOverride;
+
     ui64 StatBioReqs = 0;
     ui64 StatHitPages = 0;
     ui64 StatHitBytes = 0;
@@ -184,7 +184,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         Owner = owner;
 
         Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_SAUSAGECACHE);
-        sys->AppData<TAppData>()->Icb->RegisterSharedControl(SizeOverride, Config->CacheName + "_Size"); 
+        sys->AppData<TAppData>()->Icb->RegisterSharedControl(SizeOverride, Config->CacheName + "_Size");
     }
 
     void TakePoison()
@@ -1010,7 +1010,7 @@ public:
         : TActor(&TThis::StateFunc)
         , Config(config)
         , Cache(*config->CacheConfig)
-        , SizeOverride(config->CacheConfig->Limit, 1, Max<i64>()) 
+        , SizeOverride(config->CacheConfig->Limit, 1, Max<i64>())
     {
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;

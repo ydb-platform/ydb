@@ -36,13 +36,13 @@ namespace NKikimr {
 
             // if two identical permissions with different attributies are specified,
             // only one of them will be processed. Which one is not guaranteed
-            const std::vector<TEntry> Entries; 
+            const std::vector<TEntry> Entries;
 
             struct TInitializationFields {
                 TString Database;
                 TString Ticket;
                 TString PeerName;
-                std::vector<TEntry> Entries; 
+                std::vector<TEntry> Entries;
             };
 
             TEvAuthorizeTicket(TInitializationFields&& init)

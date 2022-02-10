@@ -131,7 +131,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
             Self->PlanQueue.Progress(ctx);
     }
 
-    Self->CheckSplitCanStart(ctx); 
+    Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
 }
 

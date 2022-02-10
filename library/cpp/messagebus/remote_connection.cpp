@@ -186,7 +186,7 @@ namespace NBus {
             }
 
             ReaderData.DropChannel();
- 
+
             ReaderData.Status.Fd = readSocket.Socket;
             ReaderData.SocketVersion = readSocket.SocketVersion;
 
@@ -393,8 +393,8 @@ namespace NBus {
             }
 
             return true;
-        } 
- 
+        }
+
         bool TRemoteConnection::ReaderFillBuffer() {
             if (!ReaderData.BufferMore())
                 return true;

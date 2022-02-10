@@ -2,7 +2,7 @@
 #include "mkql_node_builder.h"
 #include "mkql_node_cast.h"
 #include "mkql_node_visitor.h"
-#include "mkql_node_printer.h" 
+#include "mkql_node_printer.h"
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -18,10 +18,10 @@ using namespace NDetail;
 TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     : Alloc(alloc)
     , Arena(&Alloc.Ref())
-    , EmptyStruct(nullptr) 
-    , EmptyTuple(nullptr) 
+    , EmptyStruct(nullptr)
+    , EmptyTuple(nullptr)
 {
-    NamesPool.reserve(64); 
+    NamesPool.reserve(64);
     TypeOfType = TTypeType::Create(*this);
     TypeOfType->Type = TypeOfType;
     TypeOfVoid = TVoidType::Create(TypeOfType, *this);
@@ -462,7 +462,7 @@ bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
     }
 }
 
-TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env, 
+TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env,
     bool validate)
     : TType(EKind::Struct, env.GetTypeOfType())
     , MembersCount(membersCount)
@@ -471,22 +471,22 @@ TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* memb
     if (!validate)
         return;
 
-    TInternName lastMemberName; 
+    TInternName lastMemberName;
     for (size_t index = 0; index < membersCount; ++index) {
         const auto& name = Members[index].first;
         MKQL_ENSURE(!name.Str().empty(), "Empty member name is not allowed");
 
-        MKQL_ENSURE(name.Str() > lastMemberName.Str(), "Member names are not sorted: " 
-                    << name.Str() << " <= " << lastMemberName.Str()); 
+        MKQL_ENSURE(name.Str() > lastMemberName.Str(), "Member names are not sorted: "
+                    << name.Str() << " <= " << lastMemberName.Str());
 
         lastMemberName = name;
     }
 }
 
 TStructType* TStructType::Create(const std::pair<TString, TType*>* members, ui32 membersCount, const TTypeEnvironment& env) {
-    std::pair<TInternName, TType*>* allocatedMembers = nullptr; 
+    std::pair<TInternName, TType*>* allocatedMembers = nullptr;
     if (membersCount) {
-        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers))); 
+        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < membersCount; ++i) {
             allocatedMembers[i] = std::make_pair(env.InternName(members[i].first), members[i].second);
         }
@@ -496,9 +496,9 @@ TStructType* TStructType::Create(const std::pair<TString, TType*>* members, ui32
 }
 
 TStructType* TStructType::Create(ui32 membersCount, const TStructMember* members, const TTypeEnvironment& env) {
-    std::pair<TInternName, TType*>* allocatedMembers = nullptr; 
+    std::pair<TInternName, TType*>* allocatedMembers = nullptr;
     if (membersCount) {
-        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers))); 
+        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < membersCount; ++i) {
             allocatedMembers[i] = std::make_pair(env.InternName(members[i].Name), members[i].Type);
         }
@@ -565,9 +565,9 @@ TNode* TStructType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     if (!needClone)
         return const_cast<TStructType*>(this);
 
-    std::pair<TInternName, TType*>* allocatedMembers = nullptr; 
+    std::pair<TInternName, TType*>* allocatedMembers = nullptr;
     if (MembersCount) {
-        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(MembersCount * sizeof(*allocatedMembers))); 
+        allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(MembersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < MembersCount; ++i) {
             allocatedMembers[i].first = Members[i].first;
             auto newNode = (TNode*)Members[i].second->GetCookie();
@@ -594,7 +594,7 @@ ui32 TStructType::GetMemberIndex(const TStringBuf& name) const {
 
     TStringStream ss;
     for (ui32 i = 0; i < MembersCount; ++i) {
-        ss << " " << Members[i].first.Str(); 
+        ss << " " << Members[i].first.Str();
     }
     THROW yexception() << "Member with name '" << name << "' not found; "
             << " known members: " << ss.Str() << ".";
@@ -602,7 +602,7 @@ ui32 TStructType::GetMemberIndex(const TStringBuf& name) const {
 
 TMaybe<ui32> TStructType::FindMemberIndex(const TStringBuf& name) const {
     for (ui32 i = 0; i < MembersCount; ++i) {
-        if (Members[i].first == name) 
+        if (Members[i].first == name)
             return i;
     }
 
@@ -640,9 +640,9 @@ TStructLiteral* TStructLiteral::Create(ui32 valuesCount, const TRuntimeNode* val
         for (ui32 i = 0; i < valuesCount; ++i) {
             allocatedValues[i] = values[i];
         }
-    } else if (env.GetEmptyStruct()) { 
-        // if EmptyStruct has already been initialized 
-        return env.GetEmptyStruct(); 
+    } else if (env.GetEmptyStruct()) {
+        // if EmptyStruct has already been initialized
+        return env.GetEmptyStruct();
     }
 
     return ::new(env.Allocate<TStructLiteral>()) TStructLiteral(allocatedValues, type);
@@ -1319,7 +1319,7 @@ bool TDictLiteral::Equals(const TDictLiteral& nodeToCompare) const {
     return true;
 }
 
-TCallableType::TCallableType(const TInternName &name, TType* returnType, ui32 argumentsCount, 
+TCallableType::TCallableType(const TInternName &name, TType* returnType, ui32 argumentsCount,
         TType **arguments, TNode* payload, const TTypeEnvironment& env)
     : TType(EKind::Callable, env.GetTypeOfType())
     , IsMergeDisabled0(false)
@@ -1536,7 +1536,7 @@ TCallable::TCallable(TRuntimeNode result, TCallableType* type, bool validate)
     }
 
     MKQL_ENSURE(result.GetStaticType()->IsSameType(*type->GetReturnType()), "incorrect result type for callable: "
-        << GetType()->GetName()); 
+        << GetType()->GetName());
     Result.Freeze();
 }
 
@@ -1658,7 +1658,7 @@ bool TCallable::Equals(const TCallable& nodeToCompare) const {
     return true;
 }
 
-void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) { 
+void TCallable::SetResult(TRuntimeNode result, const TTypeEnvironment& env) {
     Y_UNUSED(env);
     MKQL_ENSURE(!Result.GetNode(), "result is already set");
 
@@ -1917,9 +1917,9 @@ TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* value
         for (ui32 i = 0; i < valuesCount; ++i) {
             allocatedValues[i] = values[i];
         }
-    } else if (env.GetEmptyTuple()) { 
-        // if EmptyTuple has already been initialized 
-        return env.GetEmptyTuple(); 
+    } else if (env.GetEmptyTuple()) {
+        // if EmptyTuple has already been initialized
+        return env.GetEmptyTuple();
     }
 
     return ::new(env.Allocate<TTupleLiteral>()) TTupleLiteral(allocatedValues, type);

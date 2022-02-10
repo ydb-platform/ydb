@@ -5,16 +5,16 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 #include <util/stream/format.h>
-#include <util/stream/str.h> 
-#include <util/string/cast.h> 
-#include <util/string/printf.h> 
+#include <util/stream/str.h>
+#include <util/string/cast.h>
+#include <util/string/printf.h>
 #include <util/system/backtrace.h>
 #include <util/system/spinlock.h>
 #include <util/system/yassert.h>
 
 
-namespace NAllocProfiler { 
- 
+namespace NAllocProfiler {
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -87,11 +87,11 @@ public:
         return Y_ARRAY_SIZE(Frames);
     }
 
-    void BackTrace(const TFrameInfo* stack, TStackVec<void*, 64>& frames) const 
+    void BackTrace(const TFrameInfo* stack, TStackVec<void*, 64>& frames) const
     {
-        frames.clear(); 
+        frames.clear();
         for (size_t i = 0; i < 100; ++i) {
-            frames.push_back(stack->Addr); 
+            frames.push_back(stack->Addr);
             int prevInd = stack->PrevInd;
             if (prevInd == -1) {
                 break;
@@ -174,11 +174,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAllocationStackCollector::TImpl: public TStackCollector<TStats> { 
-    using TBase = TStackCollector<TStats>; 
+class TAllocationStackCollector::TImpl: public TStackCollector<TStats> {
+    using TBase = TStackCollector<TStats>;
 
 private:
-    TStats Total; 
+    TStats Total;
 
 public:
     int Alloc(void** stack, size_t frameCount, int tag, size_t size)
@@ -203,7 +203,7 @@ public:
         Total.Clear();
     }
 
-    void Dump(int count, IAllocationStatsDumper& out) const 
+    void Dump(int count, IAllocationStatsDumper& out) const
     {
         const TFrameInfo* frames = TBase::GetFrames();
         size_t framesCount = TBase::GetFramesCount();
@@ -225,18 +225,18 @@ public:
                     : ls.Frees > rs.Frees;
         });
 
-        out.DumpTotal(Total); 
+        out.DumpTotal(Total);
 
-        TAllocationInfo allocInfo; 
+        TAllocationInfo allocInfo;
         int printedCount = 0;
         for (const TFrameInfo* stack: stacks) {
-            allocInfo.Clear(); 
-            allocInfo.Tag = stack->Tag; 
-            allocInfo.Stats = stack->Stats; 
-            TBase::BackTrace(stack, allocInfo.Stack); 
+            allocInfo.Clear();
+            allocInfo.Tag = stack->Tag;
+            allocInfo.Stats = stack->Stats;
+            TBase::BackTrace(stack, allocInfo.Stack);
 
-            out.DumpEntry(allocInfo); 
- 
+            out.DumpEntry(allocInfo);
+
             if (++printedCount >= count) {
                 break;
             }
@@ -268,65 +268,65 @@ void TAllocationStackCollector::Clear()
     Impl->Clear();
 }
 
-void TAllocationStackCollector::Dump(int count, IAllocationStatsDumper &out) const 
+void TAllocationStackCollector::Dump(int count, IAllocationStatsDumper &out) const
 {
     Impl->Dump(count, out);
 }
 
- 
-TString IAllocationStatsDumper::FormatTag(int tag) { 
-    return ToString(tag); 
-} 
- 
-TString IAllocationStatsDumper::FormatSize(intptr_t sz) { 
-    return ToString(sz); 
-} 
- 
- 
-TAllocationStatsDumper::TAllocationStatsDumper(IOutputStream& out) 
-    : PrintedCount(0) 
-    , Out(out) 
-    , SymbolCache(2048) 
-{} 
- 
-void TAllocationStatsDumper::DumpTotal(const TStats& total) { 
-    Out << "TOTAL" 
-        << "\tAllocs: " << total.Allocs 
-        << "\tFrees: " << total.Frees 
-        << "\tCurrentSize: " << FormatSize(total.CurrentSize) 
-        << Endl; 
-} 
- 
-void TAllocationStatsDumper::DumpEntry(const TAllocationInfo& allocInfo) { 
-    Out << Endl 
-        << "STACK #" << PrintedCount+1 << ": " << FormatTag(allocInfo.Tag) 
-        << "\tAllocs: " << allocInfo.Stats.Allocs 
-        << "\tFrees: " << allocInfo.Stats.Frees 
-        << "\tCurrentSize: " << FormatSize(allocInfo.Stats.CurrentSize) 
-        << Endl; 
-    FormatBackTrace(allocInfo.Stack.data(), allocInfo.Stack.size()); 
-    PrintedCount++; 
-} 
- 
-void TAllocationStatsDumper::FormatBackTrace(void* const* stack, size_t sz) { 
-    char name[1024]; 
-    for (size_t i = 0; i < sz; ++i) { 
-        TSymbol symbol; 
-        auto it = SymbolCache.Find(stack[i]); 
-        if (it != SymbolCache.End()) { 
-            symbol = it.Value(); 
-        } else { 
-            TResolvedSymbol rs = ResolveSymbol(stack[i], name, sizeof(name)); 
-            symbol = {rs.NearestSymbol, rs.Name}; 
-            SymbolCache.Insert(stack[i], symbol); 
-        } 
- 
-        Out << Hex((intptr_t)stack[i], HF_FULL) << "\t" << symbol.Name; 
-        intptr_t offset = (intptr_t)stack[i] - (intptr_t)symbol.Address; 
-        if (offset) 
-            Out << " +" << offset; 
-        Out << Endl; 
-    } 
-} 
- 
-}   // namespace NAllocProfiler 
+
+TString IAllocationStatsDumper::FormatTag(int tag) {
+    return ToString(tag);
+}
+
+TString IAllocationStatsDumper::FormatSize(intptr_t sz) {
+    return ToString(sz);
+}
+
+
+TAllocationStatsDumper::TAllocationStatsDumper(IOutputStream& out)
+    : PrintedCount(0)
+    , Out(out)
+    , SymbolCache(2048)
+{}
+
+void TAllocationStatsDumper::DumpTotal(const TStats& total) {
+    Out << "TOTAL"
+        << "\tAllocs: " << total.Allocs
+        << "\tFrees: " << total.Frees
+        << "\tCurrentSize: " << FormatSize(total.CurrentSize)
+        << Endl;
+}
+
+void TAllocationStatsDumper::DumpEntry(const TAllocationInfo& allocInfo) {
+    Out << Endl
+        << "STACK #" << PrintedCount+1 << ": " << FormatTag(allocInfo.Tag)
+        << "\tAllocs: " << allocInfo.Stats.Allocs
+        << "\tFrees: " << allocInfo.Stats.Frees
+        << "\tCurrentSize: " << FormatSize(allocInfo.Stats.CurrentSize)
+        << Endl;
+    FormatBackTrace(allocInfo.Stack.data(), allocInfo.Stack.size());
+    PrintedCount++;
+}
+
+void TAllocationStatsDumper::FormatBackTrace(void* const* stack, size_t sz) {
+    char name[1024];
+    for (size_t i = 0; i < sz; ++i) {
+        TSymbol symbol;
+        auto it = SymbolCache.Find(stack[i]);
+        if (it != SymbolCache.End()) {
+            symbol = it.Value();
+        } else {
+            TResolvedSymbol rs = ResolveSymbol(stack[i], name, sizeof(name));
+            symbol = {rs.NearestSymbol, rs.Name};
+            SymbolCache.Insert(stack[i], symbol);
+        }
+
+        Out << Hex((intptr_t)stack[i], HF_FULL) << "\t" << symbol.Name;
+        intptr_t offset = (intptr_t)stack[i] - (intptr_t)symbol.Address;
+        if (offset)
+            Out << " +" << offset;
+        Out << Endl;
+    }
+}
+
+}   // namespace NAllocProfiler

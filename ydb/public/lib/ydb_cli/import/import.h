@@ -34,7 +34,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(NTable::EDataFormat, Format, NTable::EDataFormat::CSV);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
-    FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100); 
+    FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
@@ -53,7 +53,7 @@ private:
     std::shared_ptr<NTable::TTableClient> TableClient;
 
     TStatus UpsertCsv(const TString& dataFile, const TString& dbPath, const TImportFileSettings& settings);
-    TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header, 
+    TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header,
                             const NTable::TBulkUpsertSettings& upsertSettings,
                             const NTable::TRetryOperationSettings& retrySettings);
 };

@@ -205,7 +205,7 @@ namespace {
             entry.KesusInfo.Drop();
             entry.SolomonVolumeInfo.Drop();
             entry.PQGroupInfo.Drop();
-            entry.OlapStoreInfo.Drop(); 
+            entry.OlapStoreInfo.Drop();
             entry.OlapTableInfo.Drop();
             entry.CdcStreamInfo.Drop();
             entry.SequenceInfo.Drop();
@@ -704,7 +704,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KesusInfo.Drop();
             SolomonVolumeInfo.Drop();
             PQGroupInfo.Drop();
-            OlapStoreInfo.Drop(); 
+            OlapStoreInfo.Drop();
             OlapTableInfo.Drop();
             CdcStreamInfo.Drop();
             SequenceInfo.Drop();
@@ -762,16 +762,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillTableInfoFromOlapStore(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            if (pathDesc.HasDomainDescription()) { 
-                DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription()); 
-            } 
-        } 
+            if (pathDesc.HasDomainDescription()) {
+                DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
+            }
+        }
 
         void FillTableInfoFromOlapTable(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& desc = pathDesc.GetColumnTableDescription();
 
             THashMap<TString, ui32> nameToId;
-            const auto& schemaDesc = desc.GetSchema(); 
+            const auto& schemaDesc = desc.GetSchema();
             for (const auto& columnDesc : schemaDesc.GetColumns()) {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
@@ -1371,9 +1371,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
                 Kind = TNavigate::KindOlapTable;
-                if (Created) { 
-                    FillTableInfoFromOlapTable(pathDesc); 
-                } 
+                if (Created) {
+                    FillTableInfoFromOlapTable(pathDesc);
+                }
                 FillInfo(Kind, OlapTableInfo, std::move(*pathDesc.MutableColumnTableDescription()));
                 if (OlapTableInfo->Description.HasColumnStorePathId()) {
                     auto& p = OlapTableInfo->Description.GetColumnStorePathId();
@@ -1555,13 +1555,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
 
                 entry.Kind = TNavigate::KindTable;
-                if (target == NSysView::ISystemViewResolver::ETarget::OlapStore || 
-                    target == NSysView::ISystemViewResolver::ETarget::OlapTable) 
-                { 
-                    // OLAP sys views are represented by OLAP tables 
-                    entry.Kind =TNavigate::KindOlapTable; 
-                } 
- 
+                if (target == NSysView::ISystemViewResolver::ETarget::OlapStore ||
+                    target == NSysView::ISystemViewResolver::ETarget::OlapTable)
+                {
+                    // OLAP sys views are represented by OLAP tables
+                    entry.Kind =TNavigate::KindOlapTable;
+                }
+
                 entry.Columns = std::move(schema->Columns);
 
                 if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1606,21 +1606,21 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
                     return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
-                } else if (Kind == TNavigate::KindOlapStore) { 
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore); 
-                    entry.OlapStoreInfo = OlapStoreInfo; 
-                    return; 
-                } else if (Kind == TNavigate::KindOlapTable) { 
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable); 
-                    entry.OlapStoreInfo = OlapStoreInfo; 
-                    entry.OlapTableInfo = OlapTableInfo; 
-                    return; 
+                } else if (Kind == TNavigate::KindOlapStore) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
+                    entry.OlapStoreInfo = OlapStoreInfo;
+                    return;
+                } else if (Kind == TNavigate::KindOlapTable) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable);
+                    entry.OlapStoreInfo = OlapStoreInfo;
+                    entry.OlapTableInfo = OlapTableInfo;
+                    return;
                 }
 
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
-            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindOlapTable; 
+            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindOlapTable;
             if (entry.Operation == TNavigate::OpTable && !isTable) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
@@ -1675,7 +1675,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.KesusInfo = KesusInfo;
             entry.SolomonVolumeInfo = SolomonVolumeInfo;
             entry.PQGroupInfo = PQGroupInfo;
-            entry.OlapStoreInfo = OlapStoreInfo; 
+            entry.OlapStoreInfo = OlapStoreInfo;
             entry.OlapTableInfo = OlapTableInfo;
             entry.CdcStreamInfo = CdcStreamInfo;
             entry.SequenceInfo = SequenceInfo;
@@ -1803,22 +1803,22 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
                     return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
-                } else if (Kind == TNavigate::KindOlapStore) { 
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore); 
-                    // Add all shards of the OLAP store 
-                    for (ui64 columnShard : OlapStoreInfo->Description.GetColumnShards()) { 
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard)); 
-                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo(); 
-                    } 
-                    return; 
-                } else if (Kind == TNavigate::KindOlapTable) { 
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable); 
-                    // Add all shards of the OLAP table 
-                    for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) { 
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard)); 
-                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo(); 
-                    } 
-                    return; 
+                } else if (Kind == TNavigate::KindOlapStore) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
+                    // Add all shards of the OLAP store
+                    for (ui64 columnShard : OlapStoreInfo->Description.GetColumnShards()) {
+                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
+                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                    }
+                    return;
+                } else if (Kind == TNavigate::KindOlapTable) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable);
+                    // Add all shards of the OLAP table
+                    for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
+                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
+                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                    }
+                    return;
                 }
 
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
@@ -1849,12 +1849,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         ++context->Request->ErrorCount;
                     }
                 }
-            } else if (OlapTableInfo) { 
-                // TODO: return proper partitioning info (KIKIMR-11069) 
-                for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) { 
+            } else if (OlapTableInfo) {
+                // TODO: return proper partitioning info (KIKIMR-11069)
+                for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
                     keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
-                    keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo(); 
-                } 
+                    keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                }
             } else {
                 if (Partitioning) {
                     FillRangePartitioning(keyDesc.Range, keyDesc.Partitions);
@@ -1930,10 +1930,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // PQ specific
         TIntrusivePtr<TNavigate::TPQGroupInfo> PQGroupInfo;
 
-        // OlapStore specific 
-        TIntrusivePtr<TNavigate::TOlapStoreInfo> OlapStoreInfo; 
+        // OlapStore specific
+        TIntrusivePtr<TNavigate::TOlapStoreInfo> OlapStoreInfo;
         TIntrusivePtr<TNavigate::TOlapTableInfo> OlapTableInfo;
- 
+
         // CDC specific
         TIntrusivePtr<TNavigate::TCdcStreamInfo> CdcStreamInfo;
 

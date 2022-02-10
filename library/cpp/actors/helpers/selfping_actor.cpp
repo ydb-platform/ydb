@@ -72,8 +72,8 @@ private:
 public:
     static constexpr auto ActorActivityType() {
         return SELF_PING_ACTOR;
-    } 
- 
+    }
+
     TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter,
             const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
         : SendInterval(sendInterval)

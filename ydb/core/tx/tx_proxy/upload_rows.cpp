@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NTxProxy {
 
-class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::UPLOAD_ROWS_INTERNAL> { 
+class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::UPLOAD_ROWS_INTERNAL> {
 public:
     TUploadRowsInternal(
         TActorId sender,
@@ -33,10 +33,10 @@ public:
     }
 
 private:
-    TString GetDatabase()override { 
-        return TString(); 
-    } 
- 
+    TString GetDatabase()override {
+        return TString();
+    }
+
     const TString& GetTable() override {
         return Table;
     }

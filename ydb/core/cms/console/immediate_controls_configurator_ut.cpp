@@ -129,7 +129,7 @@ void InitImmediateControlsConfigurator(TTenantTestRuntime &runtime)
         cfg.MutableDataShardControls()->SetDisableByKeyFilter(1);
         cfg.MutableDataShardControls()->SetMaxTxLagMilliseconds(2592000000ULL);
         cfg.MutableDataShardControls()->SetCanCancelROWithReadSets(1);
-        cfg.MutableTxLimitControls()->SetPerRequestDataSizeLimit(256000000000000ULL); 
+        cfg.MutableTxLimitControls()->SetPerRequestDataSizeLimit(256000000000000ULL);
         cfg.MutableTxLimitControls()->SetPerShardReadSizeLimit(107374182400ULL);
         cfg.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(5368709120ULL);
     }
@@ -144,7 +144,7 @@ void InitImmediateControlsConfigurator(TTenantTestRuntime &runtime)
         cfg.MutableDataShardControls()->SetDisableByKeyFilter(10);
         cfg.MutableDataShardControls()->SetMaxTxLagMilliseconds(25920000000ULL);
         cfg.MutableDataShardControls()->SetCanCancelROWithReadSets(10);
-        cfg.MutableTxLimitControls()->SetPerRequestDataSizeLimit(300000000000000ULL); 
+        cfg.MutableTxLimitControls()->SetPerRequestDataSizeLimit(300000000000000ULL);
         cfg.MutableTxLimitControls()->SetPerShardReadSizeLimit(1073741824000ULL);
         cfg.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(53687091200ULL);
     }

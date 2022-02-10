@@ -138,8 +138,8 @@ public:
         , Alloc_(alloc)
         , Options_(options)
         , Origin_(initial)
-        , MemoryAllocatedBeforeCurrent_(0) 
-        , MemoryWasteBeforeCurrent_(0) 
+        , MemoryAllocatedBeforeCurrent_(0)
+        , MemoryWasteBeforeCurrent_(0)
     {
     }
 
@@ -245,11 +245,11 @@ public:
     }
 
     inline size_t MemoryAllocated() const noexcept {
-        return MemoryAllocatedBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Used() : 0); 
+        return MemoryAllocatedBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Used() : 0);
     }
 
     inline size_t MemoryWaste() const noexcept {
-        return MemoryWasteBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Left() : 0); 
+        return MemoryWasteBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Left() : 0);
     }
 
     template <class TOp>
@@ -277,14 +277,14 @@ protected:
     }
 
     inline void* RawAllocate(size_t len, size_t align) {
-        Y_ASSERT(align > 0); 
+        Y_ASSERT(align > 0);
         void* ret = Current_->Allocate(len, align);
 
         if (ret) {
             return ret;
         }
 
-        AddChunk(len + align - 1); 
+        AddChunk(len + align - 1);
 
         return Current_->Allocate(len, align);
     }
@@ -302,8 +302,8 @@ private:
     TOptions Options_;
     TChunkList Chunks_;
     const size_t Origin_;
-    size_t MemoryAllocatedBeforeCurrent_; 
-    size_t MemoryWasteBeforeCurrent_; 
+    size_t MemoryAllocatedBeforeCurrent_;
+    size_t MemoryWasteBeforeCurrent_;
 };
 
 template <typename TPool>

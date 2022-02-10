@@ -39,9 +39,9 @@ struct TEvTabletCounters {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS_AGGREGATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET_COUNTERS)");
 
-    // Used just as an atomic counter 
-    struct TInFlightCookie : TThrRefBase {}; 
- 
+    // Used just as an atomic counter
+    struct TInFlightCookie : TThrRefBase {};
+
     struct TEvTabletAddCounters : public TEventLocal<TEvTabletAddCounters, EvTabletAddCounters> {
         //
         const ui64 TabletID;
@@ -49,7 +49,7 @@ struct TEvTabletCounters {
         const TPathId TenantPathId;
         TAutoPtr<TTabletCountersBase> ExecutorCounters;
         TAutoPtr<TTabletCountersBase> AppCounters;
-        TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator 
+        TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
 
         TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId,
             TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters)
@@ -58,7 +58,7 @@ struct TEvTabletCounters {
             , TenantPathId(tenantPathId)
             , ExecutorCounters(executorCounters)
             , AppCounters(appCounters)
-            , InFlightCounter(inFlightCounter) 
+            , InFlightCounter(inFlightCounter)
         {}
     };
 

@@ -36,7 +36,7 @@ public:
 
         struct TComp {
             bool operator ()(const TNodeDesc& l, const TNodeDesc& r) {
-                return r.RemainsMemory > l.RemainsMemory && l.RemainsComputeActors > 0; 
+                return r.RemainsMemory > l.RemainsMemory && l.RemainsComputeActors > 0;
             }
         };
 

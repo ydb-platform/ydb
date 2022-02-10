@@ -150,8 +150,8 @@ namespace NMonitoring {
         }
 
         ~TTag() {
-            try { 
-                Str << "</" << tag << ">"; 
+            try {
+                Str << "</" << tag << ">";
             } catch (...) {
             }
         }

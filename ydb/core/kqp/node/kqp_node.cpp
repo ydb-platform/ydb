@@ -296,20 +296,20 @@ private:
                     actorSystem->Send(rm, new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, message));
                 };
 
-            ETableKind tableKind = ETableKind::Unknown; 
-            { 
-                NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta; 
-                if (dqTask.GetMeta().UnpackTo(&meta)) { 
-                    tableKind = (ETableKind)meta.GetTable().GetTableKind(); 
-                    if (tableKind == ETableKind::Unknown) { 
-                        // For backward compatibility 
-                        tableKind = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView; 
-                    } 
-                } 
-            } 
- 
+            ETableKind tableKind = ETableKind::Unknown;
+            {
+                NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
+                if (dqTask.GetMeta().UnpackTo(&meta)) {
+                    tableKind = (ETableKind)meta.GetTable().GetTableKind();
+                    if (tableKind == ETableKind::Unknown) {
+                        // For backward compatibility
+                        tableKind = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView;
+                    }
+                }
+            }
+
             IActor* computeActor;
-            if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) { 
+            if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
                                                          nullptr, nullptr, runtimeSettings, memoryLimits, Counters);
                 taskCtx.ComputeActorId = Register(computeActor);

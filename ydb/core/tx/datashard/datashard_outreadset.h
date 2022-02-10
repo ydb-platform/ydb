@@ -55,8 +55,8 @@ public:
 
     bool LoadReadSets(NIceDb::TNiceDb& db);
     void SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, TString body);
-    void SaveAck(const TActorContext& ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev); 
-    void AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx); 
+    void SaveAck(const TActorContext& ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev);
+    void AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx);
     bool ResendRS(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, ui64 seqNo);
     void ResendAll(const TActorContext& ctx);
     void Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
@@ -69,9 +69,9 @@ public:
     ui64 CountAcks() const { return ReadSetAcks.size(); }
 
 private:
-    void UpdateMonCounter() const; 
- 
-private: 
+    void UpdateMonCounter() const;
+
+private:
     TDataShard * Self;
     THashMap<ui64, TReadSetKey> CurrentReadSets;      // SeqNo -> Info
     THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo

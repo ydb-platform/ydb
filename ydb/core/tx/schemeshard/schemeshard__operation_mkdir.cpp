@@ -172,12 +172,12 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist({ 
-                            TPathElement::EPathType::EPathTypeDir, 
-                            TPathElement::EPathType::EPathTypeSubDomain, 
-                            TPathElement::EPathType::EPathTypeExtSubDomain, 
+                    .FailOnExist({
+                            TPathElement::EPathType::EPathTypeDir,
+                            TPathElement::EPathType::EPathTypeSubDomain,
+                            TPathElement::EPathType::EPathTypeExtSubDomain,
                             TPathElement::EPathType::EPathTypeColumnStore
-                        }, acceptExisted); 
+                        }, acceptExisted);
             } else {
                 checks
                     .NotEmpty()

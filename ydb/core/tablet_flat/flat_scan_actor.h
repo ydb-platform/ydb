@@ -58,7 +58,7 @@ namespace NOps {
 
         ~TDriver()
         {
-            /* Correct actors shutdown hasn't been implemented in 
+            /* Correct actors shutdown hasn't been implemented in
                 kikimr, thus actors may be destructed in incompleted state
                 and dtor cannot be used for completeness checkups.
 
@@ -246,17 +246,17 @@ namespace NOps {
 
             conf.AheadLo = Args.AheadLo;
             conf.AheadHi = Args.AheadHi;
- 
+
             if (Conf.ReadAheadLo != Max<ui64>() && Conf.ReadAheadLo <= conf.AheadLo) {
-                 conf.AheadLo = Conf.ReadAheadLo; 
-            } 
- 
-            if (Conf.ReadAheadHi != Max<ui64>() && Conf.ReadAheadHi <= conf.AheadHi) { 
-                 conf.AheadHi = Conf.ReadAheadHi; 
-            } 
- 
-            conf.AheadLo = Min(conf.AheadLo, conf.AheadHi); 
- 
+                 conf.AheadLo = Conf.ReadAheadLo;
+            }
+
+            if (Conf.ReadAheadHi != Max<ui64>() && Conf.ReadAheadHi <= conf.AheadHi) {
+                 conf.AheadHi = Conf.ReadAheadHi;
+            }
+
+            conf.AheadLo = Min(conf.AheadLo, conf.AheadHi);
+
             conf.Trace = Args.Trace;
             conf.Edge = Conf.LargeEdge;
             conf.Tablet = Args.Tablet;

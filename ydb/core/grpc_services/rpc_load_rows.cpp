@@ -1,8 +1,8 @@
-#include "grpc_request_proxy.h" 
- 
-#include "rpc_calls.h" 
-#include "rpc_common.h" 
- 
+#include "grpc_request_proxy.h"
+
+#include "rpc_calls.h"
+#include "rpc_common.h"
+
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
@@ -13,86 +13,86 @@
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
 
-#include <util/string/vector.h> 
+#include <util/string/vector.h>
 #include <util/generic/size_literals.h>
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
-using namespace NActors; 
-using namespace Ydb; 
- 
+
+namespace NKikimr {
+namespace NGRpcService {
+
+using namespace NActors;
+using namespace Ydb;
+
 namespace {
 
-bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) { 
-    bool ok = true; 
-    switch (type) { 
-    case NScheme::NTypeIds::Bool: 
-    case NScheme::NTypeIds::Int8: 
-    case NScheme::NTypeIds::Uint8: 
-    case NScheme::NTypeIds::Int16: 
-    case NScheme::NTypeIds::Uint16: 
-    case NScheme::NTypeIds::Int32: 
-    case NScheme::NTypeIds::Uint32: 
-    case NScheme::NTypeIds::Int64: 
-    case NScheme::NTypeIds::Uint64: 
-    case NScheme::NTypeIds::Float: 
-    case NScheme::NTypeIds::Double: 
-    case NScheme::NTypeIds::String: 
-        break; 
- 
-    case NScheme::NTypeIds::Decimal: 
-        ok = !NYql::NDecimal::IsError(cell.AsValue<NYql::NDecimal::TInt128>()); 
-        break; 
- 
-    case NScheme::NTypeIds::Date: 
-        ok = cell.AsValue<ui16>() < NUdf::MAX_DATE; 
-        break; 
- 
-    case NScheme::NTypeIds::Datetime: 
-        ok = cell.AsValue<ui32>() < NUdf::MAX_DATETIME; 
-        break; 
- 
-    case NScheme::NTypeIds::Timestamp: 
-        ok = cell.AsValue<ui64>() < NUdf::MAX_TIMESTAMP; 
-        break; 
- 
-    case NScheme::NTypeIds::Interval: 
-        ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP; 
-        break; 
- 
-    case NScheme::NTypeIds::Utf8: 
-        ok = NYql::IsUtf8(cell.AsBuf()); 
-        break; 
- 
-    case NScheme::NTypeIds::Yson: 
-        ok = NYql::NDom::IsValidYson(cell.AsBuf()); 
-        break; 
- 
-    case NScheme::NTypeIds::Json: 
-        ok = NYql::NDom::IsValidJson(cell.AsBuf()); 
-        break; 
- 
-    case NScheme::NTypeIds::JsonDocument: 
-        // JsonDocument value was verified at parsing time 
-        break; 
- 
-    case NScheme::NTypeIds::DyNumber: 
-        // DyNumber value was verified at parsing time 
-        break; 
- 
-    default: 
-        err = Sprintf("Unexpected type %d", type); 
-        return false; 
-    } 
- 
-    if (!ok) { 
-        err = Sprintf("Invalid %s value", NScheme::TypeName(type)); 
-    } 
- 
-    return ok; 
-} 
- 
+bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
+    bool ok = true;
+    switch (type) {
+    case NScheme::NTypeIds::Bool:
+    case NScheme::NTypeIds::Int8:
+    case NScheme::NTypeIds::Uint8:
+    case NScheme::NTypeIds::Int16:
+    case NScheme::NTypeIds::Uint16:
+    case NScheme::NTypeIds::Int32:
+    case NScheme::NTypeIds::Uint32:
+    case NScheme::NTypeIds::Int64:
+    case NScheme::NTypeIds::Uint64:
+    case NScheme::NTypeIds::Float:
+    case NScheme::NTypeIds::Double:
+    case NScheme::NTypeIds::String:
+        break;
+
+    case NScheme::NTypeIds::Decimal:
+        ok = !NYql::NDecimal::IsError(cell.AsValue<NYql::NDecimal::TInt128>());
+        break;
+
+    case NScheme::NTypeIds::Date:
+        ok = cell.AsValue<ui16>() < NUdf::MAX_DATE;
+        break;
+
+    case NScheme::NTypeIds::Datetime:
+        ok = cell.AsValue<ui32>() < NUdf::MAX_DATETIME;
+        break;
+
+    case NScheme::NTypeIds::Timestamp:
+        ok = cell.AsValue<ui64>() < NUdf::MAX_TIMESTAMP;
+        break;
+
+    case NScheme::NTypeIds::Interval:
+        ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
+        break;
+
+    case NScheme::NTypeIds::Utf8:
+        ok = NYql::IsUtf8(cell.AsBuf());
+        break;
+
+    case NScheme::NTypeIds::Yson:
+        ok = NYql::NDom::IsValidYson(cell.AsBuf());
+        break;
+
+    case NScheme::NTypeIds::Json:
+        ok = NYql::NDom::IsValidJson(cell.AsBuf());
+        break;
+
+    case NScheme::NTypeIds::JsonDocument:
+        // JsonDocument value was verified at parsing time
+        break;
+
+    case NScheme::NTypeIds::DyNumber:
+        // DyNumber value was verified at parsing time
+        break;
+
+    default:
+        err = Sprintf("Unexpected type %d", type);
+        return false;
+    }
+
+    if (!ok) {
+        err = Sprintf("Invalid %s value", NScheme::TypeName(type));
+    }
+
+    return ok;
+}
+
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
     switch (type.id()) {
@@ -173,58 +173,58 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 
 }
 
-class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> { 
-    using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>; 
-public: 
+class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
+    using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
+public:
     explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout())) 
-        , Request(request) 
-    {} 
+        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
+        , Request(request)
+    {}
 
-private: 
-    static bool CellFromProtoVal(NScheme::TTypeId type, const Ydb::Value* vp, 
-                                  TCell& c, TString& err, TMemoryPool& valueDataPool) 
-    { 
-        if (vp->Hasnull_flag_value()) { 
-            c = TCell(); 
-            return true; 
-        } 
- 
-        if (vp->Hasnested_value()) { 
-            vp = &vp->Getnested_value(); 
-        } 
- 
-        const Ydb::Value& val = *vp; 
- 
-#define EXTRACT_VAL(cellType, protoType, cppType) \ 
-        case NScheme::NTypeIds::cellType : { \ 
-                cppType v = val.Get##protoType##_value(); \ 
-                c = TCell((const char*)&v, sizeof(v)); \ 
-                break; \ 
-            } 
- 
-        switch (type) { 
-        EXTRACT_VAL(Bool, bool, ui8); 
-        EXTRACT_VAL(Int8, int32, i8); 
-        EXTRACT_VAL(Uint8, uint32, ui8); 
-        EXTRACT_VAL(Int16, int32, i16); 
-        EXTRACT_VAL(Uint16, uint32, ui16); 
-        EXTRACT_VAL(Int32, int32, i32); 
-        EXTRACT_VAL(Uint32, uint32, ui32); 
-        EXTRACT_VAL(Int64, int64, i64); 
-        EXTRACT_VAL(Uint64, uint64, ui64); 
-        EXTRACT_VAL(Float, float, float); 
-        EXTRACT_VAL(Double, double, double); 
-        EXTRACT_VAL(Date, uint32, ui16); 
-        EXTRACT_VAL(Datetime, uint32, ui32); 
-        EXTRACT_VAL(Timestamp, uint64, ui64); 
-        EXTRACT_VAL(Interval, int64, i64); 
-        case NScheme::NTypeIds::Json : 
-        case NScheme::NTypeIds::Utf8 : { 
-                TString v = val.Gettext_value(); 
-                c = TCell(v.data(), v.size()); 
-                break; 
-            } 
+private:
+    static bool CellFromProtoVal(NScheme::TTypeId type, const Ydb::Value* vp,
+                                  TCell& c, TString& err, TMemoryPool& valueDataPool)
+    {
+        if (vp->Hasnull_flag_value()) {
+            c = TCell();
+            return true;
+        }
+
+        if (vp->Hasnested_value()) {
+            vp = &vp->Getnested_value();
+        }
+
+        const Ydb::Value& val = *vp;
+
+#define EXTRACT_VAL(cellType, protoType, cppType) \
+        case NScheme::NTypeIds::cellType : { \
+                cppType v = val.Get##protoType##_value(); \
+                c = TCell((const char*)&v, sizeof(v)); \
+                break; \
+            }
+
+        switch (type) {
+        EXTRACT_VAL(Bool, bool, ui8);
+        EXTRACT_VAL(Int8, int32, i8);
+        EXTRACT_VAL(Uint8, uint32, ui8);
+        EXTRACT_VAL(Int16, int32, i16);
+        EXTRACT_VAL(Uint16, uint32, ui16);
+        EXTRACT_VAL(Int32, int32, i32);
+        EXTRACT_VAL(Uint32, uint32, ui32);
+        EXTRACT_VAL(Int64, int64, i64);
+        EXTRACT_VAL(Uint64, uint64, ui64);
+        EXTRACT_VAL(Float, float, float);
+        EXTRACT_VAL(Double, double, double);
+        EXTRACT_VAL(Date, uint32, ui16);
+        EXTRACT_VAL(Datetime, uint32, ui32);
+        EXTRACT_VAL(Timestamp, uint64, ui64);
+        EXTRACT_VAL(Interval, int64, i64);
+        case NScheme::NTypeIds::Json :
+        case NScheme::NTypeIds::Utf8 : {
+                TString v = val.Gettext_value();
+                c = TCell(v.data(), v.size());
+                break;
+            }
         case NScheme::NTypeIds::JsonDocument : {
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
             if (!binaryJson.Defined()) {
@@ -245,62 +245,62 @@ private:
             c = TCell(dyNumberInPool.data(), dyNumberInPool.size());
             break;
         }
-        case NScheme::NTypeIds::Yson : 
-        case NScheme::NTypeIds::String : { 
-                TString v = val.Getbytes_value(); 
-                c = TCell(v.data(), v.size()); 
-                break; 
-            } 
-        case NScheme::NTypeIds::Decimal : { 
-            std::pair<ui64,ui64>& decimalVal = *valueDataPool.Allocate<std::pair<ui64,ui64> >(); 
-            decimalVal.first = val.low_128(); 
-            decimalVal.second = val.high_128(); 
-            c = TCell((const char*)&decimalVal, sizeof(decimalVal)); 
-            break; 
-        } 
-        default: 
-            err = Sprintf("Unexpected type %d", type); 
-            return false; 
-        }; 
- 
-        return CheckValueData(type, c, err); 
-    } 
- 
-    template <class TProto> 
-    static bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto, 
-                                   TString& err, TMemoryPool& valueDataPool) 
-    { 
-        cells.clear(); 
-        cells.reserve(descr.size()); 
- 
-        for (auto& fd : descr) { 
-            if (proto.items_size() <= (int)fd.PositionInStruct) { 
-                err = "Invalid request"; 
-                return false; 
-            } 
-            cells.push_back({}); 
-            if (!CellFromProtoVal(fd.Type, &proto.Getitems(fd.PositionInStruct), cells.back(), err, valueDataPool)) { 
-                return false; 
-            } 
+        case NScheme::NTypeIds::Yson :
+        case NScheme::NTypeIds::String : {
+                TString v = val.Getbytes_value();
+                c = TCell(v.data(), v.size());
+                break;
+            }
+        case NScheme::NTypeIds::Decimal : {
+            std::pair<ui64,ui64>& decimalVal = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+            decimalVal.first = val.low_128();
+            decimalVal.second = val.high_128();
+            c = TCell((const char*)&decimalVal, sizeof(decimalVal));
+            break;
+        }
+        default:
+            err = Sprintf("Unexpected type %d", type);
+            return false;
+        };
+
+        return CheckValueData(type, c, err);
+    }
+
+    template <class TProto>
+    static bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto,
+                                   TString& err, TMemoryPool& valueDataPool)
+    {
+        cells.clear();
+        cells.reserve(descr.size());
+
+        for (auto& fd : descr) {
+            if (proto.items_size() <= (int)fd.PositionInStruct) {
+                err = "Invalid request";
+                return false;
+            }
+            cells.push_back({});
+            if (!CellFromProtoVal(fd.Type, &proto.Getitems(fd.PositionInStruct), cells.back(), err, valueDataPool)) {
+                return false;
+            }
 
             if (fd.NotNull && cells.back().IsNull()) {
                 err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
                 return false;
             }
-        } 
- 
-        return true; 
-    } 
- 
+        }
+
+        return true;
+    }
+
 private:
     bool ReportCostInfoEnabled() const {
         return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
-    TString GetDatabase()override { 
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())); 
-    } 
- 
+    TString GetDatabase()override {
+        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+    }
+
     const TString& GetTable() override {
         return Request->GetProtoRequest()->table();
     }
@@ -331,25 +331,25 @@ private:
 
         NACLib::TUserToken userToken(Request->GetInternalToken());
         const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult(); 
-        if (!resolveResult) { 
+        auto resolveResult = GetResolveNameResult();
+        if (!resolveResult) {
             TStringStream explanation;
             explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << Request->GetProtoRequest()->table() 
-                        << "' has not been resolved yet"; 
+                        << " table '" << Request->GetProtoRequest()->table()
+                        << "' has not been resolved yet";
 
             errorMessage = explanation.Str();
             return false;
         }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) { 
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok 
-                && entry.SecurityObject != nullptr 
-                && !entry.SecurityObject->CheckAccess(access, userToken)) 
+        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
+            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+                && entry.SecurityObject != nullptr
+                && !entry.SecurityObject->CheckAccess(access, userToken))
             {
                 TStringStream explanation;
                 explanation << "Access denied for " << userToken.GetUserSID()
                             << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << Request->GetProtoRequest()->table() << "'"; 
+                            << " to table '" << Request->GetProtoRequest()->table() << "'";
 
                 errorMessage = explanation.Str();
                 return false;
@@ -378,34 +378,34 @@ private:
     }
 
     bool ExtractRows(TString& errorMessage) override {
-        // Parse type field 
-        // Check that it is a list of stuct 
-        // List all memebers and check their names and types 
-        // Save indexes of key column members and no-key members 
- 
-        TVector<TCell> keyCells; 
-        TVector<TCell> valueCells; 
+        // Parse type field
+        // Check that it is a list of stuct
+        // List all memebers and check their names and types
+        // Save indexes of key column members and no-key members
+
+        TVector<TCell> keyCells;
+        TVector<TCell> valueCells;
         float cost = 0.0f;
- 
-        // TODO: check that value is a list of structs 
- 
-        // For each row in values 
-        TMemoryPool valueDataPool(256); 
-        const auto& rows = Request->GetProtoRequest()->Getrows().Getvalue().Getitems(); 
-        for (const auto& r : rows) { 
-            valueDataPool.Clear(); 
- 
+
+        // TODO: check that value is a list of structs
+
+        // For each row in values
+        TMemoryPool valueDataPool(256);
+        const auto& rows = Request->GetProtoRequest()->Getrows().Getvalue().Getitems();
+        for (const auto& r : rows) {
+            valueDataPool.Clear();
+
             ui64 sz = 0;
-            // Take members corresponding to key columns 
-            if (!FillCellsFromProto(keyCells, KeyColumnPositions, r, errorMessage, valueDataPool)) { 
-                return false; 
-            } 
- 
-            // Fill rest of cells with non-key column members 
-            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool)) { 
-                return false; 
-            } 
- 
+            // Take members corresponding to key columns
+            if (!FillCellsFromProto(keyCells, KeyColumnPositions, r, errorMessage, valueDataPool)) {
+                return false;
+            }
+
+            // Fill rest of cells with non-key column members
+            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool)) {
+                return false;
+            }
+
             for (const auto& cell : keyCells) {
                 sz += cell.Size();
             }
@@ -416,15 +416,15 @@ private:
 
             cost += TUpsertCost::OneRowCost(sz);
 
-            // Save serialized key and value 
-            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells)); 
-            TString serializedValue = TSerializedCellVec::Serialize(valueCells); 
-            AllRows.emplace_back(serializedKey, serializedValue); 
-        } 
- 
+            // Save serialized key and value
+            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
+            TString serializedValue = TSerializedCellVec::Serialize(valueCells);
+            AllRows.emplace_back(serializedKey, serializedValue);
+        }
+
         RuCost = TUpsertCost::CostToRu(cost);
-        return true; 
-    } 
+        return true;
+    }
 
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
@@ -434,8 +434,8 @@ private:
 private:
     TAutoPtr<TEvBulkUpsertRequest> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
-}; 
- 
+};
+
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
@@ -654,7 +654,7 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx) { 
+void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx) {
     auto* req = ev->Get()->GetProtoRequest();
     if (req->has_arrow_batch_settings()) {
         ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
@@ -663,7 +663,7 @@ void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorConte
     } else {
         ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release()));
     }
-} 
- 
-} // namespace NKikimr 
-} // namespace NGRpcService 
+}
+
+} // namespace NKikimr
+} // namespace NGRpcService

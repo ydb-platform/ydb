@@ -360,7 +360,7 @@ message PartitioningSettings {
     // Preferred partition size for auto partitioning by size, Mb
     uint64 partition_size_mb = 3;
     // Enable auto partitioning based on load on each partition
-    Ydb.FeatureFlag.Status partitioning_by_load = 4; 
+    Ydb.FeatureFlag.Status partitioning_by_load = 4;
     reserved 5; // partitioning_by_load settings
     // Minimum partitions count auto merge would stop working at
     uint64 min_partitions_count = 6;
@@ -707,8 +707,8 @@ message ExecuteQueryResult {
     TransactionMeta tx_meta = 2;
     // Query metadata
     QueryMeta query_meta = 3;
-    // Query execution statistics 
-    Ydb.TableStats.QueryStats query_stats = 4; 
+    // Query execution statistics
+    Ydb.TableStats.QueryStats query_stats = 4;
 }
 
 // Explain data query
@@ -939,15 +939,15 @@ message ReadTableResult {
     // Result set (same as result of sql request)
     Ydb.ResultSet result_set = 1;
 }
- 
-message BulkUpsertRequest { 
-    string table = 1; 
-    // "rows" parameter must be a list of structs where each stuct represents one row. 
-    // It must contain all key columns but not necessarily all non-key columns. 
-    // Similar to UPSERT statement only values of specified columns will be updated. 
-    TypedValue rows = 2; 
+
+message BulkUpsertRequest {
+    string table = 1;
+    // "rows" parameter must be a list of structs where each stuct represents one row.
+    // It must contain all key columns but not necessarily all non-key columns.
+    // Similar to UPSERT statement only values of specified columns will be updated.
+    TypedValue rows = 2;
     Ydb.Operations.OperationParams operation_params = 3;
- 
+
     // You may set data_format + data instead of rows to insert data in serialized formats.
     oneof data_format {
         Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 7;
@@ -956,15 +956,15 @@ message BulkUpsertRequest {
 
     // It's last in the definition to help with sidecar patterns
     bytes data = 1000;
-} 
- 
-message BulkUpsertResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message BulkUpsertResult { 
-} 
- 
+}
+
+message BulkUpsertResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message BulkUpsertResult {
+}
+
 message ExecuteScanQueryRequest {
     enum Mode {
         MODE_UNSPECIFIED = 0;

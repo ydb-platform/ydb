@@ -20,7 +20,7 @@
     Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
 #   define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
         Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
-#   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \ 
+#   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
         Y_UNUSED(MemInfo); Y_UNUSED(Mem);
 #endif
 

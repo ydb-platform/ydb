@@ -13,8 +13,8 @@ class TWalleRemoveTaskAdapter : public TActorBootstrapped<TWalleRemoveTaskAdapte
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_WALLE_REQ;
-    } 
- 
+    }
+
     TWalleRemoveTaskAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &event, const TCmsStatePtr state, TActorId cms)
         : RequestEvent(event)
         , State(state)

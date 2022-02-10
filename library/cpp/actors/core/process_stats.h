@@ -1,15 +1,15 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "actor.h" 
- 
+#pragma once
+
+#include "defs.h"
+#include "actor.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
- 
+
 namespace NMonitoring {
     class TMetricRegistry;
 }
 
-namespace NActors { 
+namespace NActors {
     struct TProcStat {
         ui64 Rss;
         ui64 VolCtxSwtch;

@@ -7,9 +7,9 @@
 
 namespace NKikimr::NOlap {
 
-const TString TIndexInfo::STORE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexStatsName; 
-const TString TIndexInfo::TABLE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::TablePrimaryIndexStatsName; 
- 
+const TString TIndexInfo::STORE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexStatsName;
+const TString TIndexInfo::TABLE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::TablePrimaryIndexStatsName;
+
 void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstant& value) {
     switch (scalar.type->id()) {
         case arrow::Type::BOOL:

@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TCallable* c1 = TCallable::Create(0, nullptr, ctype1, env);
         UNIT_ASSERT_EQUAL(c1->GetInputsCount(), 0);
         UNIT_ASSERT(!c1->HasResult());
-        c1->SetResult(TRuntimeNode(env.GetVoid(), true), env); 
+        c1->SetResult(TRuntimeNode(env.GetVoid(), true), env);
         UNIT_ASSERT(c1->HasResult());
         UNIT_ASSERT_EQUAL(c1->GetResult().GetStaticType()->GetKind(), TType::EKind::Void);
 
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(c2->GetInput(1).IsImmediate(), false);
         UNIT_ASSERT_EQUAL(c2->GetInput(1).GetNode()->GetType()->GetKind(), TType::EKind::Callable);
         UNIT_ASSERT(!c2->HasResult());
-        c2->SetResult(TRuntimeNode(env.GetVoid(), true), env); 
+        c2->SetResult(TRuntimeNode(env.GetVoid(), true), env);
         UNIT_ASSERT(c2->HasResult());
         UNIT_ASSERT_EQUAL(c2->GetResult().GetStaticType()->GetKind(), TType::EKind::Void);
     }

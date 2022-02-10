@@ -1,6 +1,6 @@
- 
-option cc_enable_arenas = true; 
- 
+
+option cc_enable_arenas = true;
+
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/kqp.proto";
@@ -21,27 +21,27 @@ import "google/protobuf/empty.proto";
 package NKikimrTxDataShard;
 option java_package = "ru.yandex.kikimr.proto";
 
-enum EDatashardState { 
-    Uninitialized = 0; 
-    WaitScheme = 1; 
-    Ready = 2; 
-    Readonly = 3; 
-    Offline = 4; 
-    PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received 
+enum EDatashardState {
+    Uninitialized = 0;
+    WaitScheme = 1;
+    Ready = 2;
+    Readonly = 3;
+    Offline = 4;
+    PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received
     Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden
- 
-    // Split/Merge Src states 
-    SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting 
-    SplitSrcMakeSnapshot = 102; 
-    SplitSrcSendingSnapshot = 103; 
-    SplitSrcWaitForPartitioningChanged = 104; 
- 
-    // Split/Merge Dst states 
-    SplitDstReceivingSnapshot = 201; 
- 
-    Unknown = 0xFFFF; 
-} 
- 
+
+    // Split/Merge Src states
+    SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting
+    SplitSrcMakeSnapshot = 102;
+    SplitSrcSendingSnapshot = 103;
+    SplitSrcWaitForPartitioningChanged = 104;
+
+    // Split/Merge Dst states
+    SplitDstReceivingSnapshot = 201;
+
+    Unknown = 0xFFFF;
+}
+
 message TEvGetShardState {
    optional NActorsProto.TActorId Source = 1;
 }
@@ -62,7 +62,7 @@ message TShardOpResult {
 message TEvSchemaChanged {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 Origin = 2;
-    optional uint32 State = 3;  // EDatashardState 
+    optional uint32 State = 3;  // EDatashardState
     optional uint64 TxId = 4;
     optional uint64 Step = 5;
     optional uint32 Generation = 6;
@@ -72,19 +72,19 @@ message TEvSchemaChanged {
 
 message TEvSchemaChangedResult {
     optional uint64 TxId = 1;
-    // DEPRECATED: optional bool Retry = 2; 
+    // DEPRECATED: optional bool Retry = 2;
 }
 
-message TEvStateChanged { 
+message TEvStateChanged {
     optional NActorsProto.TActorId Source = 1;
-    optional uint64 TabletId = 2; 
-    optional uint32 State = 3;  // EDatashardState 
-} 
- 
-message TEvStateChangedResult { 
-    optional uint64 TabletId = 1; 
-    optional uint32 State = 2;  // EDatashardState 
-} 
+    optional uint64 TabletId = 2;
+    optional uint32 State = 3;  // EDatashardState
+}
+
+message TEvStateChangedResult {
+    optional uint64 TabletId = 1;
+    optional uint32 State = 2;  // EDatashardState
+}
 message TRWTransaction {
 }
 
@@ -162,7 +162,7 @@ message TKqpTransaction {
         optional uint64 SchemaVersion = 3;
         // reserved 4
         optional string SysViewInfo = 5;
-        optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind 
+        optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind
     }
 
     // Data-query task meta
@@ -241,8 +241,8 @@ message TKqpReadset {
 }
 
 message TDataTransaction {
-    optional TRWTransaction RWTransaction = 1;  // DEPRECATED 
-    optional TROTransaction ROTransaction = 2;  // DEPRECATED 
+    optional TRWTransaction RWTransaction = 1;  // DEPRECATED
+    optional TROTransaction ROTransaction = 2;  // DEPRECATED
     optional bytes MiniKQL = 3;
     optional bool Immediate = 4;
     optional fixed64 LockTxId = 5;
@@ -290,27 +290,27 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccLowWatermarkTxId = 9;
 }
 
-message TSnapshotTransferInfo { 
-    optional uint64 Shard = 1; 
-}; 
- 
-message TReceiveSnapshot { 
+message TSnapshotTransferInfo {
+    optional uint64 Shard = 1;
+};
+
+message TReceiveSnapshot {
     optional uint64 TableId_Deprecated = 1;
-    repeated TSnapshotTransferInfo ReceiveFrom = 2; 
+    repeated TSnapshotTransferInfo ReceiveFrom = 2;
     optional TTableId TableId = 3;
-} 
- 
-message TSendSnapshot { 
+}
+
+message TSendSnapshot {
     optional uint64 TableId_Deprecated = 1;
-    repeated TSnapshotTransferInfo SendTo = 2; 
+    repeated TSnapshotTransferInfo SendTo = 2;
     optional TTableId TableId = 3;
-} 
- 
-message TSchemeOpSeqNo { 
-    optional uint64 Generation = 1; 
-    optional uint64 Round = 2; 
-} 
- 
+}
+
+message TSchemeOpSeqNo {
+    optional uint64 Generation = 1;
+    optional uint64 Round = 2;
+}
+
 message TCreatePersistentSnapshot {
     optional uint64 OwnerId = 1;
     optional uint64 PathId = 2;
@@ -388,15 +388,15 @@ message TMoveTable {
     repeated TRemapIndexPathId ReMapIndexes = 5;
 }
 
-message TFlatSchemeTransaction { 
+message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
     optional NKikimrSchemeOp.TTableDescription AlterTable = 3;
-    optional TReceiveSnapshot ReceiveSnapshot = 4; 
-    optional TSendSnapshot SendSnapshot = 5; 
+    optional TReceiveSnapshot ReceiveSnapshot = 4;
+    optional TSendSnapshot SendSnapshot = 5;
     optional NKikimrSchemeOp.TBackupTask Backup = 6;
- 
-    optional TSchemeOpSeqNo SeqNo = 7; 
+
+    optional TSchemeOpSeqNo SeqNo = 7;
     optional bool ReadOnly = 8;
     reserved 9;
 
@@ -416,8 +416,8 @@ message TFlatSchemeTransaction {
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
-} 
- 
+}
+
 message TDistributedEraseTransaction {
     message TDependent {
         optional uint64 ShardId = 1;
@@ -502,8 +502,8 @@ message TError {
         DUPLICATED_SNAPSHOT_POLICY = 11;
         MISSING_SNAPSHOT_POLICY = 12;
         PROGRAM_ERROR = 13;
-        OUT_OF_SPACE = 14; 
-        READ_SIZE_EXECEEDED = 15; 
+        OUT_OF_SPACE = 14;
+        READ_SIZE_EXECEEDED = 15;
         SHARD_IS_BLOCKED = 16;
         UNKNOWN = 17;
         REPLY_SIZE_EXECEEDED = 18;
@@ -548,11 +548,11 @@ message TEvProposeTransactionResult {
         BAD_REQUEST = 12;
     };
 
-    message TReadSetInfo { 
-        optional uint64 ShardId = 1; 
-        optional uint64 Size = 2; 
-    }; 
- 
+    message TReadSetInfo {
+        optional uint64 ShardId = 1;
+        optional uint64 Size = 2;
+    };
+
     optional ETransactionKind TxKind = 1;
     optional uint64 Origin = 2;
     optional EStatus Status = 3;
@@ -568,15 +568,15 @@ message TEvProposeTransactionResult {
     optional uint64 ExecLatency = 13;
     optional uint64 ProposeLatency = 14;
     repeated TLock TxLocks = 15;
-    optional uint64 ReadSize = 16; 
-    optional uint64 ReplySize = 17; 
-    repeated TReadSetInfo OutgoingReadSetInfo = 18; 
+    optional uint64 ReadSize = 16;
+    optional uint64 ReplySize = 17;
+    repeated TReadSetInfo OutgoingReadSetInfo = 18;
     optional TTabletInfo TabletInfo = 19;
     // For read table tx result holds offsets in TxResult to cut response
     repeated uint32 RowOffsets = 20;
     repeated fixed64 DomainCoordinators = 21;
     optional uint32 ApiVersion = 22; // Version of TxResult response data
-    optional NKikimrQueryStats.TTxStats TxStats = 23; 
+    optional NKikimrQueryStats.TTxStats TxStats = 23;
     optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...)
     optional bytes DataLastKey = 25; // Response data last key (for retries)
     reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
@@ -605,58 +605,58 @@ message TAddSnapshotPolicyTransaction {
     optional uint64 DeltaStep = 3;
 }
 
-message TEvReturnBorrowedPart { 
-    optional uint64 FromTabletId = 1; 
-    repeated NKikimrProto.TLogoBlobID PartMetadata = 2; 
-} 
- 
-message TEvReturnBorrowedPartAck { 
-    repeated NKikimrProto.TLogoBlobID PartMetadata = 1; 
-} 
- 
-message TKeyRangeToTablet { 
-    optional bytes KeyRangeBegin = 1; 
-    optional bytes KeyRangeEnd = 2; 
-    optional uint64 TabletID = 3;       // datashard tabletId 
-    optional uint64 ShardIdx = 4;       // Internal idx of a datashard in schemeshard 
-} 
- 
-message TSplitMergeDescription { 
-    repeated TKeyRangeToTablet SourceRanges = 1; 
-    repeated TKeyRangeToTablet DestinationRanges = 2; 
-} 
- 
-// Schemeshard -> Dst datashard 
-message TEvInitSplitMergeDestination { 
-    optional uint64 OperationCookie = 1; 
+message TEvReturnBorrowedPart {
+    optional uint64 FromTabletId = 1;
+    repeated NKikimrProto.TLogoBlobID PartMetadata = 2;
+}
+
+message TEvReturnBorrowedPartAck {
+    repeated NKikimrProto.TLogoBlobID PartMetadata = 1;
+}
+
+message TKeyRangeToTablet {
+    optional bytes KeyRangeBegin = 1;
+    optional bytes KeyRangeEnd = 2;
+    optional uint64 TabletID = 3;       // datashard tabletId
+    optional uint64 ShardIdx = 4;       // Internal idx of a datashard in schemeshard
+}
+
+message TSplitMergeDescription {
+    repeated TKeyRangeToTablet SourceRanges = 1;
+    repeated TKeyRangeToTablet DestinationRanges = 2;
+}
+
+// Schemeshard -> Dst datashard
+message TEvInitSplitMergeDestination {
+    optional uint64 OperationCookie = 1;
     optional uint64 SchemeshardTabletId = 2; // OwnerSchemeShardTabletId
-    optional TSplitMergeDescription SplitDescription = 3; 
+    optional TSplitMergeDescription SplitDescription = 3;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 4;
     optional NKikimrSchemeOp.TTableDescription CreateTable = 5;
     optional uint64 SubDomainPathId = 6; // LocalPathId (SchemeshardTabletId is the OwnerId)
-} 
- 
-message TEvInitSplitMergeDestinationAck { 
-    optional uint64 OperationCookie = 1; 
-    optional uint64 TabletId = 2; 
-} 
- 
-// Schemeshard -> Src datashard 
-message TEvSplit { 
-    optional uint64 OperationCookie = 1; 
-    optional TSplitMergeDescription SplitDescription = 2; 
-} 
- 
-message TEvSplitAck { 
-    optional uint64 OperationCookie = 1; 
-    optional uint64 TabletId = 2; 
-} 
- 
-message TTableSnapshot { 
+}
+
+message TEvInitSplitMergeDestinationAck {
+    optional uint64 OperationCookie = 1;
+    optional uint64 TabletId = 2;
+}
+
+// Schemeshard -> Src datashard
+message TEvSplit {
+    optional uint64 OperationCookie = 1;
+    optional TSplitMergeDescription SplitDescription = 2;
+}
+
+message TEvSplitAck {
+    optional uint64 OperationCookie = 1;
+    optional uint64 TabletId = 2;
+}
+
+message TTableSnapshot {
     optional uint64 TableId = 1; // tableid in term of localDB
-    optional bytes SnapshotData = 2; 
-} 
- 
+    optional bytes SnapshotData = 2;
+}
+
 message TPersistentSnapshot {
     optional uint64 OwnerId = 1;
     optional uint64 PathId = 2;
@@ -667,12 +667,12 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
-// Src datashard -> Dst datashard 
-message TEvSplitTransferSnapshot { 
-    optional uint64 OperationCookie = 1; 
-    optional uint64 SrcTabletId = 2; 
+// Src datashard -> Dst datashard
+message TEvSplitTransferSnapshot {
+    optional uint64 OperationCookie = 1;
+    optional uint64 SrcTabletId = 2;
     optional NKikimrSchemeOp.TTableDescription UserTableScheme = 3;
-    repeated TTableSnapshot TableSnapshot = 4; 
+    repeated TTableSnapshot TableSnapshot = 4;
     optional uint64 MinWriteVersionStep = 5;
     optional uint64 MinWriteVersionTxId = 6;
     repeated TPersistentSnapshot PersistentSnapshots = 7;
@@ -689,148 +689,148 @@ message TEvSplitTransferSnapshot {
 
     // Number of bytes that are in the ReplicationSourceOffsets table
     optional uint64 ReplicationSourceOffsetsBytes = 16;
-} 
- 
-message TEvSplitTransferSnapshotAck { 
-    optional uint64 TabletId = 1; 
-    optional uint64 OperationCookie = 2; 
-} 
- 
-// Schemeshard -> Src datashard 
-message TEvSplitPartitioningChanged { 
+}
+
+message TEvSplitTransferSnapshotAck {
+    optional uint64 TabletId = 1;
+    optional uint64 OperationCookie = 2;
+}
+
+// Schemeshard -> Src datashard
+message TEvSplitPartitioningChanged {
     optional NActorsProto.TActorId Sender = 2;
-    optional uint64 OperationCookie = 1; 
-} 
- 
-message TEvSplitPartitioningChangedAck { 
-    optional uint64 OperationCookie = 1; 
-    optional uint64 TabletId = 2; 
-} 
+    optional uint64 OperationCookie = 1;
+}
+
+message TEvSplitPartitioningChangedAck {
+    optional uint64 OperationCookie = 1;
+    optional uint64 TabletId = 2;
+}
 
 message TEvCancelBackup {
     optional uint64 BackupTxId = 1;
     optional uint64 TableId = 2;
 }
- 
+
 message TEvCancelRestore {
     optional uint64 RestoreTxId = 1;
     optional uint64 TableId = 2;
 }
 
-message TEvGetTableStats { 
-    optional uint64 TableId = 1; 
-    optional uint64 DataSizeResolution = 2; 
-    optional uint64 RowCountResolution = 3; 
-    optional bool CollectKeySample = 4; 
-} 
- 
-message TEvGetTableStatsResult { 
-    optional uint64 DatashardId = 1; 
+message TEvGetTableStats {
+    optional uint64 TableId = 1;
+    optional uint64 DataSizeResolution = 2;
+    optional uint64 RowCountResolution = 3;
+    optional bool CollectKeySample = 4;
+}
+
+message TEvGetTableStatsResult {
+    optional uint64 DatashardId = 1;
     optional uint64 TableLocalId = 2;
-    optional NKikimrTableStats.TTableStats TableStats = 3; 
+    optional NKikimrTableStats.TTableStats TableStats = 3;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 4;
-    optional uint32 ShardState = 5; 
-    repeated uint64 UserTablePartOwners = 6; 
-    repeated uint64 SysTablesPartOwners = 7; 
-    optional bool FullStatsReady = 8; 
+    optional uint32 ShardState = 5;
+    repeated uint64 UserTablePartOwners = 6;
+    repeated uint64 SysTablesPartOwners = 7;
+    optional bool FullStatsReady = 8;
     optional uint64 TableOwnerId = 9;
-} 
- 
-message TEvPeriodicTableStats { 
-    optional uint64 DatashardId = 1; 
+}
+
+message TEvPeriodicTableStats {
+    optional uint64 DatashardId = 1;
     optional uint64 TableLocalId = 2;
- 
-    optional uint64 Generation = 3; 
-    optional uint64 Round = 4; 
- 
-    optional NKikimrTableStats.TTableStats TableStats = 5; 
+
+    optional uint64 Generation = 3;
+    optional uint64 Round = 4;
+
+    optional NKikimrTableStats.TTableStats TableStats = 5;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 6;
- 
-    optional uint32 ShardState = 7; 
-    repeated uint64 UserTablePartOwners = 8; 
-    repeated uint64 SysTablesPartOwners = 9; 
+
+    optional uint32 ShardState = 7;
+    repeated uint64 UserTablePartOwners = 8;
+    repeated uint64 SysTablesPartOwners = 9;
 
     optional uint32 NodeId = 10;
     optional uint64 StartTime = 11; // milliseconds since epoch
 
     optional uint64 TableOwnerId = 12;
-} 
- 
-message TEvS3ListingRequest { 
-    optional uint64 TableId = 1; 
-    optional bytes SerializedKeyPrefix = 2; 
- 
-    optional string PathColumnPrefix = 3; 
-    optional string PathColumnDelimiter = 4; 
- 
-    optional bytes SerializedStartAfterKeySuffix = 5; 
- 
-    repeated uint32 ColumnsToReturn = 6; 
-    optional uint32 MaxKeys = 7; 
- 
-    optional string LastCommonPrefix = 8; 
-} 
- 
-message TEvS3ListingResponse { 
-    optional uint64 TabletID = 1; 
-    optional uint32 Status = 2; 
-    optional string ErrorDescription = 3; 
-    repeated bytes CommonPrefixesRows = 4;  // TSerializedCellVec 
-    repeated bytes ContentsRows = 5;        // TSerializedCellVec 
-    optional bool MoreRows = 6; 
-} 
- 
-message TSerializedRowColumnsScheme { 
-    repeated uint32 KeyColumnIds = 1; 
-    repeated uint32 ValueColumnIds = 2; 
-} 
- 
-// In SerilializedCellVector format 
-// Order of cells in KeyColumns and NonKeyColumns is described by TSerializedRowColumnsScheme 
-message TSerializedRowToLoad { 
-    optional bytes KeyColumns = 1; 
-    optional bytes ValueColumns = 2; 
-} 
- 
-message TEvUploadRowsRequest { 
-    optional uint64 TableId = 1; 
-    optional TSerializedRowColumnsScheme RowScheme = 2; 
-    repeated TSerializedRowToLoad Rows = 3; 
-    optional uint64 CancelDeadlineMs = 4; // Wallclock timestamp (not duration) 
+}
+
+message TEvS3ListingRequest {
+    optional uint64 TableId = 1;
+    optional bytes SerializedKeyPrefix = 2;
+
+    optional string PathColumnPrefix = 3;
+    optional string PathColumnDelimiter = 4;
+
+    optional bytes SerializedStartAfterKeySuffix = 5;
+
+    repeated uint32 ColumnsToReturn = 6;
+    optional uint32 MaxKeys = 7;
+
+    optional string LastCommonPrefix = 8;
+}
+
+message TEvS3ListingResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;
+    optional string ErrorDescription = 3;
+    repeated bytes CommonPrefixesRows = 4;  // TSerializedCellVec
+    repeated bytes ContentsRows = 5;        // TSerializedCellVec
+    optional bool MoreRows = 6;
+}
+
+message TSerializedRowColumnsScheme {
+    repeated uint32 KeyColumnIds = 1;
+    repeated uint32 ValueColumnIds = 2;
+}
+
+// In SerilializedCellVector format
+// Order of cells in KeyColumns and NonKeyColumns is described by TSerializedRowColumnsScheme
+message TSerializedRowToLoad {
+    optional bytes KeyColumns = 1;
+    optional bytes ValueColumns = 2;
+}
+
+message TEvUploadRowsRequest {
+    optional uint64 TableId = 1;
+    optional TSerializedRowColumnsScheme RowScheme = 2;
+    repeated TSerializedRowToLoad Rows = 3;
+    optional uint64 CancelDeadlineMs = 4; // Wallclock timestamp (not duration)
     optional bool WriteToTableShadow = 5;
-} 
- 
-message TEvUploadRowsResponse { 
-    optional uint64 TabletID = 1; 
-    optional uint32 Status = 2; 
-    optional string ErrorDescription = 3; 
-} 
- 
-message TEvReadColumnsRequest { 
-    optional uint64 TableId = 1; 
-    repeated string Columns = 2; 
-    optional uint64 MaxRows = 3; 
-    optional uint64 MaxBytes = 4; 
- 
-    optional bytes FromKey = 5; 
-    optional bool FromKeyInclusive = 6; 
+}
+
+message TEvUploadRowsResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;
+    optional string ErrorDescription = 3;
+}
+
+message TEvReadColumnsRequest {
+    optional uint64 TableId = 1;
+    repeated string Columns = 2;
+    optional uint64 MaxRows = 3;
+    optional uint64 MaxBytes = 4;
+
+    optional bytes FromKey = 5;
+    optional bool FromKeyInclusive = 6;
 
     optional uint64 SnapshotStep = 7;
     optional uint64 SnapshotTxId = 8;
 
     optional string Format = 9;
-} 
- 
-message TEvReadColumnsResponse { 
-    optional uint64 TabletID = 1; 
-    optional uint32 Status = 2; 
-    optional string ErrorDescription = 3; 
- 
-    optional bytes Blocks = 4;              // The data 
-    optional bytes LastKey = 5;             // For continuation 
-    optional bool LastKeyInclusive = 6; 
+}
+
+message TEvReadColumnsResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;
+    optional string ErrorDescription = 3;
+
+    optional bytes Blocks = 4;              // The data
+    optional bytes LastKey = 5;             // For continuation
+    optional bool LastKeyInclusive = 6;
     optional bool EndOfShard = 7;
-} 
+}
 
 message TStatus {
     optional Ydb.StatusIds.StatusCode Code = 1;
@@ -857,7 +857,7 @@ message TEvGetInfoResponse {
         optional uint64 PathId = 4;
         optional NKikimrSchemeOp.TTableDescription Description = 5;
         optional TStats Stats = 6;
-        optional NKikimrTabletBase.TMetrics Metrics = 7; 
+        optional NKikimrTabletBase.TMetrics Metrics = 7;
         optional uint64 SchemaVersion = 8;
     }
 
@@ -1144,12 +1144,12 @@ message TEvGetDataHistogramResponse {
         repeated string KeyNames = 2;
         optional THistogram SizeHistogram = 3;
         optional THistogram CountHistogram = 4;
-        optional THistogram KeyAccessSample = 5; 
+        optional THistogram KeyAccessSample = 5;
     }
 
     optional TStatus Status = 1;
     repeated TTableHistograms TableHistograms = 2;
-} 
+}
 
 message TEvRefreshVolatileSnapshotRequest {
     optional uint64 OwnerId = 1;

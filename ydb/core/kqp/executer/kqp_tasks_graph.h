@@ -31,7 +31,7 @@ struct TStageInfoMeta {
 
     TTableId TableId;
     TString TablePath;
-    ETableKind TableKind; 
+    ETableKind TableKind;
 
     TVector<bool> SkipNullKeys;
 
@@ -40,26 +40,26 @@ struct TStageInfoMeta {
     NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
 
     explicit TStageInfoMeta(const IKqpGateway::TPhysicalTxData& tx)
-        : Tx(tx) 
-        , TableKind(ETableKind::Unknown) 
-    {} 
- 
-    bool IsDatashard() const { 
-        return TableKind == ETableKind::Datashard; 
-    } 
- 
-    bool IsSysView() const { 
+        : Tx(tx)
+        , TableKind(ETableKind::Unknown)
+    {}
+
+    bool IsDatashard() const {
+        return TableKind == ETableKind::Datashard;
+    }
+
+    bool IsSysView() const {
         if (!ShardKey) {
             return false;
         }
-        YQL_ENSURE((TableKind == ETableKind::SysView) == ShardKey->IsSystemView()); 
-        return TableKind == ETableKind::SysView; 
-    } 
- 
-    bool IsOlap() const { 
-        return TableKind == ETableKind::Olap; 
-    } 
- 
+        YQL_ENSURE((TableKind == ETableKind::SysView) == ShardKey->IsSystemView());
+        return TableKind == ETableKind::SysView;
+    }
+
+    bool IsOlap() const {
+        return TableKind == ETableKind::Olap;
+    }
+
 };
 
 struct TTaskInputMeta {};

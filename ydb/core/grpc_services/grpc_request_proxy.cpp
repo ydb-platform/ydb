@@ -87,8 +87,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_PROXY;
-    } 
- 
+    }
+
 private:
     void HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx);
     void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx);

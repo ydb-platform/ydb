@@ -57,8 +57,8 @@ SRCS(
     database_basic_sausage_metainfo.proto
     drivemodel.proto
     export.proto
-    flat_tx_scheme.proto 
-    flat_scheme_op.proto 
+    flat_tx_scheme.proto
+    flat_scheme_op.proto
     health.proto
     hive.proto
     http_config.proto
@@ -82,10 +82,10 @@ SRCS(
     node_broker.proto
     node_limits.proto
     profiler.proto
-    query_stats.proto 
+    query_stats.proto
     replication.proto
     resource_broker.proto
-    scheme_log.proto 
+    scheme_log.proto
     scheme_type_metadata.proto
     scheme_type_operation.proto
     serverless_proxy_config.proto
@@ -97,7 +97,7 @@ SRCS(
     statestorage.proto
     stream.proto
     subdomains.proto
-    table_stats.proto 
+    table_stats.proto
     tablet.proto
     tablet_counters_aggregator.proto
     tablet_counters.proto

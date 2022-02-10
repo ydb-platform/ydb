@@ -32,28 +32,28 @@ message TEvLocalSchemeTxResponse {
 
     optional NTabletFlatScheme.TSchemeChanges FullScheme = 4;
 }
- 
-message TEvLocalReadColumns { 
-    optional string TableName = 1; 
-    repeated string Columns = 2; 
-    optional uint64 MaxRows = 3; 
-    optional uint64 MaxBytes = 4; 
- 
-    optional bytes FromKey = 5; 
-    optional bool FromKeyInclusive = 6; 
-    optional bytes ToKey = 7; 
-    optional bool ToKeyInclusive = 8; 
- 
-    optional string Format = 9; 
-} 
- 
-message TEvLocalReadColumnsResponse { 
-    optional uint64 TabletID = 1; 
-    optional uint32 Status = 2;             // Ydb::StatusIds 
-    optional string ErrorDescription = 3; 
- 
-    optional bytes Blocks = 4;              // The data 
-    optional bytes LastKey = 5;             // For continuation 
-    optional bool LastKeyInclusive = 6; 
-    optional bool EndOfShard = 7; 
-} 
+
+message TEvLocalReadColumns {
+    optional string TableName = 1;
+    repeated string Columns = 2;
+    optional uint64 MaxRows = 3;
+    optional uint64 MaxBytes = 4;
+
+    optional bytes FromKey = 5;
+    optional bool FromKeyInclusive = 6;
+    optional bytes ToKey = 7;
+    optional bool ToKeyInclusive = 8;
+
+    optional string Format = 9;
+}
+
+message TEvLocalReadColumnsResponse {
+    optional uint64 TabletID = 1;
+    optional uint32 Status = 2;             // Ydb::StatusIds
+    optional string ErrorDescription = 3;
+
+    optional bytes Blocks = 4;              // The data
+    optional bytes LastKey = 5;             // For continuation
+    optional bool LastKeyInclusive = 6;
+    optional bool EndOfShard = 7;
+}

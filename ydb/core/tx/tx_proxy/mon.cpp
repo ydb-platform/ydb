@@ -9,7 +9,7 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     : Counters(counters)
     , TxGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "tx"))
     , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq"))
-    , AllocPoolCounters(counters, "tx_proxy") 
+    , AllocPoolCounters(counters, "tx_proxy")
 {
     CacheRequestLatency = TxGroup->GetHistogram("CacheRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
 
@@ -124,9 +124,9 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     MergeResultMiniKQLExecError = DataReqGroup->GetCounter("MergeResult/MiniKQLExecError", true);
     MergeResultMiniKQLExecComplete = DataReqGroup->GetCounter("MergeResult/MiniKQLExecComplete", true);
     MergeResultMiniKQLUnknownStatus = DataReqGroup->GetCounter("MergeResult/MiniKQLUnknownStatus", true);
- 
-    ResultsReceivedCount = DataReqGroup->GetCounter("ResultsReceived/Count", true); 
-    ResultsReceivedSize = DataReqGroup->GetCounter("ResultsReceived/Size", true); 
+
+    ResultsReceivedCount = DataReqGroup->GetCounter("ResultsReceived/Count", true);
+    ResultsReceivedSize = DataReqGroup->GetCounter("ResultsReceived/Size", true);
 }
 
 }}

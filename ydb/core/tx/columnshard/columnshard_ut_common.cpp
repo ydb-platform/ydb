@@ -1,7 +1,7 @@
 #include "columnshard_ut_common.h"
 
-#include "columnshard__stats_scan.h" 
- 
+#include "columnshard__stats_scan.h"
+
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -91,14 +91,14 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
     record.SetTxId(snap.PlanStep);
     record.SetScanId(scanId);
     // record.SetLocalPathId(0);
-    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE); 
+    record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE);
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = PrimaryIndexStatsSchema; 
-    for (const auto& col : ydbSchema.Columns) { 
-        record.AddColumnTags(col.second.Id); 
-        record.AddColumnTypes(col.second.PType); 
+    auto ydbSchema = PrimaryIndexStatsSchema;
+    for (const auto& col : ydbSchema.Columns) {
+        record.AddColumnTags(col.second.Id);
+        record.AddColumnTypes(col.second.PType);
     }
 
     for (ui64 pathId : pathIds) {
@@ -215,7 +215,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TStrin
         batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
     }
 
-    auto batch = batchBuilder.FlushBatch(true); 
+    auto batch = batchBuilder.FlushBatch(true);
     UNIT_ASSERT(batch);
     auto status = batch->ValidateFull();
     UNIT_ASSERT(status.ok());

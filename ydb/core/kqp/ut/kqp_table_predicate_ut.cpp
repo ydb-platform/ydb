@@ -17,7 +17,7 @@ using namespace NYdb::NTable;
 
 static void CreateSampleTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE [/Root/TestNulls] ( 
+        CREATE TABLE [/Root/TestNulls] (
             Key1 Uint32,
             Key2 Uint32,
             Value String,
@@ -26,7 +26,7 @@ static void CreateSampleTables(TSession session) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES 
+        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES
             (NULL, NULL, "One"),
             (NULL, 100u, "Two"),
             (NULL, 200u, "Three"),
@@ -44,7 +44,7 @@ static void CreateSampleTables(TSession session) {
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE [/Root/TestDate] ( 
+        CREATE TABLE [/Root/TestDate] (
             Key Date,
             Value String,
             PRIMARY KEY (Key)
@@ -52,7 +52,7 @@ static void CreateSampleTables(TSession session) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        REPLACE INTO [/Root/TestDate] (Key, Value) VALUES 
+        REPLACE INTO [/Root/TestDate] (Key, Value) VALUES
             (NULL, "One"),
             (Date("2019-05-08"), "Two"),
             (Date("2019-07-01"), "Three");
@@ -65,7 +65,7 @@ static void CreateSampleTables(TSession session) {
             .AddNullableColumn("ValueInt", EPrimitiveType::Int32)
             .SetPrimaryKeyColumn("Key");
 
-        UNIT_ASSERT(session.CreateTable("/Root/MultiShardTable", 
+        UNIT_ASSERT(session.CreateTable("/Root/MultiShardTable",
             builder.Build(),
             TCreateTableSettings()
                 .PartitioningPolicy(
@@ -75,7 +75,7 @@ static void CreateSampleTables(TSession session) {
             ).GetValueSync().IsSuccess());
 
         UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/MultiShardTable] (Key, Value) VALUES 
+            REPLACE INTO [/Root/MultiShardTable] (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two"),
                 (3, "Three"),
@@ -84,7 +84,7 @@ static void CreateSampleTables(TSession session) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
 
         UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/MultiShardTable] (Key, ValueInt) VALUES 
+            REPLACE INTO [/Root/MultiShardTable] (Key, ValueInt) VALUES
                 (10, 10);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync().IsSuccess());
     }
@@ -96,7 +96,7 @@ static void CreateSampleTables(TSession session) {
             .AddNullableColumn("ValueInt", EPrimitiveType::Int32)
             .SetPrimaryKeyColumns({"Key1", "Key2"});
 
-        UNIT_ASSERT(session.CreateTable("/Root/MultiShardTableCk", 
+        UNIT_ASSERT(session.CreateTable("/Root/MultiShardTableCk",
             builder.Build(),
             TCreateTableSettings()
                 .PartitioningPolicy(
@@ -106,7 +106,7 @@ static void CreateSampleTables(TSession session) {
             ).GetValueSync().IsSuccess());
 
         UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/MultiShardTableCk] (Key1, Key2, ValueInt) VALUES 
+            REPLACE INTO [/Root/MultiShardTableCk] (Key1, Key2, ValueInt) VALUES
                 (1, "One", NULL),
                 (2, "Two", NULL),
                 (3, "Three", NULL),
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         CreateSampleTables(session);
         auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Value FROM [/Root/TestNulls] WHERE 
+                SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 IS NULL AND Key2 IS NULL
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT * FROM [/Root/Test] 
+                SELECT * FROM [/Root/Test]
                 WHERE Group == 1 AND Name IS NULL
             )"),
             TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Value FROM [/Root/TestNulls] WHERE 
+            SELECT Value FROM [/Root/TestNulls] WHERE
                 Key1 <= 1
             ORDER BY Value
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Value FROM [/Root/TestNulls] WHERE Key1 > 1 
+                SELECT Value FROM [/Root/TestNulls] WHERE Key1 > 1
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto result = session.ExecuteDataQuery(Q_(R"(
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
-                SELECT Value FROM [/Root/TestNulls] WHERE 
+                SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 = $key1 AND Key2 >= $key2
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto result = session.ExecuteDataQuery(Q_(R"(
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
-                SELECT Value FROM [/Root/TestNulls] WHERE 
+                SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 = $key1 AND Key2 == $key2
             )"),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
                 DECLARE $key1 AS 'Uint32?';
                 DECLARE $key2 AS 'Uint32?';
-                SELECT Value FROM [/Root/TestNulls] WHERE 
+                SELECT Value FROM [/Root/TestNulls] WHERE
                     Key1 = $key1 AND Key2 <= $key2
             )",
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), std::move(params)).ExtractValueSync();
@@ -503,8 +503,8 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             DECLARE $name AS String;
-            $groups = (SELECT Group FROM `/Root/Test` WHERE Name = $name); 
-            SELECT * FROM `/Root/TwoShard` WHERE Key in $groups; 
+            $groups = (SELECT Group FROM `/Root/Test` WHERE Name = $name);
+            SELECT * FROM `/Root/TwoShard` WHERE Key in $groups;
         )"), TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
@@ -518,14 +518,14 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            auto query = Q_(R"(UPDATE `/Root/KeyValue` SET Value = Value || "_updated" WHERE Key IN (1, 2, 3, 4))"); 
+            auto query = Q_(R"(UPDATE `/Root/KeyValue` SET Value = Value || "_updated" WHERE Key IN (1, 2, 3, 4))");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {
-            auto query = Q_(R"(SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key)"); 
+            auto query = Q_(R"(SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key)");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         CreateSampleTables(session);
 
-        const TString query = Q_("UPDATE [/Root/MultiShardTable] SET Value = 'aaaaa' WHERE Key IN (1, 500)"); 
+        const TString query = Q_("UPDATE [/Root/MultiShardTable] SET Value = 'aaaaa' WHERE Key IN (1, 500)");
 
         if (!UseNewEngine) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         const TString query = Q_(R"(
-            UPDATE [/Root/MultiShardTable] SET ValueInt = ValueInt + 1 
+            UPDATE [/Root/MultiShardTable] SET ValueInt = ValueInt + 1
             WHERE Key IN (1,2,3,4,NULL))");
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Key, ValueInt FROM [/Root/MultiShardTable] ORDER BY Key; 
+                SELECT Key, ValueInt FROM [/Root/MultiShardTable] ORDER BY Key;
 
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPDATE `/Root/MultiShardTable` SET ValueInt = ValueInt + 1 WHERE Key IN 
+            UPDATE `/Root/MultiShardTable` SET ValueInt = ValueInt + 1 WHERE Key IN
                 (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,
                 31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
                 61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,
@@ -632,7 +632,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Key, ValueInt FROM `/Root/MultiShardTable` ORDER BY Key 
+                SELECT Key, ValueInt FROM `/Root/MultiShardTable` ORDER BY Key
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPDATE `/Root/MultiShardTableCk` SET ValueInt = ValueInt + 1 WHERE Key1 IN 
+            UPDATE `/Root/MultiShardTableCk` SET ValueInt = ValueInt + 1 WHERE Key1 IN
                 (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,
                 31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
                 61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Key1, ValueInt FROM `/Root/MultiShardTableCk` ORDER BY Key1; 
+                SELECT Key1, ValueInt FROM `/Root/MultiShardTableCk` ORDER BY Key1;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -679,8 +679,8 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         const TString query = Q_(R"(
-                UPDATE `/Root/MultiShardTable` SET ValueInt = ValueInt + 1 WHERE Key IN (1,2,10); 
-                UPDATE `/Root/TestNulls` SET Value = 'qq' WHERE Key1 IN (1,2); 
+                UPDATE `/Root/MultiShardTable` SET ValueInt = ValueInt + 1 WHERE Key IN (1,2,10);
+                UPDATE `/Root/TestNulls` SET Value = 'qq' WHERE Key1 IN (1,2);
             )");
 
         {
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Key, ValueInt FROM `/Root/MultiShardTable` ORDER BY Key; 
+                SELECT Key, ValueInt FROM `/Root/MultiShardTable` ORDER BY Key;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT Key1, Value FROM `/Root/TestNulls` ORDER BY Key1; 
+                SELECT Key1, Value FROM `/Root/TestNulls` ORDER BY Key1;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         const TString query = "PRAGMA Kikimr.UseNewEngine = 'false'; "
                               "SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1 "
-                              "UNION ALL SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1;"; 
+                              "UNION ALL SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1;";
 
         auto result = session.ExplainDataQuery(query).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -763,7 +763,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         CreateSampleTables(session);
 
-        const TString query = Q_("UPDATE `/Root/MultiShardTable` SET Value = 'aaaaa' WHERE Value IN ('One', 'www')"); 
+        const TString query = Q_("UPDATE `/Root/MultiShardTable` SET Value = 'aaaaa' WHERE Value IN ('One', 'www')");
 
         if (!UseNewEngine) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Value FROM [/Root/TestDate] 
+            SELECT Value FROM [/Root/TestDate]
             WHERE Key = Date("2019-07-01")
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Key FROM [/Root/EightShard] WHERE 
+            SELECT Key FROM [/Root/EightShard] WHERE
                 Key > 200 AND Key >= 301 AND
                 Key < 600 AND Key <= 501
             ORDER BY Key;
@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             DECLARE $key_to_1 AS Uint64;
             DECLARE $key_to_2 AS Uint64;
 
-            SELECT Key FROM [/Root/EightShard] WHERE 
+            SELECT Key FROM [/Root/EightShard] WHERE
                 Key > $key_from_1 AND Key >= $key_from_2 AND
                 Key < $key_to_1 AND Key <= $key_to_2
             ORDER BY Key;
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             DECLARE $key_from_1 AS Uint64;
             DECLARE $key_to_1 AS Uint64;
 
-            SELECT Key FROM [/Root/EightShard] WHERE 
+            SELECT Key FROM [/Root/EightShard] WHERE
                 Key > $key_from_1 AND Key >= 301 AND
                 Key < $key_to_1 AND Key <= 501
             ORDER BY Key;
@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND 
+            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
                 Key2 >= 100 AND Key2 > 200 AND
                 Key2 <= 600 AND Key2 < 500
             ORDER BY Key2;
@@ -938,7 +938,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             DECLARE $key_to_1 AS 'Uint32?';
             DECLARE $key_to_2 AS 'Uint32?';
 
-            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND 
+            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
                 Key2 >= $key_from_1 AND Key2 > $key_from_2 AND
                 Key2 <= $key_to_1 AND Key2 < $key_to_2
             ORDER BY Key2;
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             DECLARE $key_from_2 AS 'Uint32?';
             DECLARE $key_to_2 AS 'Uint32?';
 
-            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND 
+            SELECT Key2 FROM [/Root/TestNulls] WHERE Key1 = 3 AND
                 Key2 >= 100 AND Key2 > $key_from_2 AND
                 Key2 <= 600 AND Key2 < $key_to_2
             ORDER BY Key2;
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             PRAGMA Kikimr.UseNewEngine = 'false';
             DECLARE $key1_from AS Uint32;
             DECLARE $name AS String;
-            SELECT * FROM [/Root/Join2] WHERE Key1 > $key1_from AND Name = $name; 
+            SELECT * FROM [/Root/Join2] WHERE Key1 > $key1_from AND Name = $name;
         )";
 
         auto result = session.ExplainDataQuery(query).GetValueSync();
@@ -987,7 +987,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         UNIT_ASSERT(NJson::ReadJsonTree(result.GetPlan(), &plan));
 
         UNIT_ASSERT_VALUES_EQUAL(plan["tables"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["name"], "/Root/Join2"); 
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["name"], "/Root/Join2");
         UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["reads"].GetArray().size(), 1);
         auto& read = plan["tables"][0]["reads"][0];
         UNIT_ASSERT(!read.Has("lookup_by"));
@@ -1000,7 +1000,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
-            DELETE FROM `/Root/Join2` 
+            DELETE FROM `/Root/Join2`
             WHERE Key1 = 102 AND Key2 = "One" OR
                   Key1 = 101 AND Key2 = "Two" OR
                   Key1 = 101 AND Key2 = "Three"
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/EightShard` 
+            SELECT * FROM `/Root/EightShard`
             WHERE Key = 101 OR Key = 302 OR Key = 403 OR Key = 705
             ORDER BY Key;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/Logs` 
+            SELECT * FROM `/Root/Logs`
             WHERE
                 App = "apache" AND Ts = 0 OR
                 App = "nginx" AND Ts = 2 OR
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/Logs` 
+            SELECT * FROM `/Root/Logs`
             WHERE
                 App = "apache" AND Ts = 0 OR
                 App = "nginx" AND Ts = 2 OR

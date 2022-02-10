@@ -29,7 +29,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
- 
+
 #include <library/cpp/threading/future/async.h>
 
 #include <util/generic/algorithm.h>
@@ -335,7 +335,7 @@ public:
 
 private:
     static bool CheckKeyColumn(const TStringBuf& columnName, ui32 keyIndex, IDbSchemeResolver::TTableResult* lookup, TExprNode& node, TExprContext& ctx) {
-        auto column = lookup->Columns.FindPtr(columnName); 
+        auto column = lookup->Columns.FindPtr(columnName);
         if (!column) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
                 << "Unknown column '" << columnName
@@ -353,8 +353,8 @@ private:
         }
 
         return true;
-    } 
- 
+    }
+
     static bool CheckRowTuple(IDbSchemeResolver::TTableResult* lookup, TExprNode& node, TExprNode& rowTuple, TExprContext& ctx) {
         if (rowTuple.ChildrenSize() != lookup->KeyColumnCount) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
@@ -477,9 +477,9 @@ private:
         }
 
         Y_ENSURE_EX(keyCount <= lookup->KeyColumnCount, TNodeException(node)
-            << "Too many key columns specified, table [" << lookup->Table.TableName 
-            << "] has only: " << lookup->KeyColumnCount 
-            << ", but got " << keyCount << "."); 
+            << "Too many key columns specified, table [" << lookup->Table.TableName
+            << "] has only: " << lookup->KeyColumnCount
+            << ", but got " << keyCount << ".");
 
         Y_ENSURE_EX(fromComponents > 0, TNodeException(node)
             << "Expected at least one component of key in the 'from' section of the range");
@@ -499,10 +499,10 @@ private:
 
         auto selectTuple = node.Child(2);
 
-        // Check that all selected columns are present in table schema 
-        ui32 selectIndex = 0; 
-        for (auto selectItem : selectTuple->Children()) { 
-            auto columnName = selectItem->Content(); 
+        // Check that all selected columns are present in table schema
+        ui32 selectIndex = 0;
+        for (auto selectItem : selectTuple->Children()) {
+            auto columnName = selectItem->Content();
             if (!NKikimr::IsSystemColumn(columnName)) {
                 auto column = lookup->Columns.FindPtr(columnName);
                 Y_ENSURE_EX(column, TNodeException(node)
@@ -510,10 +510,10 @@ private:
                     << "' for table [" << lookup->Table.TableName
                     << "] at select position #" << selectIndex);
             }
- 
-            ++selectIndex; 
-        } 
- 
+
+            ++selectIndex;
+        }
+
         auto optionsNode = node.Child(3);
         Y_ENSURE_EX(optionsNode->IsList(), TNodeException(optionsNode) << "Expected tuple");
         for (auto optionsItem : optionsNode->Children()) {
@@ -1366,7 +1366,7 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
                         TConvertResult convRes;
                         convRes.Errors.AddIssues(expr->Context.IssueManager.GetIssues());
                         promise.SetValue(convRes);
-                        return; 
+                        return;
                     }
 
                     TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get());
@@ -1392,7 +1392,7 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
                 TConvertResult convRes;
                 convRes.Errors.AddIssues(expr->Context.IssueManager.GetIssues());
                 promise.SetValue(convRes);
-                return promise.GetFuture(); 
+                return promise.GetFuture();
             }
 
             TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get());
@@ -1573,16 +1573,16 @@ private:
             errors = Expr->Context.IssueManager.GetIssues();
             return false;
         }
-        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok); 
-        do { 
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
             status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
-        } while (status.Level == IGraphTransformer::TStatus::Repeat); 
+        } while (status.Level == IGraphTransformer::TStatus::Repeat);
         Y_VERIFY_DEBUG(status.Level == IGraphTransformer::TStatus::Ok ||
-                     status.Level == IGraphTransformer::TStatus::Error); 
-        if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                     status.Level == IGraphTransformer::TStatus::Error);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
             errors = Expr->Context.IssueManager.GetIssues();
-            return false; 
-        } 
+            return false;
+        }
         return true;
     }
 

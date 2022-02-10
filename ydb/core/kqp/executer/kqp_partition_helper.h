@@ -22,10 +22,10 @@ struct TShardInfo {
     TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
 
-TSerializedTableRange MakeKeyRange(const TVector<NUdf::TDataTypeId>& keyColumnTypes, 
-    const NKqpProto::TKqpPhyKeyRange& range, const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, 
-    const NMiniKQL::TTypeEnvironment& typeEnv); 
- 
+TSerializedTableRange MakeKeyRange(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
+    const NKqpProto::TKqpPhyKeyRange& range, const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
+    const NMiniKQL::TTypeEnvironment& typeEnv);
+
 TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NUdf::TDataTypeId>& keyColumnTypes,
     const NKqpProto::TKqpPhyOpReadOlapRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);

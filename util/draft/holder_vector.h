@@ -20,8 +20,8 @@ public:
 
     void Clear() {
         for (typename TBase::iterator it = TBase::begin(); it != TBase::end(); ++it) {
-            if (*it) 
-                D::Destroy(*it); 
+            if (*it)
+                D::Destroy(*it);
         }
         TBase::clear();
     }
@@ -33,11 +33,11 @@ public:
     // TVector takes ownership of T
     void PushBack(T* t) {
         try {
-            TBase::push_back(t); 
+            TBase::push_back(t);
         } catch (...) {
-            if (t) 
-                D::Destroy(t); 
-            throw; 
+            if (t)
+                D::Destroy(t);
+            throw;
         }
     }
 
@@ -65,11 +65,11 @@ public:
         }
     }
 
-    T* Release(size_t i) { 
-        T* t = (*this)[i]; 
+    T* Release(size_t i) {
+        T* t = (*this)[i];
         (*this)[i] = nullptr;
-        return t; 
-    } 
+        return t;
+    }
 
     void Resize(size_t newSize) {
         for (size_t i = newSize; i < size(); ++i) {

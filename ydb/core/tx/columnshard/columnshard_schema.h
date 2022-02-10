@@ -13,18 +13,18 @@
 
 namespace NKikimr::NColumnShard {
 
-using NOlap::TWriteId; 
-using NOlap::IBlobGroupSelector; 
- 
+using NOlap::TWriteId;
+using NOlap::IBlobGroupSelector;
+
 struct Schema : NIceDb::Schema {
-    // These settings are persisted on each Init. So we use empty settings in order not to overwrite what 
-    // was changed by the user 
-    struct EmptySettings { 
-        static void Materialize(NIceDb::TToughDb&) {} 
-    }; 
- 
-    using TSettings = SchemaSettings<EmptySettings>; 
- 
+    // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
+    // was changed by the user
+    struct EmptySettings {
+        static void Materialize(NIceDb::TToughDb&) {}
+    };
+
+    using TSettings = SchemaSettings<EmptySettings>;
+
     using TInsertedData = NOlap::TInsertedData;
     using TGranuleRecord = NOlap::TGranuleRecord;
     using TColumnRecord = NOlap::TColumnRecord;
@@ -44,9 +44,9 @@ struct Schema : NIceDb::Schema {
         LastPlannedTxId = 5,
         LastSchemaSeqNoGeneration = 6,
         LastSchemaSeqNoRound = 7,
- 
-        LastGcBarrierGen = 8, 
-        LastGcBarrierStep = 9, 
+
+        LastGcBarrierGen = 8,
+        LastGcBarrierStep = 9,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -138,36 +138,36 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, SinceStep, SinceTxId, InfoProto>;
     };
 
-    struct LongTxWrites : Table<6> { 
-        struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {}; 
-        struct LongTxId : Column<2, NScheme::NTypeIds::String> {}; 
+    struct LongTxWrites : Table<6> {
+        struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
 
-        using TKey = TableKey<WriteId>; 
-        using TColumns = TableColumns<WriteId, LongTxId>; 
-    }; 
- 
-    struct BlobsToKeep : Table<7> { 
+        using TKey = TableKey<WriteId>;
+        using TColumns = TableColumns<WriteId, LongTxId>;
+    };
+
+    struct BlobsToKeep : Table<7> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId>;
     };
 
-    struct BlobsToDelete : Table<8> { 
-        struct BlobId : Column<1, NScheme::NTypeIds::String> {}; 
+    struct BlobsToDelete : Table<8> {
+        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
 
-        using TKey = TableKey<BlobId>; 
-        using TColumns = TableColumns<BlobId>; 
+        using TKey = TableKey<BlobId>;
+        using TColumns = TableColumns<BlobId>;
     };
 
-    struct SmallBlobs : Table<12> { 
-        struct BlobId : Column<1, NScheme::NTypeIds::String> {}; 
-        struct Data : Column<2, NScheme::NTypeIds::String> {}; 
- 
-        using TKey = TableKey<BlobId>; 
-        using TColumns = TableColumns<BlobId, Data>; 
-    }; 
- 
+    struct SmallBlobs : Table<12> {
+        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
+        struct Data : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<BlobId>;
+        using TColumns = TableColumns<BlobId, Data>;
+    };
+
     // Index tables
 
     // InsertTable - common for all indices
@@ -235,13 +235,13 @@ struct Schema : NIceDb::Schema {
         TableInfo,
         TableVersionInfo,
         LongTxWrites,
-        BlobsToKeep, 
-        BlobsToDelete, 
+        BlobsToKeep,
+        BlobsToDelete,
         InsertTable,
         IndexGranules,
         IndexColumns,
-        IndexCounters, 
-        SmallBlobs 
+        IndexCounters,
+        SmallBlobs
         >;
 
     //
@@ -258,12 +258,12 @@ struct Schema : NIceDb::Schema {
 
     template <typename T>
     static bool GetSpecialValue(NIceDb::TNiceDb& db, EValueIds key, T& value) {
-        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>; 
+        using TSource = std::conditional_t<std::is_integral_v<T> || std::is_enum_v<T>, Value::Digit, Value::Bytes>;
 
         auto rowset = db.Table<Value>().Key((ui32)key).Select<TSource>();
         if (rowset.IsReady()) {
             if (rowset.IsValid())
-                value = T{rowset.template GetValue<TSource>()}; 
+                value = T{rowset.template GetValue<TSource>()};
             return true;
         }
         return false;
@@ -407,24 +407,24 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const NLongTxService::TLongTxId& longTxId) { 
+    static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const NLongTxService::TLongTxId& longTxId) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
         Y_VERIFY(proto.SerializeToString(&serialized));
-        db.Table<LongTxWrites>().Key((ui64)writeId).Update( 
+        db.Table<LongTxWrites>().Key((ui64)writeId).Update(
             NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized));
     }
 
-    static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) { 
-        db.Table<LongTxWrites>().Key((ui64)writeId).Delete(); 
+    static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {
+        db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
     }
 
     // InsertTable activities
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
         db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
-            NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()), 
+            NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
             NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
         );
     }
@@ -458,7 +458,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool InsertTable_Load(NIceDb::TNiceDb& db,
-                                 const IBlobGroupSelector* dsGroupSelector, 
+                                 const IBlobGroupSelector* dsGroupSelector,
                                  THashMap<TWriteId, TInsertedData>& inserted,
                                  THashMap<ui64, TSet<TInsertedData>>& committed,
                                  THashMap<TWriteId, TInsertedData>& aborted,
@@ -477,8 +477,8 @@ struct Schema : NIceDb::Schema {
             TString metaStr = rowset.GetValue<InsertTable::Meta>();
 
             TString error;
-            NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error); 
-            Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str()); 
+            NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
+            Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
 
             TInstant writeTime = loadTime;
             NKikimrTxColumnShard::TLogicalMetadata meta;
@@ -486,7 +486,7 @@ struct Schema : NIceDb::Schema {
                 writeTime = TInstant::Seconds(meta.GetDirtyWriteTimeSeconds());
             }
 
-            TInsertedData data(shardOrPlan, writeTxId, tableId, dedupId, blobId, metaStr, writeTime); 
+            TInsertedData data(shardOrPlan, writeTxId, tableId, dedupId, blobId, metaStr, writeTime);
 
             switch (recType) {
                 case EInsertTableIds::Inserted:
@@ -550,8 +550,8 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<IndexColumns::XTxId>(row.XTxId),
             NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
             NIceDb::TUpdate<IndexColumns::Metadata>(row.Metadata),
-            NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset), 
-            NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size) 
+            NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
+            NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size)
         );
     }
 
@@ -559,8 +559,8 @@ struct Schema : NIceDb::Schema {
         db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Delete();
     }
 
-    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index, 
-                                  std::function<void(TColumnRecord&&)> callback) { 
+    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
+                                  std::function<void(TColumnRecord&&)> callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
@@ -577,12 +577,12 @@ struct Schema : NIceDb::Schema {
             row.XTxId = rowset.GetValue<IndexColumns::XTxId>();
             TString strBlobId = rowset.GetValue<IndexColumns::Blob>();
             row.Metadata = rowset.GetValue<IndexColumns::Metadata>();
-            row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>(); 
-            row.BlobRange.Size = rowset.GetValue<IndexColumns::Size>(); 
+            row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>();
+            row.BlobRange.Size = rowset.GetValue<IndexColumns::Size>();
 
-            Y_VERIFY(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size()); 
-            TLogoBlobID logoBlobId((const ui64*)strBlobId.data()); 
-            row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId); 
+            Y_VERIFY(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+            TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+            row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
 
             callback(std::move(row));
 

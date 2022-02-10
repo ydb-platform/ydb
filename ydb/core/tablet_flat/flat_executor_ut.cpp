@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         TString Type;
         ui32 MaxPriority;
     };
- 
+
     struct TIsResourceAllocation {
         TIsResourceAllocation()
         {}

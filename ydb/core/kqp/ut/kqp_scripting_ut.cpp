@@ -101,10 +101,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "true";
-            UPSERT INTO [/Root/KeyValue] 
-            SELECT Key, Text AS Value FROM [/Root/EightShard]; 
+            UPSERT INTO [/Root/KeyValue]
+            SELECT Key, Text AS Value FROM [/Root/EightShard];
 
-            SELECT * FROM [/Root/EightShard]; 
+            SELECT * FROM [/Root/EightShard];
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -201,24 +201,24 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
-            SELECT * FROM `/Root/.sys/partition_stats`; 
+            SELECT * FROM `/Root/.sys/partition_stats`;
             COMMIT;
-            SELECT * FROM `/Root/.sys/partition_stats`; 
+            SELECT * FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
 
         result = client.ExecuteYqlScript(R"(
-            SELECT * FROM `/Root/.sys/partition_stats`; 
-            SELECT * FROM `/Root/.sys/partition_stats`; 
+            SELECT * FROM `/Root/.sys/partition_stats`;
+            SELECT * FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
 
         result = client.ExecuteYqlScript(R"(
             SELECT *
-            FROM `/Root/TwoShard` AS ts 
-            JOIN `/Root/.sys/partition_stats`AS ps 
+            FROM `/Root/TwoShard` AS ts
+            JOIN `/Root/.sys/partition_stats`AS ps
             ON ts.Key = ps.PartIdx;
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
-            CREATE TABLE `/Root/TestTable` ( 
+            CREATE TABLE `/Root/TestTable` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
 
         result = client.ExecuteYqlScript(R"(
-            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES 
+            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
                 (1u, "One"),
                 (2u, "Two");
         )").GetValueSync();

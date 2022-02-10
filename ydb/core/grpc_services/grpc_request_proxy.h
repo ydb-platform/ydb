@@ -81,10 +81,10 @@ protected:
     void Handle(TEvAlterCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeCoordinationNode::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
@@ -101,7 +101,7 @@ protected:
     void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);

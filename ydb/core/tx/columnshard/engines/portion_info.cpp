@@ -59,9 +59,9 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
 
 std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo,
                                                      const std::shared_ptr<arrow::Schema>& schema,
-                                                     const THashMap<TBlobRange, TString>& blobsData) const { 
+                                                     const THashMap<TBlobRange, TString>& blobsData) const {
     // Correct records order
-    TMap<int, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks 
+    TMap<int, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
 
     for (auto& rec : Records) {
         ui32 columnId = rec.ColumnId;
@@ -72,7 +72,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo
             continue; // no such column in schema - do not need it
         }
 
-        columnChunks[pos][rec.Chunk] = rec.BlobRange; 
+        columnChunks[pos][rec.Chunk] = rec.BlobRange;
     }
 
     // Make chunked arrays for columns
@@ -102,7 +102,7 @@ std::shared_ptr<arrow::Table> TPortionInfo::Assemble(const TIndexInfo& indexInfo
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::AssembleInBatch(const TIndexInfo& indexInfo,
                                                                   const std::shared_ptr<arrow::Schema>& schema,
-                                                                  const THashMap<TBlobRange, TString>& data) const { 
+                                                                  const THashMap<TBlobRange, TString>& data) const {
     std::shared_ptr<arrow::Table> portion = Assemble(indexInfo, schema, data);
     auto res = portion->CombineChunks();
     Y_VERIFY(res.ok());
@@ -177,10 +177,10 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
             case TPortionMeta::SPLIT_COMPACTED:
                 meta.MutablePortionMeta()->SetIsSplitCompacted(true);
                 break;
-            case TPortionMeta::INACTIVE: 
-                Y_FAIL("Unexpected inactive case"); 
-                //meta.MutablePortionMeta()->SetInactive(true); 
-                break; 
+            case TPortionMeta::INACTIVE:
+                Y_FAIL("Unexpected inactive case");
+                //meta.MutablePortionMeta()->SetInactive(true);
+                break;
         }
     }
 

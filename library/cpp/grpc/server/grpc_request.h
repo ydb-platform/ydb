@@ -59,8 +59,8 @@ public:
                  TRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters, 
-                 IGRpcRequestLimiterPtr limiter) 
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter)
         : TBaseAsyncContext<TService>(service, cq)
         , Server_(server)
         , Cb_(cb)
@@ -69,7 +69,7 @@ public:
         , Name_(name)
         , Logger_(std::move(logger))
         , Counters_(std::move(counters))
-        , RequestLimiter_(std::move(limiter)) 
+        , RequestLimiter_(std::move(limiter))
         , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
     {
@@ -87,8 +87,8 @@ public:
                  TStreamRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters, 
-                 IGRpcRequestLimiterPtr limiter) 
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter)
         : TBaseAsyncContext<TService>(service, cq)
         , Server_(server)
         , Cb_(cb)
@@ -97,7 +97,7 @@ public:
         , Name_(name)
         , Logger_(std::move(logger))
         , Counters_(std::move(counters))
-        , RequestLimiter_(std::move(limiter)) 
+        , RequestLimiter_(std::move(limiter))
         , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
         , StateFunc_(&TThis::SetRequestDone)
     {
@@ -363,7 +363,7 @@ private:
             return false;
         }
 
-        if (IncRequest()) { 
+        if (IncRequest()) {
             // Adjust counters.
             RequestSize = Request_->ByteSize();
             Counters_->StartProcessing(RequestSize);
@@ -405,7 +405,7 @@ private:
 
         if (!ok) {
             logCb(-1);
-            DecRequest(); 
+            DecRequest();
             Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
                 TDuration::Seconds(RequestTimer.Passed()));
             return false;
@@ -426,7 +426,7 @@ private:
         GRPC_LOG_DEBUG(Logger_, "[%p] finished request Name# %s ok# %s peer# %s", this, Name_,
             ok ? "true" : "false", this->Context.peer().c_str());
         //PrintBackTrace();
-        DecRequest(); 
+        DecRequest();
         Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
             TDuration::Seconds(RequestTimer.Passed()));
         return false;
@@ -436,7 +436,7 @@ private:
         GRPC_LOG_DEBUG(Logger_, "[%p] finished request with error Name# %s ok# %s peer# %s", this, Name_,
             ok ? "true" : "false", this->Context.peer().c_str());
         if (!SkipUpdateCountersOnError) {
-            DecRequest(); 
+            DecRequest();
             Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
                 TDuration::Seconds(RequestTimer.Passed()));
         }
@@ -457,28 +457,28 @@ private:
         }
     }
 
-    bool IncRequest() { 
-        if (!Server_->IncRequest()) 
-            return false; 
- 
-        if (!RequestLimiter_) 
-            return true; 
- 
-        if (!RequestLimiter_->IncRequest()) { 
-            Server_->DecRequest(); 
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
-    void DecRequest() { 
-        if (RequestLimiter_) { 
-            RequestLimiter_->DecRequest(); 
-        } 
-        Server_->DecRequest(); 
-    } 
- 
+    bool IncRequest() {
+        if (!Server_->IncRequest())
+            return false;
+
+        if (!RequestLimiter_)
+            return true;
+
+        if (!RequestLimiter_->IncRequest()) {
+            Server_->DecRequest();
+            return false;
+        }
+
+        return true;
+    }
+
+    void DecRequest() {
+        if (RequestLimiter_) {
+            RequestLimiter_->DecRequest();
+        }
+        Server_->DecRequest();
+    }
+
     using TStateFunc = bool (TThis::*)(bool);
     TService* Server_;
     TOnRequest Cb_;
@@ -487,7 +487,7 @@ private:
     const char* const Name_;
     TLoggerPtr Logger_;
     ICounterBlockPtr Counters_;
-    IGRpcRequestLimiterPtr RequestLimiter_; 
+    IGRpcRequestLimiterPtr RequestLimiter_;
 
     THolder<grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>> Writer_;
     THolder<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
@@ -521,8 +521,8 @@ public:
                  typename TBase::TRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters, 
-                 IGRpcRequestLimiterPtr limiter = nullptr) 
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter = nullptr)
         : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), std::move(limiter)}
     {
     }

@@ -19,7 +19,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
     TTempDir tempDir;
     TVector<TActorId> testIds;
     TActorId pDiskId;
-    TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr); 
+    TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
     auto ioContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
     appData.IoContextFactory = ioContext.get();
 

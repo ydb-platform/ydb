@@ -236,9 +236,9 @@ TString SerializeSchema(const arrow::Schema& schema) {
     return TString((const char*)(*buffer)->data(), (*buffer)->size());
 }
 
-std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) { 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(str)); 
-    arrow::io::BufferReader reader(buffer); 
+std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
+    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(str));
+    arrow::io::BufferReader reader(buffer);
     arrow::ipc::DictionaryMemo dictMemo;
     auto schema = ReadSchema(&reader, &dictMemo);
     if (!schema.ok()) {
@@ -316,13 +316,13 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
     return SerializeBatch(batch, writeOptions);
 }
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) { 
+std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(blob)); 
-    arrow::io::BufferReader reader(buffer); 
+    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(blob));
+    arrow::io::BufferReader reader(buffer);
     auto batch = ReadRecordBatch(schema, &dictMemo, options, &reader);
     if (!batch.ok() || !(*batch)->Validate().ok()) {
         return {};
@@ -451,25 +451,25 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
     return out;
 }
 
-// Check if the pertumation doesn't reoder anything 
-bool IsNoOp(const arrow::UInt64Array& permutation) { 
-    for (i64 i = 0; i < permutation.length(); ++i) { 
-        if (permutation.Value(i) != (ui64)i) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
-std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch, 
-                                            const std::shared_ptr<arrow::UInt64Array>& permutation) { 
-    Y_VERIFY(permutation->length() == batch->num_rows()); 
- 
-    auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation); 
-    Y_VERIFY(res.ok()); 
-    return (*res).record_batch(); 
-} 
- 
+// Check if the pertumation doesn't reoder anything
+bool IsNoOp(const arrow::UInt64Array& permutation) {
+    for (i64 i = 0; i < permutation.length(); ++i) {
+        if (permutation.Value(i) != (ui64)i) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                            const std::shared_ptr<arrow::UInt64Array>& permutation) {
+    Y_VERIFY(permutation->length() == batch->num_rows());
+
+    auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
+    Y_VERIFY(res.ok());
+    return (*res).record_batch();
+}
+
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                const std::vector<ui32>& sharding, ui32 numShards) {
     Y_VERIFY((size_t)batch->num_rows() == sharding.size());
@@ -494,7 +494,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
         Y_VERIFY_OK(builder.Finish(&permutation));
     }
 
-    auto reorderedBatch = Reorder(batch, permutation); 
+    auto reorderedBatch = Reorder(batch, permutation);
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> out(numShards);
 
@@ -909,7 +909,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                               const std::shared_ptr<arrow::Schema>& sortingKey) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey);
-    return Reorder(batch, sortPermutation); 
+    return Reorder(batch, sortPermutation);
 }
 
 bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {

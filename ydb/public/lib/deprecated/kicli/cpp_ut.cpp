@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
         UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
-        UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "Mismatch of column type expectedType = 3 actual type = 4608"); 
+        UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "Mismatch of column type expectedType = 3 actual type = 4608");
     }
 
     Y_UNIT_TEST(Test14) {
@@ -1397,226 +1397,226 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(SameTableDifferentColumns) {
-        using namespace NClient; 
-        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
-        Tests::TServer server = StartupKikimr(clientConfig); 
-        NClient::TKikimr kikimr(clientConfig); 
+        using namespace NClient;
+        NMsgBusProxy::TMsgBusClientConfig clientConfig;
+        Tests::TServer server = StartupKikimr(clientConfig);
+        NClient::TKikimr kikimr(clientConfig);
 
-        auto dc = kikimr.GetSchemaRoot("dc-1"); 
-        auto example = dc.MakeDirectory("deduper"); 
-        example.CreateTable("Groups", { 
-                                TKeyColumn("ShardId", NClient::TType::Uint32), 
-                                TKeyColumn("HostTitleHash", NClient::TType::Uint64), 
-                                TKeyColumn("GroupSimHash", NClient::TType::Uint64), 
-                                TKeyColumn("Rank", NClient::TType::Uint32), 
-                                TKeyColumn("UrlHash", NClient::TType::Uint32) 
-                            }); 
- 
-        auto updateQuery = kikimr.Query(R"___( 
-                                        ( 
-                                        (let shardId (Parameter 'SHARDID (DataType 'Uint32))) 
-                                        (let hostTitleHash (Parameter 'HOSTTITLEHASH (DataType 'Uint64))) 
-                                        (let groupSimHash (Parameter 'GROUPSIMHASH (DataType 'Uint64))) 
-                                        (let rank (Parameter 'RANK (DataType 'Uint32))) 
-                                        (let urlHash (Parameter 'URLHASH (DataType 'Uint32))) 
-                                        (let key '( 
-                                            '('ShardId shardId) 
-                                            '('HostTitleHash hostTitleHash) 
-                                            '('GroupSimHash groupSimHash) 
-                                            '('Rank rank) 
-                                            '('UrlHash urlHash) 
-                                        )) 
-                                        (let value '()) 
-                                        (let pgmReturn (AsList 
-                                            (UpdateRow '/dc-1/deduper/Groups key value) 
-                                        )) 
-                                        (return pgmReturn) 
-                                        ) 
-                                        )___").SyncPrepare().GetQuery(); 
- 
-        { 
-            auto result = updateQuery.SyncExecute( 
-                            TParameter("SHARDID", (ui32)0), 
-                            TParameter("HOSTTITLEHASH", (ui64)1111), 
-                            TParameter("GROUPSIMHASH", (ui64)2222), 
-                            TParameter("RANK", (ui32)1), 
-                            TParameter("URLHASH", (ui32)424242) 
-                            ); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str()); 
-        } 
- 
-        { 
-            auto result = updateQuery.SyncExecute( 
-                            TParameter("SHARDID", (ui32)0), 
-                            TParameter("HOSTTITLEHASH", (ui64)1111), 
-                            TParameter("GROUPSIMHASH", (ui64)2223), 
-                            TParameter("RANK", (ui32)0), 
-                            TParameter("URLHASH", (ui32)333333) 
-                            ); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str()); 
-        } 
- 
-        { 
-            // The query does SelecRow and SelectRange from the same table but with different sets 
-            // of key columns and different selected columns 
+        auto dc = kikimr.GetSchemaRoot("dc-1");
+        auto example = dc.MakeDirectory("deduper");
+        example.CreateTable("Groups", {
+                                TKeyColumn("ShardId", NClient::TType::Uint32),
+                                TKeyColumn("HostTitleHash", NClient::TType::Uint64),
+                                TKeyColumn("GroupSimHash", NClient::TType::Uint64),
+                                TKeyColumn("Rank", NClient::TType::Uint32),
+                                TKeyColumn("UrlHash", NClient::TType::Uint32)
+                            });
+
+        auto updateQuery = kikimr.Query(R"___(
+                                        (
+                                        (let shardId (Parameter 'SHARDID (DataType 'Uint32)))
+                                        (let hostTitleHash (Parameter 'HOSTTITLEHASH (DataType 'Uint64)))
+                                        (let groupSimHash (Parameter 'GROUPSIMHASH (DataType 'Uint64)))
+                                        (let rank (Parameter 'RANK (DataType 'Uint32)))
+                                        (let urlHash (Parameter 'URLHASH (DataType 'Uint32)))
+                                        (let key '(
+                                            '('ShardId shardId)
+                                            '('HostTitleHash hostTitleHash)
+                                            '('GroupSimHash groupSimHash)
+                                            '('Rank rank)
+                                            '('UrlHash urlHash)
+                                        ))
+                                        (let value '())
+                                        (let pgmReturn (AsList
+                                            (UpdateRow '/dc-1/deduper/Groups key value)
+                                        ))
+                                        (return pgmReturn)
+                                        )
+                                        )___").SyncPrepare().GetQuery();
+
+        {
+            auto result = updateQuery.SyncExecute(
+                            TParameter("SHARDID", (ui32)0),
+                            TParameter("HOSTTITLEHASH", (ui64)1111),
+                            TParameter("GROUPSIMHASH", (ui64)2222),
+                            TParameter("RANK", (ui32)1),
+                            TParameter("URLHASH", (ui32)424242)
+                            );
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
+        }
+
+        {
+            auto result = updateQuery.SyncExecute(
+                            TParameter("SHARDID", (ui32)0),
+                            TParameter("HOSTTITLEHASH", (ui64)1111),
+                            TParameter("GROUPSIMHASH", (ui64)2223),
+                            TParameter("RANK", (ui32)0),
+                            TParameter("URLHASH", (ui32)333333)
+                            );
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
+        }
+
+        {
+            // The query does SelecRow and SelectRange from the same table but with different sets
+            // of key columns and different selected columns
             auto rawq = kikimr.Query(R"___(
-                                  ( 
-                                  (let shardId (Parameter 'SHARDID (DataType 'Uint32))) 
-                                  (let hostTitleHash (Parameter 'HOSTTITLEHASH (DataType 'Uint64))) 
-                                  (let groupSimHash (Parameter 'GROUPSIMHASH (DataType 'Uint64))) 
-                                  (let rank (Parameter 'RANK (DataType 'Uint32))) 
-                                  (let urlHash (Parameter 'URLHASH (DataType 'Uint32))) 
-                                  (let key1 '('('ShardId shardId) 
-                                              '('HostTitleHash hostTitleHash) 
-                                              '('GroupSimHash groupSimHash) 
-                                              '('Rank rank) 
-                                              '('UrlHash urlHash))) 
-                                  (let column1 '('UrlHash)) 
-                                  (let range '('IncFrom '('ShardId shardId (Void)) 
-                                                        '('HostTitleHash hostTitleHash (Void)) 
-                                                        '('GroupSimHash groupSimHash (Void)) 
-                                  )) 
-                                  (let column2 '('UrlHash)) 
-                                  (let options '('('ItemsLimit (Uint64 '1)))) 
-                                  # SelectRow by the full key (5 columns) with 1 key column in the result 
-                                  (let res1 (SelectRow 'dc-1/deduper/Groups key1 column1)) 
-                                  # SelectRange by 3 key columns and 1 key column in the result 
-                                  (let res2 (SelectRange 'dc-1/deduper/Groups range column2 options)) 
-                                  (let result (SetResult 'result (AsStruct '('rowResult res1) '('rangeResult res2)))) 
-                                  (let pgmReturn (AsList result)) 
-                                  (return pgmReturn) 
-                                  ) 
+                                  (
+                                  (let shardId (Parameter 'SHARDID (DataType 'Uint32)))
+                                  (let hostTitleHash (Parameter 'HOSTTITLEHASH (DataType 'Uint64)))
+                                  (let groupSimHash (Parameter 'GROUPSIMHASH (DataType 'Uint64)))
+                                  (let rank (Parameter 'RANK (DataType 'Uint32)))
+                                  (let urlHash (Parameter 'URLHASH (DataType 'Uint32)))
+                                  (let key1 '('('ShardId shardId)
+                                              '('HostTitleHash hostTitleHash)
+                                              '('GroupSimHash groupSimHash)
+                                              '('Rank rank)
+                                              '('UrlHash urlHash)))
+                                  (let column1 '('UrlHash))
+                                  (let range '('IncFrom '('ShardId shardId (Void))
+                                                        '('HostTitleHash hostTitleHash (Void))
+                                                        '('GroupSimHash groupSimHash (Void))
+                                  ))
+                                  (let column2 '('UrlHash))
+                                  (let options '('('ItemsLimit (Uint64 '1))))
+                                  # SelectRow by the full key (5 columns) with 1 key column in the result
+                                  (let res1 (SelectRow 'dc-1/deduper/Groups key1 column1))
+                                  # SelectRange by 3 key columns and 1 key column in the result
+                                  (let res2 (SelectRange 'dc-1/deduper/Groups range column2 options))
+                                  (let result (SetResult 'result (AsStruct '('rowResult res1) '('rangeResult res2))))
+                                  (let pgmReturn (AsList result))
+                                  (return pgmReturn)
+                                  )
                                   )___");
             auto q = rawq.SyncPrepare();
-            UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str()); 
- 
-            auto query = q.GetQuery(); 
-            auto result = query.SyncExecute( 
-                    TParameter("SHARDID", (ui32)0), 
-                    TParameter("HOSTTITLEHASH", (ui64)1111), 
-                    TParameter("GROUPSIMHASH", (ui64)2222), 
-                    TParameter("RANK", (ui32)1), 
-                    TParameter("URLHASH", (ui32)424242) 
-                    ); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str()); 
-            // result.GetValue().DumpValue(); 
-        } 
-    } 
- 
-    void CheckSelectRange(NClient::TKikimr& kikimr, 
-                          ui32 key1Start, ui32 key1End, 
-                          bool includeFrom, bool includeTo, 
+            UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str());
+
+            auto query = q.GetQuery();
+            auto result = query.SyncExecute(
+                    TParameter("SHARDID", (ui32)0),
+                    TParameter("HOSTTITLEHASH", (ui64)1111),
+                    TParameter("GROUPSIMHASH", (ui64)2222),
+                    TParameter("RANK", (ui32)1),
+                    TParameter("URLHASH", (ui32)424242)
+                    );
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
+            // result.GetValue().DumpValue();
+        }
+    }
+
+    void CheckSelectRange(NClient::TKikimr& kikimr,
+                          ui32 key1Start, ui32 key1End,
+                          bool includeFrom, bool includeTo,
                           const TVector<std::pair<ui32, ui32>>& expectedKeys)
-    { 
-        using namespace NClient; 
- 
+    {
+        using namespace NClient;
+
         auto rawq = kikimr.Query(
-                    Sprintf(R"___( 
-                              ( 
-                              (let key1Start (Parameter 'KEY1START (DataType 'Uint32))) 
-                              (let key1End (Parameter 'KEY1END (DataType 'Uint32))) 
-                              (let range '('%s '%s '('Key1 key1Start key1End))) 
-                              (let column '('Key1 'Key2)) 
-                              (let options '()) 
-                              (let readRes (SelectRange 'dc-1/test/Table range column options)) 
-                              (let result (SetResult 'readRes readRes)) 
-                              (let pgmReturn (AsList result)) 
-                              (return pgmReturn) 
-                              ) 
-                              )___", 
-                              includeFrom ? "IncFrom" : "ExcFrom", 
-                              includeTo ? "IncTo" : "ExcTo" 
+                    Sprintf(R"___(
+                              (
+                              (let key1Start (Parameter 'KEY1START (DataType 'Uint32)))
+                              (let key1End (Parameter 'KEY1END (DataType 'Uint32)))
+                              (let range '('%s '%s '('Key1 key1Start key1End)))
+                              (let column '('Key1 'Key2))
+                              (let options '())
+                              (let readRes (SelectRange 'dc-1/test/Table range column options))
+                              (let result (SetResult 'readRes readRes))
+                              (let pgmReturn (AsList result))
+                              (return pgmReturn)
+                              )
+                              )___",
+                              includeFrom ? "IncFrom" : "ExcFrom",
+                              includeTo ? "IncTo" : "ExcTo"
                     ));
         auto q = rawq.SyncPrepare();
-        UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str()); 
- 
-        auto query = q.GetQuery(); 
-        auto result = query.SyncExecute( 
-                    TParameter("KEY1START", key1Start), 
-                    TParameter("KEY1END", key1End) 
-                ); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str()); 
-        // result.GetValue().DumpValue(); 
-        auto valueResult = result.GetValue(); 
-        ui32 sz = valueResult["readRes"]["List"].Size(); 
-        UNIT_ASSERT_VALUES_EQUAL(sz, expectedKeys.size()); 
-        for (ui32 i = 0; i < sz ; ++i) { 
-            ui32 actualKey1 = (ui32)valueResult["readRes"]["List"][i]["Key1"]; 
-            ui64 actualKey2 = (ui64)valueResult["readRes"]["List"][i]["Key2"]; 
- 
-            UNIT_ASSERT_VALUES_EQUAL(actualKey1, expectedKeys[i].first); 
-            UNIT_ASSERT_VALUES_EQUAL(actualKey2, expectedKeys[i].second); 
-        } 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NMsgBusProxy::MSTATUS_OK,  q.GetError().GetMessage().c_str());
+
+        auto query = q.GetQuery();
+        auto result = query.SyncExecute(
+                    TParameter("KEY1START", key1Start),
+                    TParameter("KEY1END", key1End)
+                );
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
+        // result.GetValue().DumpValue();
+        auto valueResult = result.GetValue();
+        ui32 sz = valueResult["readRes"]["List"].Size();
+        UNIT_ASSERT_VALUES_EQUAL(sz, expectedKeys.size());
+        for (ui32 i = 0; i < sz ; ++i) {
+            ui32 actualKey1 = (ui32)valueResult["readRes"]["List"][i]["Key1"];
+            ui64 actualKey2 = (ui64)valueResult["readRes"]["List"][i]["Key2"];
+
+            UNIT_ASSERT_VALUES_EQUAL(actualKey1, expectedKeys[i].first);
+            UNIT_ASSERT_VALUES_EQUAL(actualKey2, expectedKeys[i].second);
+        }
+    }
+
     Y_UNIT_TEST(SelectRangeWithInf) {
-        using namespace NClient; 
-        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
-        Tests::TServer server = StartupKikimr(clientConfig); 
-        NClient::TKikimr kikimr(clientConfig); 
- 
-        auto dc = kikimr.GetSchemaRoot("dc-1"); 
-        auto example = dc.MakeDirectory("test"); 
-        example.CreateTable("Table", { 
-                                TKeyColumn("Key1", NClient::TType::Uint32), 
-                                TKeyColumn("Key2", NClient::TType::Uint64), 
+        using namespace NClient;
+        NMsgBusProxy::TMsgBusClientConfig clientConfig;
+        Tests::TServer server = StartupKikimr(clientConfig);
+        NClient::TKikimr kikimr(clientConfig);
+
+        auto dc = kikimr.GetSchemaRoot("dc-1");
+        auto example = dc.MakeDirectory("test");
+        example.CreateTable("Table", {
+                                TKeyColumn("Key1", NClient::TType::Uint32),
+                                TKeyColumn("Key2", NClient::TType::Uint64),
                                 TColumn("Value", NClient::TType::Utf8)
-                            }); 
- 
+                            });
+
         auto rawQuery = kikimr.Query(R"___(
-                                        ( 
-                                        (let key1 (Parameter 'KEY1 (DataType 'Uint32))) 
-                                        (let key2 (Parameter 'KEY2 (DataType 'Uint64))) 
+                                        (
+                                        (let key1 (Parameter 'KEY1 (DataType 'Uint32)))
+                                        (let key2 (Parameter 'KEY2 (DataType 'Uint64)))
                                         (let val (Parameter 'VALUE (DataType 'Utf8)))
-                                        (let key '( 
-                                            '('Key1 key1) 
-                                            '('Key2 key2) 
-                                        )) 
-                                        (let value '('('Value val))) 
-                                        (let pgmReturn (AsList 
-                                            (UpdateRow '/dc-1/test/Table key value) 
-                                        )) 
-                                        (return pgmReturn) 
-                                        ) 
+                                        (let key '(
+                                            '('Key1 key1)
+                                            '('Key2 key2)
+                                        ))
+                                        (let value '('('Value val)))
+                                        (let pgmReturn (AsList
+                                            (UpdateRow '/dc-1/test/Table key value)
+                                        ))
+                                        (return pgmReturn)
+                                        )
                                         )___");
         auto updateQuery = rawQuery.SyncPrepare();
-        UNIT_ASSERT_VALUES_EQUAL_C(updateQuery.GetStatus(), NMsgBusProxy::MSTATUS_OK,  updateQuery.GetError().GetMessage().c_str()); 
- 
-        // Write many rows in order to trigger compaction and create a flat part 
-        for (ui32 k1 = 0; k1 < 300; ++k1) { 
-            for (ui64 k2 = 0; k2 < 3; ++k2) { 
-                auto result = updateQuery.GetQuery().SyncExecute( 
-                            TParameter("KEY1", k1), 
-                            TParameter("KEY2", k2), 
+        UNIT_ASSERT_VALUES_EQUAL_C(updateQuery.GetStatus(), NMsgBusProxy::MSTATUS_OK,  updateQuery.GetError().GetMessage().c_str());
+
+        // Write many rows in order to trigger compaction and create a flat part
+        for (ui32 k1 = 0; k1 < 300; ++k1) {
+            for (ui64 k2 = 0; k2 < 3; ++k2) {
+                auto result = updateQuery.GetQuery().SyncExecute(
+                            TParameter("KEY1", k1),
+                            TParameter("KEY2", k2),
                             TParameter("VALUE", TString(2048, 'A'))
-                            ); 
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str()); 
-            } 
-        } 
- 
-        for (ui32 k1 = 0; k1 < 299; ++k1) { 
-            // from (k1, inf) to (k1+1, inf) 
+                            );
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NMsgBusProxy::MSTATUS_OK,  result.GetError().GetMessage().c_str());
+            }
+        }
+
+        for (ui32 k1 = 0; k1 < 299; ++k1) {
+            // from (k1, inf) to (k1+1, inf)
             TVector<std::pair<ui32, ui32>> expected = {{k1+1,0},{k1+1,1},{k1+1,2}};
-            CheckSelectRange(kikimr, k1, k1+1, false, false, expected); 
-            CheckSelectRange(kikimr, k1, k1+1, false, true, expected); 
-            CheckSelectRange(kikimr, k1, k1+1, true, false, expected); 
-            CheckSelectRange(kikimr, k1, k1+1, true, true, expected); 
- 
-            // from (k1, inf) to (k1, inf) 
-            CheckSelectRange(kikimr, k1, k1, false, false, {}); 
-            CheckSelectRange(kikimr, k1, k1, false, true, {}); 
-            CheckSelectRange(kikimr, k1, k1, true, false, {}); 
-            CheckSelectRange(kikimr, k1, k1, true, true, {}); 
- 
-            // from (k1+1, inf) to (k1, inf) 
-            CheckSelectRange(kikimr, k1+1, k1, false, false, {}); 
-            CheckSelectRange(kikimr, k1+1, k1, false, true, {}); 
-            CheckSelectRange(kikimr, k1+1, k1, true, false, {}); 
-            CheckSelectRange(kikimr, k1+1, k1, true, true, {}); 
-        } 
-    } 
- 
- 
+            CheckSelectRange(kikimr, k1, k1+1, false, false, expected);
+            CheckSelectRange(kikimr, k1, k1+1, false, true, expected);
+            CheckSelectRange(kikimr, k1, k1+1, true, false, expected);
+            CheckSelectRange(kikimr, k1, k1+1, true, true, expected);
+
+            // from (k1, inf) to (k1, inf)
+            CheckSelectRange(kikimr, k1, k1, false, false, {});
+            CheckSelectRange(kikimr, k1, k1, false, true, {});
+            CheckSelectRange(kikimr, k1, k1, true, false, {});
+            CheckSelectRange(kikimr, k1, k1, true, true, {});
+
+            // from (k1+1, inf) to (k1, inf)
+            CheckSelectRange(kikimr, k1+1, k1, false, false, {});
+            CheckSelectRange(kikimr, k1+1, k1, false, true, {});
+            CheckSelectRange(kikimr, k1+1, k1, true, false, {});
+            CheckSelectRange(kikimr, k1+1, k1, true, true, {});
+        }
+    }
+
+
     Y_UNIT_TEST(TypicalCase1) {
         using namespace NClient;
         NMsgBusProxy::TMsgBusClientConfig clientConfig;
@@ -2146,12 +2146,12 @@ NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVect
         auto &tuple = *range.MutableFrom()->MutableType()->MutableTuple();
         for (auto &s : from) {
             if (s)
-                range.MutableFrom()->MutableValue()->AddTuple()->MutableOptional()->SetText(s); 
+                range.MutableFrom()->MutableValue()->AddTuple()->MutableOptional()->SetText(s);
             auto &elem = *tuple.AddElement();
-            elem.SetKind(NKikimrMiniKQL::Optional); 
-            auto &item = *elem.MutableOptional()->MutableItem(); 
-            item.SetKind(NKikimrMiniKQL::Data); 
-            item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id); 
+            elem.SetKind(NKikimrMiniKQL::Optional);
+            auto &item = *elem.MutableOptional()->MutableItem();
+            item.SetKind(NKikimrMiniKQL::Data);
+            item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
         }
     }
     if (!to.empty()) {
@@ -2159,12 +2159,12 @@ NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVect
         auto &tuple = *range.MutableTo()->MutableType()->MutableTuple();
         for (auto &s : to) {
             if (s)
-                range.MutableTo()->MutableValue()->AddTuple()->MutableOptional()->SetText(s); 
+                range.MutableTo()->MutableValue()->AddTuple()->MutableOptional()->SetText(s);
             auto &elem = *tuple.AddElement();
-            elem.SetKind(NKikimrMiniKQL::Optional); 
-            auto &item = *elem.MutableOptional()->MutableItem(); 
-            item.SetKind(NKikimrMiniKQL::Data); 
-            item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id); 
+            elem.SetKind(NKikimrMiniKQL::Optional);
+            auto &item = *elem.MutableOptional()->MutableItem();
+            item.SetKind(NKikimrMiniKQL::Data);
+            item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
         }
     }
     range.SetFromInclusive(fromInclusive);

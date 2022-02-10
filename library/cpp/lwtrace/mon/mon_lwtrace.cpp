@@ -1,5 +1,5 @@
-#include "mon_lwtrace.h" 
- 
+#include "mon_lwtrace.h"
+
 #include <algorithm>
 #include <iterator>
 
@@ -15,21 +15,21 @@
 #include <util/string/escape.h>
 #include <util/system/condvar.h>
 #include <util/system/execpath.h>
-#include <util/system/hostname.h> 
- 
-using namespace NMonitoring; 
- 
+#include <util/system/hostname.h>
+
+using namespace NMonitoring;
+
 #define WWW_CHECK(cond, ...) \
-    do { \ 
-        if (!(cond)) { \ 
-            ythrow yexception() << Sprintf(__VA_ARGS__); \ 
-        } \ 
-    } while (false) \ 
-    /**/ 
- 
+    do { \
+        if (!(cond)) { \
+            ythrow yexception() << Sprintf(__VA_ARGS__); \
+        } \
+    } while (false) \
+    /**/
+
 #define WWW_HTML_INNER(out) HTML(out) WITH_SCOPED(tmp, TScopedHtmlInner(out))
 #define WWW_HTML(out) out << NMonitoring::HTTPOKHTML; WWW_HTML_INNER(out)
- 
+
 namespace NLwTraceMonPage {
 
 struct TTrackLogRefs {
@@ -1537,35 +1537,35 @@ void SeriesSelectors(TStringStream& ss, const TCgiParameters& e,
     }
 }
 
-class TProbesHtmlPrinter { 
-private: 
+class TProbesHtmlPrinter {
+private:
     TVector<TVector<TString>> TableData;
     static constexpr int TimeoutSec = 15 * 60; // default timeout
-public: 
-    void Push(const NLWTrace::TProbe* probe) 
-    { 
+public:
+    void Push(const NLWTrace::TProbe* probe)
+    {
         TableData.emplace_back();
         auto& row = TableData.back();
 
         row.emplace_back();
         TString& groups = row.back();
-        bool first = true; 
+        bool first = true;
         for (const char* const* i = probe->Event.Groups; *i != nullptr; ++i, first = false) {
             groups.append(TString(first? "": ", ") + GroupHtml(*i));
-        } 
+        }
 
         row.push_back(ProbeHtml(probe->Event.GetProvider(), probe->Event.Name));
 
         row.emplace_back();
         TString& params = row.back();
-        first = true; 
-        for (size_t i = 0; i < probe->Event.Signature.ParamCount; i++, first = false) { 
+        first = true;
+        for (size_t i = 0; i < probe->Event.Signature.ParamCount; i++, first = false) {
             params.append(TString(first? "": ", ") + probe->Event.Signature.ParamTypes[i]
                           + " " + probe->Event.Signature.ParamNames[i]);
-        } 
+        }
 
         row.emplace_back(ToString(probe->GetExecutorsCount()));
-    } 
+    }
 
     void Output(IOutputStream& os)
     {
@@ -1647,8 +1647,8 @@ private:
            "</div>";
         return ss.Str();
     }
-}; 
- 
+};
+
 void TDashboardRegistry::Register(const NLWTrace::TDashboard& dashboard) {
     TGuard<TMutex> g(Mutex);
     Dashboards[dashboard.GetName()] = dashboard;
@@ -1835,27 +1835,27 @@ public:
     }
 };
 
-class TTracesHtmlPrinter { 
-private: 
+class TTracesHtmlPrinter {
+private:
     IOutputStream& Os;
     TInstant Now;
-public: 
+public:
     explicit TTracesHtmlPrinter(IOutputStream& os)
-        : Os(os) 
+        : Os(os)
         , Now(TInstant::Now())
-    {} 
- 
+    {}
+
     void Push(ILogSource* src)
-    { 
+    {
         TString id = src->GetId();
-        Os << "<tr>"; 
-        Os << "<td>"; 
-        try { 
+        Os << "<tr>";
+        Os << "<td>";
+        try {
             Os << src->GetStartTime().ToStringUpToSeconds();
-        } catch (...) { 
-            Os << "error: " << CurrentExceptionMessage(); 
-        } 
-        Os << "</td>" 
+        } catch (...) {
+            Os << "error: " << CurrentExceptionMessage();
+        }
+        Os << "</td>"
            << "<td><div class=\"dropdown\">"
                 "<a href=\"#\" data-toggle=\"dropdown\">" << TimeoutToString(src->GetTimeout(Now)) << "</a>"
                 "<ul class=\"dropdown-menu\">"
@@ -1867,12 +1867,12 @@ public:
                   "<li><a href=\"#\" onClick=\"$.redirectPost('?mode=settimeout&ui=y', {id:'" << id << "'});\">no timeout</a></li>"
                 "</ul>"
               "</div></td>"
-           << "<td>" << EncodeHtmlPcdata(id) << "</td>" 
+           << "<td>" << EncodeHtmlPcdata(id) << "</td>"
            << "<td>" << src->GetEventsCount() << "</td>"
            << "<td>" << src->GetThreadsCount() << "</td>"
-           << "<td><a href=\"?mode=log&id=" << id << "\">Text</a></td>" 
-           << "<td><a href=\"?mode=log&format=json&id=" << id << "\">Json</a></td>" 
-           << "<td><a href=\"?mode=query&id=" << id << "\">Query</a></td>" 
+           << "<td><a href=\"?mode=log&id=" << id << "\">Text</a></td>"
+           << "<td><a href=\"?mode=log&format=json&id=" << id << "\">Json</a></td>"
+           << "<td><a href=\"?mode=query&id=" << id << "\">Query</a></td>"
            << "<td><a href=\"?mode=analytics&id=" << id << "\">Analytics</a></td>"
            << "<td><div class=\"dropdown navbar-right\">" // navbar-right is hack to drop left
                     "<a href=\"#\" data-toggle=\"dropdown\">Modify</a>"
@@ -1881,8 +1881,8 @@ public:
                       "<li><a href=\"#\" onClick=\"$.redirectPost('?mode=delete&ui=y', {id:'" << id << "'});\">Delete</a></li>"
                     "</ul>"
               "</div></td>"
-           << "</tr>\n"; 
-    } 
+           << "</tr>\n";
+    }
 private:
     static TString TimeoutToString(TDuration d)
     {
@@ -1916,8 +1916,8 @@ private:
         }
         return ss.Str();
     }
-}; 
- 
+};
+
 class TTracesLister {
 private:
     TVariants& Variants;
@@ -2004,8 +2004,8 @@ private:
     }
 };
 
-class TLogFilter { 
-private: 
+class TLogFilter {
+private:
     struct TFilter {
         TString ParamName;
         TString ParamValue;
@@ -2042,31 +2042,31 @@ private:
     THashSet<const NLWTrace::TSignature*> Signatures; // Just to list param names
     TVariants ParamNames;
     THashMap<TString, THashSet<TString>> FilteredParamValues; // paramName -> { paramValue }
-public: 
+public:
     explicit TLogFilter(const TVector<TString>& filters)
-    { 
+    {
         for (const TString& subvalue : filters) {
             TFilter filter(subvalue);
             FilteredParamValues[filter.ParamName]; // just create empty set to gather values later
             if (filter.Parsed) {
                 Filters.push_back(filter);
             }
-        } 
-    } 
- 
+        }
+    }
+
     virtual ~TLogFilter() {}
 
     template <class TLog>
     bool Filter(const TLog& log)
-    { 
+    {
         Gather(log);
         for (const TFilter& filter : Filters) {
             if (filter.Query.ExecuteQuery(log) != filter.Value) {
                 return false;
-            } 
-        } 
+            }
+        }
         return true;
-    } 
+    }
 
     void FilterSelectors(TStringStream& ss, const TCgiParameters& e, const TString& fparam)
     {
@@ -2155,8 +2155,8 @@ private:
         Sort(result.begin(), result.end());
         return result;
     }
-}; 
- 
+};
+
 static void EscapeJSONString(IOutputStream& os, const TString& s)
 {
     for (TString::const_iterator i = s.begin(), e = s.end(); i != e; ++i) {
@@ -2180,72 +2180,72 @@ static TString EscapeJSONString(const TString& s)
     return ss.Str();
 }
 
-class TLogJsonPrinter { 
-private: 
+class TLogJsonPrinter {
+private:
     IOutputStream& Os;
-    bool FirstThread; 
-    bool FirstItem; 
-public: 
+    bool FirstThread;
+    bool FirstItem;
+public:
     explicit TLogJsonPrinter(IOutputStream& os)
-        : Os(os) 
-        , FirstThread(true) 
-        , FirstItem(true) 
-    {} 
- 
-    void OutputHeader() 
-    { 
-        Os << "{\n\t\"source\": \"" << HostName() << "\"" 
-              "\n\t, \"items\": [" 
-              ; 
-    } 
- 
+        : Os(os)
+        , FirstThread(true)
+        , FirstItem(true)
+    {}
+
+    void OutputHeader()
+    {
+        Os << "{\n\t\"source\": \"" << HostName() << "\""
+              "\n\t, \"items\": ["
+              ;
+    }
+
     void OutputFooter(const NLWTrace::TSession* trace)
-    { 
-        Os << "\n\t\t]" 
-              "\n\t, \"threads\": [" 
-              ; 
+    {
+        Os << "\n\t\t]"
+              "\n\t, \"threads\": ["
+              ;
         trace->ReadThreads(*this);
-        Os << "]" 
+        Os << "]"
               "\n\t, \"events_count\": " << trace->GetEventsCount() <<
               "\n\t, \"threads_count\": " << trace->GetThreadsCount() <<
-              "\n\t, \"timestamp\": " << Now().GetValue() << 
-              "\n}" 
-              ; 
-    } 
- 
-    void PushThread(TThread::TId tid) 
-    { 
-        Os << (FirstThread? "": ", ") << tid; 
-        FirstThread = false; 
-    } 
- 
+              "\n\t, \"timestamp\": " << Now().GetValue() <<
+              "\n}"
+              ;
+    }
+
+    void PushThread(TThread::TId tid)
+    {
+        Os << (FirstThread? "": ", ") << tid;
+        FirstThread = false;
+    }
+
     void Push(TThread::TId tid, const NLWTrace::TLogItem& item)
-    { 
-        Os << "\n\t\t" << (FirstItem? "": ", "); 
-        FirstItem = false; 
- 
-        Os << "[" << tid << 
-              ", " << item.Timestamp.GetValue() << 
-              ", \"" << item.Probe->Event.GetProvider() << "\"" 
-              ", \"" << item.Probe->Event.Name << "\"" 
-              ", {" 
-              ; 
-        if (item.SavedParamsCount > 0) { 
+    {
+        Os << "\n\t\t" << (FirstItem? "": ", ");
+        FirstItem = false;
+
+        Os << "[" << tid <<
+              ", " << item.Timestamp.GetValue() <<
+              ", \"" << item.Probe->Event.GetProvider() << "\""
+              ", \"" << item.Probe->Event.Name << "\""
+              ", {"
+              ;
+        if (item.SavedParamsCount > 0) {
             TString ParamValues[LWTRACE_MAX_PARAMS];
-            item.Probe->Event.Signature.SerializeParams(item.Params, ParamValues); 
-            bool first = true; 
-            for (size_t i = 0; i < item.SavedParamsCount; i++, first = false) { 
-                Os << (first? "": ", ") << "\"" << item.Probe->Event.Signature.ParamNames[i] << "\": \""; 
-                EscapeJSONString(Os, ParamValues[i]); 
-                Os << "\""; 
-            } 
-        } 
-        Os << "}]"; 
-    } 
-}; 
- 
-class TLogTextPrinter : public TLogFilter { 
-private: 
+            item.Probe->Event.Signature.SerializeParams(item.Params, ParamValues);
+            bool first = true;
+            for (size_t i = 0; i < item.SavedParamsCount; i++, first = false) {
+                Os << (first? "": ", ") << "\"" << item.Probe->Event.Signature.ParamNames[i] << "\": \"";
+                EscapeJSONString(Os, ParamValues[i]);
+                Os << "\"";
+            }
+        }
+        Os << "}]";
+    }
+};
+
+class TLogTextPrinter : public TLogFilter {
+private:
     TMultiMap<NLWTrace::TTypedParam, std::pair<TThread::TId, NLWTrace::TLogItem> > Items;
     TMultiMap<NLWTrace::TTypedParam, NLWTrace::TTrackLog> Depot;
     THashMap<NLWTrace::TProbe*, size_t> ProbeId;
@@ -2256,7 +2256,7 @@ private:
     ui64 Head = 0;
     ui64 Tail = 0;
     bool ShowTs = false;
-public: 
+public:
     TLogTextPrinter(const TVector<TString>& filters, ui64 head, ui64 tail, const TString& order, bool reverseOrder, bool cutTs, bool showTs)
         : TLogFilter(filters)
         , CutTs(cutTs)
@@ -2284,11 +2284,11 @@ public:
     };
 
     void Output(IOutputStream& os) const
-    { 
+    {
         OutputItems<Text>(os);
         OutputDepot<Text>(os);
-    } 
- 
+    }
+
     void OutputJson(IOutputStream& os) const
     {
         os << "{\"depot\":[\n";
@@ -2315,13 +2315,13 @@ public:
     }
 
     void Push(TThread::TId tid, const NLWTrace::TLogItem& item)
-    { 
+    {
         CutTs.Push(tid, item);
-        if (Filter(item)) { 
+        if (Filter(item)) {
             AddId(item);
             Items.emplace(GetKey(item), std::make_pair(tid, item));
-        } 
-    } 
+        }
+    }
 
     void Push(TThread::TId tid, const NLWTrace::TTrackLog& tl)
     {
@@ -2332,7 +2332,7 @@ public:
         }
     }
 
-private: 
+private:
     void AddId(const NLWTrace::TLogItem& item)
     {
         if (ProbeId.find(item.Probe) == ProbeId.end()) {
@@ -2412,7 +2412,7 @@ private:
 
     template <EFormat Format, bool AsTrack = false>
     void OutputItem(IOutputStream& os, TThread::TId tid, const NLWTrace::TLogItem& item, ui64 startTs, ui64 prevTs, bool& first) const
-    { 
+    {
         if (CutTs.Skip(item)) {
             return;
         }
@@ -2427,7 +2427,7 @@ private:
             }
             if (tid) {
                 os << "<" << tid << "> ";
-            } 
+            }
             if (item.Timestamp != TInstant::Zero()) {
                 os << "[" << item.Timestamp << "] ";
             } else {
@@ -2464,9 +2464,9 @@ private:
                 }
                 os << "}]" << (AsTrack? "]":"");
             }
-        } 
+        }
         first = false;
-    } 
+    }
 
     template <EFormat Format>
     void OutputTrackLog(IOutputStream& os, const NLWTrace::TTrackLog& tl, bool& first) const
@@ -2486,8 +2486,8 @@ private:
         }
         os << "\n";
     }
-}; 
- 
+};
+
 class TLogAnalyzer: public TLogFilter {
 private:
     TMultiMap<ui64, std::pair<TThread::TId, NLWTrace::TLogItem>> Items;
@@ -3773,52 +3773,52 @@ NLWTrace::TManager g_UnsafeManager(g_Probes, true);
 TDashboardRegistry g_DashboardRegistry;
 
 class TLWTraceMonPage : public NMonitoring::IMonPage {
-private: 
+private:
     NLWTrace::TManager* TraceMngr;
     TString StartTime;
     TTraceCleaner Cleaner;
     TMutex SnapshotsMtx;
     THashMap<TString, TAtomicSharedPtr<NLWTrace::TLogPb>> Snapshots;
-public: 
+public:
     explicit TLWTraceMonPage(bool allowUnsafe = false)
-        : NMonitoring::IMonPage("trace", "Tracing") 
+        : NMonitoring::IMonPage("trace", "Tracing")
         , TraceMngr(&TraceManager(allowUnsafe))
         , Cleaner(TraceMngr)
     {
         time_t stime = TInstant::Now().TimeT();
         StartTime = CTimeR(&stime);
     }
- 
+
     virtual void Output(NMonitoring::IMonHttpRequest& request) {
         TStringStream out;
-        try { 
+        try {
             if (request.GetParams().Get("mode") == "") {
                 OutputTracesAndSnapshots(request, out);
-            } else if (request.GetParams().Get("mode") == "probes") { 
+            } else if (request.GetParams().Get("mode") == "probes") {
                 OutputProbes(request, out);
             } else if (request.GetParams().Get("mode") == "dashboards") {
                 OutputDashboards(request, out);
             } else if (request.GetParams().Get("mode") == "dashboard") {
                 OutputDashboard(request, out);
-            } else if (request.GetParams().Get("mode") == "log") { 
+            } else if (request.GetParams().Get("mode") == "log") {
                 OutputLog(request, out);
-            } else if (request.GetParams().Get("mode") == "query") { 
+            } else if (request.GetParams().Get("mode") == "query") {
                 OutputQuery(request, out);
             } else if (request.GetParams().Get("mode") == "builder") {
                 OutputBuilder(request, out);
             } else if (request.GetParams().Get("mode") == "analytics") {
                 OutputAnalytics(request, out);
-            } else if (request.GetParams().Get("mode") == "new") { 
+            } else if (request.GetParams().Get("mode") == "new") {
                 PostNew(request, out);
-            } else if (request.GetParams().Get("mode") == "delete") { 
+            } else if (request.GetParams().Get("mode") == "delete") {
                 PostDelete(request, out);
             } else if (request.GetParams().Get("mode") == "make_snapshot") {
                 PostSnapshot(request, out);
             } else if (request.GetParams().Get("mode") == "settimeout") {
                 PostSetTimeout(request, out);
-            } else { 
-                ythrow yexception() << "Bad request"; 
-            } 
+            } else {
+                ythrow yexception() << "Bad request";
+            }
         } catch (TPageGenBase& gen) {
             out.Clear();
             out << gen.what();
@@ -4063,8 +4063,8 @@ private:
             WWW_HTML(out) {
                 out << "<h2>Trace Query: " << id << "</h2><pre>" << queryStr;
             }
-        } 
-    } 
+        }
+    }
 
     void OutputBuilder(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
@@ -4669,8 +4669,8 @@ private:
         }
         return false;
     }
-}; 
- 
+};
+
 void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe) {
     THolder<NLwTraceMonPage::TLWTraceMonPage> p = MakeHolder<NLwTraceMonPage::TLWTraceMonPage>(allowUnsafe);
     mon->Register(p.Release());
@@ -4706,7 +4706,7 @@ void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe) {
     WWW_STATIC_FILE("lwtrace/mon/static/js/jquery.treegrid.min.js", JAVASCRIPT);
     WWW_STATIC_FILE("lwtrace/mon/static/js/jquery.url.min.js", JAVASCRIPT);
 #undef WWW_STATIC_FILE
-} 
+}
 
 NLWTrace::TProbeRegistry& ProbeRegistry() {
     return g_Probes;

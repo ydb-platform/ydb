@@ -7,7 +7,7 @@
 #include <util/system/compiler.h>
 #include <util/system/info.h>
 #include <util/system/error.h>
-#include <util/thread/lfstack.h> 
+#include <util/thread/lfstack.h>
 
 #if defined(_win_)
 #include <util/system/winint.h>
@@ -33,8 +33,8 @@ public:
     {}
 
     ~TGlobalPagePool() {
-        void* addr = nullptr; 
-        while (Pages.Dequeue(&addr)) { 
+        void* addr = nullptr;
+        while (Pages.Dequeue(&addr)) {
 #ifdef _win_
             Y_VERIFY_DEBUG(::VirtualFree(addr, 0, MEM_RELEASE), "VirtualFree failed: %s", LastSystemErrorText());
 #else
@@ -43,25 +43,25 @@ public:
         }
     }
 
-    void* GetPage() { 
-        void *page = nullptr; 
-        if (Pages.Dequeue(&page)) { 
-            AtomicDecrement(Count); 
-            return page; 
-        } 
- 
-        return nullptr; 
+    void* GetPage() {
+        void *page = nullptr;
+        if (Pages.Dequeue(&page)) {
+            AtomicDecrement(Count);
+            return page;
+        }
+
+        return nullptr;
     }
 
-    void PushPage(void* addr) { 
-        AtomicIncrement(Count); 
-        Pages.Enqueue(addr); 
+    void PushPage(void* addr) {
+        AtomicIncrement(Count);
+        Pages.Enqueue(addr);
     }
 
-    ui64 GetPageCount() const { 
-        return RelaxedLoad(&Count); 
-    } 
- 
+    ui64 GetPageCount() const {
+        return RelaxedLoad(&Count);
+    }
+
     size_t GetPageSize() const {
         return PageSize;
     }
@@ -72,8 +72,8 @@ public:
 
 private:
     const size_t PageSize;
-    TAtomic Count = 0; 
-    TLockFreeStack<void*> Pages; 
+    TAtomic Count = 0;
+    TLockFreeStack<void*> Pages;
 };
 
 class TGlobalPools {
@@ -100,51 +100,51 @@ private:
 
 } // unnamed
 
-TAlignedPagePoolCounters::TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) { 
-    if (!countersRoot || name.empty()) 
-        return; 
-    NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc"); 
-    TotalBytesAllocatedCntr = subGroup->GetCounter(name + "/TotalBytesAllocated"); 
-    AllocationsCntr = subGroup->GetCounter(name + "/Allocations", true); 
-    PoolsCntr = subGroup->GetCounter(name + "/Pools", true); 
-    LostPagesBytesFreeCntr = subGroup->GetCounter(name + "/LostPagesBytesFreed", true); 
-} 
- 
+TAlignedPagePoolCounters::TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {
+    if (!countersRoot || name.empty())
+        return;
+    NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
+    TotalBytesAllocatedCntr = subGroup->GetCounter(name + "/TotalBytesAllocated");
+    AllocationsCntr = subGroup->GetCounter(name + "/Allocations", true);
+    PoolsCntr = subGroup->GetCounter(name + "/Pools", true);
+    LostPagesBytesFreeCntr = subGroup->GetCounter(name + "/LostPagesBytesFreed", true);
+}
+
 TAlignedPagePool::~TAlignedPagePool() {
-    if (CheckLostMem && !UncaughtException()) { 
+    if (CheckLostMem && !UncaughtException()) {
         Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
                        "Expected %ld, actual %ld (%ld page(s), %ld offloaded)", TotalAllocated,
                        FreePages.size() * POOL_PAGE_SIZE, FreePages.size(), OffloadedActiveBytes);
         Y_VERIFY_DEBUG(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
-    } 
+    }
 
-    size_t activeBlocksSize = 0; 
-    for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) { 
-        activeBlocksSize += it->second; 
-        Free(it->first, it->second); 
+    size_t activeBlocksSize = 0;
+    for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {
+        activeBlocksSize += it->second;
+        Free(it->first, it->second);
     }
 
     if (activeBlocksSize > 0 || FreePages.size() != AllPages.size() || OffloadedActiveBytes) {
-        if (Counters.LostPagesBytesFreeCntr) { 
+        if (Counters.LostPagesBytesFreeCntr) {
             (*Counters.LostPagesBytesFreeCntr) += OffloadedActiveBytes + activeBlocksSize + (AllPages.size() - FreePages.size()) * POOL_PAGE_SIZE;
-        } 
-    } 
- 
+        }
+    }
+
     Y_VERIFY_DEBUG(TotalAllocated == AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes,
-                   "Expected %ld, actual %ld (%ld page(s))", TotalAllocated, 
+                   "Expected %ld, actual %ld (%ld page(s))", TotalAllocated,
                    AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes, AllPages.size());
- 
-    for (auto &ptr : AllPages) { 
-        TGlobalPools::Instance().Get(0).PushPage(ptr); 
-    } 
- 
-    if (Counters.TotalBytesAllocatedCntr) { 
-        (*Counters.TotalBytesAllocatedCntr) -= TotalAllocated; 
-    } 
-    if (Counters.PoolsCntr) { 
-        --(*Counters.PoolsCntr); 
-    } 
-    TotalAllocated = 0; 
+
+    for (auto &ptr : AllPages) {
+        TGlobalPools::Instance().Get(0).PushPage(ptr);
+    }
+
+    if (Counters.TotalBytesAllocatedCntr) {
+        (*Counters.TotalBytesAllocatedCntr) -= TotalAllocated;
+    }
+    if (Counters.PoolsCntr) {
+        --(*Counters.PoolsCntr);
+    }
+    TotalAllocated = 0;
 }
 
 void TAlignedPagePool::ReleaseFreePages() {
@@ -215,9 +215,9 @@ void* TAlignedPagePool::GetPage() {
         if (AllocNotifyCallback) {
             AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
         }
-        if (Counters.TotalBytesAllocatedCntr) { 
-            (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE; 
-        } 
+        if (Counters.TotalBytesAllocatedCntr) {
+            (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE;
+        }
         ++PageGlobalHitCount;
         AllPages.emplace(ptr);
 
@@ -281,9 +281,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
             if (AllocNotifyCallback) {
                 AllocNotifyCurrentBytes += size;
             }
-            if (Counters.TotalBytesAllocatedCntr) { 
-                (*Counters.TotalBytesAllocatedCntr) += size; 
-            } 
+            if (Counters.TotalBytesAllocatedCntr) {
+                (*Counters.TotalBytesAllocatedCntr) += size;
+            }
             ++PageGlobalHitCount;
         } else {
             ++PageMissCount;
@@ -301,9 +301,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
         if (AllocNotifyCallback) {
             AllocNotifyCurrentBytes += size;
         }
-        if (Counters.TotalBytesAllocatedCntr) { 
-            (*Counters.TotalBytesAllocatedCntr) += size; 
-        } 
+        if (Counters.TotalBytesAllocatedCntr) {
+            (*Counters.TotalBytesAllocatedCntr) += size;
+        }
 #else
         void* mem = ::mmap(nullptr, size + POOL_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
         if (Y_UNLIKELY(MAP_FAILED == mem)) {
@@ -322,9 +322,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
                 if (AllocNotifyCallback) {
                     AllocNotifyCurrentBytes += size + POOL_PAGE_SIZE;
                 }
-                if (Counters.TotalBytesAllocatedCntr) { 
-                    (*Counters.TotalBytesAllocatedCntr) += size + POOL_PAGE_SIZE; 
-                } 
+                if (Counters.TotalBytesAllocatedCntr) {
+                    (*Counters.TotalBytesAllocatedCntr) += size + POOL_PAGE_SIZE;
+                }
             } else {
                 // Return extra space to the system
                 if (Y_UNLIKELY(0 != ::munmap(reinterpret_cast<ui8*>(mem) + size, POOL_PAGE_SIZE))) {
@@ -335,9 +335,9 @@ void* TAlignedPagePool::Alloc(size_t size) {
                 if (AllocNotifyCallback) {
                     AllocNotifyCurrentBytes += size;
                 }
-                if (Counters.TotalBytesAllocatedCntr) { 
-                    (*Counters.TotalBytesAllocatedCntr) += size; 
-                } 
+                if (Counters.TotalBytesAllocatedCntr) {
+                    (*Counters.TotalBytesAllocatedCntr) += size;
+                }
             }
         } else {
             res = reinterpret_cast<void*>((reinterpret_cast<uintptr_t>(mem) & PAGE_ADDR_MASK) + POOL_PAGE_SIZE);
@@ -355,16 +355,16 @@ void* TAlignedPagePool::Alloc(size_t size) {
             if (AllocNotifyCallback) {
                 AllocNotifyCurrentBytes += size;
             }
-            if (Counters.TotalBytesAllocatedCntr) { 
-                (*Counters.TotalBytesAllocatedCntr) += size; 
-            } 
+            if (Counters.TotalBytesAllocatedCntr) {
+                (*Counters.TotalBytesAllocatedCntr) += size;
+            }
         }
 #endif
     }
 
-    if (Counters.AllocationsCntr) { 
-        ++(*Counters.AllocationsCntr); 
-    } 
+    if (Counters.AllocationsCntr) {
+        ++(*Counters.AllocationsCntr);
+    }
     ++AllocCount;
     UpdatePeaks();
     return res;
@@ -388,9 +388,9 @@ void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
 
     Y_VERIFY_DEBUG(TotalAllocated >= size);
     TotalAllocated -= size;
-    if (Counters.TotalBytesAllocatedCntr) { 
-        (*Counters.TotalBytesAllocatedCntr) -= size; 
-    } 
+    if (Counters.TotalBytesAllocatedCntr) {
+        (*Counters.TotalBytesAllocatedCntr) -= size;
+    }
 }
 
 bool TAlignedPagePool::TryIncreaseLimit(ui64 required) {
@@ -401,14 +401,14 @@ bool TAlignedPagePool::TryIncreaseLimit(ui64 required) {
     return Limit >= required;
 }
 
-ui64 TAlignedPagePool::GetGlobalPagePoolSize() { 
-    ui64 size = 0; 
-    for (size_t level = 0; level <= MidLevels; ++level) { 
+ui64 TAlignedPagePool::GetGlobalPagePoolSize() {
+    ui64 size = 0;
+    for (size_t level = 0; level <= MidLevels; ++level) {
         size += TGlobalPools::Instance().Get(level).GetSize();
-    } 
-    return size; 
-} 
- 
+    }
+    return size;
+}
+
 void TAlignedPagePool::PrintStat(size_t usedPages, IOutputStream& out) const {
     usedPages += GetFreePageCount();
     out << "Count of free pages: " << GetFreePageCount() << Endl;

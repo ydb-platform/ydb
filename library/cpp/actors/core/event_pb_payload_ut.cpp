@@ -8,7 +8,7 @@ using namespace NActors;
 
 enum {
     EvMessageWithPayload = EventSpaceBegin(TEvents::ES_PRIVATE),
-    EvArenaMessage, 
+    EvArenaMessage,
     EvArenaMessageBig,
     EvMessageWithPayloadPreSerialized
 };
@@ -38,81 +38,81 @@ TString MakeString(size_t len) {
 
 Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
-    template <class TEventFrom, class TEventTo> 
-    void TestSerializeDeserialize(size_t size1, size_t size2) { 
-        static_assert(TEventFrom::EventType == TEventTo::EventType, "Must be same event type"); 
+    template <class TEventFrom, class TEventTo>
+    void TestSerializeDeserialize(size_t size1, size_t size2) {
+        static_assert(TEventFrom::EventType == TEventTo::EventType, "Must be same event type");
 
-        TEventFrom msg; 
-        msg.Record.SetMeta("hello, world!"); 
-        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size1)))); 
-        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size2)))); 
-        msg.Record.AddSomeData(MakeString((size1 + size2) % 50 + 11)); 
+        TEventFrom msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size1))));
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size2))));
+        msg.Record.AddSomeData(MakeString((size1 + size2) % 50 + 11));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>(); 
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
         msg.SerializeToArcadiaStream(serializer.Get());
-        auto buffers = serializer->Release(msg.IsExtendedFormat()); 
-        UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize()); 
-        TString ser = buffers->GetString(); 
- 
-        TString chunkerRes; 
-        TCoroutineChunkSerializer chunker; 
-        chunker.SetSerializingEvent(&msg); 
-        while (!chunker.IsComplete()) { 
-            char buffer[4096]; 
+        auto buffers = serializer->Release(msg.IsExtendedFormat());
+        UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize());
+        TString ser = buffers->GetString();
+
+        TString chunkerRes;
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg);
+        while (!chunker.IsComplete()) {
+            char buffer[4096];
             auto range = chunker.FeedBuf(buffer, sizeof(buffer));
             for (auto p = range.first; p != range.second; ++p) {
                 chunkerRes += TString(p->first, p->second);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
+
         THolder<IEventBase> ev2 = THolder(TEventTo::Load(buffers));
-        TEventTo& msg2 = static_cast<TEventTo&>(*ev2); 
-        UNIT_ASSERT_VALUES_EQUAL(msg2.Record.GetMeta(), msg.Record.GetMeta()); 
-        UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(0)), msg.GetPayload(msg.Record.GetPayloadId(0))); 
-        UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(1)), msg.GetPayload(msg.Record.GetPayloadId(1))); 
+        TEventTo& msg2 = static_cast<TEventTo&>(*ev2);
+        UNIT_ASSERT_VALUES_EQUAL(msg2.Record.GetMeta(), msg.Record.GetMeta());
+        UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(0)), msg.GetPayload(msg.Record.GetPayloadId(0)));
+        UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(1)), msg.GetPayload(msg.Record.GetPayloadId(1)));
     }
- 
-    template <class TEvent> 
-    void TestAllSizes(size_t step1 = 100, size_t step2 = 111) { 
-        for (size_t size1 = 0; size1 < 10000; size1 += step1) { 
-            for (size_t size2 = 0; size2 < 10000; size2 += step2) { 
-                TestSerializeDeserialize<TEvent, TEvent>(size1, size2); 
-            } 
-        } 
-    } 
- 
+
+    template <class TEvent>
+    void TestAllSizes(size_t step1 = 100, size_t step2 = 111) {
+        for (size_t size1 = 0; size1 < 10000; size1 += step1) {
+            for (size_t size2 = 0; size2 < 10000; size2 += step2) {
+                TestSerializeDeserialize<TEvent, TEvent>(size1, size2);
+            }
+        }
+    }
+
 #if (!defined(_tsan_enabled_))
-    Y_UNIT_TEST(SerializeDeserialize) { 
-        TestAllSizes<TEvMessageWithPayload>(); 
-    } 
+    Y_UNIT_TEST(SerializeDeserialize) {
+        TestAllSizes<TEvMessageWithPayload>();
+    }
 #endif
- 
- 
-    struct TEvArenaMessage : TEventPBWithArena<TEvArenaMessage, TMessageWithPayload, EvArenaMessage> { 
-    }; 
- 
-    Y_UNIT_TEST(SerializeDeserializeArena) { 
-        TestAllSizes<TEvArenaMessage>(500, 111); 
-    } 
- 
- 
-    struct TEvArenaMessageBig : TEventPBWithArena<TEvArenaMessageBig, TMessageWithPayload, EvArenaMessageBig, 4000, 32000> { 
-    }; 
- 
-    Y_UNIT_TEST(SerializeDeserializeArenaBig) { 
-        TestAllSizes<TEvArenaMessageBig>(111, 500); 
-    } 
- 
- 
-    // Compatible with TEvArenaMessage but doesn't use arenas 
-    struct TEvArenaMessageWithoutArena : TEventPB<TEvArenaMessageWithoutArena, TMessageWithPayload, EvArenaMessage> { 
-    }; 
- 
-    Y_UNIT_TEST(Compatibility) { 
-        TestSerializeDeserialize<TEvArenaMessage, TEvArenaMessageWithoutArena>(200, 14010); 
-        TestSerializeDeserialize<TEvArenaMessageWithoutArena, TEvArenaMessage>(2000, 4010); 
-    } 
+
+
+    struct TEvArenaMessage : TEventPBWithArena<TEvArenaMessage, TMessageWithPayload, EvArenaMessage> {
+    };
+
+    Y_UNIT_TEST(SerializeDeserializeArena) {
+        TestAllSizes<TEvArenaMessage>(500, 111);
+    }
+
+
+    struct TEvArenaMessageBig : TEventPBWithArena<TEvArenaMessageBig, TMessageWithPayload, EvArenaMessageBig, 4000, 32000> {
+    };
+
+    Y_UNIT_TEST(SerializeDeserializeArenaBig) {
+        TestAllSizes<TEvArenaMessageBig>(111, 500);
+    }
+
+
+    // Compatible with TEvArenaMessage but doesn't use arenas
+    struct TEvArenaMessageWithoutArena : TEventPB<TEvArenaMessageWithoutArena, TMessageWithPayload, EvArenaMessage> {
+    };
+
+    Y_UNIT_TEST(Compatibility) {
+        TestSerializeDeserialize<TEvArenaMessage, TEvArenaMessageWithoutArena>(200, 14010);
+        TestSerializeDeserialize<TEvArenaMessageWithoutArena, TEvArenaMessage>(2000, 4010);
+    }
 
     Y_UNIT_TEST(PreSerializedCompatibility) {
         // ensure TEventPreSerializedPB and TEventPB are interchangable with no compatibility issues

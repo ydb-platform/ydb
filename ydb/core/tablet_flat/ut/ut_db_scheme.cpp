@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TScheme) {
     Y_UNIT_TEST(Policy)
     {
         auto delta = TModel().Build();
- 
+
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
         policy->InMemSizeToSnapshot = 1234;
         policy->InMemStepsToSnapshot = 100;
@@ -177,17 +177,17 @@ Y_UNIT_TEST_SUITE(TScheme) {
         policy->ReadAheadLoThreshold = 50000;
         policy->Generations.push_back({150, 3, 4, 250, NLocalDb::LegacyQueueIdToTaskName(1), true});
         policy->Generations.push_back({550, 7, 8, 950, NLocalDb::LegacyQueueIdToTaskName(2), false});
- 
+
         delta.SetCompactionPolicy(TModel::TableId, *policy);
 
         TAutoPtr<TScheme> scheme = new TScheme();
         TSchemeModifier(*scheme).Apply(*delta.Flush());
- 
-        auto snapshot = scheme->GetSnapshot(); 
- 
-        TAutoPtr<TScheme> scheme2 = new TScheme(); 
+
+        auto snapshot = scheme->GetSnapshot();
+
+        TAutoPtr<TScheme> scheme2 = new TScheme();
         TSchemeModifier(*scheme2).Apply(*snapshot);
- 
+
         if (auto &policy = scheme2->GetTableInfo(TModel::TableId)->CompactionPolicy) {
             UNIT_ASSERT_VALUES_EQUAL(policy->InMemSizeToSnapshot, 1234);
             UNIT_ASSERT_VALUES_EQUAL(policy->InMemStepsToSnapshot, 100);
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TScheme) {
         } else {
             UNIT_ASSERT(false);
         }
-    } 
+    }
 }
 
 }

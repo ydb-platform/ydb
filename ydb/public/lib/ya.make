@@ -3,7 +3,7 @@ OWNER(g:kikimr)
 RECURSE(
     base
     deprecated
-    experimental 
+    experimental
     idx_test
     json_value
     jwt

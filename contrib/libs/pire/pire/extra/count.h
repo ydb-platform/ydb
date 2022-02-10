@@ -1,38 +1,38 @@
-/* 
- * count.h -- definition of the counting scanner 
- * 
- * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>, 
- *                          Alexander Gololobov <agololobov@gmail.com> 
- * 
- * This file is part of Pire, the Perl Incompatible 
- * Regular Expressions library. 
- * 
- * Pire is free software: you can redistribute it and/or modify 
- * it under the terms of the GNU Lesser Public License as published by 
- * the Free Software Foundation, either version 3 of the License, or 
- * (at your option) any later version. 
+/*
+ * count.h -- definition of the counting scanner
  *
- * Pire is distributed in the hope that it will be useful, 
- * but WITHOUT ANY WARRANTY; without even the implied warranty of 
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
- * GNU Lesser Public License for more details. 
- * You should have received a copy of the GNU Lesser Public License 
- * along with Pire.  If not, see <http://www.gnu.org/licenses>. 
- */ 
- 
- 
-#ifndef PIRE_EXTRA_COUNT_H 
-#define PIRE_EXTRA_COUNT_H 
- 
+ * Copyright (c) 2007-2010, Dmitry Prokoptsev <dprokoptsev@gmail.com>,
+ *                          Alexander Gololobov <agololobov@gmail.com>
+ *
+ * This file is part of Pire, the Perl Incompatible
+ * Regular Expressions library.
+ *
+ * Pire is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Pire is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser Public License for more details.
+ * You should have received a copy of the GNU Lesser Public License
+ * along with Pire.  If not, see <http://www.gnu.org/licenses>.
+ */
+
+
+#ifndef PIRE_EXTRA_COUNT_H
+#define PIRE_EXTRA_COUNT_H
+
 #include <contrib/libs/pire/pire/scanners/loaded.h>
 #include <contrib/libs/pire/pire/fsm.h>
- 
+
 #include <algorithm>
 
-namespace Pire { 
-class Fsm; 
+namespace Pire {
+class Fsm;
 
-namespace Impl { 
+namespace Impl {
 	template<class T>
 	class ScannerGlueCommon;
 
@@ -43,8 +43,8 @@ namespace Impl {
 
 	template <class AdvancedScanner>
 	AdvancedScanner MakeAdvancedCountingScanner(const Fsm& re, const Fsm& sep, bool* simple);
-}; 
- 
+};
+
 template<size_t I>
 class IncrementPerformer {
 public:
@@ -110,38 +110,38 @@ public:
 	}
 };
 
-/** 
- * A scanner which counts occurences of the 
- * given regexp separated by another regexp 
- * in input text. 
- */ 
+/**
+ * A scanner which counts occurences of the
+ * given regexp separated by another regexp
+ * in input text.
+ */
 template<class DerivedScanner, class State>
 class BaseCountingScanner: public LoadedScanner {
-public: 
-	enum { 
-		IncrementAction = 1, 
-		ResetAction = 2, 
+public:
+	enum {
+		IncrementAction = 1,
+		ResetAction = 2,
 
-		FinalFlag = 0, 
-		DeadFlag = 1, 
-	}; 
- 
-	void Initialize(State& state) const 
-	{ 
-		state.m_state = m.initial; 
-		memset(&state.m_current, 0, sizeof(state.m_current)); 
-		memset(&state.m_total, 0, sizeof(state.m_total)); 
-		state.m_updatedMask = 0; 
-	} 
- 
+		FinalFlag = 0,
+		DeadFlag = 1,
+	};
+
+	void Initialize(State& state) const
+	{
+		state.m_state = m.initial;
+		memset(&state.m_current, 0, sizeof(state.m_current));
+		memset(&state.m_total, 0, sizeof(state.m_total));
+		state.m_updatedMask = 0;
+	}
+
 	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 	void TakeAction(State& s, Action a) const
 	{
 		static_cast<const DerivedScanner*>(this)->template TakeActionImpl<MAX_RE_COUNT>(s, a);
 	}
 
-	bool CanStop(const State&) const { return false; } 
- 
+	bool CanStop(const State&) const { return false; }
+
 	Char Translate(Char ch) const
 	{
 		return m_letters[static_cast<size_t>(ch)];
@@ -154,55 +154,55 @@ public:
 		return x.action;
 	}
 
-	Action Next(State& s, Char c) const 
-	{ 
+	Action Next(State& s, Char c) const
+	{
 		return NextTranslated(s, Translate(c));
-	} 
- 
-	Action Next(const State& current, State& n, Char c) const 
-	{ 
-		n = current; 
-		return Next(n, c); 
-	} 
- 
-	bool Final(const State& /*state*/) const { return false; } 
- 
-	bool Dead(const State&) const { return false; } 
- 
+	}
+
+	Action Next(const State& current, State& n, Char c) const
+	{
+		n = current;
+		return Next(n, c);
+	}
+
+	bool Final(const State& /*state*/) const { return false; }
+
+	bool Dead(const State&) const { return false; }
+
 	using LoadedScanner::Swap;
 
-	size_t StateIndex(const State& s) const { return StateIdx(s.m_state); } 
- 
+	size_t StateIndex(const State& s) const { return StateIdx(s.m_state); }
+
 protected:
-	using LoadedScanner::Init; 
+	using LoadedScanner::Init;
 	using LoadedScanner::InternalState;
- 
+
 	template<size_t ActualReCount>
-	void PerformIncrement(State& s, Action mask) const 
-	{ 
-		if (mask) { 
+	void PerformIncrement(State& s, Action mask) const
+	{
+		if (mask) {
 			IncrementPerformer<ActualReCount>::Do(s, mask);
-			s.m_updatedMask |= ((size_t)mask) << MAX_RE_COUNT; 
-		} 
-	} 
- 
+			s.m_updatedMask |= ((size_t)mask) << MAX_RE_COUNT;
+		}
+	}
+
 	template<size_t ActualReCount>
-	void PerformReset(State& s, Action mask) const 
-	{ 
-		mask &= s.m_updatedMask; 
-		if (mask) { 
+	void PerformReset(State& s, Action mask) const
+	{
+		mask &= s.m_updatedMask;
+		if (mask) {
 			ResetPerformer<ActualReCount>::Do(s, mask);
 			s.m_updatedMask &= (Action)~mask;
-		} 
-	} 
- 
-	void Next(InternalState& s, Char c) const 
-	{ 
+		}
+	}
+
+	void Next(InternalState& s, Char c) const
+	{
 		Transition x = reinterpret_cast<const Transition*>(s)[Translate(c)];
-		s += SignExtend(x.shift); 
-	} 
+		s += SignExtend(x.shift);
+	}
 };
- 
+
 template <size_t MAX_RE_COUNT>
 class CountingState {
 public:
@@ -258,21 +258,21 @@ public:
 	}
 
 private:
-	Action RemapAction(Action action) 
-	{ 
-		if (action == (Matched | DeadFlag)) 
-			return 1; 
-		else if (action == DeadFlag) 
-			return 1 << MAX_RE_COUNT; 
-		else 
-			return 0; 
-	} 
+	Action RemapAction(Action action)
+	{
+		if (action == (Matched | DeadFlag))
+			return 1;
+		else if (action == DeadFlag)
+			return 1 << MAX_RE_COUNT;
+		else
+			return 0;
+	}
 
-	friend void BuildScanner<CountingScanner>(const Fsm&, CountingScanner&); 
-	friend class Impl::ScannerGlueCommon<CountingScanner>; 
+	friend void BuildScanner<CountingScanner>(const Fsm&, CountingScanner&);
+	friend class Impl::ScannerGlueCommon<CountingScanner>;
 	friend class Impl::CountingScannerGlueTask<CountingScanner>;
-}; 
- 
+};
+
 class AdvancedCountingScanner : public BaseCountingScanner<AdvancedCountingScanner, CountingState<LoadedScanner::MAX_RE_COUNT>> {
 public:
 	using State = CountingState<MAX_RE_COUNT>;
@@ -329,10 +329,10 @@ public:
 		++m_current[regexp_id];
 		m_total[regexp_id] = ymax(m_total[regexp_id], m_current[regexp_id]);
 	}
- 
+
 	template<size_t I>
 	friend class IncrementPerformer;
- 
+
 	template<size_t I>
 	friend class ResetPerformer;
 
@@ -352,7 +352,7 @@ private:
 				s << state.m_current[i] << '/' << state.m_total[i] << ' ';
 			return s << ')';
 		}
-#endif 
+#endif
 };
 
 

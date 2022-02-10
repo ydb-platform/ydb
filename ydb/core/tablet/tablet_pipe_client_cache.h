@@ -29,7 +29,7 @@ namespace NTabletPipe {
         virtual bool OnConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) = 0;
         virtual void OnDisconnect(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) = 0;
         virtual void Close(const TActorContext& ctx, ui64 tabletId) = 0;
-        virtual void ForceClose(const TActorContext& ctx, ui64 tabletId) = 0; 
+        virtual void ForceClose(const TActorContext& ctx, ui64 tabletId) = 0;
         virtual void Shutdown(const TActorContext& ctx, ui64 tabletId) = 0;
         virtual void PopWhileOverflow() = 0;
     };

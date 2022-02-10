@@ -1,2 +1,2 @@
-#pragma once 
-#include <util/ysaveload.h> 
+#pragma once
+#include <util/ysaveload.h>

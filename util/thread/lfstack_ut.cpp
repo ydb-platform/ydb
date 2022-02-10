@@ -1,7 +1,7 @@
 
 #include <util/system/atomic.h>
 #include <util/system/event.h>
-#include <util/generic/deque.h> 
+#include <util/generic/deque.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, p.RefCount());
     }
- 
+
     Y_UNIT_TEST(NoCopyTest) {
         static unsigned copied = 0;
         struct TCopyCount {
@@ -232,53 +232,53 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
     struct TMultiThreadTester {
         using ThisType = TMultiThreadTester<TTest>;
 
-        size_t Threads; 
-        size_t OperationsPerThread; 
- 
-        TCountDownLatch StartLatch; 
+        size_t Threads;
+        size_t OperationsPerThread;
+
+        TCountDownLatch StartLatch;
         TLockFreeStack<typename TTest::ValueType> Stack;
- 
+
         TMultiThreadTester()
-            : Threads(10) 
-            , OperationsPerThread(100000) 
-            , StartLatch(Threads) 
-        { 
-        } 
- 
-        void Worker() { 
-            StartLatch.CountDown(); 
-            StartLatch.Await(); 
- 
+            : Threads(10)
+            , OperationsPerThread(100000)
+            , StartLatch(Threads)
+        {
+        }
+
+        void Worker() {
+            StartLatch.CountDown();
+            StartLatch.Await();
+
             TVector<typename TTest::ValueType> unused;
-            for (size_t i = 0; i < OperationsPerThread; ++i) { 
-                switch (GetCycleCount() % 4) { 
-                    case 0: { 
+            for (size_t i = 0; i < OperationsPerThread; ++i) {
+                switch (GetCycleCount() % 4) {
+                    case 0: {
                         TTest::Enqueue(Stack, i);
-                        break; 
-                    } 
-                    case 1: { 
+                        break;
+                    }
+                    case 1: {
                         TTest::Dequeue(Stack);
-                        break; 
-                    } 
-                    case 2: { 
+                        break;
+                    }
+                    case 2: {
                         TTest::EnqueueAll(Stack);
-                        break; 
-                    } 
-                    case 3: { 
+                        break;
+                    }
+                    case 3: {
                         TTest::DequeueAll(Stack);
-                        break; 
-                    } 
-                } 
-            } 
-        } 
- 
-        void Run() { 
-            TDeque<NThreading::TLegacyFuture<>> futures; 
- 
-            for (size_t i = 0; i < Threads; ++i) { 
+                        break;
+                    }
+                }
+            }
+        }
+
+        void Run() {
+            TDeque<NThreading::TLegacyFuture<>> futures;
+
+            for (size_t i = 0; i < Threads; ++i) {
                 futures.emplace_back(std::bind(&ThisType::Worker, this));
-            } 
-            futures.clear(); 
+            }
+            futures.clear();
             TTest::DequeueAll(Stack);
         }
     };
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
 
         static void Enqueue(TLockFreeStack<int>& stack, size_t i) {
             stack.Enqueue(static_cast<int>(i));
-        } 
+        }
 
         static void Dequeue(TLockFreeStack<int>& stack) {
             int value;
@@ -304,12 +304,12 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
             TVector<int> value;
             stack.DequeueAll(&value);
         }
-    }; 
- 
-    // Test for catching thread sanitizer problems 
+    };
+
+    // Test for catching thread sanitizer problems
     Y_UNIT_TEST(TestFreeList) {
         TMultiThreadTester<TFreeListTest>().Run();
-    } 
+    }
 
     struct TMoveTest {
         using ValueType = THolder<int>;

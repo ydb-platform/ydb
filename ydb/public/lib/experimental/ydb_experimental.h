@@ -1,12 +1,12 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
- 
-namespace NYdb { 
-namespace NExperimental { 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+
+namespace NYdb {
+namespace NExperimental {
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TStreamPartIterator;
 
 using TAsyncStreamPartIterator = NThreading::TFuture<TStreamPartIterator>;

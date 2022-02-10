@@ -11,8 +11,8 @@ class LogLevels(enum.IntEnum):
     WARN = 4,
     NOTICE = 5,
     INFO = 6,
-    DEBUG = 7, 
-    TRACE = 8 
+    DEBUG = 7,
+    TRACE = 8
 
     @staticmethod
     def from_string(val):

@@ -174,7 +174,7 @@ public:
         }
     }
 
-    bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const; 
+    bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
 };
 
 class TSerializedTableRange {
@@ -308,7 +308,7 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
                 return -1;
         } else if (second[idx].IsNull()) {
             return 1;
-        } else if (const int compares = CompareTypedCells(first[idx], second[idx], cellTypes[idx])) { 
+        } else if (const int compares = CompareTypedCells(first[idx], second[idx], cellTypes[idx])) {
             return compares;
         }
     }
@@ -636,16 +636,16 @@ public:
         EStatus Status;
     };
 
-    struct TRangeLimits { 
-        ui64 ItemsLimit; 
-        ui64 BytesLimit; 
- 
-        TRangeLimits(ui64 itemsLimit = 0, ui64 bytesLimit = 0) 
-            : ItemsLimit(itemsLimit) 
-            , BytesLimit(bytesLimit) 
-        {} 
-    }; 
- 
+    struct TRangeLimits {
+        ui64 ItemsLimit;
+        ui64 BytesLimit;
+
+        TRangeLimits(ui64 itemsLimit = 0, ui64 bytesLimit = 0)
+            : ItemsLimit(itemsLimit)
+            , BytesLimit(bytesLimit)
+        {}
+    };
+
     struct TPartitionRangeInfo {
         TSerializedCellVec EndKeyPrefix;
         bool IsInclusive = false;
@@ -665,7 +665,7 @@ public:
     // in
     const TTableId TableId;
     const TOwnedTableRange Range;
-    const TRangeLimits RangeLimits; 
+    const TRangeLimits RangeLimits;
     const ERowOperation RowOperation;
     const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key
     const TVector<TColumnOp> Columns;
@@ -686,7 +686,7 @@ public:
             ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false)
         : TableId(tableId)
         , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
-        , RangeLimits(itemsLimit, bytesLimit) 
+        , RangeLimits(itemsLimit, bytesLimit)
         , RowOperation(rowOperation)
         , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
         , Columns(columns.begin(), columns.end())

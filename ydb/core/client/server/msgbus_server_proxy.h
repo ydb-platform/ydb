@@ -59,8 +59,8 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR;
-    } 
- 
+    }
+
     TMessageBusServerProxy(
         TMessageBusServer* server,
         std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory

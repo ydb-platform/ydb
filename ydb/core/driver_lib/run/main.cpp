@@ -14,9 +14,9 @@
 #include <ydb/core/driver_lib/run/config_parser.h>
 #include <ydb/core/driver_lib/run/run.h>
 
-// allocator info 
+// allocator info
 #include <library/cpp/malloc/api/malloc.h>
- 
+
 #ifndef _win_
 #include <sys/mman.h>
 #endif
@@ -24,33 +24,33 @@
 namespace NKikimr {
 
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
-#ifdef _win32_ 
-    WSADATA dummy; 
-    WSAStartup(MAKEWORD(2, 2), &dummy); 
-#endif 
- 
-    TKikimrRunner::SetSignalHandlers(); 
+#ifdef _win32_
+    WSADATA dummy;
+    WSAStartup(MAKEWORD(2, 2), &dummy);
+#endif
+
+    TKikimrRunner::SetSignalHandlers();
     Cout << "Starting Kikimr r" << GetArcadiaLastChange()
-         << " built by " << GetProgramBuildUser() << Endl; 
- 
+         << " built by " << GetProgramBuildUser() << Endl;
+
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
-    if (runner) { 
-        runner->KikimrStart(); 
-        runner->BusyLoop(); 
-        // exit busy loop by a signal 
-        Cout << "Shutting Kikimr down" << Endl; 
-        runner->KikimrStop(false); 
-    } 
- 
-    return 0; 
-} 
- 
- 
-    void PrintAllocatorInfoAndExit() { 
-        Cout << "linked with malloc: " << NMalloc::MallocInfo().Name << Endl; 
-        exit(0); 
-    } 
- 
+    if (runner) {
+        runner->KikimrStart();
+        runner->BusyLoop();
+        // exit busy loop by a signal
+        Cout << "Shutting Kikimr down" << Endl;
+        runner->KikimrStop(false);
+    }
+
+    return 0;
+}
+
+
+    void PrintAllocatorInfoAndExit() {
+        Cout << "linked with malloc: " << NMalloc::MallocInfo().Name << Endl;
+        exit(0);
+    }
+
     int Main(int argc, char **argv, std::shared_ptr<TModuleFactories> factories) {
 #ifndef _win_
         mlockall(MCL_CURRENT);
@@ -59,7 +59,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         using TDriverModeParser = TCliCommands<EDriverMode>;
 
         NKikimrConfig::TAppConfig appConfig;
-        TCommandConfig cmdConf; 
+        TCommandConfig cmdConf;
         TKikimrRunConfig runConfig(appConfig);
 
         TRunCommandConfigParser configParser(runConfig);
@@ -78,7 +78,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         opts.AddLongOption('t', "time", "Show request execution time").NoArgument();
         opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument();
         opts.AddLongOption(0,  "allocator-info", "Print the name of allocator linked to the binary and exit")
-                .NoArgument().Handler(&PrintAllocatorInfoAndExit); 
+                .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         opts.SetFreeArgsMin(1);
         opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
         opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
@@ -150,27 +150,27 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     }
 } // NKikimr
 
-namespace { 
-std::terminate_handler defaultTerminateHandler; 
-} 
- 
-void KikimrTerminateHandler() { 
-    Cerr << "======= terminate() call stack ========\n"; 
-    FormatBackTrace(&Cerr); 
-    Cerr << "=======================================\n"; 
- 
-    auto oldHandler = defaultTerminateHandler; 
-    if (oldHandler) 
-        oldHandler(); 
-    else 
-        abort(); 
-} 
- 
-void SetupTerminateHandler() { 
-    defaultTerminateHandler = std::get_terminate(); 
-    std::set_terminate(KikimrTerminateHandler); 
-} 
- 
+namespace {
+std::terminate_handler defaultTerminateHandler;
+}
+
+void KikimrTerminateHandler() {
+    Cerr << "======= terminate() call stack ========\n";
+    FormatBackTrace(&Cerr);
+    Cerr << "=======================================\n";
+
+    auto oldHandler = defaultTerminateHandler;
+    if (oldHandler)
+        oldHandler();
+    else
+        abort();
+}
+
+void SetupTerminateHandler() {
+    defaultTerminateHandler = std::get_terminate();
+    std::set_terminate(KikimrTerminateHandler);
+}
+
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
     try {
         return NKikimr::Main(argc, argv, std::move(factories));

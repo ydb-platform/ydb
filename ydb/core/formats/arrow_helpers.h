@@ -9,22 +9,22 @@
 
 namespace NKikimr::NArrow {
 
-// Arrow inrernally keeps references to Buffer objects with the data 
-// This helper class implements arrow::Buffer over TString that owns 
-// the actual memory 
-class TBufferOverString : public arrow::Buffer { 
-    TString Str; 
-public: 
-    explicit TBufferOverString(TString str) 
-        : arrow::Buffer((const unsigned char*)str.data(), str.size()) 
-        , Str(str) 
-    { 
-        Y_VERIFY(data() == (const unsigned char*)Str.data()); 
-    } 
-}; 
- 
+// Arrow inrernally keeps references to Buffer objects with the data
+// This helper class implements arrow::Buffer over TString that owns
+// the actual memory
+class TBufferOverString : public arrow::Buffer {
+    TString Str;
+public:
+    explicit TBufferOverString(TString str)
+        : arrow::Buffer((const unsigned char*)str.data(), str.size())
+        , Str(str)
+    {
+        Y_VERIFY(data() == (const unsigned char*)Str.data());
+    }
+};
+
 std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId);
- 
+
 template <typename T>
 inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
     auto& arrX = static_cast<const T&>(*x);
@@ -55,12 +55,12 @@ std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pa
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString,  NScheme::TTypeId>>& columns);
 
 TString SerializeSchema(const arrow::Schema& schema);
-std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str); 
+std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options);
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, 
+std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema);
 

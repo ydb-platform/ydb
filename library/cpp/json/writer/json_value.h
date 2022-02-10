@@ -92,7 +92,7 @@ namespace NJson {
         bool GetValueByPath(TStringBuf path, TJsonValue& result, char delimiter = '.') const;
         bool SetValueByPath(TStringBuf path, const TJsonValue& value, char delimiter = '.');
         bool SetValueByPath(TStringBuf path, TJsonValue&& value, char delimiter = '.');
- 
+
         // returns NULL on failure
         const TJsonValue* GetValueByPath(TStringBuf path, char delimiter = '.') const noexcept;
         TJsonValue* GetValueByPath(TStringBuf path, char delimiter = '.') noexcept;

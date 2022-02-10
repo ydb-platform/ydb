@@ -100,7 +100,7 @@ RECURSE(
     backports.weakref
     banal
     bandit
-    bcrypt 
+    bcrypt
     beautifulsoup4
     behave
     betamax
@@ -658,7 +658,7 @@ RECURSE(
     nbclient
     nbconvert
     nbformat
-    ncclient 
+    ncclient
     ndg-httpsclient
     nest-asyncio
     nested-diff
@@ -837,7 +837,7 @@ RECURSE(
     pymqi
     PyMySQL
     pynacl
-    pynetbox 
+    pynetbox
     pyodbc
     pyOpenSSL
     pyparsing

@@ -15,8 +15,8 @@ namespace NMonitoring {
         virtual void Collect(double value) = 0;
 
         virtual ISummaryDoubleSnapshotPtr Snapshot() const = 0;
-
-        virtual size_t SizeBytes() const = 0;
+ 
+        virtual size_t SizeBytes() const = 0; 
     };
 
     using ISummaryDoubleCollectorPtr = THolder<ISummaryDoubleCollector>;
@@ -50,10 +50,10 @@ namespace NMonitoring {
                     Count_.load(std::memory_order_relaxed));
         }
 
-        size_t SizeBytes() const override {
-            return sizeof(*this);
-        }
-
+        size_t SizeBytes() const override { 
+            return sizeof(*this); 
+        } 
+ 
     private:
         std::atomic<double> Sum_;
         std::atomic<double> Min_;

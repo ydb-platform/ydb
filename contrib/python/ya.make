@@ -897,7 +897,7 @@ RECURSE(
     python-dotenv
     python-editor
     python-geohash
-    python-gnupg 
+    python-gnupg
     python-hglib
     python-i18n
     python-jose

@@ -5,12 +5,12 @@ import ydb
 
 
 class School(object):
-    __slots__ = ("city", "number", "address")
+    __slots__ = ("city", "number", "address") 
 
     def __init__(self, city, number, address):
-        self.city = city
-        self.number = number
-        self.address = address
+        self.city = city 
+        self.number = number 
+        self.address = address 
 
 
 def get_schools_data():
@@ -33,7 +33,7 @@ def get_schools_data():
 
 def create_table(session, path):
     session.create_table(
-        os.path.join(path, "schools"),
+        os.path.join(path, "schools"), 
         ydb.TableDescription()
         .with_column(ydb.Column("city", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column("number", ydb.OptionalType(ydb.PrimitiveType.Uint32)))
@@ -47,15 +47,15 @@ def fill_table(session, path):
     PRAGMA TablePathPrefix("{path}");
 
     DECLARE $schoolsData AS "List<Struct<
-        city: Utf8,
-        number: Uint32,
-        address: Utf8>>";
+        city: Utf8, 
+        number: Uint32, 
+        address: Utf8>>"; 
 
-    REPLACE INTO schools
+    REPLACE INTO schools 
     SELECT
-        city,
-        number,
-        address
+        city, 
+        number, 
+        address 
     FROM AS_TABLE($schoolsData);
     """.format(
         path=path

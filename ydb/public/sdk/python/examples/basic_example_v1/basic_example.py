@@ -31,7 +31,7 @@ SELECT
     series_id,
     title,
     series_info,
-    CAST(release_date AS Uint64) AS release_date
+    CAST(release_date AS Uint64) AS release_date 
 FROM AS_TABLE($seriesData);
 
 REPLACE INTO seasons
@@ -39,8 +39,8 @@ SELECT
     series_id,
     season_id,
     title,
-    CAST(first_aired AS Uint64) AS first_aired,
-    CAST(last_aired AS Uint64) AS last_aired
+    CAST(first_aired AS Uint64) AS first_aired, 
+    CAST(last_aired AS Uint64) AS last_aired 
 FROM AS_TABLE($seasonsData);
 
 REPLACE INTO episodes
@@ -49,7 +49,7 @@ SELECT
     season_id,
     episode_id,
     title,
-    CAST(air_date AS Uint64) AS air_date
+    CAST(air_date AS Uint64) AS air_date 
 FROM AS_TABLE($episodesData);
 """
 

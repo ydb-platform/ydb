@@ -10,103 +10,103 @@ class TAvlTree: public TNonCopyable {
     using TTreeItem = TAvlTreeItem<T, C>;
     friend struct TAvlTreeItem<T, C>;
 
-    static inline const T* AsT(const TTreeItem* item) noexcept {
-        return (const T*)item;
-    }
-
-    static inline T* AsT(TTreeItem* item) noexcept {
+    static inline const T* AsT(const TTreeItem* item) noexcept { 
+        return (const T*)item; 
+    } 
+ 
+    static inline T* AsT(TTreeItem* item) noexcept { 
         return (T*)item;
     }
 
-    template <class TTreeItem, class TValue>
-    class TIteratorBase {
+    template <class TTreeItem, class TValue> 
+    class TIteratorBase { 
     public:
-        inline TIteratorBase(TTreeItem* p, const TAvlTree* t) noexcept
+        inline TIteratorBase(TTreeItem* p, const TAvlTree* t) noexcept 
             : Ptr_(p)
             , Tree_(t)
         {
         }
 
-        inline bool IsEnd() const noexcept {
+        inline bool IsEnd() const noexcept { 
             return Ptr_ == nullptr;
         }
 
-        inline bool IsBegin() const noexcept {
+        inline bool IsBegin() const noexcept { 
             return Ptr_ == nullptr;
         }
 
-        inline bool IsFirst() const noexcept {
+        inline bool IsFirst() const noexcept { 
             return Ptr_ && Ptr_ == Tree_->Head_;
         }
 
-        inline bool IsLast() const noexcept {
+        inline bool IsLast() const noexcept { 
             return Ptr_ && Ptr_ == Tree_->Tail_;
         }
 
-        inline TValue& operator*() const noexcept {
+        inline TValue& operator*() const noexcept { 
             return *AsT(Ptr_);
         }
 
-        inline TValue* operator->() const noexcept {
+        inline TValue* operator->() const noexcept { 
             return AsT(Ptr_);
         }
 
-        inline TTreeItem* Inc() noexcept {
+        inline TTreeItem* Inc() noexcept { 
             return Ptr_ = FindNext(Ptr_);
         }
 
-        inline TTreeItem* Dec() noexcept {
+        inline TTreeItem* Dec() noexcept { 
             return Ptr_ = FindPrev(Ptr_);
         }
 
-        inline TIteratorBase& operator++() noexcept {
+        inline TIteratorBase& operator++() noexcept { 
             Inc();
             return *this;
         }
 
-        inline TIteratorBase operator++(int) noexcept {
-            TIteratorBase ret(*this);
+        inline TIteratorBase operator++(int) noexcept { 
+            TIteratorBase ret(*this); 
             Inc();
             return ret;
         }
 
-        inline TIteratorBase& operator--() noexcept {
+        inline TIteratorBase& operator--() noexcept { 
             Dec();
             return *this;
         }
 
-        inline TIteratorBase operator--(int) noexcept {
-            TIteratorBase ret(*this);
+        inline TIteratorBase operator--(int) noexcept { 
+            TIteratorBase ret(*this); 
             Dec();
             return ret;
         }
 
-        inline TIteratorBase Next() const noexcept {
+        inline TIteratorBase Next() const noexcept { 
             return ConstructNext(*this);
         }
 
-        inline TIteratorBase Prev() const noexcept {
+        inline TIteratorBase Prev() const noexcept { 
             return ConstructPrev(*this);
         }
 
-        inline bool operator==(const TIteratorBase& r) const noexcept {
+        inline bool operator==(const TIteratorBase& r) const noexcept { 
             return Ptr_ == r.Ptr_;
         }
 
-        inline bool operator!=(const TIteratorBase& r) const noexcept {
+        inline bool operator!=(const TIteratorBase& r) const noexcept { 
             return Ptr_ != r.Ptr_;
         }
 
     private:
-        inline static TIteratorBase ConstructNext(const TIteratorBase& i) noexcept {
+        inline static TIteratorBase ConstructNext(const TIteratorBase& i) noexcept { 
             return TIterator(FindNext(i.Ptr_), i.Tree_);
         }
 
-        inline static TIteratorBase ConstructPrev(const TIteratorBase& i) noexcept {
+        inline static TIteratorBase ConstructPrev(const TIteratorBase& i) noexcept { 
             return TIterator(FindPrev(i.Ptr_), i.Tree_);
         }
 
-        inline static TIteratorBase FindPrev(TTreeItem* el) noexcept {
+        inline static TIteratorBase FindPrev(TTreeItem* el) noexcept { 
             if (el->Left_ != nullptr) {
                 el = el->Left_;
 
@@ -153,22 +153,22 @@ class TAvlTree: public TNonCopyable {
         const TAvlTree* Tree_;
     };
 
-    using TConstIterator = TIteratorBase<const TTreeItem, const T>;
-    using TIterator = TIteratorBase<TTreeItem, T>;
-
-    static inline TConstIterator ConstructFirstConst(const TAvlTree* t) noexcept {
-        return TConstIterator(t->Head_, t);
-    }
-
-    static inline TIterator ConstructFirst(const TAvlTree* t) noexcept {
+    using TConstIterator = TIteratorBase<const TTreeItem, const T>; 
+    using TIterator = TIteratorBase<TTreeItem, T>; 
+ 
+    static inline TConstIterator ConstructFirstConst(const TAvlTree* t) noexcept { 
+        return TConstIterator(t->Head_, t); 
+    } 
+ 
+    static inline TIterator ConstructFirst(const TAvlTree* t) noexcept { 
         return TIterator(t->Head_, t);
     }
 
-    static inline TConstIterator ConstructLastConst(const TAvlTree* t) noexcept {
-        return TConstIterator(t->Tail_, t);
-    }
-
-    static inline TIterator ConstructLast(const TAvlTree* t) noexcept {
+    static inline TConstIterator ConstructLastConst(const TAvlTree* t) noexcept { 
+        return TConstIterator(t->Tail_, t); 
+    } 
+ 
+    static inline TIterator ConstructLast(const TAvlTree* t) noexcept { 
         return TIterator(t->Tail_, t);
     }
 
@@ -177,17 +177,17 @@ class TAvlTree: public TNonCopyable {
     }
 
 public:
-    using const_iterator = TConstIterator;
+    using const_iterator = TConstIterator; 
     using iterator = TIterator;
 
-    inline TAvlTree() noexcept
+    inline TAvlTree() noexcept 
         : Root_(nullptr)
         , Head_(nullptr)
         , Tail_(nullptr)
     {
     }
 
-    inline ~TAvlTree() noexcept {
+    inline ~TAvlTree() noexcept { 
         Clear();
     }
 
@@ -197,7 +197,7 @@ public:
         }
     }
 
-    inline T* Insert(TTreeItem* el, TTreeItem** lastFound = nullptr) noexcept {
+    inline T* Insert(TTreeItem* el, TTreeItem** lastFound = nullptr) noexcept { 
         el->Unlink();
         el->Tree_ = this;
 
@@ -232,7 +232,7 @@ public:
         }
     }
 
-    inline T* Find(const TTreeItem* el) const noexcept {
+    inline T* Find(const TTreeItem* el) const noexcept { 
         TTreeItem* curEl = Root_;
 
         while (curEl) {
@@ -248,7 +248,7 @@ public:
         return nullptr;
     }
 
-    inline T* LowerBound(const TTreeItem* el) const noexcept {
+    inline T* LowerBound(const TTreeItem* el) const noexcept { 
         TTreeItem* curEl = Root_;
         TTreeItem* lowerBound = nullptr;
 
@@ -266,7 +266,7 @@ public:
         return AsT(lowerBound);
     }
 
-    inline T* Erase(TTreeItem* el) noexcept {
+    inline T* Erase(TTreeItem* el) noexcept { 
         if (el->Tree_ == this) {
             return this->EraseImpl(el);
         }
@@ -274,7 +274,7 @@ public:
         return nullptr;
     }
 
-    inline T* EraseImpl(TTreeItem* el) noexcept {
+    inline T* EraseImpl(TTreeItem* el) noexcept { 
         el->Tree_ = nullptr;
 
         TTreeItem* replacement;
@@ -377,67 +377,67 @@ public:
         return AsT(el);
     }
 
-    inline const_iterator First() const noexcept {
-        return ConstructFirstConst(this);
-    }
-
-    inline const_iterator Last() const noexcept {
-        return ConstructLastConst(this);
-    }
-
-    inline const_iterator Begin() const noexcept {
-        return First();
-    }
-
-    inline const_iterator End() const noexcept {
-        return const_iterator(nullptr, this);
-    }
-
-    inline const_iterator begin() const noexcept {
-        return Begin();
-    }
-
-    inline const_iterator end() const noexcept {
-        return End();
-    }
-
-    inline const_iterator cbegin() const noexcept {
-        return Begin();
-    }
-
-    inline const_iterator cend() const noexcept {
-        return End();
-    }
-
-    inline iterator First() noexcept {
+    inline const_iterator First() const noexcept { 
+        return ConstructFirstConst(this); 
+    } 
+ 
+    inline const_iterator Last() const noexcept { 
+        return ConstructLastConst(this); 
+    } 
+ 
+    inline const_iterator Begin() const noexcept { 
+        return First(); 
+    } 
+ 
+    inline const_iterator End() const noexcept { 
+        return const_iterator(nullptr, this); 
+    } 
+ 
+    inline const_iterator begin() const noexcept { 
+        return Begin(); 
+    } 
+ 
+    inline const_iterator end() const noexcept { 
+        return End(); 
+    } 
+ 
+    inline const_iterator cbegin() const noexcept { 
+        return Begin(); 
+    } 
+ 
+    inline const_iterator cend() const noexcept { 
+        return End(); 
+    } 
+ 
+    inline iterator First() noexcept { 
         return ConstructFirst(this);
     }
 
-    inline iterator Last() noexcept {
+    inline iterator Last() noexcept { 
         return ConstructLast(this);
     }
 
-    inline iterator Begin() noexcept {
+    inline iterator Begin() noexcept { 
         return First();
     }
 
-    inline iterator End() noexcept {
+    inline iterator End() noexcept { 
         return iterator(nullptr, this);
     }
 
-    inline iterator begin() noexcept {
-        return Begin();
-    }
-
-    inline iterator end() noexcept {
-        return End();
-    }
-
-    inline bool Empty() const noexcept {
+    inline iterator begin() noexcept { 
+        return Begin(); 
+    } 
+ 
+    inline iterator end() noexcept { 
+        return End(); 
+    } 
+ 
+    inline bool Empty() const noexcept { 
         return const_cast<TAvlTree*>(this)->Begin() == const_cast<TAvlTree*>(this)->End();
     }
 
-    inline explicit operator bool() const noexcept {
+    inline explicit operator bool() const noexcept { 
         return !this->Empty();
     }
 
@@ -454,7 +454,7 @@ public:
     }
 
 private:
-    inline TTreeItem* Rebalance(TTreeItem* n) noexcept {
+    inline TTreeItem* Rebalance(TTreeItem* n) noexcept { 
         long lheight, rheight;
 
         TTreeItem* a;
@@ -561,7 +561,7 @@ private:
         return ggp;
     }
 
-    inline void RecalcHeights(TTreeItem* el) noexcept {
+    inline void RecalcHeights(TTreeItem* el) noexcept { 
         long lheight, rheight, new_height;
 
         while (el) {
@@ -580,7 +580,7 @@ private:
         }
     }
 
-    inline TTreeItem* FindFirstUnbalGP(TTreeItem* el) noexcept {
+    inline TTreeItem* FindFirstUnbalGP(TTreeItem* el) noexcept { 
         long lheight, rheight, balanceProp;
         TTreeItem* gp;
 
@@ -606,7 +606,7 @@ private:
         return nullptr;
     }
 
-    inline TTreeItem* FindFirstUnbalEl(TTreeItem* el) noexcept {
+    inline TTreeItem* FindFirstUnbalEl(TTreeItem* el) noexcept { 
         if (el == nullptr) {
             return nullptr;
         }
@@ -626,7 +626,7 @@ private:
         return nullptr;
     }
 
-    inline void ReplaceEl(TTreeItem* el, TTreeItem* replacement) noexcept {
+    inline void ReplaceEl(TTreeItem* el, TTreeItem* replacement) noexcept { 
         TTreeItem* parent = el->Parent_;
         TTreeItem* left = el->Left_;
         TTreeItem* right = el->Right_;
@@ -658,7 +658,7 @@ private:
         replacement->Height_ = el->Height_;
     }
 
-    inline void RemoveEl(TTreeItem* el, TTreeItem* filler) noexcept {
+    inline void RemoveEl(TTreeItem* el, TTreeItem* filler) noexcept { 
         TTreeItem* parent = el->Parent_;
 
         if (parent) {
@@ -723,10 +723,10 @@ struct TAvlTreeItem: public TNonCopyable {
 public:
     using TTree = TAvlTree<T, C>;
     friend class TAvlTree<T, C>;
-    friend typename TAvlTree<T, C>::TConstIterator;
-    friend typename TAvlTree<T, C>::TIterator;
+    friend typename TAvlTree<T, C>::TConstIterator; 
+    friend typename TAvlTree<T, C>::TIterator; 
 
-    inline TAvlTreeItem() noexcept
+    inline TAvlTreeItem() noexcept 
         : Left_(nullptr)
         , Right_(nullptr)
         , Parent_(nullptr)
@@ -735,11 +735,11 @@ public:
     {
     }
 
-    inline ~TAvlTreeItem() noexcept {
+    inline ~TAvlTreeItem() noexcept { 
         Unlink();
     }
 
-    inline void Unlink() noexcept {
+    inline void Unlink() noexcept { 
         if (Tree_) {
             Tree_->EraseImpl(this);
         }

@@ -143,10 +143,10 @@ namespace NYT {
 
     void TJsonWriter::OnEntity() {
         if (IsWriteAllowed()) {
-            EnterNode(); 
+            EnterNode();
             JsonWriter->WriteNull();
-            LeaveNode(); 
-        } 
+            LeaveNode();
+        }
     }
 
     void TJsonWriter::OnBeginList() {

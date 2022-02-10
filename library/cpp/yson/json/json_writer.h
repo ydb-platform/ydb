@@ -35,7 +35,7 @@ namespace NYT {
             EJsonFormat format = JF_TEXT,
             EJsonAttributesMode attributesMode = JAM_ON_DEMAND,
             ESerializedBoolFormat booleanFormat = SBF_STRING);
- 
+
         TJsonWriter(
             IOutputStream* output,
             NJson::TJsonWriterConfig config,

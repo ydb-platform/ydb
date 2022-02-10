@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TMultiResourceLock) {
 
         startEvent.Signal();
 
-        NThreading::TFuture<void> all = NThreading::WaitExceptionOrAll(workers); 
+        NThreading::TFuture<void> all = NThreading::WaitExceptionOrAll(workers);
         all.GetValueSync();
         queue.Stop();
 

@@ -1,12 +1,12 @@
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers) 
+SUBSCRIBER(g:util-subscribers)
 
 PROVIDES(cityhash)
- 
+
 RECURSE(
     benchmark
 )
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

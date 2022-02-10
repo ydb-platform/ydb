@@ -17,11 +17,11 @@ VERSION(5.2.4)
 
 CFLAGS(-DTUKLIB_SYMBOL_PREFIX=lzma_)
 
-ADDINCL( 
-    contrib/libs/xz 
+ADDINCL(
+    contrib/libs/xz
     contrib/libs/xz/common
-) 
- 
+)
+
 SRCS(
     tuklib_cpucores.c
 )

@@ -131,7 +131,7 @@ private:
             resultFutures.push_back(RunUploadTask(dataProvider, shard, uploadFn).Apply(checker));
         }
 
-        NThreading::WaitExceptionOrAll(resultFutures).Wait(); 
+        NThreading::WaitExceptionOrAll(resultFutures).Wait();
         if (errStatus)
             ThrowOnError(errStatus.GetRef());
     }

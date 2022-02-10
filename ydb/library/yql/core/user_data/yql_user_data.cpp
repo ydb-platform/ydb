@@ -21,14 +21,14 @@ void TUserData::UserDataToLibraries(
 }
 
 void TUserData::FillFromFolder(
-    TFsPath root, 
+    TFsPath root,
     EType type,
     TVector<TUserData>& userData
 ) {
     if (!root.Exists()) {
         return;
     }
-    root = root.RealPath(); 
+    root = root.RealPath();
     TDirIterator dir(root, TDirIterator::TOptions(FTS_LOGICAL));
     for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
         if (file->fts_level == FTS_ROOTLEVEL) {
@@ -36,7 +36,7 @@ void TUserData::FillFromFolder(
         }
         TFsPath filePath(file->fts_path);
         userData.push_back({
-            type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath 
+            type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath
         });
     }
 }

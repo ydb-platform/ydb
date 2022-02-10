@@ -1,7 +1,7 @@
 UNITTEST()
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers) 
+SUBSCRIBER(g:util-subscribers)
 
 SRCDIR(util/draft)
 

@@ -43,7 +43,7 @@ namespace {
         TMaybe<double> CyclesPerIteration;
         TMaybe<double> SecondsPerIteration;
         double RunTime;
-        size_t TestId;  //  Sequential test id (zero-based) 
+        size_t TestId;  //  Sequential test id (zero-based)
     };
 
     struct ITestRunner: public TIntrusiveListItem<ITestRunner> {
@@ -52,7 +52,7 @@ namespace {
 
         virtual TStringBuf Name() const noexcept = 0;
         virtual TResult Run(const TOptions& opts) = 0;
-        size_t SequentialId = 0; 
+        size_t SequentialId = 0;
     };
 
     struct TCpuBenchmark: public ITestRunner {
@@ -387,39 +387,39 @@ namespace {
         TVector<TResult> Results_;
     };
 
-    class TOrderedReporter: public IReporter { 
-    public: 
-        TOrderedReporter(THolder<IReporter> slave) 
-            : Slave_(std::move(slave)) 
-        { 
-        } 
- 
-        void Report(TResult&& result) override { 
-            with_lock (ResultsLock_) { 
-                OrderedResultQueue_.emplace(result.TestId, std::move(result)); 
-                while (!OrderedResultQueue_.empty() && OrderedResultQueue_.begin()->first <= ExpectedTestId_) { 
-                    Slave_->Report(std::move(OrderedResultQueue_.begin()->second)); 
-                    OrderedResultQueue_.erase(OrderedResultQueue_.begin()); 
-                    ++ExpectedTestId_; 
-                } 
-            } 
-        } 
- 
-        void Finish() override { 
-            for (auto& it : OrderedResultQueue_) { 
-                Slave_->Report(std::move(it.second)); 
-            } 
-            OrderedResultQueue_.clear(); 
-            Slave_->Finish(); 
-        } 
- 
-    private: 
-        THolder<IReporter> Slave_; 
-        size_t ExpectedTestId_ = 0; 
-        TMap<size_t, TResult> OrderedResultQueue_; 
-        TAdaptiveLock ResultsLock_; 
-    }; 
- 
+    class TOrderedReporter: public IReporter {
+    public:
+        TOrderedReporter(THolder<IReporter> slave)
+            : Slave_(std::move(slave))
+        {
+        }
+
+        void Report(TResult&& result) override {
+            with_lock (ResultsLock_) {
+                OrderedResultQueue_.emplace(result.TestId, std::move(result));
+                while (!OrderedResultQueue_.empty() && OrderedResultQueue_.begin()->first <= ExpectedTestId_) {
+                    Slave_->Report(std::move(OrderedResultQueue_.begin()->second));
+                    OrderedResultQueue_.erase(OrderedResultQueue_.begin());
+                    ++ExpectedTestId_;
+                }
+            }
+        }
+
+        void Finish() override {
+            for (auto& it : OrderedResultQueue_) {
+                Slave_->Report(std::move(it.second));
+            }
+            OrderedResultQueue_.clear();
+            Slave_->Finish();
+        }
+
+    private:
+        THolder<IReporter> Slave_;
+        size_t ExpectedTestId_ = 0;
+        TMap<size_t, TResult> OrderedResultQueue_;
+        TAdaptiveLock ResultsLock_;
+    };
+
     THolder<IReporter> MakeReporter(const EOutFormat type) {
         switch (type) {
             case F_CONSOLE:
@@ -437,16 +437,16 @@ namespace {
 
         return MakeHolder<TConsoleReporter>(); // make compiler happy
     }
- 
+
     THolder<IReporter> MakeOrderedReporter(const EOutFormat type) {
-        return MakeHolder<TOrderedReporter>(MakeReporter(type)); 
-    } 
- 
+        return MakeHolder<TOrderedReporter>(MakeReporter(type));
+    }
+
     void EnumerateTests(TVector<ITestRunner*>& tests) {
-        for (size_t id : xrange(tests.size())) { 
-            tests[id]->SequentialId = id; 
-        } 
-    } 
+        for (size_t id : xrange(tests.size())) {
+            tests[id]->SequentialId = id;
+        }
+    }
 }
 
 template <>
@@ -560,7 +560,7 @@ int NBench::Main(int argc, char** argv) {
             tests.push_back(&it);
         }
     }
-    EnumerateTests(tests); 
+    EnumerateTests(tests);
 
     if (opts.ListTests) {
         for (const auto* const it : tests) {
@@ -581,7 +581,7 @@ int NBench::Main(int argc, char** argv) {
     }
 
     const TOptions testOpts = {timeBudget / tests.size()};
-    const auto reporter = MakeOrderedReporter(opts.OutFormat); 
+    const auto reporter = MakeOrderedReporter(opts.OutFormat);
 
     std::function<void(ITestRunner**)> func = [&](ITestRunner** it) {
         auto&& res = (*it)->Run(testOpts);

@@ -50,7 +50,7 @@ private:
     UNIT_TEST_SUITE(TRegexpTest);
     UNIT_TEST(TestRe)
     UNIT_TEST(TestSubst)
-    UNIT_TEST(TestOffEndOfBuffer); 
+    UNIT_TEST(TestOffEndOfBuffer);
     UNIT_TEST_SUITE_END();
 
     inline void TestRe() {
@@ -91,13 +91,13 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(copyResult, newResult);
         }
     }
- 
-    void TestOffEndOfBuffer() { 
-        const TString needle{".*[^./]gov[.].*"}; 
-        TRegExMatch re{needle, REG_UTF8}; 
-        const TString haystack{"fakty.ictv.ua"}; 
-        UNIT_ASSERT_VALUES_EQUAL(re.Match(haystack.c_str()), false); 
-    } 
+
+    void TestOffEndOfBuffer() {
+        const TString needle{".*[^./]gov[.].*"};
+        TRegExMatch re{needle, REG_UTF8};
+        const TString haystack{"fakty.ictv.ua"};
+        UNIT_ASSERT_VALUES_EQUAL(re.Match(haystack.c_str()), false);
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TRegexpTest);

@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         auto futures = simulateSessionBusy(10, session);
 
-        NThreading::WaitExceptionOrAll(futures).GetValueSync(); 
+        NThreading::WaitExceptionOrAll(futures).GetValueSync();
 
         for (auto& future : futures) {
             auto result = future.GetValue();
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
             auto futures = simulateSessionBusy(queriesCount, session);
 
-            NThreading::WaitExceptionOrAll(futures).GetValueSync(); 
+            NThreading::WaitExceptionOrAll(futures).GetValueSync();
 
             for (auto& future : futures) {
                 auto result = future.GetValue();
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
             auto futures = simulateSessionBusy(queriesCount, session);
 
-            NThreading::WaitExceptionOrAll(futures).GetValueSync(); 
+            NThreading::WaitExceptionOrAll(futures).GetValueSync();
 
             for (auto& future : futures) {
                 auto result = future.GetValue();

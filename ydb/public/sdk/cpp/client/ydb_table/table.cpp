@@ -1529,7 +1529,7 @@ public:
             }
         }
         sessions.clear();
-        return NThreading::WaitExceptionOrAll(closeResults); 
+        return NThreading::WaitExceptionOrAll(closeResults);
     }
 
     NThreading::TFuture<void> Stop() {

@@ -14,7 +14,7 @@ struct TTestGuard: public TTestBase {
     UNIT_TEST(TestUnguard)
     UNIT_TEST(TestTryReadGuard)
     UNIT_TEST(TestWithLock)
-    UNIT_TEST(TestWithLockScope); 
+    UNIT_TEST(TestWithLockScope);
     UNIT_TEST_SUITE_END();
 
     struct TGuardChecker {
@@ -167,14 +167,14 @@ struct TTestGuard: public TTestBase {
         UNIT_ASSERT(!m.guarded);
         UNIT_ASSERT_EQUAL(n, 43);
     }
- 
-    void TestWithLockScope() { 
-        auto Guard = [](auto) { UNIT_FAIL("Non global Guard used"); return 0; }; 
-        TGuardChecker m; 
+
+    void TestWithLockScope() {
+        auto Guard = [](auto) { UNIT_FAIL("Non global Guard used"); return 0; };
+        TGuardChecker m;
         with_lock (m) {
-            Y_UNUSED(Guard); 
-        } 
-    } 
+            Y_UNUSED(Guard);
+        }
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TTestGuard)

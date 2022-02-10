@@ -1,7 +1,7 @@
 PY23_TEST()
 
 OWNER(g:util)
-SUBSCRIBER(g:util-subscribers) 
+SUBSCRIBER(g:util-subscribers)
 
 SRCDIR(util)
 

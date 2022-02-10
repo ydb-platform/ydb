@@ -13,11 +13,11 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(1 == AnyOf(TStringBuf("10"), isOne));
         UNIT_ASSERT(1 == AnyOf(TStringBuf("11"), isOne));
         UNIT_ASSERT(0 == AnyOf(TStringBuf(), isOne));
- 
-        const char array00[]{'0', '0'}; 
-        UNIT_ASSERT(0 == AnyOf(array00, isOne)); 
-        const char array01[]{'0', '1'}; 
-        UNIT_ASSERT(1 == AnyOf(array01, isOne)); 
+
+        const char array00[]{'0', '0'};
+        UNIT_ASSERT(0 == AnyOf(array00, isOne));
+        const char array01[]{'0', '1'};
+        UNIT_ASSERT(1 == AnyOf(array01, isOne));
     }
 
     Y_UNIT_TEST(AllOfTest) {
@@ -26,11 +26,11 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == AllOf(TStringBuf("10"), isOne));
         UNIT_ASSERT(1 == AllOf(TStringBuf("11"), isOne));
         UNIT_ASSERT(1 == AllOf(TStringBuf(), isOne));
- 
-        const char array01[]{'0', '1'}; 
-        UNIT_ASSERT(0 == AllOf(array01, isOne)); 
-        const char array11[]{'1', '1'}; 
-        UNIT_ASSERT(1 == AllOf(array11, isOne)); 
+
+        const char array01[]{'0', '1'};
+        UNIT_ASSERT(0 == AllOf(array01, isOne));
+        const char array11[]{'1', '1'};
+        UNIT_ASSERT(1 == AllOf(array11, isOne));
     }
 
     Y_UNIT_TEST(CountIfTest) {
@@ -39,9 +39,9 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == CountIf(TStringBuf("___________"), isOne));
         UNIT_ASSERT(0 == CountIf(TStringBuf(), isOne));
         UNIT_ASSERT(1 == CountIf(TStringBuf("1"), isOne));
- 
-        const char array[] = "____1________1____1_______"; 
-        UNIT_ASSERT(3 == CountIf(array, isOne)); 
+
+        const char array[] = "____1________1____1_______";
+        UNIT_ASSERT(3 == CountIf(array, isOne));
     }
 
     Y_UNIT_TEST(CountTest) {
@@ -51,9 +51,9 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == Count(TStringBuf("___________"), '1'));
         UNIT_ASSERT(0 == Count(TStringBuf(), '1'));
         UNIT_ASSERT(1 == Count(TStringBuf("1"), '1'));
- 
-        const char array[] = "____1________1____1_______"; 
-        UNIT_ASSERT(3 == Count(array, '1')); 
+
+        const char array[] = "____1________1____1_______";
+        UNIT_ASSERT(3 == Count(array, '1'));
     }
 
     struct TStrokaNoCopy: TString {
@@ -510,11 +510,11 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
     Y_UNIT_TEST(StableSortByTest) {
         TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};
-        StableSortBy(collection, [](int x) { return x / 100; }); 
+        StableSortBy(collection, [](int x) { return x / 100; });
         TVector<int> expected = {101, 106, 102, 203, 205, 404, 401};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
+    }
+
     Y_UNIT_TEST(SortUniqueByTest) {
         TVector<int> collection = {404, 101, 101, 203, 101, 203, 404};
         StableSortUniqueBy(collection, [](int x) { return x / 100; });

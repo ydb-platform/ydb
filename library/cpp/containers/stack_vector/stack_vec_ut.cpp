@@ -9,16 +9,16 @@ namespace {
 
     static_assert(std::is_copy_constructible_v<TNotCopyAssignable>);
     static_assert(!std::is_copy_assignable_v<TNotCopyAssignable>);
- 
-    template <class T, size_t JunkPayloadSize> 
-    struct TThickAlloc: public std::allocator<T> { 
-        template <class U> 
-        struct rebind { 
-            using other = TThickAlloc<U, JunkPayloadSize>; 
-        }; 
- 
-        char Junk[JunkPayloadSize]{sizeof(T)}; 
-    }; 
+
+    template <class T, size_t JunkPayloadSize>
+    struct TThickAlloc: public std::allocator<T> {
+        template <class U>
+        struct rebind {
+            using other = TThickAlloc<U, JunkPayloadSize>;
+        };
+
+        char Junk[JunkPayloadSize]{sizeof(T)};
+    };
 
     template <class T>
     struct TStatefulAlloc: public std::allocator<T> {
@@ -126,12 +126,12 @@ Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
         }
         // Just verify that the program did not crash.
     }
- 
-    Y_UNIT_TEST(TestCustomAllocSize) { 
-        constexpr size_t n = 16384; 
-        using TVec = TStackVec<size_t, 1, true, TThickAlloc<size_t, n>>; 
-        UNIT_ASSERT_LT(sizeof(TVec), 1.5 * n); 
-    } 
+
+    Y_UNIT_TEST(TestCustomAllocSize) {
+        constexpr size_t n = 16384;
+        using TVec = TStackVec<size_t, 1, true, TThickAlloc<size_t, n>>;
+        UNIT_ASSERT_LT(sizeof(TVec), 1.5 * n);
+    }
 
     Y_UNIT_TEST(TestStatefulAlloc) {
         size_t count = 0;

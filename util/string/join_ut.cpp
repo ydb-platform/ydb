@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {}), "");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {42}), "42");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {1, 2, 3}), "1 2 3");
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), "1 2 3"); 
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), "1 2 3");
     }
 
     Y_UNIT_TEST(StrContainerItems) {
@@ -143,9 +143,9 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
             stream << MakeRangeJoiner(" ", std::initializer_list<TString>{vstring[0], vstring[1], vstring[2]});
             UNIT_ASSERT_EQUAL(stream.Str(), result);
         }
- 
-        // c-style array 
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), result); 
+
+        // c-style array
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), result);
     }
 
     Y_UNIT_TEST(CustomToString) {

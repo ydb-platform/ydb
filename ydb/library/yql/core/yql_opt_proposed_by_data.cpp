@@ -103,7 +103,7 @@ private:
             futures.push_back(GetTransformer(x).GetAsyncFuture(input));
         }
 
-        return WaitExceptionOrAll(futures); 
+        return WaitExceptionOrAll(futures);
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {

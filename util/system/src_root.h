@@ -3,8 +3,8 @@
 #include "compiler.h"
 #include "defaults.h"
 
-#include <type_traits> 
- 
+#include <type_traits>
+
 namespace NPrivate {
     struct TStaticBuf {
         constexpr TStaticBuf(const char* data, unsigned len) noexcept
@@ -32,37 +32,37 @@ namespace NPrivate {
     constexpr TStaticBuf ArcRoot = STATIC_BUF(Y_STRINGIZE(ARCADIA_ROOT));
     constexpr TStaticBuf BuildRoot = STATIC_BUF(Y_STRINGIZE(ARCADIA_BUILD_ROOT));
 
-    constexpr Y_FORCE_INLINE bool IsProperPrefix(const TStaticBuf prefix, const TStaticBuf string) noexcept { 
-        if (prefix.Len < string.Len) { 
-            for (unsigned i = prefix.Len; i-- > 0;) { 
-                if (prefix.Data[i] != string.Data[i]) { 
-                    return false; 
-                } 
-            } 
-            return true; 
-        } else { 
-            return false; 
-        } 
-    } 
- 
-    constexpr unsigned RootPrefixLength(const TStaticBuf& f) noexcept { 
-        if (IsProperPrefix(ArcRoot, f)) { 
-            return ArcRoot.Len + 1; 
+    constexpr Y_FORCE_INLINE bool IsProperPrefix(const TStaticBuf prefix, const TStaticBuf string) noexcept {
+        if (prefix.Len < string.Len) {
+            for (unsigned i = prefix.Len; i-- > 0;) {
+                if (prefix.Data[i] != string.Data[i]) {
+                    return false;
+                }
+            }
+            return true;
+        } else {
+            return false;
         }
-        if (IsProperPrefix(BuildRoot, f)) { 
-            return BuildRoot.Len + 1; 
-        }
-        return 0; 
     }
- 
-    constexpr Y_FORCE_INLINE TStaticBuf StripRoot(const TStaticBuf& f, unsigned prefixLength) noexcept { 
-        return TStaticBuf(f.Data + prefixLength, f.Len - prefixLength); 
-    } 
- 
-    //$(SRC_ROOT)/prj/blah.cpp -> prj/blah.cpp 
-    constexpr Y_FORCE_INLINE TStaticBuf StripRoot(const TStaticBuf& f) noexcept { 
-        return StripRoot(f, RootPrefixLength(f)); 
-    } 
+
+    constexpr unsigned RootPrefixLength(const TStaticBuf& f) noexcept {
+        if (IsProperPrefix(ArcRoot, f)) {
+            return ArcRoot.Len + 1;
+        }
+        if (IsProperPrefix(BuildRoot, f)) {
+            return BuildRoot.Len + 1;
+        }
+        return 0;
+    }
+
+    constexpr Y_FORCE_INLINE TStaticBuf StripRoot(const TStaticBuf& f, unsigned prefixLength) noexcept {
+        return TStaticBuf(f.Data + prefixLength, f.Len - prefixLength);
+    }
+
+    //$(SRC_ROOT)/prj/blah.cpp -> prj/blah.cpp
+    constexpr Y_FORCE_INLINE TStaticBuf StripRoot(const TStaticBuf& f) noexcept {
+        return StripRoot(f, RootPrefixLength(f));
+    }
 }
 
-#define __SOURCE_FILE_IMPL__ ::NPrivate::StripRoot(STATIC_BUF(__FILE__), std::integral_constant<unsigned, ::NPrivate::RootPrefixLength(STATIC_BUF(__FILE__))>::value) 
+#define __SOURCE_FILE_IMPL__ ::NPrivate::StripRoot(STATIC_BUF(__FILE__), std::integral_constant<unsigned, ::NPrivate::RootPrefixLength(STATIC_BUF(__FILE__))>::value)

@@ -83,16 +83,16 @@ static inline void StableSort(TContainer& container, TCompare compare) {
     StableSort(container.begin(), container.end(), compare);
 }
 
-template <class TIterator, typename TGetKey> 
-static inline void StableSortBy(TIterator begin, TIterator end, const TGetKey& getKey) { 
+template <class TIterator, typename TGetKey>
+static inline void StableSortBy(TIterator begin, TIterator end, const TGetKey& getKey) {
     StableSort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
-} 
- 
-template <class TContainer, typename TGetKey> 
-static inline void StableSortBy(TContainer& container, const TGetKey& getKey) { 
-    StableSortBy(container.begin(), container.end(), getKey); 
-} 
- 
+}
+
+template <class TContainer, typename TGetKey>
+static inline void StableSortBy(TContainer& container, const TGetKey& getKey) {
+    StableSortBy(container.begin(), container.end(), getKey);
+}
+
 template <class T>
 static inline void PartialSort(T f, T m, T l) {
     std::partial_sort(f, m, l);
@@ -135,9 +135,9 @@ static inline auto FindPtr(I f, I l, const T& v) -> decltype(&*f) {
 
 template <class C, class T>
 static inline auto FindPtr(C&& c, const T& v) {
-    using std::begin; 
-    using std::end; 
-    return FindPtr(begin(c), end(c), v); 
+    using std::begin;
+    using std::end;
+    return FindPtr(begin(c), end(c), v);
 }
 
 template <class I, class P>
@@ -160,9 +160,9 @@ static inline bool AllOf(I f, I l, P pred) {
 
 template <class C, class P>
 static inline bool AllOf(const C& c, P pred) {
-    using std::begin; 
-    using std::end; 
-    return AllOf(begin(c), end(c), pred); 
+    using std::begin;
+    using std::end;
+    return AllOf(begin(c), end(c), pred);
 }
 
 template <class I, class P>
@@ -172,9 +172,9 @@ static inline bool AnyOf(I f, I l, P pred) {
 
 template <class C, class P>
 static inline bool AnyOf(const C& c, P pred) {
-    using std::begin; 
-    using std::end; 
-    return AnyOf(begin(c), end(c), pred); 
+    using std::begin;
+    using std::end;
+    return AnyOf(begin(c), end(c), pred);
 }
 
 // FindIfPtr - return NULL if not found. Works for arrays, containers, iterators
@@ -186,17 +186,17 @@ static inline auto FindIfPtr(I f, I l, P pred) -> decltype(&*f) {
 
 template <class C, class P>
 static inline auto FindIfPtr(C&& c, P pred) {
-    using std::begin; 
-    using std::end; 
-    return FindIfPtr(begin(c), end(c), pred); 
+    using std::begin;
+    using std::end;
+    return FindIfPtr(begin(c), end(c), pred);
 }
 
 template <class C, class T>
 static inline size_t FindIndex(C&& c, const T& x) {
-    using std::begin; 
-    using std::end; 
-    auto it = Find(begin(c), end(c), x); 
-    return it == end(c) ? NPOS : (it - begin(c)); 
+    using std::begin;
+    using std::end;
+    auto it = Find(begin(c), end(c), x);
+    return it == end(c) ? NPOS : (it - begin(c));
 }
 
 template <class C, class P>
@@ -650,9 +650,9 @@ static inline auto CountIf(It first, It last, P p) {
 
 template <class C, class P>
 static inline auto CountIf(const C& c, P pred) {
-    using std::begin; 
-    using std::end; 
-    return CountIf(begin(c), end(c), pred); 
+    using std::begin;
+    using std::end;
+    return CountIf(begin(c), end(c), pred);
 }
 
 template <class I1, class I2>

@@ -219,12 +219,12 @@ public:
     using const_iterator = const_pointer;
     using size_type = size_t;
     using difference_type = ptrdiff_t;
-    using TBucketDivisor = ::NPrivate::THashDivisor; 
+    using TBucketDivisor = ::NPrivate::THashDivisor;
 
     _yhashtable_buckets(const Alloc& other)
         : base_type(other)
         , Data(nullptr)
-        , Size() 
+        , Size()
     {
     }
 
@@ -232,13 +232,13 @@ public:
         Y_ASSERT(!Data);
     }
 
-    void initialize_dynamic(TBucketDivisor size) { 
+    void initialize_dynamic(TBucketDivisor size) {
         Y_ASSERT(!Data);
 
-        Data = this->_get_alloc().allocate(size() + 2) + 1; 
+        Data = this->_get_alloc().allocate(size() + 2) + 1;
         Size = size;
 
-        *reinterpret_cast<size_type*>(Data - 1) = size() + 2; 
+        *reinterpret_cast<size_type*>(Data - 1) = size() + 2;
     }
 
     void deinitialize_dynamic() {
@@ -246,11 +246,11 @@ public:
 
         this->_get_alloc().deallocate(Data - 1, *reinterpret_cast<size_type*>(Data - 1));
         Data = pointer();
-        Size = TBucketDivisor(); 
+        Size = TBucketDivisor();
     }
 
-    void initialize_static(pointer data, TBucketDivisor size) { 
-        Y_ASSERT(!Data && data && size() >= 1); 
+    void initialize_static(pointer data, TBucketDivisor size) {
+        Y_ASSERT(!Data && data && size() >= 1);
 
         Data = data;
         Size = size;
@@ -260,11 +260,11 @@ public:
         Y_ASSERT(Data);
 
         Data = pointer();
-        Size = TBucketDivisor(); 
+        Size = TBucketDivisor();
     }
 
-    void resize_noallocate(TBucketDivisor size) { 
-        Y_ASSERT(size() <= capacity()); 
+    void resize_noallocate(TBucketDivisor size) {
+        Y_ASSERT(size() <= capacity());
 
         Size = size;
     }
@@ -276,10 +276,10 @@ public:
         return Data;
     }
     iterator end() {
-        return Data + Size(); 
+        return Data + Size();
     }
     const_iterator end() const {
-        return Data + Size(); 
+        return Data + Size();
     }
 
     pointer data() {
@@ -290,30 +290,30 @@ public:
     }
 
     size_type size() const {
-        return Size(); 
+        return Size();
     }
     size_type capacity() const {
         return *reinterpret_cast<size_type*>(Data - 1);
     }
-    TBucketDivisor ExtSize() const { 
-        return Size; 
-    } 
-    int BucketDivisorHint() const { 
-        return +Size.Hint; 
-    } 
+    TBucketDivisor ExtSize() const {
+        return Size;
+    }
+    int BucketDivisorHint() const {
+        return +Size.Hint;
+    }
 
     allocator_type get_allocator() const {
         return this->_get_alloc();
     }
 
     const_reference operator[](size_type index) const {
-        Y_ASSERT(index <= Size()); 
+        Y_ASSERT(index <= Size());
 
         return *(Data + index);
     }
 
     reference operator[](size_type index) {
-        Y_ASSERT(index <= Size()); 
+        Y_ASSERT(index <= Size());
 
         return *(Data + index);
     }
@@ -329,7 +329,7 @@ private:
     pointer Data;
 
     /** Size of the buckets array. Doesn't take the marker element at the end into account. */
-    TBucketDivisor Size; 
+    TBucketDivisor Size;
 };
 
 /**
@@ -455,7 +455,7 @@ class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, Eq
     using node = typename traits_type::node;
     using nodep_allocator_type = typename traits_type::nodep_allocator_type;
     using buckets_type = _yhashtable_buckets<node*, nodep_allocator_type>;
-    using TBucketDivisor = ::NPrivate::THashDivisor; 
+    using TBucketDivisor = ::NPrivate::THashDivisor;
 
 public:
     using key_type = Key;
@@ -560,7 +560,7 @@ public:
         if (ht.empty()) {
             initialize_buckets(buckets, 0);
         } else {
-            initialize_buckets_dynamic(buckets, ht.buckets.ExtSize()); 
+            initialize_buckets_dynamic(buckets, ht.buckets.ExtSize());
             copy_from_dynamic(ht);
         }
     }
@@ -591,10 +591,10 @@ public:
                 initialize_buckets(buckets, 0);
             } else {
                 if (buckets.capacity() > ht.buckets.size()) {
-                    buckets.resize_noallocate(ht.buckets.ExtSize()); 
+                    buckets.resize_noallocate(ht.buckets.ExtSize());
                 } else {
                     deinitialize_buckets(buckets);
-                    initialize_buckets_dynamic(buckets, ht.buckets.ExtSize()); 
+                    initialize_buckets_dynamic(buckets, ht.buckets.ExtSize());
                 }
 
                 copy_from_dynamic(ht);
@@ -845,10 +845,10 @@ public:
         basic_clear();
 
         if (downsize < buckets.size()) {
-            const TBucketDivisor newSize = HashBucketCountExt(downsize); 
-            if (newSize() < buckets.size()) { 
-                Y_ASSERT(newSize() >= 7); /* We cannot downsize static buckets. */ 
-                buckets.resize_noallocate(newSize); 
+            const TBucketDivisor newSize = HashBucketCountExt(downsize);
+            if (newSize() < buckets.size()) {
+                Y_ASSERT(newSize() >= 7); /* We cannot downsize static buckets. */
+                buckets.resize_noallocate(newSize);
             }
         }
     }
@@ -880,19 +880,19 @@ public:
 private:
     static void initialize_buckets(buckets_type& buckets, size_type sizeHint) {
         if (sizeHint == 0) {
-            buckets.initialize_static(reinterpret_cast<node**>(const_cast<void**>(_yhashtable_empty_data)) + 1, TBucketDivisor::One()); 
+            buckets.initialize_static(reinterpret_cast<node**>(const_cast<void**>(_yhashtable_empty_data)) + 1, TBucketDivisor::One());
         } else {
-            TBucketDivisor size = HashBucketCountExt(sizeHint); 
-            Y_ASSERT(size() >= 7); 
+            TBucketDivisor size = HashBucketCountExt(sizeHint);
+            Y_ASSERT(size() >= 7);
 
             initialize_buckets_dynamic(buckets, size);
         }
     }
 
-    static void initialize_buckets_dynamic(buckets_type& buckets, TBucketDivisor size) { 
+    static void initialize_buckets_dynamic(buckets_type& buckets, TBucketDivisor size) {
         buckets.initialize_dynamic(size);
-        memset(buckets.data(), 0, size() * sizeof(*buckets.data())); 
-        buckets[size()] = (node*)1; 
+        memset(buckets.data(), 0, size() * sizeof(*buckets.data()));
+        buckets[size()] = (node*)1;
     }
 
     static void deinitialize_buckets(buckets_type& buckets) {
@@ -909,7 +909,7 @@ private:
 
     template <class OtherKey>
     size_type bkt_num_key(const OtherKey& key) const {
-        return bkt_num_key(key, buckets.ExtSize()); 
+        return bkt_num_key(key, buckets.ExtSize());
     }
 
     template <class OtherValue>
@@ -918,14 +918,14 @@ private:
     }
 
     template <class OtherKey>
-    size_type bkt_num_key(const OtherKey& key, TBucketDivisor n) const { 
-        const size_type bucket = n.Remainder(this->_get_hash_fun()(key)); 
-        Y_ASSERT((0 <= bucket) && (bucket < n())); 
-        return bucket; 
+    size_type bkt_num_key(const OtherKey& key, TBucketDivisor n) const {
+        const size_type bucket = n.Remainder(this->_get_hash_fun()(key));
+        Y_ASSERT((0 <= bucket) && (bucket < n()));
+        return bucket;
     }
 
     template <class OtherValue>
-    size_type bkt_num(const OtherValue& obj, TBucketDivisor n) const { 
+    size_type bkt_num(const OtherValue& obj, TBucketDivisor n) const {
         return bkt_num_key(get_key(obj), n);
     }
 
@@ -1268,8 +1268,8 @@ bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
         if (old_n != 1 && num_elements_hint <= old_n) // TODO: this if is for backwards compatibility down to order-in-buckets level. Can be safely removed.
             return false;
 
-        const TBucketDivisor n = HashBucketCountExt(num_elements_hint + 1, buckets.BucketDivisorHint() + 1); 
-        if (n() > old_n) { 
+        const TBucketDivisor n = HashBucketCountExt(num_elements_hint + 1, buckets.BucketDivisorHint() + 1);
+        if (n() > old_n) {
             buckets_type tmp(buckets.get_allocator());
             initialize_buckets_dynamic(tmp, n);
 #ifdef __STL_USE_EXCEPTIONS
@@ -1417,8 +1417,8 @@ namespace NPrivate {
     inline TString MapKeyToString(char* key) {
         return MapKeyToString(TStringBuf(key));
     }
- 
-    [[noreturn]] void ThrowKeyNotFoundInHashTableException(const TStringBuf keyRepresentation); 
+
+    [[noreturn]] void ThrowKeyNotFoundInHashTableException(const TStringBuf keyRepresentation);
 }
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
@@ -1652,8 +1652,8 @@ public:
         using namespace ::NPrivate;
         const_iterator it = find(key);
 
-        if (Y_UNLIKELY(it == end())) { 
-            ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key)); 
+        if (Y_UNLIKELY(it == end())) {
+            ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key));
         }
 
         return it->second;
@@ -1664,8 +1664,8 @@ public:
         using namespace ::NPrivate;
         iterator it = find(key);
 
-        if (Y_UNLIKELY(it == end())) { 
-            ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key)); 
+        if (Y_UNLIKELY(it == end())) {
+            ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key));
         }
 
         return it->second;

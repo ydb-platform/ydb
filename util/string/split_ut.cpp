@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConvertingConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestCharSkipEmpty) { 
+    Y_UNIT_TEST(TestCharSkipEmpty) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", "ab", "qwabcab"};
         TVector<TString> good(canonic, canonic + 3);
@@ -559,14 +559,14 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         UNIT_ASSERT_EXCEPTION(StringSplitter("1 2 3").Split(' ').CollectInto(&a, &a), yexception);
     }
 
-    Y_UNIT_TEST(TestSplitStringWithIgnore) { 
-        TStringBuf s; 
-        StringSplitter("x y z").Split(' ').CollectInto(&std::ignore, &s, &std::ignore); 
-        UNIT_ASSERT_VALUES_EQUAL(s, "y"); 
- 
-        UNIT_ASSERT_EXCEPTION(StringSplitter("ignored != non-requred").Split(':').CollectInto(&s, &std::ignore), yexception); 
-    } 
- 
+    Y_UNIT_TEST(TestSplitStringWithIgnore) {
+        TStringBuf s;
+        StringSplitter("x y z").Split(' ').CollectInto(&std::ignore, &s, &std::ignore);
+        UNIT_ASSERT_VALUES_EQUAL(s, "y");
+
+        UNIT_ASSERT_EXCEPTION(StringSplitter("ignored != non-requred").Split(':').CollectInto(&s, &std::ignore), yexception);
+    }
+
     Y_UNIT_TEST(TestTryCollectInto) {
         int a, b, c;
         bool parsingSucceeded;

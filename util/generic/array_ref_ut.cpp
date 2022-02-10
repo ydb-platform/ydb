@@ -283,10 +283,10 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         Do(a);
         UNIT_ASSERT_VALUES_EQUAL(a[0], 8);
     }
- 
-    Y_UNIT_TEST(TestConstexpr) { 
-        static constexpr const int a[] = {1, 2, -3, -4}; 
-        static constexpr const auto r0 = MakeArrayRef(a, 1); 
+
+    Y_UNIT_TEST(TestConstexpr) {
+        static constexpr const int a[] = {1, 2, -3, -4};
+        static constexpr const auto r0 = MakeArrayRef(a, 1);
         static_assert(r0.size() == 1, "r0.size() is not equal 1");
         static_assert(r0.data()[0] == 1, "r0.data()[0] is not equal to 1");
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         static constexpr const TArrayRef<const int> r2 = r1;
         static_assert(r2.size() == 4, "r2.size() is not equal to 4");
         static_assert(r2.data()[2] == -3, "r2.data()[2] is not equal to -3");
-    } 
+    }
 
     template <typename T>
     static void Foo(const TConstArrayRef<T>) {

@@ -383,36 +383,36 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             UNIT_ASSERT(NProtoBuf::IsEqual(message, GetCorrectMessage()));
         }
     }
- 
-    Y_UNIT_TEST(TestMergeFromString) { 
-        NProtobufUtilUt::TMergeTest message; 
-        NProtobufUtilUt::TMergeTest messageFirstHalf; 
-        NProtobufUtilUt::TMergeTest messageSecondHalf; 
- 
-        for (ui32 v = ~0; v != 0; v >>= 1) { 
-            message.AddMergeInt(v); 
-            (v > 0xffff ? messageFirstHalf : messageSecondHalf).AddMergeInt(v); 
-        } 
- 
-        const TString full = message.SerializeAsString(); 
- 
-        { 
-            NProtobufUtilUt::TMergeTest m1; 
-            UNIT_ASSERT(NProtoBuf::MergeFromString(m1, full)); 
-            UNIT_ASSERT(NProtoBuf::IsEqual(message, m1)); 
-        } 
-        { 
-            NProtobufUtilUt::TMergeTest m2; 
-            TStringBuf s0 = TStringBuf(full).SubStr(0, 3); 
-            TStringBuf s1 = TStringBuf(full).SubStr(3); 
-            // объединение результатов двух MergePartialFromString не эквивалентно вызову MergePartialFromString от объединения строк 
-            UNIT_ASSERT(!(NProtoBuf::MergePartialFromString(m2, s0) && NProtoBuf::MergePartialFromString(m2, s1))); 
-        } 
-        { 
-            NProtobufUtilUt::TMergeTest m3; 
-            UNIT_ASSERT(NProtoBuf::MergePartialFromString(m3, messageFirstHalf.SerializeAsString())); 
-            UNIT_ASSERT(NProtoBuf::MergeFromString(m3, messageSecondHalf.SerializeAsString())); 
-            UNIT_ASSERT(NProtoBuf::IsEqual(message, m3)); 
-        } 
-    } 
+
+    Y_UNIT_TEST(TestMergeFromString) {
+        NProtobufUtilUt::TMergeTest message;
+        NProtobufUtilUt::TMergeTest messageFirstHalf;
+        NProtobufUtilUt::TMergeTest messageSecondHalf;
+
+        for (ui32 v = ~0; v != 0; v >>= 1) {
+            message.AddMergeInt(v);
+            (v > 0xffff ? messageFirstHalf : messageSecondHalf).AddMergeInt(v);
+        }
+
+        const TString full = message.SerializeAsString();
+
+        {
+            NProtobufUtilUt::TMergeTest m1;
+            UNIT_ASSERT(NProtoBuf::MergeFromString(m1, full));
+            UNIT_ASSERT(NProtoBuf::IsEqual(message, m1));
+        }
+        {
+            NProtobufUtilUt::TMergeTest m2;
+            TStringBuf s0 = TStringBuf(full).SubStr(0, 3);
+            TStringBuf s1 = TStringBuf(full).SubStr(3);
+            // объединение результатов двух MergePartialFromString не эквивалентно вызову MergePartialFromString от объединения строк
+            UNIT_ASSERT(!(NProtoBuf::MergePartialFromString(m2, s0) && NProtoBuf::MergePartialFromString(m2, s1)));
+        }
+        {
+            NProtobufUtilUt::TMergeTest m3;
+            UNIT_ASSERT(NProtoBuf::MergePartialFromString(m3, messageFirstHalf.SerializeAsString()));
+            UNIT_ASSERT(NProtoBuf::MergeFromString(m3, messageSecondHalf.SerializeAsString()));
+            UNIT_ASSERT(NProtoBuf::IsEqual(message, m3));
+        }
+    }
 }

@@ -34,7 +34,7 @@ struct TUserData {
     );
 
     static void FillFromFolder(
-        TFsPath root, 
+        TFsPath root,
         EType type,
         TVector<TUserData>& userData
     );

@@ -9,7 +9,7 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 
-#include <util/generic/singleton.h> 
+#include <util/generic/singleton.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 
@@ -24,7 +24,7 @@ struct TLoginProvider::TImpl {
     THolder<NArgonish::IArgon2Base> ArgonHasher;
 
     TImpl() {
-        ArgonHasher = Default<NArgonish::TArgon2Factory>().Create( 
+        ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
             NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
             2, // 2-pass computation
             (1<<11), // 2 mebibytes memory usage (in KiB)
@@ -182,7 +182,7 @@ TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TRemoveGr
         response.Error = "Group not found";
         return response;
     }
- 
+
     auto itChildToParentIndex = ChildToParentIndex.find(request.Group);
     if (itChildToParentIndex != ChildToParentIndex.end()) {
         for (const TString& parent : itChildToParentIndex->second) {
@@ -198,7 +198,7 @@ TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TRemoveGr
     for (const TString& member : itGroupModify->second.Members) {
         ChildToParentIndex[member].erase(request.Group);
     }
- 
+
     Sids.erase(itGroupModify);
 
     return response;
@@ -342,7 +342,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
                 response.Error = "Security state is empty";
                 response.ErrorRetryable = true;
             } else if (keyId < Keys.front().KeyId) {
-                response.Error = "The key of this token has expired"; 
+                response.Error = "The key of this token has expired";
             } else if (keyId > Keys.back().KeyId) {
                 response.Error = "The key of this token is not available yet";
                 response.ErrorRetryable = true;
@@ -388,7 +388,7 @@ std::chrono::system_clock::time_point TLoginProvider::GetTokenExpiresAt(const TS
 }
 
 bool TLoginProvider::IsItTimeToRotateKeys() const {
-    return Keys.empty() 
+    return Keys.empty()
         || Keys.back().PrivateKey.empty()
         || KeysRotationTime + KEYS_ROTATION_PERIOD < std::chrono::system_clock::now();
 }

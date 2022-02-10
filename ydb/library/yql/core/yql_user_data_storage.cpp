@@ -350,7 +350,7 @@ NThreading::TFuture<std::function<TUserDataTable()>> FreezeUserDataTableIfNeeded
         voidFutures.push_back(f.IgnoreResult());
     }
 
-    return NThreading::WaitExceptionOrAll(voidFutures).Apply([files = files, futures = std::move(futures)](NThreading::TFuture<void> f) mutable { 
+    return NThreading::WaitExceptionOrAll(voidFutures).Apply([files = files, futures = std::move(futures)](NThreading::TFuture<void> f) mutable {
         std::function<TUserDataTable()> result = [f, files, futures]() mutable {
             // rethrow exception if any
             f.GetValue();

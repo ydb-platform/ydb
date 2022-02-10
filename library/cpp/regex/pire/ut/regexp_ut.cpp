@@ -8,7 +8,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
 
     Y_UNIT_TEST(False) {
         UNIT_ASSERT(!TMatcher(TFsm::False()).Match("").Final());
-        UNIT_ASSERT(!TMatcher(TFsm::False()).Match(TStringBuf{}).Final()); 
+        UNIT_ASSERT(!TMatcher(TFsm::False()).Match(TStringBuf{}).Final());
     }
 
     Y_UNIT_TEST(Surround) {

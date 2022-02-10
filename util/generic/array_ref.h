@@ -35,39 +35,39 @@ public:
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-    constexpr inline TArrayRef() noexcept 
+    constexpr inline TArrayRef() noexcept
         : T_(nullptr)
         , S_(0)
     {
     }
 
-    constexpr inline TArrayRef(T* data, size_t len) noexcept 
+    constexpr inline TArrayRef(T* data, size_t len) noexcept
         : T_(data)
         , S_(len)
     {
     }
 
-    constexpr inline TArrayRef(T* begin, T* end) noexcept 
+    constexpr inline TArrayRef(T* begin, T* end) noexcept
         : T_(begin)
         , S_(end - begin)
     {
     }
 
-    constexpr inline TArrayRef(std::initializer_list<T> list) noexcept 
+    constexpr inline TArrayRef(std::initializer_list<T> list) noexcept
         : T_(list.begin())
         , S_(list.size())
     {
     }
 
     template <class Container>
-    constexpr inline TArrayRef(Container&& container, decltype(std::declval<T*&>() = container.data(), nullptr) = nullptr) noexcept 
+    constexpr inline TArrayRef(Container&& container, decltype(std::declval<T*&>() = container.data(), nullptr) = nullptr) noexcept
         : T_(container.data())
         , S_(container.size())
     {
     }
 
     template <size_t N>
-    constexpr inline TArrayRef(T (&array)[N]) noexcept 
+    constexpr inline TArrayRef(T (&array)[N]) noexcept
         : T_(array)
         , S_(N)
     {
@@ -250,12 +250,12 @@ TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef) noexcept {
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) { 
+constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) { 
+constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) {
     return TArrayRef<typename Range::value_type>(range);
 }
 
@@ -270,11 +270,11 @@ constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(Range& r
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* data, size_t size) { 
+constexpr TArrayRef<T> MakeArrayRef(T* data, size_t size) {
     return TArrayRef<T>(data, size);
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* begin, T* end) { 
+constexpr TArrayRef<T> MakeArrayRef(T* begin, T* end) {
     return TArrayRef<T>(begin, end);
 }

@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()));
         }
 
-        NThreading::WaitExceptionOrAll(results).Wait(); 
+        NThreading::WaitExceptionOrAll(results).Wait();
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 10);
 
         for (auto& result : results) {
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             }
         }
 
-        NThreading::WaitExceptionOrAll(results).Wait(); 
+        NThreading::WaitExceptionOrAll(results).Wait();
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 10);
 
         for (size_t i = 0; i < results.size(); i++) {
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         }
 
         for (auto& r : results) {
-            NThreading::WaitExceptionOrAll(r).Wait(); 
+            NThreading::WaitExceptionOrAll(r).Wait();
         }
         for (auto& r : results) {
             if (!r.empty()) {

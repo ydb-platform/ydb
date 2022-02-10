@@ -169,9 +169,9 @@ TUtf32String JoinRange(wchar32 delim, const TIter beg, const TIter end) {
 
 template <typename TCharType, typename TContainer>
 inline TBasicString<TCharType> JoinSeq(std::basic_string_view<TCharType> delim, const TContainer& data) {
-    using std::begin; 
-    using std::end; 
-    return JoinRange(delim, begin(data), end(data)); 
+    using std::begin;
+    using std::end;
+    return JoinRange(delim, begin(data), end(data));
 }
 
 template <typename TCharType, typename TContainer>

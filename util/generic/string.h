@@ -134,10 +134,10 @@ public:
         return *this;
     }
 
-    TBasicCharRef& operator=(const TBasicCharRef& other) { 
-        return this->operator=(static_cast<TChar>(other)); 
-    } 
- 
+    TBasicCharRef& operator=(const TBasicCharRef& other) {
+        return this->operator=(static_cast<TChar>(other));
+    }
+
     /*
      * WARN:
      * Though references are copyable types according to the standard,

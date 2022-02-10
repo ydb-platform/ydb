@@ -13,10 +13,10 @@ SRCS(
     wait_any.cpp
 )
 
-PEERDIR( 
-    library/cpp/threading/future 
-) 
- 
+PEERDIR(
+    library/cpp/threading/future
+)
+
 END()
 
 RECURSE_FOR_TESTS(

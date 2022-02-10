@@ -508,11 +508,11 @@ namespace NStringSplitPrivate {
         *dst = src;
     }
 
-    template <class T> 
-    inline void DoFromString(const T& src, decltype(std::ignore)* dst) noexcept { 
-        *dst = src; 
-    } 
- 
+    template <class T>
+    inline void DoFromString(const T& src, decltype(std::ignore)* dst) noexcept {
+        *dst = src;
+    }
+
     template <class Src, class Dst>
     inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const Src& src, Dst* dst) noexcept {
         return ::TryFromString(src, *dst);
@@ -524,12 +524,12 @@ namespace NStringSplitPrivate {
         return true;
     }
 
-    template <class T> 
-    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const T& src, decltype(std::ignore)* dst) noexcept { 
-        *dst = src; 
-        return true; 
-    } 
- 
+    template <class T>
+    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const T& src, decltype(std::ignore)* dst) noexcept {
+        *dst = src;
+        return true;
+    }
+
     /**
      * Consumer that places provided elements into a container. Not using
      * `emplace(iterator)` for efficiency.

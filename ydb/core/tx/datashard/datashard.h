@@ -114,10 +114,10 @@ namespace NDataShard {
             Stored = 1ULL << 42,
             // Operation is waiting for async job to finish
             WaitingForAsyncJob = 1ULL << 43,
-            // Operation must complete before results sending 
-            WaitCompletion = 1ULL << 44, 
+            // Operation must complete before results sending
+            WaitCompletion = 1ULL << 44,
 
-            LastFlag = WaitCompletion, 
+            LastFlag = WaitCompletion,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
@@ -416,21 +416,21 @@ struct TEvDataShard {
             Record.SetFlags(flags);
         }
 
-        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId, 
+        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId, ui32 flags = NDataShard::TTxFlags::Default)
-            : TEvProposeTransaction(txKind, source, txId, txBody, flags) 
-        { 
-            auto &snapshot = *Record.MutableMvccSnapshot(); 
-            snapshot.SetStep(snapshotStep); 
-            snapshot.SetTxId(snapshotTxId); 
-        } 
- 
-        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId, 
+            : TEvProposeTransaction(txKind, source, txId, txBody, flags)
+        {
+            auto &snapshot = *Record.MutableMvccSnapshot();
+            snapshot.SetStep(snapshotStep);
+            snapshot.SetTxId(snapshotTxId);
+        }
+
+        TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const TRowVersion& snapshot, ui32 flags = NDataShard::TTxFlags::Default)
-            : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, flags) 
-        { 
-        } 
- 
+            : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, flags)
+        {
+        }
+
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)

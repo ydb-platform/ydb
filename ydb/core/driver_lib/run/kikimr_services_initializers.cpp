@@ -1037,7 +1037,7 @@ void TLoggerInitializer::InitializeServices(
     setup->LocalServices.push_back(loggerActorPair);
 
     IActor *configurator;
-    if (PathToConfigCacheFile && !appData->FeatureFlags.GetEnableConfigurationCache()) { 
+    if (PathToConfigCacheFile && !appData->FeatureFlags.GetEnableConfigurationCache()) {
         configurator = NConsole::CreateLogSettingsConfigurator(PathToConfigCacheFile);
     } else {
         configurator = NConsole::CreateLogSettingsConfigurator();
@@ -2126,21 +2126,21 @@ void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetu
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TConfigsCacheInitializer::TConfigsCacheInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-    , PathToConfigCacheFile(runConfig.PathToConfigCacheFile) 
-{ 
-} 
- 
-void TConfigsCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
-    if (PathToConfigCacheFile && appData->FeatureFlags.GetEnableConfigurationCache()) { 
-        IActor* actor = NConsole::CreateConfigsCacheActor(PathToConfigCacheFile); 
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
-            NConsole::MakeConfigsCacheActorID(NodeId), 
-            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId))); 
-    } 
-} 
- 
+TConfigsCacheInitializer::TConfigsCacheInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+    , PathToConfigCacheFile(runConfig.PathToConfigCacheFile)
+{
+}
+
+void TConfigsCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (PathToConfigCacheFile && appData->FeatureFlags.GetEnableConfigurationCache()) {
+        IActor* actor = NConsole::CreateConfigsCacheActor(PathToConfigCacheFile);
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+            NConsole::MakeConfigsCacheActorID(NodeId),
+            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
 // TTabletInfoInitializer
 
 TTabletInfoInitializer::TTabletInfoInitializer(const TKikimrRunConfig& runConfig)

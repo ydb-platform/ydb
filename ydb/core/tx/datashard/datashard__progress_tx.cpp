@@ -41,7 +41,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
             // Allow another concurrent progress tx
             Self->PlanQueue.Reset(ctx);
-            Self->Pipeline.ActivateWaitingTxOps(ctx); 
+            Self->Pipeline.ActivateWaitingTxOps(ctx);
 
             ActiveOp = Self->Pipeline.GetNextActiveOp(false);
             if (!ActiveOp) {
@@ -132,7 +132,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
     }
 
     Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx); 
+    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 }}

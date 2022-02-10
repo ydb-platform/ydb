@@ -26,8 +26,8 @@ struct TEngineHostCounters {
     ui64 UpdateRowBytes = 0;
     ui64 EraseRowBytes = 0;
 
-    ui64 InvisibleRowSkips = 0; 
- 
+    ui64 InvisibleRowSkips = 0;
+
     TEngineHostCounters& operator+=(const TEngineHostCounters& other) {
         NSelectRow += other.NSelectRow;
         NSelectRange += other.NSelectRange;
@@ -57,7 +57,7 @@ struct TEngineHostCounters {
             << ", UpdateRowBytes: " << UpdateRowBytes
             << ", EraseRowBytes: " << EraseRowBytes
             << ", SelectRangeDeletedRowSkips: " << SelectRangeDeletedRowSkips
-            << ", InvisibleRowSkips: " << InvisibleRowSkips 
+            << ", InvisibleRowSkips: " << InvisibleRowSkips
             << "}";
     }
 };
@@ -124,9 +124,9 @@ public:
 
     TEngineHostCounters& GetCounters() const { return Counters; }
 
-    virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0; 
-    virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0; 
- 
+    virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0;
+    virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0;
+
     virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0;
 
 protected:
@@ -151,11 +151,11 @@ public:
         Y_UNUSED(tableId);
         return TRowVersion::Min();
     }
- 
-    TRowVersion GetReadVersion(const TTableId& tableId) const override { 
-        Y_UNUSED(tableId); 
-        return TRowVersion::Max(); 
-    } 
+
+    TRowVersion GetReadVersion(const TTableId& tableId) const override {
+        Y_UNUSED(tableId);
+        return TRowVersion::Max();
+    }
 
     IChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
         Y_UNUSED(tableId);

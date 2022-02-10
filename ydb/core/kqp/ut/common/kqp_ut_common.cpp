@@ -105,7 +105,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
-    ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout); 
+    ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
     ServerSettings->SetEnableNotNullColumns(true);
@@ -170,17 +170,17 @@ TKikimrRunner::TKikimrRunner(const TString& authToken, const TString& domainRoot
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
 
-void TKikimrRunner::CreateSampleTables() { 
-    Client->CreateTable("/Root", R"( 
+void TKikimrRunner::CreateSampleTables() {
+    Client->CreateTable("/Root", R"(
         Name: "TwoShard"
         Columns { Name: "Key", Type: "Uint32" }
         Columns { Name: "Value1", Type: "String" }
         Columns { Name: "Value2", Type: "Int32" }
         KeyColumnNames: ["Key"]
         UniformPartitionsCount: 2
-    )"); 
+    )");
 
-    Client->CreateTable("/Root", R"( 
+    Client->CreateTable("/Root", R"(
         Name: "EightShard"
         Columns { Name: "Key", Type: "Uint64" }
         Columns { Name: "Text", Type: "String" }
@@ -193,9 +193,9 @@ void TKikimrRunner::CreateSampleTables() {
         SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 500 } } } }
         SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 600 } } } }
         SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 700 } } } }
-    )"); 
+    )");
 
-    Client->CreateTable("/Root", R"( 
+    Client->CreateTable("/Root", R"(
         Name: "Logs"
         Columns { Name: "App", Type: "Utf8" }
         Columns { Name: "Message", Type: "Utf8" }
@@ -204,9 +204,9 @@ void TKikimrRunner::CreateSampleTables() {
         KeyColumnNames: ["App", "Ts", "Host"],
         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "a" } } } }
         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "b" } } } }
-    )"); 
+    )");
 
-    Client->CreateTable("/Root", R"( 
+    Client->CreateTable("/Root", R"(
         Name: "BatchUpload"
         Columns {
             Name: "Key1"
@@ -234,7 +234,7 @@ void TKikimrRunner::CreateSampleTables() {
         }
         KeyColumnNames: ["Key1", "Key2"]
         UniformPartitionsCount: 10
-    )"); 
+    )");
 
     // TODO: Reuse driver (YDB-626)
     NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root"));
@@ -372,7 +372,7 @@ void TKikimrRunner::CreateSampleTables() {
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
- 
+
 }
 
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
@@ -405,7 +405,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     NKikimr::NKqp::WaitForKqpProxyInit(GetDriver());
 
     if (settings.WithSampleTables) {
-        CreateSampleTables(); 
+        CreateSampleTables();
     }
 }
 

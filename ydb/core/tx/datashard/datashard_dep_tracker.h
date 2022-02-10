@@ -52,40 +52,40 @@ private:
         TRangeTreap<TOperation::TPtr, TOperationPtrTraits> ImmediateWrites;
     };
 
-    struct TDependencyTrackingLogic { 
-        TDependencyTracker& Parent; 
- 
-        explicit TDependencyTrackingLogic(TDependencyTracker& parent) 
-            : Parent(parent) {} 
- 
-        // Adds operation to the tracker 
-        virtual void AddOperation(const TOperation::TPtr& op) const noexcept = 0; 
- 
-        // Removes operation from the tracker, no future operations may conflict with it 
-        virtual void RemoveOperation(const TOperation::TPtr& op) const noexcept = 0; 
-    }; 
- 
-    struct TDefaultDependencyTrackingLogic : public TDependencyTrackingLogic { 
-        explicit TDefaultDependencyTrackingLogic(TDependencyTracker& parent) 
-            : TDependencyTrackingLogic(parent) {} 
- 
-        void AddOperation(const TOperation::TPtr& op) const noexcept override; 
-        void RemoveOperation(const TOperation::TPtr& op) const noexcept override; 
-    }; 
- 
-    struct TMvccDependencyTrackingLogic : public TDependencyTrackingLogic { 
-        explicit TMvccDependencyTrackingLogic(TDependencyTracker& parent) 
-            : TDependencyTrackingLogic(parent) {} 
- 
-        void AddOperation(const TOperation::TPtr& op) const noexcept override; 
-        void RemoveOperation(const TOperation::TPtr& op) const noexcept override; 
-    }; 
- 
+    struct TDependencyTrackingLogic {
+        TDependencyTracker& Parent;
+
+        explicit TDependencyTrackingLogic(TDependencyTracker& parent)
+            : Parent(parent) {}
+
+        // Adds operation to the tracker
+        virtual void AddOperation(const TOperation::TPtr& op) const noexcept = 0;
+
+        // Removes operation from the tracker, no future operations may conflict with it
+        virtual void RemoveOperation(const TOperation::TPtr& op) const noexcept = 0;
+    };
+
+    struct TDefaultDependencyTrackingLogic : public TDependencyTrackingLogic {
+        explicit TDefaultDependencyTrackingLogic(TDependencyTracker& parent)
+            : TDependencyTrackingLogic(parent) {}
+
+        void AddOperation(const TOperation::TPtr& op) const noexcept override;
+        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
+    };
+
+    struct TMvccDependencyTrackingLogic : public TDependencyTrackingLogic {
+        explicit TMvccDependencyTrackingLogic(TDependencyTracker& parent)
+            : TDependencyTrackingLogic(parent) {}
+
+        void AddOperation(const TOperation::TPtr& op) const noexcept override;
+        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
+    };
+
 public:
     TDependencyTracker(TDataShard* self)
         : Self(self)
-        , DefaultLogic(*this) 
-        , MvccLogic(*this) 
+        , DefaultLogic(*this)
+        , MvccLogic(*this)
     { }
 
 public:
@@ -96,14 +96,14 @@ public:
     void RemoveSchema(const TPathId& tableId) noexcept;
 
     // Adds operation to the tracker
-    void AddOperation(const TOperation::TPtr& op) noexcept { 
-        GetTrackingLogic().AddOperation(op); 
-    } 
+    void AddOperation(const TOperation::TPtr& op) noexcept {
+        GetTrackingLogic().AddOperation(op);
+    }
 
     // Removes operation from the tracker, no future operations may conflict with it
-    void RemoveOperation(const TOperation::TPtr& op) noexcept { 
-        GetTrackingLogic().RemoveOperation(op); 
-    } 
+    void RemoveOperation(const TOperation::TPtr& op) noexcept {
+        GetTrackingLogic().RemoveOperation(op);
+    }
 
 private:
     void ClearTmpRead() noexcept;
@@ -119,8 +119,8 @@ private:
     void FlushImmediateReads() noexcept;
     void FlushImmediateWrites() noexcept;
 
-    const TDependencyTrackingLogic& GetTrackingLogic() const noexcept; 
- 
+    const TDependencyTrackingLogic& GetTrackingLogic() const noexcept;
+
 private:
     TDataShard* Self;
     // Temporary vectors for building dependencies
@@ -149,9 +149,9 @@ private:
     TIntrusiveList<TOperationDelayedReadListItem> DelayedImmediateReads;
     TIntrusiveList<TOperationDelayedWriteListItem> DelayedPlannedWrites;
     TIntrusiveList<TOperationDelayedWriteListItem> DelayedImmediateWrites;
- 
-    const TDefaultDependencyTrackingLogic DefaultLogic; 
-    const TMvccDependencyTrackingLogic MvccLogic; 
+
+    const TDefaultDependencyTrackingLogic DefaultLogic;
+    const TMvccDependencyTrackingLogic MvccLogic;
 };
 
 } // namespace NDataShard

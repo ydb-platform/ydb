@@ -72,17 +72,17 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         bool extended = false;
 
         const bool mvcc = DataShard.IsMvccEnabled();
- 
-        TRowVersion minVersion = mvcc ? TRowVersion(op->GetStep(), op->GetTxId()).Next() 
-                                      : DataShard.GetSnapshotManager().GetMinWriteVersion(); 
-        TRowVersion completeEdge = mvcc ? DataShard.GetSnapshotManager().GetCompleteEdge() 
-                                    : TRowVersion::Min(); 
-        TRowVersion incompleteEdge = mvcc ? DataShard.GetSnapshotManager().GetIncompleteEdge() 
-                                     : TRowVersion::Min(); 
-        TRowVersion lowWatermark = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() : 
-                                   TRowVersion::Min(); 
- 
-        if (minVersion || completeEdge || incompleteEdge || lowWatermark) 
+
+        TRowVersion minVersion = mvcc ? TRowVersion(op->GetStep(), op->GetTxId()).Next()
+                                      : DataShard.GetSnapshotManager().GetMinWriteVersion();
+        TRowVersion completeEdge = mvcc ? DataShard.GetSnapshotManager().GetCompleteEdge()
+                                    : TRowVersion::Min();
+        TRowVersion incompleteEdge = mvcc ? DataShard.GetSnapshotManager().GetIncompleteEdge()
+                                     : TRowVersion::Min();
+        TRowVersion lowWatermark = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() :
+                                   TRowVersion::Min();
+
+        if (minVersion || completeEdge || incompleteEdge || lowWatermark)
             extended = true; // Must use an extended format
 
         if (extended) {
@@ -95,26 +95,26 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
             // TODO: make it possible to send multiple tables
             rs.SetBorrowedSnapshot(compressedBody);
 
-            if (minVersion) { 
-                rs.SetMinWriteVersionStep(minVersion.Step); 
-                rs.SetMinWriteVersionTxId(minVersion.TxId); 
-            } 
- 
-            if (completeEdge) { 
-                rs.SetMvccCompleteEdgeStep(completeEdge.Step); 
-                rs.SetMvccCompleteEdgeTxId(completeEdge.TxId); 
-            } 
- 
-            if (incompleteEdge) { 
-                rs.SetMvccIncompleteEdgeStep(incompleteEdge.Step); 
-                rs.SetMvccIncompleteEdgeTxId(incompleteEdge.TxId); 
-            } 
- 
-            if (lowWatermark) { 
-                rs.SetMvccLowWatermarkStep(lowWatermark.Step); 
-                rs.SetMvccLowWatermarkTxId(lowWatermark.TxId); 
-            } 
- 
+            if (minVersion) {
+                rs.SetMinWriteVersionStep(minVersion.Step);
+                rs.SetMinWriteVersionTxId(minVersion.TxId);
+            }
+
+            if (completeEdge) {
+                rs.SetMvccCompleteEdgeStep(completeEdge.Step);
+                rs.SetMvccCompleteEdgeTxId(completeEdge.TxId);
+            }
+
+            if (incompleteEdge) {
+                rs.SetMvccIncompleteEdgeStep(incompleteEdge.Step);
+                rs.SetMvccIncompleteEdgeTxId(incompleteEdge.TxId);
+            }
+
+            if (lowWatermark) {
+                rs.SetMvccLowWatermarkStep(lowWatermark.Step);
+                rs.SetMvccLowWatermarkTxId(lowWatermark.TxId);
+            }
+
             rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong());
             rsBody.append(SnapshotTransferReadSetMagic);
             Y_PROTOBUF_SUPPRESS_NODISCARD rs.AppendToString(&rsBody);

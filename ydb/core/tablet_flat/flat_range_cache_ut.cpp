@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
         // Empty default config
         TKeyRangeCache cache(*nulls, { });
         // Empty keys, both inclusive
-        TKeyRangeEntry entry({ }, { }, true, true, TRowVersion::Min()); 
+        TKeyRangeEntry entry({ }, { }, true, true, TRowVersion::Min());
         // This will allocate a single node in the map
         cache.Add(entry);
         // This should be the size of that single node

@@ -302,16 +302,16 @@ public:
         return WriteVersion;
     }
 
-    void SetReadVersion(TRowVersion readVersion) { 
-        ReadVersion = readVersion; 
-    } 
- 
-    TRowVersion GetReadVersion(const TTableId& tableId) const override { 
-        Y_UNUSED(tableId); 
-        Y_VERIFY(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set"); 
-        return ReadVersion; 
-    } 
- 
+    void SetReadVersion(TRowVersion readVersion) {
+        ReadVersion = readVersion;
+    }
+
+    TRowVersion GetReadVersion(const TTableId& tableId) const override {
+        Y_UNUSED(tableId);
+        Y_VERIFY(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set");
+        return ReadVersion;
+    }
+
     void SetIsImmediateTx() {
         IsImmediateTx = true;
     }
@@ -502,7 +502,7 @@ private:
     bool IsImmediateTx = false;
     TInstant Now;
     TRowVersion WriteVersion = TRowVersion::Max();
-    TRowVersion ReadVersion = TRowVersion::Min(); 
+    TRowVersion ReadVersion = TRowVersion::Min();
     mutable THashMap<TTableId, THolder<IChangeCollector>> ChangeCollectors;
 };
 
@@ -646,16 +646,16 @@ void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {
     host->SetWriteVersion(writeVersion);
 }
 
-void TEngineBay::SetReadVersion(TRowVersion readVersion) { 
-    Y_VERIFY(EngineHost); 
- 
+void TEngineBay::SetReadVersion(TRowVersion readVersion) {
+    Y_VERIFY(EngineHost);
+
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    host->SetReadVersion(readVersion); 
- 
-    Y_VERIFY(ComputeCtx); 
-    ComputeCtx->SetReadVersion(readVersion); 
-} 
- 
+    host->SetReadVersion(readVersion);
+
+    Y_VERIFY(ComputeCtx);
+    ComputeCtx->SetReadVersion(readVersion);
+}
+
 void TEngineBay::SetIsImmediateTx() {
     Y_VERIFY(EngineHost);
 

@@ -39,14 +39,14 @@ namespace {
                 range.InclusiveTo || !range.To);
         }
     }
- 
+
     bool IsLess(const TOperation& a, const TRowVersion& b) {
         return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() < b.TxId);
     }
 
     bool IsLessEqual(const TOperation& a, const TRowVersion& b) {
-        return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() <= b.TxId); 
-    } 
+        return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() <= b.TxId);
+    }
 }
 
 void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept {
@@ -137,14 +137,14 @@ void TDependencyTracker::FlushImmediateWrites() noexcept {
     }
 }
 
-const TDependencyTracker::TDependencyTrackingLogic& TDependencyTracker::GetTrackingLogic() const noexcept { 
+const TDependencyTracker::TDependencyTrackingLogic& TDependencyTracker::GetTrackingLogic() const noexcept {
     if (Self->IsMvccEnabled())
-        return MvccLogic; 
- 
-    return DefaultLogic; 
-} 
- 
-void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept { 
+        return MvccLogic;
+
+    return DefaultLogic;
+}
+
+void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept {
     if (op->IsUsingSnapshot()) {
         return;
     }
@@ -164,10 +164,10 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
 
     // Non-immediate snapshot operations cannot be reordered
     if (!op->IsImmediate() && op->IsSnapshotTx()) {
-        if (Parent.LastSnapshotOp) { 
-            op->AddDependency(Parent.LastSnapshotOp); 
+        if (Parent.LastSnapshotOp) {
+            op->AddDependency(Parent.LastSnapshotOp);
         }
-        Parent.LastSnapshotOp = op; 
+        Parent.LastSnapshotOp = op;
     }
 
     // First pass, gather all reads/writes expanded with locks, add lock based dependencies
@@ -179,7 +179,7 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
         const auto& locksCache = op->LocksCache();
         for (const auto& vk : keysInfo.Keys) {
             const auto& k = *vk.Key;
-            if (Parent.Self->IsUserTable(k.TableId)) { 
+            if (Parent.Self->IsUserTable(k.TableId)) {
                 const ui64 tableId = k.TableId.PathId.LocalPathId;
                 if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) {
                     tooManyKeys = true;
@@ -187,20 +187,20 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                 if (vk.IsWrite) {
                     haveWrites = true;
                     if (!tooManyKeys && !isGlobalWriter) {
-                        Parent.TmpWrite.emplace_back(tableId, k.Range); 
+                        Parent.TmpWrite.emplace_back(tableId, k.Range);
                     }
                 } else {
                     haveReads = true;
                     if (!tooManyKeys && !isGlobalReader) {
-                        Parent.TmpRead.emplace_back(tableId, k.Range); 
+                        Parent.TmpRead.emplace_back(tableId, k.Range);
                     }
                 }
             } else if (TSysTables::IsLocksTable(k.TableId)) {
                 Y_VERIFY(k.Range.Point, "Unexpected non-point read from the locks table");
-                const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From); 
+                const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From);
 
                 // Add hard dependency on all operations that worked with the same lock
-                auto& lastLockOp = Parent.LastLockOps[lockTxId]; 
+                auto& lastLockOp = Parent.LastLockOps[lockTxId];
                 if (lastLockOp != op) {
                     op->AddAffectedLock(lockTxId);
                     if (lastLockOp) {
@@ -217,7 +217,7 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                         // now we cannot know which keys it translated to, and
                         // have to assume "whole shard" worst case.
                         isGlobalReader = true;
-                    } else if (auto it = Parent.Locks.find(lockTxId); it != Parent.Locks.end()) { 
+                    } else if (auto it = Parent.Locks.find(lockTxId); it != Parent.Locks.end()) {
                         haveReads = true;
                         if (!tooManyKeys && (keysCount += it->second.Keys.size()) > MAX_REORDER_TX_KEYS) {
                             tooManyKeys = true;
@@ -226,11 +226,11 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                             if (it->second.WholeShard) {
                                 isGlobalReader = true;
                             } else {
-                                Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end()); 
+                                Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end());
                             }
                         }
-                    } else if (auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId)) { 
-                        Y_ASSERT(!lock->IsBroken()); 
+                    } else if (auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId)) {
+                        Y_ASSERT(!lock->IsBroken());
                         haveReads = true;
                         if (!tooManyKeys && (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) {
                             tooManyKeys = true;
@@ -262,12 +262,12 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
         }
 
         if (haveReads && isGlobalReader) {
-            Parent.ClearTmpRead(); 
+            Parent.ClearTmpRead();
             haveReads = false;
         }
 
         if (haveWrites && isGlobalWriter) {
-            Parent.ClearTmpWrite(); 
+            Parent.ClearTmpWrite();
             haveWrites = false;
         }
     }
@@ -288,37 +288,37 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
     if (isGlobalWriter) {
         // We are potentially writing to all keys in all tables, thus we conflict with everything
         if (op->IsImmediate()) {
-            for (auto& item : Parent.AllPlannedReaders) { 
+            for (auto& item : Parent.AllPlannedReaders) {
                 TOperation::From(item)->AddImmediateConflict(op);
             }
-            for (auto& item : Parent.AllPlannedWriters) { 
+            for (auto& item : Parent.AllPlannedWriters) {
                 TOperation::From(item)->AddImmediateConflict(op);
             }
         } else {
-            for (auto& item : Parent.AllPlannedReaders) { 
+            for (auto& item : Parent.AllPlannedReaders) {
                 op->AddDependency(TOperation::From(item));
             }
-            for (auto& item : Parent.AllPlannedWriters) { 
+            for (auto& item : Parent.AllPlannedWriters) {
                 op->AddDependency(TOperation::From(item));
             }
-            for (auto& item : Parent.AllImmediateReaders) { 
+            for (auto& item : Parent.AllImmediateReaders) {
                 op->AddImmediateConflict(TOperation::From(item));
             }
-            for (auto& item : Parent.AllImmediateWriters) { 
+            for (auto& item : Parent.AllImmediateWriters) {
                 op->AddImmediateConflict(TOperation::From(item));
             }
         }
     } else {
         if (haveWrites) {
             // Each write may conflict with previous reads or writes
-            Parent.FlushPlannedReads(); 
-            Parent.FlushPlannedWrites(); 
+            Parent.FlushPlannedReads();
+            Parent.FlushPlannedWrites();
             if (!op->IsImmediate()) {
-                Parent.FlushImmediateReads(); 
-                Parent.FlushImmediateWrites(); 
+                Parent.FlushImmediateReads();
+                Parent.FlushImmediateWrites();
             }
-            for (const auto& write : Parent.TmpWrite) { 
-                if (auto it = Parent.Tables.find(write.TableId); it != Parent.Tables.end()) { 
+            for (const auto& write : Parent.TmpWrite) {
+                if (auto it = Parent.Tables.find(write.TableId); it != Parent.Tables.end()) {
                     auto searchRange = MakeSearchRange(write.Key);
                     if (op->IsImmediate()) {
                         it->second.PlannedReads.EachIntersection(searchRange, processImmediatePlanned);
@@ -334,23 +334,23 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
 
             // If we have any reads we conflict with global reads or writes
             if (op->IsImmediate()) {
-                for (auto& item : Parent.GlobalPlannedReaders) { 
+                for (auto& item : Parent.GlobalPlannedReaders) {
                     TOperation::From(item)->AddImmediateConflict(op);
                 }
-                for (auto& item : Parent.GlobalPlannedWriters) { 
+                for (auto& item : Parent.GlobalPlannedWriters) {
                     TOperation::From(item)->AddImmediateConflict(op);
                 }
             } else {
-                for (auto& item : Parent.GlobalPlannedReaders) { 
+                for (auto& item : Parent.GlobalPlannedReaders) {
                     op->AddDependency(TOperation::From(item));
                 }
-                for (auto& item : Parent.GlobalPlannedWriters) { 
+                for (auto& item : Parent.GlobalPlannedWriters) {
                     op->AddDependency(TOperation::From(item));
                 }
-                for (auto& item : Parent.GlobalImmediateReaders) { 
+                for (auto& item : Parent.GlobalImmediateReaders) {
                     op->AddImmediateConflict(TOperation::From(item));
                 }
-                for (auto& item : Parent.GlobalImmediateWriters) { 
+                for (auto& item : Parent.GlobalImmediateWriters) {
                     op->AddImmediateConflict(TOperation::From(item));
                 }
             }
@@ -359,25 +359,25 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
         if (isGlobalReader) {
             // We are potentially reading all keys in all tables, thus we conflict with all writes
             if (op->IsImmediate()) {
-                for (auto& item : Parent.AllPlannedWriters) { 
+                for (auto& item : Parent.AllPlannedWriters) {
                     TOperation::From(item)->AddImmediateConflict(op);
                 }
             } else {
-                for (auto& item : Parent.AllPlannedWriters) { 
+                for (auto& item : Parent.AllPlannedWriters) {
                     op->AddDependency(TOperation::From(item));
                 }
-                for (auto& item : Parent.AllImmediateWriters) { 
+                for (auto& item : Parent.AllImmediateWriters) {
                     op->AddImmediateConflict(TOperation::From(item));
                 }
             }
         } else if (haveReads) {
             // Each read may conflict with previous writes
-            Parent.FlushPlannedWrites(); 
+            Parent.FlushPlannedWrites();
             if (!op->IsImmediate()) {
-                Parent.FlushImmediateWrites(); 
+                Parent.FlushImmediateWrites();
             }
-            for (const auto& read : Parent.TmpRead) { 
-                if (auto it = Parent.Tables.find(read.TableId); it != Parent.Tables.end()) { 
+            for (const auto& read : Parent.TmpRead) {
+                if (auto it = Parent.Tables.find(read.TableId); it != Parent.Tables.end()) {
                     auto searchRange = MakeSearchRange(read.Key);
                     if (op->IsImmediate()) {
                         it->second.PlannedWrites.EachIntersection(searchRange, processImmediatePlanned);
@@ -392,14 +392,14 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
             // But if we also have writes, then we already added them above
             if (!haveWrites) {
                 if (op->IsImmediate()) {
-                    for (auto& item : Parent.GlobalPlannedWriters) { 
+                    for (auto& item : Parent.GlobalPlannedWriters) {
                         TOperation::From(item)->AddImmediateConflict(op);
                     }
                 } else {
-                    for (auto& item : Parent.GlobalPlannedWriters) { 
+                    for (auto& item : Parent.GlobalPlannedWriters) {
                         op->AddDependency(TOperation::From(item));
                     }
-                    for (auto& item : Parent.GlobalImmediateWriters) { 
+                    for (auto& item : Parent.GlobalImmediateWriters) {
                         op->AddImmediateConflict(TOperation::From(item));
                     }
                 }
@@ -412,49 +412,49 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
         // Global writer transactions conflict with everything, so we only add them once
         // If it op is also is global reader it is shadowed by being a global writer
         if (op->IsImmediate()) {
-            Parent.GlobalImmediateWriters.PushBack(op.Get()); 
+            Parent.GlobalImmediateWriters.PushBack(op.Get());
         } else {
-            Parent.GlobalPlannedWriters.PushBack(op.Get()); 
+            Parent.GlobalPlannedWriters.PushBack(op.Get());
         }
     } else {
         if (haveWrites) {
             if (op->IsImmediate()) {
                 if (DelayImmediateRanges) {
-                    op->SetDelayedKnownWrites(Parent.TmpWrite); 
-                    Parent.DelayedImmediateWrites.PushBack(op.Get()); 
+                    op->SetDelayedKnownWrites(Parent.TmpWrite);
+                    Parent.DelayedImmediateWrites.PushBack(op.Get());
                 } else {
-                    Parent.AddImmediateWrites(op, Parent.TmpWrite); 
+                    Parent.AddImmediateWrites(op, Parent.TmpWrite);
                 }
             } else {
                 if (DelayPlannedRanges) {
-                    op->SetDelayedKnownWrites(Parent.TmpWrite); 
-                    Parent.DelayedPlannedWrites.PushBack(op.Get()); 
+                    op->SetDelayedKnownWrites(Parent.TmpWrite);
+                    Parent.DelayedPlannedWrites.PushBack(op.Get());
                 } else {
-                    Parent.AddPlannedWrites(op, Parent.TmpWrite); 
+                    Parent.AddPlannedWrites(op, Parent.TmpWrite);
                 }
             }
         }
 
         if (isGlobalReader) {
             if (op->IsImmediate()) {
-                Parent.GlobalImmediateReaders.PushBack(op.Get()); 
+                Parent.GlobalImmediateReaders.PushBack(op.Get());
             } else {
-                Parent.GlobalPlannedReaders.PushBack(op.Get()); 
+                Parent.GlobalPlannedReaders.PushBack(op.Get());
             }
         } else if (haveReads) {
             if (op->IsImmediate()) {
                 if (DelayImmediateRanges) {
-                    op->SetDelayedKnownReads(Parent.TmpRead); 
-                    Parent.DelayedImmediateReads.PushBack(op.Get()); 
+                    op->SetDelayedKnownReads(Parent.TmpRead);
+                    Parent.DelayedImmediateReads.PushBack(op.Get());
                 } else {
-                    Parent.AddImmediateReads(op, Parent.TmpRead); 
+                    Parent.AddImmediateReads(op, Parent.TmpRead);
                 }
             } else {
                 if (DelayPlannedRanges) {
-                    op->SetDelayedKnownReads(Parent.TmpRead); 
-                    Parent.DelayedPlannedReads.PushBack(op.Get()); 
+                    op->SetDelayedKnownReads(Parent.TmpRead);
+                    Parent.DelayedPlannedReads.PushBack(op.Get());
                 } else {
-                    Parent.AddPlannedReads(op, Parent.TmpRead); 
+                    Parent.AddPlannedReads(op, Parent.TmpRead);
                 }
             }
         }
@@ -462,21 +462,21 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
 
     if (isGlobalWriter || haveWrites) {
         if (op->IsImmediate()) {
-            Parent.AllImmediateWriters.PushBack(op.Get()); 
+            Parent.AllImmediateWriters.PushBack(op.Get());
         } else {
-            Parent.AllPlannedWriters.PushBack(op.Get()); 
+            Parent.AllPlannedWriters.PushBack(op.Get());
         }
     } else if (isGlobalReader || haveReads) {
         if (op->IsImmediate()) {
-            Parent.AllImmediateReaders.PushBack(op.Get()); 
+            Parent.AllImmediateReaders.PushBack(op.Get());
         } else {
-            Parent.AllPlannedReaders.PushBack(op.Get()); 
+            Parent.AllPlannedReaders.PushBack(op.Get());
         }
     }
 
     if (const ui64 lockTxId = op->LockTxId()) {
         // Add hard dependency on all operations that worked with the same lock
-        auto& lastLockOp = Parent.LastLockOps[lockTxId]; 
+        auto& lastLockOp = Parent.LastLockOps[lockTxId];
         if (lastLockOp != op) {
             op->AddAffectedLock(lockTxId);
             if (lastLockOp) {
@@ -487,7 +487,7 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
 
         // Update lock state with worst case prediction
         if (isGlobalReader) {
-            auto& lockState = Parent.Locks[lockTxId]; 
+            auto& lockState = Parent.Locks[lockTxId];
             if (!lockState.Initialized) {
                 lockState.WholeShard = true;
                 lockState.Initialized = true;
@@ -496,9 +496,9 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                 lockState.WholeShard = true;
             }
         } else if (haveReads) {
-            auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId); 
-            Y_ASSERT(!lock || !lock->IsBroken()); 
-            auto& lockState = Parent.Locks[lockTxId]; 
+            auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId);
+            Y_ASSERT(!lock || !lock->IsBroken());
+            auto& lockState = Parent.Locks[lockTxId];
             if (!lockState.Initialized) {
                 if (lock) {
                     if (lock->IsBroken()) {
@@ -515,465 +515,32 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                     }
                 }
                 lockState.Initialized = true;
-            } 
-            if (!lockState.WholeShard && !lockState.Broken) { 
-                lockState.Keys.insert(lockState.Keys.end(), Parent.TmpRead.begin(), Parent.TmpRead.end()); 
-            } 
-        } 
-    } 
- 
-    if (haveReads) { 
-        Parent.ClearTmpRead(); 
-    } 
- 
-    if (haveWrites) { 
-        Parent.ClearTmpWrite(); 
-    } 
-} 
- 
-void TDependencyTracker::TDefaultDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept { 
-    if (Parent.LastSnapshotOp == op) { 
-        Parent.LastSnapshotOp = nullptr; 
-    } 
- 
-    for (ui64 lockTxId : op->GetAffectedLocks()) { 
-        auto it = Parent.LastLockOps.find(lockTxId); 
-        if (it != Parent.LastLockOps.end() && it->second == op) { 
-            Parent.Locks.erase(lockTxId); 
-            Parent.LastLockOps.erase(it); 
-        } 
-    } 
- 
-    TOperationAllListItem* allListItem = op.Get(); 
-    TOperationGlobalListItem* globalListItem = op.Get(); 
-    TOperationDelayedReadListItem* delayedReadListItem = op.Get(); 
-    TOperationDelayedWriteListItem* delayedWriteListItem = op.Get(); 
- 
-    allListItem->Unlink(); 
-    globalListItem->Unlink(); 
- 
-    if (!delayedReadListItem->Empty()) { 
-        delayedReadListItem->Unlink(); 
-        op->RemoveDelayedKnownReads(); 
-    } else { 
-        for (auto& kv : Parent.Tables) { 
-            if (op->IsImmediate()) { 
-                kv.second.ImmediateReads.RemoveRanges(op); 
-            } else { 
-                kv.second.PlannedReads.RemoveRanges(op); 
-            } 
-        } 
-    } 
- 
-    if (!delayedWriteListItem->Empty()) { 
-        delayedWriteListItem->Unlink(); 
-        op->RemoveDelayedKnownWrites(); 
-    } else { 
-        for (auto& kv : Parent.Tables) { 
-            if (op->IsImmediate()) { 
-                kv.second.ImmediateWrites.RemoveRanges(op); 
-            } else { 
-                kv.second.PlannedWrites.RemoveRanges(op); 
-            } 
-        } 
-    } 
-} 
- 
-void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept { 
-    if (op->IsUsingSnapshot()) { 
-        return; 
-    } 
- 
-    // WARNING: kqp scan transactions don't have known keys, that means 
-    // we must assume they are global reader and must be careful not to 
-    // look into extracted keys for these transactions. 
-    bool haveKeys = !op->IsKqpScanTransaction(); 
- 
-    bool isGlobalReader = op->IsGlobalReader(); 
-    bool isGlobalWriter = op->IsGlobalWriter(); 
- 
-    bool tooManyKeys = false; 
-    if (haveKeys && op->KeysCount() > MAX_REORDER_TX_KEYS) { 
-        tooManyKeys = true; 
-    } 
- 
-    // Non-immediate snapshot operations cannot be reordered 
-    if (!op->IsImmediate() && op->IsSnapshotTx()) { 
-        if (Parent.LastSnapshotOp) { 
-            op->AddDependency(Parent.LastSnapshotOp); 
-        } 
-        Parent.LastSnapshotOp = op; 
-    } 
- 
-    // We use an optimistic readVersion assuming this transaction is read-only.
-    // If it happens that this transaction is not read-only we would include
-    // some locked keys in conflicts that are actually broken, but it's not
-    // a problem.
-    TRowVersion readVersion = Parent.Self->GetMvccTxVersion(EMvccTxMode::ReadOnly, op.Get());
- 
-    // First pass, gather all reads/writes expanded with locks, add lock based dependencies 
-    bool haveReads = false; 
-    bool haveWrites = false; 
-    if (haveKeys) { 
-        size_t keysCount = 0; 
-        const auto& keysInfo = op->GetKeysInfo(); 
-        const auto& locksCache = op->LocksCache(); 
-        for (const auto& vk : keysInfo.Keys) { 
-            const auto& k = *vk.Key; 
-            if (Parent.Self->IsUserTable(k.TableId)) { 
-                const ui64 tableId = k.TableId.PathId.LocalPathId; 
-                if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) { 
-                    tooManyKeys = true; 
-                }
-                if (vk.IsWrite) { 
-                    haveWrites = true; 
-                    if (!tooManyKeys && !isGlobalWriter) { 
-                        Parent.TmpWrite.emplace_back(tableId, k.Range); 
-                    } 
-                } else { 
-                    haveReads = true; 
-                    if (!tooManyKeys && !isGlobalReader) { 
-                        Parent.TmpRead.emplace_back(tableId, k.Range); 
-                    } 
-                } 
-            } else if (TSysTables::IsLocksTable(k.TableId)) { 
-                Y_VERIFY(k.Range.Point, "Unexpected non-point read from the locks table"); 
-                const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From); 
- 
-                // Add hard dependency on all operations that worked with the same lock 
-                auto& lastLockOp = Parent.LastLockOps[lockTxId]; 
-                if (lastLockOp != op) { 
-                    op->AddAffectedLock(lockTxId); 
-                    if (lastLockOp) { 
-                        op->AddDependency(lastLockOp); 
-                    } 
-                    lastLockOp = op; 
-                } 
- 
-                // Reading a lock means checking it for validity, i.e. "reading" those predicted keys 
-                if (!vk.IsWrite) { 
-                    if (auto it = locksCache.Locks.find(lockTxId); it != locksCache.Locks.end()) { 
-                        // This transaction uses locks cache, so lock check 
-                        // outcome was persisted and restored. Unfortunately 
-                        // now we cannot know which keys it translated to, and 
-                        // have to assume "whole shard" worst case. 
-                        isGlobalReader = true; 
-                    } else if (auto it = Parent.Locks.find(lockTxId); it != Parent.Locks.end()) { 
-                        haveReads = true; 
-                        if (!tooManyKeys && (keysCount += it->second.Keys.size()) > MAX_REORDER_TX_KEYS) { 
-                            tooManyKeys = true; 
-                        } 
-                        if (!tooManyKeys && !isGlobalReader) { 
-                            if (it->second.WholeShard) { 
-                                isGlobalReader = true; 
-                            } else { 
-                                Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end()); 
-                            } 
-                        } 
-                    } else if (auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion)) { 
-                        Y_ASSERT(!lock->IsBroken(readVersion)); 
-                        haveReads = true; 
-                        if (!tooManyKeys && (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) { 
-                            tooManyKeys = true; 
-                        } 
-                        if (!tooManyKeys && !isGlobalReader) { 
-                            if (lock->IsShardLock()) { 
-                                isGlobalReader = true; 
-                            } else { 
-                                for (const auto& point : lock->GetPoints()) { 
-                                    Parent.TmpRead.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
-                                } 
-                                for (const auto& range : lock->GetRanges()) { 
-                                    Parent.TmpRead.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
-                                } 
-                            } 
-                        } 
-                    } 
-                } 
             }
-        } 
- 
-        if (tooManyKeys) { 
-            if (haveReads) { 
-                isGlobalReader = true; 
-            } 
-            if (haveWrites) { 
-                isGlobalWriter = true; 
-            } 
-        } 
- 
-        if (haveReads && isGlobalReader) { 
-            Parent.ClearTmpRead(); 
-            haveReads = false; 
-        } 
- 
-        if (haveWrites && isGlobalWriter) { 
-            Parent.ClearTmpWrite(); 
-            haveWrites = false; 
-        } 
-    } 
- 
-    TRowVersion snapshot = TRowVersion::Max(); 
-    bool snapshotRepeatable = false;
-    if (op->IsMvccSnapshotRead()) {
-        snapshot = op->GetMvccSnapshot(); 
-        snapshotRepeatable = op->IsMvccSnapshotRepeatable();
-    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter)) {
-        snapshot = readVersion;
-        op->SetMvccSnapshot(snapshot, /* repeatable */ false);
-    }
- 
-    auto onImmediateConflict = [&](TOperation& conflict) {
-        Y_VERIFY(!conflict.IsImmediate());
-        if (snapshot.IsMax()) {
-            conflict.AddImmediateConflict(op);
-        } else if (snapshotRepeatable ? IsLessEqual(conflict, snapshot) : IsLess(conflict, snapshot)) {
-            op->AddDependency(&conflict);
-        }
-    };
-
-    auto processImmediatePlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) { 
-        onImmediateConflict(*conflict);
-    }; 
- 
-    auto processPlannedPlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) { 
-        op->AddDependency(conflict); 
-    }; 
- 
-    auto processPlannedImmediate = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) { 
-        op->AddImmediateConflict(conflict); 
-    }; 
- 
-    // Second pass, add dependencies 
-    if (isGlobalWriter) { 
-        Y_ASSERT(snapshot.IsMax()); 
- 
-        // We are potentially writing to all keys in all tables, thus we conflict with everything 
-        if (op->IsImmediate()) { 
-            for (auto& item : Parent.AllPlannedWriters) { 
-                TOperation::From(item)->AddImmediateConflict(op); 
-            } 
-        } else { 
-            for (auto& item : Parent.AllPlannedWriters) { 
-                op->AddDependency(TOperation::From(item)); 
-            } 
-            for (auto& item : Parent.AllImmediateWriters) { 
-                op->AddImmediateConflict(TOperation::From(item)); 
-            } 
-            // In mvcc case we skip immediate readers because they read at a fixed time point, 
-            // so that they already calculated all their dependencies and cannot have new ones, 
-            // however we are interesting in immediate readers who are immediate writers as well, 
-            // but we already processed such transactions in the previous loop. 
-        } 
-    } else { 
-        if (haveWrites) { 
-            Y_ASSERT(snapshot.IsMax()); 
- 
-            // Each write may conflict with previous writes 
-            Parent.FlushPlannedWrites(); 
-            if (!op->IsImmediate()) { 
-                Parent.FlushImmediateReads(); 
-                Parent.FlushImmediateWrites(); 
-            } 
-            for (const auto& write : Parent.TmpWrite) { 
-                if (auto it = Parent.Tables.find(write.TableId); it != Parent.Tables.end()) { 
-                    auto searchRange = MakeSearchRange(write.Key); 
-                    if (op->IsImmediate()) { 
-                        it->second.PlannedWrites.EachIntersection(searchRange, processImmediatePlanned); 
-                    } else { 
-                        it->second.PlannedWrites.EachIntersection(searchRange, processPlannedPlanned); 
-                        // You should consider immediate reads as reads in scope of a writing immediate transaction 
-                        it->second.ImmediateReads.EachIntersection(searchRange, processPlannedImmediate); 
-                        it->second.ImmediateWrites.EachIntersection(searchRange, processPlannedImmediate); 
-                    } 
-                } 
-            } 
- 
-            // If we have any reads or writes we conflict with global writes 
-            if (op->IsImmediate()) { 
-                for (auto& item : Parent.GlobalPlannedWriters) { 
-                    TOperation::From(item)->AddImmediateConflict(op); 
-                } 
-            } else { 
-                for (auto& item : Parent.GlobalPlannedWriters) { 
-                    op->AddDependency(TOperation::From(item)); 
-                } 
-                // Here we have immediate writers who are global readers as well 
-                for (auto& item : Parent.GlobalImmediateReaders) { 
-                    op->AddImmediateConflict(TOperation::From(item)); 
-                } 
-                for (auto& item : Parent.GlobalImmediateWriters) { 
-                    op->AddImmediateConflict(TOperation::From(item)); 
-                } 
-            } 
-        } 
- 
-        if (isGlobalReader) { 
-            // We are potentially reading all keys in all tables, thus we conflict with all writes 
-            if (op->IsImmediate()) { 
-                for (auto& item : Parent.AllPlannedWriters) { 
-                    onImmediateConflict(*TOperation::From(item));
-                } 
-            } else { 
-                for (auto& item : Parent.AllPlannedWriters) { 
-                    op->AddDependency(TOperation::From(item)); 
-                } 
-                // Since each happened read moves incomplete edge, neither immediate write cannot affect 
-                // such read, that's why a planned reader cannot be a dependency for any immediate write 
-            } 
-        } else if (haveReads) { 
-            // Each read may conflict with previous writes 
-            Parent.FlushPlannedWrites(); 
-            for (const auto& read : Parent.TmpRead) { 
-                if (auto it = Parent.Tables.find(read.TableId); it != Parent.Tables.end()) { 
-                    auto searchRange = MakeSearchRange(read.Key); 
-                    if (op->IsImmediate()) { 
-                        it->second.PlannedWrites.EachIntersection(searchRange, processImmediatePlanned); 
-                    } else { 
-                        it->second.PlannedWrites.EachIntersection(searchRange, processPlannedPlanned); 
-                    } 
-                } 
-            } 
- 
-            // If we have any reads we conflict with previous global writes 
-            // But if we also have writes, then we already added them above. 
-            if (!haveWrites) { 
-                if (op->IsImmediate()) { 
-                    for (auto& item : Parent.GlobalPlannedWriters) { 
-                        onImmediateConflict(*TOperation::From(item));
-                    } 
-                } else { 
-                    for (auto& item : Parent.GlobalPlannedWriters) { 
-                        op->AddDependency(TOperation::From(item)); 
-                    } 
-                    // Since each happened read moves incomplete edge, neither immediate write cannot affect 
-                    // such read, that's why a planned reader cannot be a dependency for any immediate write 
-                } 
-            } 
-        } 
-    } 
- 
-    // Third pass, add new operation to relevant tables 
-    if (isGlobalWriter) { 
-        // Global writer transactions conflict with everything, so we only add them once 
-        // If the op is also a reader it's shadowed by being a global writer 
-        if (op->IsImmediate()) { 
-            Parent.GlobalImmediateWriters.PushBack(op.Get()); 
-        } else { 
-            Parent.GlobalPlannedWriters.PushBack(op.Get()); 
-        } 
-    } else { 
-        if (haveWrites) { 
-            if (op->IsImmediate()) { 
-                if (DelayImmediateRanges) { 
-                    op->SetDelayedKnownWrites(Parent.TmpWrite); 
-                    Parent.DelayedImmediateWrites.PushBack(op.Get()); 
-                } else { 
-                    Parent.AddImmediateWrites(op, Parent.TmpWrite); 
-                } 
- 
-                // In mvcc case we don't track reads, but sice a writing immediate transaction may be 
-                // rescheduled, a read in scope of the writing immediate transaction is an exception 
-                if (isGlobalReader) { 
-                    Parent.GlobalImmediateReaders.PushBack(op.Get()); 
-                } else if (haveReads) { 
-                    if (DelayImmediateRanges) { 
-                        op->SetDelayedKnownReads(Parent.TmpRead); 
-                        Parent.DelayedImmediateReads.PushBack(op.Get()); 
-                    } else { 
-                        Parent.AddImmediateReads(op, Parent.TmpRead); 
-                    } 
-                } 
-            } else { 
-                if (DelayPlannedRanges) { 
-                    op->SetDelayedKnownWrites(Parent.TmpWrite); 
-                    Parent.DelayedPlannedWrites.PushBack(op.Get()); 
-                } else { 
-                    Parent.AddPlannedWrites(op, Parent.TmpWrite); 
-                } 
-            } 
-        } 
-        // In mvcc case we don't track planned reads, immediate reads 
-        // are tracked in a special case, this is already done above 
-    } 
- 
-    if (isGlobalWriter || haveWrites) { 
-        if (op->IsImmediate()) { 
-            Parent.AllImmediateWriters.PushBack(op.Get()); 
-        } else { 
-            Parent.AllPlannedWriters.PushBack(op.Get()); 
-        } 
-    } 
-    // In mvcc case we don't track planned reads, immediate reads 
-    // are tracked in a special case, this is already done above 
- 
-    if (const ui64 lockTxId = op->LockTxId()) { 
-        // Add hard dependency on all operations that worked with the same lock 
-        auto& lastLockOp = Parent.LastLockOps[lockTxId]; 
-        if (lastLockOp != op) { 
-            op->AddAffectedLock(lockTxId); 
-            if (lastLockOp) { 
-                op->AddDependency(lastLockOp); 
-            } 
-            lastLockOp = op; 
-        } 
- 
-        // Update lock state with worst case prediction 
-        if (isGlobalReader) { 
-            auto& lockState = Parent.Locks[lockTxId]; 
-            if (!lockState.Initialized) { 
-                lockState.WholeShard = true; 
-                lockState.Initialized = true; 
-            } else if (!lockState.WholeShard && !lockState.Broken) { 
-                SwapConsume(lockState.Keys); 
-                lockState.WholeShard = true; 
-            } 
-        } else if (haveReads) { 
-            auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion); 
-            Y_ASSERT(!lock || !lock->IsBroken(readVersion)); 
-            auto& lockState = Parent.Locks[lockTxId]; 
-            if (!lockState.Initialized) { 
-                if (lock) { 
-                    if (lock->IsBroken(readVersion)) { 
-                        lockState.Broken = true; 
-                    } else if (lock->IsShardLock()) { 
-                        lockState.WholeShard = true; 
-                    } else { 
-                        for (const auto& point : lock->GetPoints()) { 
-                            lockState.Keys.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
-                        } 
-                        for (const auto& range : lock->GetRanges()) { 
-                            lockState.Keys.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
-                        } 
-                    } 
-                } 
-                lockState.Initialized = true; 
-            } 
             if (!lockState.WholeShard && !lockState.Broken) {
-                lockState.Keys.insert(lockState.Keys.end(), Parent.TmpRead.begin(), Parent.TmpRead.end()); 
+                lockState.Keys.insert(lockState.Keys.end(), Parent.TmpRead.begin(), Parent.TmpRead.end());
             }
         }
     }
 
     if (haveReads) {
-        Parent.ClearTmpRead(); 
+        Parent.ClearTmpRead();
     }
 
     if (haveWrites) {
-        Parent.ClearTmpWrite(); 
+        Parent.ClearTmpWrite();
     }
 }
 
-void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept { 
-    if (Parent.LastSnapshotOp == op) { 
-        Parent.LastSnapshotOp = nullptr; 
+void TDependencyTracker::TDefaultDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept {
+    if (Parent.LastSnapshotOp == op) {
+        Parent.LastSnapshotOp = nullptr;
     }
 
     for (ui64 lockTxId : op->GetAffectedLocks()) {
-        auto it = Parent.LastLockOps.find(lockTxId); 
-        if (it != Parent.LastLockOps.end() && it->second == op) { 
-            Parent.Locks.erase(lockTxId); 
-            Parent.LastLockOps.erase(it); 
+        auto it = Parent.LastLockOps.find(lockTxId);
+        if (it != Parent.LastLockOps.end() && it->second == op) {
+            Parent.Locks.erase(lockTxId);
+            Parent.LastLockOps.erase(it);
         }
     }
 
@@ -989,7 +556,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
         delayedReadListItem->Unlink();
         op->RemoveDelayedKnownReads();
     } else {
-        for (auto& kv : Parent.Tables) { 
+        for (auto& kv : Parent.Tables) {
             if (op->IsImmediate()) {
                 kv.second.ImmediateReads.RemoveRanges(op);
             } else {
@@ -1002,7 +569,440 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
         delayedWriteListItem->Unlink();
         op->RemoveDelayedKnownWrites();
     } else {
-        for (auto& kv : Parent.Tables) { 
+        for (auto& kv : Parent.Tables) {
+            if (op->IsImmediate()) {
+                kv.second.ImmediateWrites.RemoveRanges(op);
+            } else {
+                kv.second.PlannedWrites.RemoveRanges(op);
+            }
+        }
+    }
+}
+
+void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept {
+    if (op->IsUsingSnapshot()) {
+        return;
+    }
+
+    // WARNING: kqp scan transactions don't have known keys, that means
+    // we must assume they are global reader and must be careful not to
+    // look into extracted keys for these transactions.
+    bool haveKeys = !op->IsKqpScanTransaction();
+
+    bool isGlobalReader = op->IsGlobalReader();
+    bool isGlobalWriter = op->IsGlobalWriter();
+
+    bool tooManyKeys = false;
+    if (haveKeys && op->KeysCount() > MAX_REORDER_TX_KEYS) {
+        tooManyKeys = true;
+    }
+
+    // Non-immediate snapshot operations cannot be reordered
+    if (!op->IsImmediate() && op->IsSnapshotTx()) {
+        if (Parent.LastSnapshotOp) {
+            op->AddDependency(Parent.LastSnapshotOp);
+        }
+        Parent.LastSnapshotOp = op;
+    }
+
+    // We use an optimistic readVersion assuming this transaction is read-only.
+    // If it happens that this transaction is not read-only we would include
+    // some locked keys in conflicts that are actually broken, but it's not
+    // a problem.
+    TRowVersion readVersion = Parent.Self->GetMvccTxVersion(EMvccTxMode::ReadOnly, op.Get());
+
+    // First pass, gather all reads/writes expanded with locks, add lock based dependencies
+    bool haveReads = false;
+    bool haveWrites = false;
+    if (haveKeys) {
+        size_t keysCount = 0;
+        const auto& keysInfo = op->GetKeysInfo();
+        const auto& locksCache = op->LocksCache();
+        for (const auto& vk : keysInfo.Keys) {
+            const auto& k = *vk.Key;
+            if (Parent.Self->IsUserTable(k.TableId)) {
+                const ui64 tableId = k.TableId.PathId.LocalPathId;
+                if (!tooManyKeys && ++keysCount > MAX_REORDER_TX_KEYS) {
+                    tooManyKeys = true;
+                }
+                if (vk.IsWrite) {
+                    haveWrites = true;
+                    if (!tooManyKeys && !isGlobalWriter) {
+                        Parent.TmpWrite.emplace_back(tableId, k.Range);
+                    }
+                } else {
+                    haveReads = true;
+                    if (!tooManyKeys && !isGlobalReader) {
+                        Parent.TmpRead.emplace_back(tableId, k.Range);
+                    }
+                }
+            } else if (TSysTables::IsLocksTable(k.TableId)) {
+                Y_VERIFY(k.Range.Point, "Unexpected non-point read from the locks table");
+                const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From);
+
+                // Add hard dependency on all operations that worked with the same lock
+                auto& lastLockOp = Parent.LastLockOps[lockTxId];
+                if (lastLockOp != op) {
+                    op->AddAffectedLock(lockTxId);
+                    if (lastLockOp) {
+                        op->AddDependency(lastLockOp);
+                    }
+                    lastLockOp = op;
+                }
+
+                // Reading a lock means checking it for validity, i.e. "reading" those predicted keys
+                if (!vk.IsWrite) {
+                    if (auto it = locksCache.Locks.find(lockTxId); it != locksCache.Locks.end()) {
+                        // This transaction uses locks cache, so lock check
+                        // outcome was persisted and restored. Unfortunately
+                        // now we cannot know which keys it translated to, and
+                        // have to assume "whole shard" worst case.
+                        isGlobalReader = true;
+                    } else if (auto it = Parent.Locks.find(lockTxId); it != Parent.Locks.end()) {
+                        haveReads = true;
+                        if (!tooManyKeys && (keysCount += it->second.Keys.size()) > MAX_REORDER_TX_KEYS) {
+                            tooManyKeys = true;
+                        }
+                        if (!tooManyKeys && !isGlobalReader) {
+                            if (it->second.WholeShard) {
+                                isGlobalReader = true;
+                            } else {
+                                Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end());
+                            }
+                        }
+                    } else if (auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion)) {
+                        Y_ASSERT(!lock->IsBroken(readVersion));
+                        haveReads = true;
+                        if (!tooManyKeys && (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) {
+                            tooManyKeys = true;
+                        }
+                        if (!tooManyKeys && !isGlobalReader) {
+                            if (lock->IsShardLock()) {
+                                isGlobalReader = true;
+                            } else {
+                                for (const auto& point : lock->GetPoints()) {
+                                    Parent.TmpRead.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
+                                }
+                                for (const auto& range : lock->GetRanges()) {
+                                    Parent.TmpRead.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (tooManyKeys) {
+            if (haveReads) {
+                isGlobalReader = true;
+            }
+            if (haveWrites) {
+                isGlobalWriter = true;
+            }
+        }
+
+        if (haveReads && isGlobalReader) {
+            Parent.ClearTmpRead();
+            haveReads = false;
+        }
+
+        if (haveWrites && isGlobalWriter) {
+            Parent.ClearTmpWrite();
+            haveWrites = false;
+        }
+    }
+
+    TRowVersion snapshot = TRowVersion::Max();
+    bool snapshotRepeatable = false;
+    if (op->IsMvccSnapshotRead()) {
+        snapshot = op->GetMvccSnapshot();
+        snapshotRepeatable = op->IsMvccSnapshotRepeatable();
+    } else if (op->IsImmediate() && (op->IsReadTable() || op->IsDataTx() && !haveWrites && !isGlobalWriter)) {
+        snapshot = readVersion;
+        op->SetMvccSnapshot(snapshot, /* repeatable */ false);
+    }
+
+    auto onImmediateConflict = [&](TOperation& conflict) {
+        Y_VERIFY(!conflict.IsImmediate());
+        if (snapshot.IsMax()) {
+            conflict.AddImmediateConflict(op);
+        } else if (snapshotRepeatable ? IsLessEqual(conflict, snapshot) : IsLess(conflict, snapshot)) {
+            op->AddDependency(&conflict);
+        }
+    };
+
+    auto processImmediatePlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+        onImmediateConflict(*conflict);
+    };
+
+    auto processPlannedPlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+        op->AddDependency(conflict);
+    };
+
+    auto processPlannedImmediate = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+        op->AddImmediateConflict(conflict);
+    };
+
+    // Second pass, add dependencies
+    if (isGlobalWriter) {
+        Y_ASSERT(snapshot.IsMax());
+
+        // We are potentially writing to all keys in all tables, thus we conflict with everything
+        if (op->IsImmediate()) {
+            for (auto& item : Parent.AllPlannedWriters) {
+                TOperation::From(item)->AddImmediateConflict(op);
+            }
+        } else {
+            for (auto& item : Parent.AllPlannedWriters) {
+                op->AddDependency(TOperation::From(item));
+            }
+            for (auto& item : Parent.AllImmediateWriters) {
+                op->AddImmediateConflict(TOperation::From(item));
+            }
+            // In mvcc case we skip immediate readers because they read at a fixed time point,
+            // so that they already calculated all their dependencies and cannot have new ones,
+            // however we are interesting in immediate readers who are immediate writers as well,
+            // but we already processed such transactions in the previous loop.
+        }
+    } else {
+        if (haveWrites) {
+            Y_ASSERT(snapshot.IsMax());
+
+            // Each write may conflict with previous writes
+            Parent.FlushPlannedWrites();
+            if (!op->IsImmediate()) {
+                Parent.FlushImmediateReads();
+                Parent.FlushImmediateWrites();
+            }
+            for (const auto& write : Parent.TmpWrite) {
+                if (auto it = Parent.Tables.find(write.TableId); it != Parent.Tables.end()) {
+                    auto searchRange = MakeSearchRange(write.Key);
+                    if (op->IsImmediate()) {
+                        it->second.PlannedWrites.EachIntersection(searchRange, processImmediatePlanned);
+                    } else {
+                        it->second.PlannedWrites.EachIntersection(searchRange, processPlannedPlanned);
+                        // You should consider immediate reads as reads in scope of a writing immediate transaction
+                        it->second.ImmediateReads.EachIntersection(searchRange, processPlannedImmediate);
+                        it->second.ImmediateWrites.EachIntersection(searchRange, processPlannedImmediate);
+                    }
+                }
+            }
+
+            // If we have any reads or writes we conflict with global writes
+            if (op->IsImmediate()) {
+                for (auto& item : Parent.GlobalPlannedWriters) {
+                    TOperation::From(item)->AddImmediateConflict(op);
+                }
+            } else {
+                for (auto& item : Parent.GlobalPlannedWriters) {
+                    op->AddDependency(TOperation::From(item));
+                }
+                // Here we have immediate writers who are global readers as well
+                for (auto& item : Parent.GlobalImmediateReaders) {
+                    op->AddImmediateConflict(TOperation::From(item));
+                }
+                for (auto& item : Parent.GlobalImmediateWriters) {
+                    op->AddImmediateConflict(TOperation::From(item));
+                }
+            }
+        }
+
+        if (isGlobalReader) {
+            // We are potentially reading all keys in all tables, thus we conflict with all writes
+            if (op->IsImmediate()) {
+                for (auto& item : Parent.AllPlannedWriters) {
+                    onImmediateConflict(*TOperation::From(item));
+                }
+            } else {
+                for (auto& item : Parent.AllPlannedWriters) {
+                    op->AddDependency(TOperation::From(item));
+                }
+                // Since each happened read moves incomplete edge, neither immediate write cannot affect
+                // such read, that's why a planned reader cannot be a dependency for any immediate write
+            }
+        } else if (haveReads) {
+            // Each read may conflict with previous writes
+            Parent.FlushPlannedWrites();
+            for (const auto& read : Parent.TmpRead) {
+                if (auto it = Parent.Tables.find(read.TableId); it != Parent.Tables.end()) {
+                    auto searchRange = MakeSearchRange(read.Key);
+                    if (op->IsImmediate()) {
+                        it->second.PlannedWrites.EachIntersection(searchRange, processImmediatePlanned);
+                    } else {
+                        it->second.PlannedWrites.EachIntersection(searchRange, processPlannedPlanned);
+                    }
+                }
+            }
+
+            // If we have any reads we conflict with previous global writes
+            // But if we also have writes, then we already added them above.
+            if (!haveWrites) {
+                if (op->IsImmediate()) {
+                    for (auto& item : Parent.GlobalPlannedWriters) {
+                        onImmediateConflict(*TOperation::From(item));
+                    }
+                } else {
+                    for (auto& item : Parent.GlobalPlannedWriters) {
+                        op->AddDependency(TOperation::From(item));
+                    }
+                    // Since each happened read moves incomplete edge, neither immediate write cannot affect
+                    // such read, that's why a planned reader cannot be a dependency for any immediate write
+                }
+            }
+        }
+    }
+
+    // Third pass, add new operation to relevant tables
+    if (isGlobalWriter) {
+        // Global writer transactions conflict with everything, so we only add them once
+        // If the op is also a reader it's shadowed by being a global writer
+        if (op->IsImmediate()) {
+            Parent.GlobalImmediateWriters.PushBack(op.Get());
+        } else {
+            Parent.GlobalPlannedWriters.PushBack(op.Get());
+        }
+    } else {
+        if (haveWrites) {
+            if (op->IsImmediate()) {
+                if (DelayImmediateRanges) {
+                    op->SetDelayedKnownWrites(Parent.TmpWrite);
+                    Parent.DelayedImmediateWrites.PushBack(op.Get());
+                } else {
+                    Parent.AddImmediateWrites(op, Parent.TmpWrite);
+                }
+
+                // In mvcc case we don't track reads, but sice a writing immediate transaction may be
+                // rescheduled, a read in scope of the writing immediate transaction is an exception
+                if (isGlobalReader) {
+                    Parent.GlobalImmediateReaders.PushBack(op.Get());
+                } else if (haveReads) {
+                    if (DelayImmediateRanges) {
+                        op->SetDelayedKnownReads(Parent.TmpRead);
+                        Parent.DelayedImmediateReads.PushBack(op.Get());
+                    } else {
+                        Parent.AddImmediateReads(op, Parent.TmpRead);
+                    }
+                }
+            } else {
+                if (DelayPlannedRanges) {
+                    op->SetDelayedKnownWrites(Parent.TmpWrite);
+                    Parent.DelayedPlannedWrites.PushBack(op.Get());
+                } else {
+                    Parent.AddPlannedWrites(op, Parent.TmpWrite);
+                }
+            }
+        }
+        // In mvcc case we don't track planned reads, immediate reads
+        // are tracked in a special case, this is already done above
+    }
+
+    if (isGlobalWriter || haveWrites) {
+        if (op->IsImmediate()) {
+            Parent.AllImmediateWriters.PushBack(op.Get());
+        } else {
+            Parent.AllPlannedWriters.PushBack(op.Get());
+        }
+    }
+    // In mvcc case we don't track planned reads, immediate reads
+    // are tracked in a special case, this is already done above
+
+    if (const ui64 lockTxId = op->LockTxId()) {
+        // Add hard dependency on all operations that worked with the same lock
+        auto& lastLockOp = Parent.LastLockOps[lockTxId];
+        if (lastLockOp != op) {
+            op->AddAffectedLock(lockTxId);
+            if (lastLockOp) {
+                op->AddDependency(lastLockOp);
+            }
+            lastLockOp = op;
+        }
+
+        // Update lock state with worst case prediction
+        if (isGlobalReader) {
+            auto& lockState = Parent.Locks[lockTxId];
+            if (!lockState.Initialized) {
+                lockState.WholeShard = true;
+                lockState.Initialized = true;
+            } else if (!lockState.WholeShard && !lockState.Broken) {
+                SwapConsume(lockState.Keys);
+                lockState.WholeShard = true;
+            }
+        } else if (haveReads) {
+            auto lock = Parent.Self->SysLocksTable().GetRawLock(lockTxId, readVersion);
+            Y_ASSERT(!lock || !lock->IsBroken(readVersion));
+            auto& lockState = Parent.Locks[lockTxId];
+            if (!lockState.Initialized) {
+                if (lock) {
+                    if (lock->IsBroken(readVersion)) {
+                        lockState.Broken = true;
+                    } else if (lock->IsShardLock()) {
+                        lockState.WholeShard = true;
+                    } else {
+                        for (const auto& point : lock->GetPoints()) {
+                            lockState.Keys.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
+                        }
+                        for (const auto& range : lock->GetRanges()) {
+                            lockState.Keys.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
+                        }
+                    }
+                }
+                lockState.Initialized = true;
+            }
+            if (!lockState.WholeShard && !lockState.Broken) {
+                lockState.Keys.insert(lockState.Keys.end(), Parent.TmpRead.begin(), Parent.TmpRead.end());
+            }
+        }
+    }
+
+    if (haveReads) {
+        Parent.ClearTmpRead();
+    }
+
+    if (haveWrites) {
+        Parent.ClearTmpWrite();
+    }
+}
+
+void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept {
+    if (Parent.LastSnapshotOp == op) {
+        Parent.LastSnapshotOp = nullptr;
+    }
+
+    for (ui64 lockTxId : op->GetAffectedLocks()) {
+        auto it = Parent.LastLockOps.find(lockTxId);
+        if (it != Parent.LastLockOps.end() && it->second == op) {
+            Parent.Locks.erase(lockTxId);
+            Parent.LastLockOps.erase(it);
+        }
+    }
+
+    TOperationAllListItem* allListItem = op.Get();
+    TOperationGlobalListItem* globalListItem = op.Get();
+    TOperationDelayedReadListItem* delayedReadListItem = op.Get();
+    TOperationDelayedWriteListItem* delayedWriteListItem = op.Get();
+
+    allListItem->Unlink();
+    globalListItem->Unlink();
+
+    if (!delayedReadListItem->Empty()) {
+        delayedReadListItem->Unlink();
+        op->RemoveDelayedKnownReads();
+    } else {
+        for (auto& kv : Parent.Tables) {
+            if (op->IsImmediate()) {
+                kv.second.ImmediateReads.RemoveRanges(op);
+            } else {
+                kv.second.PlannedReads.RemoveRanges(op);
+            }
+        }
+    }
+
+    if (!delayedWriteListItem->Empty()) {
+        delayedWriteListItem->Unlink();
+        op->RemoveDelayedKnownWrites();
+    } else {
+        for (auto& kv : Parent.Tables) {
             if (op->IsImmediate()) {
                 kv.second.ImmediateWrites.RemoveRanges(op);
             } else {

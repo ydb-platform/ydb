@@ -127,12 +127,12 @@ public:
                     ComputeCtx.ReadTable(ParseResult.TableId, keyCells);
 
                     NTable::TRowState dbRow;
-                    NTable::TSelectStats stats; 
+                    NTable::TSelectStats stats;
                     ui64 flags = 0; // TODO: Check DisableByKeyFilter
-                    auto ready = ComputeCtx.Database->Select(LocalTid, keyValues, ColumnTags, dbRow, stats, flags, ComputeCtx.GetReadVersion()); 
-                    if (stats.Invisible) 
-                        ComputeCtx.BreakSetLocks(); 
- 
+                    auto ready = ComputeCtx.Database->Select(LocalTid, keyValues, ColumnTags, dbRow, stats, flags, ComputeCtx.GetReadVersion());
+                    if (stats.Invisible)
+                        ComputeCtx.BreakSetLocks();
+
                     switch (ready) {
                         case EReady::Page:
                             ComputeCtx.SetTabletNotReady();
@@ -247,7 +247,7 @@ public:
                         keyRange.MaxInclusive = range.InclusiveTo;
 
                         ComputeCtx.ReadTable(ParseResult.TableId, range);
-                        Iterator = ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, ComputeCtx.GetReadVersion()); 
+                        Iterator = ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, ComputeCtx.GetReadVersion());
                         break;
                     }
 
@@ -265,7 +265,7 @@ public:
             auto fetched = TryFetchRow(*Iterator, result, ctx, tableStats, ComputeCtx, SystemColumnTags, ParseResult.SkipNullKeys);
 
             if (Iterator->Stats.InvisibleRowSkips) {
-                ComputeCtx.BreakSetLocks(); 
+                ComputeCtx.BreakSetLocks();
             }
 
             ShardTableStats += tableStats;
@@ -280,7 +280,7 @@ public:
             TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
             TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
 
-            if (fetched) { 
+            if (fetched) {
                 return result;
             }
 

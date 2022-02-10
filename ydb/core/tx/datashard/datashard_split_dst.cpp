@@ -45,7 +45,7 @@ public:
                 tableId.OwnerId = Ev->Get()->Record.GetSchemeshardTabletId();
             }
 
-            auto info = Self->CreateUserTable(txc, createTable); 
+            auto info = Self->CreateUserTable(txc, createTable);
             Self->AddUserTable(tableId, info);
 
             if (Self->GetPathOwnerId() == INVALID_TABLET_ID) {
@@ -147,7 +147,7 @@ public:
             newTableScheme.SetPartitionRangeBeginIsInclusive(true);
             newTableScheme.SetPartitionRangeEndIsInclusive(false);
 
-            Self->CreateUserTable(txc, newTableScheme); 
+            Self->CreateUserTable(txc, newTableScheme);
         }
     }
 
@@ -180,22 +180,22 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         // Choose the highest write version, so we won't overwrite any important data
-        TRowVersion minWriteVersion(record.GetMinWriteVersionStep(), record.GetMinWriteVersionTxId()); 
+        TRowVersion minWriteVersion(record.GetMinWriteVersionStep(), record.GetMinWriteVersionTxId());
 
-        if (Self->GetSnapshotManager().GetMinWriteVersion() < minWriteVersion) 
-            Self->GetSnapshotManager().SetMinWriteVersion(db, minWriteVersion); 
- 
+        if (Self->GetSnapshotManager().GetMinWriteVersion() < minWriteVersion)
+            Self->GetSnapshotManager().SetMinWriteVersion(db, minWriteVersion);
+
         const bool mvcc = Self->IsMvccEnabled();
-        if (mvcc) { 
-            TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId()); 
-            if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge) 
-                Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge); 
-            TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId()); 
-            if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge) 
-                Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge); 
-            TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId()); 
-            if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark) 
-                Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark); 
+        if (mvcc) {
+            TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId());
+            if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge)
+                Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge);
+            TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
+            if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
+                Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+            TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
+            if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
+                Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
         }
 
         // Would be true for the first snapshot we receive, e.g. during a merge
@@ -242,8 +242,8 @@ public:
         if (Self->ReceiveSnapshotsFrom.empty()) {
             LastSnapshotReceived = true;
 
-            const auto minVersion = mvcc ? Self->GetSnapshotManager().GetLowWatermark() 
-                                         : Self->GetSnapshotManager().GetMinWriteVersion(); 
+            const auto minVersion = mvcc ? Self->GetSnapshotManager().GetLowWatermark()
+                                         : Self->GetSnapshotManager().GetMinWriteVersion();
 
             // Mark versions not accessible via snapshots as deleted
             for (const auto& kv : Self->GetUserTables()) {
@@ -261,8 +261,8 @@ public:
                     vlower = vupper.Next();
                 }
 
-                if (vlower < minVersion) { 
-                    txc.DB.RemoveRowVersions(localTableId, vlower, minVersion); 
+                if (vlower < minVersion) {
+                    txc.DB.RemoveRowVersions(localTableId, vlower, minVersion);
                 }
             }
 

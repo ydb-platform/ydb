@@ -11,11 +11,11 @@ using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSnapshot) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableSnapshot) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
@@ -55,11 +55,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 3, value = 3\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitAfter) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitAfter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
@@ -106,11 +106,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 4, value = 44\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitBefore) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitBefore) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
@@ -159,11 +159,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 4, value = 44\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitFinished) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableSplitFinished) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
@@ -242,11 +242,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 6, value = 66\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumn) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumn) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
@@ -296,11 +296,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "ERROR: ResolveError\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumnLatePropose) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableDropColumnLatePropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
@@ -389,11 +389,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "ERROR: ResolveError\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ReadTableMaxRows) { 
+    Y_UNIT_TEST_WITH_MVCC(ReadTableMaxRows) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 

@@ -46,7 +46,7 @@ public:
     ui64 TxInFly() const { return TxsInFly.size(); }
     void AddTxInFly(TOperation::TPtr op);
     void RemoveTxInFly(ui64 txId);
-    TOperation::TPtr FindTxInFly(ui64 txId) const 
+    TOperation::TPtr FindTxInFly(ui64 txId) const
     {
         auto it = TxsInFly.find(txId);
         if (it != TxsInFly.end())

@@ -44,7 +44,7 @@ struct TUnit {
 namespace {
 
 void CreateTable(TServer::TPtr server, const TActorId& sender, const TString& root,
-        const TString& name, const TString& ttlColType = "Timestamp") { 
+        const TString& name, const TString& ttlColType = "Timestamp") {
     auto opts = TShardedTableOptions()
         .EnableOutOfOrder(false)
         .Columns({
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(enableMvcc) 
+            .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        CreateTable(server, sender, "/Root", "table-1"); 
+        CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
             UPSERT INTO [/Root/table-1] (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
@@ -386,15 +386,15 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldSuccess) { 
+    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldSuccess) {
         EraseRowsShouldSuccess(Nothing(), WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldFailOnVariousErrors) { 
+    Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldFailOnVariousErrors) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        CreateTable(server, sender, "/Root", "table-1"); 
+        CreateTable(server, sender, "/Root", "table-1");
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
 
         EraseRows(server, sender, "/Root/table-1", TTableId(), {1}, SerializeKeys({1, 2}),
@@ -427,13 +427,13 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, bool enableMvcc = false) { 
+    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, bool enableMvcc = false) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(enableMvcc) 
+            .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        CreateTable(server, sender, "/Root", "table-1", ttlColType); 
+        CreateTable(server, sender, "/Root", "table-1", ttlColType);
         ExecSQL(server, sender, toUpload);
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), Strip(afterErase));
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldErase) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
@@ -467,10 +467,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 2030-04-15T00:00:00.000000Z
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotErase) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -480,10 +480,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
 key = 1, value = 2030-04-15T00:00:00.000000Z
 key = 2, value = 2030-04-15T00:00:00.000000Z
 key = 3, value = 2030-04-15T00:00:00.000000Z
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint32) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint32) {
         ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, 0),
@@ -493,10 +493,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64Seconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64Seconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::SECONDS, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, 0),
@@ -506,10 +506,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MILLISECONDS, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, 0),
@@ -519,10 +519,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MICROSECONDS, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, 0),
@@ -532,10 +532,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000000
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::NANOSECONDS, R"(
 UPSERT INTO [/Root/table-1] (key, value) VALUES
 (1, 0),
@@ -545,10 +545,10 @@ UPSERT INTO [/Root/table-1] (key, value) VALUES
         )", R"(
 key = 3, value = 1902441600000000000
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::SECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -563,10 +563,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 5, value = .190244160e10
 key = 6, value = .63624960000e12
 key = 7, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMilliSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMilliSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::MILLISECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -579,10 +579,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 3, value = .1902441600000e13
 key = 4, value = .636249600000000e15
 key = 5, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMicroSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberMicroSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::MICROSECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -598,10 +598,10 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 key = 6, value = .190244160000000e16
 key = 7, value = .99999999999999999999999999999999999999e126
 key = 8, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberNanoSeconds) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnDyNumberNanoSeconds) {
         ConditionalEraseShouldSuccess("DyNumber", TUnit::NANOSECONDS, R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -612,16 +612,16 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
         )", R"(
 key = 3, value = .1902441600000000000e19
 key = 4, value = (empty maybe)
-        )", WithMvcc); 
+        )", WithMvcc);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldFailOnVariousErrors) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldFailOnVariousErrors) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -637,7 +637,7 @@ key = 4, value = (empty maybe)
             const auto tableName = Sprintf("table-%i", tableNum++);
             const auto tablePath = Sprintf("/Root/%s", tableName.data());
 
-            CreateTable(server, sender, "/Root", tableName, TString(ct)); 
+            CreateTable(server, sender, "/Root", tableName, TString(ct));
             auto tableId = ResolveTableId(server, sender, tablePath);
 
             ConditionalEraseRows(server, sender, tablePath, TTableId(), 2, 0, TUnit::AUTO, {}, {},
@@ -661,13 +661,13 @@ key = 4, value = (empty maybe)
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldBreakLocks) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldBreakLocks) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -678,7 +678,7 @@ key = 4, value = (empty maybe)
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        CreateTable(server, sender, "/Root", "table-1"); 
+        CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
             UPSERT INTO [/Root/table-1] (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
@@ -724,13 +724,13 @@ key = 4, value = (empty maybe)
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotEraseModifiedRows) { 
+    Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotEraseModifiedRows) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
             .SetUseRealThreads(false);
 
@@ -741,7 +741,7 @@ key = 4, value = (empty maybe)
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        CreateTable(server, sender, "/Root", "table-1"); 
+        CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
             UPSERT INTO [/Root/table-1] (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),

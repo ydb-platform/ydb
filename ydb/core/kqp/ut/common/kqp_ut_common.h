@@ -79,7 +79,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
     bool WithSampleTables = true;
-    TDuration KeepSnapshotTimeout = TDuration::Zero(); 
+    TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -89,9 +89,9 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetDomainRoot(const TString& value) { DomainRoot = value; return *this; }
     TKikimrSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
-    TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; } 
+    TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
- 
+
 };
 
 class TKikimrRunner {
@@ -139,7 +139,7 @@ public:
 private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
-    void CreateSampleTables(); 
+    void CreateSampleTables();
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;

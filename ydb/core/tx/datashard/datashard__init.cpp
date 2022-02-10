@@ -81,15 +81,15 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     // path filled for user tables. Resolve path for them.
     Self->ResolveTablePath(ctx);
 
-    // Plan cleanup if needed 
+    // Plan cleanup if needed
     if (Self->State == TShardState::Ready ||
         Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
         Self->State == TShardState::SplitSrcMakeSnapshot)
     {
-        // Initialize snapshot expiration queue with current context time 
-        Self->GetSnapshotManager().InitExpireQueue(ctx.Now()); 
- 
-        if (Self->GetSnapshotManager().HasExpiringSnapshots()) 
+        // Initialize snapshot expiration queue with current context time
+        Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
+
+        if (Self->GetSnapshotManager().HasExpiringSnapshots())
             Self->PlanCleanup(ctx);
     }
 
@@ -101,7 +101,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
             Self->StartFindSubDomainPathId();
         }
     }
- 
+
     Self->CreateChangeSender(ctx);
     Self->EnqueueChangeRecords(std::move(ChangeRecords));
     Self->MaybeActivateChangeSender(ctx);
@@ -118,8 +118,8 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
         }
     }
 
-    // Switch mvcc state if needed 
-    Self->CheckMvccStateChangeCanStart(ctx); 
+    // Switch mvcc state if needed
+    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
@@ -520,21 +520,21 @@ public:
             txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
- 
+
             if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) {
                 auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled;
-                Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state); 
- 
-                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute" 
+                Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
+
+                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
                     << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state");
-            } 
- 
-            Self->MvccSwitchState = TSwitchState::DONE; 
+            }
+
+            Self->MvccSwitchState = TSwitchState::DONE;
         }
 
         //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys
-        if (Self->State == TShardState::Ready || 
-            Self->State == TShardState::SplitSrcWaitForNoTxInFlight) { 
+        if (Self->State == TShardState::Ready ||
+            Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
             TString rawProcessingParams;
             LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
 

@@ -106,7 +106,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 void TCompleteOperationUnit::Complete(TOperation::TPtr op,
                                       const TActorContext &ctx)
 {
-    Pipeline.RemoveCommittingOp(op); 
+    Pipeline.RemoveCommittingOp(op);
     Pipeline.RemoveTx(op->GetStepOrder());
     DataShard.IncCounter(COUNTER_PLANNED_TX_COMPLETE);
     if (!op->IsDirty())

@@ -50,9 +50,9 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     NIceDb::TNiceDb db(txc.DB);
 
     Y_VERIFY(schemeTx.HasCreateTable());
- 
+
     const bool mvcc = DataShard.IsMvccEnabled();
- 
+
     for (auto &pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
             NKikimrTxDataShard::TSnapshotTransferReadSet rs;
@@ -73,19 +73,19 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
 
                 TRowVersion minVersion(rs.GetMinWriteVersionStep(), rs.GetMinWriteVersionTxId());
-                if (DataShard.GetSnapshotManager().GetMinWriteVersion() < minVersion) 
-                    DataShard.GetSnapshotManager().SetMinWriteVersion(db, minVersion); 
- 
-                if (mvcc) { 
-                    TRowVersion completeEdge(rs.GetMvccCompleteEdgeStep(), rs.GetMvccCompleteEdgeTxId()); 
-                    if (DataShard.GetSnapshotManager().GetCompleteEdge() < completeEdge) 
-                        DataShard.GetSnapshotManager().SetCompleteEdge(db, completeEdge); 
-                    TRowVersion incompleteEdge(rs.GetMvccIncompleteEdgeStep(), rs.GetMvccIncompleteEdgeTxId()); 
-                    if (DataShard.GetSnapshotManager().GetIncompleteEdge() < incompleteEdge) 
-                        DataShard.GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge); 
-                    TRowVersion lowWatermark(rs.GetMvccLowWatermarkStep(), rs.GetMvccLowWatermarkTxId()); 
-                    if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark) 
-                        DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark); 
+                if (DataShard.GetSnapshotManager().GetMinWriteVersion() < minVersion)
+                    DataShard.GetSnapshotManager().SetMinWriteVersion(db, minVersion);
+
+                if (mvcc) {
+                    TRowVersion completeEdge(rs.GetMvccCompleteEdgeStep(), rs.GetMvccCompleteEdgeTxId());
+                    if (DataShard.GetSnapshotManager().GetCompleteEdge() < completeEdge)
+                        DataShard.GetSnapshotManager().SetCompleteEdge(db, completeEdge);
+                    TRowVersion incompleteEdge(rs.GetMvccIncompleteEdgeStep(), rs.GetMvccIncompleteEdgeTxId());
+                    if (DataShard.GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
+                        DataShard.GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+                    TRowVersion lowWatermark(rs.GetMvccLowWatermarkStep(), rs.GetMvccLowWatermarkTxId());
+                    if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
+                        DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
                 }
             }
 
@@ -96,11 +96,11 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(),
         "Found unexpected persistent snapshots at CopyTable destination");
 
-    const auto minVersion = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() 
-                                 : DataShard.GetSnapshotManager().GetMinWriteVersion(); 
- 
+    const auto minVersion = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark()
+                                 : DataShard.GetSnapshotManager().GetMinWriteVersion();
+
     // If MinWriteVersion is not zero, then all versions below it are inaccessible
-    if (minVersion) { 
+    if (minVersion) {
         for (const auto& kv : DataShard.GetUserTables()) {
             ui32 localTableId = kv.second->LocalTid;
             txc.DB.RemoveRowVersions(localTableId, TRowVersion::Min(), minVersion);

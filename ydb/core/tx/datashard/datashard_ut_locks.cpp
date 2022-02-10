@@ -29,7 +29,7 @@ namespace NTest {
     public:
         ui64 PathOwnerId = 0;
         ui64 CurrentSchemeShardId = 0;
-        TRowVersion CompleteVersion = TRowVersion::Min(); 
+        TRowVersion CompleteVersion = TRowVersion::Min();
 
         TFakeDataShard() {
             InitSchema();
@@ -37,7 +37,7 @@ namespace NTest {
 
         static ui64 TabletID() { return 0; }
         static ui32 Generation() { return 0; }
-        TRowVersion LastCompleteTxVersion() const { return CompleteVersion; } 
+        TRowVersion LastCompleteTxVersion() const { return CompleteVersion; }
 
         bool IsUserTable(const TTableId& tableId) const;
 
@@ -141,17 +141,17 @@ namespace NTest {
             , Locks(&DataShard)
         {
             ui64 tid = tableId.PathId.LocalPathId;
-            ui64 sid = tableId.PathId.OwnerId; 
- 
-            TmpLock.PathId = tid; 
-            TmpLock.SchemeShard = sid; 
- 
-            TmpLockVec.reserve(4); 
-            TmpLockVec.emplace_back(TCell::Make(TmpLock.LockId)); 
-            TmpLockVec.emplace_back(TCell::Make(TmpLock.DataShard)); 
-            TmpLockVec.emplace_back(TCell::Make(TmpLock.SchemeShard)); 
-            TmpLockVec.emplace_back(TCell::Make(TmpLock.PathId)); 
- 
+            ui64 sid = tableId.PathId.OwnerId;
+
+            TmpLock.PathId = tid;
+            TmpLock.SchemeShard = sid;
+
+            TmpLockVec.reserve(4);
+            TmpLockVec.emplace_back(TCell::Make(TmpLock.LockId));
+            TmpLockVec.emplace_back(TCell::Make(TmpLock.DataShard));
+            TmpLockVec.emplace_back(TCell::Make(TmpLock.SchemeShard));
+            TmpLockVec.emplace_back(TCell::Make(TmpLock.PathId));
+
             Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid]);
         }
 
@@ -172,10 +172,10 @@ namespace NTest {
             Locks.BreakLock(TableId, key.GetRow());
         }
 
-        void BreakSetLocks() { 
-            Locks.BreakSetLocks(LockId()); 
-        } 
- 
+        void BreakSetLocks() {
+            Locks.BreakSetLocks(LockId());
+        }
+
         //
 
         void EraseLock(ui64 lockId) {
@@ -189,58 +189,58 @@ namespace NTest {
 
         //
 
-        void StartTx(TLocksUpdate& update) { 
-            update.LockTxId = 0; 
-            Locks.SetTxUpdater(&update); 
-        } 
- 
+        void StartTx(TLocksUpdate& update) {
+            update.LockTxId = 0;
+            Locks.SetTxUpdater(&update);
+        }
+
         void StartTx(ui64 lockTxId, TLocksUpdate& update) {
             update.LockTxId = lockTxId;
             Locks.SetTxUpdater(&update);
         }
 
-        TVector<TSysLocks::TLock> ApplyTxLocks() { 
-            auto locks = Locks.ApplyLocks(); 
+        TVector<TSysLocks::TLock> ApplyTxLocks() {
+            auto locks = Locks.ApplyLocks();
             Locks.SetTxUpdater(nullptr);
-            return locks; 
+            return locks;
         }
 
-        template <typename T> 
-        void Select(const TVector<T>& selects, bool breakSetLocks = false) { 
-            for (auto& value : selects) { 
-                SetLock(TLockTester::TPointKey<T>(value)); 
-            } 
-            if (breakSetLocks) 
-                BreakSetLocks(); 
-        } 
- 
-        template <typename T> 
-        void Select(const TVector<std::pair<T, T>>& rangeSelects, ui32 rangeFlags = 0) { 
-            for (auto& range : rangeSelects) { 
-                SetLock(TLockTester::TRangeKey<T>(range.first, range.second, rangeFlags)); 
-            } 
-        } 
- 
-        template <typename T> 
-        void Select(const TVector<std::pair<T, T>>& rangeSelects, bool breakSetLocks, ui32 rangeFlags = 0) { 
-            for (auto& range : rangeSelects) { 
-                SetLock(TLockTester::TRangeKey<T>(range.first, range.second, rangeFlags)); 
-            } 
-            if (breakSetLocks) 
-                BreakSetLocks(); 
-        } 
- 
-        template <typename T> 
-        void Update(const TVector<T>& updates) { 
-            for (auto& value : updates) { 
-                BreakLock(TLockTester::TPointKey<T>(value)); 
-            } 
-        } 
- 
-        void PromoteCompleteVersion(const TRowVersion& completeVersion) { 
-            DataShard.CompleteVersion = Max(DataShard.CompleteVersion, completeVersion); 
-        } 
- 
+        template <typename T>
+        void Select(const TVector<T>& selects, bool breakSetLocks = false) {
+            for (auto& value : selects) {
+                SetLock(TLockTester::TPointKey<T>(value));
+            }
+            if (breakSetLocks)
+                BreakSetLocks();
+        }
+
+        template <typename T>
+        void Select(const TVector<std::pair<T, T>>& rangeSelects, ui32 rangeFlags = 0) {
+            for (auto& range : rangeSelects) {
+                SetLock(TLockTester::TRangeKey<T>(range.first, range.second, rangeFlags));
+            }
+        }
+
+        template <typename T>
+        void Select(const TVector<std::pair<T, T>>& rangeSelects, bool breakSetLocks, ui32 rangeFlags = 0) {
+            for (auto& range : rangeSelects) {
+                SetLock(TLockTester::TRangeKey<T>(range.first, range.second, rangeFlags));
+            }
+            if (breakSetLocks)
+                BreakSetLocks();
+        }
+
+        template <typename T>
+        void Update(const TVector<T>& updates) {
+            for (auto& value : updates) {
+                BreakLock(TLockTester::TPointKey<T>(value));
+            }
+        }
+
+        void PromoteCompleteVersion(const TRowVersion& completeVersion) {
+            DataShard.CompleteVersion = Max(DataShard.CompleteVersion, completeVersion);
+        }
+
     private:
         TTableId TableId;
         NTest::TFakeDataShard DataShard;
@@ -251,8 +251,8 @@ namespace NTest {
         ui64 LockId() const { return Locks.CurrentLockTxId(); }
 
         TArrayRef<const TCell> LockAsRowKey(ui64 lockId) {
-            TmpLockVec[0] = TCell::Make(TmpLock.LockId = lockId); 
- 
+            TmpLockVec[0] = TCell::Make(TmpLock.LockId = lockId);
+
             return TArrayRef<const TCell>(TmpLockVec.data(), TmpLockVec.size());
         }
 
@@ -266,9 +266,9 @@ namespace NTest {
         TLocksUpdate txLocks;
         tester.StartTx(lockTxId, txLocks);
 
-        tester.Select(selects); 
-        tester.Update(updates); 
-        tester.Select(rangeSelects, rangeFlags); 
+        tester.Select(selects);
+        tester.Update(updates);
+        tester.Select(rangeSelects, rangeFlags);
 
         tester.ApplyTxLocks();
     }
@@ -296,181 +296,181 @@ namespace NTest {
 // TODO: correctness, times
 Y_UNIT_TEST_SUITE(TDataShardLocksTest) {
 
-Y_UNIT_TEST(MvccTestOooTxDoesntBreakPrecedingReadersLocks) { 
-    NTest::TLockTester tester; 
- 
-    { 
-        // lock tx 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 1); 
-        tester.StartTx(10, update); 
-        tester.Select(TVector<ui32>({10, 15, 25, 30})); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(!lock.IsError()); 
-    } 
- 
-    { 
-        // Ooo write 
-        TLocksUpdate update; 
-        update.BreakVersion = TRowVersion(1, 10); 
-        tester.StartTx(update); 
-        tester.Update(TVector<ui32>({15, 25})); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // Check locks 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 5); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(tester.CheckLock(10)); 
-    } 
-} 
- 
-Y_UNIT_TEST(MvccTestOutdatedLocksRemove) { 
-    NTest::TLockTester tester; 
- 
-    { 
-        // Lock tx 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 1); 
-        tester.StartTx(10, update); 
-        tester.Select(TVector<ui32>({10})); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(!lock.IsError()); 
-    } 
- 
-    { 
-        // Ooo write breaks set lock 
-        TLocksUpdate update; 
-        update.BreakVersion = TRowVersion(1, 10); 
-        tester.StartTx(update); 
-        tester.Update(TVector<ui32>({10})); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // Another lock 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 15); 
-        tester.StartTx(12, update); 
-        tester.Select(TVector<ui32>({22})); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(!lock.IsError()); 
-    } 
- 
-    tester.PromoteCompleteVersion(TRowVersion(1, 10)); 
- 
-    { 
-        // lock is ready to be deleted but still in place 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 5); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(tester.CheckLock(10)); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // erase triggers outdated locks cleanup 
-        TLocksUpdate update; 
-        tester.StartTx(update); 
-        tester.EraseLock(12); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // lock is removed 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 5); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(!tester.CheckLock(10)); 
-    } 
-} 
- 
-Y_UNIT_TEST(MvccTestBreakEdge) { 
-    NTest::TLockTester tester; 
- 
-    { 
-        // lock tx 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 1); 
-        tester.StartTx(10, update); 
-        tester.Select(TVector<ui32>({10, 15, 25, 30})); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(!lock.IsError()); 
-    } 
- 
-    { 
-        // Ooo write 
-        TLocksUpdate update; 
-        update.BreakVersion = TRowVersion(1, 10); 
-        tester.StartTx(update); 
-        tester.Update(TVector<ui32>({15, 25})); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // Check locks 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 5); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(tester.CheckLock(10)); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // At this point lock is broken 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 15); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(!tester.CheckLock(10)); 
-    } 
-} 
- 
-Y_UNIT_TEST(MvccTestWriteBreaksLocks) { 
-    NTest::TLockTester tester; 
- 
-    { 
-        // lock tx 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 1); 
-        tester.StartTx(10, update); 
-        tester.Select(TVector<ui32>({10, 15, 25, 30})); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(!lock.IsError()); 
-    } 
- 
-    { 
-        // subsequent write 
-        TLocksUpdate update; 
-        tester.StartTx(update); 
-        tester.Update(TVector<ui32>({15, 25})); 
-        tester.ApplyTxLocks(); 
-    } 
- 
-    { 
-        // lock is broken permanently 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 5); 
-        tester.StartTx(update); 
-        UNIT_ASSERT(!tester.CheckLock(10)); 
-    } 
-} 
- 
-Y_UNIT_TEST(MvccTestAlreadyBrokenLocks) { 
-    NTest::TLockTester tester; 
- 
-    { 
-        // lock tx 
-        TLocksUpdate update; 
-        update.CheckVersion = TRowVersion(1, 1); 
-        tester.StartTx(10, update); 
-        tester.Select(TVector<ui32>({10, 15, 25, 30}), true); 
-        for (auto lock : tester.ApplyTxLocks()) 
-            UNIT_ASSERT(lock.IsError() && lock.Counter == TSysTables::TLocksTable::TLock::ErrorAlreadyBroken); 
-    } 
-} 
- 
+Y_UNIT_TEST(MvccTestOooTxDoesntBreakPrecedingReadersLocks) {
+    NTest::TLockTester tester;
+
+    {
+        // lock tx
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 1);
+        tester.StartTx(10, update);
+        tester.Select(TVector<ui32>({10, 15, 25, 30}));
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(!lock.IsError());
+    }
+
+    {
+        // Ooo write
+        TLocksUpdate update;
+        update.BreakVersion = TRowVersion(1, 10);
+        tester.StartTx(update);
+        tester.Update(TVector<ui32>({15, 25}));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // Check locks
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 5);
+        tester.StartTx(update);
+        UNIT_ASSERT(tester.CheckLock(10));
+    }
+}
+
+Y_UNIT_TEST(MvccTestOutdatedLocksRemove) {
+    NTest::TLockTester tester;
+
+    {
+        // Lock tx
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 1);
+        tester.StartTx(10, update);
+        tester.Select(TVector<ui32>({10}));
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(!lock.IsError());
+    }
+
+    {
+        // Ooo write breaks set lock
+        TLocksUpdate update;
+        update.BreakVersion = TRowVersion(1, 10);
+        tester.StartTx(update);
+        tester.Update(TVector<ui32>({10}));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // Another lock
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 15);
+        tester.StartTx(12, update);
+        tester.Select(TVector<ui32>({22}));
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(!lock.IsError());
+    }
+
+    tester.PromoteCompleteVersion(TRowVersion(1, 10));
+
+    {
+        // lock is ready to be deleted but still in place
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 5);
+        tester.StartTx(update);
+        UNIT_ASSERT(tester.CheckLock(10));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // erase triggers outdated locks cleanup
+        TLocksUpdate update;
+        tester.StartTx(update);
+        tester.EraseLock(12);
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // lock is removed
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 5);
+        tester.StartTx(update);
+        UNIT_ASSERT(!tester.CheckLock(10));
+    }
+}
+
+Y_UNIT_TEST(MvccTestBreakEdge) {
+    NTest::TLockTester tester;
+
+    {
+        // lock tx
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 1);
+        tester.StartTx(10, update);
+        tester.Select(TVector<ui32>({10, 15, 25, 30}));
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(!lock.IsError());
+    }
+
+    {
+        // Ooo write
+        TLocksUpdate update;
+        update.BreakVersion = TRowVersion(1, 10);
+        tester.StartTx(update);
+        tester.Update(TVector<ui32>({15, 25}));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // Check locks
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 5);
+        tester.StartTx(update);
+        UNIT_ASSERT(tester.CheckLock(10));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // At this point lock is broken
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 15);
+        tester.StartTx(update);
+        UNIT_ASSERT(!tester.CheckLock(10));
+    }
+}
+
+Y_UNIT_TEST(MvccTestWriteBreaksLocks) {
+    NTest::TLockTester tester;
+
+    {
+        // lock tx
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 1);
+        tester.StartTx(10, update);
+        tester.Select(TVector<ui32>({10, 15, 25, 30}));
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(!lock.IsError());
+    }
+
+    {
+        // subsequent write
+        TLocksUpdate update;
+        tester.StartTx(update);
+        tester.Update(TVector<ui32>({15, 25}));
+        tester.ApplyTxLocks();
+    }
+
+    {
+        // lock is broken permanently
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 5);
+        tester.StartTx(update);
+        UNIT_ASSERT(!tester.CheckLock(10));
+    }
+}
+
+Y_UNIT_TEST(MvccTestAlreadyBrokenLocks) {
+    NTest::TLockTester tester;
+
+    {
+        // lock tx
+        TLocksUpdate update;
+        update.CheckVersion = TRowVersion(1, 1);
+        tester.StartTx(10, update);
+        tester.Select(TVector<ui32>({10, 15, 25, 30}), true);
+        for (auto lock : tester.ApplyTxLocks())
+            UNIT_ASSERT(lock.IsError() && lock.Counter == TSysTables::TLocksTable::TLock::ErrorAlreadyBroken);
+    }
+}
+
 Y_UNIT_TEST(Points_OneTx) {
     NTest::TLockTester tester;
 

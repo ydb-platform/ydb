@@ -160,7 +160,7 @@ namespace Tests {
         TAppPrepare app; /* will cook TAppData */
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
-        app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout); 
+        app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
         app.CompactionConfig = Settings->CompactionConfig;

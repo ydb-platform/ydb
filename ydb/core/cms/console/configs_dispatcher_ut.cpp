@@ -480,14 +480,14 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         // Config should be requested from CMS.
         auto config1 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, false);
-        CheckEqualsIgnoringVersion(config, config1); 
+        CheckEqualsIgnoringVersion(config, config1);
         UNIT_ASSERT(nodeConfigRequests > 0);
 
         // We didn't ask to cache, so config should still be requested from CMS.
         // This time ask to cache config.
         nodeConfigRequests = 0;
         auto config2 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config2); 
+        CheckEqualsIgnoringVersion(config, config2);
         UNIT_ASSERT(nodeConfigRequests > 0);
 
         // Make sure subscription is online by using it with another subscriber.
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         // This time we should get config with no requests to CMS.
         nodeConfigRequests = 0;
         auto config3 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config3); 
+        CheckEqualsIgnoringVersion(config, config3);
         UNIT_ASSERT_VALUES_EQUAL(nodeConfigRequests, 0);
 
         // Change config and expect dispatcher to process notification.
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         // Now we should get new config with no requests to CMS.
         config.MutableLogConfig()->SetClusterName("cluster2");
         auto config4 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config4); 
+        CheckEqualsIgnoringVersion(config, config4);
         UNIT_ASSERT_VALUES_EQUAL(nodeConfigRequests, 0);
     }
 

@@ -50,8 +50,8 @@ public:
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
         if (added) {
-            DataShard.GetSnapshotManager().InitSnapshotExpireTime(key, ctx.Now()); 
-            if (DataShard.GetSnapshotManager().HasExpiringSnapshots()) 
+            DataShard.GetSnapshotManager().InitSnapshotExpireTime(key, ctx.Now());
+            if (DataShard.GetSnapshotManager().HasExpiringSnapshots())
                 DataShard.PlanCleanup(ctx);
 
             return EExecutionStatus::ExecutedNoMoreRestarts;

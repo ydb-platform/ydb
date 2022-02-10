@@ -83,7 +83,7 @@ public:
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         DataShard.SysLocksTable().ApplyLocks();
-        Pipeline.AddCommittingOp(op); 
+        Pipeline.AddCommittingOp(op);
 
         return EExecutionStatus::ExecutedNoMoreRestarts;
     }

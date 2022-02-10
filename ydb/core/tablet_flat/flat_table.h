@@ -58,7 +58,7 @@ public:
         ui64 Weeded = 0;
         ui64 Sieved = 0;
         ui64 NoKey = 0;         /* Examined TPart without the key */
-        ui64 Invisible = 0;     /* Skipped invisible versions */ 
+        ui64 Invisible = 0;     /* Skipped invisible versions */
     };
 
     explicit TTable(TEpoch);

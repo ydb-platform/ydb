@@ -61,7 +61,7 @@ protected:
     bool NodeBrokerUseTls;
     bool FixedNodeID;
     bool IgnoreCmsConfigs;
-    bool HierarchicalCfg; 
+    bool HierarchicalCfg;
     TString NodeAddress;
     TString NodeHost;
     TString NodeResolveHost;
@@ -256,20 +256,20 @@ protected:
         ProxyBusSessionConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
         ProxyBusQueueConfig.ConfigureLastGetopt(*config.Opts, "mbus-");
 
-        config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding") 
-        .NoArgument().SetFlag(&HierarchicalCfg); 
- 
+        config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding")
+        .NoArgument().SetFlag(&HierarchicalCfg);
+
         config.SetFreeArgsMin(0);
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 
     template<typename TProto>
-    TProto *MutableConfigPart(TConfig& config, const char *optname, 
+    TProto *MutableConfigPart(TConfig& config, const char *optname,
             bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
             const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const,
             TProto* (NKikimrConfig::TAppConfig::*mutableConfig)()) {
         TProto *res = nullptr;
-        if (!HierarchicalCfg && (AppConfig.*hasConfig)()) { 
+        if (!HierarchicalCfg && (AppConfig.*hasConfig)()) {
             return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
         }
 
@@ -303,16 +303,16 @@ protected:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-#define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \ 
+#define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
             &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD)
 #define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD)
 
-        OPTION("auth-file", AuthConfig); 
-        OPTION_MERGE("auth-token-file", AuthConfig); 
- 
-        LoadBaseConfig(config); 
+        OPTION("auth-file", AuthConfig);
+        OPTION_MERGE("auth-token-file", AuthConfig);
+
+        LoadBaseConfig(config);
         LoadYamlConfig();
- 
+
         // start memorylog as soon as possible
         if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {
             if (mem->HasLogBufferSize() && mem->GetLogBufferSize() > 0) {
@@ -664,74 +664,74 @@ protected:
         }
     }
 
-    inline bool LoadConfigFromCMS() { 
-        TVector<TString> addrs; 
-        FillClusterEndpoints(addrs); 
- 
-        SetRandomSeed(TInstant::Now().MicroSeconds()); 
- 
-        int minAttempts = 10; 
-        int attempts = 0; 
- 
-        TString error; 
- 
-        while (attempts < minAttempts) { 
-            for (const auto &addr : addrs) { 
-                // Randomized backoff 
-                if (attempts > 0) 
-                    Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000))); 
- 
+    inline bool LoadConfigFromCMS() {
+        TVector<TString> addrs;
+        FillClusterEndpoints(addrs);
+
+        SetRandomSeed(TInstant::Now().MicroSeconds());
+
+        int minAttempts = 10;
+        int attempts = 0;
+
+        TString error;
+
+        while (attempts < minAttempts) {
+            for (const auto &addr : addrs) {
+                // Randomized backoff
+                if (attempts > 0)
+                    Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
+
                 NClient::TKikimr kikimr(GetKikimr(addr));
-                auto configurator = kikimr.GetNodeConfigurator(); 
- 
-                Cout << "Trying to get configs from " << addr << Endl; 
- 
-                auto result = configurator.SyncGetNodeConfig(RunConfig.NodeId, 
-                                                             FQDNHostName(), 
-                                                             TenantName, 
-                                                             NodeType, 
-                                                             DeduceNodeDomain(), 
-                                                             AppConfig.GetAuthConfig().GetStaffApiUserToken()); 
- 
-                if (result.IsSuccess()) { 
-                    auto appConfig = result.GetConfig(); 
- 
-                    if (RunConfig.PathToConfigCacheFile) { 
-                        Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl; 
-                        if (!SaveConfigForNodeToCache(appConfig)) { 
-                            Cout << "Failed to save config to cache file" << Endl; 
-                        } 
-                    } 
- 
-                    BaseConfig.Swap(&appConfig); 
- 
-                    Cout << "Success." << Endl; 
- 
-                    return true; 
-                } 
- 
-                error = result.GetErrorMessage(); 
-                Cerr << "Configuration error: " << error << Endl; 
-                ++attempts; 
-            } 
-        } 
- 
-        return false; 
-    } 
- 
-    inline bool LoadConfigFromCache() { 
-        if (RunConfig.PathToConfigCacheFile) { 
-            NKikimrConfig::TAppConfig config; 
-            if (GetCachedConfig(config)) { 
-                BaseConfig.Swap(&config); 
- 
-                return true; 
-            } 
-        } 
- 
-        return false; 
-    } 
- 
+                auto configurator = kikimr.GetNodeConfigurator();
+
+                Cout << "Trying to get configs from " << addr << Endl;
+
+                auto result = configurator.SyncGetNodeConfig(RunConfig.NodeId,
+                                                             FQDNHostName(),
+                                                             TenantName,
+                                                             NodeType,
+                                                             DeduceNodeDomain(),
+                                                             AppConfig.GetAuthConfig().GetStaffApiUserToken());
+
+                if (result.IsSuccess()) {
+                    auto appConfig = result.GetConfig();
+
+                    if (RunConfig.PathToConfigCacheFile) {
+                        Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;
+                        if (!SaveConfigForNodeToCache(appConfig)) {
+                            Cout << "Failed to save config to cache file" << Endl;
+                        }
+                    }
+
+                    BaseConfig.Swap(&appConfig);
+
+                    Cout << "Success." << Endl;
+
+                    return true;
+                }
+
+                error = result.GetErrorMessage();
+                Cerr << "Configuration error: " << error << Endl;
+                ++attempts;
+            }
+        }
+
+        return false;
+    }
+
+    inline bool LoadConfigFromCache() {
+        if (RunConfig.PathToConfigCacheFile) {
+            NKikimrConfig::TAppConfig config;
+            if (GetCachedConfig(config)) {
+                BaseConfig.Swap(&config);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     inline void LoadYamlConfig() {
         for(const TString& yamlConfigFile: YamlConfigFiles) {
             auto yamlConfig = TFileInput(yamlConfigFile);
@@ -762,32 +762,32 @@ protected:
 
     inline bool LoadBootstrapConfig(TConfig& config) {
         bool res = false;
-        for (const TString& path : config.ParseResult->GetFreeArgs()) { 
-            NKikimrConfig::TAppConfig parsedConfig; 
-            const bool result = ParsePBFromFile(path, &parsedConfig); 
-            Y_VERIFY(result); 
-            BaseConfig.MergeFrom(parsedConfig); 
-            res = true; 
-        } 
- 
-        return res; 
-    } 
- 
-    void LoadBaseConfig(TConfig& config) { 
-        if (HierarchicalCfg) { 
-            if (LoadConfigFromCMS()) 
-                return; 
-            if (LoadConfigFromCache()) 
-                return; 
-            if (LoadBootstrapConfig(config)) 
-                return; 
- 
-            ythrow yexception() << "cannot load configuration"; 
-        } else { 
-            LoadBootstrapConfig(config); 
-        } 
-    } 
- 
+        for (const TString& path : config.ParseResult->GetFreeArgs()) {
+            NKikimrConfig::TAppConfig parsedConfig;
+            const bool result = ParsePBFromFile(path, &parsedConfig);
+            Y_VERIFY(result);
+            BaseConfig.MergeFrom(parsedConfig);
+            res = true;
+        }
+
+        return res;
+    }
+
+    void LoadBaseConfig(TConfig& config) {
+        if (HierarchicalCfg) {
+            if (LoadConfigFromCMS())
+                return;
+            if (LoadConfigFromCache())
+                return;
+            if (LoadBootstrapConfig(config))
+                return;
+
+            ythrow yexception() << "cannot load configuration";
+        } else {
+            LoadBootstrapConfig(config);
+        }
+    }
+
     TString DeduceTenantDomain() {
         if (TenantDomain)
             return TenantDomain;
@@ -846,13 +846,13 @@ protected:
             if (!NodeId)
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
 
-            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile) 
+            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
                 LoadCachedConfigsForStaticNode();
             return;
         }
 
         RegisterDynamicNode();
-        if (!HierarchicalCfg && !IgnoreCmsConfigs) 
+        if (!HierarchicalCfg && !IgnoreCmsConfigs)
             LoadConfigForDynamicNode();
     }
 

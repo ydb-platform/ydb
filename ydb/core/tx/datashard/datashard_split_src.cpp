@@ -173,16 +173,16 @@ public:
             }
         }
 
-        TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext; 
+        TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
         if (Self->IsMvccEnabled()) {
-            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot), 
-                                                    Self->GetSnapshotManager().GetCompleteEdge(), 
-                                                    Self->GetSnapshotManager().GetIncompleteEdge(), 
-                                                    Self->GetSnapshotManager().GetLowWatermark()); 
-        } else { 
-            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot)); 
-        } 
- 
+            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
+                                                    Self->GetSnapshotManager().GetCompleteEdge(),
+                                                    Self->GetSnapshotManager().GetIncompleteEdge(),
+                                                    Self->GetSnapshotManager().GetLowWatermark());
+        } else {
+            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot));
+        }
+
         txc.Env.MakeSnapshot(snapContext);
 
         Self->SplitSnapshotStarted = true;
@@ -311,20 +311,20 @@ public:
 
             if (!needToReadPages) {
                 // Send version at which data is not protected by persistent snapshots
-                if (auto minVersion = Self->GetSnapshotManager().GetMinWriteVersion()) { 
+                if (auto minVersion = Self->GetSnapshotManager().GetMinWriteVersion()) {
                     snapshot->SetMinWriteVersionStep(minVersion.Step);
                     snapshot->SetMinWriteVersionTxId(minVersion.TxId);
                 }
 
                 if (Self->IsMvccEnabled()) {
-                    snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step); 
-                    snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId); 
-                    snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step); 
-                    snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId); 
-                    snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step); 
-                    snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId); 
-                } 
- 
+                    snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
+                    snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
+                    snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
+                    snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
+                    snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);
+                    snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId);
+                }
+
                 // Send info about existing persistent snapshots
                 for (const auto& kv : Self->GetSnapshotManager().GetSnapshots()) {
                     if (kv.second.HasFlags(TSnapshot::FlagRemoved)) {

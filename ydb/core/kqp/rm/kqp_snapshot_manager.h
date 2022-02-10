@@ -14,15 +14,15 @@ struct TEvKqpSnapshot {
         TKqpSnapshotEvents::EvCreateSnapshotRequest>
     {
         explicit TEvCreateSnapshotRequest(const TVector<TString>& tables)
-            : Tables(tables) 
-            , MvccSnapshot(false){} 
+            : Tables(tables)
+            , MvccSnapshot(false){}
 
-        explicit TEvCreateSnapshotRequest() 
-            : Tables({}) 
-            , MvccSnapshot(true){} 
- 
+        explicit TEvCreateSnapshotRequest()
+            : Tables({})
+            , MvccSnapshot(true){}
+
         const TVector<TString> Tables;
-        const bool MvccSnapshot; 
+        const bool MvccSnapshot;
     };
 
     struct TEvCreateSnapshotResponse : public TEventLocal<TEvCreateSnapshotResponse,

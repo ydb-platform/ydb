@@ -151,28 +151,28 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
     Change->Stats.SelectSieved += res.Sieved;
     Change->Stats.SelectWeeded += res.Weeded;
     Change->Stats.SelectNoKey += res.NoKey;
-    Change->Stats.SelectInvisible += res.Invisible; 
+    Change->Stats.SelectInvisible += res.Invisible;
     return res.Ready;
 }
 
-EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, TSelectStats& stats, ui64 flg, TRowVersion snapshot) const noexcept 
-{ 
-    TempIterators.clear(); 
-    Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table); 
+EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, TSelectStats& stats, ui64 flg, TRowVersion snapshot) const noexcept
+{
+    TempIterators.clear();
+    Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
     auto res = Require(table)->Select(key, tags, Env, row, flg, snapshot, TempIterators);
-    Change->Stats.SelectSieved += res.Sieved; 
-    Change->Stats.SelectWeeded += res.Weeded; 
-    Change->Stats.SelectNoKey += res.NoKey; 
-    Change->Stats.SelectInvisible += res.Invisible; 
- 
-    stats.Sieved += res.Sieved; 
-    stats.Weeded += res.Weeded; 
-    stats.NoKey += res.NoKey; 
-    stats.Invisible += res.Invisible; 
- 
-    return res.Ready; 
-} 
- 
+    Change->Stats.SelectSieved += res.Sieved;
+    Change->Stats.SelectWeeded += res.Weeded;
+    Change->Stats.SelectNoKey += res.NoKey;
+    Change->Stats.SelectInvisible += res.Invisible;
+
+    stats.Sieved += res.Sieved;
+    stats.Weeded += res.Weeded;
+    stats.NoKey += res.NoKey;
+    stats.Invisible += res.Invisible;
+
+    return res.Ready;
+}
+
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)

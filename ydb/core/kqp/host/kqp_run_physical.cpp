@@ -35,9 +35,9 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
     } else {
         if (CurrentTxIndex >= txsCount) {
             if (!txState.DeferredEffects.Empty() && TxState->Tx().Locks.Broken()) {
-                TxState->Tx().Locks.ReportIssues(ctx); 
-                return TStatus::Error; 
-            } 
+                TxState->Tx().Locks.ReportIssues(ctx);
+                return TStatus::Error;
+            }
 
             if (settings.GetCommitTx()) {
                 status = Execute(nullptr, /* commit */ true, ctx);

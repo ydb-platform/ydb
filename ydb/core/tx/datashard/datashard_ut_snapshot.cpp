@@ -152,11 +152,11 @@ namespace {
 
 Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotSplit) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotSplit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
         RegisterFormats(serverSettings);
 
@@ -169,8 +169,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
@@ -209,11 +209,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(table1headAfterSplit, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotMerge) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotMerge) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
         RegisterFormats(serverSettings);
 
@@ -226,8 +226,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
         // Split/merge would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
@@ -276,11 +276,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(table1snapshotAfterMerge, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotAndLocalMKQLUpdate) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotAndLocalMKQLUpdate) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
         RegisterFormats(serverSettings);
 
@@ -293,8 +293,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
@@ -340,11 +340,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "key = 3, value = 3\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotReadTable) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotReadTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -357,8 +357,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 2); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 2); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 2);
+        CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
@@ -427,11 +427,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(table1snapshotdiscarded, "ERROR: WrongRequest\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotRefreshDiscard) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotRefreshDiscard) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -444,8 +444,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 2); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 2); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 2);
+        CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
@@ -478,11 +478,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT(!DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeout) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeout) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000);
 
@@ -496,8 +496,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 2); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 2); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 2);
+        CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
@@ -521,11 +521,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "ERROR: WrongRequest\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeoutRefresh) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeoutRefresh) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000);
 
@@ -539,8 +539,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 2); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 2); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 2);
+        CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
@@ -593,11 +593,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnReboot) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnReboot) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000);
 
@@ -611,8 +611,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
@@ -657,11 +657,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnFinish) { 
+    Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnFinish) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc) 
+            .SetEnableMvcc(WithMvcc)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000);
 
@@ -675,8 +675,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 

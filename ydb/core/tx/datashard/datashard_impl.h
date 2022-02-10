@@ -79,14 +79,14 @@ private:
 // For Split
 class TSplitSnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
 public:
-    TSplitSnapshotContext(ui64 txId, TVector<ui32> &&tables, 
-                          TRowVersion completeEdge = TRowVersion::Min(), 
-                          TRowVersion incompleteEdge = TRowVersion::Min(), 
-                          TRowVersion lowWatermark = TRowVersion::Min()) 
+    TSplitSnapshotContext(ui64 txId, TVector<ui32> &&tables,
+                          TRowVersion completeEdge = TRowVersion::Min(),
+                          TRowVersion incompleteEdge = TRowVersion::Min(),
+                          TRowVersion lowWatermark = TRowVersion::Min())
         : TxId(txId)
-        , CompleteEdge(completeEdge) 
-        , IncompleteEdge(incompleteEdge) 
-        , LowWatermark(lowWatermark) 
+        , CompleteEdge(completeEdge)
+        , IncompleteEdge(incompleteEdge)
+        , LowWatermark(lowWatermark)
         , Tables(tables)
     {}
 
@@ -95,9 +95,9 @@ public:
     }
 
     ui64 TxId;
-    TRowVersion CompleteEdge; 
-    TRowVersion IncompleteEdge; 
-    TRowVersion LowWatermark; 
+    TRowVersion CompleteEdge;
+    TRowVersion IncompleteEdge;
+    TRowVersion LowWatermark;
 
 private:
     TVector<ui32> Tables;
@@ -109,29 +109,29 @@ public:
     virtual void OnFinished(TDataShard* self) = 0;
 };
 
-struct TReadWriteVersions { 
-    TReadWriteVersions(const TRowVersion& readVersion, const TRowVersion& writeVersion) 
-        : ReadVersion(readVersion) 
-        , WriteVersion(writeVersion) 
-    {} 
- 
-    TReadWriteVersions(const TRowVersion& version) 
-        : ReadVersion(version) 
-        , WriteVersion(version) 
-    {} 
- 
-    const TRowVersion ReadVersion; 
-    const TRowVersion WriteVersion; 
-}; 
- 
-enum class TSwitchState { 
-    READY, 
-    SWITCHING, 
-    DONE 
-}; 
- 
+struct TReadWriteVersions {
+    TReadWriteVersions(const TRowVersion& readVersion, const TRowVersion& writeVersion)
+        : ReadVersion(readVersion)
+        , WriteVersion(writeVersion)
+    {}
+
+    TReadWriteVersions(const TRowVersion& version)
+        : ReadVersion(version)
+        , WriteVersion(version)
+    {}
+
+    const TRowVersion ReadVersion;
+    const TRowVersion WriteVersion;
+};
+
+enum class TSwitchState {
+    READY,
+    SWITCHING,
+    DONE
+};
+
 class TDataShardEngineHost;
-struct TSetupSysLocks; 
+struct TSetupSysLocks;
 
 ///
 class TDataShard
@@ -194,7 +194,7 @@ class TDataShard
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
     class TTxUnsafeUploadRows;
-    class TTxExecuteMvccStateChange; 
+    class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
     class TTxCompactTable;
@@ -255,11 +255,11 @@ class TDataShard
     friend class TS3UploadsManager;
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
-    friend struct TSetupSysLocks; 
+    friend struct TSetupSysLocks;
 
-    friend class TTxStartMvccStateChange; 
-    friend class TTxExecuteMvccStateChange; 
- 
+    friend class TTxStartMvccStateChange;
+    friend class TTxExecuteMvccStateChange;
+
     class TFindSubDomainPathIdActor;
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
@@ -789,15 +789,15 @@ class TDataShard
             Sys_MinWriteVersionTxId, // 23 Minimum TxId for new writes (past known snapshots)
             Sys_PathOwnerId, // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
 
-            SysMvcc_State, 
-            SysMvcc_CompleteEdgeStep, 
-            SysMvcc_CompleteEdgeTxId, 
-            SysMvcc_IncompleteEdgeStep, 
-            SysMvcc_IncompleteEdgeTxId, 
-            SysMvcc_LowWatermarkStep, 
-            SysMvcc_LowWatermarkTxId, 
-            SysMvcc_KeepSnapshotTimeout, 
- 
+            SysMvcc_State,
+            SysMvcc_CompleteEdgeStep,
+            SysMvcc_CompleteEdgeTxId,
+            SysMvcc_IncompleteEdgeStep,
+            SysMvcc_IncompleteEdgeTxId,
+            SysMvcc_LowWatermarkStep,
+            SysMvcc_LowWatermarkTxId,
+            SysMvcc_KeepSnapshotTimeout,
+
             Sys_SubDomainOwnerId, // 33 OwnerId of the subdomain path id
             Sys_SubDomainLocalPathId, // 34 LocalPathId of the subdomain path id
             Sys_SubDomainOutOfSpace, // 35 Boolean flag indicating database is out of space
@@ -904,7 +904,7 @@ class TDataShard
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx);
@@ -1053,10 +1053,10 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
-    NTabletFlatExecutor::ITransaction* CreateTxExecuteMvccStateChange(); 
+    NTabletFlatExecutor::ITransaction* CreateTxExecuteMvccStateChange();
 
-    TReadWriteVersions GetLocalReadWriteVersions() const; 
- 
+    TReadWriteVersions GetLocalReadWriteVersions() const;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_DATASHARD_ACTOR;
@@ -1138,13 +1138,13 @@ public:
     ui64 TxPlanned() const { return TransQueue.TxPlanned(); }
     ui64 TxPlanWaiting() const { return TransQueue.TxPlanWaiting(); }
     ui64 ImmediateInFly() const { return Pipeline.ImmediateInFly(); }
-    ui64 TxWaiting() const { return Pipeline.WaitingTxs(); } 
+    ui64 TxWaiting() const { return Pipeline.WaitingTxs(); }
 
-    inline TRowVersion LastCompleteTxVersion() const { 
-        auto order = Pipeline.GetLastCompleteTx(); 
-        return TRowVersion(order.Step, order.TxId); 
-    } 
- 
+    inline TRowVersion LastCompleteTxVersion() const {
+        auto order = Pipeline.GetLastCompleteTx();
+        return TRowVersion(order.Step, order.TxId);
+    }
+
     bool CanDrop() const {
         Y_VERIFY(State != TShardState::Offline, "Unexpexted repeated drop");
         return (TxInFly() == 1) && OutReadSets.Empty() && (State != TShardState::PreOffline);
@@ -1276,10 +1276,10 @@ public:
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
     void CheckStateChange(const TActorContext& ctx);
     void CheckSplitCanStart(const TActorContext& ctx);
-    void CheckMvccStateChangeCanStart(const TActorContext& ctx); 
+    void CheckMvccStateChangeCanStart(const TActorContext& ctx);
 
     ui32 GetState() const { return State; }
-    TSwitchState GetMvccSwitchState() { return MvccSwitchState; } 
+    TSwitchState GetMvccSwitchState() { return MvccSwitchState; }
     void SetPersistState(ui32 state, TTransactionContext &txc)
     {
         NIceDb::TNiceDb db(txc.DB);
@@ -1306,7 +1306,7 @@ public:
     void PersistOwnerPathId(ui64 id,
                             NTabletFlatExecutor::TTransactionContext &txc);
 
-    TDuration CleanupTimeout() const; 
+    TDuration CleanupTimeout() const;
     void PlanCleanup(const TActorContext &ctx) {
         CleanupQueue.Schedule(ctx, CleanupTimeout());
     }
@@ -1373,7 +1373,7 @@ public:
         const TPathId& streamPathId);
 
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
-    TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc, 
+    TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
                                     const NKikimrSchemeOp::TTableDescription& tableScheme);
     static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
     TUserTable::TPtr MoveUserTable(const TActorContext& ctx, TTransactionContext& txc, const NKikimrTxDataShard::TMoveTable& move);
@@ -1419,7 +1419,7 @@ public:
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;
 
-    TReadWriteVersions GetReadWriteVersions(TOperation* op = nullptr) const; 
+    TReadWriteVersions GetReadWriteVersions(TOperation* op = nullptr) const;
 
     void FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const;
 
@@ -1438,9 +1438,9 @@ public:
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
-    bool WaitPlanStep(ui64 step); 
-    bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const; 
- 
+    bool WaitPlanStep(ui64 step);
+    bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
+
     bool CheckChangesQueueOverflow() const;
 
 private:
@@ -1916,7 +1916,7 @@ private:
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
-    TSwitchState MvccSwitchState; 
+    TSwitchState MvccSwitchState;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
@@ -1970,7 +1970,7 @@ private:
     TS3DownloadsManager S3Downloads;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
-    TSet<ui64> MediatorTimeCastWaitingSteps; 
+    TSet<ui64> MediatorTimeCastWaitingSteps;
 
     TControlWrapper DisableByKeyFilter;
     TControlWrapper MaxTxInFly;
@@ -2165,7 +2165,7 @@ protected:
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
-            HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle); 
+            HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
             HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPart, Handle);

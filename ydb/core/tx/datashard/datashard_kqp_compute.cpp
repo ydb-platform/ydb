@@ -160,11 +160,11 @@ void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TArra
     Shard->SetTableAccessTime(tableId, Now);
 }
 
-void TKqpDatashardComputeContext::BreakSetLocks() const { 
-    MKQL_ENSURE_S(Shard); 
-    Shard->SysLocksTable().BreakSetLocks(LockTxId); 
-} 
- 
+void TKqpDatashardComputeContext::BreakSetLocks() const {
+    MKQL_ENSURE_S(Shard);
+    Shard->SysLocksTable().BreakSetLocks(LockTxId);
+}
+
 void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId) {
     LockTxId = lockTxId;
 }
@@ -173,16 +173,16 @@ ui64 TKqpDatashardComputeContext::GetShardId() const {
     return Shard->TabletID();
 }
 
-void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) { 
-    ReadVersion = readVersion; 
-} 
- 
-TRowVersion TKqpDatashardComputeContext::GetReadVersion() const { 
-    Y_VERIFY(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set"); 
- 
-    return ReadVersion; 
-} 
- 
+void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
+    ReadVersion = readVersion;
+}
+
+TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
+    Y_VERIFY(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set");
+
+    return ReadVersion;
+}
+
 void TKqpDatashardComputeContext::SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId) {
     OutputChannels.emplace(std::make_pair(taskId, channelId), actorId);
 }
@@ -259,7 +259,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetReadVersion()); 
+                                         GetReadVersion());
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
             << ", columns: [" << JoinSeq(", ", columnTags) << "]"

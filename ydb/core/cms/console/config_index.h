@@ -284,16 +284,16 @@ public:
     using TPtr = TIntrusivePtr<TScopedConfig>;
 
     // Merge all config items into resulting config.
-    void ComputeConfig(NKikimrConfig::TAppConfig &config, bool addVersion = false) const; 
+    void ComputeConfig(NKikimrConfig::TAppConfig &config, bool addVersion = false) const;
 
-    // Merge config items with given kinds into resulting config. 
-    void ComputeConfig(const THashSet<ui32> &kinds, NKikimrConfig::TAppConfig &config, bool addVersion = false) const; 
- 
+    // Merge config items with given kinds into resulting config.
+    void ComputeConfig(const THashSet<ui32> &kinds, NKikimrConfig::TAppConfig &config, bool addVersion = false) const;
+
 private:
     void MergeItems(const TOrderedConfigItems &items,
-                    NKikimrConfig::TAppConfig &config, bool addVersion) const; 
+                    NKikimrConfig::TAppConfig &config, bool addVersion) const;
     void MergeItem(TConfigItem::TPtr item,
-                   NKikimrConfig::TAppConfig &config, bool addVersion) const; 
+                   NKikimrConfig::TAppConfig &config, bool addVersion) const;
 
 public:
     // Here all config items included into the scope are listed.
@@ -647,59 +647,59 @@ private:
     TSubscriptionSet EmptySubscriptionsSet;
 };
 
-struct TInMemorySubscription : public TThrRefBase { 
-    using TPtr = TIntrusivePtr<TInMemorySubscription>; 
- 
-    TActorId Subscriber; 
-    ui64 Generation; 
- 
-    ui32 NodeId; 
-    TString Host; 
-    TString Tenant; 
-    TString NodeType; 
-    THashSet<ui32> ItemKinds; 
- 
-    NKikimrConfig::TConfigVersion LastProvided; 
- 
-    TActorId Worker; 
-}; 
- 
-using TInMemorySubscriptionSet = THashSet<TInMemorySubscription::TPtr, TPtrHash>; 
- 
-class TInMemorySubscriptionIndex { 
-public: 
-    void CollectAffectedSubscriptions(const TUsageScope &scope, ui32 kind, TInMemorySubscriptionSet &out) const; 
- 
-    TInMemorySubscription::TPtr GetSubscription(const TActorId &subscriber); 
- 
-    const THashMap<TActorId, TInMemorySubscription::TPtr> &GetSubscriptions() const; 
- 
-    void AddSubscription(TInMemorySubscription::TPtr subscription); 
- 
-    void RemoveSubscription(const TActorId &subscriber); 
- 
-private: 
-    template <typename TKey> 
-    void RemoveFromIndex(TInMemorySubscription::TPtr subscription, 
-                         const TKey &key, 
-                         THashMap<TKey, TInMemorySubscriptionSet> &index) 
-    { 
-        auto it = index.find(key); 
-        Y_VERIFY(it != index.end()); 
-        Y_VERIFY(it->second.contains(subscription)); 
-        it->second.erase(subscription); 
-        if (it->second.empty()) 
-            index.erase(it); 
-    } 
- 
-    THashMap<TActorId, TInMemorySubscription::TPtr> Subscriptions; 
- 
-    THashMap<ui32, TInMemorySubscriptionSet> SubscriptionsByNodeId; 
-    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByHost; 
-    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByTenant; 
-    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByNodeType; 
-}; 
- 
+struct TInMemorySubscription : public TThrRefBase {
+    using TPtr = TIntrusivePtr<TInMemorySubscription>;
+
+    TActorId Subscriber;
+    ui64 Generation;
+
+    ui32 NodeId;
+    TString Host;
+    TString Tenant;
+    TString NodeType;
+    THashSet<ui32> ItemKinds;
+
+    NKikimrConfig::TConfigVersion LastProvided;
+
+    TActorId Worker;
+};
+
+using TInMemorySubscriptionSet = THashSet<TInMemorySubscription::TPtr, TPtrHash>;
+
+class TInMemorySubscriptionIndex {
+public:
+    void CollectAffectedSubscriptions(const TUsageScope &scope, ui32 kind, TInMemorySubscriptionSet &out) const;
+
+    TInMemorySubscription::TPtr GetSubscription(const TActorId &subscriber);
+
+    const THashMap<TActorId, TInMemorySubscription::TPtr> &GetSubscriptions() const;
+
+    void AddSubscription(TInMemorySubscription::TPtr subscription);
+
+    void RemoveSubscription(const TActorId &subscriber);
+
+private:
+    template <typename TKey>
+    void RemoveFromIndex(TInMemorySubscription::TPtr subscription,
+                         const TKey &key,
+                         THashMap<TKey, TInMemorySubscriptionSet> &index)
+    {
+        auto it = index.find(key);
+        Y_VERIFY(it != index.end());
+        Y_VERIFY(it->second.contains(subscription));
+        it->second.erase(subscription);
+        if (it->second.empty())
+            index.erase(it);
+    }
+
+    THashMap<TActorId, TInMemorySubscription::TPtr> Subscriptions;
+
+    THashMap<ui32, TInMemorySubscriptionSet> SubscriptionsByNodeId;
+    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByHost;
+    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByTenant;
+    THashMap<TString, TInMemorySubscriptionSet> SubscriptionsByNodeType;
+};
+
 struct TSubscriptionModifications {
     TSubscriptionModifications() = default;
     TSubscriptionModifications(const TSubscriptionModifications &other) = default;

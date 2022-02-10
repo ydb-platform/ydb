@@ -53,7 +53,7 @@ struct TKqpSnapshotEvents {
     enum EKqpSnapshotEvents {
         EvCreateSnapshotRequest = EventSpaceBegin(TKikimrEvents::ES_KQP) + 150,
         EvCreateSnapshotResponse,
-        EvDiscardSnapshot 
+        EvDiscardSnapshot
     };
 };
 

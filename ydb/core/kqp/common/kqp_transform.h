@@ -59,23 +59,23 @@ struct TKqpTxLocks {
     NKikimrMiniKQL::TListType LocksListType;
     THashMap<TKqpTxLock::TKey, TKqpTxLock> LocksMap;
 
-    TMaybe<NYql::TIssue> LockIssue; 
- 
+    TMaybe<NYql::TIssue> LockIssue;
+
     bool HasLocks() const { return !LocksMap.empty(); }
-    bool Broken() const { return LockIssue.Defined(); } 
-    void MarkBroken(NYql::TIssue lockIssue) { LockIssue.ConstructInPlace(std::move(lockIssue)); } 
+    bool Broken() const { return LockIssue.Defined(); }
+    void MarkBroken(NYql::TIssue lockIssue) { LockIssue.ConstructInPlace(std::move(lockIssue)); }
     ui64 GetLockTxId() const { return HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
     size_t Size() const { return LocksMap.size(); }
 
-    void ReportIssues(NYql::TExprContext& ctx) { 
-        if (LockIssue) 
-            ctx.AddError(*LockIssue); 
-    } 
- 
-    void Clear() { 
-        LocksMap.clear(); 
-        LockIssue.Clear(); 
-    } 
+    void ReportIssues(NYql::TExprContext& ctx) {
+        if (LockIssue)
+            ctx.AddError(*LockIssue);
+    }
+
+    void Clear() {
+        LocksMap.clear();
+        LockIssue.Clear();
+    }
 };
 
 using TParamValueMap = THashMap<TString, NKikimrMiniKQL::TParams>;
@@ -178,10 +178,10 @@ public:
         return DeferredEffects.Add(physicalTx, std::move(params));
     }
 
-    const IKqpGateway::TKqpSnapshot& GetSnapshot() const { 
-        return SnapshotHandle.Snapshot; 
-    } 
- 
+    const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
+        return SnapshotHandle.Snapshot;
+    }
+
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!Locks.HasLocks());

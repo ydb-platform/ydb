@@ -1184,27 +1184,27 @@ private:
             << ", lockTxId: " << lockTxId
             << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
 
-        TEvDataShard::TEvProposeTransaction* ev; 
+        TEvDataShard::TEvProposeTransaction* ev;
         if (Request.Snapshot.IsValid() && ReadOnlyTx) {
-            ev = new TEvDataShard::TEvProposeTransaction( 
+            ev = new TEvDataShard::TEvProposeTransaction(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 SelfId(),
                 TxId,
                 dataTransaction.SerializeAsString(),
-                Request.Snapshot.Step, 
-                Request.Snapshot.TxId, 
+                Request.Snapshot.Step,
+                Request.Snapshot.TxId,
                 ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
-        } else { 
-            ev = new TEvDataShard::TEvProposeTransaction( 
-                NKikimrTxDataShard::TX_KIND_DATA, 
-                SelfId(), 
-                TxId, 
-                dataTransaction.SerializeAsString(), 
+        } else {
+            ev = new TEvDataShard::TEvProposeTransaction(
+                NKikimrTxDataShard::TX_KIND_DATA,
+                SelfId(),
+                TxId,
+                dataTransaction.SerializeAsString(),
                 ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
-        } 
+        }
 
         Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev, shardId, true));
- 
+
         auto result = ShardStates.emplace(shardId, std::move(shardState));
         YQL_ENSURE(result.second);
     }

@@ -49,8 +49,8 @@ protected:
         }
 
         if (commit) {
-            Y_VERIFY_DEBUG(txState.DeferredEffects.Empty() || !txState.Locks.Broken()); 
- 
+            Y_VERIFY_DEBUG(txState.DeferredEffects.Empty() || !txState.Locks.Broken());
+
             for (const auto& effect : txState.DeferredEffects) {
                 YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx.GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
@@ -62,15 +62,15 @@ protected:
             }
 
             if (txState.Locks.HasLocks()) {
-                request.ValidateLocks = !(txState.GetSnapshot().IsValid() && txState.DeferredEffects.Empty()); 
+                request.ValidateLocks = !(txState.GetSnapshot().IsValid() && txState.DeferredEffects.Empty());
                 request.EraseLocks = true;
 
                 for (auto& [lockId, lock] : txState.Locks.LocksMap) {
                     request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType));
                 }
             }
-        } else if (ShouldAcquireLocks()) { 
-            request.AcquireLocksTxId = txState.Locks.GetLockTxId(); 
+        } else if (ShouldAcquireLocks()) {
+            request.AcquireLocksTxId = txState.Locks.GetLockTxId();
         }
 
         ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {});
@@ -135,42 +135,42 @@ private:
         request.MaxAffectedShards = TransformCtx->QueryCtx->Limits.PhaseLimits.AffectedShardsLimit;
         request.TotalReadSizeLimitBytes = TransformCtx->QueryCtx->Limits.PhaseLimits.TotalReadSizeLimitBytes;
         request.MkqlMemoryLimit = TransformCtx->QueryCtx->Limits.PhaseLimits.ComputeNodeMemoryLimitBytes;
-        request.Snapshot = TxState->Tx().GetSnapshot(); 
+        request.Snapshot = TxState->Tx().GetSnapshot();
         request.IsolationLevel = *TxState->Tx().EffectiveIsolationLevel;
 
         return request;
     }
 
-    bool ShouldAcquireLocks() { 
-        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) { 
-            return false; 
-        } 
- 
-        if (TxState->Tx().Locks.Broken()) { 
-            return false;  // Do not acquire locks after first lock issue 
-        } 
- 
+    bool ShouldAcquireLocks() {
+        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        if (TxState->Tx().Locks.Broken()) {
+            return false;  // Do not acquire locks after first lock issue
+        }
+
         if (!TxState->Tx().DeferredEffects.Empty()) {
-            return true; // Acquire locks in read write tx 
-        } 
- 
+            return true; // Acquire locks in read write tx
+        }
+
         for (auto& tx : TransformCtx->PhysicalQuery->GetTransactions()) {
             if (tx.GetHasEffects()) {
                 return true; // Acquire locks in read write tx
             }
         }
 
-        if (!TransformCtx->Settings.GetCommitTx()) { 
-            return true; // Is not a commit tx 
-        } 
- 
-        if (TxState->Tx().GetSnapshot().IsValid()) { 
-            return false; // It is a read only tx with snapshot, no need to acquire locks 
-        } 
- 
-        return true; 
-    } 
- 
+        if (!TransformCtx->Settings.GetCommitTx()) {
+            return true; // Is not a commit tx
+        }
+
+        if (TxState->Tx().GetSnapshot().IsValid()) {
+            return false; // It is a read only tx with snapshot, no need to acquire locks
+        }
+
+        return true;
+    }
+
     TKqpParamsMap GetParamsRefMap(const TParamValueMap& map) {
         TKqpParamsMap paramsMap(TransformState);
         for (auto& pair : map) {

@@ -91,7 +91,7 @@ public:
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
     void SetWriteVersion(TRowVersion writeVersion);
-    void SetReadVersion(TRowVersion readVersion); 
+    void SetReadVersion(TRowVersion readVersion);
     void SetIsImmediateTx();
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;

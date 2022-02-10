@@ -899,7 +899,7 @@ private:
         LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"
             << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
-            << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}"); 
+            << ", snapshot: {" << Request.Snapshot.TxId << ", " << Request.Snapshot.Step << "}");
 
         ExecuteScanTx(std::move(computeTasks), std::move(scanTasks));
 
@@ -919,7 +919,7 @@ private:
         }
 
         auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
-            std::move(scanTasks), Request.Snapshot, 
+            std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath);
         RegisterWithSameMailbox(planner);

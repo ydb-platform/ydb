@@ -63,7 +63,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
                << " tableId# " << tableId
                << " schema version# " << schemaVersion);
 
-    TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable()); 
+    TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
 
     for (const auto& [indexPathId, indexInfo] : info->Indexes) {
@@ -80,7 +80,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     if (DataShard.GetState() == TShardState::WaitScheme) {
         txc.DB.NoMoreReadsForTx();
         DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck 
+        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
     }
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;

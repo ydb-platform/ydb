@@ -1597,13 +1597,13 @@ public:
     TFuture<TMkqlResult> ExecuteMkql(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
-        return RunInternal(cluster, program, std::move(params), false, false, settings, snapshot); 
+        return RunInternal(cluster, program, std::move(params), false, false, settings, snapshot);
     }
 
     TFuture<TMkqlResult> ExecuteMkqlPrepared(const TString& cluster, const TString& program,
         TKqpParamsMap&& params, const TMkqlSettings& settings, const TKqpSnapshot& snapshot) override
     {
-        return RunInternal(cluster, program, std::move(params), false, true, settings, snapshot); 
+        return RunInternal(cluster, program, std::move(params), false, true, settings, snapshot);
     }
 
     TFuture<TMkqlResult> PrepareMkql(const TString& cluster, const TString& program) override {
@@ -1876,34 +1876,34 @@ public:
         );
     }
 
-    NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) override { 
-        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout); 
-        auto snapMgrActorId = RegisterActor(snapMgr); 
- 
-        auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>(); 
- 
-        return SendActorRequest< 
-            TEvKqpSnapshot::TEvCreateSnapshotRequest, 
-            TEvKqpSnapshot::TEvCreateSnapshotResponse, 
-            IKqpGateway::TKqpSnapshotHandle> 
-            ( 
-                snapMgrActorId, 
-                ev.Release(), 
-                [](TPromise<IKqpGateway::TKqpSnapshotHandle> promise, 
-                                 TEvKqpSnapshot::TEvCreateSnapshotResponse&& response) mutable 
-                { 
-                    IKqpGateway::TKqpSnapshotHandle handle; 
-                    handle.Snapshot = response.Snapshot; 
+    NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) override {
+        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
+        auto snapMgrActorId = RegisterActor(snapMgr);
+
+        auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
+
+        return SendActorRequest<
+            TEvKqpSnapshot::TEvCreateSnapshotRequest,
+            TEvKqpSnapshot::TEvCreateSnapshotResponse,
+            IKqpGateway::TKqpSnapshotHandle>
+            (
+                snapMgrActorId,
+                ev.Release(),
+                [](TPromise<IKqpGateway::TKqpSnapshotHandle> promise,
+                                 TEvKqpSnapshot::TEvCreateSnapshotResponse&& response) mutable
+                {
+                    IKqpGateway::TKqpSnapshotHandle handle;
+                    handle.Snapshot = response.Snapshot;
                     handle.Status = response.Status;
                     handle.AddIssues(response.Issues);
-                    promise.SetValue(handle); 
-                } 
-            ); 
-    } 
- 
+                    promise.SetValue(handle);
+                }
+            );
+    }
+
     void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) override {
-        if (handle.ManagingActor) 
-            ActorSystem->Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot)); 
+        if (handle.ManagingActor)
+            ActorSystem->Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
     }
 
     TInstant GetCurrentTime() const override {
@@ -2036,7 +2036,7 @@ private:
     }
 
     TFuture<TMkqlResult> RunInternal(const TString& cluster, const TString& program, TKqpParamsMap&& params,
-        bool compileOnly, bool prepared, const TMkqlSettings& settings, const TKqpSnapshot& snapshot = TKqpSnapshot::InvalidSnapshot) 
+        bool compileOnly, bool prepared, const TMkqlSettings& settings, const TKqpSnapshot& snapshot = TKqpSnapshot::InvalidSnapshot)
     {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -2094,11 +2094,11 @@ private:
                 if (limits.TotalReadSizeLimitBytes) {
                     mkqlTx.MutableLimits()->SetTotalReadSizeLimitBytes(limits.TotalReadSizeLimitBytes);
                 }
- 
-                if (snapshot.IsValid()) { 
-                    mkqlTx.SetSnapshotStep(snapshot.Step); 
-                    mkqlTx.SetSnapshotTxId(snapshot.TxId); 
-                } 
+
+                if (snapshot.IsValid()) {
+                    mkqlTx.SetSnapshotStep(snapshot.Step);
+                    mkqlTx.SetSnapshotTxId(snapshot.TxId);
+                }
             }
 
             if (settings.CollectStats) {

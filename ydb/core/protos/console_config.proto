@@ -297,34 +297,34 @@ message TConfigId {
     repeated TConfigItemId ItemIds = 1;
 }
 
-message TConfigSubscriptionRequest { 
-    optional uint64 Generation = 1; 
-    optional TNodeAttributes Options = 2; 
-    repeated uint32 ConfigItemKinds = 3; 
-    optional NKikimrConfig.TConfigVersion KnownVersion = 4; 
-} 
- 
-message TConfigSubscriptionResponse { 
-    optional uint64 Generation = 1; 
-    optional TStatus Status = 2; 
-} 
- 
-message TConfigSubscriptionError { 
-    optional Ydb.StatusIds.StatusCode Code = 2; 
-    optional string Reason = 3; 
-} 
- 
-message TConfigSubscriptionCanceled { 
-    optional uint64 Generation = 1; 
-} 
- 
-message TConfigSubscriptionNotification { 
-    optional uint64 Order = 1; 
-    optional uint64 Generation = 2; 
-    optional NKikimrConfig.TAppConfig Config = 3; 
-    repeated uint32 AffectedKinds = 4; 
-} 
- 
+message TConfigSubscriptionRequest {
+    optional uint64 Generation = 1;
+    optional TNodeAttributes Options = 2;
+    repeated uint32 ConfigItemKinds = 3;
+    optional NKikimrConfig.TConfigVersion KnownVersion = 4;
+}
+
+message TConfigSubscriptionResponse {
+    optional uint64 Generation = 1;
+    optional TStatus Status = 2;
+}
+
+message TConfigSubscriptionError {
+    optional Ydb.StatusIds.StatusCode Code = 2;
+    optional string Reason = 3;
+}
+
+message TConfigSubscriptionCanceled {
+    optional uint64 Generation = 1;
+}
+
+message TConfigSubscriptionNotification {
+    optional uint64 Order = 1;
+    optional uint64 Generation = 2;
+    optional NKikimrConfig.TAppConfig Config = 3;
+    repeated uint32 AffectedKinds = 4;
+}
+
 message TSubscription {
     // Subscription id.
     optional uint64 Id = 1;

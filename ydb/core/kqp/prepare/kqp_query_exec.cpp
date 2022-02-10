@@ -542,10 +542,10 @@ bool AddDeferredEffect(NNodes::TExprBase effect, const TVector<NKikimrKqp::TPara
             newEffect.AddBindings()->CopyFrom(binding);
         }
     } else {
-        if (txState.Tx().Locks.Broken()) { 
-            txState.Tx().Locks.ReportIssues(ctx); 
-            return false; 
-        } 
+        if (txState.Tx().Locks.Broken()) {
+            txState.Tx().Locks.ReportIssues(ctx);
+            return false;
+        }
         THashMap<TString, NKikimrKqp::TParameterBinding> bindingsMap;
         for (auto& binding : bindings) {
             bindingsMap.emplace(binding.GetName(), binding);
@@ -727,11 +727,11 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
     YQL_ENSURE(lockType.GetMember(5).GetName() == "SchemeShard");
 
     res.first = true;
-    for (auto& lockValue : value.GetList()) { 
-        TKqpTxLock txLock(lockValue); 
-        if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) { 
+    for (auto& lockValue : value.GetList()) {
+        TKqpTxLock txLock(lockValue);
+        if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
             switch (counter) {
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken: 
+                case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:
                 case NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken:
                     res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
                     break;
@@ -741,18 +741,18 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
             }
             res.first = false;
 
-        } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) { 
+        } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
             if (curTxLock->Invalidated(txLock)) {
                 res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
                 res.first = false;
             }
         } else {
-            // despite there were some errors we need to proceed merge to erase remaining locks properly 
+            // despite there were some errors we need to proceed merge to erase remaining locks properly
             locks.LocksMap.insert(std::make_pair(txLock.GetKey(), txLock));
         }
     }
 
-    return res; 
+    return res;
 }
 
 bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
@@ -778,17 +778,17 @@ bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue&
 bool UnpackMergeLocks(const NKikimrMiniKQL::TResult& result, TKqpTransactionContext& txCtx, TExprContext& ctx) {
     auto structType = result.GetType().GetStruct();
     ui32 locksIndex;
-    bool found = GetRunResultIndex(structType, TString(NKikimr::NMiniKQL::TxLocksResultLabel2), locksIndex); 
+    bool found = GetRunResultIndex(structType, TString(NKikimr::NMiniKQL::TxLocksResultLabel2), locksIndex);
     YQL_ENSURE(found ^ txCtx.Locks.Broken());
 
-    if (found) { 
-        auto locksType = structType.GetMember(locksIndex).GetType().GetOptional().GetItem(); 
-        auto locksValue = result.GetValue().GetStruct(locksIndex).GetOptional(); 
+    if (found) {
+        auto locksType = structType.GetMember(locksIndex).GetType().GetOptional().GetItem();
+        auto locksValue = result.GetValue().GetStruct(locksIndex).GetOptional();
 
         return MergeLocks(locksType, locksValue, txCtx, ctx);
-    } 
- 
-    return false; 
+    }
+
+    return false;
 }
 
 void LogMkqlResult(const NKikimrMiniKQL::TResult& result, TExprContext& ctx) {

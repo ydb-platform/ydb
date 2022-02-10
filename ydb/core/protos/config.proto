@@ -607,12 +607,12 @@ message TDynamicNodeConfig {
 }
 
 message TFeatureFlags {
-    enum Tribool { 
-        UNSET = 0; 
-        VALUE_TRUE = 1; 
-        VALUE_FALSE = 2; 
-    } 
- 
+    enum Tribool {
+        UNSET = 0;
+        VALUE_TRUE = 1;
+        VALUE_FALSE = 2;
+    }
+
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
     optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
@@ -650,7 +650,7 @@ message TFeatureFlags {
     optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
     optional bool EnableGracefulShutdown = 36 [default = true];
     optional bool EnableDrainOnShutdown = 37 [default = true];
-    optional bool EnableConfigurationCache = 38 [default = false]; 
+    optional bool EnableConfigurationCache = 38 [default = false];
     optional bool EnableDbCounters = 39 [default = false];
     optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
     optional bool EnableAsyncIndexes = 41 [default = true];
@@ -1320,16 +1320,16 @@ message TNamedConfig {
     optional bytes Config = 2;
 }
 
-message TConfigItemVersion { 
-    optional uint32 Kind = 1; 
-    optional uint64 Id = 2; 
-    optional uint64 Generation = 3; 
-} 
- 
-message TConfigVersion { 
-    repeated TConfigItemVersion Items = 1; 
-} 
- 
+message TConfigItemVersion {
+    optional uint32 Kind = 1;
+    optional uint64 Id = 2;
+    optional uint64 Generation = 3;
+}
+
+message TConfigVersion {
+    repeated TConfigItemVersion Items = 1;
+}
+
 message TAppConfig {
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;
@@ -1382,6 +1382,6 @@ message TAppConfig {
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
- 
-    optional TConfigVersion Version = 102; 
+
+    optional TConfigVersion Version = 102;
 }

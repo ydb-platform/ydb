@@ -156,8 +156,8 @@ message TMiniKQLTransaction {
     optional uint64 PerShardKeysSizeLimitBytes = 54;
     optional bool CollectStats = 55;
     optional TLimits Limits = 56;
-    optional uint64 SnapshotStep = 9; 
-    optional uint64 SnapshotTxId = 10; 
+    optional uint64 SnapshotStep = 9;
+    optional uint64 SnapshotTxId = 10;
 };
 
 message TMiniKQLCompileResults {

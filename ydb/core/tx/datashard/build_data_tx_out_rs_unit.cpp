@@ -60,7 +60,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion); 
+    tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
     try {
         auto &outReadSets = op->OutReadSets();

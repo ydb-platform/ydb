@@ -49,7 +49,7 @@ struct TSysTables {
         struct TLock {
             enum ESetErrors : ui64 {
                 ErrorMin = Max<ui64>() - 255,
-                ErrorAlreadyBroken = Max<ui64>() - 3, 
+                ErrorAlreadyBroken = Max<ui64>() - 3,
                 ErrorNotSet = Max<ui64>() - 2,
                 ErrorTooMuch = Max<ui64>() - 1,
                 ErrorBroken = Max<ui64>()

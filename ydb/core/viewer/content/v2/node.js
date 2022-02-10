@@ -149,10 +149,10 @@ Node.prototype.updateToolTip = function() {
             });
             tooltip += endpoints;
         }
- 
-        if (sysInfo.ConfigState !== undefined) { 
-            tooltip += '<tr><td>Configuration</td><td>' + sysInfo.ConfigState + '</td></tr>'; 
-        } 
+
+        if (sysInfo.ConfigState !== undefined) {
+            tooltip += '<tr><td>Configuration</td><td>' + sysInfo.ConfigState + '</td></tr>';
+        }
     }
     tooltip += '</table>'
     this.domElementHostLink.setAttribute('data-original-title', tooltip);
@@ -678,10 +678,10 @@ Node.prototype.updateSysInfo = function(update) {
         tip += '</table></html>';
         memBlock.domElement.setAttribute('data-original-title', tip);
     }
- 
-    if (sysInfo.ConfigState === 'Outdated') { 
-        this.domElementNodeIcons.innerHTML = this.getIcon('exclamation-sign', red); 
-    } 
+
+    if (sysInfo.ConfigState === 'Outdated') {
+        this.domElementNodeIcons.innerHTML = this.getIcon('exclamation-sign', red);
+    }
 
     this.domElementHostLink.setAttribute('href', this.getBaseUrl());
 }

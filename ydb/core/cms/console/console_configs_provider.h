@@ -25,7 +25,7 @@ public:
             EvSetSubscriptions,
             EvUpdateConfigs,
             EvUpdateSubscriptions,
-            EvWorkerDisconnected, 
+            EvWorkerDisconnected,
 
             EvEnd
         };
@@ -50,15 +50,15 @@ public:
             TSubscription::TPtr Subscription;
         };
 
-        struct TEvWorkerDisconnected : public TEventLocal<TEvWorkerDisconnected, EvWorkerDisconnected> { 
-            explicit TEvWorkerDisconnected(TInMemorySubscription::TPtr subscription) 
-                : Subscription(subscription) 
-            { 
-            } 
- 
-            TInMemorySubscription::TPtr Subscription; 
-        }; 
- 
+        struct TEvWorkerDisconnected : public TEventLocal<TEvWorkerDisconnected, EvWorkerDisconnected> {
+            explicit TEvWorkerDisconnected(TInMemorySubscription::TPtr subscription)
+                : Subscription(subscription)
+            {
+            }
+
+            TInMemorySubscription::TPtr Subscription;
+        };
+
         struct TEvSetConfig : public TEventLocal<TEvSetConfig, EvSetConfig> {
             TEvSetConfig(const TConfigsConfig &config)
                 : Config(config)
@@ -124,15 +124,15 @@ private:
     void CheckAllSubscriptions(const TActorContext &ctx);
     void CheckSubscriptions(const TSubscriptionSet &subscriptions,
                             const TActorContext &ctx);
-    void CheckSubscriptions(const TInMemorySubscriptionSet &subscriptions, 
-                            const TActorContext &ctx); 
+    void CheckSubscriptions(const TInMemorySubscriptionSet &subscriptions,
+                            const TActorContext &ctx);
     void CheckSubscription(TSubscription::TPtr subscriptions,
                            const TActorContext &ctx);
-    void CheckSubscription(TInMemorySubscription::TPtr subscriptions, 
-                           const TActorContext &ctx); 
+    void CheckSubscription(TInMemorySubscription::TPtr subscriptions,
+                           const TActorContext &ctx);
 
-    void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, const TActorContext &ctx);
@@ -140,7 +140,7 @@ private:
     void Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSetConfig::TPtr &ev, const TActorContext &ctx);
@@ -152,15 +152,15 @@ private:
     void HandlePoison(const TActorContext &ctx)
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::HandlePoison");
- 
+
         Die(ctx);
     }
 
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::CMS_CONFIGS);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionRequest, Handle); 
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionCanceled, Handle); 
+            HFuncTraced(TEvConsole::TEvConfigSubscriptionRequest, Handle);
+            HFuncTraced(TEvConsole::TEvConfigSubscriptionCanceled, Handle);
             HFuncTraced(TEvConsole::TEvCheckConfigUpdatesRequest, Handle);
             HFuncTraced(TEvConsole::TEvConfigNotificationResponse, Handle);
             HFuncTraced(TEvConsole::TEvGetConfigItemsRequest, Handle);
@@ -168,7 +168,7 @@ private:
             HFuncTraced(TEvConsole::TEvGetNodeConfigItemsRequest, Handle);
             HFuncTraced(TEvConsole::TEvGetNodeConfigRequest, Handle);
             HFuncTraced(TEvConsole::TEvListConfigSubscriptionsRequest, Handle);
-            HFuncTraced(TEvPrivate::TEvWorkerDisconnected, Handle); 
+            HFuncTraced(TEvPrivate::TEvWorkerDisconnected, Handle);
             HFuncTraced(TEvPrivate::TEvNotificationTimeout, Handle);
             HFuncTraced(TEvPrivate::TEvSenderDied, Handle);
             HFuncTraced(TEvPrivate::TEvSetConfig, Handle);
@@ -209,7 +209,7 @@ private:
     TConfigsConfig Config;
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;
-    TInMemorySubscriptionIndex InMemoryIndex; 
+    TInMemorySubscriptionIndex InMemoryIndex;
 };
 
 } // namespace NConsole

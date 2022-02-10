@@ -181,20 +181,20 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING) { 
-        TString err = TStringBuilder() 
-                << "Wrong shard state: " << (TShardState)DataShard.GetState() 
-                << " tablet id: " << DataShard.TabletID(); 
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED) 
-                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err); 
- 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, 
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to mvcc state change"); 
- 
-        op->Abort(); 
-        return true; 
-    } 
- 
+    if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING) {
+        TString err = TStringBuilder()
+                << "Wrong shard state: " << (TShardState)DataShard.GetState()
+                << " tablet id: " << DataShard.TabletID();
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
+                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                     "Tablet " << DataShard.TabletID() << " rejecting tx due to mvcc state change");
+
+        op->Abort();
+        return true;
+    }
+
     if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
@@ -231,11 +231,11 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING) 
-    { 
-        return true; 
-    } 
- 
+    if (DataShard.GetMvccSwitchState() == TSwitchState::SWITCHING)
+    {
+        return true;
+    }
+
     if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
         return true;
     }

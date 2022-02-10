@@ -28,7 +28,7 @@ using namespace Tests;
 const bool ENABLE_DATASHARD_LOG = true;
 const bool DUMP_RESULT = false;
 
-void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) { 
+void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
     if (ENABLE_DATASHARD_LOG) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     }
@@ -39,8 +39,8 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
 
     TAppPrepare app;
 
-    app.SetEnableMvcc(opts.Mvcc); 
- 
+    app.SetEnableMvcc(opts.Mvcc);
+
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
                       domainId, domainId, TVector<ui32>{domainId},
@@ -63,7 +63,7 @@ TTester::TTester(ESchema schema, const TOptions& opts)
     , LastTxId(0)
     , LastStep(opts.FirstStep)
 {
-    Setup(Runtime, opts); 
+    Setup(Runtime, opts);
     Sender = Runtime.AllocateEdgeActor();
 
     // Schemeshard is only used to receive notifications
@@ -78,7 +78,7 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
     , LastTxId(0)
     , LastStep(1)
 {
-    Setup(Runtime, opts); 
+    Setup(Runtime, opts);
     setup(Runtime);
     Sender = Runtime.AllocateEdgeActor();
     AllowIncompleteResult = (dispatchName != INITIAL_TEST_DISPATCH_NAME);

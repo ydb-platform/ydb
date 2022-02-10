@@ -229,7 +229,7 @@ enum EServiceKikimr {
     KESUS_TABLET = 553;
 
     CONFIGS_DISPATCHER = 560;
-    CONFIGS_CACHE = 561; 
+    CONFIGS_CACHE = 561;
 
     // SchemeBoard section
     SCHEME_BOARD_REPLICA = 570;

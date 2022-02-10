@@ -8,7 +8,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/cache/cache.h>
-#include <util/generic/queue.h> 
+#include <util/generic/queue.h>
 #include <util/generic/set.h>
 
 #include <util/system/valgrind.h>
@@ -38,7 +38,7 @@ public:
     virtual ui64 TabletID() const = 0;
     virtual bool IsUserTable(const TTableId& tableId) const = 0;
     virtual ui32 Generation() const = 0;
-    virtual TRowVersion LastCompleteTxVersion() const = 0; 
+    virtual TRowVersion LastCompleteTxVersion() const = 0;
 
     TTabletCountersBase* const &TabletCounters;
 };
@@ -86,11 +86,11 @@ public:
         return Self->Generation();
     }
 
-    TRowVersion LastCompleteTxVersion() const override 
-    { 
-        return Self->LastCompleteTxVersion(); 
-    } 
- 
+    TRowVersion LastCompleteTxVersion() const override
+    {
+        return Self->LastCompleteTxVersion();
+    }
+
 private:
     const T *Self;
 };
@@ -122,19 +122,19 @@ struct TRangeKey {
     }
 };
 
-struct TVersionedLockId { 
-    TVersionedLockId(ui64 lockId, TRowVersion version) 
-        : LockId(lockId) 
-        , Version(version) {} 
- 
-    ui64 LockId; 
-    TRowVersion Version; 
- 
-    bool operator<(const TVersionedLockId& other) const { 
-        return Version < other.Version; 
-    } 
-}; 
- 
+struct TVersionedLockId {
+    TVersionedLockId(ui64 lockId, TRowVersion version)
+        : LockId(lockId)
+        , Version(version) {}
+
+    ui64 LockId;
+    TRowVersion Version;
+
+    bool operator<(const TVersionedLockId& other) const {
+        return Version < other.Version;
+    }
+};
+
 /// Aggregates shard, point and range locks
 class TLockInfo : public TSimpleRefCount<TLockInfo> {
     friend class TTableLocks;
@@ -146,8 +146,8 @@ public:
     TLockInfo(TLockLocker * locker, ui64 lockId);
     ~TLockInfo();
 
-    ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); } 
-    bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); } 
+    ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
+    bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
 
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
@@ -168,7 +168,7 @@ private:
     void AddShardLock(const THashSet<TPathId>& affectedTables);
     bool AddPoint(const TPointKey& point);
     bool AddRange(const TRangeKey& range);
-    void SetBroken(const TRowVersion& at); 
+    void SetBroken(const TRowVersion& at);
 
 private:
     TLockLocker * Locker;
@@ -179,8 +179,8 @@ private:
     TVector<TPointKey> Points;
     TVector<TRangeKey> Ranges;
     bool ShardLock = false;
- 
-    std::optional<TRowVersion> BreakVersion; 
+
+    std::optional<TRowVersion> BreakVersion;
 };
 
 ///
@@ -199,7 +199,7 @@ public:
     void AddPointLock(const TPointKey& point, const TLockInfo::TPtr& lock);
     void AddRangeLock(const TRangeKey& range, const TLockInfo::TPtr& lock);
     void RemoveLock(const TLockInfo::TPtr& lock);
-    void BreakLocks(TConstArrayRef<TCell> key, const TRowVersion& at); 
+    void BreakLocks(TConstArrayRef<TCell> key, const TRowVersion& at);
     void BreakAllLocks(const TRowVersion& at);
 
     ui64 NumKeyColumns() const {
@@ -281,17 +281,17 @@ public:
     }
 
     TLockInfo::TPtr AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
-    TLockInfo::TPtr AddPointLock(ui64 lockTxId, const TPointKey& key, const TRowVersion& at); 
-    TLockInfo::TPtr AddRangeLock(ui64 lockTxId, const TRangeKey& key, const TRowVersion& at); 
-    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const; 
+    TLockInfo::TPtr AddPointLock(ui64 lockTxId, const TPointKey& key, const TRowVersion& at);
+    TLockInfo::TPtr AddRangeLock(ui64 lockTxId, const TRangeKey& key, const TRowVersion& at);
+    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
 
     ui64 LocksCount() const { return Locks.size(); }
-    ui64 BrokenLocksCount() const { return BrokenLocks.size() + BrokenCandidates.size(); } 
+    ui64 BrokenLocksCount() const { return BrokenLocks.size() + BrokenCandidates.size(); }
 
-    void BreakShardLocks(const TRowVersion& at); 
-    void BreakLocks(const TPointKey& point, const TRowVersion& at); 
+    void BreakShardLocks(const TRowVersion& at);
+    void BreakLocks(const TPointKey& point, const TRowVersion& at);
     void BreakAllLocks(const TPathId& pathId, const TRowVersion& at);
-    void BreakLock(ui64 lockTxId, const TRowVersion& at); 
+    void BreakLock(ui64 lockTxId, const TRowVersion& at);
     void RemoveLock(ui64 lockTxId);
 
     bool TableHasLocks(const TTableId& tableId) const {
@@ -324,7 +324,7 @@ public:
     bool ForceShardLock(const THashSet<TPathId>& rangeTables) const;
 
     // optimisation: set to remove broken lock at next Remove()
-    void ScheduleLockCleanup(ui64 lockId, const TRowVersion& at); 
+    void ScheduleLockCleanup(ui64 lockId, const TRowVersion& at);
 
     ui64 IncCounter() { return Counter++; };
 
@@ -335,8 +335,8 @@ private:
     THashSet<ui64> ShardLocks;
     TVector<ui64> BrokenLocks; // LockIds of broken locks (optimisation)
     TVector<ui64> CleanupPending; // LockIds of broken locks with pending cleanup
-    TPriorityQueue<TVersionedLockId> BrokenCandidates; 
-    TPriorityQueue<TVersionedLockId> CleanupCandidates; 
+    TPriorityQueue<TVersionedLockId> BrokenCandidates;
+    TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TLockLimiter Limiter;
     ui64 Counter;
 
@@ -366,11 +366,11 @@ struct TLocksUpdate {
     THashSet<TPathId> AffectedTables;
     THashSet<TPathId> RangeTables;
 
-    TRowVersion CheckVersion = TRowVersion::Max(); 
-    TRowVersion BreakVersion = TRowVersion::Min(); 
- 
-    bool BreakOwn = false; 
- 
+    TRowVersion CheckVersion = TRowVersion::Max();
+    TRowVersion BreakVersion = TRowVersion::Min();
+
+    bool BreakOwn = false;
+
     void Clear() {
         LockTxId = 0;
         ShardLock = false;
@@ -413,11 +413,11 @@ struct TLocksUpdate {
     void EraseLock(ui64 lockId) {
         Erases.push_back(lockId);
     }
- 
-    void BreakSetLocks(ui64 lockId) { 
-        Y_VERIFY(LockTxId == lockId); 
-        BreakOwn = true; 
-    } 
+
+    void BreakSetLocks(ui64 lockId) {
+        Y_VERIFY(LockTxId == lockId);
+        BreakOwn = true;
+    }
 };
 
 struct TLocksCache {
@@ -472,20 +472,20 @@ public:
     void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId);
     void BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void BreakAllLocks(const TTableId& tableId);
-    void BreakSetLocks(ui64 lockTxId); 
+    void BreakSetLocks(ui64 lockTxId);
     bool IsMyKey(const TArrayRef<const TCell>& key) const;
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
 
-    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const { 
-        return Locker.GetLock(lockTxId, at); 
+    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
+        return Locker.GetLock(lockTxId, at);
     }
 
-    bool IsBroken(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const { 
-        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, at); 
+    bool IsBroken(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
+        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, at);
         if (txLock)
-            return txLock->IsBroken(at); 
+            return txLock->IsBroken(at);
         return true;
     }
 

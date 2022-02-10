@@ -10,12 +10,12 @@ TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShar
 }
 
 bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
-    auto [readVersion, writeVersion] = Self->GetReadWriteVersions(); 
+    auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
     if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion))
-        return false; 
- 
+        return false;
+
     Self->PromoteCompleteEdge(writeVersion.Step, txc);
-    return true; 
+    return true;
 }
 
 void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) {

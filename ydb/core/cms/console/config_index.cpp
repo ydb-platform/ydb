@@ -221,35 +221,35 @@ void MergeMessageOverwriteRepeated(::google::protobuf::Message &to,
     to.MergeFrom(from);
 }
 
-void TScopedConfig::ComputeConfig(NKikimrConfig::TAppConfig &config, bool addVersion) const 
+void TScopedConfig::ComputeConfig(NKikimrConfig::TAppConfig &config, bool addVersion) const
 {
     for (auto &pr : ConfigItems) {
         NKikimrConfig::TAppConfig mergeResult;
-        MergeItems(pr.second, mergeResult, addVersion); 
+        MergeItems(pr.second, mergeResult, addVersion);
         config.MergeFrom(mergeResult);
     }
 }
 
-void TScopedConfig::ComputeConfig(const THashSet<ui32> &kinds, NKikimrConfig::TAppConfig &config, bool addVersion) const 
-{ 
-    for (auto &pr : ConfigItems) { 
-        if (kinds.contains(pr.first)) { 
-            NKikimrConfig::TAppConfig mergeResult; 
-            MergeItems(pr.second, mergeResult, addVersion); 
-            config.MergeFrom(mergeResult); 
-        } 
-    } 
-} 
- 
+void TScopedConfig::ComputeConfig(const THashSet<ui32> &kinds, NKikimrConfig::TAppConfig &config, bool addVersion) const
+{
+    for (auto &pr : ConfigItems) {
+        if (kinds.contains(pr.first)) {
+            NKikimrConfig::TAppConfig mergeResult;
+            MergeItems(pr.second, mergeResult, addVersion);
+            config.MergeFrom(mergeResult);
+        }
+    }
+}
+
 void TScopedConfig::MergeItems(const TOrderedConfigItems &items,
-                               NKikimrConfig::TAppConfig &config, bool addVersion) const 
+                               NKikimrConfig::TAppConfig &config, bool addVersion) const
 {
     for (auto &item : items)
-        MergeItem(item, config, addVersion); 
+        MergeItem(item, config, addVersion);
 }
 
 void TScopedConfig::MergeItem(TConfigItem::TPtr item,
-                              NKikimrConfig::TAppConfig &config, bool addVersion) const 
+                              NKikimrConfig::TAppConfig &config, bool addVersion) const
 {
     if (item->MergeStrategy == NKikimrConsole::TConfigItem::OVERWRITE)
         config.CopyFrom(item->Config);
@@ -259,13 +259,13 @@ void TScopedConfig::MergeItem(TConfigItem::TPtr item,
         MergeMessageOverwriteRepeated(config, item->Config);
     else
         Y_FAIL("unexpected merge strategy %d", static_cast<int>(item->MergeStrategy));
- 
-    if (addVersion) { 
-        auto vItem = config.MutableVersion()->AddItems(); 
-        vItem->SetKind(item->Kind); 
-        vItem->SetId(item->Id); 
-        vItem->SetGeneration(item->Generation); 
-    } 
+
+    if (addVersion) {
+        auto vItem = config.MutableVersion()->AddItems();
+        vItem->SetKind(item->Kind);
+        vItem->SetId(item->Id);
+        vItem->SetGeneration(item->Generation);
+    }
 }
 
 TConfigItem::TPtr TConfigIndex::GetItem(ui64 id) const
@@ -689,98 +689,98 @@ void TSubscriptionIndex::RemoveSubscription(ui64 id)
     Subscriptions.erase(id);
 }
 
-TInMemorySubscription::TPtr TInMemorySubscriptionIndex::GetSubscription(const TActorId &subscriber) 
-{ 
-    auto it = Subscriptions.find(subscriber); 
-    if (it == Subscriptions.end()) 
-        return nullptr; 
-    return it->second; 
-} 
- 
-const THashMap<TActorId, TInMemorySubscription::TPtr> &TInMemorySubscriptionIndex::GetSubscriptions() const 
-{ 
-    return Subscriptions; 
-} 
- 
-void TInMemorySubscriptionIndex::AddSubscription(TInMemorySubscription::TPtr subscription) 
-{ 
-    Y_VERIFY(!Subscriptions.contains(subscription->Subscriber)); 
- 
-    Subscriptions.emplace(subscription->Subscriber, subscription); 
- 
-    SubscriptionsByNodeId[subscription->NodeId].insert(subscription); 
-    SubscriptionsByHost[subscription->Host].insert(subscription); 
-    SubscriptionsByTenant[subscription->Tenant].insert(subscription); 
-    SubscriptionsByNodeType[subscription->NodeType].insert(subscription); 
-} 
- 
-void TInMemorySubscriptionIndex::RemoveSubscription(const TActorId &subscriber) 
-{ 
-    auto it = Subscriptions.find(subscriber); 
-    Y_VERIFY(it != Subscriptions.end()); 
-    auto subscription = it->second; 
- 
-    RemoveFromIndex(subscription, subscription->NodeId, SubscriptionsByNodeId); 
-    RemoveFromIndex(subscription, subscription->Host, SubscriptionsByHost); 
-    RemoveFromIndex(subscription, subscription->Tenant, SubscriptionsByTenant); 
-    RemoveFromIndex(subscription, subscription->NodeType, SubscriptionsByNodeType); 
- 
-    Subscriptions.erase(it); 
-} 
- 
-void TInMemorySubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope, 
-                                                      ui32 kind, 
-                                                      TInMemorySubscriptionSet &subscriptions) const 
-{ 
-    if (subscriptions.size() == Subscriptions.size()) 
-        return; 
- 
-    if (scope.NodeIds.empty() && scope.Hosts.empty() && !scope.Tenant && !scope.NodeType) { 
-        for (auto &it : Subscriptions) { 
-            if (it.second->ItemKinds.contains(kind)) 
-                subscriptions.insert(it.second); 
-        } 
- 
-        return; 
-    } 
- 
-    for (ui32 nodeId : scope.NodeIds) { 
-        auto it = SubscriptionsByNodeId.find(nodeId); 
-        if (it != SubscriptionsByNodeId.end()) { 
-            for (auto & subscription : it->second) 
-                if (subscription->ItemKinds.contains(kind)) 
-                    subscriptions.insert(subscription); 
-        } 
-    } 
- 
-    for (auto &host : scope.Hosts) { 
-        auto it = SubscriptionsByHost.find(host); 
-        if (it != SubscriptionsByHost.end()) { 
-            for (auto & subscription : it->second) 
-                if (subscription->ItemKinds.contains(kind)) 
-                    subscriptions.insert(subscription); 
-        } 
-    } 
- 
-    if (scope.Tenant) { 
-        auto it = SubscriptionsByTenant.find(scope.Tenant); 
-        if (it != SubscriptionsByTenant.end()) { 
-            for (auto & subscription : it->second) 
-                if (subscription->ItemKinds.contains(kind)) 
-                    subscriptions.insert(subscription); 
-        } 
-    } 
- 
-    if (scope.NodeType) { 
-        auto it = SubscriptionsByNodeType.find(scope.NodeType); 
-        if (it != SubscriptionsByNodeType.end()) { 
-            for (auto & subscription : it->second) 
-                if (subscription->ItemKinds.contains(kind)) 
-                    subscriptions.insert(subscription); 
-        } 
-    } 
-} 
- 
+TInMemorySubscription::TPtr TInMemorySubscriptionIndex::GetSubscription(const TActorId &subscriber)
+{
+    auto it = Subscriptions.find(subscriber);
+    if (it == Subscriptions.end())
+        return nullptr;
+    return it->second;
+}
+
+const THashMap<TActorId, TInMemorySubscription::TPtr> &TInMemorySubscriptionIndex::GetSubscriptions() const
+{
+    return Subscriptions;
+}
+
+void TInMemorySubscriptionIndex::AddSubscription(TInMemorySubscription::TPtr subscription)
+{
+    Y_VERIFY(!Subscriptions.contains(subscription->Subscriber));
+
+    Subscriptions.emplace(subscription->Subscriber, subscription);
+
+    SubscriptionsByNodeId[subscription->NodeId].insert(subscription);
+    SubscriptionsByHost[subscription->Host].insert(subscription);
+    SubscriptionsByTenant[subscription->Tenant].insert(subscription);
+    SubscriptionsByNodeType[subscription->NodeType].insert(subscription);
+}
+
+void TInMemorySubscriptionIndex::RemoveSubscription(const TActorId &subscriber)
+{
+    auto it = Subscriptions.find(subscriber);
+    Y_VERIFY(it != Subscriptions.end());
+    auto subscription = it->second;
+
+    RemoveFromIndex(subscription, subscription->NodeId, SubscriptionsByNodeId);
+    RemoveFromIndex(subscription, subscription->Host, SubscriptionsByHost);
+    RemoveFromIndex(subscription, subscription->Tenant, SubscriptionsByTenant);
+    RemoveFromIndex(subscription, subscription->NodeType, SubscriptionsByNodeType);
+
+    Subscriptions.erase(it);
+}
+
+void TInMemorySubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
+                                                      ui32 kind,
+                                                      TInMemorySubscriptionSet &subscriptions) const
+{
+    if (subscriptions.size() == Subscriptions.size())
+        return;
+
+    if (scope.NodeIds.empty() && scope.Hosts.empty() && !scope.Tenant && !scope.NodeType) {
+        for (auto &it : Subscriptions) {
+            if (it.second->ItemKinds.contains(kind))
+                subscriptions.insert(it.second);
+        }
+
+        return;
+    }
+
+    for (ui32 nodeId : scope.NodeIds) {
+        auto it = SubscriptionsByNodeId.find(nodeId);
+        if (it != SubscriptionsByNodeId.end()) {
+            for (auto & subscription : it->second)
+                if (subscription->ItemKinds.contains(kind))
+                    subscriptions.insert(subscription);
+        }
+    }
+
+    for (auto &host : scope.Hosts) {
+        auto it = SubscriptionsByHost.find(host);
+        if (it != SubscriptionsByHost.end()) {
+            for (auto & subscription : it->second)
+                if (subscription->ItemKinds.contains(kind))
+                    subscriptions.insert(subscription);
+        }
+    }
+
+    if (scope.Tenant) {
+        auto it = SubscriptionsByTenant.find(scope.Tenant);
+        if (it != SubscriptionsByTenant.end()) {
+            for (auto & subscription : it->second)
+                if (subscription->ItemKinds.contains(kind))
+                    subscriptions.insert(subscription);
+        }
+    }
+
+    if (scope.NodeType) {
+        auto it = SubscriptionsByNodeType.find(scope.NodeType);
+        if (it != SubscriptionsByNodeType.end()) {
+            for (auto & subscription : it->second)
+                if (subscription->ItemKinds.contains(kind))
+                    subscriptions.insert(subscription);
+        }
+    }
+}
+
 void TSubscriptionIndex::CollectAffectedSubscriptions(const TUsageScope &scope,
                                                       ui32 kind,
                                                       TSubscriptionSet &subscriptions) const

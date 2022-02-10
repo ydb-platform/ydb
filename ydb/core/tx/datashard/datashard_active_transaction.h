@@ -174,7 +174,7 @@ public:
     bool CheckCancelled();
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
-    void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); } 
+    void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const { return EngineBay.GetCollectedChanges(); }
 

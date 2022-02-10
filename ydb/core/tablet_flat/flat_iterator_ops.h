@@ -83,52 +83,52 @@ struct TTableItOps {
     public:
         using TEraseCacheOpsCommon::TEraseCacheOpsCommon;
 
-        inline bool CrossedAtLeft( 
+        inline bool CrossedAtLeft(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<const TCell> key)
         {
-            return !IsEnd(it) && Cache->InsideLeft(it, key); 
+            return !IsEnd(it) && Cache->InsideLeft(it, key);
         }
 
-        inline bool CrossedAtRight( 
-            TKeyRangeCache::const_iterator it, 
-            TArrayRef<const TCell> key) 
-        { 
-            return !IsEnd(it) && Cache->InsideRight(it, key); 
-        } 
- 
+        inline bool CrossedAtRight(
+            TKeyRangeCache::const_iterator it,
+            TArrayRef<const TCell> key)
+        {
+            return !IsEnd(it) && Cache->InsideRight(it, key);
+        }
+
         inline TKeyRangeCache::const_iterator MergeAdjacent(
                 TKeyRangeCache::const_iterator prev,
-                TKeyRangeCache::const_iterator next, 
-                TRowVersion version) 
+                TKeyRangeCache::const_iterator next,
+                TRowVersion version)
         {
-            return Cache->Merge(prev, next, version); 
+            return Cache->Merge(prev, next, version);
         }
 
         inline void ExtendForward(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<TCell> key,
-                bool inclusive, 
-                TRowVersion version) 
+                bool inclusive,
+                TRowVersion version)
         {
-            Cache->ExtendRight(it, key, inclusive, version); 
+            Cache->ExtendRight(it, key, inclusive, version);
         }
 
         inline void ExtendBackward(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<TCell> key,
-                bool inclusive, 
-                TRowVersion version) 
+                bool inclusive,
+                TRowVersion version)
         {
-            Cache->ExtendLeft(it, key, inclusive, version); 
+            Cache->ExtendLeft(it, key, inclusive, version);
         }
 
         inline void AddRange(
                 TArrayRef<TCell> first,
-                TArrayRef<TCell> last, 
-                TRowVersion version) 
+                TArrayRef<TCell> last,
+                TRowVersion version)
         {
-            Cache->Add(TKeyRangeEntry(first, last, true, true, version)); 
+            Cache->Add(TKeyRangeEntry(first, last, true, true, version));
         }
 
         inline std::pair<TKeyRangeCache::const_iterator, bool> FindKey(
@@ -142,10 +142,10 @@ struct TTableItOps {
             return it;
         }
 
-        inline bool IsEnd(TKeyRangeCache::const_iterator it) { 
-            return it == Cache->end(); 
-        } 
- 
+        inline bool IsEnd(TKeyRangeCache::const_iterator it) {
+            return it == Cache->end();
+        }
+
         static inline TArrayRef<const TCell> EndKey(TKeyRangeCache::const_iterator it) {
             return it->ToKey;
         }
@@ -185,52 +185,52 @@ struct TTableItReverseOps {
     public:
         using TEraseCacheOpsCommon::TEraseCacheOpsCommon;
 
-        inline bool CrossedAtLeft( 
+        inline bool CrossedAtLeft(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<const TCell> key)
         {
-            return !IsEnd(it) && Cache->InsideRight(it, key); 
+            return !IsEnd(it) && Cache->InsideRight(it, key);
         }
 
-        inline bool CrossedAtRight( 
-            TKeyRangeCache::const_iterator it, 
-            TArrayRef<const TCell> key) 
-        { 
-            return !IsEnd(it) && Cache->InsideLeft(it, key); 
-        } 
- 
+        inline bool CrossedAtRight(
+            TKeyRangeCache::const_iterator it,
+            TArrayRef<const TCell> key)
+        {
+            return !IsEnd(it) && Cache->InsideLeft(it, key);
+        }
+
         inline TKeyRangeCache::const_iterator MergeAdjacent(
                 TKeyRangeCache::const_iterator prev,
-                TKeyRangeCache::const_iterator next, 
-                TRowVersion version) 
+                TKeyRangeCache::const_iterator next,
+                TRowVersion version)
         {
-            return Cache->Merge(next, prev, version); 
+            return Cache->Merge(next, prev, version);
         }
 
         inline void ExtendForward(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<TCell> key,
-                bool inclusive, 
-                TRowVersion version) 
+                bool inclusive,
+                TRowVersion version)
         {
-            Cache->ExtendLeft(it, key, inclusive, version); 
+            Cache->ExtendLeft(it, key, inclusive, version);
         }
 
         inline void ExtendBackward(
                 TKeyRangeCache::const_iterator it,
                 TArrayRef<TCell> key,
-                bool inclusive, 
-                TRowVersion version) 
+                bool inclusive,
+                TRowVersion version)
         {
-            Cache->ExtendRight(it, key, inclusive, version); 
+            Cache->ExtendRight(it, key, inclusive, version);
         }
 
         inline void AddRange(
                 TArrayRef<TCell> first,
-                TArrayRef<TCell> last, 
-                TRowVersion version) 
+                TArrayRef<TCell> last,
+                TRowVersion version)
         {
-            Cache->Add(TKeyRangeEntry(last, first, true, true, version)); 
+            Cache->Add(TKeyRangeEntry(last, first, true, true, version));
         }
 
         inline std::pair<TKeyRangeCache::const_iterator, bool> FindKey(
@@ -247,10 +247,10 @@ struct TTableItReverseOps {
             return it;
         }
 
-        inline bool IsEnd(TKeyRangeCache::const_iterator it) { 
-            return it == Cache->end(); 
-        } 
- 
+        inline bool IsEnd(TKeyRangeCache::const_iterator it) {
+            return it == Cache->end();
+        }
+
         static inline TArrayRef<const TCell> EndKey(TKeyRangeCache::const_iterator it) {
             return it->FromKey;
         }

@@ -64,12 +64,12 @@ enum EFreezeState {
     Unfreeze = 2;
 }
 
-enum EMvccState { 
-    MvccUnspecified = 0; 
-    MvccEnabled = 1; 
-    MvccDisabled = 2; 
-} 
- 
+enum EMvccState {
+    MvccUnspecified = 0;
+    MvccEnabled = 1;
+    MvccDisabled = 2;
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -271,8 +271,8 @@ message TPartitionConfig {
     optional EFreezeState FreezeState = 21;
     optional bool ShadowData = 22; // Table has separate shadow data for later merging
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
-    reserved 24; // EMvccState MvccState = 24; no longer used 
-    optional uint64 KeepSnapshotTimeout = 25; // milliseconds 
+    reserved 24; // EMvccState MvccState = 24; no longer used
+    optional uint64 KeepSnapshotTimeout = 25; // milliseconds
 }
 
 message TSplitBoundary {

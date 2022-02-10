@@ -1,83 +1,83 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/ipv6_address/ipv6_address.h>
 #include <unordered_set>
-
+ 
 class TIpv6AddressTest: public TTestBase {
-    UNIT_TEST_SUITE(TIpv6AddressTest);
-    UNIT_TEST(ParseHostAndMayBePortFromString_data);
+    UNIT_TEST_SUITE(TIpv6AddressTest); 
+    UNIT_TEST(ParseHostAndMayBePortFromString_data); 
     UNIT_TEST(CheckAddressValidity)
-    UNIT_TEST_SUITE_END();
-
-private:
-    void ParseHostAndMayBePortFromString_data();
+    UNIT_TEST_SUITE_END(); 
+ 
+private: 
+    void ParseHostAndMayBePortFromString_data(); 
     void CheckAddressValidity();
     void HashCompileTest();
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TIpv6AddressTest);
-
-using TResult = std::tuple<THostAddressAndPort, TString, TIpPort>;
-
-TResult IpRes(TString Ip, TIpPort Port) {
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TIpv6AddressTest); 
+ 
+using TResult = std::tuple<THostAddressAndPort, TString, TIpPort>; 
+ 
+TResult IpRes(TString Ip, TIpPort Port) { 
     bool Ok;
-    THostAddressAndPort HostAddressAndPort;
-    HostAddressAndPort.Ip = TIpv6Address::FromString(Ip, Ok);
-    Y_VERIFY(Ok);
-    HostAddressAndPort.Port = Port;
-    return TResult(HostAddressAndPort, {}, {});
-}
-TResult HostRes(TString HostName, TIpPort Port) {
-    return TResult({}, HostName, Port);
-}
-
+    THostAddressAndPort HostAddressAndPort; 
+    HostAddressAndPort.Ip = TIpv6Address::FromString(Ip, Ok); 
+    Y_VERIFY(Ok); 
+    HostAddressAndPort.Port = Port; 
+    return TResult(HostAddressAndPort, {}, {}); 
+} 
+TResult HostRes(TString HostName, TIpPort Port) { 
+    return TResult({}, HostName, Port); 
+} 
+ 
 void ParseHostAndMayBePortFromString(TString RawStr,
                                      TIpPort DefaultPort,
-                                     const TResult ExpectedResult,
+                                     const TResult ExpectedResult, 
                                      const bool ExpectedOk) {
     bool Ok = false;
-    const TResult ActualResult = ParseHostAndMayBePortFromString(RawStr, DefaultPort, Ok);
-
-    UNIT_ASSERT(Ok == ExpectedOk);
+    const TResult ActualResult = ParseHostAndMayBePortFromString(RawStr, DefaultPort, Ok); 
+ 
+    UNIT_ASSERT(Ok == ExpectedOk); 
     if (Ok == false)
-        return;
-
-    UNIT_ASSERT(ActualResult == ExpectedResult);
-}
-
+        return; 
+ 
+    UNIT_ASSERT(ActualResult == ExpectedResult); 
+} 
+ 
 void CheckIpDefPortAgainstIpPortDefPort_v4OrHost(TString Ip,
                                                  TIpPort Port,
-                                                 const TResult ExpectedResult,
+                                                 const TResult ExpectedResult, 
                                                  const bool ExpectedOk) {
-    ParseHostAndMayBePortFromString(Ip, Port, ExpectedResult, ExpectedOk);
-
-    TString New = Ip + ":" + ToString(Port);
-    ParseHostAndMayBePortFromString(New, Port + 12, ExpectedResult, ExpectedOk);
-}
-
-void CheckIpDefPortAgainstIpPortDefPort_v6(TString Ip, TIpPort Port, const TResult ExpectedResult, const bool ExpectedOk) {
-    ParseHostAndMayBePortFromString(Ip, Port, ExpectedResult, ExpectedOk);
-
-    TString New = "[" + Ip + "]" + ":" + ToString(Port);
-    ParseHostAndMayBePortFromString(New, Port + 12, ExpectedResult, ExpectedOk);
-}
-
-void CheckIpDefPortAgainstIpPortDefPort(TString Ip, TIpPort Port, const TResult ExpectedResult, const bool ExpectedOk) {
+    ParseHostAndMayBePortFromString(Ip, Port, ExpectedResult, ExpectedOk); 
+ 
+    TString New = Ip + ":" + ToString(Port); 
+    ParseHostAndMayBePortFromString(New, Port + 12, ExpectedResult, ExpectedOk); 
+} 
+ 
+void CheckIpDefPortAgainstIpPortDefPort_v6(TString Ip, TIpPort Port, const TResult ExpectedResult, const bool ExpectedOk) { 
+    ParseHostAndMayBePortFromString(Ip, Port, ExpectedResult, ExpectedOk); 
+ 
+    TString New = "[" + Ip + "]" + ":" + ToString(Port); 
+    ParseHostAndMayBePortFromString(New, Port + 12, ExpectedResult, ExpectedOk); 
+} 
+ 
+void CheckIpDefPortAgainstIpPortDefPort(TString Ip, TIpPort Port, const TResult ExpectedResult, const bool ExpectedOk) { 
     if (Ip.find(':') == TString::npos) {
-        CheckIpDefPortAgainstIpPortDefPort_v4OrHost(Ip, Port, ExpectedResult, ExpectedOk);
-    } else {
-        CheckIpDefPortAgainstIpPortDefPort_v6(Ip, Port, ExpectedResult, ExpectedOk);
-    }
-}
-
-void TIpv6AddressTest::ParseHostAndMayBePortFromString_data() {
-    CheckIpDefPortAgainstIpPortDefPort("1.2.3.4", 123, IpRes("1.2.3.4", 123), true);
-    ParseHostAndMayBePortFromString("[1.2.3.4]", 123, {}, false);
-
-    ParseHostAndMayBePortFromString("[2001::7348]", 123, IpRes("2001::7348", 123), true);
-    CheckIpDefPortAgainstIpPortDefPort("2001::7348", 123, IpRes("2001::7348", 123), true);
-
-    CheckIpDefPortAgainstIpPortDefPort("ya.ru", 123, HostRes("ya.ru", 123), true);
-}
+        CheckIpDefPortAgainstIpPortDefPort_v4OrHost(Ip, Port, ExpectedResult, ExpectedOk); 
+    } else { 
+        CheckIpDefPortAgainstIpPortDefPort_v6(Ip, Port, ExpectedResult, ExpectedOk); 
+    } 
+} 
+ 
+void TIpv6AddressTest::ParseHostAndMayBePortFromString_data() { 
+    CheckIpDefPortAgainstIpPortDefPort("1.2.3.4", 123, IpRes("1.2.3.4", 123), true); 
+    ParseHostAndMayBePortFromString("[1.2.3.4]", 123, {}, false); 
+ 
+    ParseHostAndMayBePortFromString("[2001::7348]", 123, IpRes("2001::7348", 123), true); 
+    CheckIpDefPortAgainstIpPortDefPort("2001::7348", 123, IpRes("2001::7348", 123), true); 
+ 
+    CheckIpDefPortAgainstIpPortDefPort("ya.ru", 123, HostRes("ya.ru", 123), true); 
+} 
 
 void TIpv6AddressTest::CheckAddressValidity() {
     bool Ok;

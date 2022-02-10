@@ -51,13 +51,13 @@
 {"spwd", initspwd},
 #endif
 
-#ifdef _DARWIN_
+#ifdef _DARWIN_ 
 #ifndef __IOS__
-{"_multiprocessing", init_multiprocessing},
+{"_multiprocessing", init_multiprocessing}, 
 {"_scproxy", init_scproxy},
+#endif 
 #endif
-#endif
-
+ 
 #ifdef _CYGWIN_
 {"_multiprocessing", init_multiprocessing},
 #endif
@@ -86,7 +86,7 @@
 {"_subprocess", init_subprocess},
 {"_winreg", init_winreg},
 #endif
-
+ 
 #if defined(_x86_) && !defined(_CYGWIN_) || defined(__powerpc__) || defined(__aarch64__)
-{"_ctypes", init_ctypes},
-#endif
+{"_ctypes", init_ctypes}, 
+#endif 

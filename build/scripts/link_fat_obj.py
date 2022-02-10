@@ -1,7 +1,7 @@
-import argparse
-import subprocess
-import sys
-
+import argparse 
+import subprocess 
+import sys 
+ 
 from process_whole_archive_option import ProcessWholeArchiveOption
 
 YA_ARG_PREFIX = '-Ya,'
@@ -16,7 +16,7 @@ def get_args():
     parser.add_argument('--build-root', default=None)
     parser.add_argument('--with-own-obj', action='store_true', default=False)
     parser.add_argument('--with-global-srcs', action='store_true', default=False)
-
+ 
     groups = {}
     args_list = groups.setdefault('default', [])
     for arg in sys.argv[1:]:
@@ -68,17 +68,17 @@ def main():
         do_archive += auto_input
     if args.with_global_srcs:
         do_archive += global_srcs
-
+ 
     def call(c):
         proc = subprocess.Popen(c, shell=False, stderr=sys.stderr, stdout=sys.stdout, cwd=args.build_root)
         proc.communicate()
         return proc.returncode
-
+ 
     if obj_output:
         link_res = call(do_link)
         if link_res:
             sys.exit(link_res)
-
+ 
     if do_globals:
         glob_res = call(do_globals)
         if glob_res:

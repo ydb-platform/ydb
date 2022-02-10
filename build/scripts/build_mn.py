@@ -5,7 +5,7 @@ import sys
 import os
 import shutil
 import re
-import subprocess
+import subprocess 
 
 
 def get_value(val):
@@ -78,30 +78,30 @@ class BuildMnBase(object):
 
 class BuildMn(BuildMnBase):
     def Run(self, argv):
-        if len(argv) < 6:
-            print >>sys.stderr, "BuildMn.Run(<ARCADIA_ROOT> <archiver> <mninfo> <mnname> <mnrankingSuffix> <cppOutput> [params...])"
+        if len(argv) < 6: 
+            print >>sys.stderr, "BuildMn.Run(<ARCADIA_ROOT> <archiver> <mninfo> <mnname> <mnrankingSuffix> <cppOutput> [params...])" 
             sys.exit(1)
 
         self.SrcRoot = argv[0]
         self.archiver = argv[1]
 
-        mninfo = argv[2]
-        mnname = argv[3]
-        mnrankingSuffix = argv[4]
-        mncppPath = argv[5]
+        mninfo = argv[2] 
+        mnname = argv[3] 
+        mnrankingSuffix = argv[4] 
+        mncppPath = argv[5] 
         check = False
         ptr = False
         multi = False
-        self.fml_unused_tool = ''
-        for param in argv[6:]:
+        self.fml_unused_tool = '' 
+        for param in argv[6:]: 
             if param == "CHECK":
                 check = True
             elif param == "PTR":
                 ptr = True
             elif param == "MULTI":
                 multi = True
-            elif param.startswith('fml_tool='):
-                self.fml_unused_tool = get_value(param)
+            elif param.startswith('fml_tool='): 
+                self.fml_unused_tool = get_value(param) 
             else:
                 print >>sys.stdout, "Unknown param: {0}".format(param)
         super(BuildMn, self).Run(mninfo, mnname, mnrankingSuffix, mncppPath, check=check, ptr=ptr, multi=multi)
@@ -122,29 +122,29 @@ class BuildMns(BuildMnBase):
         self.mnmultilist = "const {0} {1}".format(mnmultilisttype, self.mnmultilistname)
 
     def InitForAll(self, argv):
-        if len(argv) < 8:
-            print >>sys.stderr, "BuildMns.InitForAll(<ARCADIA_ROOT> <BINDIR> <archiver>  <listname> <mnranking_suffix> <hdrfile> <srcfile> <mninfos> [fml_tool=<fml_unused_tool> CHECK])"
+        if len(argv) < 8: 
+            print >>sys.stderr, "BuildMns.InitForAll(<ARCADIA_ROOT> <BINDIR> <archiver>  <listname> <mnranking_suffix> <hdrfile> <srcfile> <mninfos> [fml_tool=<fml_unused_tool> CHECK])" 
             sys.exit(1)
 
         bmns_args = []
         self.check = False
-        self.fml_unused_tool = ''
+        self.fml_unused_tool = '' 
         for arg in argv:
             if arg == "CHECK":
                 self.check = True
-            elif arg.startswith('fml_tool='):
-                self.fml_unused_tool = get_value(arg)
+            elif arg.startswith('fml_tool='): 
+                self.fml_unused_tool = get_value(arg) 
             else:
                 bmns_args.append(arg)
 
         self.SrcRoot = bmns_args[0]
         self.BINDIR = bmns_args[1]
         self.archiver = bmns_args[2]
-        self.listname = bmns_args[3]
-        self.mnrankingSuffix = get_value(bmns_args[4])
-        self.hdrfile = bmns_args[5]
-        self.srcfile = bmns_args[6]
-        self.mninfos = bmns_args[7:]
+        self.listname = bmns_args[3] 
+        self.mnrankingSuffix = get_value(bmns_args[4]) 
+        self.hdrfile = bmns_args[5] 
+        self.srcfile = bmns_args[6] 
+        self.mninfos = bmns_args[7:] 
 
         self.InitBase(self.listname, self.mnrankingSuffix)
 
@@ -180,21 +180,21 @@ class BuildMns(BuildMnBase):
 
         bmns_args = []
         self.check = False
-        self.fml_unused_tool = ''
+        self.fml_unused_tool = '' 
         for arg in argv:
             if arg == "CHECK":
                 self.check = True
-            elif arg.startswith('fml_tool='):
-                self.fml_unused_tool = get_value(arg)
+            elif arg.startswith('fml_tool='): 
+                self.fml_unused_tool = get_value(arg) 
             else:
                 bmns_args.append(arg)
 
         self.SrcRoot = bmns_args[0]
         self.BINDIR = bmns_args[1]
         self.archiver = bmns_args[2]
-        self.listname = bmns_args[3]
-        self.mnrankingSuffix = get_value(bmns_args[4])
-        self.mninfos = bmns_args[5:]
+        self.listname = bmns_args[3] 
+        self.mnrankingSuffix = get_value(bmns_args[4]) 
+        self.mninfos = bmns_args[5:] 
 
     def BuildMnsHeader(self):
         if self.mninfos:

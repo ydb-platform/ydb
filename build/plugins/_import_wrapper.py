@@ -1,9 +1,9 @@
-try:
+try: 
     from ymake import CustomCommand as RealCustomCommand
-    from ymake import addrule
-    from ymake import addparser
+    from ymake import addrule 
+    from ymake import addparser 
     from ymake import subst
-
+ 
     class CustomCommand(RealCustomCommand):
         def __init__(self, *args, **kwargs):
             RealCustomCommand.__init__(*args, **kwargs)
@@ -11,7 +11,7 @@ try:
         def resolve_path(self, path):
             return subst(path)
 
-except ImportError:
+except ImportError: 
     from _custom_command import CustomCommand  # noqa
     from _custom_command import addrule  # noqa
     from _custom_command import addparser  # noqa

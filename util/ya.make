@@ -340,7 +340,7 @@ ELSE()
             system/context_x86.asm
         )
     ENDIF()
-    IF (ARCH_AARCH64 OR ARCH_ARM64)
+    IF (ARCH_AARCH64 OR ARCH_ARM64) 
         SRCS(
             system/context_aarch64.S
         )

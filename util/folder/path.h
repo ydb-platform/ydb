@@ -119,7 +119,7 @@ public:
     /**
      * @returns relative path or empty path if root equals to this.
      */
-    TFsPath RelativePath(const TFsPath& root) const; //..; for relative paths 1st component must be the same
+    TFsPath RelativePath(const TFsPath& root) const; //..; for relative paths 1st component must be the same 
 
     /**
      * Never fails. Returns this if already a root.
@@ -191,7 +191,7 @@ public:
     void Touch() const;
 
     TFsPath RealPath() const;
-    TFsPath RealLocation() const;
+    TFsPath RealLocation() const; 
     TFsPath ReadLink() const;
 
     /// always absolute

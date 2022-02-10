@@ -51,13 +51,13 @@ extern void init_multiprocessing(void);
 extern void initspwd(void);
 #endif
 
-#ifdef _DARWIN_
+#ifdef _DARWIN_ 
 #ifndef __IOS__
-extern void init_multiprocessing(void);
+extern void init_multiprocessing(void); 
 extern void init_scproxy(void);
+#endif 
 #endif
-#endif
-
+ 
 #ifdef _CYGWIN_
 extern void init_multiprocessing(void);
 #endif
@@ -86,7 +86,7 @@ extern void initmsvcrt(void);
 extern void init_subprocess(void);
 extern void init_winreg(void);
 #endif
-
+ 
 #if !defined(_CYGWIN_)
-extern void init_ctypes(void);
-#endif
+extern void init_ctypes(void); 
+#endif 

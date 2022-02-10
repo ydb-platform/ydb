@@ -27,7 +27,7 @@ import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 
-import "google/protobuf/descriptor.proto";
+import "google/protobuf/descriptor.proto"; 
 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";

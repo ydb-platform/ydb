@@ -59,7 +59,7 @@ SRCS(
 
 CFLAGS(
     -Daccept=bison_accept
-    -DBISON_DATA_DIR="contrib/tools/bison/bison/data"
+    -DBISON_DATA_DIR="contrib/tools/bison/bison/data" 
 )
 
 PEERDIR(

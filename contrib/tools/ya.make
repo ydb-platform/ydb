@@ -58,7 +58,7 @@ RECURSE(
 
 IF (NOT OS_WINDOWS)
     RECURSE(
-        ag
+        ag 
         lftp
         make
     )

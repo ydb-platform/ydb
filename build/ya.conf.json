@@ -45,9 +45,9 @@
         "nm": {
             "description": "Run nm"
         },
-        "objcopy": {
-            "description": "Run objcopy"
-        },
+        "objcopy": { 
+            "description": "Run objcopy" 
+        }, 
         "svn": {
             "description": "Subversion command-line client"
         },
@@ -1032,7 +1032,7 @@
                     "executable": "ymake"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1072,7 +1072,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "maven_import_sandbox_uploader": {
             "tools": {
@@ -2713,7 +2713,7 @@
                     "executable": "gdb"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2746,12 +2746,12 @@
                     },
                     "default": true
                 }
-            ],
+            ], 
             "env": {
                 "TERMINFO": [
                     "$(ROOT)/gdb/lib/terminfo"
                 ]
-            }
+            } 
         },
         "gdbserver": {
             "tools": {
@@ -2795,7 +2795,7 @@
                     "executable": "python"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2835,7 +2835,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "ipython": {
             "tools": {
@@ -2893,13 +2893,13 @@
                 }
             ]
         },
-        "wine": {
-            "tools": {
+        "wine": { 
+            "tools": { 
                 "wine": {
                     "bottle": "wine",
                     "executable": "wine"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -2908,7 +2908,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "wine32": {
             "tools": {
                 "wine32": {
@@ -3180,7 +3180,7 @@
                     "executable": "jar"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3199,7 +3199,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "jdk10": {
             "tools": {
@@ -3421,7 +3421,7 @@
                     "executable": "cmake"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3440,7 +3440,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "cling": {
             "tools": {
@@ -3471,7 +3471,7 @@
                     "executable": "ninja"
                 }
             },
-            "platforms": [
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3490,7 +3490,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "valgrind": {
             "tools": {
@@ -6306,7 +6306,7 @@
                     "bin",
                     "llvm-nm"
                 ],
-                "objcopy": [
+                "objcopy": [ 
                     "llvm-toolchain",
                     "bin",
                     "llvm-objcopy"
@@ -6483,18 +6483,18 @@
                 "match": "SCRIPTGEN"
             }
         },
-        "wine": {
-            "formula": {
+        "wine": { 
+            "formula": { 
                 "sandbox_id": 495594294,
-                "match": "Wine"
-            },
-            "executable": {
+                "match": "Wine" 
+            }, 
+            "executable": { 
                 "wine": [
                     "bin",
                     "wine64"
                 ]
-            }
-        },
+            } 
+        }, 
         "wine32": {
             "formula": {
                 "sandbox_id": 1010959442,

@@ -127,13 +127,13 @@ class RODataCXX(iw.CustomCommand):
         return 'RD', self._path, 'light-green'
 
     def input(self):
-        return common.make_tuples([self._path])
+        return common.make_tuples([self._path]) 
 
     def main_out(self):
         return common.tobuilddir(common.stripext(self._path)) + '.cpp'
 
     def output(self):
-        return common.make_tuples([self.main_out()])
+        return common.make_tuples([self.main_out()]) 
 
     def run(self, extra_args, binary):
         with open(self.resolve_path(self.main_out()), 'w') as f:
@@ -164,5 +164,5 @@ def ro_data(path, unit):
     return ROData(path, unit)
 
 
-def init():
-    iw.addrule('rodata', ro_data)
+def init(): 
+    iw.addrule('rodata', ro_data) 

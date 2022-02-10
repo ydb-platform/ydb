@@ -620,14 +620,14 @@ public:
         return Stats.get();
     }
 
-    TString Save() const override {
-        return ProgramParsed.CompGraph->SaveGraphState();
-    }
-
-    void Load(TStringBuf in) override {
-        ProgramParsed.CompGraph->LoadGraphState(in);
-    }
-
+    TString Save() const override { 
+        return ProgramParsed.CompGraph->SaveGraphState(); 
+    } 
+ 
+    void Load(TStringBuf in) override { 
+        ProgramParsed.CompGraph->LoadGraphState(in); 
+    } 
+ 
 private:
     NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv() {
         return Context.TypeEnv ? *Context.TypeEnv : *SelfTypeEnv;

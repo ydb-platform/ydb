@@ -24,7 +24,7 @@ message QueryInternal {
     YandexQuery.QueryAction action = 7;
     string ast = 8; // deprected and should not be used, will be removed in future
     ExecuteMode execute_mode = 9;
-    StateLoadMode state_load_mode = 10;
+    StateLoadMode state_load_mode = 10; 
     string cloud_id = 11;
     repeated Yq.Private.TopicConsumer created_topic_consumers = 12;
     repeated bytes dq_graph = 13;

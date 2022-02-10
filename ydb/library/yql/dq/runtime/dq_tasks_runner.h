@@ -176,10 +176,10 @@ public:
 
     virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
-
-    [[nodiscard]]
-    virtual TString Save() const = 0;
-    virtual void Load(TStringBuf in) = 0;
+ 
+    [[nodiscard]] 
+    virtual TString Save() const = 0; 
+    virtual void Load(TStringBuf in) = 0; 
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,

@@ -10,7 +10,7 @@
 
 #include <ydb/library/folder_service/proto/config.pb.h>
 #include <ydb/core/yq/libs/config/protos/audit.pb.h>
-
+ 
 #include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -33,11 +33,11 @@ void Init(
     const NKikimr::TAppData* appData,
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const IYqSharedResources::TPtr& yqSharedResources,
+    const IYqSharedResources::TPtr& yqSharedResources, 
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort
-);
+); 
 
 } // NYq

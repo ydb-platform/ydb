@@ -193,7 +193,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         if (query.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query data is not placed in the table. Please shorten your request";
         }
-
+ 
         if (queryInternal.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query internal data is not placed in the table. Please reduce the number of connections and bindings";
         }

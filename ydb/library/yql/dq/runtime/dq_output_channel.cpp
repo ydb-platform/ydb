@@ -546,17 +546,17 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        YQL_ENSURE(!Checkpoint);
-        Checkpoint.ConstructInPlace(std::move(checkpoint));
-    }
-
+        YQL_ENSURE(!Checkpoint); 
+        Checkpoint.ConstructInPlace(std::move(checkpoint)); 
+    } 
+ 
     [[nodiscard]]
     bool Pop(NDqProto::TData& data, ui64 bytes) override {
         LOG("Pop request, rows in memory: " << DataHead.size() << "/" << DataTail.size()
             << ", spilled rows: " << SpilledRows << ", spilled blobs: " << SpilledBlobs.size()
             << ", finished: " << Finished << ", requested: " << bytes << ", maxChunkBytes: " << MaxChunkBytes);
 
-        if (!HasData()) {
+        if (!HasData()) { 
             if (Finished) {
                 data.SetTransportVersion(DataSerializer.GetTransportVersion());
                 data.SetRows(0);
@@ -670,15 +670,15 @@ public:
 
     [[nodiscard]]
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
-        if (!HasData() && Checkpoint) {
+        if (!HasData() && Checkpoint) { 
             checkpoint = std::move(*Checkpoint);
             Checkpoint = Nothing();
-            return true;
-        }
-        return false;
-    }
-
-    [[nodiscard]]
+            return true; 
+        } 
+        return false; 
+    } 
+ 
+    [[nodiscard]] 
     bool PopAll(NDqProto::TData& data) override {
         YQL_ENSURE(!SpilledRows);
         YQL_ENSURE(DataTail.empty());
@@ -742,10 +742,10 @@ public:
         }
     }
 
-    bool HasData() const override {
-        return !DataHead.empty() || SpilledRows != 0 || !DataTail.empty();
-    }
-
+    bool HasData() const override { 
+        return !DataHead.empty() || SpilledRows != 0 || !DataTail.empty(); 
+    } 
+ 
     bool IsFinished() const override {
         return Finished && !HasData();
     }
@@ -822,7 +822,7 @@ private:
     ui64 SpilledRows = 0;
 
     bool Finished = false;
-
+ 
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
 };
 

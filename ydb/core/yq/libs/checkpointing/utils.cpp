@@ -1,5 +1,5 @@
-#include "utils.h"
-
+#include "utils.h" 
+ 
 namespace NYq {
 
 bool IsIngress(const NYql::NDqProto::TDqTask& task) {
@@ -10,8 +10,8 @@ bool IsIngress(const NYql::NDqProto::TDqTask& task) {
         }
     }
     return true;
-}
-
+} 
+ 
 bool IsEgress(const NYql::NDqProto::TDqTask& task) {
     for (const auto& output : task.GetOutputs()) {
         if (output.HasSink()) {
@@ -19,11 +19,11 @@ bool IsEgress(const NYql::NDqProto::TDqTask& task) {
         }
     }
     return false;
-}
-
+} 
+ 
 bool HasState(const NYql::NDqProto::TDqTask& task) {
-    Y_UNUSED(task);
-    return true;
-}
+    Y_UNUSED(task); 
+    return true; 
+} 
 
 } // namespace NYq

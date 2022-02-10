@@ -616,10 +616,10 @@ public:
         }
     }
 
-    bool Empty() const override {
-        ythrow yexception() << "unimplemented";
-    }
-
+    bool Empty() const override { 
+        ythrow yexception() << "unimplemented"; 
+    } 
+ 
     void Push(NDqProto::TData&& data) override {
         try {
             return Delegate->Push(std::move(data));
@@ -957,10 +957,10 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        Y_UNUSED(checkpoint);
-        ythrow yexception() << "unimplemented";
-    }
-
+        Y_UNUSED(checkpoint); 
+        ythrow yexception() << "unimplemented"; 
+    } 
+ 
     void Finish() override {
         try {
             NDqProto::TCommandHeader header;
@@ -976,11 +976,11 @@ public:
     // |>
 
     // <| consumer methods
-
-    bool HasData() const override {
-        ythrow yexception() << "unimplemented";
-    }
-
+ 
+    bool HasData() const override { 
+        ythrow yexception() << "unimplemented"; 
+    } 
+ 
     bool IsFinished() const override {
         try {
             return Delegate->IsFinished();
@@ -998,11 +998,11 @@ public:
             TaskRunner->RaiseException();
         }
     }
-
+ 
     bool Pop(NDqProto::TCheckpoint&) override {
         return false;
-    }
-
+    } 
+ 
     // Only for data-queries
     // TODO: remove this method and create independent Data- and Stream-query implementations.
     //       Stream-query implementation should be without PopAll method.
@@ -1620,15 +1620,15 @@ public:
         }
     }
 
-    TString Save() const override {
-        ythrow yexception() << "unimplemented";
-    }
+    TString Save() const override { 
+        ythrow yexception() << "unimplemented"; 
+    } 
 
-    void Load(TStringBuf in) override {
-        Y_UNUSED(in);
-        ythrow yexception() << "unimplemented";
-    }
-
+    void Load(TStringBuf in) override { 
+        Y_UNUSED(in); 
+        ythrow yexception() << "unimplemented"; 
+    } 
+ 
 private:
     TIntrusivePtr<TTaskRunner> Delegate;
     NDqProto::TDqTask Task;

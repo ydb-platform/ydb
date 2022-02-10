@@ -64,10 +64,10 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        HFunc(TEvCheckpointStorage::TEvNewCheckpointSucceeded, Handle);
+        HFunc(TEvCheckpointStorage::TEvNewCheckpointSucceeded, Handle); 
     )
 
-    void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx); 
 };
 
 TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage)
@@ -83,7 +83,7 @@ void TActorGC::Bootstrap(const TActorContext&)
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped storage GC " << SelfId());
 }
 
-void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx)
+void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev, const NActors::TActorContext& ctx) 
 {
     const auto* event = ev->Get();
     const auto& graphId = event->CoordinatorId.GraphId;

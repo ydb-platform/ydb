@@ -26,8 +26,8 @@ PEERDIR(
     ydb/library/yql/dq/proto
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 END()
 
 RECURSE(

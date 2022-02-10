@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/test_connection
     ydb/library/folder_service
-    ydb/library/folder_service/mock
+    ydb/library/folder_service/mock 
 )
 
 YQL_LAST_ABI_VERSION()

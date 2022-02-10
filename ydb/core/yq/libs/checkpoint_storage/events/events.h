@@ -28,7 +28,7 @@ struct TEvCheckpointStorage {
         EvGetCheckpointsMetadataResponse,
 
         // Internal Storage events.
-        EvNewCheckpointSucceeded,
+        EvNewCheckpointSucceeded, 
 
         EvEnd,
     };
@@ -161,15 +161,15 @@ struct TEvCheckpointStorage {
     struct TEvGetCheckpointsMetadataRequest
         : NActors::TEventLocal<TEvGetCheckpointsMetadataRequest, EvGetCheckpointsMetadataRequest> {
         explicit TEvGetCheckpointsMetadataRequest(TString graphId, TVector<ECheckpointStatus> statuses = TVector<ECheckpointStatus>(), ui64 limit = std::numeric_limits<ui64>::max(), bool loadGraphDescription = false)
-            : GraphId(std::move(graphId))
-            , Statuses(std::move(statuses))
+            : GraphId(std::move(graphId)) 
+            , Statuses(std::move(statuses)) 
             , Limit(limit)
             , LoadGraphDescription(loadGraphDescription) {
         }
 
         TString GraphId;
-        TVector<ECheckpointStatus> Statuses;
-        ui64 Limit;
+        TVector<ECheckpointStatus> Statuses; 
+        ui64 Limit; 
         bool LoadGraphDescription = false;
     };
 
@@ -185,8 +185,8 @@ struct TEvCheckpointStorage {
     };
 
     // note that no response exists
-    struct TEvNewCheckpointSucceeded : NActors::TEventLocal<TEvNewCheckpointSucceeded, EvNewCheckpointSucceeded> {
-        TEvNewCheckpointSucceeded(TCoordinatorId coordinatorId, TCheckpointId checkpointId)
+    struct TEvNewCheckpointSucceeded : NActors::TEventLocal<TEvNewCheckpointSucceeded, EvNewCheckpointSucceeded> { 
+        TEvNewCheckpointSucceeded(TCoordinatorId coordinatorId, TCheckpointId checkpointId) 
             : CoordinatorId(std::move(coordinatorId))
             , CheckpointId(std::move(checkpointId))
         {

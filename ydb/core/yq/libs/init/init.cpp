@@ -102,7 +102,7 @@ void Init(
     const TAppData* appData,
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const IYqSharedResources::TPtr& iyqSharedResources,
+    const IYqSharedResources::TPtr& iyqSharedResources, 
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
@@ -145,8 +145,8 @@ void Init(
 
     // if not enabled then stub
     {
-        auto folderService = folderServiceFactory(protoConfig.GetFolderService());
-        actorRegistrator(NKikimr::NFolderService::FolderServiceActorId(), folderService);
+        auto folderService = folderServiceFactory(protoConfig.GetFolderService()); 
+        actorRegistrator(NKikimr::NFolderService::FolderServiceActorId(), folderService); 
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {

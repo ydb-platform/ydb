@@ -52,7 +52,7 @@ RECURSE(
     anyconfig
     anyio
     anytree
-    apipkg
+    apipkg 
     apispec
     apispec-flask-restful
     appdirs
@@ -870,7 +870,7 @@ RECURSE(
     pytest-flake8
     pytest-flakes
     pytest-flask
-    pytest-forked
+    pytest-forked 
     pytest-freezegun
     pytest-httpretty
     pytest-lazy-fixture
@@ -885,7 +885,7 @@ RECURSE(
     pytest-tornado
     pytest-twisted
     pytest-vcr
-    pytest-xdist
+    pytest-xdist 
     pytest-xprocess
     python-crfsuite
     python-crontab
@@ -924,7 +924,7 @@ RECURSE(
     PyWavelets
     PyYAML
     pyzmq
-    qemu
+    qemu 
     qrcode
     quart
     queuelib

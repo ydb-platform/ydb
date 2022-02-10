@@ -3,7 +3,7 @@ OWNER(g:yatest)
 RECURSE(
     behave
     deprecated
-    fake_ya_package
+    fake_ya_package 
     filter
     gtest
     gtest/test

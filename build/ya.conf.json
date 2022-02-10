@@ -369,18 +369,18 @@
         "fio": {
             "description": "flexible I/O tester"
         },
-        "amduprof-cli": {
-            "description": "AMDuProfCLI is a command-line tool for AMD uProf Profiler"
-        },
-        "amduprof-pcm": {
-            "description": "AMDuProfPcm is a command-line tool to monitor CPU performance metrics of AMD processors"
-        },
-        "foremost": {
-            "description": "Foremost is a Linux program to recover files based on their headers"
-        },
+        "amduprof-cli": { 
+            "description": "AMDuProfCLI is a command-line tool for AMD uProf Profiler" 
+        }, 
+        "amduprof-pcm": { 
+            "description": "AMDuProfPcm is a command-line tool to monitor CPU performance metrics of AMD processors" 
+        }, 
+        "foremost": { 
+            "description": "Foremost is a Linux program to recover files based on their headers" 
+        }, 
         "stress-ng": {
             "description": "stress load tester"
-        },
+        }, 
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
@@ -396,12 +396,12 @@
         "iperf": {
             "description": "network load tester"
         },
-        "lkvm": {
-            "description": "kvmtool is a userland tool for creating and controlling KVM guests"
+        "lkvm": { 
+            "description": "kvmtool is a userland tool for creating and controlling KVM guests" 
         },
-        "coronerctl": {
-            "description": "yandex-coroner cli, https://a.yandex-team.ru/arc/trunk/arcadia/infra/rsm/coroner/README.md"
-        },
+        "coronerctl": { 
+            "description": "yandex-coroner cli, https://a.yandex-team.ru/arc/trunk/arcadia/infra/rsm/coroner/README.md" 
+        }, 
         "blkparse": {
             "description": "produce formatted output of event streams of block devices from blktrace utility"
         },
@@ -417,15 +417,15 @@
         "btt": {
             "description": "analyse block i/o traces produces by blktrace"
         },
-        "lz4": {
-            "description": "Compress or decompress .lz4 files"
-        },
-        "pqos": {
-            "description": "Intel(R) Resource Director Technology monitoring and control tool"
-        },
-        "rdtset": {
-            "description": "Task CPU affinity and Intel(R) Resource Director Technology control tool"
-        },
+        "lz4": { 
+            "description": "Compress or decompress .lz4 files" 
+        }, 
+        "pqos": { 
+            "description": "Intel(R) Resource Director Technology monitoring and control tool" 
+        }, 
+        "rdtset": { 
+            "description": "Task CPU affinity and Intel(R) Resource Director Technology control tool" 
+        }, 
         "optrace": {
             "description": "optrace records output files written by each process",
             "visible": false
@@ -4972,58 +4972,58 @@
                 }
             ]
         },
-        "fio": {
-            "tools": {
+        "fio": { 
+            "tools": { 
                 "fio": {
                     "bottle": "fio",
                     "executable": "fio"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ]
-        },
-        "amduprof": {
-            "tools": {
-                "amduprof-cli": {
-                    "bottle": "amduprof",
-                    "executable": "amduprof-cli"
-                },
-                "amduprof-pcm": {
-                    "bottle": "amduprof",
-                    "executable": "amduprof-pcm"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "foremost": {
-            "tools": {
-                "foremost": {
-                    "bottle": "foremost",
-                    "executable": "foremost"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
+            ] 
+        }, 
+        "amduprof": { 
+            "tools": { 
+                "amduprof-cli": { 
+                    "bottle": "amduprof", 
+                    "executable": "amduprof-cli" 
+                }, 
+                "amduprof-pcm": { 
+                    "bottle": "amduprof", 
+                    "executable": "amduprof-pcm" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "foremost": { 
+            "tools": { 
+                "foremost": { 
+                    "bottle": "foremost", 
+                    "executable": "foremost" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "atop": {
             "tools": {
                 "atop": {
@@ -5120,122 +5120,122 @@
                 }
             ]
         },
-        "lkvm": {
-            "tools": {
-                "lkvm": {
-                    "bottle": "kvmtool",
-                    "executable": "lkvm"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "coronerctl": {
-            "tools": {
-                "coronerctl": {
-                    "bottle": "coronerctl",
-                    "executable": "coronerctl"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "lz4": {
-            "tools": {
-                "lz4": {
-                    "bottle": "lz4",
-                    "executable": "lz4"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "intel-cmt-cat": {
-            "tools": {
-                "pqos": {
-                    "bottle": "intel-cmt-cat",
-                    "executable": "pqos"
-                },
-                "rdtset": {
-                    "bottle": "intel-cmt-cat",
-                    "executable": "rdtset"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "blktrace": {
-            "tools": {
-                "blkparse": {
-                    "bottle": "blktrace",
-                    "executable": "blkparse"
-                },
-                "iowatcher": {
-                    "bottle": "blktrace",
-                    "executable": "iowatcher"
-                },
-                "blktrace": {
-                    "bottle": "blktrace",
-                    "executable": "blktrace"
-                },
-                "blkiomon": {
-                    "bottle": "blktrace",
-                    "executable": "blkiomon"
-                },
-                "btt": {
-                    "bottle": "blktrace",
-                    "executable": "btt"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "vmexec": {
-            "tools": {
+        "lkvm": { 
+            "tools": { 
+                "lkvm": { 
+                    "bottle": "kvmtool", 
+                    "executable": "lkvm" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "coronerctl": { 
+            "tools": { 
+                "coronerctl": { 
+                    "bottle": "coronerctl", 
+                    "executable": "coronerctl" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "lz4": { 
+            "tools": { 
+                "lz4": { 
+                    "bottle": "lz4", 
+                    "executable": "lz4" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "intel-cmt-cat": { 
+            "tools": { 
+                "pqos": { 
+                    "bottle": "intel-cmt-cat", 
+                    "executable": "pqos" 
+                }, 
+                "rdtset": { 
+                    "bottle": "intel-cmt-cat", 
+                    "executable": "rdtset" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "blktrace": { 
+            "tools": { 
+                "blkparse": { 
+                    "bottle": "blktrace", 
+                    "executable": "blkparse" 
+                }, 
+                "iowatcher": { 
+                    "bottle": "blktrace", 
+                    "executable": "iowatcher" 
+                }, 
+                "blktrace": { 
+                    "bottle": "blktrace", 
+                    "executable": "blktrace" 
+                }, 
+                "blkiomon": { 
+                    "bottle": "blktrace", 
+                    "executable": "blkiomon" 
+                }, 
+                "btt": { 
+                    "bottle": "blktrace", 
+                    "executable": "btt" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "vmexec": { 
+            "tools": { 
                 "vmexec": {
                     "bottle": "vmexec",
                     "executable": "vmexec"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "yfm-docs": {
             "tools": {
                 "yfm-docs": {
@@ -5923,9 +5923,9 @@
         "sandboxctl": {
             "formula": {
                 "sandbox_id": [
-                    832226067
+                    832226067 
                 ],
-                "match": "tools/sandboxctl/bin/sandboxctl"
+                "match": "tools/sandboxctl/bin/sandboxctl" 
             },
             "executable": {
                 "sandboxctl": [
@@ -6627,7 +6627,7 @@
             },
             "executable": {
                 "sre": [
-                    "sretool"
+                    "sretool" 
                 ],
                 "bpftrace": [
                     "tools",
@@ -7474,29 +7474,29 @@
                 ]
             }
         },
-        "fio": {
-            "formula": {
+        "fio": { 
+            "formula": { 
                 "sandbox_id": [
                     1136887344
                 ],
-                "match": "infra/kernel/tools/fio/build/fio-static.tar.gz"
-            },
-            "executable": {
+                "match": "infra/kernel/tools/fio/build/fio-static.tar.gz" 
+            }, 
+            "executable": { 
                 "fio": [
                     "fio",
                     "bin",
                     "fio"
                 ]
-            }
-        },
-        "amduprof": {
-            "formula": {
-                "sandbox_id": [
-                    747426974
-                ],
-                "match": "AMDuProf_Linux_x64_3.2.228.tar.gz"
-            },
-            "executable": {
+            } 
+        }, 
+        "amduprof": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    747426974 
+                ], 
+                "match": "AMDuProf_Linux_x64_3.2.228.tar.gz" 
+            }, 
+            "executable": { 
                 "amduprof-cli": [
                     "AMDuProf_Linux_x64_3.2.228",
                     "bin",
@@ -7507,21 +7507,21 @@
                     "bin",
                     "AMDuProfPcm"
                 ]
-            }
-        },
-        "foremost": {
-            "formula": {
-                "sandbox_id": [
-                    684724398
-                ],
-                "match": "infra/kernel/tools/foremost/build/foremost-static.tar.gz"
-            },
-            "executable": {
+            } 
+        }, 
+        "foremost": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    684724398 
+                ], 
+                "match": "infra/kernel/tools/foremost/build/foremost-static.tar.gz" 
+            }, 
+            "executable": { 
                 "foremost": [
                     "foremost"
                 ]
-            }
-        },
+            } 
+        }, 
         "atop": {
             "formula": {
                 "sandbox_id": [
@@ -7581,7 +7581,7 @@
         "stress-ng": {
             "formula": {
                 "sandbox_id": [
-                    755257561
+                    755257561 
                 ],
                 "match": "infra/kernel/tools/stress-ng/build/stress-ng-static.tar.gz"
             },
@@ -7607,122 +7607,122 @@
                 ]
             }
         },
-        "kvmtool": {
-            "formula": {
-                "sandbox_id": [
-                    547591282
-                ],
-                "match": "infra/kernel/tools/kvmtool"
-            },
-            "executable": {
-                "lkvm": [
-                    "kvmtool",
-                    "lkvm"
-                ]
-            }
-        },
-        "coronerctl": {
-            "formula": {
-                "sandbox_id": [
+        "kvmtool": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    547591282 
+                ], 
+                "match": "infra/kernel/tools/kvmtool" 
+            }, 
+            "executable": { 
+                "lkvm": [ 
+                    "kvmtool", 
+                    "lkvm" 
+                ] 
+            } 
+        }, 
+        "coronerctl": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1183844682
-                ],
+                ], 
                 "match": "infra/rsm/coroner/build/packages/coroner/pkg.json"
-            },
-            "executable": {
+            }, 
+            "executable": { 
                 "coronerctl": [
                     "coronerctl"
                 ]
-            }
-        },
-        "lz4": {
-            "formula": {
-                "sandbox_id": [
-                    756420904
-                ],
-                "match": "infra/kernel/tools/lz4"
-            },
-            "executable": {
-                "lz4": [
-                    "lz4",
-                    "usr",
+            } 
+        }, 
+        "lz4": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    756420904 
+                ], 
+                "match": "infra/kernel/tools/lz4" 
+            }, 
+            "executable": { 
+                "lz4": [ 
+                    "lz4", 
+                    "usr", 
+                    "bin", 
+                    "lz4" 
+                ] 
+            } 
+        }, 
+        "intel-cmt-cat": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    798382448 
+                ], 
+                "match": "infra/kernel/tools/resctrl" 
+            }, 
+            "executable": { 
+                "pqos": [ 
+                    "intel-cmt-cat", 
                     "bin",
-                    "lz4"
+                    "pqos" 
+                ], 
+                "rdtset": [ 
+                    "intel-cmt-cat", 
+                    "bin", 
+                    "rdtset" 
                 ]
-            }
-        },
-        "intel-cmt-cat": {
-            "formula": {
-                "sandbox_id": [
-                    798382448
-                ],
-                "match": "infra/kernel/tools/resctrl"
-            },
-            "executable": {
-                "pqos": [
-                    "intel-cmt-cat",
-                    "bin",
-                    "pqos"
-                ],
-                "rdtset": [
-                    "intel-cmt-cat",
-                    "bin",
-                    "rdtset"
-                ]
-            }
-        },
-        "blktrace": {
-            "formula": {
-                "sandbox_id": [
-                    643294824
-                ],
-                "match": "infra/kernel/tools/blktrace/build"
-            },
-            "executable": {
-                "blkparse": [
+            } 
+        }, 
+        "blktrace": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    643294824 
+                ], 
+                "match": "infra/kernel/tools/blktrace/build" 
+            }, 
+            "executable": { 
+                "blkparse": [ 
                     "blktrace",
                     "usr",
                     "bin",
                     "blkparse"
-                ],
-                "iowatcher": [
+                ], 
+                "iowatcher": [ 
                     "blktrace",
                     "usr",
                     "bin",
                     "iowatcher"
-                ],
-                "blktrace": [
+                ], 
+                "blktrace": [ 
                     "blktrace",
                     "usr",
                     "bin",
                     "blktrace"
-                ],
-                "blkiomon": [
+                ], 
+                "blkiomon": [ 
                     "blktrace",
                     "usr",
                     "bin",
                     "blkiomon"
-                ],
-                "btt": [
+                ], 
+                "btt": [ 
                     "blktrace",
                     "usr",
                     "bin",
                     "btt"
-                ]
-            }
-        },
-        "vmexec": {
-            "formula": {
-                "sandbox_id": [
+                ] 
+            } 
+        }, 
+        "vmexec": { 
+            "formula": { 
+                "sandbox_id": [ 
                     940486578
-                ],
+                ], 
                 "match": "infra/qemu/vmexec/vmexec"
-            },
-            "executable": {
+            }, 
+            "executable": { 
                 "vmexec": [
                     "vmexec"
                 ]
-            }
-        },
+            } 
+        }, 
         "yfm-docs": {
             "formula": {
                 "sandbox_id": 1150530779,

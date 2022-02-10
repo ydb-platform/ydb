@@ -535,12 +535,12 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     return registry.Release();
 }
 
-void FillStaticModules(IMutableFunctionRegistry& registry) { 
-    for (const auto& wrapper : NUdf::GetStaticUdfModuleWrapperList()) { 
-        auto [name, ptr] = wrapper(); 
+void FillStaticModules(IMutableFunctionRegistry& registry) {
+    for (const auto& wrapper : NUdf::GetStaticUdfModuleWrapperList()) {
+        auto [name, ptr] = wrapper();
         registry.AddModule(TString(StaticModulePrefix) + name, name, std::move(ptr));
-    } 
-} 
- 
+    }
+}
+
 } // namespace NMiniKQL
 } // namespace NKiki

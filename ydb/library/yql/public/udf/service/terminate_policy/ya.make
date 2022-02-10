@@ -5,8 +5,8 @@ OWNER(
     g:yql
 )
 
-PROVIDES(YqlServicePolicy) 
- 
+PROVIDES(YqlServicePolicy)
+
 SRCS(
     udf_service.cpp
 )

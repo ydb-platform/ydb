@@ -6,8 +6,8 @@ OWNER(
     g:yql_ydb_core
 )
 
-PROVIDES(YqlServicePolicy) 
- 
+PROVIDES(YqlServicePolicy)
+
 SRCS(
     udf_service.cpp
 )

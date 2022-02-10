@@ -38,7 +38,7 @@ public:
 protected:
     TDataType Data_ = nullptr;
     ui32 Size_ = 0U;
-    ui8 Reserved_[4] = {}; 
+    ui8 Reserved_[4] = {};
 };
 
 //////////////////////////////////////////////////////////////////////////////

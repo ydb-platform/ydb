@@ -201,17 +201,17 @@ char* MD5::End_b64(char* buf) {
     return buf;
 }
 
-ui64 MD5::EndHalfMix() { 
+ui64 MD5::EndHalfMix() {
     ui8 digest[16];
-    Final(digest); 
-    ui64 res = 0; 
-    for (int i = 3; i >= 0; i--) { 
-        res |= (ui64)(digest[0 + i] ^ digest[8 + i]) << ((3 - i) << 3); 
-        res |= (ui64)(digest[4 + i] ^ digest[12 + i]) << ((7 - i) << 3); 
-    } 
-    return res; 
-} 
- 
+    Final(digest);
+    ui64 res = 0;
+    for (int i = 3; i >= 0; i--) {
+        res |= (ui64)(digest[0 + i] ^ digest[8 + i]) << ((3 - i) << 3);
+        res |= (ui64)(digest[4 + i] ^ digest[12 + i]) << ((7 - i) << 3);
+    }
+    return res;
+}
+
 TString MD5::Calc(TStringBuf data) {
     return Calc(MakeUnsignedArrayRef(data));
 }
@@ -231,14 +231,14 @@ TString MD5::CalcRaw(const TArrayRef<const ui8>& data) {
     return result;
 }
 
-ui64 MD5::CalcHalfMix(const char* data, size_t len) { 
+ui64 MD5::CalcHalfMix(const char* data, size_t len) {
     return CalcHalfMix(MakeUnsignedArrayRef(data, len));
-} 
- 
+}
+
 ui64 MD5::CalcHalfMix(TStringBuf data) {
     return CalcHalfMix(MakeUnsignedArrayRef(data));
-} 
- 
+}
+
 ui64 MD5::CalcHalfMix(const TArrayRef<const ui8>& data) {
     return MD5().Update(data).EndHalfMix();
 }

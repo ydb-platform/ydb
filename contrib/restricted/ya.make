@@ -12,7 +12,7 @@ RECURSE(
     blis
     boost
     cityhash-1.0.2
-    cmph 
+    cmph
     cpuinfo
     exiv2
     expected-lite

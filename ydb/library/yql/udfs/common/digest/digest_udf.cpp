@@ -137,11 +137,11 @@ namespace {
         return valueBuilder->NewString(hash);
     }
 
-    SIMPLE_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) { 
-        Y_UNUSED(valueBuilder); 
-        return TUnboxedValuePod(MD5::CalcHalfMix(args[0].AsStringRef())); 
-    } 
- 
+    SIMPLE_UDF(TMd5HalfMix, ui64(TAutoMap<char*>)) {
+        Y_UNUSED(valueBuilder);
+        return TUnboxedValuePod(MD5::CalcHalfMix(args[0].AsStringRef()));
+    }
+
     SIMPLE_UDF(TArgon2, char*(TAutoMap<char*>, TAutoMap<char*>)) {
         const static ui32 outSize = 32;
         const static NArgonish::TArgon2Factory afactory;
@@ -362,7 +362,7 @@ namespace {
                   TNumericHash,
                   TMd5Hex,
                   TMd5Raw,
-                  TMd5HalfMix, 
+                  TMd5HalfMix,
                   TArgon2,
                   TBlake2B,
                   TSipHash,

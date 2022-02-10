@@ -6,8 +6,8 @@
 #include "udf_string.h"
 #include "udf_value.h"
 
-#include <functional> 
- 
+#include <functional>
+
 #include <stdarg.h>
 
 #ifdef _win_
@@ -34,14 +34,14 @@
         ::NYql::NUdf::SetBackTraceCallbackImpl(callback); \
     }
 #else
-#define REGISTER_MODULES(...) \ 
-    namespace { \ 
-        struct TYqlStaticUdfRegistrator { \ 
-            inline TYqlStaticUdfRegistrator() { \ 
+#define REGISTER_MODULES(...) \
+    namespace { \
+        struct TYqlStaticUdfRegistrator { \
+            inline TYqlStaticUdfRegistrator() { \
                 ::NYql::NUdf::AddToStaticUdfRegistry<__VA_ARGS__>(); \
-            } \ 
-        } YQL_REGISTRATOR; \ 
-    } 
+            } \
+        } YQL_REGISTRATOR; \
+    }
 #endif
 
 namespace NYql {
@@ -172,27 +172,27 @@ static inline void RegisterHelper(IRegistrator& registrator) {
 
 void SetBackTraceCallbackImpl(TBackTraceCallback callback);
 
- 
-using TUdfModuleWrapper = std::function<std::pair<TStringRef, TUniquePtr<IUdfModule>>()>; 
- 
-void AddToStaticUdfRegistry(TUdfModuleWrapper&&); 
- 
-template<typename TModule> 
-static inline void AddToStaticUdfRegistry() { 
-    AddToStaticUdfRegistry([]() { 
-        TUniquePtr<TModule> ptr(new TModule()); 
-        auto name = ptr->Name(); 
-        return TUdfModuleWrapper::result_type(name, ptr.Release()); 
-    }); 
-} 
- 
-template<typename THead1, typename THead2, typename... TTail> 
-static inline void AddToStaticUdfRegistry() { 
-    AddToStaticUdfRegistry<THead1>(); 
-    AddToStaticUdfRegistry<THead2, TTail...>(); 
-} 
- 
- 
+
+using TUdfModuleWrapper = std::function<std::pair<TStringRef, TUniquePtr<IUdfModule>>()>;
+
+void AddToStaticUdfRegistry(TUdfModuleWrapper&&);
+
+template<typename TModule>
+static inline void AddToStaticUdfRegistry() {
+    AddToStaticUdfRegistry([]() {
+        TUniquePtr<TModule> ptr(new TModule());
+        auto name = ptr->Name();
+        return TUdfModuleWrapper::result_type(name, ptr.Release());
+    });
+}
+
+template<typename THead1, typename THead2, typename... TTail>
+static inline void AddToStaticUdfRegistry() {
+    AddToStaticUdfRegistry<THead1>();
+    AddToStaticUdfRegistry<THead2, TTail...>();
+}
+
+
 } // namspace NUdf
 } // namspace NYql
 

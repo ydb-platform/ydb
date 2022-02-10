@@ -144,7 +144,7 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
 
 const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
-void FillStaticModules(IMutableFunctionRegistry& registry); 
- 
+void FillStaticModules(IMutableFunctionRegistry& registry);
+
 } // namespace NMiniKQL
 } // namespace NKikimr

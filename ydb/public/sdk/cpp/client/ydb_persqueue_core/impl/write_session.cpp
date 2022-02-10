@@ -216,8 +216,8 @@ void TWriteSession::OnCdsResponse(
                 name = clusterInfo.name();
                 endpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, clusterInfo.endpoint());
                 break;
-            } 
-        } 
+            }
+        }
         if (endpoint.empty()) {
             errorStatus = EStatus::GENERIC_ERROR;
             issues.AddIssue(TStringBuilder() << "Could not get valid endpoint from cluster discovery");
@@ -249,8 +249,8 @@ void TWriteSession::OnCdsResponse(
     }
     DoConnect(TDuration::Zero(), endpoint);
 
-} 
- 
+}
+
 void TWriteSession::InitWriter() { // No Lock, very initial start - no race yet as well.
     CompressionExecutor = Settings.CompressionExecutor_;
     IExecutor::TPtr executor;

@@ -76,7 +76,7 @@ TString TMemoryMapCommon::UnknownFileName() {
 }
 
 static inline i64 DownToGranularity(i64 offset) noexcept {
-    return offset & ~((i64)(GRANULARITY - 1));
+    return offset & ~((i64)(GRANULARITY - 1)); 
 }
 
 #if defined(_unix_)

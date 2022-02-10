@@ -16,7 +16,7 @@ namespace {
             signal(SIGPIPE, SIG_IGN);
 #endif
 
-#if defined(_win_)
+#if defined(_win_) 
     #pragma comment(lib, "ws2_32.lib")
             WSADATA wsaData;
             int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -31,4 +31,4 @@ namespace {
 
 void InitNetworkSubSystem() {
     (void)Singleton<TNetworkInit>();
-}
+} 

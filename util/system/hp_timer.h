@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "defaults.h"
 
 namespace NHPTimer {
@@ -33,4 +33,4 @@ struct THPTimer {
 
 private:
     NHPTimer::STime Start;
-};
+}; 

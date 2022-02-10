@@ -1124,22 +1124,22 @@ template <class T>
 class TPtrArg {
     T* Ptr;
 
-public:
+public: 
     TPtrArg(T* p)
-        : Ptr(p)
-    {
-    }
+        : Ptr(p) 
+    { 
+    } 
     TPtrArg(const TIntrusivePtr<T>& p)
-        : Ptr(p.Get())
-    {
-    }
-    operator T*() const {
-        return Ptr;
-    }
-    T* operator->() const {
-        return Ptr;
-    }
-    T* Get() const {
-        return Ptr;
-    }
-};
+        : Ptr(p.Get()) 
+    { 
+    } 
+    operator T*() const { 
+        return Ptr; 
+    } 
+    T* operator->() const { 
+        return Ptr; 
+    } 
+    T* Get() const { 
+        return Ptr; 
+    } 
+}; 

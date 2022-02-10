@@ -5,9 +5,9 @@
 
 #include <library/cpp/containers/2d_array/2d_array.h>
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 #include <util/generic/buffer.h>
-#include <util/generic/list.h>
+#include <util/generic/list.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/bitmap.h>
 #include <util/generic/variant.h>
@@ -19,11 +19,11 @@
 #include <bitset>
 #include <list>
 #include <string>
-
-#ifdef _MSC_VER
+ 
+#ifdef _MSC_VER 
 #pragma warning(disable : 4127)
-#endif
-
+#endif 
+ 
 enum ESaverMode {
     SAVER_MODE_READ = 1,
     SAVER_MODE_WRITE = 2,
@@ -47,7 +47,7 @@ struct IBinSaver {
 public:
     typedef unsigned char chunk_id;
     typedef ui32 TStoredSize; // changing this will break compatibility
-
+ 
 private:
     // This overload is required to avoid infinite recursion when overriding serialization in derived classes:
     // struct B {
@@ -206,7 +206,7 @@ private:
         }
     }
 
-    // 2D array
+    // 2D array 
     template <class T>
     void Do2DArray(TArray2D<T>& a) {
         int nXSize = a.GetXSize(), nYSize = a.GetYSize();
@@ -227,7 +227,7 @@ private:
         if (nXSize * nYSize > 0)
             DataChunk(&a[0][0], sizeof(T) * nXSize * nYSize);
     }
-    // strings
+    // strings 
     template <class TStringType>
     void DataChunkStr(TStringType& data, i64 elemSize) {
         if (bRead) {
@@ -263,8 +263,8 @@ private:
             else
                 File.Write(ptr, size);
         }
-    }
-
+    } 
+ 
     // storing/loading pointers to objects
     void StoreObject(IObjectBase* pObject);
     IObjectBase* LoadObject();
@@ -279,7 +279,7 @@ private:
     TAutoPtr<PtrIdHash> PtrIds;
 
     typedef THashMap<ui64, TPtr<IObjectBase>> CObjectsHash;
-    TAutoPtr<CObjectsHash> Objects;
+    TAutoPtr<CObjectsHash> Objects; 
 
     TVector<IObjectBase*> ObjectQueue;
 
@@ -295,19 +295,19 @@ public:
     template <class T>
     char Add(const chunk_id, T* p) {
         CallObjectSerialize(p, NBinSaverInternals::TOverloadPriority<2>());
-        return 0;
+        return 0; 
     }
     int Add(const chunk_id, std::string* pStr) {
         DataChunkString(*pStr);
-        return 0;
+        return 0; 
     }
     int Add(const chunk_id, TString* pStr) {
         DataChunkStroka(*pStr);
-        return 0;
+        return 0; 
     }
     int Add(const chunk_id, TUtf16String* pStr) {
         DataChunkWtroka(*pStr);
-        return 0;
+        return 0; 
     }
     int Add(const chunk_id, TBlob* blob) {
         if (bRead) {
@@ -328,10 +328,10 @@ public:
     template <class T1, class TA>
     int Add(const chunk_id, TVector<T1, TA>* pVec) {
         if (HasNonTrivialSerializer<T1>(0u))
-            DoVector(*pVec);
-        else
+            DoVector(*pVec); 
+        else 
             DoDataVector(*pVec);
-        return 0;
+        return 0; 
     }
 
     template <class T, int N>
@@ -351,12 +351,12 @@ public:
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMap(*pHash);
-        return 0;
+        return 0; 
     }
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMultiMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMultiMap(*pHash);
-        return 0;
+        return 0; 
     }
     template <class K, class L, class A>
     int Add(const chunk_id, TSet<K, L, A>* pSet) {
@@ -366,16 +366,16 @@ public:
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, THashSet<T1, T2, T3, T4>* pHash) {
         DoAnySet(*pHash);
-        return 0;
+        return 0; 
     }
 
     template <class T1>
     int Add(const chunk_id, TArray2D<T1>* pArr) {
         if (HasNonTrivialSerializer<T1>(0u))
-            Do2DArray(*pArr);
-        else
+            Do2DArray(*pArr); 
+        else 
             Do2DArrayData(*pArr);
-        return 0;
+        return 0; 
     }
     template <class T1>
     int Add(const chunk_id, TList<T1>* pList) {
@@ -392,13 +392,13 @@ public:
         int i = 1;
         for (typename TList<T1>::iterator k = data.begin(); k != data.end(); ++k, ++i)
             Add(i + 2, &(*k));
-        return 0;
+        return 0; 
     }
     template <class T1, class T2>
     int Add(const chunk_id, std::pair<T1, T2>* pData) {
         Add(1, &(pData->first));
         Add(2, &(pData->second));
-        return 0;
+        return 0; 
     }
 
     template <class T1, size_t N>
@@ -538,8 +538,8 @@ public:
     template <class T, typename = decltype(std::declval<T&>() & std::declval<IBinSaver&>())>
     static bool HasNonTrivialSerializer(ui32) {
         return true;
-    }
-
+    } 
+ 
     template <class T>
     static bool HasNonTrivialSerializer(...) {
         return sizeof(std::declval<IBinSaver*>()->Add(0, std::declval<T*>())) != 1;
@@ -552,7 +552,7 @@ public:
         , StableOutput(stableOutput)
     {
     }
-    virtual ~IBinSaver();
+    virtual ~IBinSaver(); 
     bool IsValid() const {
         return File.IsValid();
     }
@@ -586,8 +586,8 @@ struct TRegisterSaveLoadType {
     BASIC_REGISTER_CLASS(name)           \
     static TRegisterSaveLoadType<name> init##name##N(N);
 
-// using TObj/TRef on forward declared templ class will not work
-// but multiple registration with same id is allowed
+// using TObj/TRef on forward declared templ class will not work 
+// but multiple registration with same id is allowed 
 #define REGISTER_SAVELOAD_TEMPL1_CLASS(N, className, T) \
     static TRegisterSaveLoadType<className<T>> init##className##T##N(N);
 

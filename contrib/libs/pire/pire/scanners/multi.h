@@ -41,7 +41,7 @@
 #include "common.h"
 
 namespace Pire {
-
+ 
 namespace Impl {
 
 	inline static ssize_t SignExtend(i32 i) { return i; }

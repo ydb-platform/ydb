@@ -7,42 +7,42 @@
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <util/system/compat.h>
-#include <util/system/compiler.h>
+#include <util/system/compiler.h> 
 #include <util/system/types.h>
 
-#ifdef _MSC_VER
-#ifndef _CRT_SECURE_NO_WARNINGS
+#ifdef _MSC_VER 
+#ifndef _CRT_SECURE_NO_WARNINGS 
 #define _CRT_SECURE_NO_WARNINGS
-#endif
-#ifdef _M_X64
+#endif 
+#ifdef _M_X64 
 #define _64_
-#endif
-#include <intrin.h>
+#endif 
+#include <intrin.h> 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#pragma intrinsic(_InterlockedCompareExchange)
-#pragma intrinsic(_InterlockedExchangeAdd)
-
-#include <new>
+#include <Windows.h> 
+#pragma intrinsic(_InterlockedCompareExchange) 
+#pragma intrinsic(_InterlockedExchangeAdd) 
+ 
+#include <new> 
 #include <assert.h>
-#include <errno.h>
-
-#define PERTHREAD __declspec(thread)
-#define _win_
+#include <errno.h> 
+ 
+#define PERTHREAD __declspec(thread) 
+#define _win_ 
 #define Y_FORCE_INLINE __forceinline
-
+ 
 using TAtomic = volatile long;
-
+ 
 static inline long AtomicAdd(TAtomic& a, long b) {
-    return _InterlockedExchangeAdd(&a, b) + b;
-}
-
+    return _InterlockedExchangeAdd(&a, b) + b; 
+} 
+ 
 static inline long AtomicSub(TAtomic& a, long b) {
     return AtomicAdd(a, -b);
 }
 
-#pragma comment(lib, "synchronization.lib")
-
+#pragma comment(lib, "synchronization.lib") 
+ 
 #ifndef NDEBUG
 #define Y_ASSERT_NOBT(x)           \
     {                              \
@@ -52,16 +52,16 @@ static inline long AtomicSub(TAtomic& a, long b) {
         } else                     \
             assert(x);             \
     }
-#else
+#else 
 #define Y_ASSERT_NOBT(x) ((void)0)
-#endif
-
-#else
-
-#include <util/system/defaults.h>
-#include <util/system/atomic.h>
-#include <util/system/yassert.h>
-
+#endif 
+ 
+#else 
+ 
+#include <util/system/defaults.h> 
+#include <util/system/atomic.h> 
+#include <util/system/yassert.h> 
+ 
 #if !defined(NDEBUG) && !defined(__GCCXML__)
 #define Y_ASSERT_NOBT(a)                                    \
     do {                                                    \
@@ -91,16 +91,16 @@ static inline long AtomicSub(TAtomic& a, long b) {
     } while (0)
 #endif
 
-#include <pthread.h>
-#include <sys/mman.h>
-#include <stdlib.h>
-#include <memory.h>
-#include <new>
-#include <errno.h>
-
+#include <pthread.h> 
+#include <sys/mman.h> 
+#include <stdlib.h> 
+#include <memory.h> 
+#include <new> 
+#include <errno.h> 
+ 
 #if defined(_linux_)
-#include <linux/futex.h>
-#include <sys/syscall.h>
+#include <linux/futex.h> 
+#include <sys/syscall.h> 
 #if !defined(MADV_HUGEPAGE)
 #define MADV_HUGEPAGE 14
 #endif
@@ -109,21 +109,21 @@ static inline long AtomicSub(TAtomic& a, long b) {
 #endif
 #endif
 
-#define PERTHREAD __thread
-
-#endif
-
-#ifndef _darwin_
-
+#define PERTHREAD __thread 
+ 
+#endif 
+ 
+#ifndef _darwin_ 
+ 
 #ifndef Y_ARRAY_SIZE
 #define Y_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-#endif
-
+#endif 
+ 
 #ifndef NDEBUG
-#define DBG_FILL_MEMORY
+#define DBG_FILL_MEMORY 
 static bool FillMemoryOnAllocation = true;
-#endif
-
+#endif 
+ 
 static bool TransparentHugePages = false; // force MADV_HUGEPAGE for large allocs
 static bool MapHugeTLB = false;           // force MAP_HUGETLB for small allocs
 static bool EnableDefrag = true;
@@ -138,57 +138,57 @@ inline T* DoCas(T* volatile* target, T* exchange, T* compare) {
 #if defined(__has_builtin) && __has_builtin(__sync_val_compare_and_swap)
     return __sync_val_compare_and_swap(target, compare, exchange);
 #elif defined(_WIN32)
-#ifdef _64_
-    return (T*)_InterlockedCompareExchange64((__int64*)target, (__int64)exchange, (__int64)compare);
-#else
-    //return (T*)InterlockedCompareExchangePointer(targetVoidP, exchange, compare);
-    return (T*)_InterlockedCompareExchange((LONG*)target, (LONG)exchange, (LONG)compare);
-#endif
-#elif defined(__i386) || defined(__x86_64__)
+#ifdef _64_ 
+    return (T*)_InterlockedCompareExchange64((__int64*)target, (__int64)exchange, (__int64)compare); 
+#else 
+    //return (T*)InterlockedCompareExchangePointer(targetVoidP, exchange, compare); 
+    return (T*)_InterlockedCompareExchange((LONG*)target, (LONG)exchange, (LONG)compare); 
+#endif 
+#elif defined(__i386) || defined(__x86_64__) 
     union {
         T* volatile* NP;
         void* volatile* VoidP;
-    } gccSucks;
-    gccSucks.NP = target;
+    } gccSucks; 
+    gccSucks.NP = target; 
     void* volatile* targetVoidP = gccSucks.VoidP;
-
+ 
     __asm__ __volatile__(
-        "lock\n\t"
-        "cmpxchg %2,%0\n\t"
+        "lock\n\t" 
+        "cmpxchg %2,%0\n\t" 
         : "+m"(*(targetVoidP)), "+a"(compare)
         : "r"(exchange)
-        : "cc", "memory");
-    return compare;
-#else
+        : "cc", "memory"); 
+    return compare; 
+#else 
 #error inline_cas not defined for this platform
-#endif
-}
-
-#ifdef _64_
+#endif 
+} 
+ 
+#ifdef _64_ 
 const uintptr_t N_MAX_WORKSET_SIZE = 0x100000000ll * 200;
 const uintptr_t N_HUGE_AREA_FINISH = 0x700000000000ll;
-#ifndef _freebsd_
+#ifndef _freebsd_ 
 const uintptr_t LINUX_MMAP_AREA_START = 0x100000000ll;
 static uintptr_t volatile linuxAllocPointer = LINUX_MMAP_AREA_START;
 static uintptr_t volatile linuxAllocPointerHuge = LINUX_MMAP_AREA_START + N_MAX_WORKSET_SIZE;
-#endif
-#else
+#endif 
+#else 
 const uintptr_t N_MAX_WORKSET_SIZE = 0xffffffff;
-#endif
-#define ALLOC_START ((char*)0)
-
-const size_t N_CHUNK_SIZE = 1024 * 1024;
-const size_t N_CHUNKS = N_MAX_WORKSET_SIZE / N_CHUNK_SIZE;
-const size_t N_LARGE_ALLOC_SIZE = N_CHUNK_SIZE * 128;
-
-// map size idx to size in bytes
+#endif 
+#define ALLOC_START ((char*)0) 
+ 
+const size_t N_CHUNK_SIZE = 1024 * 1024; 
+const size_t N_CHUNKS = N_MAX_WORKSET_SIZE / N_CHUNK_SIZE; 
+const size_t N_LARGE_ALLOC_SIZE = N_CHUNK_SIZE * 128; 
+ 
+// map size idx to size in bytes 
 #ifdef LFALLOC_YT
 const int N_SIZES = 27;
 #else
-const int N_SIZES = 25;
+const int N_SIZES = 25; 
 #endif
-const int nSizeIdxToSize[N_SIZES] = {
-    -1,
+const int nSizeIdxToSize[N_SIZES] = { 
+    -1, 
 #if defined(_64_)
     16, 16, 32, 32, 48, 64, 96, 128,
 #else
@@ -206,14 +206,14 @@ const int nSizeIdxToSize[N_SIZES] = {
 #ifdef LFALLOC_YT
     49152, 65536
 #endif
-};
+}; 
 #ifdef LFALLOC_YT
 const size_t N_MAX_FAST_SIZE = 65536;
 #else
-const size_t N_MAX_FAST_SIZE = 32768;
+const size_t N_MAX_FAST_SIZE = 32768; 
 #endif
-const unsigned char size2idxArr1[64 + 1] = {
-    1,
+const unsigned char size2idxArr1[64 + 1] = { 
+    1, 
 #if defined(_64_)
     2, 2, 4, 4, // 16, 16, 32, 32
 #else
@@ -224,11 +224,11 @@ const unsigned char size2idxArr1[64 + 1] = {
     9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10,         // 192, 256
     11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, // 384
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12  // 512
-};
+}; 
 #ifdef LFALLOC_YT
 const unsigned char size2idxArr2[256] = {
 #else
-const unsigned char size2idxArr2[128] = {
+const unsigned char size2idxArr2[128] = { 
 #endif
     12, 12, 13, 14,                                                 // 512, 512, 768, 1024
     15, 15, 16, 16,                                                 // 1536, 2048
@@ -250,32 +250,32 @@ const unsigned char size2idxArr2[128] = {
     26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
     26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, // 65536
 #endif
-};
-
-// map entry number to size idx
-// special size idx's: 0 = not used, -1 = mem locked, but not allocated
-static volatile char chunkSizeIdx[N_CHUNKS];
-const int FREE_CHUNK_ARR_BUF = 0x20000; // this is effectively 128G of free memory (with 1M chunks), should not be exhausted actually
-static volatile uintptr_t freeChunkArr[FREE_CHUNK_ARR_BUF];
-static volatile int freeChunkCount;
-
+}; 
+ 
+// map entry number to size idx 
+// special size idx's: 0 = not used, -1 = mem locked, but not allocated 
+static volatile char chunkSizeIdx[N_CHUNKS]; 
+const int FREE_CHUNK_ARR_BUF = 0x20000; // this is effectively 128G of free memory (with 1M chunks), should not be exhausted actually 
+static volatile uintptr_t freeChunkArr[FREE_CHUNK_ARR_BUF]; 
+static volatile int freeChunkCount; 
+ 
 static void AddFreeChunk(uintptr_t chunkId) {
-    chunkSizeIdx[chunkId] = -1;
+    chunkSizeIdx[chunkId] = -1; 
     if (Y_UNLIKELY(freeChunkCount == FREE_CHUNK_ARR_BUF))
         NMalloc::AbortFromCorruptedAllocator("free chunks array overflowed");
-    freeChunkArr[freeChunkCount++] = chunkId;
-}
-
+    freeChunkArr[freeChunkCount++] = chunkId; 
+} 
+ 
 static bool GetFreeChunk(uintptr_t* res) {
-    if (freeChunkCount == 0) {
-        *res = 0;
-        return false;
-    }
-    *res = freeChunkArr[--freeChunkCount];
-    return true;
-}
-
-//////////////////////////////////////////////////////////////////////////
+    if (freeChunkCount == 0) { 
+        *res = 0; 
+        return false; 
+    } 
+    *res = freeChunkArr[--freeChunkCount]; 
+    return true; 
+} 
+ 
+////////////////////////////////////////////////////////////////////////// 
 enum ELFAllocCounter {
     CT_USER_ALLOC,     // accumulated size requested by user code
     CT_MMAP,           // accumulated mmapped size
@@ -299,7 +299,7 @@ static Y_FORCE_INLINE void IncrementCounter(ELFAllocCounter counter, size_t valu
 enum EMMapMode {
     MM_NORMAL, // memory for small allocs
     MM_HUGE    // memory for large allocs
-};
+}; 
 
 #ifndef _MSC_VER
 inline void VerifyMmapResult(void* result) {
@@ -331,65 +331,65 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
         }
     }
 
-    bool wrapped = false;
+    bool wrapped = false; 
     for (;;) {
         char* prevAllocPtr = *areaPtr;
         char* nextAllocPtr = prevAllocPtr + sz;
         if (uintptr_t(nextAllocPtr - (char*)nullptr) >= areaFinish) {
             if (Y_UNLIKELY(wrapped)) {
                 NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented");
-            }
-            // wrap after all area is used
+            } 
+            // wrap after all area is used 
             DoCas(areaPtr, areaStart, prevAllocPtr);
-            wrapped = true;
-            continue;
-        }
-
+            wrapped = true; 
+            continue; 
+        } 
+ 
         if (DoCas(areaPtr, nextAllocPtr, prevAllocPtr) != prevAllocPtr)
-            continue;
-
+            continue; 
+ 
         char* largeBlock = (char*)mmap(prevAllocPtr, sz, mapProt, mapFlags, -1, 0);
         VerifyMmapResult(largeBlock);
-        if (largeBlock == prevAllocPtr)
+        if (largeBlock == prevAllocPtr) 
             return largeBlock;
-        if (largeBlock)
-            munmap(largeBlock, sz);
-
-        if (sz < 0x80000) {
-            // skip utilized area with big steps
+        if (largeBlock) 
+            munmap(largeBlock, sz); 
+ 
+        if (sz < 0x80000) { 
+            // skip utilized area with big steps 
             DoCas(areaPtr, nextAllocPtr + 0x10 * 0x10000, nextAllocPtr);
-        }
-    }
-}
-#endif
-
+        } 
+    } 
+} 
+#endif 
+ 
 static char* AllocWithMMap(uintptr_t sz, EMMapMode mode) {
-    (void)mode;
-#ifdef _MSC_VER
+    (void)mode; 
+#ifdef _MSC_VER 
     char* largeBlock = (char*)VirtualAlloc(0, sz, MEM_RESERVE, PAGE_READWRITE);
     if (Y_UNLIKELY(largeBlock == nullptr))
         NMalloc::AbortFromCorruptedAllocator("out of memory");
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
-#else
+#else 
 #if defined(_freebsd_) || !defined(_64_)
     char* largeBlock = (char*)mmap(0, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     VerifyMmapResult(largeBlock);
     if (Y_UNLIKELY(uintptr_t(((char*)largeBlock - ALLOC_START) + sz) >= N_MAX_WORKSET_SIZE))
         NMalloc::AbortFromCorruptedAllocator("out of working set, something has broken");
-#else
+#else 
     char* largeBlock = AllocWithMMapLinuxImpl(sz, mode);
     if (TransparentHugePages) {
         madvise(largeBlock, sz, MADV_HUGEPAGE);
     }
-#endif
-#endif
+#endif 
+#endif 
     Y_ASSERT_NOBT(largeBlock);
     IncrementCounter(CT_MMAP, sz);
     IncrementCounter(CT_MMAP_CNT, 1);
-    return largeBlock;
-}
-
+    return largeBlock; 
+} 
+ 
 enum class ELarge : ui8 {
     Free = 0,   // block in free cache
     Alloc = 1,  // block is allocated
@@ -432,285 +432,285 @@ static void LargeBlockUnmap(void* p, size_t pages) {
 
     IncrementCounter(CT_MUNMAP, bytes);
     IncrementCounter(CT_MUNMAP_CNT, 1);
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
     Y_ASSERT_NOBT(0);
-#else
+#else 
     TLargeBlk::As(p)->Mark(ELarge::Gone);
     munmap((char*)p - 4096ll, bytes);
-#endif
-}
+#endif 
+} 
 
-//////////////////////////////////////////////////////////////////////////
-const size_t LB_BUF_SIZE = 250;
+////////////////////////////////////////////////////////////////////////// 
+const size_t LB_BUF_SIZE = 250; 
 const size_t LB_BUF_HASH = 977;
 static int LB_LIMIT_TOTAL_SIZE = 500 * 1024 * 1024 / 4096; // do not keep more then this mem total in lbFreePtrs[]
 static void* volatile lbFreePtrs[LB_BUF_HASH][LB_BUF_SIZE];
-static TAtomic lbFreePageCount;
-
+static TAtomic lbFreePageCount; 
+ 
 
 static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
-    size_t pgCount = (_nSize + 4095) / 4096;
-#ifdef _MSC_VER
+    size_t pgCount = (_nSize + 4095) / 4096; 
+#ifdef _MSC_VER 
     char* pRes = (char*)VirtualAlloc(0, (pgCount + 1) * 4096ll, MEM_COMMIT, PAGE_READWRITE);
     if (Y_UNLIKELY(pRes == 0)) {
         NMalloc::AbortFromCorruptedAllocator("out of memory");
     }
-#else
+#else 
 
     IncrementCounter(counter, pgCount * 4096ll);
     IncrementCounter(CT_SYSTEM_ALLOC, 4096ll);
 
-    int lbHash = pgCount % LB_BUF_HASH;
-    for (int i = 0; i < LB_BUF_SIZE; ++i) {
+    int lbHash = pgCount % LB_BUF_HASH; 
+    for (int i = 0; i < LB_BUF_SIZE; ++i) { 
         void* p = lbFreePtrs[lbHash][i];
         if (p == nullptr)
-            continue;
+            continue; 
         if (DoCas(&lbFreePtrs[lbHash][i], (void*)nullptr, p) == p) {
             size_t realPageCount = TLargeBlk::As(p)->Pages;
-            if (realPageCount == pgCount) {
-                AtomicAdd(lbFreePageCount, -pgCount);
+            if (realPageCount == pgCount) { 
+                AtomicAdd(lbFreePageCount, -pgCount); 
                 TLargeBlk::As(p)->Mark(ELarge::Alloc);
-                return p;
-            } else {
+                return p; 
+            } else { 
                 if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) != (void*)nullptr) {
-                    // block was freed while we were busy
+                    // block was freed while we were busy 
                     AtomicAdd(lbFreePageCount, -realPageCount);
                     LargeBlockUnmap(p, realPageCount);
-                    --i;
-                }
-            }
-        }
-    }
+                    --i; 
+                } 
+            } 
+        } 
+    } 
     char* pRes = AllocWithMMap((pgCount + 1) * 4096ll, MM_HUGE);
-#endif
-    pRes += 4096ll;
+#endif 
+    pRes += 4096ll; 
     TLargeBlk::As(pRes)->SetSize(_nSize, pgCount);
     TLargeBlk::As(pRes)->Mark(ELarge::Alloc);
-
-    return pRes;
-}
-
-#ifndef _MSC_VER
+ 
+    return pRes; 
+} 
+ 
+#ifndef _MSC_VER 
 static void FreeAllLargeBlockMem() {
     for (auto& lbFreePtr : lbFreePtrs) {
-        for (int i = 0; i < LB_BUF_SIZE; ++i) {
+        for (int i = 0; i < LB_BUF_SIZE; ++i) { 
             void* p = lbFreePtr[i];
             if (p == nullptr)
-                continue;
+                continue; 
             if (DoCas(&lbFreePtr[i], (void*)nullptr, p) == p) {
                 int pgCount = TLargeBlk::As(p)->Pages;
-                AtomicAdd(lbFreePageCount, -pgCount);
+                AtomicAdd(lbFreePageCount, -pgCount); 
                 LargeBlockUnmap(p, pgCount);
-            }
-        }
-    }
-}
-#endif
-
+            } 
+        } 
+    } 
+} 
+#endif 
+ 
 static void LargeBlockFree(void* p, ELFAllocCounter counter) {
     if (p == nullptr)
-        return;
-#ifdef _MSC_VER
-    VirtualFree((char*)p - 4096ll, 0, MEM_RELEASE);
-#else
+        return; 
+#ifdef _MSC_VER 
+    VirtualFree((char*)p - 4096ll, 0, MEM_RELEASE); 
+#else 
     size_t pgCount = TLargeBlk::As(p)->Pages;
-
+ 
     TLargeBlk::As(p)->Mark(ELarge::Free);
     IncrementCounter(counter, pgCount * 4096ll);
     IncrementCounter(CT_SYSTEM_FREE, 4096ll);
 
-    if (lbFreePageCount > LB_LIMIT_TOTAL_SIZE)
-        FreeAllLargeBlockMem();
-    int lbHash = pgCount % LB_BUF_HASH;
-    for (int i = 0; i < LB_BUF_SIZE; ++i) {
+    if (lbFreePageCount > LB_LIMIT_TOTAL_SIZE) 
+        FreeAllLargeBlockMem(); 
+    int lbHash = pgCount % LB_BUF_HASH; 
+    for (int i = 0; i < LB_BUF_SIZE; ++i) { 
         if (lbFreePtrs[lbHash][i] == nullptr) {
             if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) == nullptr) {
                 AtomicAdd(lbFreePageCount, pgCount);
-                return;
-            }
-        }
-    }
-
+                return; 
+            } 
+        } 
+    } 
+ 
     LargeBlockUnmap(p, pgCount);
-#endif
-}
-
+#endif 
+} 
+ 
 static void* SystemAlloc(size_t _nSize) {
-    //HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, _nSize);
+    //HeapAlloc(GetProcessHeap(), HEAP_GENERATE_EXCEPTIONS, _nSize); 
     return LargeBlockAlloc(_nSize, CT_SYSTEM_ALLOC);
-}
+} 
 static void SystemFree(void* p) {
-    //HeapFree(GetProcessHeap(), 0, p);
+    //HeapFree(GetProcessHeap(), 0, p); 
     LargeBlockFree(p, CT_SYSTEM_FREE);
-}
+} 
 
-
+ 
 //////////////////////////////////////////////////////////////////////////
-char* const LF_LOCK_FREE = ((char*)0) + 0;
-char* const LF_LOCK_LOCKED = ((char*)0) + 1;
-char* const LF_LOCK_FUTEX_WAIT = ((char*)0) + 2;
-static bool LFHasFutex = true;
-static bool LFCheckedWinVersion = false;
-
-// TLFLockData has to be zero-initialized explicitly https://en.cppreference.com/w/cpp/language/zero_initialization
-// otherwise constructor TLFLockData() for global var might be called after first use
-struct TLFLockData
-{
-    char* Pad1[15];
-    char* volatile LockVar; // = LF_LOCK_FREE; // no constructor, zero-initialize manually
-    char* Pad2[15];
-
-    bool TryLock()
-    {
-        return (LockVar == LF_LOCK_FREE && DoCas(&LockVar, LF_LOCK_LOCKED, LF_LOCK_FREE) == LF_LOCK_FREE);
+char* const LF_LOCK_FREE = ((char*)0) + 0; 
+char* const LF_LOCK_LOCKED = ((char*)0) + 1; 
+char* const LF_LOCK_FUTEX_WAIT = ((char*)0) + 2; 
+static bool LFHasFutex = true; 
+static bool LFCheckedWinVersion = false; 
+ 
+// TLFLockData has to be zero-initialized explicitly https://en.cppreference.com/w/cpp/language/zero_initialization 
+// otherwise constructor TLFLockData() for global var might be called after first use 
+struct TLFLockData 
+{ 
+    char* Pad1[15]; 
+    char* volatile LockVar; // = LF_LOCK_FREE; // no constructor, zero-initialize manually 
+    char* Pad2[15]; 
+ 
+    bool TryLock() 
+    { 
+        return (LockVar == LF_LOCK_FREE && DoCas(&LockVar, LF_LOCK_LOCKED, LF_LOCK_FREE) == LF_LOCK_FREE); 
+    } 
+ 
+    void FutexWait() 
+    { 
+#ifdef _win_ 
+        if (!LFCheckedWinVersion) { 
+            OSVERSIONINFOA ver; 
+            memset(&ver, 0, sizeof(ver)); 
+            ver.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA); 
+            GetVersionExA(&ver); 
+            LFHasFutex = (ver.dwMajorVersion > 6) || (ver.dwMajorVersion == 6 && ver.dwMinorVersion >= 2); 
+            LFCheckedWinVersion = true; 
+        } 
+        if (LFHasFutex) { 
+            if (LockVar == LF_LOCK_LOCKED) { 
+                DoCas(&LockVar, LF_LOCK_FUTEX_WAIT, LF_LOCK_LOCKED); 
+            } 
+            if (LockVar == LF_LOCK_FUTEX_WAIT) { 
+                char* lockedValue = LF_LOCK_FUTEX_WAIT; 
+                WaitOnAddress(&LockVar, &lockedValue, sizeof(LockVar), INFINITE); 
+            } 
+        } else { 
+            SwitchToThread(); 
+        } 
+#elif defined(_linux_) 
+        if (LFHasFutex) { 
+            if (LockVar == LF_LOCK_LOCKED) { 
+                DoCas(&LockVar, LF_LOCK_FUTEX_WAIT, LF_LOCK_LOCKED); 
+            } 
+            if (LockVar == LF_LOCK_FUTEX_WAIT) { 
+                // linux allow only int variables checks, here we pretend low bits of LockVar are int 
+                syscall(SYS_futex, &LockVar, FUTEX_WAIT_PRIVATE, *(int*)&LF_LOCK_FUTEX_WAIT, 0, 0, 0); 
+            } 
+        } else { 
+            sched_yield(); 
+        } 
+#else 
+        sched_yield(); 
+#endif 
+    } 
+ 
+    void Unlock() 
+    { 
+        Y_ASSERT_NOBT(LockVar != LF_LOCK_FREE); 
+        if (DoCas(&LockVar, LF_LOCK_FREE, LF_LOCK_LOCKED) != LF_LOCK_LOCKED) { 
+            Y_ASSERT_NOBT(LockVar == LF_LOCK_FUTEX_WAIT && LFHasFutex); 
+            LockVar = LF_LOCK_FREE; 
+#ifdef _win_ 
+            WakeByAddressAll((PVOID)&LockVar); 
+#elif defined(_linux_) 
+            syscall(SYS_futex, &LockVar, FUTEX_WAKE_PRIVATE, INT_MAX, 0, 0, 0); 
+#endif 
+        } 
+    } 
+}; 
+ 
+static TLFLockData LFGlobalLock; 
+ 
+ 
+class TLFLockHolder { 
+    TLFLockData *LockData = nullptr; 
+    int Attempt = 0; 
+    int SleepMask = 0x7f; 
+ 
+public: 
+    TLFLockHolder() {} 
+    TLFLockHolder(TLFLockData *lk) { 
+        while (!TryLock(lk)); 
+    } 
+    bool TryLock(TLFLockData *lk) 
+    { 
+        Y_ASSERT_NOBT(LockData == nullptr); 
+        if (lk->TryLock()) { 
+            LockData = lk; 
+            return true; 
+        }
+        if ((++Attempt & SleepMask) == 0) { 
+            lk->FutexWait(); 
+            SleepMask = (SleepMask * 2 + 1) & 0x7fff; 
+        } else { 
+#ifdef _MSC_VER 
+            _mm_pause(); 
+#elif defined(__i386) || defined(__x86_64__) 
+            __asm__ __volatile__("pause"); 
+#endif 
+        } 
+        return false; 
     }
-
-    void FutexWait()
-    {
-#ifdef _win_
-        if (!LFCheckedWinVersion) {
-            OSVERSIONINFOA ver;
-            memset(&ver, 0, sizeof(ver));
-            ver.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA);
-            GetVersionExA(&ver);
-            LFHasFutex = (ver.dwMajorVersion > 6) || (ver.dwMajorVersion == 6 && ver.dwMinorVersion >= 2);
-            LFCheckedWinVersion = true;
-        }
-        if (LFHasFutex) {
-            if (LockVar == LF_LOCK_LOCKED) {
-                DoCas(&LockVar, LF_LOCK_FUTEX_WAIT, LF_LOCK_LOCKED);
-            }
-            if (LockVar == LF_LOCK_FUTEX_WAIT) {
-                char* lockedValue = LF_LOCK_FUTEX_WAIT;
-                WaitOnAddress(&LockVar, &lockedValue, sizeof(LockVar), INFINITE);
-            }
-        } else {
-            SwitchToThread();
-        }
-#elif defined(_linux_)
-        if (LFHasFutex) {
-            if (LockVar == LF_LOCK_LOCKED) {
-                DoCas(&LockVar, LF_LOCK_FUTEX_WAIT, LF_LOCK_LOCKED);
-            }
-            if (LockVar == LF_LOCK_FUTEX_WAIT) {
-                // linux allow only int variables checks, here we pretend low bits of LockVar are int
-                syscall(SYS_futex, &LockVar, FUTEX_WAIT_PRIVATE, *(int*)&LF_LOCK_FUTEX_WAIT, 0, 0, 0);
-            }
-        } else {
-            sched_yield();
-        }
-#else
-        sched_yield();
-#endif
-    }
-
-    void Unlock()
-    {
-        Y_ASSERT_NOBT(LockVar != LF_LOCK_FREE);
-        if (DoCas(&LockVar, LF_LOCK_FREE, LF_LOCK_LOCKED) != LF_LOCK_LOCKED) {
-            Y_ASSERT_NOBT(LockVar == LF_LOCK_FUTEX_WAIT && LFHasFutex);
-            LockVar = LF_LOCK_FREE;
-#ifdef _win_
-            WakeByAddressAll((PVOID)&LockVar);
-#elif defined(_linux_)
-            syscall(SYS_futex, &LockVar, FUTEX_WAKE_PRIVATE, INT_MAX, 0, 0, 0);
-#endif
+    ~TLFLockHolder() { 
+        if (LockData) { 
+            LockData->Unlock(); 
         }
     }
-};
-
-static TLFLockData LFGlobalLock;
-
-
-class TLFLockHolder {
-    TLFLockData *LockData = nullptr;
-    int Attempt = 0;
-    int SleepMask = 0x7f;
-
-public:
-    TLFLockHolder() {}
-    TLFLockHolder(TLFLockData *lk) {
-        while (!TryLock(lk));
-    }
-    bool TryLock(TLFLockData *lk)
-    {
-        Y_ASSERT_NOBT(LockData == nullptr);
-        if (lk->TryLock()) {
-            LockData = lk;
-            return true;
-        }
-        if ((++Attempt & SleepMask) == 0) {
-            lk->FutexWait();
-            SleepMask = (SleepMask * 2 + 1) & 0x7fff;
-        } else {
-#ifdef _MSC_VER
-            _mm_pause();
-#elif defined(__i386) || defined(__x86_64__)
-            __asm__ __volatile__("pause");
-#endif
-        }
-        return false;
-    }
-    ~TLFLockHolder() {
-        if (LockData) {
-            LockData->Unlock();
-        }
-    }
-};
-
-//////////////////////////////////////////////////////////////////////////
+}; 
+ 
+////////////////////////////////////////////////////////////////////////// 
 class TLFAllocFreeList {
     struct TNode {
         TNode* Next;
-    };
-
+    }; 
+ 
     TNode* volatile Head;
     TNode* volatile Pending;
     TAtomic PendingToFreeListCounter;
-    TAtomic AllocCount;
+    TAtomic AllocCount; 
     void* Padding;
-
+ 
     static Y_FORCE_INLINE void Enqueue(TNode* volatile* headPtr, TNode* n) {
         for (;;) {
             TNode* volatile prevHead = *headPtr;
-            n->Next = prevHead;
-            if (DoCas(headPtr, n, prevHead) == prevHead)
-                break;
-        }
-    }
+            n->Next = prevHead; 
+            if (DoCas(headPtr, n, prevHead) == prevHead) 
+                break; 
+        } 
+    } 
     Y_FORCE_INLINE void* DoAlloc() {
         TNode* res;
-        for (res = Head; res; res = Head) {
+        for (res = Head; res; res = Head) { 
             TNode* keepNext = res->Next;
             if (DoCas(&Head, keepNext, res) == res) {
                 //Y_VERIFY(keepNext == res->Next);
-                break;
+                break; 
             }
-        }
-        return res;
-    }
+        } 
+        return res; 
+    } 
     void FreeList(TNode* fl) {
-        if (!fl)
-            return;
+        if (!fl) 
+            return; 
         TNode* flTail = fl;
-        while (flTail->Next)
-            flTail = flTail->Next;
+        while (flTail->Next) 
+            flTail = flTail->Next; 
         for (;;) {
             TNode* volatile prevHead = Head;
-            flTail->Next = prevHead;
-            if (DoCas(&Head, fl, prevHead) == prevHead)
-                break;
-        }
-    }
+            flTail->Next = prevHead; 
+            if (DoCas(&Head, fl, prevHead) == prevHead) 
+                break; 
+        } 
+    } 
 
-public:
+public: 
     Y_FORCE_INLINE void Free(void* ptr) {
         TNode* newFree = (TNode*)ptr;
         if (AtomicAdd(AllocCount, 0) == 0)
-            Enqueue(&Head, newFree);
-        else
-            Enqueue(&Pending, newFree);
-    }
+            Enqueue(&Head, newFree); 
+        else 
+            Enqueue(&Pending, newFree); 
+    } 
     Y_FORCE_INLINE void* Alloc() {
         TAtomic keepCounter = AtomicAdd(PendingToFreeListCounter, 0);
         TNode* fl = Pending;
@@ -719,61 +719,61 @@ public:
             // If (keepCounter == PendingToFreeListCounter) then Pending was not freed by other threads.
             // Hence Pending is not used in any concurrent DoAlloc() atm and can be safely moved to FreeList
             if (fl && keepCounter == AtomicAdd(PendingToFreeListCounter, 0) && DoCas(&Pending, (TNode*)nullptr, fl) == fl) {
-                // pick first element from Pending and return it
+                // pick first element from Pending and return it 
                 void* res = fl;
-                fl = fl->Next;
-                // if there are other elements in Pending list, add them to main free list
-                FreeList(fl);
+                fl = fl->Next; 
+                // if there are other elements in Pending list, add them to main free list 
+                FreeList(fl); 
                 AtomicAdd(PendingToFreeListCounter, 1);
                 AtomicAdd(AllocCount, -1);
-                return res;
-            }
-        }
+                return res; 
+            } 
+        } 
         void* res = DoAlloc();
         AtomicAdd(AllocCount, -1);
-        return res;
-    }
+        return res; 
+    } 
     void* GetWholeList() {
         TNode* res;
-        for (res = Head; res; res = Head) {
+        for (res = Head; res; res = Head) { 
             if (DoCas(&Head, (TNode*)nullptr, res) == res)
-                break;
-        }
-        return res;
-    }
+                break; 
+        } 
+        return res; 
+    } 
     void ReturnWholeList(void* ptr) {
         while (AtomicAdd(AllocCount, 0) != 0) // theoretically can run into problems with parallel DoAlloc()
             ;                                 //ThreadYield();
         for (;;) {
             TNode* prevHead = Head;
-            if (DoCas(&Head, (TNode*)ptr, prevHead) == prevHead) {
-                FreeList(prevHead);
-                break;
-            }
-        }
-    }
-};
-
-/////////////////////////////////////////////////////////////////////////
-static TLFAllocFreeList globalFreeLists[N_SIZES];
+            if (DoCas(&Head, (TNode*)ptr, prevHead) == prevHead) { 
+                FreeList(prevHead); 
+                break; 
+            } 
+        } 
+    } 
+}; 
+ 
+///////////////////////////////////////////////////////////////////////// 
+static TLFAllocFreeList globalFreeLists[N_SIZES]; 
 static char* volatile globalCurrentPtr[N_SIZES];
-static TLFAllocFreeList blockFreeList;
-
-// globalFreeLists[] contains TFreeListGroup, each of them points up to 15 free blocks
-const int FL_GROUP_SIZE = 15;
+static TLFAllocFreeList blockFreeList; 
+ 
+// globalFreeLists[] contains TFreeListGroup, each of them points up to 15 free blocks 
+const int FL_GROUP_SIZE = 15; 
 struct TFreeListGroup {
     TFreeListGroup* Next;
     char* Ptrs[FL_GROUP_SIZE];
-};
-#ifdef _64_
-const int FREE_LIST_GROUP_SIZEIDX = 8;
-#else
-const int FREE_LIST_GROUP_SIZEIDX = 6;
-#endif
-
-//////////////////////////////////////////////////////////////////////////
-// find free chunks and reset chunk size so they can be reused by different sized allocations
-// do not look at blockFreeList (TFreeListGroup has same size for any allocations)
+}; 
+#ifdef _64_ 
+const int FREE_LIST_GROUP_SIZEIDX = 8; 
+#else 
+const int FREE_LIST_GROUP_SIZEIDX = 6; 
+#endif 
+ 
+////////////////////////////////////////////////////////////////////////// 
+// find free chunks and reset chunk size so they can be reused by different sized allocations 
+// do not look at blockFreeList (TFreeListGroup has same size for any allocations) 
 static bool DefragmentMem() {
     if (!EnableDefrag) {
         return false;
@@ -783,225 +783,225 @@ static bool DefragmentMem() {
 
     int* nFreeCount = (int*)SystemAlloc(N_CHUNKS * sizeof(int));
     if (Y_UNLIKELY(!nFreeCount)) {
-        //__debugbreak();
+        //__debugbreak(); 
         NMalloc::AbortFromCorruptedAllocator("debugbreak");
-    }
-    memset(nFreeCount, 0, N_CHUNKS * sizeof(int));
-
+    } 
+    memset(nFreeCount, 0, N_CHUNKS * sizeof(int)); 
+ 
     TFreeListGroup* wholeLists[N_SIZES];
-    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) {
-        wholeLists[nSizeIdx] = (TFreeListGroup*)globalFreeLists[nSizeIdx].GetWholeList();
+    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) { 
+        wholeLists[nSizeIdx] = (TFreeListGroup*)globalFreeLists[nSizeIdx].GetWholeList(); 
         for (TFreeListGroup* g = wholeLists[nSizeIdx]; g; g = g->Next) {
             for (auto pData : g->Ptrs) {
-                if (pData) {
-                    uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE;
-                    ++nFreeCount[nChunk];
+                if (pData) { 
+                    uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE; 
+                    ++nFreeCount[nChunk]; 
                     Y_ASSERT_NOBT(chunkSizeIdx[nChunk] == nSizeIdx);
-                }
-            }
-        }
-    }
-
-    bool bRes = false;
-    for (size_t nChunk = 0; nChunk < N_CHUNKS; ++nChunk) {
-        int fc = nFreeCount[nChunk];
-        nFreeCount[nChunk] = 0;
-        if (chunkSizeIdx[nChunk] <= 0)
-            continue;
-        int nEntries = N_CHUNK_SIZE / nSizeIdxToSize[static_cast<int>(chunkSizeIdx[nChunk])];
+                } 
+            } 
+        } 
+    } 
+ 
+    bool bRes = false; 
+    for (size_t nChunk = 0; nChunk < N_CHUNKS; ++nChunk) { 
+        int fc = nFreeCount[nChunk]; 
+        nFreeCount[nChunk] = 0; 
+        if (chunkSizeIdx[nChunk] <= 0) 
+            continue; 
+        int nEntries = N_CHUNK_SIZE / nSizeIdxToSize[static_cast<int>(chunkSizeIdx[nChunk])]; 
         Y_ASSERT_NOBT(fc <= nEntries); // can not have more free blocks then total count
-        if (fc == nEntries) {
-            bRes = true;
-            nFreeCount[nChunk] = 1;
-        }
-    }
-    if (bRes) {
+        if (fc == nEntries) { 
+            bRes = true; 
+            nFreeCount[nChunk] = 1; 
+        } 
+    } 
+    if (bRes) { 
         for (auto& wholeList : wholeLists) {
             TFreeListGroup** ppPtr = &wholeList;
-            while (*ppPtr) {
+            while (*ppPtr) { 
                 TFreeListGroup* g = *ppPtr;
-                int dst = 0;
+                int dst = 0; 
                 for (auto pData : g->Ptrs) {
-                    if (pData) {
-                        uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE;
-                        if (nFreeCount[nChunk] == 0)
-                            g->Ptrs[dst++] = pData; // block is not freed, keep pointer
-                    }
-                }
-                if (dst == 0) {
-                    // no valid pointers in group, free it
-                    *ppPtr = g->Next;
-                    blockFreeList.Free(g);
-                } else {
-                    // reset invalid pointers to 0
-                    for (int i = dst; i < FL_GROUP_SIZE; ++i)
+                    if (pData) { 
+                        uintptr_t nChunk = (pData - ALLOC_START) / N_CHUNK_SIZE; 
+                        if (nFreeCount[nChunk] == 0) 
+                            g->Ptrs[dst++] = pData; // block is not freed, keep pointer 
+                    } 
+                } 
+                if (dst == 0) { 
+                    // no valid pointers in group, free it 
+                    *ppPtr = g->Next; 
+                    blockFreeList.Free(g); 
+                } else { 
+                    // reset invalid pointers to 0 
+                    for (int i = dst; i < FL_GROUP_SIZE; ++i) 
                         g->Ptrs[i] = nullptr;
-                    ppPtr = &g->Next;
-                }
-            }
-        }
-        for (uintptr_t nChunk = 0; nChunk < N_CHUNKS; ++nChunk) {
-            if (!nFreeCount[nChunk])
-                continue;
+                    ppPtr = &g->Next; 
+                } 
+            } 
+        } 
+        for (uintptr_t nChunk = 0; nChunk < N_CHUNKS; ++nChunk) { 
+            if (!nFreeCount[nChunk]) 
+                continue; 
             char* pStart = ALLOC_START + nChunk * N_CHUNK_SIZE;
-#ifdef _win_
-            VirtualFree(pStart, N_CHUNK_SIZE, MEM_DECOMMIT);
-#elif defined(_freebsd_)
-            madvise(pStart, N_CHUNK_SIZE, MADV_FREE);
-#else
-            madvise(pStart, N_CHUNK_SIZE, MADV_DONTNEED);
-#endif
-            AddFreeChunk(nChunk);
-        }
-    }
-
-    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx)
-        globalFreeLists[nSizeIdx].ReturnWholeList(wholeLists[nSizeIdx]);
-
-    SystemFree(nFreeCount);
-    return bRes;
-}
-
+#ifdef _win_ 
+            VirtualFree(pStart, N_CHUNK_SIZE, MEM_DECOMMIT); 
+#elif defined(_freebsd_) 
+            madvise(pStart, N_CHUNK_SIZE, MADV_FREE); 
+#else 
+            madvise(pStart, N_CHUNK_SIZE, MADV_DONTNEED); 
+#endif 
+            AddFreeChunk(nChunk); 
+        } 
+    } 
+ 
+    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) 
+        globalFreeLists[nSizeIdx].ReturnWholeList(wholeLists[nSizeIdx]); 
+ 
+    SystemFree(nFreeCount); 
+    return bRes; 
+} 
+ 
 static Y_FORCE_INLINE void* LFAllocFromCurrentChunk(int nSizeIdx, int blockSize, int count) {
     char* volatile* pFreeArray = &globalCurrentPtr[nSizeIdx];
     while (char* newBlock = *pFreeArray) {
         char* nextFree = newBlock + blockSize * count;
-
-        // check if there is space in chunk
+ 
+        // check if there is space in chunk 
         char* globalEndPtr = ALLOC_START + ((newBlock - ALLOC_START) & ~((uintptr_t)N_CHUNK_SIZE - 1)) + N_CHUNK_SIZE;
-        if (nextFree >= globalEndPtr) {
-            if (nextFree > globalEndPtr)
-                break;
+        if (nextFree >= globalEndPtr) { 
+            if (nextFree > globalEndPtr) 
+                break; 
             nextFree = nullptr; // it was last block in chunk
-        }
-        if (DoCas(pFreeArray, nextFree, newBlock) == newBlock)
-            return newBlock;
-    }
+        } 
+        if (DoCas(pFreeArray, nextFree, newBlock) == newBlock) 
+            return newBlock; 
+    } 
     return nullptr;
-}
-
+} 
+ 
 enum EDefrag {
-    MEM_DEFRAG,
-    NO_MEM_DEFRAG,
-};
-
+    MEM_DEFRAG, 
+    NO_MEM_DEFRAG, 
+}; 
+ 
 static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
     IncrementCounter(CT_SLOW_ALLOC_CNT, 1);
 
-    TLFLockHolder ls;
+    TLFLockHolder ls; 
     for (;;) {
         bool locked = ls.TryLock(&LFGlobalLock);
-        void* res = LFAllocFromCurrentChunk(nSizeIdx, blockSize, 1);
-        if (res) {
-            return res; // might happen when other thread allocated new current chunk
-        }
+        void* res = LFAllocFromCurrentChunk(nSizeIdx, blockSize, 1); 
+        if (res) { 
+            return res; // might happen when other thread allocated new current chunk 
+        } 
         if (locked) {
             break;
         }
-    }
-    for (;;) {
-        uintptr_t nChunk;
-        if (GetFreeChunk(&nChunk)) {
+    } 
+    for (;;) { 
+        uintptr_t nChunk; 
+        if (GetFreeChunk(&nChunk)) { 
             char* newPlace = ALLOC_START + nChunk * N_CHUNK_SIZE;
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
             void* pTest = VirtualAlloc(newPlace, N_CHUNK_SIZE, MEM_COMMIT, PAGE_READWRITE);
             Y_ASSERT_NOBT(pTest == newPlace);
-#endif
-            chunkSizeIdx[nChunk] = (char)nSizeIdx;
-            globalCurrentPtr[nSizeIdx] = newPlace + blockSize;
-            return newPlace;
-        }
-
-        // out of luck, try to defrag
-        if (defrag == MEM_DEFRAG && DefragmentMem()) {
-            continue;
-        }
-
+#endif 
+            chunkSizeIdx[nChunk] = (char)nSizeIdx; 
+            globalCurrentPtr[nSizeIdx] = newPlace + blockSize; 
+            return newPlace; 
+        } 
+ 
+        // out of luck, try to defrag 
+        if (defrag == MEM_DEFRAG && DefragmentMem()) { 
+            continue; 
+        } 
+ 
         char* largeBlock = AllocWithMMap(N_LARGE_ALLOC_SIZE, MM_NORMAL);
         uintptr_t addr = ((largeBlock - ALLOC_START) + N_CHUNK_SIZE - 1) & (~(N_CHUNK_SIZE - 1));
         uintptr_t endAddr = ((largeBlock - ALLOC_START) + N_LARGE_ALLOC_SIZE) & (~(N_CHUNK_SIZE - 1));
         for (uintptr_t p = addr; p < endAddr; p += N_CHUNK_SIZE) {
-            uintptr_t chunk = p / N_CHUNK_SIZE;
+            uintptr_t chunk = p / N_CHUNK_SIZE; 
             Y_ASSERT_NOBT(chunk * N_CHUNK_SIZE == p);
             Y_ASSERT_NOBT(chunkSizeIdx[chunk] == 0);
-            AddFreeChunk(chunk);
-        }
-    }
+            AddFreeChunk(chunk); 
+        } 
+    } 
     return nullptr;
-}
-
-// allocate single block
+} 
+ 
+// allocate single block 
 static Y_FORCE_INLINE void* LFAllocNoCache(int nSizeIdx, EDefrag defrag) {
-    int blockSize = nSizeIdxToSize[nSizeIdx];
+    int blockSize = nSizeIdxToSize[nSizeIdx]; 
     void* res = LFAllocFromCurrentChunk(nSizeIdx, blockSize, 1);
-    if (res)
-        return res;
-
-    return SlowLFAlloc(nSizeIdx, blockSize, defrag);
-}
-
-// allocate multiple blocks, returns number of blocks allocated (max FL_GROUP_SIZE)
-// buf should have space for at least FL_GROUP_SIZE elems
+    if (res) 
+        return res; 
+ 
+    return SlowLFAlloc(nSizeIdx, blockSize, defrag); 
+} 
+ 
+// allocate multiple blocks, returns number of blocks allocated (max FL_GROUP_SIZE) 
+// buf should have space for at least FL_GROUP_SIZE elems 
 static Y_FORCE_INLINE int LFAllocNoCacheMultiple(int nSizeIdx, char** buf) {
-    int blockSize = nSizeIdxToSize[nSizeIdx];
+    int blockSize = nSizeIdxToSize[nSizeIdx]; 
     void* res = LFAllocFromCurrentChunk(nSizeIdx, blockSize, FL_GROUP_SIZE);
-    if (res) {
+    if (res) { 
         char* resPtr = (char*)res;
-        for (int k = 0; k < FL_GROUP_SIZE; ++k) {
-            buf[k] = resPtr;
-            resPtr += blockSize;
-        }
-        return FL_GROUP_SIZE;
-    }
-    buf[0] = (char*)SlowLFAlloc(nSizeIdx, blockSize, MEM_DEFRAG);
-    return 1;
-}
-
-// take several blocks from global free list (max FL_GROUP_SIZE blocks), returns number of blocks taken
-// buf should have space for at least FL_GROUP_SIZE elems
+        for (int k = 0; k < FL_GROUP_SIZE; ++k) { 
+            buf[k] = resPtr; 
+            resPtr += blockSize; 
+        } 
+        return FL_GROUP_SIZE; 
+    } 
+    buf[0] = (char*)SlowLFAlloc(nSizeIdx, blockSize, MEM_DEFRAG); 
+    return 1; 
+} 
+ 
+// take several blocks from global free list (max FL_GROUP_SIZE blocks), returns number of blocks taken 
+// buf should have space for at least FL_GROUP_SIZE elems 
 static Y_FORCE_INLINE int TakeBlocksFromGlobalFreeList(int nSizeIdx, char** buf) {
     TLFAllocFreeList& fl = globalFreeLists[nSizeIdx];
     TFreeListGroup* g = (TFreeListGroup*)fl.Alloc();
-    if (g) {
-        int resCount = 0;
+    if (g) { 
+        int resCount = 0; 
         for (auto& ptr : g->Ptrs) {
             if (ptr)
                 buf[resCount++] = ptr;
-            else
-                break;
-        }
-        blockFreeList.Free(g);
-        return resCount;
-    }
-    return 0;
-}
-
-// add several blocks to global free list
+            else 
+                break; 
+        } 
+        blockFreeList.Free(g); 
+        return resCount; 
+    } 
+    return 0; 
+} 
+ 
+// add several blocks to global free list 
 static Y_FORCE_INLINE void PutBlocksToGlobalFreeList(ptrdiff_t nSizeIdx, char** buf, int count) {
-    for (int startIdx = 0; startIdx < count;) {
+    for (int startIdx = 0; startIdx < count;) { 
         TFreeListGroup* g = (TFreeListGroup*)blockFreeList.Alloc();
         Y_ASSERT_NOBT(sizeof(TFreeListGroup) == nSizeIdxToSize[FREE_LIST_GROUP_SIZEIDX]);
-        if (!g) {
-            g = (TFreeListGroup*)LFAllocNoCache(FREE_LIST_GROUP_SIZEIDX, NO_MEM_DEFRAG);
-        }
-
-        int groupSize = count - startIdx;
-        if (groupSize > FL_GROUP_SIZE)
-            groupSize = FL_GROUP_SIZE;
-        for (int i = 0; i < groupSize; ++i)
-            g->Ptrs[i] = buf[startIdx + i];
-        for (int i = groupSize; i < FL_GROUP_SIZE; ++i)
+        if (!g) { 
+            g = (TFreeListGroup*)LFAllocNoCache(FREE_LIST_GROUP_SIZEIDX, NO_MEM_DEFRAG); 
+        } 
+ 
+        int groupSize = count - startIdx; 
+        if (groupSize > FL_GROUP_SIZE) 
+            groupSize = FL_GROUP_SIZE; 
+        for (int i = 0; i < groupSize; ++i) 
+            g->Ptrs[i] = buf[startIdx + i]; 
+        for (int i = groupSize; i < FL_GROUP_SIZE; ++i) 
             g->Ptrs[i] = nullptr;
-
-        // add free group to the global list
+ 
+        // add free group to the global list 
         TLFAllocFreeList& fl = globalFreeLists[nSizeIdx];
-        fl.Free(g);
-
-        startIdx += groupSize;
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////
+        fl.Free(g); 
+ 
+        startIdx += groupSize; 
+    } 
+} 
+ 
+////////////////////////////////////////////////////////////////////////// 
 static TAtomic GlobalCounters[CT_MAX];
 const int MAX_LOCAL_UPDATES = 100;
 const intptr_t MAX_LOCAL_DELTA = 1*1024*1024;
@@ -1096,43 +1096,43 @@ static TPerTagAllocCounter GlobalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLO
 #endif // LFALLOC_DBG
 
 //////////////////////////////////////////////////////////////////////////
-const int THREAD_BUF = 256;
-static int borderSizes[N_SIZES];
-const int MAX_MEM_PER_SIZE_PER_THREAD = 512 * 1024;
+const int THREAD_BUF = 256; 
+static int borderSizes[N_SIZES]; 
+const int MAX_MEM_PER_SIZE_PER_THREAD = 512 * 1024; 
 struct TThreadAllocInfo {
-    // FreePtrs - pointers to first free blocks in per thread block list
-    // LastFreePtrs - pointers to last blocks in lists, may be invalid if FreePtr is zero
+    // FreePtrs - pointers to first free blocks in per thread block list 
+    // LastFreePtrs - pointers to last blocks in lists, may be invalid if FreePtr is zero 
     char* FreePtrs[N_SIZES][THREAD_BUF];
-    int FreePtrIndex[N_SIZES];
+    int FreePtrIndex[N_SIZES]; 
     TThreadAllocInfo* pNextInfo;
     TLocalCounter LocalCounters[CT_MAX];
 
 #if defined(LFALLOC_DBG)
     TLocalPerTagAllocCounter LocalPerTagAllocCounters[DBG_ALLOC_MAX_TAG][DBG_ALLOC_NUM_SIZES];
 #endif
-#ifdef _win_
-    HANDLE hThread;
-#endif
-
+#ifdef _win_ 
+    HANDLE hThread; 
+#endif 
+ 
     void Init(TThreadAllocInfo** pHead) {
         memset(this, 0, sizeof(*this));
         for (auto& i : FreePtrIndex)
             i = THREAD_BUF;
-#ifdef _win_
-        BOOL b = DuplicateHandle(
+#ifdef _win_ 
+        BOOL b = DuplicateHandle( 
             GetCurrentProcess(), GetCurrentThread(),
             GetCurrentProcess(), &hThread,
-            0, FALSE, DUPLICATE_SAME_ACCESS);
+            0, FALSE, DUPLICATE_SAME_ACCESS); 
         Y_ASSERT_NOBT(b);
-#endif
-        pNextInfo = *pHead;
-        *pHead = this;
-        for (int k = 0; k < N_SIZES; ++k) {
-            int maxCount = MAX_MEM_PER_SIZE_PER_THREAD / nSizeIdxToSize[k];
-            if (maxCount > THREAD_BUF)
-                maxCount = THREAD_BUF;
-            borderSizes[k] = THREAD_BUF - maxCount;
-        }
+#endif 
+        pNextInfo = *pHead; 
+        *pHead = this; 
+        for (int k = 0; k < N_SIZES; ++k) { 
+            int maxCount = MAX_MEM_PER_SIZE_PER_THREAD / nSizeIdxToSize[k]; 
+            if (maxCount > THREAD_BUF) 
+                maxCount = THREAD_BUF; 
+            borderSizes[k] = THREAD_BUF - maxCount; 
+        } 
         for (int i = 0; i < CT_MAX; ++i) {
             LocalCounters[i].Init(&GlobalCounters[i]);
         }
@@ -1144,11 +1144,11 @@ struct TThreadAllocInfo {
             }
         }
 #endif
-    }
+    } 
     void Done() {
         for (auto sizeIdx : FreePtrIndex) {
             Y_ASSERT_NOBT(sizeIdx == THREAD_BUF);
-        }
+        } 
         for (auto& localCounter : LocalCounters) {
             localCounter.Flush();
         }
@@ -1161,17 +1161,17 @@ struct TThreadAllocInfo {
             }
         }
 #endif
-#ifdef _win_
-        if (hThread)
-            CloseHandle(hThread);
-#endif
-    }
-};
+#ifdef _win_ 
+        if (hThread) 
+            CloseHandle(hThread); 
+#endif 
+    } 
+}; 
 PERTHREAD TThreadAllocInfo* pThreadInfo;
 static TThreadAllocInfo* pThreadInfoList;
-
-static TLFLockData LFLockThreadInfo;
-
+ 
+static TLFLockData LFLockThreadInfo; 
+ 
 static Y_FORCE_INLINE void IncrementCounter(ELFAllocCounter counter, size_t value) {
 #ifdef LFALLOC_YT
     TThreadAllocInfo* thr = pThreadInfo;
@@ -1195,7 +1195,7 @@ extern "C" i64 GetLFAllocCounterFull(int counter) {
 #ifdef LFALLOC_YT
     i64 ret = GlobalCounters[counter];
     {
-        TLFLockHolder ll(&LFLockThreadInfo);
+        TLFLockHolder ll(&LFLockThreadInfo); 
         for (TThreadAllocInfo** p = &pThreadInfoList; *p;) {
             TThreadAllocInfo* pInfo = *p;
             ret += pInfo->LocalCounters[counter].Value;
@@ -1209,101 +1209,101 @@ extern "C" i64 GetLFAllocCounterFull(int counter) {
 }
 
 static void MoveSingleThreadFreeToGlobal(TThreadAllocInfo* pInfo) {
-    for (int sizeIdx = 0; sizeIdx < N_SIZES; ++sizeIdx) {
+    for (int sizeIdx = 0; sizeIdx < N_SIZES; ++sizeIdx) { 
         int& freePtrIdx = pInfo->FreePtrIndex[sizeIdx];
         char** freePtrs = pInfo->FreePtrs[sizeIdx];
-        PutBlocksToGlobalFreeList(sizeIdx, freePtrs + freePtrIdx, THREAD_BUF - freePtrIdx);
-        freePtrIdx = THREAD_BUF;
-    }
-}
-
-#ifdef _win_
+        PutBlocksToGlobalFreeList(sizeIdx, freePtrs + freePtrIdx, THREAD_BUF - freePtrIdx); 
+        freePtrIdx = THREAD_BUF; 
+    } 
+} 
+ 
+#ifdef _win_ 
 static bool IsDeadThread(TThreadAllocInfo* pInfo) {
-    DWORD dwExit;
-    bool isDead = !GetExitCodeThread(pInfo->hThread, &dwExit) || dwExit != STILL_ACTIVE;
-    return isDead;
-}
-
+    DWORD dwExit; 
+    bool isDead = !GetExitCodeThread(pInfo->hThread, &dwExit) || dwExit != STILL_ACTIVE; 
+    return isDead; 
+} 
+ 
 static void CleanupAfterDeadThreads() {
-    TLFLockHolder ll(&LFLockThreadInfo);
+    TLFLockHolder ll(&LFLockThreadInfo); 
     for (TThreadAllocInfo** p = &pThreadInfoList; *p;) {
         TThreadAllocInfo* pInfo = *p;
-        if (IsDeadThread(pInfo)) {
-            MoveSingleThreadFreeToGlobal(pInfo);
-            pInfo->Done();
-            *p = pInfo->pNextInfo;
-            SystemFree(pInfo);
-        } else
-            p = &pInfo->pNextInfo;
-    }
-}
-#endif
-
-#ifndef _win_
-static pthread_key_t ThreadCacheCleaner;
+        if (IsDeadThread(pInfo)) { 
+            MoveSingleThreadFreeToGlobal(pInfo); 
+            pInfo->Done(); 
+            *p = pInfo->pNextInfo; 
+            SystemFree(pInfo); 
+        } else 
+            p = &pInfo->pNextInfo; 
+    } 
+} 
+#endif 
+ 
+#ifndef _win_ 
+static pthread_key_t ThreadCacheCleaner; 
 static void* volatile ThreadCacheCleanerStarted; // 0 = not started, -1 = started, -2 = is starting
-static PERTHREAD bool IsStoppingThread;
-
+static PERTHREAD bool IsStoppingThread; 
+ 
 static void FreeThreadCache(void*) {
     TThreadAllocInfo* pToDelete = nullptr;
-    {
-        TLFLockHolder ll(&LFLockThreadInfo);
-        pToDelete = pThreadInfo;
+    { 
+        TLFLockHolder ll(&LFLockThreadInfo); 
+        pToDelete = pThreadInfo; 
         if (pToDelete == nullptr)
-            return;
-
-        // remove from the list
+            return; 
+ 
+        // remove from the list 
         for (TThreadAllocInfo** p = &pThreadInfoList; *p; p = &(*p)->pNextInfo) {
-            if (*p == pToDelete) {
-                *p = pToDelete->pNextInfo;
-                break;
-            }
-        }
-        IsStoppingThread = true;
+            if (*p == pToDelete) { 
+                *p = pToDelete->pNextInfo; 
+                break; 
+            } 
+        } 
+        IsStoppingThread = true; 
         pThreadInfo = nullptr;
-    }
-
-    // free per thread buf
-    MoveSingleThreadFreeToGlobal(pToDelete);
-    pToDelete->Done();
-    SystemFree(pToDelete);
-}
-#endif
-
+    } 
+ 
+    // free per thread buf 
+    MoveSingleThreadFreeToGlobal(pToDelete); 
+    pToDelete->Done(); 
+    SystemFree(pToDelete); 
+} 
+#endif 
+ 
 static void AllocThreadInfo() {
-#ifndef _win_
+#ifndef _win_ 
     if (DoCas(&ThreadCacheCleanerStarted, (void*)-2, (void*)nullptr) == (void*)nullptr) {
-        pthread_key_create(&ThreadCacheCleaner, FreeThreadCache);
-        ThreadCacheCleanerStarted = (void*)-1;
-    }
-    if (ThreadCacheCleanerStarted != (void*)-1)
-        return; // do not use ThreadCacheCleaner until it is constructed
-
-    {
-        if (IsStoppingThread)
-            return;
-        TLFLockHolder ll(&LFLockThreadInfo);
+        pthread_key_create(&ThreadCacheCleaner, FreeThreadCache); 
+        ThreadCacheCleanerStarted = (void*)-1; 
+    } 
+    if (ThreadCacheCleanerStarted != (void*)-1) 
+        return; // do not use ThreadCacheCleaner until it is constructed 
+ 
+    { 
+        if (IsStoppingThread) 
+            return; 
+        TLFLockHolder ll(&LFLockThreadInfo); 
         if (IsStoppingThread) // better safe than sorry
             return;
 
-        pThreadInfo = (TThreadAllocInfo*)SystemAlloc(sizeof(TThreadAllocInfo));
-        pThreadInfo->Init(&pThreadInfoList);
-    }
-    pthread_setspecific(ThreadCacheCleaner, (void*)-1); // without value destructor will not be called
-#else
-    CleanupAfterDeadThreads();
-    {
-        pThreadInfo = (TThreadAllocInfo*)SystemAlloc(sizeof(TThreadAllocInfo));
-        TLFLockHolder ll(&LFLockThreadInfo);
-        pThreadInfo->Init(&pThreadInfoList);
-    }
-#endif
-}
-
+        pThreadInfo = (TThreadAllocInfo*)SystemAlloc(sizeof(TThreadAllocInfo)); 
+        pThreadInfo->Init(&pThreadInfoList); 
+    } 
+    pthread_setspecific(ThreadCacheCleaner, (void*)-1); // without value destructor will not be called 
+#else 
+    CleanupAfterDeadThreads(); 
+    { 
+        pThreadInfo = (TThreadAllocInfo*)SystemAlloc(sizeof(TThreadAllocInfo)); 
+        TLFLockHolder ll(&LFLockThreadInfo); 
+        pThreadInfo->Init(&pThreadInfoList); 
+    } 
+#endif 
+} 
+ 
     //////////////////////////////////////////////////////////////////////////
     // DBG stuff
     //////////////////////////////////////////////////////////////////////////
-
+ 
 #if defined(LFALLOC_DBG)
 
 struct TAllocHeader {
@@ -1476,7 +1476,7 @@ extern "C" void GetPerTagAllocInfo(
 
     if (info) {
         if (flushPerThreadCounters) {
-            TLFLockHolder ll(&LFLockThreadInfo);
+            TLFLockHolder ll(&LFLockThreadInfo); 
             for (TThreadAllocInfo** p = &pThreadInfoList; *p;) {
                 TThreadAllocInfo* pInfo = *p;
                 for (int tag = 0; tag < DBG_ALLOC_MAX_TAG; ++tag) {
@@ -1503,7 +1503,7 @@ extern "C" void GetPerTagAllocInfo(
 
 #endif // LFALLOC_DBG
 
-//////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////// 
 static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 #if defined(LFALLOC_DBG)
     size_t size = _nSize;
@@ -1512,8 +1512,8 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 
     IncrementCounter(CT_USER_ALLOC, _nSize);
 
-    int nSizeIdx;
-    if (_nSize > 512) {
+    int nSizeIdx; 
+    if (_nSize > 512) { 
         if (_nSize > N_MAX_FAST_SIZE) {
             void* ptr = LargeBlockAlloc(_nSize, CT_LARGE_ALLOC);
 #if defined(LFALLOC_DBG)
@@ -1521,13 +1521,13 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 #endif
             return ptr;
         }
-        nSizeIdx = size2idxArr2[(_nSize - 1) >> 8];
-    } else
-        nSizeIdx = size2idxArr1[1 + (((int)_nSize - 1) >> 3)];
-
+        nSizeIdx = size2idxArr2[(_nSize - 1) >> 8]; 
+    } else 
+        nSizeIdx = size2idxArr1[1 + (((int)_nSize - 1) >> 3)]; 
+ 
     IncrementCounter(CT_SMALL_ALLOC, nSizeIdxToSize[nSizeIdx]);
 
-    // check per thread buffer
+    // check per thread buffer 
     TThreadAllocInfo* thr = pThreadInfo;
     if (!thr) {
         AllocThreadInfo();
@@ -1549,38 +1549,38 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 #endif
             return ptr;
         }
-
-        // try to alloc from global free list
+ 
+        // try to alloc from global free list 
         char* buf[FL_GROUP_SIZE];
-        int count = TakeBlocksFromGlobalFreeList(nSizeIdx, buf);
-        if (count == 0) {
-            count = LFAllocNoCacheMultiple(nSizeIdx, buf);
-            if (count == 0) {
+        int count = TakeBlocksFromGlobalFreeList(nSizeIdx, buf); 
+        if (count == 0) { 
+            count = LFAllocNoCacheMultiple(nSizeIdx, buf); 
+            if (count == 0) { 
                 NMalloc::AbortFromCorruptedAllocator("no way LFAllocNoCacheMultiple() can fail");
-            }
-        }
+            } 
+        } 
         char** dstBuf = thr->FreePtrs[nSizeIdx] + freePtrIdx - 1;
-        for (int i = 0; i < count - 1; ++i)
-            dstBuf[-i] = buf[i];
-        freePtrIdx -= count - 1;
+        for (int i = 0; i < count - 1; ++i) 
+            dstBuf[-i] = buf[i]; 
+        freePtrIdx -= count - 1; 
         void* ptr = buf[count - 1];
 #if defined(LFALLOC_DBG)
         ptr = TrackAllocation(ptr, size, nSizeIdx);
 #endif
         return ptr;
     }
-}
-
+} 
+ 
 static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) {
     void* res = LFAllocImpl(_nSize);
-#ifdef DBG_FILL_MEMORY
+#ifdef DBG_FILL_MEMORY 
     if (FillMemoryOnAllocation && res && (_nSize <= DBG_FILL_MAX_SIZE)) {
-        memset(res, 0xcf, _nSize);
-    }
+        memset(res, 0xcf, _nSize); 
+    } 
 #endif
-    return res;
-}
-
+    return res; 
+} 
+ 
 static Y_FORCE_INLINE void LFFree(void* p) {
 #if defined(LFALLOC_DBG)
     if (p == nullptr)
@@ -1588,62 +1588,62 @@ static Y_FORCE_INLINE void LFFree(void* p) {
     p = GetAllocHeader(p);
 #endif
 
-    uintptr_t chkOffset = ((char*)p - ALLOC_START) - 1ll;
-    if (chkOffset >= N_MAX_WORKSET_SIZE) {
+    uintptr_t chkOffset = ((char*)p - ALLOC_START) - 1ll; 
+    if (chkOffset >= N_MAX_WORKSET_SIZE) { 
         if (p == nullptr)
-            return;
+            return; 
 #if defined(LFALLOC_DBG)
         TrackDeallocation(p, N_SIZES);
 #endif
         LargeBlockFree(p, CT_LARGE_FREE);
-        return;
-    }
+        return; 
+    } 
 
-    uintptr_t chunk = ((char*)p - ALLOC_START) / N_CHUNK_SIZE;
-    ptrdiff_t nSizeIdx = chunkSizeIdx[chunk];
-    if (nSizeIdx <= 0) {
+    uintptr_t chunk = ((char*)p - ALLOC_START) / N_CHUNK_SIZE; 
+    ptrdiff_t nSizeIdx = chunkSizeIdx[chunk]; 
+    if (nSizeIdx <= 0) { 
 #if defined(LFALLOC_DBG)
         TrackDeallocation(p, N_SIZES);
 #endif
         LargeBlockFree(p, CT_LARGE_FREE);
-        return;
-    }
+        return; 
+    } 
 
 #if defined(LFALLOC_DBG)
     TrackDeallocation(p, nSizeIdx);
 #endif
 
-#ifdef DBG_FILL_MEMORY
-    memset(p, 0xfe, nSizeIdxToSize[nSizeIdx]);
-#endif
+#ifdef DBG_FILL_MEMORY 
+    memset(p, 0xfe, nSizeIdxToSize[nSizeIdx]); 
+#endif 
 
     IncrementCounter(CT_SMALL_FREE, nSizeIdxToSize[nSizeIdx]);
 
-    // try to store info to per thread buf
+    // try to store info to per thread buf 
     TThreadAllocInfo* thr = pThreadInfo;
-    if (thr) {
+    if (thr) { 
         int& freePtrIdx = thr->FreePtrIndex[nSizeIdx];
-        if (freePtrIdx > borderSizes[nSizeIdx]) {
-            thr->FreePtrs[nSizeIdx][--freePtrIdx] = (char*)p;
-            return;
-        }
-
-        // move several pointers to global free list
-        int freeCount = FL_GROUP_SIZE;
-        if (freeCount > THREAD_BUF - freePtrIdx)
-            freeCount = THREAD_BUF - freePtrIdx;
+        if (freePtrIdx > borderSizes[nSizeIdx]) { 
+            thr->FreePtrs[nSizeIdx][--freePtrIdx] = (char*)p; 
+            return; 
+        } 
+ 
+        // move several pointers to global free list 
+        int freeCount = FL_GROUP_SIZE; 
+        if (freeCount > THREAD_BUF - freePtrIdx) 
+            freeCount = THREAD_BUF - freePtrIdx; 
         char** freePtrs = thr->FreePtrs[nSizeIdx];
-        PutBlocksToGlobalFreeList(nSizeIdx, freePtrs + freePtrIdx, freeCount);
-        freePtrIdx += freeCount;
-
-        freePtrs[--freePtrIdx] = (char*)p;
-
-    } else {
-        AllocThreadInfo();
-        PutBlocksToGlobalFreeList(nSizeIdx, (char**)&p, 1);
-    }
-}
-
+        PutBlocksToGlobalFreeList(nSizeIdx, freePtrs + freePtrIdx, freeCount); 
+        freePtrIdx += freeCount; 
+ 
+        freePtrs[--freePtrIdx] = (char*)p; 
+ 
+    } else { 
+        AllocThreadInfo(); 
+        PutBlocksToGlobalFreeList(nSizeIdx, (char**)&p, 1); 
+    } 
+} 
+ 
 static size_t LFGetSize(const void* p) {
 #if defined(LFALLOC_DBG)
     if (p == nullptr)
@@ -1652,160 +1652,160 @@ static size_t LFGetSize(const void* p) {
 #endif
 
     uintptr_t chkOffset = ((const char*)p - ALLOC_START);
-    if (chkOffset >= N_MAX_WORKSET_SIZE) {
+    if (chkOffset >= N_MAX_WORKSET_SIZE) { 
         if (p == nullptr)
-            return 0;
+            return 0; 
         return TLargeBlk::As(p)->Pages * 4096ll;
-    }
+    } 
     uintptr_t chunk = ((const char*)p - ALLOC_START) / N_CHUNK_SIZE;
-    ptrdiff_t nSizeIdx = chunkSizeIdx[chunk];
-    if (nSizeIdx <= 0)
+    ptrdiff_t nSizeIdx = chunkSizeIdx[chunk]; 
+    if (nSizeIdx <= 0) 
         return TLargeBlk::As(p)->Pages * 4096ll;
-    return nSizeIdxToSize[nSizeIdx];
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Output mem alloc stats
-const int N_PAGE_SIZE = 4096;
+    return nSizeIdxToSize[nSizeIdx]; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////////////////////////// 
+// Output mem alloc stats 
+const int N_PAGE_SIZE = 4096; 
 static void DebugTraceMMgr(const char* pszFormat, ...) // __cdecl
-{
-    static char buff[20000];
-    va_list va;
+{ 
+    static char buff[20000]; 
+    va_list va; 
     //
-    va_start(va, pszFormat);
-    vsprintf(buff, pszFormat, va);
-    va_end(va);
+    va_start(va, pszFormat); 
+    vsprintf(buff, pszFormat, va); 
+    va_end(va); 
 //
 #ifdef _win_
-    OutputDebugStringA(buff);
+    OutputDebugStringA(buff); 
 #else
     fputs(buff, stderr);
 #endif
-}
-
+} 
+ 
 struct TChunkStats {
-    char *Start, *Finish;
+    char *Start, *Finish; 
     i64 Size;
     char* Entries;
     i64 FreeCount;
-
+ 
     TChunkStats(size_t chunk, i64 size, char* entries)
-        : Size(size)
-        , Entries(entries)
-        , FreeCount(0)
-    {
-        Start = ALLOC_START + chunk * N_CHUNK_SIZE;
-        Finish = Start + N_CHUNK_SIZE;
-    }
+        : Size(size) 
+        , Entries(entries) 
+        , FreeCount(0) 
+    { 
+        Start = ALLOC_START + chunk * N_CHUNK_SIZE; 
+        Finish = Start + N_CHUNK_SIZE; 
+    } 
     void CheckBlock(char* pBlock) {
-        if (pBlock && pBlock >= Start && pBlock < Finish) {
-            ++FreeCount;
+        if (pBlock && pBlock >= Start && pBlock < Finish) { 
+            ++FreeCount; 
             i64 nShift = pBlock - Start;
             i64 nOffsetInStep = nShift & (N_CHUNK_SIZE - 1);
-            Entries[nOffsetInStep / Size] = 1;
-        }
-    }
+            Entries[nOffsetInStep / Size] = 1; 
+        } 
+    } 
     void SetGlobalFree(char* ptr) {
         i64 nShift = ptr - Start;
         i64 nOffsetInStep = nShift & (N_CHUNK_SIZE - 1);
-        while (nOffsetInStep + Size <= N_CHUNK_SIZE) {
-            ++FreeCount;
-            Entries[nOffsetInStep / Size] = 1;
-            nOffsetInStep += Size;
-        }
-    }
-};
-
+        while (nOffsetInStep + Size <= N_CHUNK_SIZE) { 
+            ++FreeCount; 
+            Entries[nOffsetInStep / Size] = 1; 
+            nOffsetInStep += Size; 
+        } 
+    } 
+}; 
+ 
 static void DumpMemoryBlockUtilizationLocked() {
     TFreeListGroup* wholeLists[N_SIZES];
-    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) {
-        wholeLists[nSizeIdx] = (TFreeListGroup*)globalFreeLists[nSizeIdx].GetWholeList();
-    }
+    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) { 
+        wholeLists[nSizeIdx] = (TFreeListGroup*)globalFreeLists[nSizeIdx].GetWholeList(); 
+    } 
     char* bfList = (char*)blockFreeList.GetWholeList();
-
-    DebugTraceMMgr("memory blocks utilisation stats:\n");
+ 
+    DebugTraceMMgr("memory blocks utilisation stats:\n"); 
     i64 nTotalAllocated = 0, nTotalFree = 0, nTotalBadPages = 0, nTotalPages = 0, nTotalUsed = 0, nTotalLocked = 0;
     i64 nTotalGroupBlocks = 0;
     char* entries;
-    entries = (char*)SystemAlloc((N_CHUNK_SIZE / 4));
-    for (size_t k = 0; k < N_CHUNKS; ++k) {
-        if (chunkSizeIdx[k] <= 0) {
-            if (chunkSizeIdx[k] == -1)
-                nTotalLocked += N_CHUNK_SIZE;
-            continue;
-        }
+    entries = (char*)SystemAlloc((N_CHUNK_SIZE / 4)); 
+    for (size_t k = 0; k < N_CHUNKS; ++k) { 
+        if (chunkSizeIdx[k] <= 0) { 
+            if (chunkSizeIdx[k] == -1) 
+                nTotalLocked += N_CHUNK_SIZE; 
+            continue; 
+        } 
         i64 nSizeIdx = chunkSizeIdx[k];
         i64 nSize = nSizeIdxToSize[nSizeIdx];
-        TChunkStats cs(k, nSize, entries);
-        int nEntriesTotal = N_CHUNK_SIZE / nSize;
-        memset(entries, 0, nEntriesTotal);
+        TChunkStats cs(k, nSize, entries); 
+        int nEntriesTotal = N_CHUNK_SIZE / nSize; 
+        memset(entries, 0, nEntriesTotal); 
         for (TFreeListGroup* g = wholeLists[nSizeIdx]; g; g = g->Next) {
             for (auto& ptr : g->Ptrs)
                 cs.CheckBlock(ptr);
-        }
-        TChunkStats csGB(k, nSize, entries);
-        if (nSizeIdx == FREE_LIST_GROUP_SIZEIDX) {
+        } 
+        TChunkStats csGB(k, nSize, entries); 
+        if (nSizeIdx == FREE_LIST_GROUP_SIZEIDX) { 
             for (auto g : wholeLists) {
                 for (; g; g = g->Next)
-                    csGB.CheckBlock((char*)g);
-            }
+                    csGB.CheckBlock((char*)g); 
+            } 
             for (char* blk = bfList; blk; blk = *(char**)blk)
-                csGB.CheckBlock(blk);
-            nTotalGroupBlocks += csGB.FreeCount * nSize;
-        }
-        if (((globalCurrentPtr[nSizeIdx] - ALLOC_START) / N_CHUNK_SIZE) == k)
-            cs.SetGlobalFree(globalCurrentPtr[nSizeIdx]);
-        nTotalUsed += (nEntriesTotal - cs.FreeCount - csGB.FreeCount) * nSize;
-
-        char pages[N_CHUNK_SIZE / N_PAGE_SIZE];
-        memset(pages, 0, sizeof(pages));
-        for (int i = 0, nShift = 0; i < nEntriesTotal; ++i, nShift += nSize) {
-            int nBit = 0;
-            if (entries[i])
-                nBit = 1; // free entry
-            else
-                nBit = 2; // used entry
+                csGB.CheckBlock(blk); 
+            nTotalGroupBlocks += csGB.FreeCount * nSize; 
+        } 
+        if (((globalCurrentPtr[nSizeIdx] - ALLOC_START) / N_CHUNK_SIZE) == k) 
+            cs.SetGlobalFree(globalCurrentPtr[nSizeIdx]); 
+        nTotalUsed += (nEntriesTotal - cs.FreeCount - csGB.FreeCount) * nSize; 
+ 
+        char pages[N_CHUNK_SIZE / N_PAGE_SIZE]; 
+        memset(pages, 0, sizeof(pages)); 
+        for (int i = 0, nShift = 0; i < nEntriesTotal; ++i, nShift += nSize) { 
+            int nBit = 0; 
+            if (entries[i]) 
+                nBit = 1; // free entry 
+            else 
+                nBit = 2; // used entry 
             for (i64 nDelta = nSize - 1; nDelta >= 0; nDelta -= N_PAGE_SIZE)
-                pages[(nShift + nDelta) / N_PAGE_SIZE] |= nBit;
-        }
+                pages[(nShift + nDelta) / N_PAGE_SIZE] |= nBit; 
+        } 
         i64 nBadPages = 0;
         for (auto page : pages) {
             nBadPages += page == 3;
             nTotalPages += page != 1;
-        }
+        } 
         DebugTraceMMgr("entry = %lld; size = %lld; free = %lld; system %lld; utilisation = %g%%, fragmentation = %g%%\n",
                        k, nSize, cs.FreeCount * nSize, csGB.FreeCount * nSize,
                        (N_CHUNK_SIZE - cs.FreeCount * nSize) * 100.0f / N_CHUNK_SIZE, 100.0f * nBadPages / Y_ARRAY_SIZE(pages));
-        nTotalAllocated += N_CHUNK_SIZE;
-        nTotalFree += cs.FreeCount * nSize;
-        nTotalBadPages += nBadPages;
-    }
-    SystemFree(entries);
+        nTotalAllocated += N_CHUNK_SIZE; 
+        nTotalFree += cs.FreeCount * nSize; 
+        nTotalBadPages += nBadPages; 
+    } 
+    SystemFree(entries); 
     DebugTraceMMgr("Total allocated = %llu, free = %lld, system = %lld, locked for future use %lld, utilisation = %g, fragmentation = %g\n",
                    nTotalAllocated, nTotalFree, nTotalGroupBlocks, nTotalLocked,
                    100.0f * (nTotalAllocated - nTotalFree) / nTotalAllocated, 100.0f * nTotalBadPages / nTotalPages);
     DebugTraceMMgr("Total %lld bytes used, %lld bytes in used pages\n", nTotalUsed, nTotalPages * N_PAGE_SIZE);
-
-    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx)
-        globalFreeLists[nSizeIdx].ReturnWholeList(wholeLists[nSizeIdx]);
-    blockFreeList.ReturnWholeList(bfList);
-}
-
+ 
+    for (int nSizeIdx = 0; nSizeIdx < N_SIZES; ++nSizeIdx) 
+        globalFreeLists[nSizeIdx].ReturnWholeList(wholeLists[nSizeIdx]); 
+    blockFreeList.ReturnWholeList(bfList); 
+} 
+ 
 void FlushThreadFreeList() {
     if (pThreadInfo)
         MoveSingleThreadFreeToGlobal(pThreadInfo);
 }
 
 void DumpMemoryBlockUtilization() {
-    // move current thread free to global lists to get better statistics
+    // move current thread free to global lists to get better statistics 
     FlushThreadFreeList();
-    {
-        TLFLockHolder ls(&LFGlobalLock);
-        DumpMemoryBlockUtilizationLocked();
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////
+    { 
+        TLFLockHolder ls(&LFGlobalLock); 
+        DumpMemoryBlockUtilizationLocked(); 
+    } 
+} 
+ 
+////////////////////////////////////////////////////////////////////////// 
 // malloc api
 
 static bool LFAlloc_SetParam(const char* param, const char* value) {
@@ -1876,12 +1876,12 @@ static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_
 #endif
         NMalloc::AbortFromCorruptedAllocator(error);
     }
-    size_t bigsize = size;
-    if (bigsize <= alignment) {
-        bigsize = alignment;
-    } else if (bigsize < 2 * alignment) {
-        bigsize = 2 * alignment;
-    }
+    size_t bigsize = size; 
+    if (bigsize <= alignment) { 
+        bigsize = alignment; 
+    } else if (bigsize < 2 * alignment) { 
+        bigsize = 2 * alignment; 
+    } 
 #if defined(LFALLOC_DBG)
     if (alignment > sizeof(TAllocHeader)) {
         bigsize += alignment;
@@ -1905,8 +1905,8 @@ static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_
 #endif
 
     Y_ASSERT_NOBT((intptr_t)*memptr % alignment == 0);
-    return 0;
-}
+    return 0; 
+} 
 
 static Y_FORCE_INLINE void* LFVAlloc(size_t size) {
     const size_t pg = N_PAGE_SIZE;

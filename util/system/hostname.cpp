@@ -27,7 +27,7 @@ namespace {
             }
 
             HostName = hostNameBuf.Data();
-        }
+        } 
 
         TString HostName;
     };

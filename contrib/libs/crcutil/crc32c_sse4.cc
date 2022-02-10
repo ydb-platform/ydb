@@ -313,7 +313,7 @@ bool Crc32cSSE4::IsSSE42Available() {
 #if defined(_MSC_VER)
   int cpu_info[4];
   __cpuid(cpu_info, 1);
-  return ((cpu_info[2] & (1 << 20)) != 0);
+  return ((cpu_info[2] & (1 << 20)) != 0); 
 #elif defined(__GNUC__) && (HAVE_AMD64 || HAVE_I386)
   // Not using "cpuid.h" intentionally: it is missing from
   // too many installations.

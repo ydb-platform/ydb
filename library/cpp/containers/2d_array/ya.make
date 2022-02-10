@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(kirillovs)
 
-SRCS(
-    2d_array.cpp
-)
-
-END()
+SRCS( 
+    2d_array.cpp 
+) 
+ 
+END() 

@@ -52,7 +52,7 @@ inline bool YaIsDebuggerPresent() {
 
 inline void YaDebugBreak() {
     __debugbreak();
-}
+} 
 
 #undef Y_ASSERT
 
@@ -79,7 +79,7 @@ inline void YaDebugBreak() {
                 }                                               \
             }                                                   \
         } while (false)
-#else
+#else 
     #define Y_ASSERT(a)                            \
         do {                                       \
             if (false) {                           \
@@ -87,8 +87,8 @@ inline void YaDebugBreak() {
                 Y_UNUSED(__xxx);                   \
             }                                      \
         } while (false)
-#endif
-
+#endif 
+ 
 namespace NPrivate {
     /// method should not be used directly
     [[noreturn]] void Panic(const TStaticBuf& file, int line, const char* function, const char* expr, const char* format, ...) noexcept Y_PRINTF_FORMAT(5, 6);

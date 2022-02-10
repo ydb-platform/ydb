@@ -28,16 +28,16 @@ void IBinSaver::StoreObject(IObjectBase* pObject) {
             if (pFound != PtrIds->end())
                 id = pFound->second;
             else {
-                id = PtrIds->ysize() + 1;
+                id = PtrIds->ysize() + 1; 
                 PtrIds->insert(std::make_pair(pObject, id));
             }
         }
-        ptrId = id;
+        ptrId = id; 
     }
 
     DataChunk(&ptrId, sizeof(ptrId));
-    if (!Objects.Get())
-        Objects.Reset(new CObjectsHash);
+    if (!Objects.Get()) 
+        Objects.Reset(new CObjectsHash); 
     if (ptrId != 0 && Objects->find(ptrId) == Objects->end()) {
         ObjectQueue.push_back(pObject);
         (*Objects)[ptrId];
@@ -51,13 +51,13 @@ void IBinSaver::StoreObject(IObjectBase* pObject) {
 }
 
 IObjectBase* IBinSaver::LoadObject() {
-    ui64 ptrId = 0;
-    DataChunk(&ptrId, sizeof(ptrId));
-    if (ptrId != 0) {
-        if (!Objects.Get())
-            Objects.Reset(new CObjectsHash);
-        CObjectsHash::iterator pFound = Objects->find(ptrId);
-        if (pFound != Objects->end())
+    ui64 ptrId = 0; 
+    DataChunk(&ptrId, sizeof(ptrId)); 
+    if (ptrId != 0) { 
+        if (!Objects.Get()) 
+            Objects.Reset(new CObjectsHash); 
+        CObjectsHash::iterator pFound = Objects->find(ptrId); 
+        if (pFound != Objects->end()) 
             return pFound->second;
         int typeId;
         DataChunk(&typeId, sizeof(typeId));
@@ -67,7 +67,7 @@ IObjectBase* IBinSaver::LoadObject() {
             fprintf(stderr, "IBinSaver: trying to load unregistered object\n");
             abort();
         }
-        (*Objects)[ptrId] = pObj;
+        (*Objects)[ptrId] = pObj; 
         ObjectQueue.push_back(pObj);
         return pObj;
     }
@@ -75,7 +75,7 @@ IObjectBase* IBinSaver::LoadObject() {
 }
 
 IBinSaver::~IBinSaver() {
-    for (size_t i = 0; i < ObjectQueue.size(); ++i) {
+    for (size_t i = 0; i < ObjectQueue.size(); ++i) { 
         AddPolymorphicBase(1, ObjectQueue[i]);
     }
 }

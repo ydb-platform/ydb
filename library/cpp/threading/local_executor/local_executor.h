@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/cast.h>
@@ -10,7 +10,7 @@
 #include <util/generic/ymath.h>
 
 #include <functional>
-
+ 
 namespace NPar {
     struct ILocallyExecutable : virtual public TThrRefBase {
         // Must be implemented by the end user to define job that will be processed by one of
@@ -20,7 +20,7 @@ namespace NPar {
         //                  some dummy value, e.g. `0`.
         virtual void LocalExec(int id) = 0;
     };
-
+ 
     // Alternative and simpler way of describing a job for executor. Function argument has the
     // same meaning as `id` in `ILocallyExecutable::LocalExec`.
     //
@@ -196,8 +196,8 @@ namespace NPar {
             }
             return false;
         }
-    };
-
+    }; 
+ 
     // `TLocalExecutor` provides facilities for easy parallelization of existing code and cycles.
     //
     // Examples:
@@ -291,4 +291,4 @@ namespace NPar {
         params.SetBlockCountToThreadCount();
         LocalExecutor().ExecRange(std::forward<TBody>(body), params, 0);
     }
-}
+} 

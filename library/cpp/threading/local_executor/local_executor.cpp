@@ -5,24 +5,24 @@
 #include <util/generic/utility.h>
 #include <util/system/atomic.h>
 #include <util/system/event.h>
-#include <util/system/thread.h>
+#include <util/system/thread.h> 
 #include <util/system/tls.h>
-#include <util/system/yield.h>
+#include <util/system/yield.h> 
 #include <util/thread/lfqueue.h>
-
+ 
 #include <utility>
 
-#ifdef _win_
+#ifdef _win_ 
 static void RegularYield() {
-}
-#else
-// unix actually has cooperative multitasking! :)
-// without this function program runs slower and system lags for some magic reason
+} 
+#else 
+// unix actually has cooperative multitasking! :) 
+// without this function program runs slower and system lags for some magic reason 
 static void RegularYield() {
-    SchedYield();
-}
-#endif
-
+    SchedYield(); 
+} 
+#endif 
+ 
 namespace {
     struct TFunctionWrapper : NPar::ILocallyExecutable {
         NPar::TLocallyExecutableFunction Exec;
@@ -79,15 +79,15 @@ namespace {
             : Exec(std::move(exec))
             , Id(id)
         {
-        }
+        } 
     };
-
+ 
     class TLocalRangeExecutor: public NPar::ILocallyExecutable {
         TIntrusivePtr<NPar::ILocallyExecutable> Exec;
         alignas(64) TAtomic Counter;
         alignas(64) TAtomic WorkerCount;
         int LastId;
-
+ 
         void LocalExec(int) override {
             AtomicAdd(WorkerCount, 1);
             for (;;) {
@@ -96,7 +96,7 @@ namespace {
             }
             AtomicAdd(WorkerCount, -1);
         }
-
+ 
     public:
         TLocalRangeExecutor(TIntrusivePtr<ILocallyExecutable> exec, int firstId, int lastId)
             : Exec(std::move(exec))
@@ -121,8 +121,8 @@ namespace {
             return Max<int>(LastId - Counter, 0);
         }
     };
-
-}
+ 
+} 
 
 //////////////////////////////////////////////////////////////////////////
 class NPar::TLocalExecutor::TImpl {

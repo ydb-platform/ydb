@@ -53,7 +53,7 @@ public:
                         *ptr += pool.Begin() - old_begin;
             order.push_back((*ins.first).first); // copy of 'key'
         }
-        return (ui32)(*ins.first).second;
+        return (ui32)(*ins.first).second; 
     }
 
     ui32 perm_string_to_atom(const char* key) {
@@ -68,7 +68,7 @@ public:
         if (it == end())
             return 0; // INVALID_ATOM
         else
-            return (ui32)(*it).second;
+            return (ui32)(*it).second; 
     }
     const char* get_atom_name(ui32 atom) const {
         if (atom && atom <= size())

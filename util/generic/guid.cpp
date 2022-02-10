@@ -46,8 +46,8 @@ void CreateGuid(TGUID* res) {
 
     WriteUnaligned<ui64>(&dw[0], RandomNumber<ui64>());
     WriteUnaligned<ui64>(&dw[1], RandomNumber<ui64>());
-}
-
+} 
+ 
 TGUID TGUID::CreateTimebased() {
     TGUID result;
     // GUID_EPOCH_OFFSET is the number of 100-ns intervals between the

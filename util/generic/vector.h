@@ -109,7 +109,7 @@ public:
     inline yssize_t ysize() const noexcept {
         return (yssize_t)TBase::size();
     }
-
+ 
 #ifdef _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
     void yresize(size_type newSize) {
         if (std::is_pod<T>::value) {

@@ -1,18 +1,18 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(gulin)
 
-SRCS(
+SRCS( 
     class_factory.h
     bin_saver.cpp
     blob_io.cpp
     buffered_io.cpp
     mem_io.cpp
     util_stream_io.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/containers/2d_array
-)
-
-END()
+) 
+ 
+END() 

@@ -10,14 +10,14 @@
 struct TDefaultLFCounter {
     template <class T>
     void IncCount(const T& data) {
-        (void)data;
-    }
+        (void)data; 
+    } 
     template <class T>
     void DecCount(const T& data) {
-        (void)data;
-    }
-};
-
+        (void)data; 
+    } 
+}; 
+ 
 // @brief lockfree queue
 // @tparam T - the queue element, should be movable
 // @tparam TCounter, a observer class to count number of items in queue
@@ -43,7 +43,7 @@ class TLockFreeQueue: public TNonCopyable {
         T Data;
     };
 
-    // using inheritance to be able to use 0 bytes for TCounter when we don't need one
+    // using inheritance to be able to use 0 bytes for TCounter when we don't need one 
     struct TRootNode: public TCounter {
         TListNode* volatile PushQueue;
         TListNode* volatile PopQueue;
@@ -58,8 +58,8 @@ class TLockFreeQueue: public TNonCopyable {
         {
         }
         void CopyCounter(TRootNode* x) {
-            *(TCounter*)this = *(TCounter*)x;
-        }
+            *(TCounter*)this = *(TCounter*)x; 
+        } 
     };
 
     static void EraseList(TListNode* n) {
@@ -233,8 +233,8 @@ public:
     {
     }
     ~TLockFreeQueue() {
-        AsyncRef();
-        AsyncUnref(); // should free FreeList
+        AsyncRef(); 
+        AsyncUnref(); // should free FreeList 
         EraseList(JobQueue->PushQueue);
         EraseList(JobQueue->PopQueue);
         delete JobQueue;
@@ -285,8 +285,8 @@ public:
 
                 AtomicSet(newRoot->PushQueue, AtomicGet(curRoot->PushQueue));
                 AtomicSet(newRoot->PopQueue, AtomicGet(tail->Next));
-                newRoot->CopyCounter(curRoot);
-                newRoot->DecCount(tail->Data);
+                newRoot->CopyCounter(curRoot); 
+                newRoot->DecCount(tail->Data); 
                 Y_ASSERT(AtomicGet(curRoot->PopQueue) == tail);
                 if (AtomicCas(&JobQueue, newRoot, curRoot)) {
                     *data = std::move(tail->Data);
@@ -307,7 +307,7 @@ public:
             AtomicSet(newRoot->PushQueue, nullptr);
             listInvertor.DoCopy(AtomicGet(curRoot->PushQueue));
             AtomicSet(newRoot->PopQueue, listInvertor.Copy);
-            newRoot->CopyCounter(curRoot);
+            newRoot->CopyCounter(curRoot); 
             Y_ASSERT(AtomicGet(curRoot->PopQueue) == nullptr);
             if (AtomicCas(&JobQueue, newRoot, curRoot)) {
                 newRoot = nullptr;
@@ -351,12 +351,12 @@ public:
         return res;
     }
     TCounter GetCounter() {
-        AsyncRef();
+        AsyncRef(); 
         TRootNode* curRoot = AtomicGet(JobQueue);
-        TCounter res = *(TCounter*)curRoot;
-        AsyncUnref();
-        return res;
-    }
+        TCounter res = *(TCounter*)curRoot; 
+        AsyncUnref(); 
+        return res; 
+    } 
 };
 
 template <class T, class TCounter>

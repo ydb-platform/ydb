@@ -8,10 +8,10 @@
 #include <utility>
 
 namespace NSc {
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
 #pragma warning(disable : 4521 4522)
-#endif
-
+#endif 
+ 
     // todo: try to remove some rarely used methods
     class TValue {
     public:
@@ -532,7 +532,7 @@ namespace NSc {
 
 #include "scimpl.h"
 #include "scheme_cast.h"
-
-#ifdef _MSC_VER
+ 
+#ifdef _MSC_VER 
 #pragma warning(default : 4521 4522)
-#endif
+#endif 

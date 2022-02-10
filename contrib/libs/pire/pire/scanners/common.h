@@ -24,10 +24,10 @@
 #define PIRE_SCANNERS_COMMON_H_INCLUDED
 
 #include <stdlib.h>
-#include <contrib/libs/pire/pire/align.h> 
-#include <contrib/libs/pire/pire/stub/defaults.h> 
-#include <contrib/libs/pire/pire/defs.h> 
-#include <contrib/libs/pire/pire/platform.h> 
+#include <contrib/libs/pire/pire/align.h>
+#include <contrib/libs/pire/pire/stub/defaults.h>
+#include <contrib/libs/pire/pire/defs.h>
+#include <contrib/libs/pire/pire/platform.h>
 
 namespace Pire {
 	namespace ScannerIOTypes {

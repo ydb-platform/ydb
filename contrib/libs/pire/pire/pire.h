@@ -24,11 +24,11 @@
 #ifndef PIRE_PIRE_H
 #define PIRE_PIRE_H
 
-#include <contrib/libs/pire/pire/scanners/multi.h> 
+#include <contrib/libs/pire/pire/scanners/multi.h>
 #include <contrib/libs/pire/pire/scanners/half_final.h>
-#include <contrib/libs/pire/pire/scanners/simple.h> 
-#include <contrib/libs/pire/pire/scanners/slow.h> 
-#include <contrib/libs/pire/pire/scanners/pair.h> 
+#include <contrib/libs/pire/pire/scanners/simple.h>
+#include <contrib/libs/pire/pire/scanners/slow.h>
+#include <contrib/libs/pire/pire/scanners/pair.h>
 
 #include "re_lexer.h"
 #include "fsm.h"

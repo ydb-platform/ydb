@@ -25,8 +25,8 @@
 #define PIRE_PARTITION_H
 
 
-#include <contrib/libs/pire/pire/stub/stl.h> 
-#include <contrib/libs/pire/pire/stub/singleton.h> 
+#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/stub/singleton.h>
 
 namespace Pire {
 

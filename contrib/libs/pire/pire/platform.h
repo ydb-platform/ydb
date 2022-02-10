@@ -23,8 +23,8 @@
 #ifndef PIRE_PLATFORM_H_INCLUDED
 #define PIRE_PLATFORM_H_INCLUDED
 
-#include <contrib/libs/pire/pire/stub/defaults.h> 
-#include <contrib/libs/pire/pire/static_assert.h> 
+#include <contrib/libs/pire/pire/stub/defaults.h>
+#include <contrib/libs/pire/pire/static_assert.h>
 
 #ifndef PIRE_FORCED_INLINE
 #ifdef __GNUC__

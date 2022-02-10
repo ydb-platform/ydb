@@ -22,7 +22,7 @@
 
 
 #include <stdexcept>
- 
+
 #include "capture.h"
 
 namespace Pire {

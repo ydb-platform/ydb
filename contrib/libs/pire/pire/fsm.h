@@ -25,8 +25,8 @@
 #define PIRE_FSM_H
 
 
-#include <contrib/libs/pire/pire/stub/stl.h> 
- 
+#include <contrib/libs/pire/pire/stub/stl.h>
+
 #include "partition.h"
 #include "defs.h"
 

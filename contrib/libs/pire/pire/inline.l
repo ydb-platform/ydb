@@ -26,15 +26,15 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
- 
-#include <contrib/libs/pire/pire/stub/hacks.h> 
-#include <contrib/libs/pire/pire/stub/lexical_cast.h> 
-#include <contrib/libs/pire/pire/stub/saveload.h> 
-#include <contrib/libs/pire/pire/stub/memstreams.h> 
-#include <contrib/libs/pire/pire/stub/stl.h> 
- 
-#include "pire.h" 
- 
+
+#include <contrib/libs/pire/pire/stub/hacks.h>
+#include <contrib/libs/pire/pire/stub/lexical_cast.h>
+#include <contrib/libs/pire/pire/stub/saveload.h>
+#include <contrib/libs/pire/pire/stub/memstreams.h>
+#include <contrib/libs/pire/pire/stub/stl.h>
+
+#include "pire.h"
+
 ystring filename = "";
 int line = 1;
 TVector<ystring> args;

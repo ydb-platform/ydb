@@ -21,13 +21,13 @@
  */
 
 
-#include <contrib/libs/pire/pire/stub/stl.h> 
-#include <contrib/libs/pire/pire/stub/saveload.h> 
+#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/stub/saveload.h>
 #include <contrib/libs/pire/pire/scanners/common.h>
-#include <contrib/libs/pire/pire/scanners/slow.h> 
-#include <contrib/libs/pire/pire/scanners/simple.h> 
-#include <contrib/libs/pire/pire/scanners/loaded.h> 
- 
+#include <contrib/libs/pire/pire/scanners/slow.h>
+#include <contrib/libs/pire/pire/scanners/simple.h>
+#include <contrib/libs/pire/pire/scanners/loaded.h>
+
 #include "align.h"
 
 namespace Pire {

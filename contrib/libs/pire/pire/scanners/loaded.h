@@ -25,11 +25,11 @@
 #define PIRE_SCANNERS_LOADED_H
 
 #include <string.h>
- 
+
 #include <contrib/libs/pire/pire/approx_matching.h>
-#include <contrib/libs/pire/pire/fsm.h> 
-#include <contrib/libs/pire/pire/partition.h> 
- 
+#include <contrib/libs/pire/pire/fsm.h>
+#include <contrib/libs/pire/pire/partition.h>
+
 #include "common.h"
 
 #ifdef PIRE_DEBUG

@@ -171,7 +171,7 @@ public:
         return Value_;
     }
 
-protected: 
+protected:
     TValue Value_; // microseconds count
 };
 

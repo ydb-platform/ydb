@@ -21,11 +21,11 @@
  */
 
 
-#include <contrib/libs/pire/pire/stub/stl.h> 
-#include <contrib/libs/pire/pire/stub/singleton.h> 
-#include <contrib/libs/pire/pire/stub/noncopyable.h> 
-#include <contrib/libs/pire/pire/stub/utf8.h> 
- 
+#include <contrib/libs/pire/pire/stub/stl.h>
+#include <contrib/libs/pire/pire/stub/singleton.h>
+#include <contrib/libs/pire/pire/stub/noncopyable.h>
+#include <contrib/libs/pire/pire/stub/utf8.h>
+
 #include "re_lexer.h"
 
 namespace Pire {

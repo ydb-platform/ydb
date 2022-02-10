@@ -40,38 +40,38 @@ ui64 MicroSeconds() noexcept {
 
 ui64 ThreadCPUUserTime() noexcept {
 #if defined(_win_)
-    FILETIME creationTime, exitTime, kernelTime, userTime; 
-    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime); 
-    return ToMicroSeconds(userTime); 
-#else 
-    return 0; 
-#endif 
-} 
- 
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
+    return ToMicroSeconds(userTime);
+#else
+    return 0;
+#endif
+}
+
 ui64 ThreadCPUSystemTime() noexcept {
 #if defined(_win_)
-    FILETIME creationTime, exitTime, kernelTime, userTime; 
-    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime); 
-    return ToMicroSeconds(kernelTime); 
-#else 
-    return 0; 
-#endif 
-} 
- 
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
+    return ToMicroSeconds(kernelTime);
+#else
+    return 0;
+#endif
+}
+
 ui64 ThreadCPUTime() noexcept {
 #if defined(_win_)
-    FILETIME creationTime, exitTime, kernelTime, userTime; 
-    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime); 
-    return ToMicroSeconds(userTime) + ToMicroSeconds(kernelTime); 
+    FILETIME creationTime, exitTime, kernelTime, userTime;
+    GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
+    return ToMicroSeconds(userTime) + ToMicroSeconds(kernelTime);
 #elif defined(Y_HAS_CLOCK_GETTIME)
     struct timespec ts;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
     return ToMicroSeconds(ts);
 #else
     return 0;
-#endif 
-} 
- 
+#endif
+}
+
 ui32 Seconds() noexcept {
     struct timeval tv;
     gettimeofday(&tv, nullptr);

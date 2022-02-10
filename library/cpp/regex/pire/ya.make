@@ -7,7 +7,7 @@ OWNER(
     pg
 )
 
-CFLAGS(-DPIRE_NO_CONFIG) 
+CFLAGS(-DPIRE_NO_CONFIG)
 
 SRCDIR(contrib/libs/pire/pire)
 

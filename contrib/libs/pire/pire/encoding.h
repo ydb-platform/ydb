@@ -25,8 +25,8 @@
 #define PIRE_ENCODING_H
 
 
-#include <contrib/libs/pire/pire/stub/defaults.h> 
-#include <contrib/libs/pire/pire/stub/stl.h> 
+#include <contrib/libs/pire/pire/stub/defaults.h>
+#include <contrib/libs/pire/pire/stub/stl.h>
 
 namespace Pire {
 

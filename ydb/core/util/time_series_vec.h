@@ -46,18 +46,18 @@ public:
 template <class T, ui64 IntervalUs>
 class TTimeSeriesVec {
     TVector<T> Values; // circular buffer of intervals
-    ui64 Id = 0; // id (instant/interval) of the last value in buffer
+    ui64 Id = 0; // id (instant/interval) of the last value in buffer 
 public:
     // Make empty time series
     explicit TTimeSeriesVec(size_t size) {
         Values.resize(size, T());
-        Id = size - 1;
+        Id = size - 1; 
     }
 
     // Make a subseries holding values within given time range [begin; end)
     TTimeSeriesVec(const TTimeSeriesVec& source, TInstant begin, TInstant end) {
-        ui64 beginId = Max(source.BeginId(), begin.MicroSeconds() / IntervalUs);
-        ui64 endId = Min(source.EndId(), end.MicroSeconds() / IntervalUs);
+        ui64 beginId = Max(source.BeginId(), begin.MicroSeconds() / IntervalUs); 
+        ui64 endId = Min(source.EndId(), end.MicroSeconds() / IntervalUs); 
         if (beginId < endId) {
             Values.reserve(endId - beginId);
             for (ui64 id = beginId; id != endId; id++) {
@@ -106,7 +106,7 @@ public:
 
     // Get value of interval containing instant
     T Get(TInstant instant) const {
-        ui64 id = instant.MicroSeconds() / IntervalUs;
+        ui64 id = instant.MicroSeconds() / IntervalUs; 
         return Values[id % Size()];
     }
 
@@ -115,7 +115,7 @@ public:
         size_t result = Add(o.Begin(), &o.Values[0] + idx, o.Size() - idx, beginLimit);
         if (idx > 0) {
             result += Add(o.Begin() + o.Interval() * (o.Size() - idx), &o.Values[0], idx, beginLimit);
-        }
+        } 
         return result;
     }
 
@@ -139,7 +139,7 @@ public:
     // History overwrite is allowed up to `beginLimit` (excluded)
     // Returns true iff addition was successful or skipped (too old)
     bool Add(TInstant instant, T value, TInstant beginLimit = TInstant::Max()) {
-        ui64 id = instant.MicroSeconds() / IntervalUs;
+        ui64 id = instant.MicroSeconds() / IntervalUs; 
         return Add(id, value, beginLimit);
     }
 
@@ -154,11 +154,11 @@ public:
     }
 
 private:
-    ui64 BeginId() const {
+    ui64 BeginId() const { 
         return Id + 1 - Size();
     }
 
-    ui64 EndId() const {
+    ui64 EndId() const { 
         return Id + 1;
     }
 
@@ -199,11 +199,11 @@ private:
         return true; // added successfully
     }
 
-    void Propagate(ui64 id) {
-        if (id <= Id) {
+    void Propagate(ui64 id) { 
+        if (id <= Id) { 
             return;
         }
-        if (id - Id >= Size()) {
+        if (id - Id >= Size()) { 
             Clear();
             Id = id;
         } else {

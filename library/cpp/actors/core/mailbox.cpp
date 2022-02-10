@@ -352,8 +352,8 @@ namespace NActors {
         , ActorPack(TMailboxActorPack::Simple)
         , Knobs(0)
     {
-        ActorsInfo.Simple.ActorId = 0;
-        ActorsInfo.Simple.Actor = nullptr;
+        ActorsInfo.Simple.ActorId = 0; 
+        ActorsInfo.Simple.Actor = nullptr; 
     }
 
     TMailboxHeader::~TMailboxHeader() {
@@ -363,33 +363,33 @@ namespace NActors {
     bool TMailboxHeader::CleanupActors() {
         bool done = true;
         switch (ActorPack) {
-            case TMailboxActorPack::Simple: {
-                if (ActorsInfo.Simple.ActorId != 0) {
-                    delete ActorsInfo.Simple.Actor;
+            case TMailboxActorPack::Simple: { 
+                if (ActorsInfo.Simple.ActorId != 0) { 
+                    delete ActorsInfo.Simple.Actor; 
                     done = false;
                 }
                 break;
-            }
+            } 
             case TMailboxActorPack::Map: {
-                for (auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) {
-                    delete actor;
-                }
-                delete ActorsInfo.Map.ActorsMap;
+                for (auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) { 
+                    delete actor; 
+                } 
+                delete ActorsInfo.Map.ActorsMap; 
                 done = false;
-                break;
-            }
-            case TMailboxActorPack::Array: {
-                for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
-                    delete ActorsInfo.Array.ActorsArray->Actors[i].Actor;
-                }
-                delete ActorsInfo.Array.ActorsArray;
-                done = false;
-                break;
-            }
+                break; 
+            } 
+            case TMailboxActorPack::Array: { 
+                for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) { 
+                    delete ActorsInfo.Array.ActorsArray->Actors[i].Actor; 
+                } 
+                delete ActorsInfo.Array.ActorsArray; 
+                done = false; 
+                break; 
+            } 
         }
         ActorPack = TMailboxActorPack::Simple;
-        ActorsInfo.Simple.ActorId = 0;
-        ActorsInfo.Simple.Actor = nullptr;
+        ActorsInfo.Simple.ActorId = 0; 
+        ActorsInfo.Simple.Actor = nullptr; 
         return done;
     }
 

@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         TTestInfo test = InitTest(env);
 
         constexpr ui32 size = 100;
-        TString data(size, 'a');
+        TString data(size, 'a'); 
         TLogoBlobID originalBlobId(1, 1, 0, 0, size, 0);
         std::unique_ptr<IEventHandle> handle;
 
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         TTestInfo test = InitTest(env);
 
         constexpr ui32 size = 100;
-        TString data(size, 'a');
+        TString data(size, 'a'); 
         TLogoBlobID originalBlobId(1, 1, 0, 0, size, 0);
         std::unique_ptr<IEventHandle> handle;
 
@@ -202,4 +202,4 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         });
     }
 }
-
+ 

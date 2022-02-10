@@ -49,7 +49,7 @@ enum ECharset {
     CODES_CP1129,
     CODES_CP1131,
     CODES_CP1133,
-    CODES_CP1161, // [40]
+    CODES_CP1161, // [40] 
     CODES_CP1162,
     CODES_CP1163,
     CODES_CP1258,
@@ -59,7 +59,7 @@ enum ECharset {
     CODES_CP850,
     CODES_CP852,
     CODES_CP853,
-    CODES_CP856, // [50]
+    CODES_CP856, // [50] 
     CODES_CP857,
     CODES_CP858,
     CODES_CP860,
@@ -69,7 +69,7 @@ enum ECharset {
     CODES_CP864,
     CODES_CP865,
     CODES_CP869,
-    CODES_CP874, // [60]
+    CODES_CP874, // [60] 
     CODES_CP922,
     CODES_HP_ROMAN8,
     CODES_ISO646_CN,
@@ -79,7 +79,7 @@ enum ECharset {
     CODES_ISO8859_14,
     CODES_JISX0201,
     CODES_KOI8_T,
-    CODES_MAC_ARABIC, // [70]
+    CODES_MAC_ARABIC, // [70] 
     CODES_MAC_CENTRALEUROPE,
     CODES_MAC_CROATIAN,
     CODES_MAC_GREEK,
@@ -89,7 +89,7 @@ enum ECharset {
     CODES_MAC_ROMAN,
     CODES_MAC_THAI,
     CODES_MAC_TURKISH,
-    CODES_RESERVED_2, // [80] reserved code: use it for new encodings before adding them to the end of the list
+    CODES_RESERVED_2, // [80] reserved code: use it for new encodings before adding them to the end of the list 
     CODES_MULELAO,
     CODES_NEXTSTEP,
     CODES_PT154,
@@ -101,7 +101,7 @@ enum ECharset {
     CODES_VISCII,
 
     // libiconv multibyte codepages
-    CODES_BIG5, // [90]
+    CODES_BIG5, // [90] 
     CODES_BIG5_HKSCS,
     CODES_BIG5_HKSCS_1999,
     CODES_BIG5_HKSCS_2001,
@@ -111,7 +111,7 @@ enum ECharset {
     CODES_CP950,
     CODES_EUC_CN,
     CODES_EUC_JP,
-    CODES_EUC_KR, // [100]
+    CODES_EUC_KR, // [100] 
     CODES_EUC_TW,
     CODES_GB18030,
     CODES_GBK,
@@ -121,7 +121,7 @@ enum ECharset {
     CODES_ISO_2022_JP,
     CODES_ISO_2022_JP_1,
     CODES_ISO_2022_JP_2,
-    CODES_ISO_2022_KR, // [110]
+    CODES_ISO_2022_KR, // [110] 
     CODES_JOHAB,
     CODES_SHIFT_JIS,
 

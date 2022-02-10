@@ -492,27 +492,27 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         ret = ParseHTTPDateTime("1990-03-15T15:16:17Z", t);
         UNIT_ASSERT(!ret);
     }
-
+ 
     Y_UNIT_TEST(TestX509ValidityTime) {
-        UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL( 
             TInstant::ParseX509Validity("20091014165533Z"),
             TInstant::ParseRfc822("Wed, 14 Oct 2009 16:55:33 GMT"));
-        UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL( 
             TInstant::ParseX509Validity("990104074212Z"),
             TInstant::ParseRfc822("4 Jan 1999 07:42:12 GMT"));
-        UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL( 
             TInstant::ParseX509Validity("191231235959Z"),
             TInstant::ParseRfc822("31 Dec 2019 23:59:59 GMT"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestX509ValidityTimeIncorrect) {
-        bool ret;
-        time_t t = 0;
+        bool ret; 
+        time_t t = 0; 
         ret = ParseX509ValidityDateTime("500101000000Z", t);
-        UNIT_ASSERT(!ret);
+        UNIT_ASSERT(!ret); 
         ret = ParseX509ValidityDateTime("091014165533+0300", t);
-        UNIT_ASSERT(!ret);
-    }
+        UNIT_ASSERT(!ret); 
+    } 
 
     Y_UNIT_TEST(TestTInstantTryParse) {
         {

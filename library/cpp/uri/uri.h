@@ -432,7 +432,7 @@ namespace NUri {
 
         // Info methods
         int Compare(const TUri& A, int flags = FlagUrlFields) const;
-
+ 
         int CompareField(EField fld, const TUri& url) const;
 
         const TStringBuf& GetField(EField fld) const {

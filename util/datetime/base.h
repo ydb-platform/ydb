@@ -75,8 +75,8 @@ bool ParseRFC822DateTime(const char* date, time_t& utcTime);
 bool ParseRFC822DateTime(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseHTTPDateTime(const char* date, time_t& utcTime);
 bool ParseHTTPDateTime(const char* date, size_t dateLen, time_t& utcTime);
-bool ParseX509ValidityDateTime(const char* date, time_t& utcTime);
-bool ParseX509ValidityDateTime(const char* date, size_t dateLen, time_t& utcTime);
+bool ParseX509ValidityDateTime(const char* date, time_t& utcTime); 
+bool ParseX509ValidityDateTime(const char* date, size_t dateLen, time_t& utcTime); 
 
 constexpr long TVdiff(timeval r1, timeval r2) {
     return (1000000 * (r2.tv_sec - r1.tv_sec) + (r2.tv_usec - r1.tv_usec));
@@ -440,7 +440,7 @@ public:
 
     inline struct tm* GmTime(struct tm* tm) const noexcept {
         time_t clock = Seconds();
-        return GmTimeR(&clock, tm);
+        return GmTimeR(&clock, tm); 
     }
 
     /**

@@ -313,17 +313,17 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
 
     Y_UNIT_TEST(MultiCacheTest) {
         typedef TLRUCache<int, TString> TCache;
-        TCache s(3, true);
-        UNIT_ASSERT(s.Insert(1, "abcd"));
-        UNIT_ASSERT(s.Insert(1, "bcde"));
-        UNIT_ASSERT(s.Insert(2, "fghi"));
-        UNIT_ASSERT(s.Insert(2, "ghij"));
-        // (1, "abcd") will be deleted
-        UNIT_ASSERT(*s.Find(1) == "bcde");
-        // (1, "bcde") will be promoted
-        UNIT_ASSERT(*s.FindOldest() == "fghi");
+        TCache s(3, true); 
+        UNIT_ASSERT(s.Insert(1, "abcd")); 
+        UNIT_ASSERT(s.Insert(1, "bcde")); 
+        UNIT_ASSERT(s.Insert(2, "fghi")); 
+        UNIT_ASSERT(s.Insert(2, "ghij")); 
+        // (1, "abcd") will be deleted 
+        UNIT_ASSERT(*s.Find(1) == "bcde"); 
+        // (1, "bcde") will be promoted 
+        UNIT_ASSERT(*s.FindOldest() == "fghi"); 
     }
-
+ 
     struct TMyDelete {
         static int count;
         template <typename T>

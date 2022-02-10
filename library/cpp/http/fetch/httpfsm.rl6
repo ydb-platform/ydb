@@ -128,8 +128,8 @@ connection      = "connection"i def %beg_connection c_tokenlist eoh %set_connect
 ################# content-encoding ################
 action beg_content_encoding { I = HTTP_COMPRESSION_ERROR; }
 action set_content_encoding { base_hd->compression_method =
-                             ((base_hd->compression_method == HTTP_COMPRESSION_UNSET ||
-                               base_hd->compression_method == I) ?
+                             ((base_hd->compression_method == HTTP_COMPRESSION_UNSET || 
+                               base_hd->compression_method == I) ? 
                                  I : (int)HTTP_COMPRESSION_ERROR); }
 
 ce_tokenlist      = "identity"i   %{c(HTTP_COMPRESSION_IDENTITY)}
@@ -189,49 +189,49 @@ action set_charset {
     }
 }
 
-mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
-                | "text/html"i                      %{c(MIME_HTML)}
-                | "application/pdf"i                %{c(MIME_PDF)}
-                | "application/rtf"i                %{c(MIME_RTF)}
-                | "text/rtf"i                       %{c(MIME_RTF)}
-                | "application/msword"i             %{c(MIME_DOC)}
-                | "audio/mpeg"i                     %{c(MIME_MPEG)}
-                | "text/xml"i                       %{c(MIME_XML)}
-                | "application/xml"i                %{c(MIME_XML)}
-                | "application/rss+xml"i            %{c(MIME_RSS)}
-                | "application/rdf+xml"i            %{c(MIME_RSS)}
-                | "application/atom+xml"i           %{c(MIME_RSS)}
-                | "text/vnd.wap.wml"i               %{c(MIME_WML)}
-                | "application/x-shockwave-flash"i  %{c(MIME_SWF)}
-                | "application/vnd.ms-excel"i       %{c(MIME_XLS)}
-                | "application/vnd.ms-powerpoint"i  %{c(MIME_PPT)}
-                | "image/jpeg"i                     %{c(MIME_IMAGE_JPG)}
-                | "image/jpg"i                      %{c(MIME_IMAGE_JPG)}
-                | "image/pjpeg"i                    %{c(MIME_IMAGE_PJPG)}
-                | "image/png"i                      %{c(MIME_IMAGE_PNG)}
-                | "image/gif"i                      %{c(MIME_IMAGE_GIF)}
-                | "application/xhtml+xml"i          %{c(MIME_XHTMLXML)}
-                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"i    %{c(MIME_DOCX)}
-                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"i          %{c(MIME_XLSX)}
-                | "application/vnd.openxmlformats-officedocument.presentationml.presentation"i  %{c(MIME_PPTX)}
-                | "application/vnd.oasis.opendocument.text"i            %{c(MIME_ODT)}
-                | "application/vnd.oasis.opendocument.presentation"i    %{c(MIME_ODP)}
-                | "application/vnd.oasis.opendocument.spreadsheet"i     %{c(MIME_ODS)}
-                | "application/vnd.oasis.opendocument.graphics"i        %{c(MIME_ODG)}
-                | "image/x-ms-bmp"i                 %{c(MIME_IMAGE_BMP)}
-                | "image/bmp"i                      %{c(MIME_IMAGE_BMP)}
-                | "audio/x-wav"i                    %{c(MIME_WAV)}
-                | ( "application/x-tar"i | "application/x-ustar"i | "application/x-gtar"i | "application/zip"i | "application/x-archive"i
-                  | "application/x-bzip2"i | "application/x-rar"i ) %{c(MIME_ARCHIVE)}
-                | "application/x-dosexec"i          %{c(MIME_EXE)}
+mime_type       = "text/plain"i                     %{c(MIME_TEXT)} 
+                | "text/html"i                      %{c(MIME_HTML)} 
+                | "application/pdf"i                %{c(MIME_PDF)} 
+                | "application/rtf"i                %{c(MIME_RTF)} 
+                | "text/rtf"i                       %{c(MIME_RTF)} 
+                | "application/msword"i             %{c(MIME_DOC)} 
+                | "audio/mpeg"i                     %{c(MIME_MPEG)} 
+                | "text/xml"i                       %{c(MIME_XML)} 
+                | "application/xml"i                %{c(MIME_XML)} 
+                | "application/rss+xml"i            %{c(MIME_RSS)} 
+                | "application/rdf+xml"i            %{c(MIME_RSS)} 
+                | "application/atom+xml"i           %{c(MIME_RSS)} 
+                | "text/vnd.wap.wml"i               %{c(MIME_WML)} 
+                | "application/x-shockwave-flash"i  %{c(MIME_SWF)} 
+                | "application/vnd.ms-excel"i       %{c(MIME_XLS)} 
+                | "application/vnd.ms-powerpoint"i  %{c(MIME_PPT)} 
+                | "image/jpeg"i                     %{c(MIME_IMAGE_JPG)} 
+                | "image/jpg"i                      %{c(MIME_IMAGE_JPG)} 
+                | "image/pjpeg"i                    %{c(MIME_IMAGE_PJPG)} 
+                | "image/png"i                      %{c(MIME_IMAGE_PNG)} 
+                | "image/gif"i                      %{c(MIME_IMAGE_GIF)} 
+                | "application/xhtml+xml"i          %{c(MIME_XHTMLXML)} 
+                | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"i    %{c(MIME_DOCX)} 
+                | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"i          %{c(MIME_XLSX)} 
+                | "application/vnd.openxmlformats-officedocument.presentationml.presentation"i  %{c(MIME_PPTX)} 
+                | "application/vnd.oasis.opendocument.text"i            %{c(MIME_ODT)} 
+                | "application/vnd.oasis.opendocument.presentation"i    %{c(MIME_ODP)} 
+                | "application/vnd.oasis.opendocument.spreadsheet"i     %{c(MIME_ODS)} 
+                | "application/vnd.oasis.opendocument.graphics"i        %{c(MIME_ODG)} 
+                | "image/x-ms-bmp"i                 %{c(MIME_IMAGE_BMP)} 
+                | "image/bmp"i                      %{c(MIME_IMAGE_BMP)} 
+                | "audio/x-wav"i                    %{c(MIME_WAV)} 
+                | ( "application/x-tar"i | "application/x-ustar"i | "application/x-gtar"i | "application/zip"i | "application/x-archive"i 
+                  | "application/x-bzip2"i | "application/x-rar"i ) %{c(MIME_ARCHIVE)} 
+                | "application/x-dosexec"i          %{c(MIME_EXE)} 
                 | "application/x-gzip"i             %{c(MIME_GZIP)}
                 | "application/json"i               %{c(MIME_JSON)}
                 | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)}
                 | "application/vnd.android.package-archive"i %{c(MIME_APK)}
                 | ("image/x-icon"i | "image/vnd.microsoft.icon"i) %{c(MIME_IMAGE_ICON)}
                 ;
-
-
+ 
+ 
 charset_name    = token_char+ >clear_buf $update_buf;
 mime_param      = "charset"i ws* '=' ws* '"'? charset_name '"'? %set_charset   @2
                 | token ws* '=' ws* '"'? token '"'?                           @1
@@ -249,9 +249,9 @@ last_modified   = "last-modified"i def %beg_modtime http_date eoh %set_modtime;
 
 ################# location ########################
 action set_location {
-    while (buflen > 0 && (buf[buflen - 1] == ' ' || buf[buflen - 1] == '\t')) {
-        buflen --;
-    }
+    while (buflen > 0 && (buf[buflen - 1] == ' ' || buf[buflen - 1] == '\t')) { 
+        buflen --; 
+    } 
     if (hd && buflen < FETCHER_URL_MAX) {
         hd->location = TStringBuf(buf, buflen);
     }
@@ -259,34 +259,34 @@ action set_location {
 
 action set_status_303{ if (hd) hd->http_status = 303; }
 
-url             = url_char+ >clear_buf $update_buf;
-loc_url         = any_text_char+ >clear_buf $update_buf;
-location        = "location"i def loc_url eoh %set_location;
+url             = url_char+ >clear_buf $update_buf; 
+loc_url         = any_text_char+ >clear_buf $update_buf; 
+location        = "location"i def loc_url eoh %set_location; 
 refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
 
 ################# x-robots-tag ################
 action set_x_robots {
     if (hd && AcceptingXRobots) {
-        if (I > 0)
-            hd->x_robots_tag |= I;
-
-        int pos = (I > 0 ? I : -I);
-        for (size_t i = 0; i < 5; ++i)
-            if (abs(pos) & (1 << i)) // permissive flags take priority
-                hd->x_robots_state[i] = (I < 0) ? '1' : (hd->x_robots_state[i] != '1') ? '0' : '1';
-    }
+        if (I > 0) 
+            hd->x_robots_tag |= I; 
+ 
+        int pos = (I > 0 ? I : -I); 
+        for (size_t i = 0; i < 5; ++i) 
+            if (abs(pos) & (1 << i)) // permissive flags take priority 
+                hd->x_robots_state[i] = (I < 0) ? '1' : (hd->x_robots_state[i] != '1') ? '0' : '1'; 
+    } 
 }
 
 action accept_x_robots {
     AcceptingXRobots = (bool)I;
 }
 
-x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
-                   | "noindex"i   %{c(1)} | "index"i   %{c(-1)}
-                   | "nofollow"i  %{c(2)} | "follow"i  %{c(-2)}
-                   | "noarchive"i %{c(4)} | "archive"i %{c(-4)}
+x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)} 
+                   | "noindex"i   %{c(1)} | "index"i   %{c(-1)} 
+                   | "nofollow"i  %{c(2)} | "follow"i  %{c(-2)} 
+                   | "noarchive"i %{c(4)} | "archive"i %{c(-4)} 
                    | "noyaca"i    %{c(16)}
-                   | "noodp"i     %{c(8)};
+                   | "noodp"i     %{c(8)}; 
 
 any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*;
 any_key = (any_text_char - [:, \t])+ (lws (any_text_char - [:, \t])+)*;
@@ -311,12 +311,12 @@ action set_canonical {
 rel_canonical = "link"i def '<' url ">;"i lws "rel"i lws '=' lws "\"canonical\"" eoh %set_canonical;
 ################# hreflang ###############
 action set_hreflang {
-    bool first = (hreflangpos == hd->hreflangs);
+    bool first = (hreflangpos == hd->hreflangs); 
     size_t len2 = (first ? 0 : 1) + langlen + 1 + buflen;
     if (langlen && len2 < hreflangspace) {
-        if (!first) {
-            *(hreflangpos++) = '\t';
-        }
+        if (!first) { 
+            *(hreflangpos++) = '\t'; 
+        } 
         memcpy(hreflangpos, langstart, langlen);
         hreflangpos += langlen;
         *(hreflangpos++) = ' ';
@@ -342,13 +342,13 @@ hreflang = "link"i def '<' url '>' lws ";" lws
     ( ( "rel"i lws '=' lws quote "alternate" quote lws ';' lws "hreflang"i lws '=' lws quote lang quote )
     | ( "hreflang"i lws '=' lws quote lang quote lws ';' lws "rel"i lws '=' lws quote "alternate" quote ) )
    eoh %set_hreflang;
-################# squid_error #################
-action set_squid_error {
-    hd->squid_error = 1;
-}
-
-squid_error     = "X-Yandex-Squid-Error"i def any_text eoh %set_squid_error;
-
+################# squid_error ################# 
+action set_squid_error { 
+    hd->squid_error = 1; 
+} 
+ 
+squid_error     = "X-Yandex-Squid-Error"i def any_text eoh %set_squid_error; 
+ 
 ################# auth ########################
 action init_auth {
     if (auth_hd)
@@ -441,20 +441,20 @@ action set_user_agent {
 user_agent        = any_text_char* >clear_buf $update_buf;
 user_agent_header = "user-agent"i def user_agent eoh %set_user_agent;
 
-############### x-yandex-langregion ################
-action set_langregion {
-    if (request_hd && buflen < MAX_LANGREGION_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->x_yandex_langregion[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->x_yandex_langregion, buf, buflen);
-    }
-}
-
-langregion = any_text_char* >clear_buf $update_buf;
-langregion_header = "x-yandex-langregion"i def langregion eoh %set_langregion;
-
+############### x-yandex-langregion ################ 
+action set_langregion { 
+    if (request_hd && buflen < MAX_LANGREGION_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->x_yandex_langregion[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->x_yandex_langregion, buf, buflen); 
+    } 
+} 
+ 
+langregion = any_text_char* >clear_buf $update_buf; 
+langregion_header = "x-yandex-langregion"i def langregion eoh %set_langregion; 
+ 
 ############### x-yandex-sourcename ################
 action set_sourcename {
     if (request_hd && buflen < MAXWORD_LEN) {
@@ -469,34 +469,34 @@ action set_sourcename {
 sourcename        = any_text_char* >clear_buf $update_buf;
 sourcename_header = "x-yandex-sourcename"i def sourcename eoh %set_sourcename;
 
-############### x-yandex-requesttype ###############
-action set_requesttype {
-    if (request_hd && buflen < MAXWORD_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->x_yandex_requesttype[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->x_yandex_requesttype, buf, buflen);
-    }
-}
-
-requesttype        = any_text_char* >clear_buf $update_buf;
-requesttype_header = "x-yandex-requesttype"i def requesttype eoh %set_requesttype;
-
-################ x-yandex-fetchoptions ###############
-action set_fetchoptions {
-    if (request_hd && buflen < MAXWORD_LEN) {
-        buf[buflen++] = 0;
-        if (request_hd->x_yandex_fetchoptions[0] != 0) {
-            return -2;
-        }
-        memcpy(request_hd->x_yandex_fetchoptions, buf, buflen);
-    }
-}
-
-fetchoptions    = any_text_char* >clear_buf $update_buf;
-fetchoptions_header = "x-yandex-fetchoptions"i def fetchoptions eoh %set_fetchoptions;
-
+############### x-yandex-requesttype ############### 
+action set_requesttype { 
+    if (request_hd && buflen < MAXWORD_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->x_yandex_requesttype[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->x_yandex_requesttype, buf, buflen); 
+    } 
+} 
+ 
+requesttype        = any_text_char* >clear_buf $update_buf; 
+requesttype_header = "x-yandex-requesttype"i def requesttype eoh %set_requesttype; 
+ 
+################ x-yandex-fetchoptions ############### 
+action set_fetchoptions { 
+    if (request_hd && buflen < MAXWORD_LEN) { 
+        buf[buflen++] = 0; 
+        if (request_hd->x_yandex_fetchoptions[0] != 0) { 
+            return -2; 
+        } 
+        memcpy(request_hd->x_yandex_fetchoptions, buf, buflen); 
+    } 
+} 
+ 
+fetchoptions    = any_text_char* >clear_buf $update_buf; 
+fetchoptions_header = "x-yandex-fetchoptions"i def fetchoptions eoh %set_fetchoptions; 
+ 
 ################ if-modified-since ################
 action set_if_modified_since {
     if (request_hd) {
@@ -576,7 +576,7 @@ message_header  = other_header          $0
 response_header = message_header        $0
                 | auth                  @1
                 | accept_ranges         @1
-                | location              @1
+                | location              @1 
                 | x_robots_tag          @1
                 | rel_canonical         @1
                 | hreflang              @1
@@ -588,9 +588,9 @@ request_header  = message_header        $0
                 | host_header           @1
                 | user_agent_header     @1
                 | sourcename_header     @1
-                | requesttype_header    @1
-                | langregion_header     @1
-                | fetchoptions_header   @1
+                | requesttype_header    @1 
+                | langregion_header     @1 
+                | fetchoptions_header   @1 
                 | if_modified_since     @1
                 | request_cache_control @1
                 | response_timeout      @1

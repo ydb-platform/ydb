@@ -458,7 +458,7 @@
         )
     ;
 
-    write data;
+    write data; 
 
 }%%
 
@@ -469,7 +469,7 @@ bool TParser::doParse(const char* str_beg, size_t length)
     const char* p = str_beg;
     const char* pe = str_beg + length;
     const char* eof = pe;
-    int cs;
+    int cs; 
 
 #define BEG(ptr, fld) startSection (ptr, TField::Field ## fld);
 #define END(ptr, fld) finishSection(ptr, TField::Field ## fld);

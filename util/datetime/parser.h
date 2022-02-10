@@ -87,7 +87,7 @@ struct TDateTimeFields {
         tm.tm_hour = Hour;
         tm.tm_min = Minute;
         tm.tm_sec = Second;
-        time_t tt = TimeGM(&tm);
+        time_t tt = TimeGM(&tm); 
         if (tt == -1)
             return defaultValue;
         return tt - ZoneOffsetMinutes * 60;
@@ -134,8 +134,8 @@ protected:
 DECLARE_PARSER(TIso8601DateTimeParser)
 DECLARE_PARSER(TRfc822DateTimeParser)
 DECLARE_PARSER(THttpDateTimeParser)
-DECLARE_PARSER(TX509ValidityDateTimeParser)
-DECLARE_PARSER(TX509Validity4yDateTimeParser)
+DECLARE_PARSER(TX509ValidityDateTimeParser) 
+DECLARE_PARSER(TX509Validity4yDateTimeParser) 
 
 #undef DECLARE_PARSER
 

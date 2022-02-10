@@ -5,12 +5,12 @@
 
 #include <ctime>
 
-// timegm and gmtime_r versions that don't need access to filesystem or a big stack
+// timegm and gmtime_r versions that don't need access to filesystem or a big stack 
 time_t TimeGM(const struct tm* t);
 struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf);
 // safe version of ctime, convinient version of ctime_r
 TString CTimeR(const time_t* timer);
-
+ 
 #ifdef _win_
     #include <util/system/winint.h>
     #include <winsock2.h>
@@ -28,12 +28,12 @@ char* ctime_r(const time_t* clock, char* buf);
 inline time_t timegm(struct tm* t) {
     return TimeGM(t);
 }
-
+ 
 char* strptime(const char* buf, const char* fmt, struct tm* tm); // strptime.cpp
 #else
     #include <sys/time.h>
 #endif
-
+ 
 #ifndef timersub
     #define timersub(tvp, uvp, vvp)                           \
         do {                                                  \

@@ -4,7 +4,7 @@
 #include "httpheader.h"
 
 #include <library/cpp/mime/types/mime.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 #include <library/cpp/http/misc/httpcodes.h>
 
 template <size_t headermax = 100 << 10, size_t bodymax = 1 << 20>
@@ -294,7 +294,7 @@ public:
         Header = H;
         Eoferr = 1;
         Size = 0;
-        AssumeConnectionClosed = assumeConnectionClosed;
+        AssumeConnectionClosed = assumeConnectionClosed; 
         HeadRequest = headRequest;
         return parsHeader ? ParseHeader() : SkipHeader();
     }

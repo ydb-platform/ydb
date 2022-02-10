@@ -46,8 +46,8 @@ char* ctime_r(const time_t* clock, char* buf) {
     return 0;
 }
 
-#endif /* _win_ */
-
+#endif /* _win_ */ 
+ 
 #define YEAR0 1900
 #define EPOCH_YR 1970
 #define SECS_DAY (24L * 60L * 60L)
@@ -86,51 +86,51 @@ time_t TimeGM(const struct tm* t) {
 }
 
 struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf) {
-    static const int _ytab[2][12] = {
-        {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
+    static const int _ytab[2][12] = { 
+        {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}, 
         {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
 
     i64 time = static_cast<i64>(*timer);
 
-    ui64 dayclock, dayno;
-    int year = EPOCH_YR;
-
-    if (time < 0) {
-        ui64 shift = (ui64)(-time - 1) / ((ui64)FOURCENTURIES * SECS_DAY) + 1;
-        time += shift * ((ui64)FOURCENTURIES * SECS_DAY);
-        year -= shift * 400;
-    }
-
+    ui64 dayclock, dayno; 
+    int year = EPOCH_YR; 
+ 
+    if (time < 0) { 
+        ui64 shift = (ui64)(-time - 1) / ((ui64)FOURCENTURIES * SECS_DAY) + 1; 
+        time += shift * ((ui64)FOURCENTURIES * SECS_DAY); 
+        year -= shift * 400; 
+    } 
+ 
     dayclock = (ui64)time % SECS_DAY;
     dayno = (ui64)time / SECS_DAY;
-
-    year += 400 * (dayno / FOURCENTURIES);
-    dayno = dayno % FOURCENTURIES;
-
-    tmbuf->tm_sec = dayclock % 60;
-    tmbuf->tm_min = (dayclock % 3600) / 60;
-    tmbuf->tm_hour = dayclock / 3600;
-    tmbuf->tm_wday = (dayno + 4) % 7; // Day 0 was a thursday
+ 
+    year += 400 * (dayno / FOURCENTURIES); 
+    dayno = dayno % FOURCENTURIES; 
+ 
+    tmbuf->tm_sec = dayclock % 60; 
+    tmbuf->tm_min = (dayclock % 3600) / 60; 
+    tmbuf->tm_hour = dayclock / 3600; 
+    tmbuf->tm_wday = (dayno + 4) % 7; // Day 0 was a thursday 
     while (dayno >= (ui64)YEARSIZE(year)) {
-        dayno -= YEARSIZE(year);
+        dayno -= YEARSIZE(year); 
         ++year;
-    }
-    tmbuf->tm_year = year - YEAR0;
-    tmbuf->tm_yday = dayno;
-    tmbuf->tm_mon = 0;
+    } 
+    tmbuf->tm_year = year - YEAR0; 
+    tmbuf->tm_yday = dayno; 
+    tmbuf->tm_mon = 0; 
     while (dayno >= (ui64)_ytab[LEAPYEAR(year)][tmbuf->tm_mon]) {
-        dayno -= _ytab[LEAPYEAR(year)][tmbuf->tm_mon];
+        dayno -= _ytab[LEAPYEAR(year)][tmbuf->tm_mon]; 
         ++tmbuf->tm_mon;
-    }
-    tmbuf->tm_mday = dayno + 1;
-    tmbuf->tm_isdst = 0;
-#ifndef _win_
-    tmbuf->tm_gmtoff = 0;
+    } 
+    tmbuf->tm_mday = dayno + 1; 
+    tmbuf->tm_isdst = 0; 
+#ifndef _win_ 
+    tmbuf->tm_gmtoff = 0; 
     tmbuf->tm_zone = (char*)"UTC";
-#endif
-
-    return tmbuf;
-}
+#endif 
+ 
+    return tmbuf; 
+} 
 
 TString CTimeR(const time_t* timer) {
     char sTime[32];

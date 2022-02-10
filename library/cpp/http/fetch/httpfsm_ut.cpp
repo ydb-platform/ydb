@@ -17,19 +17,19 @@ class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST(TestLastModifiedCorrupted);
     UNIT_TEST(TestResponseHeaderOnRequest);
     UNIT_TEST(TestRequestHeaderOnResponse);
-    UNIT_TEST(TestXRobotsTagUnknownTags);
+    UNIT_TEST(TestXRobotsTagUnknownTags); 
     UNIT_TEST(TestXRobotsTagMyBot);
     UNIT_TEST(TestXRobotsTagOtherBot);
     UNIT_TEST(TestXRobotsTagUnavailableAfterAware);
     UNIT_TEST(TestXRobotsTagUnavailableAfterWorks);
-    UNIT_TEST(TestXRobotsTagOverridePriority);
+    UNIT_TEST(TestXRobotsTagOverridePriority); 
     UNIT_TEST(TestXRobotsTagDoesNotBreakCharset);
     UNIT_TEST(TestXRobotsTagAllowsMultiline);
     UNIT_TEST(TestRelCanonical);
     UNIT_TEST(TestHreflang);
     UNIT_TEST(TestHreflangOnLongInput);
     UNIT_TEST(TestMimeType);
-    UNIT_TEST(TestRepeatedContentEncoding);
+    UNIT_TEST(TestRepeatedContentEncoding); 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -49,19 +49,19 @@ public:
     void TestLastModifiedCorrupted();
     void TestResponseHeaderOnRequest();
     void TestRequestHeaderOnResponse();
-    void TestXRobotsTagUnknownTags();
+    void TestXRobotsTagUnknownTags(); 
     void TestXRobotsTagMyBot();
     void TestXRobotsTagOtherBot();
     void TestXRobotsTagUnavailableAfterAware();
     void TestXRobotsTagUnavailableAfterWorks();
-    void TestXRobotsTagOverridePriority();
+    void TestXRobotsTagOverridePriority(); 
     void TestXRobotsTagDoesNotBreakCharset();
     void TestXRobotsTagAllowsMultiline();
     void TestRelCanonical();
     void TestHreflang();
     void TestHreflangOnLongInput();
     void TestMimeType();
-    void TestRepeatedContentEncoding();
+    void TestRepeatedContentEncoding(); 
 };
 
 void THttpHeaderParserTestSuite::TestStart() {
@@ -91,8 +91,8 @@ void THttpHeaderParserTestSuite::TestRequestHeader() {
     UNIT_ASSERT_EQUAL(httpRequestHeader.x_yandex_request_priority,
                       DEFAULT_REQUEST_PRIORITY);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_sourcename, ""), 0);
-    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_requesttype, ""), 0);
-    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, ""), 0);
+    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_requesttype, ""), 0); 
+    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, ""), 0); 
     TestFinish();
     UNIT_ASSERT_EQUAL(httpRequestHeader.max_age, DEFAULT_MAX_AGE);
 }
@@ -161,8 +161,8 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
         "X-Yandex-Response-Timeout: 1000\r\n"
         "X-Yandex-Request-Priority: 2\r\n"
         "X-Yandex-Sourcename: orange\r\n"
-        "X-Yandex-Requesttype: userproxy\r\n"
-        "X-Yandex-FetchOptions: d;c\r\n"
+        "X-Yandex-Requesttype: userproxy\r\n" 
+        "X-Yandex-FetchOptions: d;c\r\n" 
         "Cache-control: max-age=100\r\n"
         "If-Modified-Since: Sat, 29 Oct 1994 19:43:31 GMT\r\n"
         "User-Agent: Yandex/1.01.001 (compatible; Win16; I)\r\n"
@@ -172,9 +172,9 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
     UNIT_ASSERT_EQUAL(httpRequestHeader.x_yandex_response_timeout, 1000);
     UNIT_ASSERT_EQUAL(httpRequestHeader.x_yandex_request_priority, 2);
-    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_sourcename, "orange"), 0);
-    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_requesttype, "userproxy"), 0);
-    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, "d;c"), 0);
+    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_sourcename, "orange"), 0); 
+    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_requesttype, "userproxy"), 0); 
+    UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, "d;c"), 0); 
     UNIT_ASSERT_EQUAL(httpRequestHeader.max_age, 100);
     UNIT_ASSERT_VALUES_EQUAL(httpRequestHeader.if_modified_since,
                              TInstant::ParseIso8601Deprecated("1994-10-29 19:43:31Z").TimeT());
@@ -231,7 +231,7 @@ void THttpHeaderParserTestSuite::TestLastModifiedCorrupted() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestXRobotsTagUnknownTags() {
+void THttpHeaderParserTestSuite::TestXRobotsTagUnknownTags() { 
     TestStart();
     THttpHeader httpHeader;
     httpHeaderParser->Init(&httpHeader);
@@ -312,21 +312,21 @@ void THttpHeaderParserTestSuite::TestXRobotsTagUnavailableAfterWorks() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestXRobotsTagOverridePriority() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "x-robots-tag: all, none\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "11xxx");
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 3); // NOTE legacy behavior, should be 0 as `all` overrides
-    TestFinish();
-}
-
+void THttpHeaderParserTestSuite::TestXRobotsTagOverridePriority() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: text/html\r\n" 
+        "x-robots-tag: all, none\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "11xxx"); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 3); // NOTE legacy behavior, should be 0 as `all` overrides 
+    TestFinish(); 
+} 
+ 
 void THttpHeaderParserTestSuite::TestXRobotsTagDoesNotBreakCharset() {
     TestStart();
     THttpHeader httpHeader;
@@ -394,7 +394,7 @@ void THttpHeaderParserTestSuite::TestHreflang() {
     i32 result = httpHeaderParser->Execute(headers, strlen(headers));
     UNIT_ASSERT_VALUES_EQUAL(result, 2);
     // UNIT_ASSERT_VALUES_EQUAL(strcmp(httpHeader.hreflangs, "x-default http://www.high.ru/;"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, "x-default http://www.high.ru/\ten_GB http://www.high.ru/en.html\tru_RU.KOI8-r http://www.high.ru/ru.html");
+    UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, "x-default http://www.high.ru/\ten_GB http://www.high.ru/en.html\tru_RU.KOI8-r http://www.high.ru/ru.html"); 
     TestFinish();
 }
 
@@ -461,31 +461,31 @@ void THttpHeaderParserTestSuite::TestMimeType() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestRepeatedContentEncoding() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char *headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Server: nginx\r\n"
-        "Date: Mon, 15 Oct 2018 10:40:44 GMT\r\n"
-        "Content-Type: text/plain\r\n"
-        "Transfer-Encoding: chunked\r\n"
-        "Connection: keep-alive\r\n"
-        "Last-Modified: Mon, 15 Oct 2018 03:48:54 GMT\r\n"
-        "ETag: W/\"5bc40e26-a956d\"\r\n"
-        "X-Autoru-LB: lb-03-sas.prod.vertis.yandex.net\r\n"
-        "Content-Encoding: gzip\r\n"
-        "Content-Encoding: gzip\r\n"
-        "X-UA-Bot: 1\r\n"
-        "\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.error, 0);
-    UNIT_ASSERT_EQUAL(httpHeader.compression_method, 3);
-    TestFinish();
-}
-
+void THttpHeaderParserTestSuite::TestRepeatedContentEncoding() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char *headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Server: nginx\r\n" 
+        "Date: Mon, 15 Oct 2018 10:40:44 GMT\r\n" 
+        "Content-Type: text/plain\r\n" 
+        "Transfer-Encoding: chunked\r\n" 
+        "Connection: keep-alive\r\n" 
+        "Last-Modified: Mon, 15 Oct 2018 03:48:54 GMT\r\n" 
+        "ETag: W/\"5bc40e26-a956d\"\r\n" 
+        "X-Autoru-LB: lb-03-sas.prod.vertis.yandex.net\r\n" 
+        "Content-Encoding: gzip\r\n" 
+        "Content-Encoding: gzip\r\n" 
+        "X-UA-Bot: 1\r\n" 
+        "\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.error, 0); 
+    UNIT_ASSERT_EQUAL(httpHeader.compression_method, 3); 
+    TestFinish(); 
+} 
+ 
 UNIT_TEST_SUITE_REGISTRATION(THttpHeaderParserTestSuite);
 
 Y_UNIT_TEST_SUITE(TestHttpChunkParser) {

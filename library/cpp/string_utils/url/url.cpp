@@ -376,12 +376,12 @@ size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, 
     size_t len = Min(dest_size - 1, source.length());
     memcpy(dest, source.data(), len);
     dest[len] = 0;
-    char buf[8] = ":";
-    size_t buflen = 1 + ToString(defport, buf + 1, sizeof(buf) - 2);
-    buf[buflen] = '\0';
+    char buf[8] = ":"; 
+    size_t buflen = 1 + ToString(defport, buf + 1, sizeof(buf) - 2); 
+    buf[buflen] = '\0'; 
     char* ptr = strstr(dest, buf);
     if (ptr && ptr[buflen] == 0) {
-        len -= buflen;
+        len -= buflen; 
         *ptr = 0;
     }
     strlwr(dest);

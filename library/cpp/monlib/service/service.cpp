@@ -31,9 +31,9 @@ namespace NMonitoring {
                     }
                     TString path = GetPath();
                     if (!path.StartsWith('/')) {
-                        out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n";
-                        return;
-                    }
+                        out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n"; 
+                        return; 
+                    } 
                     Headers = &in.Headers();
                     CgiParams.Scan(Url.Get(THttpURL::FieldQuery));
                 } catch (...) {
@@ -43,7 +43,7 @@ namespace NMonitoring {
 
                 if (Header.http_method == HTTP_METHOD_POST)
                     TransferData(&in, &PostContent);
-
+ 
                 Handler(out, *this);
                 out.Finish();
             } catch (...) {
@@ -66,8 +66,8 @@ namespace NMonitoring {
         const TCgiParameters& GetPostParams() const override {
             if (PostParams.empty() && !PostContent.Buffer().Empty())
                 const_cast<THttpClient*>(this)->ScanPostParams();
-            return PostParams;
-        }
+            return PostParams; 
+        } 
         TStringBuf GetPostContent() const override {
             return TStringBuf(PostContent.Buffer().Data(), PostContent.Buffer().Size());
         }
@@ -95,7 +95,7 @@ namespace NMonitoring {
         const THttpHeaders* Headers = nullptr;
         THttpURL Url;
         TCgiParameters CgiParams;
-        TCgiParameters PostParams;
+        TCgiParameters PostParams; 
         TBufferOutput PostContent;
         const NAddr::IRemoteAddr* RemoteAddr = nullptr;
     };
@@ -140,11 +140,11 @@ namespace NMonitoring {
         , BindAddr(bindAddr)
         , Port(port)
     {
-        try {
-            Listener.Bind(TIpAddress(bindAddr, port));
-        } catch (yexception e) {
+        try { 
+            Listener.Bind(TIpAddress(bindAddr, port)); 
+        } catch (yexception e) { 
             Y_FAIL("TCoHttpServer::TCoHttpServer: couldn't bind to %s:%d\n", bindAddr.data(), port);
-        }
+        } 
     }
 
     void TCoHttpServer::Start() {

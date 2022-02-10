@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:zora
+    g:zora 
 )
 
 PEERDIR(
@@ -26,7 +26,7 @@ SRCS(
     httpheader.h
     httpparser.h
     httpzreader.h
-    sockhandler.h
+    sockhandler.h 
 )
 
 GENERATE_ENUM_SERIALIZATION(httpheader.h)

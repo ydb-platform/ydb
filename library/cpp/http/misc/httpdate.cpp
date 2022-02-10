@@ -49,18 +49,18 @@ static const char *months[] = {
     "Nov", "Dec"
 };
 
-int format_http_date(char buf[], size_t size, time_t when) {
+int format_http_date(char buf[], size_t size, time_t when) { 
     struct tm tms;
-    GmTimeR(&when, &tms);
+    GmTimeR(&when, &tms); 
 
 #ifndef HTTP_DATE_ISO_8601
     return snprintf(buf, size, "%s, %02d %s %04d %02d:%02d:%02d GMT",
-        wkdays[tms.tm_wday], tms.tm_mday, months[tms.tm_mon],
-        tms.tm_year + 1900, tms.tm_hour, tms.tm_min, tms.tm_sec);
+        wkdays[tms.tm_wday], tms.tm_mday, months[tms.tm_mon], 
+        tms.tm_year + 1900, tms.tm_hour, tms.tm_min, tms.tm_sec); 
 #else /* ISO 8601 */
     return snprintf(buf, size, "%04d%02d%02dT%02d%02d%02d+0000",
-        tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
-        tms.tm_hour, tms.tm_min, tms.tm_sec);
+        tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday, 
+        tms.tm_hour, tms.tm_min, tms.tm_sec); 
 #endif
 }
 

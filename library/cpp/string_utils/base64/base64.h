@@ -39,55 +39,55 @@ inline TString Base64Decode(const TStringBuf s) {
     return ret;
 }
 
-///
-/// @brief Decodes Base64 string with strict verification
-///        of invalid symbols, also tries to decode Base64 string with padding
-///        inside.
-//
-/// @throws Throws exceptions on inputs which contain invalid symbols
-///         or incorrect padding.
-/// @{
-///
-/// @param b a pointer to the beginning of base64 encoded string.
-/// @param e a pointer to the end of base64 encoded string.
-/// @param dst memory for writing output.
-///
-/// @return Returns number of bytes decoded.
-///
-size_t Base64StrictDecode(void* dst, const char* b, const char* e);
-
-///
-/// @param src a base64 encoded string.
-/// @param dst an pointer to allocated memory
-///            for writing result.
-///
-/// @return Returns dst wrapped into TStringBuf.
-///
+/// 
+/// @brief Decodes Base64 string with strict verification 
+///        of invalid symbols, also tries to decode Base64 string with padding 
+///        inside. 
+// 
+/// @throws Throws exceptions on inputs which contain invalid symbols 
+///         or incorrect padding. 
+/// @{ 
+/// 
+/// @param b a pointer to the beginning of base64 encoded string. 
+/// @param e a pointer to the end of base64 encoded string. 
+/// @param dst memory for writing output. 
+/// 
+/// @return Returns number of bytes decoded. 
+/// 
+size_t Base64StrictDecode(void* dst, const char* b, const char* e); 
+ 
+/// 
+/// @param src a base64 encoded string. 
+/// @param dst an pointer to allocated memory 
+///            for writing result. 
+/// 
+/// @return Returns dst wrapped into TStringBuf. 
+/// 
 inline TStringBuf Base64StrictDecode(const TStringBuf src, void* dst) {
     return TStringBuf((const char*)dst, Base64StrictDecode(dst, src.begin(), src.end()));
-}
-
-///
-/// @param src a base64 encoded string.
-/// @param dst a decoded string.
-///
+} 
+ 
+/// 
+/// @param src a base64 encoded string. 
+/// @param dst a decoded string. 
+/// 
 inline void Base64StrictDecode(const TStringBuf src, TString& dst) {
-    dst.ReserveAndResize(Base64DecodeBufSize(src.size()));
-    dst.resize(Base64StrictDecode(src, dst.begin()).size());
-}
-
-///
-/// @param src a base64 encoded string.
-///
-/// @returns a decoded string.
-///
+    dst.ReserveAndResize(Base64DecodeBufSize(src.size())); 
+    dst.resize(Base64StrictDecode(src, dst.begin()).size()); 
+} 
+ 
+/// 
+/// @param src a base64 encoded string. 
+/// 
+/// @returns a decoded string. 
+/// 
 inline TString Base64StrictDecode(const TStringBuf src) {
     TString ret;
-    Base64StrictDecode(src, ret);
-    return ret;
-}
-/// @}
-
+    Base64StrictDecode(src, ret); 
+    return ret; 
+} 
+/// @} 
+ 
 /// Works with strings which length is not divisible by 4.
 TString Base64DecodeUneven(const TStringBuf s);
 

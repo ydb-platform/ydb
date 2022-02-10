@@ -9,9 +9,9 @@
 class IInputStream;
 class IOutputStream;
 
-/// @addtogroup Streams_HTTP 
-/// @{ 
-/// Объект, содержащий информацию о HTTP-заголовке. 
+/// @addtogroup Streams_HTTP
+/// @{
+/// Объект, содержащий информацию о HTTP-заголовке.
 class THttpInputHeader {
 public:
     /// @param[in] header - строка вида 'параметр: значение'.
@@ -43,7 +43,7 @@ private:
     TString Value_;
 };
 
-/// Контейнер для хранения HTTP-заголовков 
+/// Контейнер для хранения HTTP-заголовков
 class THttpHeaders {
     using THeaders = TDeque<THttpInputHeader>;
 
@@ -80,7 +80,7 @@ public:
     inline bool Empty() const noexcept {
         return Headers_.empty();
     }
- 
+
     /// Добавляет заголовок в контейнер.
     void AddHeader(THttpInputHeader header);
 
@@ -122,4 +122,4 @@ private:
     THeaders Headers_;
 };
 
-/// @} 
+/// @}

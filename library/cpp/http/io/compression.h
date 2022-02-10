@@ -28,7 +28,7 @@ public:
         if (auto codec = Codecs_.FindPtr(name)) {
             return &codec->Encoder;
         }
- 
+
         return nullptr;
     }
 

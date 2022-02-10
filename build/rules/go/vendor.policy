@@ -149,17 +149,17 @@ ALLOW .* -> vendor/github.com/go-git/go-git/v5
 ALLOW .* -> vendor/github.com/go-git/go-billy/v5
 
 # etcd client
-DENY .* -> vendor/go.etcd.io/etcd/clientv3/naming
-ALLOW .* -> vendor/go.etcd.io/etcd/mvcc
-ALLOW .* -> vendor/go.etcd.io/etcd/etcdserver/api
-ALLOW .* -> vendor/go.etcd.io/etcd/wal
-ALLOW .* -> vendor/go.etcd.io/etcd/raft
-ALLOW .* -> vendor/go.etcd.io/etcd/clientv3
-ALLOW .* -> vendor/go.etcd.io/etcd/pkg/fileutil
-ALLOW .* -> vendor/go.etcd.io/etcd/pkg/stringutil
-ALLOW .* -> vendor/go.etcd.io/etcd/pkg/transport
-ALLOW .* -> vendor/go.etcd.io/etcd/pkg/types
-
+DENY .* -> vendor/go.etcd.io/etcd/clientv3/naming 
+ALLOW .* -> vendor/go.etcd.io/etcd/mvcc 
+ALLOW .* -> vendor/go.etcd.io/etcd/etcdserver/api 
+ALLOW .* -> vendor/go.etcd.io/etcd/wal 
+ALLOW .* -> vendor/go.etcd.io/etcd/raft 
+ALLOW .* -> vendor/go.etcd.io/etcd/clientv3 
+ALLOW .* -> vendor/go.etcd.io/etcd/pkg/fileutil 
+ALLOW .* -> vendor/go.etcd.io/etcd/pkg/stringutil 
+ALLOW .* -> vendor/go.etcd.io/etcd/pkg/transport 
+ALLOW .* -> vendor/go.etcd.io/etcd/pkg/types 
+ 
 # logging to systemd
 ALLOW .* -> vendor/github.com/coreos/go-systemd/journal
 

@@ -984,7 +984,7 @@ RECURSE(
     selectors2
     selenium
     semantic-version
-    semver 
+    semver
     Send2Trash
     sentinels
     sentry-sdk

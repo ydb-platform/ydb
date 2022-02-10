@@ -1,6 +1,6 @@
 RESOURCES_LIBRARY()
 
-OWNER(orivej dancingelf rodion-m dmitrtol) 
+OWNER(orivej dancingelf rodion-m dmitrtol)
 
 DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(
     SWIFT_DEMANGLE

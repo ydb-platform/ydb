@@ -117,7 +117,7 @@ enum HttpFlags {
     // connection
     ShouldDisconnect = 1,
     ShouldRetry = 2,
-    // UNUSED 4
+    // UNUSED 4 
 
     // indexer
     ShouldReindex = 8,
@@ -125,8 +125,8 @@ enum HttpFlags {
     CheckLocation = 32,
     CheckLinks = 64,
     MarkSuspect = 128,
-    // UNUSED 256
-    // UNUSED 512
+    // UNUSED 256 
+    // UNUSED 512 
     MoveRedir = 1024,
     CanBeFake = 2048,
 };

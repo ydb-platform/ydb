@@ -6,7 +6,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("100 Continue");
         case HTTP_SWITCHING_PROTOCOLS:
             return TStringBuf("101 Switching protocols");
-        case HTTP_PROCESSING:
+        case HTTP_PROCESSING: 
             return TStringBuf("102 Processing");
 
         case HTTP_OK:
@@ -23,11 +23,11 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("205 Reset content");
         case HTTP_PARTIAL_CONTENT:
             return TStringBuf("206 Partial content");
-        case HTTP_MULTI_STATUS:
+        case HTTP_MULTI_STATUS: 
             return TStringBuf("207 Multi status");
-        case HTTP_ALREADY_REPORTED:
+        case HTTP_ALREADY_REPORTED: 
             return TStringBuf("208 Already reported");
-        case HTTP_IM_USED:
+        case HTTP_IM_USED: 
             return TStringBuf("226 IM used");
 
         case HTTP_MULTIPLE_CHOICES:
@@ -44,7 +44,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("305 Use proxy");
         case HTTP_TEMPORARY_REDIRECT:
             return TStringBuf("307 Temporarily redirect");
-        case HTTP_PERMANENT_REDIRECT:
+        case HTTP_PERMANENT_REDIRECT: 
             return TStringBuf("308 Permanent redirect");
 
         case HTTP_BAD_REQUEST:
@@ -83,29 +83,29 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("416 Requested Range Not Satisfiable");
         case HTTP_EXPECTATION_FAILED:
             return TStringBuf("417 Expectation Failed");
-        case HTTP_I_AM_A_TEAPOT:
+        case HTTP_I_AM_A_TEAPOT: 
             return TStringBuf("418 I Am A Teapot");
-        case HTTP_AUTHENTICATION_TIMEOUT:
+        case HTTP_AUTHENTICATION_TIMEOUT: 
             return TStringBuf("419 Authentication Timeout");
-        case HTTP_MISDIRECTED_REQUEST:
+        case HTTP_MISDIRECTED_REQUEST: 
             return TStringBuf("421 Misdirected Request");
         case HTTP_UNPROCESSABLE_ENTITY:
             return TStringBuf("422 Unprocessable Entity");
-        case HTTP_LOCKED:
+        case HTTP_LOCKED: 
             return TStringBuf("423 Locked");
-        case HTTP_FAILED_DEPENDENCY:
+        case HTTP_FAILED_DEPENDENCY: 
             return TStringBuf("424 Failed Dependency");
         case HTTP_UNORDERED_COLLECTION:
             return TStringBuf("425 Unordered Collection");
-        case HTTP_UPGRADE_REQUIRED:
+        case HTTP_UPGRADE_REQUIRED: 
             return TStringBuf("426 Upgrade Required");
-        case HTTP_PRECONDITION_REQUIRED:
+        case HTTP_PRECONDITION_REQUIRED: 
             return TStringBuf("428 Precondition Required");
         case HTTP_TOO_MANY_REQUESTS:
             return TStringBuf("429 Too Many Requests");
         case HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE:
             return TStringBuf("431 Request Header Fields Too Large");
-        case HTTP_UNAVAILABLE_FOR_LEGAL_REASONS:
+        case HTTP_UNAVAILABLE_FOR_LEGAL_REASONS: 
             return TStringBuf("451 Unavailable For Legal Reason");
 
         case HTTP_INTERNAL_SERVER_ERROR:
@@ -120,17 +120,17 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("504 Gateway time out");
         case HTTP_HTTP_VERSION_NOT_SUPPORTED:
             return TStringBuf("505 HTTP version not supported");
-        case HTTP_VARIANT_ALSO_NEGOTIATES:
+        case HTTP_VARIANT_ALSO_NEGOTIATES: 
             return TStringBuf("506 Variant also negotiates");
-        case HTTP_INSUFFICIENT_STORAGE:
+        case HTTP_INSUFFICIENT_STORAGE: 
             return TStringBuf("507 Insufficient storage");
-        case HTTP_LOOP_DETECTED:
+        case HTTP_LOOP_DETECTED: 
             return TStringBuf("508 Loop Detected");
         case HTTP_BANDWIDTH_LIMIT_EXCEEDED:
             return TStringBuf("509 Bandwidth Limit Exceeded");
-        case HTTP_NOT_EXTENDED:
+        case HTTP_NOT_EXTENDED: 
             return TStringBuf("510 Not Extended");
-        case HTTP_NETWORK_AUTHENTICATION_REQUIRED:
+        case HTTP_NETWORK_AUTHENTICATION_REQUIRED: 
             return TStringBuf("511 Network Authentication Required");
         case HTTP_UNASSIGNED_512:
             return TStringBuf("512 Unassigned");

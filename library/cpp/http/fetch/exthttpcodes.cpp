@@ -69,14 +69,14 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_SERVICE_UNAVAILABLE, ShouldDisconnect | ShouldRetry | MarkSuspect}, // 503
     {HTTP_GATEWAY_TIME_OUT, ShouldDisconnect | ShouldRetry | MarkSuspect},    // 504
     {HTTP_HTTP_VERSION_NOT_SUPPORTED, CrazyServer | ShouldDisconnect},        // 505
-
+ 
     {HTTP_VARIANT_ALSO_NEGOTIATES, CrazyServer | ShouldDisconnect},                // 506
     {HTTP_INSUFFICIENT_STORAGE, CrazyServer | ShouldDisconnect},                   // 507
     {HTTP_LOOP_DETECTED, CrazyServer | ShouldDisconnect},                          // 508
     {HTTP_BANDWIDTH_LIMIT_EXCEEDED, ShouldDisconnect | ShouldRetry | MarkSuspect}, // 509
     {HTTP_NOT_EXTENDED, ShouldDelete},                                             // 510
     {HTTP_NETWORK_AUTHENTICATION_REQUIRED, ShouldDelete},                          // 511
-
+ 
     // custom
     {HTTP_BAD_RESPONSE_HEADER, CrazyServer},                             // 1000
     {HTTP_CONNECTION_LOST, ShouldRetry},                                 // 1001

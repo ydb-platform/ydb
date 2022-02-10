@@ -64,26 +64,26 @@ char* CodePage::ToUpper(const char* b, char* to) const {
 }
 
 int CodePage::stricmp(const char* dst, const char* src) const {
-    unsigned char f, l;
-    do {
+    unsigned char f, l; 
+    do { 
         f = ToLower(*dst++);
         l = ToLower(*src++);
-    } while (f && (f == l));
-    return f - l;
-}
-
+    } while (f && (f == l)); 
+    return f - l; 
+} 
+ 
 int CodePage::strnicmp(const char* dst, const char* src, size_t len) const {
-    unsigned char f, l;
-    if (len) {
-        do {
+    unsigned char f, l; 
+    if (len) { 
+        do { 
             f = ToLower(*dst++);
             l = ToLower(*src++);
-        } while (--len && f && (f == l));
-        return f - l;
-    }
-    return 0;
-}
-
+        } while (--len && f && (f == l)); 
+        return f - l; 
+    } 
+    return 0; 
+} 
+ 
 static const CodePage UNSUPPORTED_CODEPAGE = {
     CODES_UNSUPPORTED,
     {
@@ -179,7 +179,7 @@ public:
             }
         }
     }
-
+ 
     inline ECharset CharsetByName(TStringBuf name) {
         if (!name)
             return CODES_UNKNOWN;
@@ -187,15 +187,15 @@ public:
         TData::const_iterator it = Data.find(name);
         if (it == Data.end())
             return CODES_UNKNOWN;
-
+ 
         return it->second;
     }
 };
 
 ECharset CharsetByName(TStringBuf name) {
     return Singleton<TCodePageHash>()->CharsetByName(name);
-}
-
+} 
+ 
 ECharset CharsetByNameOrDie(TStringBuf name) {
     ECharset result = CharsetByName(name);
     if (result == CODES_UNKNOWN)

@@ -12,7 +12,7 @@
 * no representations about the suitability of this software for any
 * purpose.  It is provided "as is" without express or implied
 * warranty.
-*
+* 
 * THIS SOFTWARE IS PROVIDED BY M.I.T. ``AS IS''.  M.I.T. DISCLAIMS
 * ALL EXPRESS OR IMPLIED WARRANTIES WITH REGARD TO THIS SOFTWARE,
 * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -37,10 +37,10 @@
 
 #include <util/system/compat.h>   /* stricmp */
 #include <util/system/yassert.h>
-#include "httpdate.h"
+#include "httpdate.h" 
 #include <util/datetime/base.h>
 
-static const char *wkdays[] = {
+static const char *wkdays[] = { 
     "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 };
 
@@ -73,8 +73,8 @@ char* format_http_date(time_t when, char* buf, size_t buflen) {
 
     Y_ASSERT(len > 0 && size_t(len) < buflen);
 
-    return buf;
-}
+    return buf; 
+} 
 
 TString FormatHttpDate(time_t when) {
     char str[64] = {0};

@@ -1,11 +1,11 @@
 #pragma once
-
+ 
 #include "defaults.h"
 
 #include <cstdarg>
 
 #include <csignal>
-
+ 
 #if defined(_unix_)
     #include <unistd.h>
 #endif
@@ -14,10 +14,10 @@
     #include <process.h>
 #endif
 
-extern "C" {
+extern "C" { 
 #if defined(_win_)
     using pid_t = int;
-
+ 
     inline unsigned int alarm(unsigned int /*seconds*/) {
         return 0; // no alarm is currently set :)
     }

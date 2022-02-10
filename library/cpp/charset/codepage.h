@@ -13,19 +13,19 @@
 
 #include <cctype>
 
-struct CodePage;
-struct Recoder;
-struct Encoder;
-
+struct CodePage; 
+struct Recoder; 
+struct Encoder; 
+ 
 /*****************************************************************\
 *                    struct CodePage                              *
 \*****************************************************************/
-struct CodePage {
+struct CodePage { 
     ECharset CPEnum;       // int MIBEnum;
     const char* Names[30]; // name[0] -- preferred mime-name
     wchar32 unicode[256];
     const char* DefaultChar; //[CCL_NUM]
-
+ 
     bool IsLower(unsigned char ch) const {
         return ::IsLower(unicode[ch]);
     }
@@ -77,12 +77,12 @@ struct CodePage {
     inline unsigned char ToUpper(unsigned char ch) const;
     inline unsigned char ToLower(unsigned char ch) const;
     inline unsigned char ToTitle(unsigned char ch) const;
-
+ 
     inline int ToDigit(unsigned char ch) const {
         return ::ToDigit(unicode[ch]);
     }
 
-    static void Initialize();
+    static void Initialize(); 
 
     inline bool SingleByteCodepage() const {
         return DefaultChar != nullptr;
@@ -90,7 +90,7 @@ struct CodePage {
     inline bool NativeCodepage() const {
         return SingleByteCodepage() || CPEnum == CODES_UTF8;
     }
-};
+}; 
 
 class TCodePageHash;
 
@@ -151,7 +151,7 @@ inline bool ValidCodepage(ECharset e) {
 
 inline const CodePage* CodePageByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().Get(e);
-}
+} 
 
 ECharset CharsetByName(TStringBuf name);
 
@@ -176,7 +176,7 @@ inline const char* NameByCharsetSafe(ECharset e) {
 inline const char* NameByCodePage(const CodePage* CP) {
     return CP->Names[0];
 }
-
+ 
 inline const CodePage* CodePageByName(const char* name) {
     ECharset code = CharsetByName(name);
     if (code == CODES_UNKNOWN)
@@ -190,7 +190,7 @@ ECharset EncodingHintByName(const char* name);
 /*****************************************************************\
 *                    struct Encoder                               *
 \*****************************************************************/
-struct Encoder {
+struct Encoder { 
     char* Table[256];
     const char* DefaultChar;
 
@@ -198,7 +198,7 @@ struct Encoder {
         if (ch > 0xFFFF)
             return 0;
         return (unsigned char)Table[(ch >> 8) & 255][ch & 255];
-    }
+    } 
 
     inline char Tr(wchar32 ch) const {
         char code = Code(ch);
@@ -206,11 +206,11 @@ struct Encoder {
             code = DefaultChar[NUnicode::CharType(ch)];
         Y_ASSERT(code != 0 || ch == 0);
         return code;
-    }
+    } 
 
     inline unsigned char operator[](wchar32 ch) const {
-        return Tr(ch);
-    }
+        return Tr(ch); 
+    } 
 
     void Tr(const wchar32* in, char* out, size_t len) const;
     void Tr(const wchar32* in, char* out) const;
@@ -220,27 +220,27 @@ struct Encoder {
 /*****************************************************************\
 *                    struct Recoder                               *
 \*****************************************************************/
-struct Recoder {
+struct Recoder { 
     unsigned char Table[257];
 
     void Create(const CodePage& source, const CodePage& target);
     void Create(const CodePage& source, const Encoder* wideTarget);
-
+ 
     void Create(const CodePage& page, wchar32 (*mapper)(wchar32));
     void Create(const CodePage& page, const Encoder* widePage, wchar32 (*mapper)(wchar32));
 
     inline unsigned char Tr(unsigned char c) const {
-        return Table[c];
-    }
+        return Table[c]; 
+    } 
     inline unsigned char operator[](unsigned char c) const {
-        return Table[c];
-    }
+        return Table[c]; 
+    } 
     void Tr(const char* in, char* out, size_t len) const;
     void Tr(const char* in, char* out) const;
     void Tr(char* in_out, size_t len) const;
     void Tr(char* in_out) const;
-};
-
+}; 
+ 
 extern const struct Encoder& WideCharToYandex;
 
 const Encoder& EncoderByCharset(ECharset enc);
@@ -276,16 +276,16 @@ inline const Encoder& EncoderByCharset(ECharset enc) {
 
 inline unsigned char CodePage::ToUpper(unsigned char ch) const {
     return NCodepagePrivate::TCodePageData::rcdr_to_upper[CPEnum].Table[ch];
-}
+} 
 inline unsigned char CodePage::ToLower(unsigned char ch) const {
     return NCodepagePrivate::TCodePageData::rcdr_to_lower[CPEnum].Table[ch];
-}
+} 
 inline unsigned char CodePage::ToTitle(unsigned char ch) const {
     return NCodepagePrivate::TCodePageData::rcdr_to_title[CPEnum].Table[ch];
-}
-
+} 
+ 
 extern const CodePage& csYandex;
-
+ 
 /// these functions change (lowers) [end] position in case of utf-8
 /// null character is NOT assumed or written at [*end]
 void DecodeUnknownPlane(wchar16* start, wchar16*& end, const ECharset enc4unk);

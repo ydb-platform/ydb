@@ -19,7 +19,7 @@
 #include "strbase.h"
 #include "strbuf.h"
 #include "string_hash.h"
-
+ 
 #if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled)
     #include "hide_ptr.h"
 #endif
@@ -306,7 +306,7 @@ public:
         return ConstRef().c_str();
     }
 
-    // ~~~ STL compatible method to obtain data pointer ~~~
+    // ~~~ STL compatible method to obtain data pointer ~~~ 
     iterator begin() {
         return &*MutRef().begin();
     }
@@ -314,7 +314,7 @@ public:
     iterator vend() {
         return &*MutRef().end();
     }
-
+ 
     reverse_iterator rbegin() {
         return reverse_iterator(vend());
     }
@@ -1092,7 +1092,7 @@ public:
 
         return *this;
     }
-
+ 
     TBasicString& replace(size_t pos, size_t n, const TCharType* s, size_t len) Y_NOEXCEPT {
         MutRef().replace(pos, n, s, len);
 
@@ -1116,7 +1116,7 @@ public:
 
         return *this;
     }
-
+ 
     void swap(TBasicString& s) noexcept {
 #ifdef TSTRING_IS_STD_STRING
         std::swap(Storage_, s.Storage_);

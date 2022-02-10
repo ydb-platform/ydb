@@ -8,7 +8,7 @@
 #include <cstring>
 #include <cstdarg>
 #include <cstdlib>
-
+ 
 #include <util/generic/string.h>
 
 #ifdef _win_

@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <memory>
 
 template <class Allocator, class T>

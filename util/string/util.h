@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 //THIS FILE A COMPAT STUB HEADER
 
 #include <cstring>

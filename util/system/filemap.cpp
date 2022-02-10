@@ -6,7 +6,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/yexception.h>
 #include <util/generic/singleton.h>
-
+ 
 #if defined(_win_)
     #include "winint.h"
 #elif defined(_unix_)
@@ -28,8 +28,8 @@
     #endif
 #else
     #error todo
-#endif
-
+#endif 
+ 
 #include <util/generic/utility.h>
 #include <util/system/sanitizers.h>
 #include "filemap.h"
@@ -254,7 +254,7 @@ public:
             result.Ptr = PtrStart_ ? static_cast<caddr_t>(PtrStart_) + base : nullptr;
         }
     #endif
-#endif
+#endif 
         if (result.Ptr != nullptr || size == 0) { // allow map of size 0
             result.Size = size;
         } else {
@@ -284,8 +284,8 @@ public:
         }
     #endif
     }
-#endif
-
+#endif 
+ 
     void SetSequential() {
 #if defined(_unix_)
         if (!(Mode_ & oNotGreedy) && Length_) {

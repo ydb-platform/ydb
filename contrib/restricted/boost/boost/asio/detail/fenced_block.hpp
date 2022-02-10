@@ -25,7 +25,7 @@
 #elif defined(__MACH__) && defined(__APPLE__)
 # include <boost/asio/detail/macos_fenced_block.hpp>
 #elif defined(__sun)
-# error include <boost/asio/detail/solaris_fenced_block.hpp>
+# error include <boost/asio/detail/solaris_fenced_block.hpp> 
 #elif defined(__GNUC__) && defined(__arm__) \
   && !defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)
 # include <boost/asio/detail/gcc_arm_fenced_block.hpp>

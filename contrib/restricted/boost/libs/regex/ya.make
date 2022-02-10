@@ -16,10 +16,10 @@ PEERDIR(
     contrib/libs/icu
 )
 
-CFLAGS(
-    -DBOOST_HAS_ICU
-)
-
+CFLAGS( 
+    -DBOOST_HAS_ICU 
+) 
+ 
 SRCS(
     src/c_regex_traits.cpp
     src/cpp_regex_traits.cpp

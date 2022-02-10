@@ -908,9 +908,9 @@ namespace detail
 
    ~directory_iterator() {}
 
-    directory_iterator& increment(system::error_code& ec) BOOST_NOEXCEPT
+    directory_iterator& increment(system::error_code& ec) BOOST_NOEXCEPT 
     { 
-      detail::directory_iterator_increment(*this, &ec);
+      detail::directory_iterator_increment(*this, &ec); 
       return *this;
     }
 

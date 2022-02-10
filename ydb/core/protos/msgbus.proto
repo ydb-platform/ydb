@@ -157,7 +157,7 @@ message TResponse {
         ]}
     ];  // Program "exit code": see NMiniKQL::IEngine::EStatus.
 
-    optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 103;
+    optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 103; 
 
     optional bytes MiniKQLErrors = 104;
     optional bytes DataShardErrors = 105;
@@ -165,10 +165,10 @@ message TResponse {
     repeated bytes UnresolvedKeys = 107; // text for each key
     optional NKikimrQueryStats.TTxStats TxStats = 111;
 
-    optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108;
+    optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108; 
     optional bool HadFollowerReads = 109;
     optional bytes SerializedReadTableResponse = 110; // Serialized Ydb.Db.TResultSet
-
+ 
     optional uint32 BSAssignedID = 40;
 
     optional NKikimrTxUserProxy.TTxProxyTimings ProxyTimings = 50;

@@ -1,6 +1,6 @@
-#include "objects.h"
-
-
-namespace NKikimr {
-
-} // namespace NKikimr
+#include "objects.h" 
+ 
+ 
+namespace NKikimr { 
+ 
+} // namespace NKikimr 

@@ -1,9 +1,9 @@
-#include "msgbus.h"
+#include "msgbus.h" 
 #include "msgbus_status.h"
-
-namespace NKikimr {
-namespace NMsgBusProxy {
-
+ 
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
 void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& description) {
     name = ToString(status);
     description = "Unknown status";
@@ -59,5 +59,5 @@ void ExplainResponseStatus(ui32 status, TString& name, TString& description) {
     }
 }
 
-} // namespace NKikimr
-} // namespace NMsgBusProxy
+} // namespace NKikimr 
+} // namespace NMsgBusProxy 

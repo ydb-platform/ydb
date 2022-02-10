@@ -623,7 +623,7 @@ namespace Tests {
             TActorId compileServiceId = Runtime->Register(compileService, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(MakeMiniKQLCompileServiceID(), compileServiceId, nodeIdx);
         }
-
+ 
         {
             IActor* longTxService = NLongTxService::CreateLongTxService();
             TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx);
@@ -913,7 +913,7 @@ namespace Tests {
         ClientConfig.Port = serverSetup.Port;
         ClientConfig.BusSessionConfig.TotalTimeout = Max<int>() / 2;
         ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds;
-        ClientConfig.BusSessionConfig.NumRetries = 10;
+        ClientConfig.BusSessionConfig.NumRetries = 10; 
         Client.reset(new NMsgBusProxy::TMsgBusClient(ClientConfig));
         Client->Init();
     }

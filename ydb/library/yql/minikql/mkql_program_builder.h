@@ -32,7 +32,7 @@ enum class EJoinKind {
     SemiSide = 16,
     Cross = 32
 };
-
+ 
 enum class EDictItems {
     Both = 0,
     Keys = 1,
@@ -128,12 +128,12 @@ public:
     //-- literal functions
     TRuntimeNode NewVoid();
     TRuntimeNode NewNull();
-
+ 
     TType* NewDataType(NUdf::TDataTypeId schemeType, bool optional = false);
     TType* NewDataType(NUdf::EDataSlot slot, bool optional = false) {
         return NewDataType(NUdf::GetDataTypeInfo(slot).TypeId, optional);
     }
-
+ 
     TType* NewDecimalType(ui8 precision, ui8 scale);
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
@@ -154,28 +154,28 @@ public:
 
     TRuntimeNode NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui8 precision, ui8 scale) const;
 
-    TType* NewOptionalType(TType* itemType);
+    TType* NewOptionalType(TType* itemType); 
     TRuntimeNode NewEmptyOptional(TType* optionalType);
     TRuntimeNode NewEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType);
-    TRuntimeNode NewOptional(TRuntimeNode data);
-    TRuntimeNode NewOptional(TType* optionalType, TRuntimeNode data);
-
+    TRuntimeNode NewOptional(TRuntimeNode data); 
+    TRuntimeNode NewOptional(TType* optionalType, TRuntimeNode data); 
+ 
     TType* NewEmptyStructType();
     TType* NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType);
     TType* NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes);
     TType* NewArrayType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes);
-    TRuntimeNode NewEmptyStruct();
+    TRuntimeNode NewEmptyStruct(); 
     TRuntimeNode NewStruct(const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members);
     TRuntimeNode NewStruct(TType* structType, const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members);
-
+ 
     TType* NewListType(TType* itemType);
     TRuntimeNode NewEmptyList(TType* itemType);
     TRuntimeNode NewEmptyListOfVoid();
     TRuntimeNode NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items);
-
+ 
     TType* NewDictType(TType* keyType, TType* payloadType, bool multi);
     TRuntimeNode NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items);
-
+ 
     TType* NewStreamType(TType* itemType);
     TType* NewFlowType(TType* itemType);
     TType* NewTaggedType(TType* baseType, const std::string_view& tag);

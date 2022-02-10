@@ -1702,18 +1702,18 @@ namespace NActors {
     }
 
     TActorSystem* TTestActorRuntimeBase::GetAnyNodeActorSystem() {
-        for (auto& x : Nodes) {
-            return x.second->ActorSystem.Get();
-        }
+        for (auto& x : Nodes) { 
+            return x.second->ActorSystem.Get(); 
+        } 
         Y_FAIL("Don't use this method.");
-    }
-
+    } 
+ 
     TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
         auto it = Nodes.find(GetNodeId(nodeId));
         Y_VERIFY(it != Nodes.end());
         return it->second->ActorSystem.Get();
     }
-
+ 
 
     TEventMailBox& TTestActorRuntimeBase::GetMailbox(ui32 nodeId, ui32 hint) {
         TGuard<TMutex> guard(Mutex);

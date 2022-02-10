@@ -4,7 +4,7 @@
 
 #include <library/cpp/http/misc/httpcodes.h>
 
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/system/defaults.h>
@@ -45,7 +45,7 @@ namespace NRainCheck {
 
         ui32 GetHttpCode() const;
         TString GetResponseBody() const;
-
+ 
         bool HasError() const;
         EError GetErrorCode() const;
         TString GetErrorDescription() const;

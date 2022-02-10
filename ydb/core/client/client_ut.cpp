@@ -12,7 +12,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/diff/diff.h>
-
+ 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
@@ -30,7 +30,7 @@ namespace Tests {
 //    const ui32 TestDomain = 1;
 
 static const TString TablePlacement = "/dc-1/Berkanavt/tables";
-
+ 
 namespace {
 
 void SetupLogging(TServer& server) {
@@ -43,7 +43,7 @@ void SetupLogging(TServer& server) {
     server.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
 #endif
 }
-
+ 
 // Creates test tables on ctor and deletes on dtor
 struct TTestTables {
     enum EVariant {
@@ -56,7 +56,7 @@ struct TTestTables {
         Sharded_SoftUpdates,
         Sharded_OutOfOrder_SoftUpdates,
     };
-
+ 
     struct TOpts {
         bool Sharded = false;
         bool OutOfOrder = false;
@@ -85,7 +85,7 @@ struct TTestTables {
             default:
                 break;
             }
-
+ 
             switch (var) {
             case Sharded_NoOpts:
             case Sharded_OutOfOrder:
@@ -943,7 +943,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )___";
 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
+ 
         NKikimrMiniKQL::TResult updateRes;
         const TString updateQuery = R"___(
             (
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     (return params)
                 )
             )___";
-
+ 
             UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
 
             {
@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )___";
 
             UNIT_ASSERT(client.Compile(readQuery, binQuery));
-
+ 
             const TString readParams = R"___(
                 (
                     (let params (Parameters))
@@ -1259,7 +1259,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     ))
                 )
             )___";
-
+ 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
             {
@@ -2868,6 +2868,6 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
 }
 
-} // namespace Tests
-} // namespace NKikimr
-
+} // namespace Tests 
+} // namespace NKikimr 
+ 

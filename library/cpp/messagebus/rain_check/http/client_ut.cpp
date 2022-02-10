@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "client.h"
-#include "http_code_extractor.h"
+#include "http_code_extractor.h" 
 
 #include <library/cpp/messagebus/rain_check/test/ut/test.h>
 
@@ -173,26 +173,26 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
 
         env.TestSync.WaitForAndIncrement(1);
     }
-
+ 
     Y_UNIT_TEST(HttpCodeExtraction) {
     // Find "request failed(" string, then copy len("HTTP/1.X NNN") chars and try to convert NNN to HTTP code.
-
+ 
 #define CHECK_VALID_LINE(line, code)                                    \
     UNIT_ASSERT_NO_EXCEPTION(TryGetHttpCodeFromErrorDescription(line)); \
     UNIT_ASSERT(!!TryGetHttpCodeFromErrorDescription(line));            \
     UNIT_ASSERT_EQUAL(*TryGetHttpCodeFromErrorDescription(line), code)
-
+ 
         CHECK_VALID_LINE(TStringBuf("library/cpp/neh/http.cpp:<LINE>: request failed(HTTP/1.0 200 Some random message"), 200);
         CHECK_VALID_LINE(TStringBuf("library/cpp/neh/http.cpp:<LINE>: request failed(HTTP/1.0 404 Some random message"), 404);
         CHECK_VALID_LINE(TStringBuf("request failed(HTTP/1.0 100 Some random message"), 100);
         CHECK_VALID_LINE(TStringBuf("request failed(HTTP/1.0 105)"), 105);
         CHECK_VALID_LINE(TStringBuf("request failed(HTTP/1.1 2004 Some random message"), 200);
-#undef CHECK_VALID_LINE
-
+#undef CHECK_VALID_LINE 
+ 
 #define CHECK_INVALID_LINE(line)                                        \
     UNIT_ASSERT_NO_EXCEPTION(TryGetHttpCodeFromErrorDescription(line)); \
     UNIT_ASSERT(!TryGetHttpCodeFromErrorDescription(line))
-
+ 
         CHECK_INVALID_LINE(TStringBuf("library/cpp/neh/http.cpp:<LINE>: request failed(HTTP/1.1 1 Some random message"));
         CHECK_INVALID_LINE(TStringBuf("request failed(HTTP/1.0 asdf Some random message"));
         CHECK_INVALID_LINE(TStringBuf("HTTP/1.0 200 Some random message"));
@@ -200,6 +200,6 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
         CHECK_INVALID_LINE(TStringBuf("HTTP/1.0 200 Some random message"));
         CHECK_INVALID_LINE(TStringBuf("HTTP/1.0 200"));
         CHECK_INVALID_LINE(TStringBuf("request failed(HTTP/1.1  3334 Some random message"));
-#undef CHECK_INVALID_LINE
-    }
+#undef CHECK_INVALID_LINE 
+    } 
 }

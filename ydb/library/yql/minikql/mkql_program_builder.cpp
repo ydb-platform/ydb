@@ -231,7 +231,7 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
     switch (type) {
 #define MKQL_SCRIPT_TYPE_CASE(name, value, ...) \
     case EScriptType::name: return std::string_view(#name);
-
+ 
         MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_CASE)
 
 #undef MKQL_SCRIPT_TYPE_CASE
@@ -1999,8 +1999,8 @@ TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const
 TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) {
     TListLiteralBuilder builder(Env, itemType);
     return TRuntimeNode(builder.Build(), true);
-}
-
+} 
+ 
 TRuntimeNode TProgramBuilder::NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items) {
     TListLiteralBuilder builder(Env, itemType);
     for (auto item : items) {

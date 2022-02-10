@@ -1,27 +1,27 @@
-#include "yql_expr.h"
+#include "yql_expr.h" 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/string/hex.h>
-
-namespace NYql {
-
+ 
+#include <util/string/hex.h> 
+ 
+namespace NYql { 
+ 
 Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
-    static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
-        TAstParseResult res = ParseAst(s);
+    static TAstParseResult ParseAstWithCheck(const TStringBuf& s) { 
+        TAstParseResult res = ParseAst(s); 
         res.Issues.PrintTo(Cout);
-        UNIT_ASSERT(res.IsOk());
-        return res;
-    }
-
+        UNIT_ASSERT(res.IsOk()); 
+        return res; 
+    } 
+ 
     static void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
         const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
-
-        UNIT_ASSERT(success);
+ 
+        UNIT_ASSERT(success); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->GetState(), typeAnnotationIndex != Max<ui32>() ? TExprNode::EState::TypeComplete : TExprNode::EState::Initial);
-    }
-
+    } 
+ 
     static void CompileExprWithCheck(TAstNode& root, TLibraryCohesion& cohesion, TExprContext& exprCtx) {
         const bool success = CompileExpr(root, cohesion, exprCtx);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
@@ -30,27 +30,27 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
     }
 
     static bool ParseAndCompile(const TString& program) {
-        TAstParseResult astRes = ParseAstWithCheck(program);
-        TExprContext exprCtx;
+        TAstParseResult astRes = ParseAstWithCheck(program); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
         bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
         return result;
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestNoReturn1) {
-        auto s = "(\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
-
+        auto s = "(\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
+ 
     Y_UNIT_TEST(TestNoReturn2) {
-        auto s = "(\n"
-            "(let x 'y)\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
-
+        auto s = "(\n" 
+            "(let x 'y)\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
+ 
     Y_UNIT_TEST(TestExportInsteadOfReturn) {
         const auto s =
             "# library\n"
@@ -63,25 +63,25 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
     }
 
     Y_UNIT_TEST(TestLeftAfterReturn) {
-        auto s = "(\n"
-            "(return 'x)\n"
-            "(let x 'y)\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
-
+        auto s = "(\n" 
+            "(return 'x)\n" 
+            "(let x 'y)\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
+ 
     Y_UNIT_TEST(TestReturn) {
-        auto s = "(\n"
-            "(return world)\n"
-            ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+        auto s = "(\n" 
+            "(return world)\n" 
+            ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::World);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestExport) {
         auto s = "(\n"
             "(let X 'Y)\n"
@@ -115,104 +115,104 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
     }
 
     Y_UNIT_TEST(TestArbitraryAtom) {
-        auto s = "(\n"
+        auto s = "(\n" 
             "(let x '\"\\x01\\x23\\x45\\x67\\x89\\xAB\\xCD\\xEF\")"
-            "(return x)\n"
-            ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+            "(return x)\n" 
+            ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "0123456789ABCDEF");
         UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::ArbitraryContent);
-
+ 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
-        TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
+        TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1); 
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
-        UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
-    }
-
+        UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent); 
+    } 
+ 
     Y_UNIT_TEST(TestBinaryAtom) {
-        auto s = "(\n"
-            "(let x 'x\"FEDCBA9876543210\")"
-            "(return x)\n"
-            ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+        auto s = "(\n" 
+            "(let x 'x\"FEDCBA9876543210\")" 
+            "(return x)\n" 
+            ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "FEDCBA9876543210");
         UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::BinaryContent);
-
+ 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
-        UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
-    }
-
+        UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent); 
+    } 
+ 
     Y_UNIT_TEST(TestLet) {
-        auto s = "(\n"
-        "(let x 'y)\n"
-        "(return x)\n"
-        ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+        auto s = "(\n" 
+        "(let x 'y)\n" 
+        "(return x)\n" 
+        ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "y");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestComplexQuote) {
-        auto s = "(\n"
-            "(let x 'a)\n"
-            "(let y 'b)\n"
-            "(let z (quote (x y)))\n"
-            "(return z)\n"
-            ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+        auto s = "(\n" 
+            "(let x 'a)\n" 
+            "(let y 'b)\n" 
+            "(let z (quote (x y)))\n" 
+            "(return z)\n" 
+            ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "a");
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "b");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestEmptyReturn) {
-        auto s = "(\n"
-            "(return)\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
-
+        auto s = "(\n" 
+            "(return)\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
+ 
     Y_UNIT_TEST(TestManyReturn) {
-        auto s = "(\n"
-            "(return world world)\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
-
+        auto s = "(\n" 
+            "(return world world)\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
+ 
     Y_UNIT_TEST(TestUnknownFunction) {
-        auto s = "(\n"
-            "(let a '2)\n"
-            "(let x (+ a '3))\n"
-            "(return x)\n"
-            ")\n";
-
-        TAstParseResult astRes = ParseAstWithCheck(s);
-        TExprContext exprCtx;
+        auto s = "(\n" 
+            "(let a '2)\n" 
+            "(let x (+ a '3))\n" 
+            "(return x)\n" 
+            ")\n"; 
+ 
+        TAstParseResult astRes = ParseAstWithCheck(s); 
+        TExprContext exprCtx; 
         TExprNode::TPtr exprRoot;
-        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
+        CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx); 
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "+");
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2);
@@ -220,15 +220,15 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "2");
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "3");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestReturnTwice) {
-        auto s = "(\n"
-            "(return)\n"
-            "(return)\n"
-            ")\n";
-        UNIT_ASSERT(false == ParseAndCompile(s));
-    }
+        auto s = "(\n" 
+            "(return)\n" 
+            "(return)\n" 
+            ")\n"; 
+        UNIT_ASSERT(false == ParseAndCompile(s)); 
+    } 
 
     Y_UNIT_TEST(TestDeclareNonTop) {
         const auto s = R"(
@@ -303,8 +303,8 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Callable);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "DataType");
     }
-}
-
+} 
+ 
 Y_UNIT_TEST_SUITE(TCompareExprTrees) {
     void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition> *const diffPositions = nullptr) {
         const auto progOne(ParseAst(one)), progTwo(ParseAst(two));
@@ -1215,4 +1215,4 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
     }
 }
 
-} // namespace NYql
+} // namespace NYql 

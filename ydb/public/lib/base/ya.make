@@ -1,22 +1,22 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     ddoarn
     g:kikimr
 )
-
-SRCS(
-    defs.h
+ 
+SRCS( 
+    defs.h 
     msgbus_status.h
-    msgbus.h
-    msgbus.cpp
-)
-
-PEERDIR(
+    msgbus.h 
+    msgbus.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/deprecated/enum_codegen
     library/cpp/messagebus
     library/cpp/messagebus/protobuf
     ydb/core/protos
-)
-
-END()
+) 
+ 
+END() 

@@ -185,12 +185,12 @@ NBus::EMessageStatus TMsgBusClient::AsyncCall(TAutoPtr<NBus::TBusMessage> msg, T
     return status;
 }
 
-void TMsgBusClient::OnResult(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> pReply) {
+void TMsgBusClient::OnResult(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status, TAutoPtr<NBus::TBusMessage> pReply) { 
     static_cast<TMessageCookie*>(pMessage->Data)->Signal(pMessage, status, pReply);
 }
 
 void TMsgBusClient::OnReply(TAutoPtr<NBus::TBusMessage> pMessage, TAutoPtr<NBus::TBusMessage> pReply) {
-    OnResult(pMessage, NBus::MESSAGE_OK, pReply);
+    OnResult(pMessage, NBus::MESSAGE_OK, pReply); 
 }
 
 void TMsgBusClient::OnError(TAutoPtr<NBus::TBusMessage> pMessage, NBus::EMessageStatus status) {

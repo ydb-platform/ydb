@@ -1,20 +1,20 @@
-LIBRARY()
-
-OWNER(vvvv)
-
-SRCS(
-    compile_context.cpp
-    compile_context.h
-    compile_result.cpp
-    compile_result.h
-    db_key_resolver.cpp
-    db_key_resolver.h
+LIBRARY() 
+ 
+OWNER(vvvv) 
+ 
+SRCS( 
+    compile_context.cpp 
+    compile_context.h 
+    compile_result.cpp 
+    compile_result.h 
+    db_key_resolver.cpp 
+    db_key_resolver.h 
     mkql_compile_service.cpp
-    yql_expr_minikql.cpp
-    yql_expr_minikql.h
-)
-
-PEERDIR(
+    yql_expr_minikql.cpp 
+    yql_expr_minikql.h 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/threading/future
     ydb/core/base
@@ -25,8 +25,8 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/mkql
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
 END()

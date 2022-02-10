@@ -1,21 +1,21 @@
-#pragma once
-
-#include "objects.h"
-
+#pragma once 
+ 
+#include "objects.h" 
+ 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+ 
 
-
-namespace NKikimrMiniKQL {
-class TValue;
-class TType;
-} // namespace NKikimrMiniKQL
-
-
-namespace NKikimr {
+namespace NKikimrMiniKQL { 
+class TValue; 
+class TType; 
+} // namespace NKikimrMiniKQL 
+ 
+ 
+namespace NKikimr { 
 namespace NResultLib {
-
-TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type);
-
+ 
+TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type); 
+ 
 // convert C++ API result
 inline TStruct ConvertResult(const NKikimr::NClient::TQueryResult& apiResult) {
     const NKikimrClient::TResponse& response = apiResult.GetResult<NKikimrClient::TResponse>();
@@ -26,4 +26,4 @@ inline TStruct ConvertResult(const NKikimr::NClient::TQueryResult& apiResult) {
 }
 
 } // namespace NResultLib
-} // namespace NKikimr
+} // namespace NKikimr 

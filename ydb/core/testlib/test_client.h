@@ -1,6 +1,6 @@
 #pragma once
-#include "tablet_helpers.h"
-
+#include "tablet_helpers.h" 
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet_types.h>
@@ -284,8 +284,8 @@ namespace Tests {
         const NScheme::TTypeRegistry& GetTypeRegistry() const;
         const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const;
         const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const;
-
-        template <typename T>
+ 
+        template <typename T> 
         void PrepareRequest(TAutoPtr<T>&) {}
 
         void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusRequest>& request) {
@@ -319,19 +319,19 @@ namespace Tests {
             const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS;
             PrepareRequest(msgHolder);
             while (TInstant::Now().MilliSeconds() < finishTimeMs) {
-                T* msgCopy(new T());
-                msgCopy->Record = msgHolder->Record;
-                msgbusStatus = Client->SyncCall(msgCopy, reply);
-                if (msgbusStatus == NBus::MESSAGE_CONNECT_FAILED) {
+                T* msgCopy(new T()); 
+                msgCopy->Record = msgHolder->Record; 
+                msgbusStatus = Client->SyncCall(msgCopy, reply); 
+                if (msgbusStatus == NBus::MESSAGE_CONNECT_FAILED) { 
                     Sleep(ITERATION_DURATION);
-                    continue;
-                } else {
-                    break;
-                }
-            }
-            return msgbusStatus;
-        }
-
+                    continue; 
+                } else { 
+                    break; 
+                } 
+            } 
+            return msgbusStatus; 
+        } 
+ 
         static ui64 GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect);
         void WaitRootIsUp(const TString& root);
         TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
@@ -341,7 +341,7 @@ namespace Tests {
         void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
         TString StartTrace(const TString &path);
         void StopTrace();
-
+ 
         // Flat DB operations
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);
         NMsgBusProxy::EResponseStatus MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf = {});

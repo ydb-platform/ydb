@@ -100,7 +100,7 @@ public:
         }
         order.resize(km);
         memset(&order[0], 0, order.size()); // if some atoms are absent
-        for (const_iterator I = this->begin(); I != end(); ++I)
+        for (const_iterator I = this->begin(); I != end(); ++I) 
             order[(*I).second - 1] = (*I).first;
     }
 };

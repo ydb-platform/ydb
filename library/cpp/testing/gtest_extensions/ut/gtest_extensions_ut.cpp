@@ -1,49 +1,49 @@
 #include <library/cpp/testing/gtest/gtest.h>
-
+ 
 #include <util/generic/string.h>
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
-
-namespace {
-    class IMock {
-    public:
-        virtual void M1(const TStringBuf&) = 0;
-        virtual void M2(TStringBuf) = 0;
-        virtual void M3(const TString&) = 0;
-        virtual void M4(TString) = 0;
-    };
-
-    class TSampleMock : IMock {
-    public:
-        MOCK_METHOD(void, M1, (const TStringBuf&));
-        MOCK_METHOD(void, M2, (TStringBuf));
-        MOCK_METHOD(void, M3, (const TString&));
-        MOCK_METHOD(void, M4, (TString));
-    };
-}
-
-
+ 
+namespace { 
+    class IMock { 
+    public: 
+        virtual void M1(const TStringBuf&) = 0; 
+        virtual void M2(TStringBuf) = 0; 
+        virtual void M3(const TString&) = 0; 
+        virtual void M4(TString) = 0; 
+    }; 
+ 
+    class TSampleMock : IMock { 
+    public: 
+        MOCK_METHOD(void, M1, (const TStringBuf&)); 
+        MOCK_METHOD(void, M2, (TStringBuf)); 
+        MOCK_METHOD(void, M3, (const TString&)); 
+        MOCK_METHOD(void, M4, (TString)); 
+    }; 
+} 
+ 
+ 
 TEST(MatchersSpecializations, String) {
     TSampleMock mock;
-
+ 
     TStringBuf simpleStringBuf = "SimpleStringBuf";
     const TStringBuf constSimpleStringBuf = "ConstSimpleStringBuf";
-
+ 
     TString simpleString = "SimpleString";
     const TString constSimpleString = "ConstSimpleString";
-
+ 
     EXPECT_CALL(mock, M1("ConstSimpleStringBuf")).Times(1);
     EXPECT_CALL(mock, M2("SimpleStringBuf")).Times(1);
     EXPECT_CALL(mock, M3("ConstSimpleString")).Times(1);
     EXPECT_CALL(mock, M4("SimpleString")).Times(1);
-
+ 
     mock.M1(constSimpleStringBuf);
     mock.M2(simpleStringBuf);
     mock.M3(constSimpleString);
     mock.M4(simpleString);
 }
-
+ 
 template <typename T, typename M>
 std::pair<bool, std::string> Match(T&& t, M&& m) {
     testing::StringMatchResultListener listener;
@@ -233,9 +233,9 @@ struct TThrowsOnMove {
     TThrowsOnMove() = default;
     TThrowsOnMove(TThrowsOnMove&&) {
         ythrow yexception() << "move failed";
-    }
+    } 
 };
-
+ 
 TEST(PrettyPrinters, String) {
     EXPECT_EQ(GtestPrint(TString("hello world")), "\"hello world\"");
     EXPECT_EQ(GtestPrint(TStringBuf("hello world")), "\"hello world\"");

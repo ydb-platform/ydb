@@ -99,7 +99,7 @@ float RandomNumber<float>() {
 
     do {
         ret = (float)GetRndGen<ui64>()->GenRandReal2();
-    } while (ret >= 1);
+    } while (ret >= 1); 
 
     return ret;
 }

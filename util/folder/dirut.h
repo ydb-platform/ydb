@@ -86,7 +86,7 @@ bool SafeResolveDir(const char* path, TString& result);
 TString GetDirName(const TString& path);
 
 TString GetBaseName(const TString& path);
-
+ 
 TString StripFileComponent(const TString& fileName);
 
 class TExistenceChecker {

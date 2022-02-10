@@ -237,8 +237,8 @@ void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& 
 
 TStringBuf GetOnlyHost(const TStringBuf url) noexcept {
     return GetHost(CutSchemePrefix(url));
-}
-
+} 
+ 
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment) noexcept {
     const size_t off = url.find('/', GetHttpPrefixSize(url));
     TStringBuf hostUnused, path;

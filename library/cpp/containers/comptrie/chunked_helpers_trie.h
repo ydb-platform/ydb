@@ -100,10 +100,10 @@ public:
             return def;
         }
     }
-
+ 
     const TCompactTrie<char>& GetTrie() const {
-        return Trie;
-    }
+        return Trie; 
+    } 
 };
 
 template <typename T, bool sorted = false>

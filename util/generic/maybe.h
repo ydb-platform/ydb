@@ -233,11 +233,11 @@ public:
 
     template <class U = T>
     std::enable_if_t<TAssignableFromAny<U>::value, TMaybe&> operator=(U&& right) {
-        if (Defined()) { 
+        if (Defined()) {
             *Data() = std::forward<U>(right);
-        } else { 
+        } else {
             Init(std::forward<U>(right));
-        } 
+        }
         return *this;
     }
 
@@ -245,7 +245,7 @@ public:
     std::enable_if_t<TCopyAssignable<U>::value,
                      TMaybe&>
     operator=(const TMaybe<U, Policy>& right) {
-        if (right.Defined()) { 
+        if (right.Defined()) {
             if (Defined()) {
                 *Data() = right.GetRef();
             } else {
@@ -285,44 +285,44 @@ public:
     }
 
     void Clear() noexcept {
-        if (Defined()) { 
+        if (Defined()) {
             this->Defined_ = false;
             Data()->~T();
-        } 
+        }
     }
 
     constexpr bool Defined() const noexcept {
         return this->Defined_;
-    } 
+    }
 
     Y_PURE_FUNCTION constexpr bool Empty() const noexcept {
-        return !Defined(); 
+        return !Defined();
     }
 
     void CheckDefined() const {
         if (Y_UNLIKELY(!Defined())) {
             Policy::OnEmpty(typeid(TValueType));
-        } 
-    } 
- 
+        }
+    }
+
     const T* Get() const noexcept {
         return Defined() ? Data() : nullptr;
-    } 
- 
+    }
+
     T* Get() noexcept {
         return Defined() ? Data() : nullptr;
-    } 
- 
+    }
+
     constexpr const T& GetRef() const& {
         CheckDefined();
 
-        return *Data(); 
+        return *Data();
     }
 
     constexpr T& GetRef() & {
         CheckDefined();
 
-        return *Data(); 
+        return *Data();
     }
 
     constexpr const T&& GetRef() const&& {
@@ -338,11 +338,11 @@ public:
     }
 
     constexpr const T& operator*() const& {
-        return GetRef(); 
-    } 
+        return GetRef();
+    }
 
     constexpr T& operator*() & {
-        return GetRef(); 
+        return GetRef();
     }
 
     constexpr const T&& operator*() const&& {
@@ -354,29 +354,29 @@ public:
     }
 
     constexpr const T* operator->() const {
-        return &GetRef(); 
+        return &GetRef();
     }
 
     constexpr T* operator->() {
-        return &GetRef(); 
-    } 
- 
+        return &GetRef();
+    }
+
     constexpr const T& GetOrElse(const T& elseValue) const {
-        return Defined() ? *Data() : elseValue; 
-    } 
- 
+        return Defined() ? *Data() : elseValue;
+    }
+
     constexpr T& GetOrElse(T& elseValue) {
-        return Defined() ? *Data() : elseValue; 
-    } 
- 
+        return Defined() ? *Data() : elseValue;
+    }
+
     constexpr const TMaybe& OrElse(const TMaybe& elseValue) const noexcept {
-        return Defined() ? *this : elseValue; 
-    } 
- 
+        return Defined() ? *this : elseValue;
+    }
+
     constexpr TMaybe& OrElse(TMaybe& elseValue) {
-        return Defined() ? *this : elseValue; 
-    } 
- 
+        return Defined() ? *this : elseValue;
+    }
+
     template <typename U>
     TMaybe<U, Policy> Cast() const {
         return Defined() ? TMaybe<U, Policy>(*Data()) : TMaybe<U, Policy>();
@@ -432,20 +432,20 @@ public:
         Swap(other);
     }
 
-private: 
+private:
     constexpr const T* Data() const noexcept {
         return std::addressof(this->Data_);
-    } 
- 
+    }
+
     constexpr T* Data() noexcept {
         return std::addressof(this->Data_);
-    } 
- 
+    }
+
     template <typename... Args>
     void Init(Args&&... args) {
         new (Data()) T(std::forward<Args>(args)...);
         this->Defined_ = true;
-    } 
+    }
 };
 
 template <class T>

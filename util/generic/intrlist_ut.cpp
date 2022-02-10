@@ -95,9 +95,9 @@ public:
     }
 };
 
-struct TIntGreater: private TGreater<int> { 
+struct TIntGreater: private TGreater<int> {
     inline bool operator()(const TInt& l, const TInt& r) const noexcept {
-        return TGreater<int>::operator()(l, r); 
+        return TGreater<int>::operator()(l, r);
     }
 };
 
@@ -105,7 +105,7 @@ void TListTest::TestQuickSort() {
     TMyList l(1000);
     size_t c = 0;
 
-    l.QuickSort(TIntGreater()); 
+    l.QuickSort(TIntGreater());
 
     UNIT_ASSERT_EQUAL(l.Size(), 1000);
 
@@ -137,9 +137,9 @@ void TListTest::TestRIterate() {
     TMyList l(1000);
     size_t c = 1000;
 
-    UNIT_ASSERT_EQUAL(l.RBegin(), TMyList::TReverseIterator(l.End())); 
-    UNIT_ASSERT_EQUAL(l.REnd(), TMyList::TReverseIterator(l.Begin())); 
- 
+    UNIT_ASSERT_EQUAL(l.RBegin(), TMyList::TReverseIterator(l.End()));
+    UNIT_ASSERT_EQUAL(l.REnd(), TMyList::TReverseIterator(l.Begin()));
+
     for (TMyList::TReverseIterator it = l.RBegin(); it != l.REnd(); ++it) {
         UNIT_ASSERT_EQUAL(*it, (int)c--);
     }

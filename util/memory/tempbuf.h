@@ -68,7 +68,7 @@ private:
 
 public:
     TTempArray() = default;
- 
+
     TTempArray(size_t len)
         : TTempBuf(RawSize(len))
     {
@@ -77,11 +77,11 @@ public:
     T* Data() noexcept {
         return TypedPointer(TTempBuf::Data());
     }
- 
+
     const T* Data() const noexcept {
         return TypedPointer(TTempBuf::Data());
     }
- 
+
     T* Current() noexcept {
         return TypedPointer(TTempBuf::Current());
     }
@@ -89,7 +89,7 @@ public:
     const T* Current() const noexcept {
         return TypedPointer(TTempBuf::Current());
     }
- 
+
     size_t Size() const noexcept {
         return TypedSize(TTempBuf::Size());
     }

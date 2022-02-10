@@ -236,9 +236,9 @@ char* TTempBuf::Current() noexcept {
 }
 
 const char* TTempBuf::Current() const noexcept {
-    return Data() + Filled(); 
-} 
- 
+    return Data() + Filled();
+}
+
 size_t TTempBuf::Filled() const noexcept {
     return Impl_->Filled();
 }

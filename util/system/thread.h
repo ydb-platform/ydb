@@ -28,7 +28,7 @@ public:
         void* StackPointer;
         // See comments for `SetCurrentThreadName`
         TString Name = GetProgramName();
- 
+
         inline TParams()
             : Proc(nullptr)
             , Data(nullptr)
@@ -36,7 +36,7 @@ public:
             , StackPointer(nullptr)
         {
         }
- 
+
         inline TParams(TThreadProc proc, void* data)
             : Proc(proc)
             , Data(data)
@@ -156,15 +156,15 @@ private:
     class TImpl;
     THolder<TImpl> Impl_;
 };
- 
+
 class ISimpleThread: public TThread {
 public:
     ISimpleThread(size_t stackSize = 0);
- 
+
     virtual ~ISimpleThread() = default;
- 
+
     virtual void* ThreadProc() = 0;
-}; 
+};
 
 struct TCurrentThreadLimits {
     TCurrentThreadLimits() noexcept;

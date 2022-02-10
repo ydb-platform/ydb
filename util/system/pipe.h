@@ -73,8 +73,8 @@ public:
     bool IsOpen() const noexcept;
     PIPEHANDLE GetHandle() const noexcept;
 
-    size_t Read(void* buf, size_t len) const; 
-    size_t Write(const void* buf, size_t len) const; 
+    size_t Read(void* buf, size_t len) const;
+    size_t Write(const void* buf, size_t len) const;
 
     // Only CloseOnExec is supported
     static void Pipe(TPipe& reader, TPipe& writer, EOpenMode mode = 0);

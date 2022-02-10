@@ -49,10 +49,10 @@ void TSocketPoller::WaitWrite(SOCKET sock, void* cookie) {
     Impl_->Set(cookie, sock, CONT_POLL_WRITE);
 }
 
-void TSocketPoller::WaitReadWrite(SOCKET sock, void* cookie) { 
-    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_WRITE); 
-} 
- 
+void TSocketPoller::WaitReadWrite(SOCKET sock, void* cookie) {
+    Impl_->Set(cookie, sock, CONT_POLL_READ | CONT_POLL_WRITE);
+}
+
 void TSocketPoller::WaitRdhup(SOCKET sock, void* cookie) {
     Impl_->Set(cookie, sock, CONT_POLL_RDHUP);
 }

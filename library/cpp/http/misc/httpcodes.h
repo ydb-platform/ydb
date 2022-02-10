@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/strbuf.h> 
- 
+#include <util/generic/strbuf.h>
+
 enum HttpCodes {
     HTTP_CONTINUE = 100,
     HTTP_SWITCHING_PROTOCOLS = 101,
@@ -76,14 +76,14 @@ enum HttpCodes {
 };
 
 TStringBuf HttpCodeStrEx(int code) noexcept;
- 
+
 inline TStringBuf HttpCodeStr(int code) noexcept {
-    return HttpCodeStrEx(code).Skip(4); 
-} 
- 
+    return HttpCodeStrEx(code).Skip(4);
+}
+
 inline bool IsHttpCode(int code) noexcept {
     return HttpCodeStrEx(code).data() != HttpCodeStrEx(0).data();
-} 
+}
 
 inline bool IsUserError(int code) noexcept {
     return code >= 400 && code < 500;

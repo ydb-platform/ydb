@@ -373,10 +373,10 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
 
     Y_UNIT_TEST(TestFromString) {
         static const struct T {
-            const char* const Str; 
-            const TDuration::TValue MicroSeconds; 
+            const char* const Str;
+            const TDuration::TValue MicroSeconds;
             const bool Parseable;
-        } tests[] = { 
+        } tests[] = {
             {"0", 0, true},
             {"1", 1000000, true},
             {"2s", 2000000, true},

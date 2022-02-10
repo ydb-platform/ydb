@@ -326,99 +326,99 @@ void TCoroTest::TestCondVar() {
 }
 
 namespace NCoroTestJoin {
-    struct TSleepCont { 
-        const TInstant Deadline; 
-        int Result; 
- 
-        inline void operator()(TCont* c) { 
-            Result = c->SleepD(Deadline); 
-        } 
-    }; 
- 
-    struct TReadCont { 
-        const TInstant Deadline; 
-        const SOCKET Sock; 
-        int Result; 
- 
-        inline void operator()(TCont* c) { 
-            char buf = 0; 
+    struct TSleepCont {
+        const TInstant Deadline;
+        int Result;
+
+        inline void operator()(TCont* c) {
+            Result = c->SleepD(Deadline);
+        }
+    };
+
+    struct TReadCont {
+        const TInstant Deadline;
+        const SOCKET Sock;
+        int Result;
+
+        inline void operator()(TCont* c) {
+            char buf = 0;
             Result = NCoro::ReadD(c, Sock, &buf, sizeof(buf), Deadline).Status();
-        } 
-    }; 
- 
-    struct TJoinCont { 
-        const TInstant Deadline; 
-        TCont* const Cont; 
-        bool Result; 
- 
-        inline void operator()(TCont* c) { 
-            Result = c->Join(Cont, Deadline); 
-        } 
-    }; 
- 
+        }
+    };
+
+    struct TJoinCont {
+        const TInstant Deadline;
+        TCont* const Cont;
+        bool Result;
+
+        inline void operator()(TCont* c) {
+            Result = c->Join(Cont, Deadline);
+        }
+    };
+
     void DoTestJoin(EContPoller pollerType) {
         auto poller = IPollerFace::Construct(pollerType);
- 
+
         if (!poller) {
             return;
         }
- 
+
         TContExecutor e(32000, std::move(poller));
- 
+
         TPipe in, out;
         TPipe::Pipe(in, out);
         SetNonBlock(in.GetHandle());
- 
+
         {
             TSleepCont sc = {TInstant::Max(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(100).ToDeadLine(), e.Create(sc, "sc"), true};
- 
+
             e.Execute(jc);
- 
+
             UNIT_ASSERT_EQUAL(sc.Result, ECANCELED);
             UNIT_ASSERT_EQUAL(jc.Result, false);
         }
- 
+
         {
             TSleepCont sc = {TDuration::MilliSeconds(100).ToDeadLine(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(200).ToDeadLine(), e.Create(sc, "sc"), false};
- 
+
             e.Execute(jc);
- 
+
             UNIT_ASSERT_EQUAL(sc.Result, ETIMEDOUT);
             UNIT_ASSERT_EQUAL(jc.Result, true);
         }
- 
+
         {
             TSleepCont sc = {TDuration::MilliSeconds(200).ToDeadLine(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(100).ToDeadLine(), e.Create(sc, "sc"), true};
- 
+
             e.Execute(jc);
- 
+
             UNIT_ASSERT_EQUAL(sc.Result, ECANCELED);
             UNIT_ASSERT_EQUAL(jc.Result, false);
         }
- 
+
         {
             TReadCont rc = {TInstant::Max(), in.GetHandle(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(100).ToDeadLine(), e.Create(rc, "rc"), true};
- 
+
             e.Execute(jc);
- 
+
             UNIT_ASSERT_EQUAL(rc.Result, ECANCELED);
             UNIT_ASSERT_EQUAL(jc.Result, false);
         }
- 
+
         {
             TReadCont rc = {TDuration::MilliSeconds(100).ToDeadLine(), in.GetHandle(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(200).ToDeadLine(), e.Create(rc, "rc"), false};
- 
+
             e.Execute(jc);
- 
+
             UNIT_ASSERT_EQUAL(rc.Result, ETIMEDOUT);
             UNIT_ASSERT_EQUAL(jc.Result, true);
         }
- 
+
         {
             TReadCont rc = {TDuration::MilliSeconds(200).ToDeadLine(), in.GetHandle(), 0};
             TJoinCont jc = {TDuration::MilliSeconds(100).ToDeadLine(), e.Create(rc, "rc"), true};
@@ -428,9 +428,9 @@ namespace NCoroTestJoin {
             UNIT_ASSERT_EQUAL(rc.Result, ECANCELED);
             UNIT_ASSERT_EQUAL(jc.Result, false);
         }
-    } 
-} 
- 
+    }
+}
+
 void TCoroTest::TestJoinDefault() {
     NCoroTestJoin::DoTestJoin(EContPoller::Default);
 }

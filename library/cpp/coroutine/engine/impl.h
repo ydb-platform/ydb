@@ -104,7 +104,7 @@ public:
     void SwitchTo(TExceptionSafeContext* ctx) {
         Trampoline_.SwitchTo(ctx);
     }
- 
+
 private:
     void Terminate();
 

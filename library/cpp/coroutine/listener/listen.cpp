@@ -10,39 +10,39 @@
 
 using namespace NAddr;
 
-namespace { 
-    union TSa { 
-        const sockaddr* Sa; 
-        const sockaddr_in* In; 
-        const sockaddr_in6* In6; 
- 
+namespace {
+    union TSa {
+        const sockaddr* Sa;
+        const sockaddr_in* In;
+        const sockaddr_in6* In6;
+
         inline TSa(const sockaddr* sa) noexcept
-            : Sa(sa) 
-        { 
-        } 
- 
+            : Sa(sa)
+        {
+        }
+
         inline bool operator==(const TSa& r) const noexcept {
-            if (Sa->sa_family == r.Sa->sa_family) { 
-                switch (Sa->sa_family) { 
+            if (Sa->sa_family == r.Sa->sa_family) {
+                switch (Sa->sa_family) {
                     case AF_INET:
                         return In->sin_port == r.In->sin_port && In->sin_addr.s_addr == r.In->sin_addr.s_addr;
                     case AF_INET6:
                         return In6->sin6_port == r.In6->sin6_port && !memcmp(&In6->sin6_addr, &r.In6->sin6_addr, sizeof(in6_addr));
-                } 
-            } 
- 
-            return false; 
-        } 
- 
+                }
+            }
+
+            return false;
+        }
+
         inline bool operator!=(const TSa& r) const noexcept {
-            return !(*this == r); 
-        } 
-    }; 
-} 
- 
+            return !(*this == r);
+        }
+    };
+}
+
 class TContListener::TImpl {
-private: 
-    struct TStoredAddrInfo: public TAddrInfo, private TNetworkAddress { 
+private:
+    struct TStoredAddrInfo: public TAddrInfo, private TNetworkAddress {
         inline TStoredAddrInfo(const struct addrinfo* ai, const TNetworkAddress& addr) noexcept
             : TAddrInfo(ai)
             , TNetworkAddress(addr)
@@ -50,7 +50,7 @@ private:
         }
     };
 
-private: 
+private:
     class TOneSocketListener: public TIntrusiveListItem<TOneSocketListener> {
     public:
         inline TOneSocketListener(TImpl* parent, IRemoteAddrPtr addr)
@@ -88,10 +88,10 @@ private:
             Stop();
         }
 
-    public: 
+    public:
         inline void Run(TCont* cont) noexcept {
-            C_ = cont; 
-            DoRun(); 
+            C_ = cont;
+            DoRun();
             C_ = nullptr;
         }
 
@@ -127,7 +127,7 @@ private:
 
     private:
         inline void DoRun() noexcept {
-            while (!C_->Cancelled()) { 
+            while (!C_->Cancelled()) {
                 try {
                     TOpaqueAddr remote;
                     const int res = NCoro::AcceptI(C_, ListenSocket_, remote.MutableAddr(), remote.LenPtr());
@@ -164,49 +164,49 @@ private:
                 }
             }
 
-            try { 
-                Parent_->Cb_->OnStop(&ListenSocket_); 
-            } catch (...) { 
-            } 
+            try {
+                Parent_->Cb_->OnStop(&ListenSocket_);
+            } catch (...) {
+            }
         }
 
     private:
-        const TImpl* const Parent_; 
+        const TImpl* const Parent_;
         TCont* C_;
         TSocketHolder ListenSocket_;
-        const IRemoteAddrPtr Addr_; 
+        const IRemoteAddrPtr Addr_;
     };
 
-private: 
-    class TListeners: public TIntrusiveListWithAutoDelete<TOneSocketListener, TDelete> { 
-    private: 
-        template <class T> 
+private:
+    class TListeners: public TIntrusiveListWithAutoDelete<TOneSocketListener, TDelete> {
+    private:
+        template <class T>
         using TIt = std::conditional_t<std::is_const<T>::value, typename T::TConstIterator, typename T::TIterator>;
- 
-        template <class T> 
+
+        template <class T>
         static inline TIt<T> FindImpl(T* t, const IRemoteAddr& addr) {
-            const TSa sa(addr.Addr()); 
- 
+            const TSa sa(addr.Addr());
+
             TIt<T> it = t->Begin();
             TIt<T> const end = t->End();
- 
-            while (it != end && sa != it->Addr()->Addr()) { 
-                ++it; 
-            } 
- 
-            return it; 
-        } 
- 
-    public: 
-        inline TIterator Find(const IRemoteAddr& addr) { 
-            return FindImpl(this, addr); 
-        } 
- 
-        inline TConstIterator Find(const IRemoteAddr& addr) const { 
-            return FindImpl(this, addr); 
-        } 
-    }; 
- 
+
+            while (it != end && sa != it->Addr()->Addr()) {
+                ++it;
+            }
+
+            return it;
+        }
+
+    public:
+        inline TIterator Find(const IRemoteAddr& addr) {
+            return FindImpl(this, addr);
+        }
+
+        inline TConstIterator Find(const IRemoteAddr& addr) const {
+            return FindImpl(this, addr);
+        }
+    };
+
 public:
     inline TImpl(ICallBack* cb, TContExecutor* e, const TOptions& opts) noexcept
         : E_(e)
@@ -221,18 +221,18 @@ public:
         }
     }
 
-    inline void Listen(const IRemoteAddr& addr) { 
-        const TListeners::TIterator it = L_.Find(addr); 
- 
-        if (it != L_.End()) { 
-            it->StartListen(); 
-        } 
-    } 
- 
-    inline void Bind(const IRemoteAddr& addr) { 
-        const TSa sa(addr.Addr()); 
- 
-        switch (sa.Sa->sa_family) { 
+    inline void Listen(const IRemoteAddr& addr) {
+        const TListeners::TIterator it = L_.Find(addr);
+
+        if (it != L_.End()) {
+            it->StartListen();
+        }
+    }
+
+    inline void Bind(const IRemoteAddr& addr) {
+        const TSa sa(addr.Addr());
+
+        switch (sa.Sa->sa_family) {
             case AF_INET:
                 L_.PushBack(new TOneSocketListener(this, MakeHolder<TIPv4Addr>(*sa.In)));
                 break;
@@ -241,9 +241,9 @@ public:
                 break;
             default:
                 ythrow yexception() << TStringBuf("unknown protocol");
-        } 
-    } 
- 
+        }
+    }
+
     inline void Bind(const TIpAddress& addr) {
         L_.PushBack(new TOneSocketListener(this, MakeHolder<TIPv4Addr>(addr)));
     }
@@ -254,17 +254,17 @@ public:
         }
     }
 
-    inline void StopListenAddr(const IRemoteAddr& addr) { 
-        const TListeners::TIterator it = L_.Find(addr); 
+    inline void StopListenAddr(const IRemoteAddr& addr) {
+        const TListeners::TIterator it = L_.Find(addr);
 
-        if (it != L_.End()) { 
-            delete &*it; 
+        if (it != L_.End()) {
+            delete &*it;
         }
     }
 
 private:
-    TContExecutor* const E_; 
-    ICallBack* const Cb_; 
+    TContExecutor* const E_;
+    ICallBack* const Cb_;
     TListeners L_;
     const TOptions Opts_;
 };
@@ -285,33 +285,33 @@ namespace {
     }
 }
 
-void TContListener::Listen(const IRemoteAddr& addr) { 
+void TContListener::Listen(const IRemoteAddr& addr) {
     CheckImpl(Impl_)->Listen(addr);
 }
 
-void TContListener::Listen(const TIpAddress& addr) { 
-    return Listen(TIPv4Addr(addr)); 
-} 
- 
-void TContListener::Listen(const TNetworkAddress& addr) { 
-    for (TNetworkAddress::TIterator it = addr.Begin(); it != addr.End(); ++it) { 
-        Listen(TAddrInfo(&*it)); 
-    }
-} 
+void TContListener::Listen(const TIpAddress& addr) {
+    return Listen(TIPv4Addr(addr));
+}
 
-void TContListener::Listen() { 
+void TContListener::Listen(const TNetworkAddress& addr) {
+    for (TNetworkAddress::TIterator it = addr.Begin(); it != addr.End(); ++it) {
+        Listen(TAddrInfo(&*it));
+    }
+}
+
+void TContListener::Listen() {
     CheckImpl(Impl_)->Listen();
-} 
- 
-void TContListener::Bind(const IRemoteAddr& addr) { 
+}
+
+void TContListener::Bind(const IRemoteAddr& addr) {
     CheckImpl(Impl_)->Bind(addr);
 }
 
-void TContListener::Bind(const TIpAddress& addr) { 
-    return Bind(TIPv4Addr(addr)); 
-} 
+void TContListener::Bind(const TIpAddress& addr) {
+    return Bind(TIPv4Addr(addr));
+}
 
-void TContListener::Bind(const TNetworkAddress& addr) { 
+void TContListener::Bind(const TNetworkAddress& addr) {
     CheckImpl(Impl_)->Bind(addr);
 }
 
@@ -319,18 +319,18 @@ void TContListener::Stop() noexcept {
     Impl_.Destroy();
 }
 
-void TContListener::StopListenAddr(const IRemoteAddr& addr) { 
+void TContListener::StopListenAddr(const IRemoteAddr& addr) {
     CheckImpl(Impl_)->StopListenAddr(addr);
 }
 
-void TContListener::StopListenAddr(const TIpAddress& addr) { 
-    return StopListenAddr(TIPv4Addr(addr)); 
+void TContListener::StopListenAddr(const TIpAddress& addr) {
+    return StopListenAddr(TIPv4Addr(addr));
 }
 
-void TContListener::StopListenAddr(const TNetworkAddress& addr) { 
-    for (TNetworkAddress::TIterator it = addr.Begin(); it != addr.End(); ++it) { 
-        StopListenAddr(TAddrInfo(&*it)); 
-    } 
+void TContListener::StopListenAddr(const TNetworkAddress& addr) {
+    for (TNetworkAddress::TIterator it = addr.Begin(); it != addr.End(); ++it) {
+        StopListenAddr(TAddrInfo(&*it));
+    }
 }
 
 void TContListener::ICallBack::OnAcceptFull(const TAcceptFull& params) {
@@ -348,7 +348,7 @@ void TContListener::ICallBack::OnAcceptFull(const TAcceptFull& params) {
     }
 }
 
-void TContListener::ICallBack::OnStop(TSocketHolder* s) { 
-    s->ShutDown(SHUT_RDWR); 
-    s->Close(); 
-} 
+void TContListener::ICallBack::OnStop(TSocketHolder* s) {
+    s->ShutDown(SHUT_RDWR);
+    s->Close();
+}

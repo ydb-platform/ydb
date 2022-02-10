@@ -254,8 +254,8 @@ struct TLess<TUtf32String>: public TLess<TUtf32StringBuf> {
 
 template <class T>
 struct TGreater: public std::greater<T> {
-}; 
- 
+};
+
 template <>
 struct TGreater<TString>: public TGreater<TStringBuf> {
     using is_transparent = void;

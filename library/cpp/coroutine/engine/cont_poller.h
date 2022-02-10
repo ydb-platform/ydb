@@ -102,7 +102,7 @@ namespace NCoro {
         struct TValue: public T, public TObjectFromPool<TValue> {
             TValue() {}
         };
- 
+
     public:
         TBigArray()
             : Pool_(TMemoryPool::TExpGrow::Instance(), TDefaultAllocator::Instance())

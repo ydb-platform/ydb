@@ -21,19 +21,19 @@ struct TTryLockOps: public TCommonLockOps<T> {
 };
 
 //must be used with great care
-template <class TOps> 
+template <class TOps>
 struct TInverseLockOps: public TOps {
-    template <class T> 
+    template <class T>
     static inline void Acquire(T* t) noexcept {
-        TOps::Release(t); 
-    } 
- 
-    template <class T> 
+        TOps::Release(t);
+    }
+
+    template <class T>
     static inline void Release(T* t) noexcept {
-        TOps::Acquire(t); 
-    } 
-}; 
- 
+        TOps::Acquire(t);
+    }
+};
+
 template <class T, class TOps = TCommonLockOps<T>>
 class TGuard: public TNonCopyable {
 public:

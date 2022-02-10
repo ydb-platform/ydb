@@ -9,13 +9,13 @@ public:
     inline TTempBufOutput() = default;
 
     explicit TTempBufOutput(size_t size)
-        : TTempBuf(size) 
+        : TTempBuf(size)
     {
     }
- 
+
     TTempBufOutput(TTempBufOutput&&) noexcept = default;
     TTempBufOutput& operator=(TTempBufOutput&&) noexcept = default;
 
 protected:
     void DoWrite(const void* data, size_t len) override;
-}; 
+};

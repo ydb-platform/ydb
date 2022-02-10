@@ -5,26 +5,26 @@
 #include <util/system/defaults.h>
 
 void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort) {
-    TDirIterator::TOptions opts;
-    opts.SetMaxLevel(depth);
+    TDirIterator::TOptions opts; 
+    opts.SetMaxLevel(depth); 
     if (sort) {
-        opts.SetSortByName();
+        opts.SetSortByName(); 
     }
 
-    TDirIterator dir(dirname, opts);
+    TDirIterator dir(dirname, opts); 
     Clear();
 
-    size_t dirNameLength = dirname.length();
+    size_t dirNameLength = dirname.length(); 
     while (dirNameLength && (dirname[dirNameLength - 1] == '\\' || dirname[dirNameLength - 1] == '/')) {
         --dirNameLength;
     }
 
     for (auto file = dir.begin(); file != dir.end(); ++file) {
-        if (file->fts_pathlen == file->fts_namelen || file->fts_pathlen <= dirNameLength) {
+        if (file->fts_pathlen == file->fts_namelen || file->fts_pathlen <= dirNameLength) { 
             continue;
         }
 
-        TStringBuf filename = file->fts_path + dirNameLength + 1;
+        TStringBuf filename = file->fts_path + dirNameLength + 1; 
 
         if (filename.empty() || !filename.StartsWith(prefix) || !filename.EndsWith(suffix)) {
             continue;

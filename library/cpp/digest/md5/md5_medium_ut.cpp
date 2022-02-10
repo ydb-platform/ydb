@@ -20,6 +20,6 @@ Y_UNIT_TEST_SUITE(TMD5MediumTest) {
             s.to_lower();
 
             UNIT_ASSERT_VALUES_EQUAL(s, "34a5a7ed4f0221310084e21a1e599659");
-        }
-    }
-}
+        } 
+    } 
+} 

@@ -7,35 +7,35 @@
 
 Y_UNIT_TEST_SUITE(TMD5Test) {
     Y_UNIT_TEST(TestMD5) {
-        // echo -n 'qwertyuiopqwertyuiopasdfghjklasdfghjkl' | md5sum
+        // echo -n 'qwertyuiopqwertyuiopasdfghjklasdfghjkl' | md5sum 
         constexpr const char* b = "qwertyuiopqwertyuiopasdfghjklasdfghjkl";
 
-        MD5 r;
-        r.Update((const unsigned char*)b, 15);
-        r.Update((const unsigned char*)b + 15, strlen(b) - 15);
+        MD5 r; 
+        r.Update((const unsigned char*)b, 15); 
+        r.Update((const unsigned char*)b + 15, strlen(b) - 15); 
 
-        char rs[33];
+        char rs[33]; 
         TString s(r.End(rs));
-        s.to_lower();
+        s.to_lower(); 
 
         UNIT_ASSERT_NO_DIFF(s, TStringBuf("3ac00dd696b966fd74deee3c35a59d8f"));
 
         TString result = r.Calc(TStringBuf(b));
-        result.to_lower();
+        result.to_lower(); 
         UNIT_ASSERT_NO_DIFF(result, TStringBuf("3ac00dd696b966fd74deee3c35a59d8f"));
-    }
+    } 
 
     Y_UNIT_TEST(TestFile) {
         TString s = NUnitTest::RandomString(1000000, 1);
         const TString tmpFile = "tmp";
 
-        {
+        { 
             TFixedBufferFileOutput fo(tmpFile);
             fo.Write(s.data(), s.size());
-        }
+        } 
 
-        char fileBuf[100];
-        char memBuf[100];
+        char fileBuf[100]; 
+        char memBuf[100]; 
         TString fileHash = MD5::File(tmpFile.data(), fileBuf);
         TString memoryHash = MD5::Data((const unsigned char*)s.data(), s.size(), memBuf);
 
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         NFs::Remove(tmpFile);
         fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_EQUAL(fileHash.size(), 0);
-    }
+    } 
 
     Y_UNIT_TEST(TestIsMD5) {
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf()));
@@ -63,4 +63,4 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         UNIT_ASSERT_EQUAL(MD5::CalcHalfMix(""), 7203772011789518145ul);
         UNIT_ASSERT_EQUAL(MD5::CalcHalfMix("qwertyuiopqwertyuiopasdfghjklasdfghjkl"), 11753545595885642730ul);
     }
-}
+} 

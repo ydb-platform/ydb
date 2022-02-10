@@ -1,9 +1,9 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/fwd.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 #include <util/system/file.h>
-
+ 
 enum class EFileLockType {
     Exclusive,
     Shared
@@ -13,9 +13,9 @@ class TFileLock: public TFile {
 public:
     TFileLock(const TString& filename, const EFileLockType type = EFileLockType::Exclusive);
 
-    void Acquire();
+    void Acquire(); 
     bool TryAcquire();
-    void Release();
+    void Release(); 
 
     inline void lock() {
         Acquire();
@@ -31,4 +31,4 @@ public:
 
 private:
     EFileLockType Type;
-};
+}; 

@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
 
         private:
-            TEchoServer* Parent_ = nullptr;
+            TEchoServer* Parent_ = nullptr; 
         };
 
     public:
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
 
         TString Execute() {
-            TSocket* s = nullptr;
+            TSocket* s = nullptr; 
             THolder<TSocket> singleReqSocket;
             if (KeepAliveConnection) {
                 if (!KeepAlivedSocket) {
@@ -277,48 +277,48 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
         }
 
-        ui16 Port = 0;
-        bool UseHttpOutput = true;
+        ui16 Port = 0; 
+        bool UseHttpOutput = true; 
         TString Type = "GET";
         TString ContentEncoding;
         TString Content;
-        bool KeepAliveConnection = false;
+        bool KeepAliveConnection = false; 
         THolder<TSocket> KeepAlivedSocket;
-        bool EnableResponseEncoding = false;
+        bool EnableResponseEncoding = false; 
         TString Hdr;
         bool Expect100Continue = false;
     };
 
     class TFailingMtpQueue: public TSimpleThreadPool {
-    private:
-        bool FailOnAdd_ = false;
+    private: 
+        bool FailOnAdd_ = false; 
 
-    public:
-        void SetFailOnAdd(bool fail = true) {
-            FailOnAdd_ = fail;
-        }
+    public: 
+        void SetFailOnAdd(bool fail = true) { 
+            FailOnAdd_ = fail; 
+        } 
         [[nodiscard]] bool Add(IObjectInQueue* pObj) override {
-            if (FailOnAdd_) {
-                return false;
-            }
-
+            if (FailOnAdd_) { 
+                return false; 
+            } 
+ 
             return TSimpleThreadPool::Add(pObj);
-        }
-        TFailingMtpQueue() = default;
+        } 
+        TFailingMtpQueue() = default; 
         TFailingMtpQueue(IThreadFactory* pool)
             : TSimpleThreadPool(pool)
-        {
-        }
-    };
-
+        { 
+        } 
+    }; 
+ 
     TString TestData(size_t size = 5 * 4096) {
         TString res;
 
-        for (size_t i = 0; i < size; ++i) {
+        for (size_t i = 0; i < size; ++i) { 
             res += (char)i;
         }
-        return res;
-    }
+        return res; 
+    } 
 
     Y_UNIT_TEST(TestEchoServer) {
         TString res = TestData();
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             for (bool keepAlive : trueFalse) {
                 r.KeepAliveConnection = keepAlive;
 
-                // THttpOutput use chunked stream, else use Content-Length
+                // THttpOutput use chunked stream, else use Content-Length 
                 for (bool useHttpOutput : trueFalse) {
                     r.UseHttpOutput = useHttpOutput;
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             server.Stop();
         }
     }
-
+ 
     Y_UNIT_TEST(TestReusePortEnabled) {
         if (!IsReusePortAvailable()) {
             return; // skip test
@@ -423,38 +423,38 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     }
 
     Y_UNIT_TEST(TestFailServer) {
-        /**
-         * Emulate request processing failures
-         * Data should be large enough not to fit into socket buffer
-         **/
+        /** 
+         * Emulate request processing failures 
+         * Data should be large enough not to fit into socket buffer 
+         **/ 
         TString res = TestData(10 * 1024 * 1024);
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-        TEchoServer serverImpl(res);
-        THttpServer::TOptions options(port);
-        options.EnableKeepAlive(true);
-        options.EnableCompression(true);
+        TEchoServer serverImpl(res); 
+        THttpServer::TOptions options(port); 
+        options.EnableKeepAlive(true); 
+        options.EnableCompression(true); 
         using TFailingServerMtpQueue = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
         THttpServer::TMtpQueueRef mainWorkers = new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory());
         THttpServer::TMtpQueueRef failWorkers = new TThreadPool(SystemThreadFactory());
-        THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
-
-        UNIT_ASSERT(server.Start());
-        for (size_t i = 0; i < 3; ++i) {
-            // should fail on 2nd request
-            static_cast<TFailingMtpQueue*>(mainWorkers.Get())->SetFailOnAdd(i == 1);
-            TTestRequest r(port);
-            r.Content = res;
-            r.Type = "POST";
+        THttpServer server(&serverImpl, mainWorkers, failWorkers, options); 
+ 
+        UNIT_ASSERT(server.Start()); 
+        for (size_t i = 0; i < 3; ++i) { 
+            // should fail on 2nd request 
+            static_cast<TFailingMtpQueue*>(mainWorkers.Get())->SetFailOnAdd(i == 1); 
+            TTestRequest r(port); 
+            r.Content = res; 
+            r.Type = "POST"; 
             TString resp = r.Execute();
-            if (i == 1) {
+            if (i == 1) { 
                 UNIT_ASSERT(resp.Contains("Service Unavailable"));
-            } else {
-                UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
-            }
-        }
-        server.Stop();
-    }
+            } else { 
+                UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription()); 
+            } 
+        } 
+        server.Stop(); 
+    } 
 
     class TReleaseConnectionServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {

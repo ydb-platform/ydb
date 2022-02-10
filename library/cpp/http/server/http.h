@@ -73,7 +73,7 @@ public:
     // shutdown a.s.a.p.
     void Stop();
 
-    // graceful shutdown with serving all already open connections
+    // graceful shutdown with serving all already open connections 
     void Shutdown();
 
     void Wait();

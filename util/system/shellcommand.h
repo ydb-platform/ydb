@@ -464,11 +464,11 @@ public:
      */
     TShellCommand& CloseInput();
 
-    /**
-     * @brief Get quoted command (for debug/view purposes only!)
-     **/
-    TString GetQuotedCommand() const;
-
+    /** 
+     * @brief Get quoted command (for debug/view purposes only!) 
+     **/ 
+    TString GetQuotedCommand() const; 
+ 
 private:
     class TImpl;
     using TImplRef = TSimpleIntrusivePtr<TImpl>;

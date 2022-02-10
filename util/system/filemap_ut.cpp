@@ -12,7 +12,7 @@
 #include <cstdio>
 
 Y_UNIT_TEST_SUITE(TFileMapTest) {
-    static const char* FileName_("./mappped_file");
+    static const char* FileName_("./mappped_file"); 
 
     void BasicTest(TMemoryMapCommon::EOpenMode mode) {
         char data[] = "abcdefgh";
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 //cygwin is not real unix :(
 #else
     Y_UNIT_TEST(TestNotGreedy) {
-        unsigned page[4096 / sizeof(unsigned)];
+        unsigned page[4096 / sizeof(unsigned)]; 
 
     #if defined(_unix_)
         // Temporary limit allowed virtual memory size to 1Gb
@@ -221,49 +221,49 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             file.Write(static_cast<void*>(data), sizeof(data));
             file.Close();
 
-            mappedArray.Init(FileName_);
-            // actual test begin
-            UNIT_ASSERT(mappedArray.Size() == sz);
+            mappedArray.Init(FileName_); 
+            // actual test begin 
+            UNIT_ASSERT(mappedArray.Size() == sz); 
             for (size_t i = 0; i < sz; ++i) {
                 UNIT_ASSERT(mappedArray[i] == data[i]);
             }
+ 
+            UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0); 
+            UNIT_ASSERT(*mappedArray.Begin() == data[0]); 
+            UNIT_ASSERT(size_t(mappedArray.End() - mappedArray.Begin()) == sz); 
+            UNIT_ASSERT(!mappedArray.Empty()); 
+            // actual test end 
+            mappedArray.Term(); 
 
-            UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0);
-            UNIT_ASSERT(*mappedArray.Begin() == data[0]);
-            UNIT_ASSERT(size_t(mappedArray.End() - mappedArray.Begin()) == sz);
-            UNIT_ASSERT(!mappedArray.Empty());
-            // actual test end
-            mappedArray.Term();
-
-            // Init array via file mapping
-            TFileMap fileMap(FileName_);
-            fileMap.Map(0, fileMap.Length());
-            mappedArray.Init(fileMap);
-
-            // actual test begin
-            UNIT_ASSERT(mappedArray.Size() == sz);
+            // Init array via file mapping 
+            TFileMap fileMap(FileName_); 
+            fileMap.Map(0, fileMap.Length()); 
+            mappedArray.Init(fileMap); 
+ 
+            // actual test begin 
+            UNIT_ASSERT(mappedArray.Size() == sz); 
             for (size_t i = 0; i < sz; ++i) {
-                UNIT_ASSERT(mappedArray[i] == data[i]);
+                UNIT_ASSERT(mappedArray[i] == data[i]); 
             }
-
-            UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0);
-            UNIT_ASSERT(*mappedArray.Begin() == data[0]);
-            UNIT_ASSERT(size_t(mappedArray.End() - mappedArray.Begin()) == sz);
-            UNIT_ASSERT(!mappedArray.Empty());
-            // actual test end
-
+ 
+            UNIT_ASSERT(mappedArray.GetAt(mappedArray.Size()) == 0); 
+            UNIT_ASSERT(*mappedArray.Begin() == data[0]); 
+            UNIT_ASSERT(size_t(mappedArray.End() - mappedArray.Begin()) == sz); 
+            UNIT_ASSERT(!mappedArray.Empty()); 
+            // actual test end 
+ 
             file = TFile(FileName_, WrOnly);
             file.Seek(0, sEnd);
             file.Write("x", 1);
             file.Close();
 
-            bool caught = false;
+            bool caught = false; 
             try {
-                mappedArray.Init(FileName_);
+                mappedArray.Init(FileName_); 
             } catch (const yexception&) {
-                caught = true;
+                caught = true; 
             }
-            UNIT_ASSERT(caught);
+            UNIT_ASSERT(caught); 
         }
         NFs::Remove(FileName_);
     }
@@ -291,32 +291,32 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
     }
 
     Y_UNIT_TEST(TestMemoryMap) {
-        TFile file(FileName_, CreateAlways | WrOnly);
-        file.Close();
-
-        FILE* f = fopen(FileName_, "rb");
+        TFile file(FileName_, CreateAlways | WrOnly); 
+        file.Close(); 
+ 
+        FILE* f = fopen(FileName_, "rb"); 
         UNIT_ASSERT(f != nullptr);
-        try {
-            TMemoryMap mappedMem(f);
-            mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow
+        try { 
+            TMemoryMap mappedMem(f); 
+            mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow 
             UNIT_ASSERT(0);                                                  // should not go here
         } catch (yexception& exc) {
             TString text = exc.what(); // exception should contain failed file name
             UNIT_ASSERT(text.find(TMemoryMapCommon::UnknownFileName()) != TString::npos);
-            fclose(f);
-        }
-
-        TFile fileForMap(FileName_, OpenExisting);
-        try {
-            TMemoryMap mappedMem(fileForMap);
-            mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow
+            fclose(f); 
+        } 
+ 
+        TFile fileForMap(FileName_, OpenExisting); 
+        try { 
+            TMemoryMap mappedMem(fileForMap); 
+            mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow 
             UNIT_ASSERT(0);                                                  // should not go here
         } catch (yexception& exc) {
             TString text = exc.what(); // exception should contain failed file name
             UNIT_ASSERT(text.find(FileName_) != TString::npos);
-        }
+        } 
         NFs::Remove(FileName_);
-    }
+    } 
 
     Y_UNIT_TEST(TestMemoryMapIsWritable) {
         TFile file(FileName_, CreateAlways | WrOnly);

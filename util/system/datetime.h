@@ -17,14 +17,14 @@
 
 /// Current time in microseconds since epoch
 ui64 MicroSeconds() noexcept;
-/// Current time in milliseconds since epoch
-inline ui64 MilliSeconds() {
-    return MicroSeconds() / ui64(1000);
-}
-/// Current time in milliseconds since epoch (deprecated, use MilliSeconds instead)
-inline ui64 millisec() {
-    return MilliSeconds();
-}
+/// Current time in milliseconds since epoch 
+inline ui64 MilliSeconds() { 
+    return MicroSeconds() / ui64(1000); 
+} 
+/// Current time in milliseconds since epoch (deprecated, use MilliSeconds instead) 
+inline ui64 millisec() { 
+    return MilliSeconds(); 
+} 
 /// Current time in seconds since epoch
 ui32 Seconds() noexcept;
 ///Current thread time in microseconds

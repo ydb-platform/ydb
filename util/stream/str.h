@@ -4,10 +4,10 @@
 #include "zerocopy_output.h"
 
 #include <util/generic/string.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 #include <util/generic/store_policy.h>
 
-/**
+/** 
  * @addtogroup Streams_Strings
  * @{
  */
@@ -54,11 +54,11 @@ protected:
 private:
     const TString* S_;
     size_t Pos_;
-
-    friend class TStringStream;
+ 
+    friend class TStringStream; 
 };
 
-/**
+/** 
  * Stream for writing data into a string.
  */
 class TStringOutput: public IZeroCopyOutput {
@@ -131,7 +131,7 @@ public:
         , TStringOutput(*TEmbeddedString::Ptr())
     {
     }
-
+ 
     inline TStringStream& operator=(const TStringStream& other) {
         // All references remain alive, we need to change position only
         Str() = other.Str();
@@ -139,7 +139,7 @@ public:
 
         return *this;
     }
-
+ 
     ~TStringStream() override;
 
     /**

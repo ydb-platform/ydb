@@ -1,20 +1,20 @@
 library
 ===
 `library/` is a directory with reusable libraries. Common ideas (with [key words](https://tools.ietf.org/html/rfc2119)):
-
+ 
 1. Libraries are categorized by the languages in which they will be used.
     Bindings **MUST** be put in `<language>` directory.
-
+ 
 2. Grouping by any other criteria **SHOULD** be defined by the language committee in `<language>` directory.
-
+ 
 3. The library **SHOULD** be in use in at least two projects.
     
     If you are not sure if you should put some library in `library/`, please contact `<language>` committee or arcadia-wg@yandex-team.ru.
-
+ 
 4. The library **SHOULD** be portable.
 
     Please contact `<language>` committee if you cannot provide usage on all platforms: `linux`, `darwin`, `windows`.
-
+ 
 5. The library **MUST** depend only on a limited list of external components
     (currently it is `util/`, `contrib/`, `vendor/`, `library/`).
 

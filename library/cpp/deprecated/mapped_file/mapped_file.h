@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <new>
 
-/// Deprecated (by pg@), use TFileMap or TMemoryMap instead
+/// Deprecated (by pg@), use TFileMap or TMemoryMap instead 
 class TMappedFile {
 private:
     TFileMap* Map_;

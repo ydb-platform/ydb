@@ -125,7 +125,7 @@ std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reuseP
 void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {
 #ifdef _linux_
     CheckedSetSockOpt(s, IPPROTO_TCP, TCP_CORK, (int)value, "TCP_CORK");
-#else
+#else 
     Y_UNUSED(s);
     Y_UNUSED(value);
 #endif

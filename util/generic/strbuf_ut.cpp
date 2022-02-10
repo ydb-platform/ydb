@@ -56,10 +56,10 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_VALUES_EQUAL(str.After('x'), TStringBuf("qwerty"));
         UNIT_ASSERT_VALUES_EQUAL(str.After('y'), TStringBuf());
         UNIT_ASSERT_STRINGS_EQUAL(str.After('='), str);
-
-        // Also works properly on empty strings
-        TStringBuf empty;
-        UNIT_ASSERT_STRINGS_EQUAL(empty.After('x'), empty);
+ 
+        // Also works properly on empty strings 
+        TStringBuf empty; 
+        UNIT_ASSERT_STRINGS_EQUAL(empty.After('x'), empty); 
     }
 
     Y_UNIT_TEST(TestBefore) {
@@ -168,10 +168,10 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         rt = lt.SplitOff('r');
         UNIT_ASSERT_EQUAL(lt, TStringBuf("qwe"));
         UNIT_ASSERT_EQUAL(rt, TStringBuf("ty"));
-
-        rt = qw;
-        lt = rt.NextTok('r');
-        TStringBuf ty = rt.NextTok('r'); // no 'r' in "ty"
+ 
+        rt = qw; 
+        lt = rt.NextTok('r'); 
+        TStringBuf ty = rt.NextTok('r'); // no 'r' in "ty" 
         UNIT_ASSERT_EQUAL(rt.size(), 0);
         UNIT_ASSERT_EQUAL(ty, TStringBuf("ty"));
     }

@@ -13,31 +13,31 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
     }
 
     Y_UNIT_TEST(TestIsTrue) {
-        UNIT_ASSERT(IsTrue("1"));
-        UNIT_ASSERT(IsTrue("yes"));
-        UNIT_ASSERT(IsTrue("YeS"));
-        UNIT_ASSERT(IsTrue("on"));
-        UNIT_ASSERT(IsTrue("true"));
+        UNIT_ASSERT(IsTrue("1")); 
+        UNIT_ASSERT(IsTrue("yes")); 
+        UNIT_ASSERT(IsTrue("YeS")); 
+        UNIT_ASSERT(IsTrue("on")); 
+        UNIT_ASSERT(IsTrue("true")); 
         UNIT_ASSERT(IsTrue("t"));
-        UNIT_ASSERT(IsTrue("da"));
+        UNIT_ASSERT(IsTrue("da")); 
 
         UNIT_ASSERT(!IsTrue(""));
         UNIT_ASSERT(!IsTrue("tr"));
-        UNIT_ASSERT(!IsTrue("foobar"));
+        UNIT_ASSERT(!IsTrue("foobar")); 
     }
-
+ 
     Y_UNIT_TEST(TestIsFalse) {
-        UNIT_ASSERT(IsFalse("0"));
-        UNIT_ASSERT(IsFalse("no"));
-        UNIT_ASSERT(IsFalse("off"));
-        UNIT_ASSERT(IsFalse("false"));
+        UNIT_ASSERT(IsFalse("0")); 
+        UNIT_ASSERT(IsFalse("no")); 
+        UNIT_ASSERT(IsFalse("off")); 
+        UNIT_ASSERT(IsFalse("false")); 
         UNIT_ASSERT(IsFalse("f"));
-        UNIT_ASSERT(IsFalse("net"));
-
+        UNIT_ASSERT(IsFalse("net")); 
+ 
         UNIT_ASSERT(!IsFalse(""));
         UNIT_ASSERT(!IsFalse("fa"));
-        UNIT_ASSERT(!IsFalse("foobar"));
-    }
+        UNIT_ASSERT(!IsFalse("foobar")); 
+    } 
 
     Y_UNIT_TEST(TestIsNumber) {
         UNIT_ASSERT(IsNumber("0"));

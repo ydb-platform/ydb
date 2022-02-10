@@ -7,9 +7,9 @@
 #include <library/cpp/colorizer/colors.h>
 
 #include <util/stream/output.h>
-#include <util/stream/format.h>
+#include <util/stream/format.h> 
 #include <util/generic/yexception.h>
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -99,7 +99,7 @@ void TModChooser::AddMode(const TString& mode, const TMainFunctionPtrV func, con
 }
 
 void TModChooser::AddMode(const TString& mode, TMainClass* func, const TString& description, bool hidden, bool noCompletion) {
-    if (Modes.FindPtr(mode)) {
+    if (Modes.FindPtr(mode)) { 
         ythrow yexception() << "TMode '" << mode << "' already exists in TModChooser.";
     }
 
@@ -184,7 +184,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
         PrintHelp(argv[0]);
         return 0;
     }
-    if (VersionHandler && (modeName == "-v" || modeName == "--version")) {
+    if (VersionHandler && (modeName == "-v" || modeName == "--version")) { 
         VersionHandler();
         return 0;
     }
@@ -199,7 +199,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
     }
 
     if (modeIter == Modes.end()) {
-        Cerr << "Unknown mode " << modeName.Quote() << "." << Endl;
+        Cerr << "Unknown mode " << modeName.Quote() << "." << Endl; 
         PrintHelp(argv[0]);
         return 1;
     }
@@ -280,9 +280,9 @@ TString TModChooser::TMode::FormatFullName(size_t pad) const {
 void TModChooser::PrintHelp(const TString& progName) const {
     Cerr << Description << Endl << Endl;
     Cerr << NColorizer::StdErr().BoldColor() << "Usage" << NColorizer::StdErr().OldColor() << ": " << progName << " MODE [MODE_OPTIONS]" << Endl;
-    Cerr << Endl;
+    Cerr << Endl; 
     Cerr << NColorizer::StdErr().BoldColor() << "Modes" << NColorizer::StdErr().OldColor() << ":" << Endl;
-    size_t maxModeLen = 0;
+    size_t maxModeLen = 0; 
     for (const auto& [name, mode] : Modes) {
         if (name != mode->Name)
             continue;  // this is an alias
@@ -309,11 +309,11 @@ void TModChooser::PrintHelp(const TString& progName) const {
             }
         }
     }
-
-    Cerr << Endl;
-    Cerr << "To get help for specific mode type '" << progName << " MODE " << ModesHelpOption << "'" << Endl;
-    if (VersionHandler)
-        Cerr << "To print program version type '" << progName << " --version'" << Endl;
+ 
+    Cerr << Endl; 
+    Cerr << "To get help for specific mode type '" << progName << " MODE " << ModesHelpOption << "'" << Endl; 
+    if (VersionHandler) 
+        Cerr << "To print program version type '" << progName << " --version'" << Endl; 
     if (!SvnRevisionOptionDisabled) {
         Cerr << "To print svn revision type --svnrevision" << Endl;
     }

@@ -526,9 +526,9 @@ public:
 
     void TestConstructors() {
         TStringType s0(nullptr);
-        UNIT_ASSERT(s0.size() == 0);
+        UNIT_ASSERT(s0.size() == 0); 
         UNIT_ASSERT_EQUAL(s0, TStringType());
-
+ 
         TStringType s;
         TStringType s1(*Data._0());
         TStringType s2(Data._0());
@@ -895,8 +895,8 @@ public:
         TStringType sS = s2; // type 'TStringType' is used as is
 
         ComputeHash(sS); /*size_t hash_val = sS.hash();
-
-        try {
+ 
+        try { 
             //UNIT_ASSERT(hash_val == Data.HashOf_0123456());
         } catch (...) {
             Cerr << hash_val << Endl;

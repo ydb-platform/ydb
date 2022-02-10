@@ -200,12 +200,12 @@ void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING {
 #endif
 }
 
-extern "C" void* calloc(size_t n, size_t elemSize) {
-    const size_t size = n * elemSize;
+extern "C" void* calloc(size_t n, size_t elemSize) { 
+    const size_t size = n * elemSize; 
 
-    if (elemSize != 0 && size / elemSize != n) {
-        return nullptr;
-    }
+    if (elemSize != 0 && size / elemSize != n) { 
+        return nullptr; 
+    } 
 
 #if defined(Y_COVER_PTR)
     void* result = malloc(size);
@@ -213,7 +213,7 @@ extern "C" void* calloc(size_t n, size_t elemSize) {
     void* result = NBalloc::Malloc(size);
 #endif
 
-    if (result) {
+    if (result) { 
         memset(result, 0, size);
     }
 
@@ -231,19 +231,19 @@ extern "C" void cfree(void* ptr) {
 #if defined(Y_COVER_PTR)
 static inline void* DoRealloc(void* oldPtr, size_t newSize) {
 #else
-extern "C" void* realloc(void* oldPtr, size_t newSize) {
+extern "C" void* realloc(void* oldPtr, size_t newSize) { 
 #endif
-    if (!oldPtr) {
+    if (!oldPtr) { 
         void* result = NBalloc::Malloc(newSize);
         return result;
     }
     if (newSize == 0) {
         NBalloc::Free(oldPtr);
-        return nullptr;
+        return nullptr; 
     }
     void* newPtr = NBalloc::Malloc(newSize);
-    if (!newPtr) {
-        return nullptr;
+    if (!newPtr) { 
+        return nullptr; 
     }
     NBalloc::TAllocHeader* header = (NBalloc::TAllocHeader*)oldPtr - 1;
     const size_t oldSize = header->AllocSize & ~NBalloc::SIGNATURE_MASK;
@@ -253,8 +253,8 @@ extern "C" void* realloc(void* oldPtr, size_t newSize) {
         NBalloc::Free(oldPtr);
         return newPtr;
     }
-    NMalloc::AbortFromCorruptedAllocator();
-    return nullptr;
+    NMalloc::AbortFromCorruptedAllocator(); 
+    return nullptr; 
 }
 
 #if defined(Y_COVER_PTR)

@@ -10,7 +10,7 @@
 #include <util/network/address.h>
 #include <util/network/socket.h>
 #include <util/generic/hash.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 #include <util/generic/buffer.h>
@@ -47,9 +47,9 @@ public:
         return Search;
     }
 
-    TStringBuf QueryStringBuf() const {
-        return TStringBuf(Search, SearchLength);
-    }
+    TStringBuf QueryStringBuf() const { 
+        return TStringBuf(Search, SearchLength); 
+    } 
 
     TStringBuf OrigQueryStringBuf() const {
         return OrigSearch;
@@ -93,7 +93,7 @@ private:
     TString Port;
     char* Path;
     char* Search;
-    size_t SearchLength; // length of Search
+    size_t SearchLength; // length of Search 
     TStringBuf OrigSearch;
     THttpHeadersContainer HeadersIn_;
     mutable char AddrData[INET6_ADDRSTRLEN];

@@ -269,27 +269,27 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
     Y_UNIT_TEST(TestStreams19) {
         TestStreams(20, 19);
     }
-
-    Y_UNIT_TEST(TestMaxPossibleDecompressedSize) {
-
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxPossibleDecompressedLength(), Max<size_t>());
-
-        TVector<char> input(10001, ' ');
-        TCodecList codecs = ListAllCodecs();
-        SetMaxPossibleDecompressedLength(10000);
-
-        for (const auto& codec : codecs) {
-            const ICodec* c = Codec(codec);
-            TBuffer inputBuffer(input.data(), input.size());
-            TBuffer output;
-            TBuffer decompressed;
-            c->Encode(inputBuffer, output);
-            UNIT_ASSERT_EXCEPTION(c->Decode(output, decompressed), yexception);
-        }
-
-        // restore status quo
-        SetMaxPossibleDecompressedLength(Max<size_t>());
-    }
+ 
+    Y_UNIT_TEST(TestMaxPossibleDecompressedSize) { 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxPossibleDecompressedLength(), Max<size_t>()); 
+ 
+        TVector<char> input(10001, ' '); 
+        TCodecList codecs = ListAllCodecs(); 
+        SetMaxPossibleDecompressedLength(10000); 
+ 
+        for (const auto& codec : codecs) { 
+            const ICodec* c = Codec(codec); 
+            TBuffer inputBuffer(input.data(), input.size()); 
+            TBuffer output; 
+            TBuffer decompressed; 
+            c->Encode(inputBuffer, output); 
+            UNIT_ASSERT_EXCEPTION(c->Decode(output, decompressed), yexception); 
+        } 
+ 
+        // restore status quo 
+        SetMaxPossibleDecompressedLength(Max<size_t>()); 
+    } 
 
     Y_UNIT_TEST(TestListAllCodecs) {
         static const TString ALL_CODECS =

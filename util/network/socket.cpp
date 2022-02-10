@@ -432,22 +432,22 @@ void SetSocketPriority(SOCKET s, int priority) {
 #endif
 }
 
-bool HasLocalAddress(SOCKET socket) {
-    TOpaqueAddr localAddr;
-    if (getsockname(socket, localAddr.MutableAddr(), localAddr.LenPtr()) != 0) {
-        ythrow TSystemError() << "HasLocalAddress: getsockname() failed. ";
-    }
-    if (IsLoopback(localAddr)) {
-        return true;
-    }
-
-    TOpaqueAddr remoteAddr;
-    if (getpeername(socket, remoteAddr.MutableAddr(), remoteAddr.LenPtr()) != 0) {
-        ythrow TSystemError() << "HasLocalAddress: getpeername() failed. ";
-    }
-    return IsSame(localAddr, remoteAddr);
-}
-
+bool HasLocalAddress(SOCKET socket) { 
+    TOpaqueAddr localAddr; 
+    if (getsockname(socket, localAddr.MutableAddr(), localAddr.LenPtr()) != 0) { 
+        ythrow TSystemError() << "HasLocalAddress: getsockname() failed. "; 
+    } 
+    if (IsLoopback(localAddr)) { 
+        return true; 
+    } 
+ 
+    TOpaqueAddr remoteAddr; 
+    if (getpeername(socket, remoteAddr.MutableAddr(), remoteAddr.LenPtr()) != 0) { 
+        ythrow TSystemError() << "HasLocalAddress: getpeername() failed. "; 
+    } 
+    return IsSame(localAddr, remoteAddr); 
+} 
+ 
 namespace {
 #if defined(_linux_)
     #if !defined(TCP_FASTOPEN)

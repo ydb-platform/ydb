@@ -4,75 +4,75 @@
 #include <library/cpp/resource/resource.h>
 
 #include <util/stream/file.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/system/tempfile.h>
 #include <util/generic/singleton.h>
 
 #define LDATA "./ldata"
-#define LDATA_RANDOM "./ldata.random"
+#define LDATA_RANDOM "./ldata.random" 
 
 static const TString data = "aa aaa aa aaa aa aaa bb bbb bb bbb bb bbb";
 
 namespace {
-    /**
-     * Produces well-formed random crap
-     **/
+    /** 
+     * Produces well-formed random crap 
+     **/ 
     TString RandomString(size_t size) {
         TString entropy(NResource::Find("/random.data"));
         TString result;
-        size_t seed = 1;
-        size_t j = 0;
-        for (size_t i = 0; i < size; ++i) {
-            seed *= 3;
-            char sym;
-            do {
-                sym = char((seed ^ i) % 256);
-                if (!sym) {
-                    seed += 1;
-                }
-            } while (!sym);
+        size_t seed = 1; 
+        size_t j = 0; 
+        for (size_t i = 0; i < size; ++i) { 
+            seed *= 3; 
+            char sym; 
+            do { 
+                sym = char((seed ^ i) % 256); 
+                if (!sym) { 
+                    seed += 1; 
+                } 
+            } while (!sym); 
             Y_ASSERT(sym);
             j = (j + 1) % entropy.size();
-            result += char(sym + entropy[j]);
-        }
-        return result;
-    }
-
+            result += char(sym + entropy[j]); 
+        } 
+        return result; 
+    } 
+ 
     TVector<TString> InitRandomData() {
         static const TVector<size_t> sizes = {
-            0,
-            1,
-            127,
-            2017,
-            32767,
-        };
-
+            0, 
+            1, 
+            127, 
+            2017, 
+            32767, 
+        }; 
+ 
         TVector<TString> result;
-        for (auto size : sizes) {
-            result.push_back(RandomString(size));
-        }
+        for (auto size : sizes) { 
+            result.push_back(RandomString(size)); 
+        } 
         result.push_back(NResource::Find("/request.data"));
-        return result;
-    }
-
+        return result; 
+    } 
+ 
     TString TestFileName(const TString& d, size_t bufferSize) {
         return LDATA_RANDOM + TString(".") + ToString(d.size()) + TString(".") + ToString(bufferSize);
-    }
-
+    } 
+ 
     struct TRandomData: public TVector<TString> {
         inline TRandomData() {
             InitRandomData().swap(*this);
         }
     };
 }
-
+ 
 static const TVector<size_t> bufferSizes = {
-    127,
-    1024,
-    32768,
-};
-
-namespace {
+    127, 
+    1024, 
+    32768, 
+}; 
+ 
+namespace { 
     template <TLzqCompress::EVersion Ver, int Level, TLzqCompress::EMode Mode>
     struct TLzqCompressX: public TLzqCompress {
         inline TLzqCompressX(IOutputStream* out, size_t bufLen)
@@ -83,7 +83,7 @@ namespace {
 }
 
 template <class C>
-static inline void TestGoodDataCompress() {
+static inline void TestGoodDataCompress() { 
     TFixedBufferFileOutput o(LDATA);
     C c(&o, 1024);
 
@@ -99,28 +99,28 @@ static inline void TestGoodDataCompress() {
     o.Finish();
 }
 
-template <class C>
+template <class C> 
 static inline void TestIncompressibleDataCompress(const TString& d, size_t bufferSize) {
     TString testFileName = TestFileName(d, bufferSize);
     TFixedBufferFileOutput o(testFileName);
-    C c(&o, bufferSize);
+    C c(&o, bufferSize); 
     c.Write(d.data(), d.size());
-    c.Finish();
-    o.Finish();
-}
-
-template <class C>
-static inline void TestCompress() {
-    TestGoodDataCompress<C>();
-    for (auto bufferSize : bufferSizes) {
+    c.Finish(); 
+    o.Finish(); 
+} 
+ 
+template <class C> 
+static inline void TestCompress() { 
+    TestGoodDataCompress<C>(); 
+    for (auto bufferSize : bufferSizes) { 
         for (auto rd : *Singleton<TRandomData>()) {
-            TestIncompressibleDataCompress<C>(rd, bufferSize);
-        }
-    }
-}
-
+            TestIncompressibleDataCompress<C>(rd, bufferSize); 
+        } 
+    } 
+} 
+ 
 template <class D>
-static inline void TestGoodDataDecompress() {
+static inline void TestGoodDataDecompress() { 
     TTempFile tmpFile(LDATA);
 
     {
@@ -137,29 +137,29 @@ static inline void TestGoodDataDecompress() {
     }
 }
 
-template <class D>
+template <class D> 
 static inline void TestIncompressibleDataDecompress(const TString& d, size_t bufferSize) {
     TString testFileName = TestFileName(d, bufferSize);
-    TTempFile tmpFile(testFileName);
-
-    {
+    TTempFile tmpFile(testFileName); 
+ 
+    { 
         TFileInput i(testFileName);
-        D ld(&i);
-
-        UNIT_ASSERT_EQUAL(ld.ReadAll(), d);
-    }
-}
-
-template <class D>
-static inline void TestDecompress() {
-    TestGoodDataDecompress<D>();
-    for (auto bufferSize : bufferSizes) {
+        D ld(&i); 
+ 
+        UNIT_ASSERT_EQUAL(ld.ReadAll(), d); 
+    } 
+} 
+ 
+template <class D> 
+static inline void TestDecompress() { 
+    TestGoodDataDecompress<D>(); 
+    for (auto bufferSize : bufferSizes) { 
         for (auto rd : *Singleton<TRandomData>()) {
-            TestIncompressibleDataDecompress<D>(rd, bufferSize);
-        }
-    }
-}
-
+            TestIncompressibleDataDecompress<D>(rd, bufferSize); 
+        } 
+    } 
+} 
+ 
 class TMixedDecompress: public IInputStream {
 public:
     TMixedDecompress(IInputStream* input)

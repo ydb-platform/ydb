@@ -5,23 +5,23 @@
 
 // DO_NOT_STYLE
 
-class TTest {
-public:
-    inline TTest(int val)
-        : Val(val)
-    {
-    }
+class TTest { 
+public: 
+    inline TTest(int val) 
+        : Val(val) 
+    { 
+    } 
 
-    inline void Swap(TTest& t) {
-        DoSwap(Val, t.Val);
-    }
+    inline void Swap(TTest& t) { 
+        DoSwap(Val, t.Val); 
+    } 
 
-    int Val;
+    int Val; 
 
-private:
-    TTest(const TTest&);
-    TTest& operator=(const TTest&);
-};
+private: 
+    TTest(const TTest&); 
+    TTest& operator=(const TTest&); 
+}; 
 
 struct TUnorderedTag {
     TStringBuf Tag;
@@ -34,7 +34,7 @@ static bool operator<(const TUnorderedTag, const TUnorderedTag) {
 static bool operator>(const TUnorderedTag, const TUnorderedTag) = delete;
 
 Y_UNIT_TEST_SUITE(TUtilityTest) {
-
+ 
     Y_UNIT_TEST(TestSwapPrimitive) {
         int i = 0;
         int j = 1;

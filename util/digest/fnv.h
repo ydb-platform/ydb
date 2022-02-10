@@ -66,8 +66,8 @@ template <class T>
 static constexpr T FnvHash(const void* buf, size_t len) {
     return FnvHash<T>((const unsigned char*)buf, (const unsigned char*)buf + len);
 }
-
-template <class T, class Buf>
+ 
+template <class T, class Buf> 
 static constexpr T FnvHash(const Buf& buf) {
     return FnvHash<T>(buf.data(), buf.size() * sizeof(*buf.data()));
-}
+} 

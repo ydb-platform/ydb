@@ -167,10 +167,10 @@ public:
         return MicroSecondsOfSecond() * (TValue)1000;
     }
 
-    constexpr explicit operator bool() const noexcept {
-        return Value_;
-    }
-
+    constexpr explicit operator bool() const noexcept { 
+        return Value_; 
+    } 
+ 
 protected:
     TValue Value_; // microseconds count
 };
@@ -311,7 +311,7 @@ public:
     static TDuration Parse(const TStringBuf input);
 
     static bool TryParse(const TStringBuf input, TDuration& result);
-
+ 
     // note global Out method is defined for TDuration, so it could be written to IOutputStream as text
 
     template <class T>

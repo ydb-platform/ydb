@@ -5,35 +5,35 @@
 #include <algorithm>
 
 Y_UNIT_TEST_SUITE(TYMapTest) {
-    template <typename TAlloc>
+    template <typename TAlloc> 
     void DoTestMap1(TMap<char, int, TLess<char>, TAlloc>& m);
 
-    template <typename TAlloc>
+    template <typename TAlloc> 
     void DoTestMMap1(TMultiMap<char, int, TLess<char>, TAlloc>& mm);
 
     Y_UNIT_TEST(TestMap1) {
-        {
+        { 
             TMap<char, int, TLess<char>> m;
-            DoTestMap1(m);
+            DoTestMap1(m); 
         }
-        {
-            TMemoryPool p(100);
+        { 
+            TMemoryPool p(100); 
             TMap<char, int, TLess<char>, TPoolAllocator> m(&p);
-            DoTestMap1(m);
-        }
-    }
+            DoTestMap1(m); 
+        } 
+    } 
 
     Y_UNIT_TEST(TestMMap1) {
-        {
+        { 
             TMultiMap<char, int, TLess<char>> mm;
-            DoTestMMap1(mm);
+            DoTestMMap1(mm); 
         }
-        {
-            TMemoryPool p(100);
+        { 
+            TMemoryPool p(100); 
             TMultiMap<char, int, TLess<char>, TPoolAllocator> mm(&p);
-            DoTestMMap1(mm);
-        }
-    }
+            DoTestMMap1(mm); 
+        } 
+    } 
 
     template <typename TAlloc>
     void DoTestMap1(TMap<char, int, TLess<char>, TAlloc>& m) {

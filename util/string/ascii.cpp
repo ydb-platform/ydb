@@ -1,8 +1,8 @@
 #include "ascii.h"
 
-#include <util/system/yassert.h>
-#include <util/system/compat.h>
-
+#include <util/system/yassert.h> 
+#include <util/system/compat.h> 
+ 
 // clang-format off
 extern const unsigned char NPrivate::ASCII_CLASS[256] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,
@@ -22,7 +22,7 @@ extern const unsigned char NPrivate::ASCII_CLASS[256] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
-
+ 
 extern const unsigned char NPrivate::ASCII_LOWER[256] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -46,14 +46,14 @@ extern const unsigned char NPrivate::ASCII_LOWER[256] = {
 int AsciiCompareIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept {
     if (s1.size() <= s2.size()) {
         if (int cmp = strnicmp(s1.data(), s2.data(), s1.size())) {
-            return cmp;
-        }
+            return cmp; 
+        } 
         return (s1.size() < s2.size()) ? -1 : 0;
-    }
-
+    } 
+ 
     Y_ASSERT(s1.size() > s2.size());
     if (int cmp = strnicmp(s1.data(), s2.data(), s2.size())) {
-        return cmp;
-    }
-    return 1;
-}
+        return cmp; 
+    } 
+    return 1; 
+} 

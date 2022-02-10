@@ -10,12 +10,12 @@
 #include <util/system/condvar.h>
 
 struct TThreadPoolTest {
-    TSpinLock Lock;
-    long R = -1;
+    TSpinLock Lock; 
+    long R = -1; 
 
     struct TTask: public IObjectInQueue {
         TThreadPoolTest* Test = nullptr;
-        long Value = 0;
+        long Value = 0; 
 
         TTask(TThreadPoolTest* test, int value)
             : Test(test)
@@ -26,8 +26,8 @@ struct TThreadPoolTest {
         void Process(void*) override {
             THolder<TTask> This(this);
 
-            TGuard<TSpinLock> guard(Test->Lock);
-            Test->R ^= Value;
+            TGuard<TSpinLock> guard(Test->Lock); 
+            Test->R ^= Value; 
         }
     };
 
@@ -54,7 +54,7 @@ struct TThreadPoolTest {
         TReallyFastRng32 rand(17);
         const size_t cnt = 1000;
 
-        R = 0;
+        R = 0; 
 
         for (size_t i = 0; i < cnt; ++i) {
             R ^= (long)rand.GenRand();
@@ -69,48 +69,48 @@ struct TThreadPoolTest {
 
         queue->Stop();
 
-        UNIT_ASSERT_EQUAL(0, R);
+        UNIT_ASSERT_EQUAL(0, R); 
     }
-};
+}; 
 
 class TFailAddQueue: public IThreadPool {
-public:
+public: 
     bool Add(IObjectInQueue* /*obj*/) override Y_WARN_UNUSED_RESULT {
-        return false;
+        return false; 
     }
 
     void Start(size_t, size_t) override {
-    }
+    } 
 
     void Stop() noexcept override {
     }
 
     size_t Size() const noexcept override {
-        return 0;
-    }
-};
-
+        return 0; 
+    } 
+}; 
+ 
 Y_UNIT_TEST_SUITE(TThreadPoolTest) {
     Y_UNIT_TEST(TestTThreadPool) {
         TThreadPoolTest t;
         TThreadPool q;
-        t.TestAnyQueue(&q);
-    }
-
+        t.TestAnyQueue(&q); 
+    } 
+ 
     Y_UNIT_TEST(TestTThreadPoolBlocking) {
         TThreadPoolTest t;
         TThreadPool q(TThreadPool::TParams().SetBlocking(true));
-        t.TestAnyQueue(&q, 100);
-    }
-
-    // disabled by pg@ long time ago due to test flaps
-    // Tried to enable: REVIEW:78772
+        t.TestAnyQueue(&q, 100); 
+    } 
+ 
+    // disabled by pg@ long time ago due to test flaps 
+    // Tried to enable: REVIEW:78772 
     Y_UNIT_TEST(TestTAdaptiveThreadPool) {
-        if (false) {
+        if (false) { 
             TThreadPoolTest t;
             TAdaptiveThreadPool q;
-            t.TestAnyQueue(&q);
-        }
+            t.TestAnyQueue(&q); 
+        } 
     }
 
     Y_UNIT_TEST(TestAddAndOwn) {
@@ -126,12 +126,12 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
     }
 
     Y_UNIT_TEST(TestAddFunc) {
-        TFailAddQueue queue;
-        bool added = queue.AddFunc(
+        TFailAddQueue queue; 
+        bool added = queue.AddFunc( 
             []() {} // Lambda, I call him 'Lambda'!
         );
-        UNIT_ASSERT_VALUES_EQUAL(added, false);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(added, false); 
+    } 
 
     Y_UNIT_TEST(TestSafeAddFuncThrows) {
         TFailAddQueue queue;
@@ -254,4 +254,4 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
             TestEnumeratedThreadName(pool, expectedNames);
         }
     }
-}
+} 

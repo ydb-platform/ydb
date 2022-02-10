@@ -59,8 +59,8 @@ struct TMemoryMapCommon {
         oPopulate = 32, // Populate page table entries (see mmap's MAP_POPULATE)
     };
     Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
-
-    /**
+ 
+    /** 
      * Name that will be printed in exceptions if not specified.
      * Overridden by name obtained from `TFile` if it's not empty.
      */
@@ -184,16 +184,16 @@ private:
 };
 
 template <class T>
-class TFileMappedArray {
-private:
-    const T* Ptr_;
-    const T* End_;
+class TFileMappedArray { 
+private: 
+    const T* Ptr_; 
+    const T* End_; 
     size_t Size_;
     char DummyData_[sizeof(T) + PLATFORM_DATA_ALIGN];
     mutable THolder<T, TDestructor> Dummy_;
-    THolder<TFileMap> DataHolder_;
+    THolder<TFileMap> DataHolder_; 
 
-public:
+public: 
     TFileMappedArray()
         : Ptr_(nullptr)
         , End_(nullptr)
@@ -204,34 +204,34 @@ public:
         Ptr_ = nullptr;
         End_ = nullptr;
     }
-    void Init(const char* name) {
-        DataHolder_.Reset(new TFileMap(name));
-        DoInit(name);
+    void Init(const char* name) { 
+        DataHolder_.Reset(new TFileMap(name)); 
+        DoInit(name); 
     }
-    void Init(const TFileMap& fileMap) {
-        DataHolder_.Reset(new TFileMap(fileMap));
-        DoInit(fileMap.GetFile().GetName());
-    }
-    void Term() {
-        DataHolder_.Destroy();
+    void Init(const TFileMap& fileMap) { 
+        DataHolder_.Reset(new TFileMap(fileMap)); 
+        DoInit(fileMap.GetFile().GetName()); 
+    } 
+    void Term() { 
+        DataHolder_.Destroy(); 
         Ptr_ = nullptr;
         Size_ = 0;
         End_ = nullptr;
     }
-    void Precharge() {
-        DataHolder_->Precharge();
-    }
+    void Precharge() { 
+        DataHolder_->Precharge(); 
+    } 
     const T& operator[](size_t pos) const {
         Y_ASSERT(pos < size());
         return Ptr_[pos];
     }
-    /// for STL compatibility only, Size() usage is recommended
+    /// for STL compatibility only, Size() usage is recommended 
     size_t size() const {
         return Size_;
     }
-    size_t Size() const {
-        return Size_;
-    }
+    size_t Size() const { 
+        return Size_; 
+    } 
     const T& GetAt(size_t pos) const {
         if (pos < Size_)
             return Ptr_[pos];
@@ -251,40 +251,40 @@ public:
 
         return *Dummy_;
     }
-    /// for STL compatibility only, Empty() usage is recommended
+    /// for STL compatibility only, Empty() usage is recommended 
     Y_PURE_FUNCTION bool empty() const noexcept {
-        return Empty();
-    }
+        return Empty(); 
+    } 
 
     Y_PURE_FUNCTION bool Empty() const noexcept {
         return 0 == Size_;
     }
-    /// for STL compatibility only, Begin() usage is recommended
+    /// for STL compatibility only, Begin() usage is recommended 
     const T* begin() const noexcept {
-        return Begin();
-    }
+        return Begin(); 
+    } 
     const T* Begin() const noexcept {
         return Ptr_;
     }
-    /// for STL compatibility only, End() usage is recommended
+    /// for STL compatibility only, End() usage is recommended 
     const T* end() const noexcept {
         return End_;
     }
     const T* End() const noexcept {
-        return End_;
-    }
+        return End_; 
+    } 
 
-private:
+private: 
     void DoInit(const TString& fileName) {
-        DataHolder_->Map(0, DataHolder_->Length());
-        if (DataHolder_->Length() % sizeof(T)) {
-            Term();
-            ythrow yexception() << "Incorrect size of file " << fileName.Quote();
-        }
-        Ptr_ = (const T*)DataHolder_->Ptr();
-        Size_ = DataHolder_->Length() / sizeof(T);
-        End_ = Ptr_ + Size_;
-    }
+        DataHolder_->Map(0, DataHolder_->Length()); 
+        if (DataHolder_->Length() % sizeof(T)) { 
+            Term(); 
+            ythrow yexception() << "Incorrect size of file " << fileName.Quote(); 
+        } 
+        Ptr_ = (const T*)DataHolder_->Ptr(); 
+        Size_ = DataHolder_->Length() / sizeof(T); 
+        End_ = Ptr_ + Size_; 
+    } 
 };
 
 class TMappedAllocation: TMoveOnly {

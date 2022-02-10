@@ -1,6 +1,6 @@
-RECURSE(
-    parse_enum
+RECURSE( 
+    parse_enum 
     parse_enum/ut
-    enum_parser
+    enum_parser 
     enum_serialization_runtime
-)
+) 

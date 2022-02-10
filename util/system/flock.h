@@ -2,7 +2,7 @@
 
 #include "error.h"
 #include "defaults.h"
-#include "file.h"
+#include "file.h" 
 
 #if defined(_unix_)
 
@@ -13,7 +13,7 @@ static inline int Flock(int fd, int op) {
     return flock(fd, op);
 }
 
-#else // not _unix_
+#else // not _unix_ 
 
     #ifdef __cplusplus
 extern "C" {
@@ -32,4 +32,4 @@ extern "C" {
 }
     #endif
 
-#endif // not _unix_
+#endif // not _unix_ 

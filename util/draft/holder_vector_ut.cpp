@@ -6,13 +6,13 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
     Y_UNIT_TEST(TestCreateEmpty) {
         THolderVector<int> ints;
         UNIT_ASSERT_EQUAL(ints.Size(), 0);
-        UNIT_ASSERT(!ints);
+        UNIT_ASSERT(!ints); 
     }
 
     Y_UNIT_TEST(TestCreateNonEmpty) {
         THolderVector<int> ints(5);
         UNIT_ASSERT_EQUAL(ints.Size(), 5);
-        UNIT_ASSERT(ints);
+        UNIT_ASSERT(ints); 
 
         for (size_t i = 0; i < ints.Size(); ++i) {
             UNIT_ASSERT_EQUAL(ints[i], (int*)nullptr);

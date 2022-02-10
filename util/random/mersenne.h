@@ -10,21 +10,21 @@ namespace NPrivate {
 
     template <>
     struct TMersenneTraits<ui64> {
-        using TImpl = TMersenne64;
+        using TImpl = TMersenne64; 
     };
 
     template <>
     struct TMersenneTraits<ui32> {
-        using TImpl = TMersenne32;
+        using TImpl = TMersenne32; 
     };
 }
 
 class IInputStream;
 
 template <class T>
-class TMersenne: public TCommonRNG<T, TMersenne<T>>, public ::NPrivate::TMersenneTraits<T>::TImpl {
+class TMersenne: public TCommonRNG<T, TMersenne<T>>, public ::NPrivate::TMersenneTraits<T>::TImpl { 
 public:
-    using TBase = typename ::NPrivate::TMersenneTraits<T>::TImpl;
+    using TBase = typename ::NPrivate::TMersenneTraits<T>::TImpl; 
 
     inline TMersenne() noexcept {
     }

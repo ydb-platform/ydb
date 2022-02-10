@@ -6,7 +6,7 @@
 #include <util/folder/path.h>
 #include <util/stream/output.h>
 #include <util/stream/file.h>
-#include <util/generic/buffer.h>
+#include <util/generic/buffer.h> 
 #include <util/generic/array_ref.h>
 
 Y_UNIT_TEST_SUITE(TBlobTest) {
@@ -38,12 +38,12 @@ Y_UNIT_TEST_SUITE(TBlobTest) {
     Y_UNIT_TEST(TestFromString) {
         TString s("dsfkjhgsadftusadtf");
         TBlob b(TBlob::FromString(s));
-
+ 
         UNIT_ASSERT_EQUAL(TString((const char*)b.Data(), b.Size()), s);
         const auto expectedRef = TArrayRef<const ui8>{(ui8*)s.data(), s.size()};
         UNIT_ASSERT_EQUAL(TArrayRef<const ui8>{b}, expectedRef);
     }
-
+ 
     Y_UNIT_TEST(TestFromBuffer) {
         const size_t sz = 1234u;
         TBuffer buf;

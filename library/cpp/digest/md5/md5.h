@@ -4,7 +4,7 @@
 #include <util/generic/strbuf.h>
 
 class IInputStream;
-
+ 
 class MD5 {
 public:
     MD5() {
@@ -29,12 +29,12 @@ public:
     void Pad();
     ui8* Final(ui8[16]);
 
-    // buf must be char[33];
-    char* End(char* buf);
-
-    // buf must be char[25];
-    char* End_b64(char* buf);
-
+    // buf must be char[33]; 
+    char* End(char* buf); 
+ 
+    // buf must be char[25]; 
+    char* End_b64(char* buf); 
+ 
     // 8-byte xor-based mix
     ui64 EndHalfMix();
 
@@ -45,7 +45,7 @@ public:
      *
      * Return nullptr / empty string if the file does not exist.
      */
-    static char* File(const char* filename, char* buf);
+    static char* File(const char* filename, char* buf); 
     static TString File(const TString& filename);
 
     static char* Data(const void* data, size_t len, char* buf);

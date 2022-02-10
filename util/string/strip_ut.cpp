@@ -6,25 +6,25 @@
 
 Y_UNIT_TEST_SUITE(TStripStringTest) {
     Y_UNIT_TEST(TestStrip) {
-        struct TTest {
+        struct TTest { 
             const char* Str;
             const char* StripLeftRes;
             const char* StripRightRes;
             const char* StripRes;
-        };
-        static const TTest tests[] = {
-            {"  012  ", "012  ", "  012", "012"},
-            {"  012", "012", "  012", "012"},
-            {"012\t\t", "012\t\t", "012", "012"},
-            {"\t012\t", "012\t", "\t012", "012"},
-            {"012", "012", "012", "012"},
-            {"012\r\n", "012\r\n", "012", "012"},
-            {"\n012\r", "012\r", "\n012", "012"},
-            {"\n \t\r", "", "", ""},
-            {"", "", "", ""},
-            {"abc", "abc", "abc", "abc"},
-            {"a c", "a c", "a c", "a c"},
-        };
+        }; 
+        static const TTest tests[] = { 
+            {"  012  ", "012  ", "  012", "012"}, 
+            {"  012", "012", "  012", "012"}, 
+            {"012\t\t", "012\t\t", "012", "012"}, 
+            {"\t012\t", "012\t", "\t012", "012"}, 
+            {"012", "012", "012", "012"}, 
+            {"012\r\n", "012\r\n", "012", "012"}, 
+            {"\n012\r", "012\r", "\n012", "012"}, 
+            {"\n \t\r", "", "", ""}, 
+            {"", "", "", ""}, 
+            {"abc", "abc", "abc", "abc"}, 
+            {"a c", "a c", "a c", "a c"}, 
+        }; 
 
         for (const auto& test : tests) {
             TString inputStr(test.Str);
@@ -45,16 +45,16 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     }
 
     Y_UNIT_TEST(TestCustomStrip) {
-        struct TTest {
+        struct TTest { 
             const char* Str;
             const char* Result;
-        };
-        static const TTest tests[] = {
-            {"//012//", "012"},
-            {"//012", "012"},
-            {"012", "012"},
-            {"012//", "012"},
-        };
+        }; 
+        static const TTest tests[] = { 
+            {"//012//", "012"}, 
+            {"//012", "012"}, 
+            {"012", "012"}, 
+            {"012//", "012"}, 
+        }; 
 
         for (auto test : tests) {
             UNIT_ASSERT_EQUAL(
@@ -64,28 +64,28 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     }
 
     Y_UNIT_TEST(TestCustomStripLeftRight) {
-        struct TTest {
-            const char* Str;
-            const char* ResultLeft;
-            const char* ResultRight;
-        };
-        static const TTest tests[] = {
-            {"//012//", "012//", "//012"},
-            {"//012", "012", "//012"},
-            {"012", "012", "012"},
-            {"012//", "012//", "012"},
-        };
-
+        struct TTest { 
+            const char* Str; 
+            const char* ResultLeft; 
+            const char* ResultRight; 
+        }; 
+        static const TTest tests[] = { 
+            {"//012//", "012//", "//012"}, 
+            {"//012", "012", "//012"}, 
+            {"012", "012", "012"}, 
+            {"012//", "012//", "012"}, 
+        }; 
+ 
         for (const auto& test : tests) {
-            UNIT_ASSERT_EQUAL(
+            UNIT_ASSERT_EQUAL( 
                 StripStringLeft(TString(test.Str), EqualsStripAdapter('/')),
                 test.ResultLeft);
-            UNIT_ASSERT_EQUAL(
+            UNIT_ASSERT_EQUAL( 
                 StripStringRight(TString(test.Str), EqualsStripAdapter('/')),
                 test.ResultRight);
-        };
-    }
-
+        }; 
+    } 
+ 
     Y_UNIT_TEST(TestNullStringStrip) {
         TStringBuf nullString(nullptr, nullptr);
         UNIT_ASSERT_EQUAL(
@@ -128,11 +128,11 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         TString abs1("Very long description string written in unknown language.");
         TString abs2(abs1);
         TString abs3(abs1);
-        CollapseText(abs1, 204);
-        CollapseText(abs2, 54);
-        CollapseText(abs3, 49);
-        UNIT_ASSERT_EQUAL(abs1 == "Very long description string written in unknown language.", true);
-        UNIT_ASSERT_EQUAL(abs2 == "Very long description string written in unknown ...", true);
-        UNIT_ASSERT_EQUAL(abs3 == "Very long description string written in ...", true);
+        CollapseText(abs1, 204); 
+        CollapseText(abs2, 54); 
+        CollapseText(abs3, 49); 
+        UNIT_ASSERT_EQUAL(abs1 == "Very long description string written in unknown language.", true); 
+        UNIT_ASSERT_EQUAL(abs2 == "Very long description string written in unknown ...", true); 
+        UNIT_ASSERT_EQUAL(abs3 == "Very long description string written in ...", true); 
     }
 }

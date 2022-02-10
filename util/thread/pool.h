@@ -175,7 +175,7 @@ public:
 
     bool AddAndOwn(THolder<IObjectInQueue> obj) Y_WARN_UNUSED_RESULT;
     virtual void Start(size_t threadCount, size_t queueSizeLimit = 0) = 0;
-    /** Wait for completion of all scheduled objects, and then exit */
+    /** Wait for completion of all scheduled objects, and then exit */ 
     virtual void Stop() noexcept = 0;
     /** Number of tasks currently in queue */
     virtual size_t Size() const noexcept = 0;

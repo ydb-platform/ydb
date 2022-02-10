@@ -83,7 +83,7 @@ public:
     }
 
     using TBase::operator[];
-    using TBase::operator bool;
+    using TBase::operator bool; 
     using TBase::at;
     using TBase::back;
     using TBase::begin;

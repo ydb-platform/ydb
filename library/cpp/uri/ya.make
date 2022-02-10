@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    mvel
+OWNER( 
+    mvel 
     g:base
-)
+) 
 
 SRCS(
     assign.cpp

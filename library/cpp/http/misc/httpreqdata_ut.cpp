@@ -1,7 +1,7 @@
-#include "httpreqdata.h"
-
+#include "httpreqdata.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
     Y_UNIT_TEST(Headers) {
         TServerRequestData sd;
@@ -44,13 +44,13 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
 
     Y_UNIT_TEST(ParseScan) {
         TServerRequestData rd;
-
+ 
         // Parse parses url without host
         UNIT_ASSERT(!rd.Parse(" http://yandex.ru/yandsearch?&gta=fake&haha=da HTTP 1.1 OK"));
-
+ 
         // This should work
         UNIT_ASSERT(rd.Parse(" /yandsearch?&gta=fake&haha=da HTTP 1.1 OK"));
-
+ 
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "&gta=fake&haha=da");
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf());
 
@@ -58,10 +58,10 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         UNIT_ASSERT(rd.CgiParam.Has("gta", "fake"));
         UNIT_ASSERT(rd.CgiParam.Has("haha", "da"));
         UNIT_ASSERT(!rd.CgiParam.Has("no-param"));
-
+ 
         rd.Clear();
     }
-
+ 
     Y_UNIT_TEST(Ctor) {
         const TString qs("gta=fake&haha=da");
         TServerRequestData rd(qs.c_str());
@@ -73,14 +73,14 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         UNIT_ASSERT(rd.CgiParam.Has("haha"));
         UNIT_ASSERT(!rd.CgiParam.Has("no-param"));
     }
-
+ 
     Y_UNIT_TEST(HashCut) {
         const TString qs("&gta=fake&haha=da");
         const TString header = " /yandsearch?" + qs + "#&uberParam=yes&q=? HTTP 1.1 OK";
 
         TServerRequestData rd;
         rd.Parse(header.c_str());
-
+ 
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs);
         UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs);
 
@@ -89,36 +89,36 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         UNIT_ASSERT(rd.CgiParam.Has("haha"));
         UNIT_ASSERT(!rd.CgiParam.Has("uberParam"));
     }
-
+ 
     Y_UNIT_TEST(MisplacedHashCut) {
         TServerRequestData rd;
         rd.Parse(" /y#ndsearch?&gta=fake&haha=da&uberParam=yes&q=? HTTP 1.1 OK");
-
+ 
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "");
         UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), "");
 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.empty());
     }
-
+ 
     Y_UNIT_TEST(CornerCase) {
         TServerRequestData rd;
         rd.Parse(" /yandsearch?#");
-
+ 
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "");
         UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), "");
 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.empty());
     }
-
+ 
     Y_UNIT_TEST(AppendQueryString) {
         const TString qs("gta=fake&haha=da");
         TServerRequestData rd(qs.c_str());
-
+ 
         UNIT_ASSERT(rd.CgiParam.Has("gta", "fake"));
         UNIT_ASSERT(rd.CgiParam.Has("haha", "da"));
-
+ 
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs);
         UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf());
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs);
 
         rd.Scan();
-
+ 
         UNIT_ASSERT(rd.CgiParam.Has("gta", "true"));
         UNIT_ASSERT(rd.CgiParam.Has("gta", "new"));
     }
@@ -151,4 +151,4 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         }
     }
 
-} // TRequestServerDataTest
+} // TRequestServerDataTest 

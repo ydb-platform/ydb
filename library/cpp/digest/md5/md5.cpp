@@ -1,8 +1,8 @@
-#include "md5.h"
-
+#include "md5.h" 
+ 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/stream/input.h>
+#include <util/stream/input.h> 
 #include <util/stream/file.h>
 #include <util/string/hex.h>
 
@@ -99,10 +99,10 @@ void MD5::Init() {
     BufferSize = 0;
     StreamSize = 0;
     /* Load magic initialization constants.  */
-    State[0] = 0x67452301;
-    State[1] = 0xefcdab89;
-    State[2] = 0x98badcfe;
-    State[3] = 0x10325476;
+    State[0] = 0x67452301; 
+    State[1] = 0xefcdab89; 
+    State[2] = 0x98badcfe; 
+    State[3] = 0x10325476; 
 }
 
 /*

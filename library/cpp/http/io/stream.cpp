@@ -228,15 +228,15 @@ private:
     }
 
     struct TParsedHeaders {
-        bool Chunked = false;
-        bool KeepAlive = false;
+        bool Chunked = false; 
+        bool KeepAlive = false; 
         TStringBuf LZipped;
     };
 
     struct TTrEnc {
         inline void operator()(const TStringBuf& s) {
             if (s == TStringBuf("chunked")) {
-                p->Chunked = true;
+                p->Chunked = true; 
             }
         }
 
@@ -318,9 +318,9 @@ private:
                 HEADERCMP(header, "connection") {
                     // accept header "Connection: Keep-Alive, TE"
                     if (strnicmp(header.Value().data(), "keep-alive", 10) == 0) {
-                        p.KeepAlive = true;
+                        p.KeepAlive = true; 
                     } else if (stricmp(header.Value().data(), "close") == 0) {
-                        p.KeepAlive = false;
+                        p.KeepAlive = false; 
                     }
                 }
                 [[fallthrough]];
@@ -336,7 +336,7 @@ private:
             }
         }
 
-        if (p.Chunked) {
+        if (p.Chunked) { 
             ChunkedInput_ = Streams_.Add(new TChunkedInput(&Buffered_, &Trailers_));
             Input_ = ChunkedInput_;
         } else {
@@ -357,7 +357,7 @@ private:
             Input_ = Streams_.Add((*decoder)(Input_).Release());
         }
 
-        KeepAlive_ = p.KeepAlive;
+        KeepAlive_ = p.KeepAlive; 
     }
 
 private:
@@ -474,7 +474,7 @@ class THttpOutput::TImpl {
         }
 
     private:
-        size_t Length_ = 0;
+        size_t Length_ = 0; 
     };
 
     enum TState {
@@ -564,7 +564,7 @@ public:
     inline void Flush() {
         TFlush f;
         Streams_.ForEach(f);
-        Slave_->Flush(); // see SEARCH-1030
+        Slave_->Flush(); // see SEARCH-1030 
     }
 
     inline void Finish() {
@@ -574,7 +574,7 @@ public:
 
         TFinish f;
         Streams_.ForEach(f);
-        Slave_->Finish(); // see SEARCH-1030
+        Slave_->Finish(); // see SEARCH-1030 
 
         Finished_ = true;
     }
@@ -806,10 +806,10 @@ private:
     }
 
     inline void RebuildStream() {
-        bool keepAlive = false;
+        bool keepAlive = false; 
         const TCompressionCodecFactory::TEncoderConstructor* encoder = nullptr;
         bool chunked = false;
-        bool haveContentLength = false;
+        bool haveContentLength = false; 
 
         for (THttpHeaders::TConstIterator h = Headers_.Begin(); h != Headers_.End(); ++h) {
             const THttpInputHeader& header = *h;
@@ -822,7 +822,7 @@ private:
             } else if (hl == TStringBuf("transfer-encoding")) {
                 chunked = to_lower(header.Value()) == TStringBuf("chunked");
             } else if (hl == TStringBuf("content-length")) {
-                haveContentLength = true;
+                haveContentLength = true; 
             }
         }
 

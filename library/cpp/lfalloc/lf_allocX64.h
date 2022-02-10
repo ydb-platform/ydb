@@ -1871,11 +1871,11 @@ static const char* LFAlloc_GetParam(const char* param) {
 static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_t size) {
     if (Y_UNLIKELY(alignment > 4096)) {
         const char* error = "Larger alignment are not guaranteed with this implementation\n";
-#ifdef _win_
+#ifdef _win_ 
         OutputDebugStringA(error);
-#endif
+#endif 
         NMalloc::AbortFromCorruptedAllocator(error);
-    }
+    } 
     size_t bigsize = size;
     if (bigsize <= alignment) {
         bigsize = alignment;

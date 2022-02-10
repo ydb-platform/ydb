@@ -14,7 +14,7 @@
 template <class T>
 size_t ToStringImpl(T t, char* buf, size_t len);
 
-/**
+/** 
  * Converts @c t to string writing not more than @c len bytes to output buffer @c buf.
  * No NULL terminator appended! Throws exception on buffer overflow.
  * @return number of bytes written
@@ -215,27 +215,27 @@ inline ::NPrivate::TFromString<typename T::TChar> FromString(const T& s) {
     return ::NPrivate::TFromString<typename T::TChar>(s.data(), s.size());
 }
 
-// Conversion exception free versions
-template <typename T, typename TChar>
-bool TryFromStringImpl(const TChar* data, size_t len, T& result);
-
-/**
- * @param data Source string buffer pointer
- * @param len Source string length, in characters
- * @param result Place to store conversion result value.
- * If conversion error occurs, no value stored in @c result
- * @return @c true in case of successful conversion, @c false otherwise
- **/
-template <typename T, typename TChar>
-inline bool TryFromString(const TChar* data, size_t len, T& result) {
-    return TryFromStringImpl<T>(data, len, result);
-}
-
-template <typename T, typename TChar>
-inline bool TryFromString(const TChar* data, T& result) {
+// Conversion exception free versions 
+template <typename T, typename TChar> 
+bool TryFromStringImpl(const TChar* data, size_t len, T& result); 
+ 
+/** 
+ * @param data Source string buffer pointer 
+ * @param len Source string length, in characters 
+ * @param result Place to store conversion result value. 
+ * If conversion error occurs, no value stored in @c result 
+ * @return @c true in case of successful conversion, @c false otherwise 
+ **/ 
+template <typename T, typename TChar> 
+inline bool TryFromString(const TChar* data, size_t len, T& result) { 
+    return TryFromStringImpl<T>(data, len, result); 
+} 
+ 
+template <typename T, typename TChar> 
+inline bool TryFromString(const TChar* data, T& result) { 
     return TryFromString<T>(data, std::char_traits<TChar>::length(data), result);
-}
-
+} 
+ 
 template <class T, class TChar>
 inline bool TryFromString(const TChar* data, const size_t len, T& result, const T& def) {
     if (TryFromString<T>(data, len, result)) {
@@ -245,31 +245,31 @@ inline bool TryFromString(const TChar* data, const size_t len, T& result, const 
     return false;
 }
 
-template <class T>
-inline bool TryFromString(const TStringBuf& s, T& result) {
+template <class T> 
+inline bool TryFromString(const TStringBuf& s, T& result) { 
     return TryFromString<T>(s.data(), s.size(), result);
-}
-
-template <class T>
+} 
+ 
+template <class T> 
 inline bool TryFromString(const TString& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
-}
-
-template <class T>
+} 
+ 
+template <class T> 
 inline bool TryFromString(const std::string& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
 }
 
 template <class T>
-inline bool TryFromString(const TWtringBuf& s, T& result) {
+inline bool TryFromString(const TWtringBuf& s, T& result) { 
     return TryFromString<T>(s.data(), s.size(), result);
-}
-
-template <class T>
+} 
+ 
+template <class T> 
 inline bool TryFromString(const TUtf16String& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
-}
-
+} 
+ 
 template <class T, class TStringType>
 inline bool TryFromStringWithDefault(const TStringType& s, T& result, const T& def) {
     return TryFromString<T>(s.data(), s.size(), result, def);

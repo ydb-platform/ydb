@@ -103,7 +103,7 @@ private:
 
         if (len) {
             const size_t out = this->Compress((const char*)ptr, len, (char*)Block(), this->AdditionalDataLength());
-            // catch compressor buffer overrun (e.g. SEARCH-2043)
+            // catch compressor buffer overrun (e.g. SEARCH-2043) 
             //Y_VERIFY(out <= this->Hint(this->BlockSize()));
 
             if (out < len || TCompressor::SaveIncompressibleChunks()) {
@@ -377,9 +377,9 @@ public:
     }
 
     static inline size_t Hint(size_t len) noexcept {
-        // see SEARCH-2043 and, e.g. examples at
-        // http://stackoverflow.com/questions/4235019/how-to-get-lzo-to-work-with-a-file-stream
-        return len + (len / 16) + 64 + 3;
+        // see SEARCH-2043 and, e.g. examples at 
+        // http://stackoverflow.com/questions/4235019/how-to-get-lzo-to-work-with-a-file-stream 
+        return len + (len / 16) + 64 + 3; 
     }
 
     static inline bool SaveIncompressibleChunks() noexcept {
@@ -502,7 +502,7 @@ public:
     static const char signature[];
 
     static inline size_t Hint(size_t len) noexcept {
-        return Max<size_t>(snappy::MaxCompressedLength(len), 100);
+        return Max<size_t>(snappy::MaxCompressedLength(len), 100); 
     }
 
     inline size_t Compress(const char* data, size_t len, char* ptr, size_t /*dstMaxSize*/) {
@@ -561,8 +561,8 @@ public:
     }
 
     inline bool SaveIncompressibleChunks() const noexcept {
-        // we must save incompressible chunks "as is"
-        // after compressor run in streaming mode
+        // we must save incompressible chunks "as is" 
+        // after compressor run in streaming mode 
         return Table_->Setting(3);
     }
 

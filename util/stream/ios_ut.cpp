@@ -52,7 +52,7 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TStreamsTest);
 
-void TStreamsTest::TestIStreamOperators() {
+void TStreamsTest::TestIStreamOperators() { 
     TString data("first line\r\nsecond\t\xd1\x82\xd0\xb5\xd1\x81\xd1\x82 line\r\n 1 -4 59 4320000000009999999 c\n -1.5 1e-110");
     TStringInput si(data);
 
@@ -103,20 +103,20 @@ void TStreamsTest::TestStringStream() {
     UNIT_ASSERT_EQUAL(s.ReadLine(), "123.1");
 
     UNIT_ASSERT_EQUAL(s.Str(), "qw\r\n1234\n34\r\n123.1");
-
-    // Test stream copying
-    TStringStream sc = s;
-
-    s << "-666-" << 13;
-    sc << "-777-" << 0 << "JackPot";
-
-    UNIT_ASSERT_EQUAL(s.Str(), "qw\r\n1234\n34\r\n123.1-666-13");
-    UNIT_ASSERT_EQUAL(sc.Str(), "qw\r\n1234\n34\r\n123.1-777-0JackPot");
-
-    TStringStream ss;
-    ss = s;
-    s << "... and some trash";
-    UNIT_ASSERT_EQUAL(ss.Str(), "qw\r\n1234\n34\r\n123.1-666-13");
+ 
+    // Test stream copying 
+    TStringStream sc = s; 
+ 
+    s << "-666-" << 13; 
+    sc << "-777-" << 0 << "JackPot"; 
+ 
+    UNIT_ASSERT_EQUAL(s.Str(), "qw\r\n1234\n34\r\n123.1-666-13"); 
+    UNIT_ASSERT_EQUAL(sc.Str(), "qw\r\n1234\n34\r\n123.1-777-0JackPot"); 
+ 
+    TStringStream ss; 
+    ss = s; 
+    s << "... and some trash"; 
+    UNIT_ASSERT_EQUAL(ss.Str(), "qw\r\n1234\n34\r\n123.1-666-13"); 
 }
 
 void TStreamsTest::TestGenericRead() {

@@ -8,7 +8,7 @@
 // timegm and gmtime_r versions that don't need access to filesystem or a big stack
 time_t TimeGM(const struct tm* t);
 struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf);
-// safe version of ctime, convinient version of ctime_r
+// safe version of ctime, convinient version of ctime_r 
 TString CTimeR(const time_t* timer);
 
 #ifdef _win_

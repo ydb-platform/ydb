@@ -69,7 +69,7 @@ void Y_FORCE_INLINE PackUI32(IOutputStream& out, ui32 v) {
     char buf[sizeof(ui32)];
     char* bufPtr = buf;
     size_t size;
-    PACK_28(v, bufPtr, mem_traits, size);
+    PACK_28(v, bufPtr, mem_traits, size); 
     out.Write(buf, size);
 }
 
@@ -86,7 +86,7 @@ struct TInputStream2Traits<TZCMemoryInput> {
 template <class TStream>
 void Y_FORCE_INLINE UnPackUI32(TStream& in, ui32& v) {
     size_t size;
-    UNPACK_28(v, in, TInputStream2Traits<TStream>::TTraits, size);
+    UNPACK_28(v, in, TInputStream2Traits<TStream>::TTraits, size); 
     (void)size;
 }
 

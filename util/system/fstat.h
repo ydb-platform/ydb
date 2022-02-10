@@ -4,7 +4,7 @@
 #include <util/system/fhandle.h>
 
 class TFile;
-class TFsPath;
+class TFsPath; 
 
 struct TFileStat {
     ui32 Mode = 0; /* protection */
@@ -29,17 +29,17 @@ public:
     bool IsDir() const noexcept;
     bool IsSymlink() const noexcept;
 
-    explicit TFileStat(const TFile& f);
-    explicit TFileStat(FHANDLE f);
-    TFileStat(const TFsPath& fileName, bool nofollow = false);
+    explicit TFileStat(const TFile& f); 
+    explicit TFileStat(FHANDLE f); 
+    TFileStat(const TFsPath& fileName, bool nofollow = false); 
     TFileStat(const TString& fileName, bool nofollow = false);
-    TFileStat(const char* fileName, bool nofollow = false);
+    TFileStat(const char* fileName, bool nofollow = false); 
 
     friend bool operator==(const TFileStat& l, const TFileStat& r) noexcept;
     friend bool operator!=(const TFileStat& l, const TFileStat& r) noexcept;
 
-private:
-    void MakeFromFileName(const char* fileName, bool nofollow);
+private: 
+    void MakeFromFileName(const char* fileName, bool nofollow); 
 };
 
 i64 GetFileLength(FHANDLE fd);

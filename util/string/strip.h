@@ -170,29 +170,29 @@ static inline T StripStringRight(const T& from) {
 template <class T, class TStripCriterion>
 static inline T StripStringLeft(const T& from, TStripCriterion&& criterion) {
     return TStripImpl<true, false>::StripString(from, criterion);
-}
-
+} 
+ 
 template <class T, class TStripCriterion>
 static inline T StripStringRight(const T& from, TStripCriterion&& criterion) {
     return TStripImpl<false, true>::StripString(from, criterion);
-}
-
+} 
+ 
 /// Copies the given string removing leading and trailing spaces.
 static inline bool Strip(const TString& from, TString& to) {
-    return StripString(from, to);
-}
+    return StripString(from, to); 
+} 
 
 /// Removes leading and trailing spaces from the string.
 inline TString& StripInPlace(TString& s) {
-    Strip(s, s);
-    return s;
-}
+    Strip(s, s); 
+    return s; 
+} 
 
 /// Returns a copy of the given string with removed leading and trailing spaces.
 inline TString Strip(const TString& s) Y_WARN_UNUSED_RESULT;
 inline TString Strip(const TString& s) {
     TString ret = s;
-    Strip(ret, ret);
+    Strip(ret, ret); 
     return ret;
 }
 
@@ -234,7 +234,7 @@ bool Collapse(const TString& from, TString& to, size_t maxLen = 0);
 
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
 inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
-    Collapse(s, s, maxLen);
+    Collapse(s, s, maxLen); 
     return s;
 }
 
@@ -242,7 +242,7 @@ inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
 inline TString Collapse(const TString& s, size_t maxLen = 0) Y_WARN_UNUSED_RESULT;
 inline TString Collapse(const TString& s, size_t maxLen) {
     TString ret;
-    Collapse(s, ret, maxLen);
+    Collapse(s, ret, maxLen); 
     return ret;
 }
 
@@ -252,6 +252,6 @@ void CollapseText(const TString& from, TString& to, size_t maxLen);
 /// @details An ellipsis is inserted at the end of the truncated line.
 inline void CollapseText(TString& s, size_t maxLen) {
     TString to;
-    CollapseText(s, to, maxLen);
+    CollapseText(s, to, maxLen); 
     s = to;
 }

@@ -1,8 +1,8 @@
 #pragma once
-
+ 
 #include <util/generic/array_ref.h>
-#include <util/generic/vector.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/vector.h> 
+#include <util/generic/strbuf.h> 
 
 #include <array>
 
@@ -12,15 +12,15 @@ namespace NCodecs::NFloatHuff {
     class TDecoder {
     public:
         explicit TDecoder(TStringBuf data);
-
+ 
         TVector<float> DecodeAll(size_t sizeHint = 0);
-
+ 
         // Returns number of decoded floats. May be fewer than requested if the EOS is found.
         size_t Decode(TArrayRef<float> dest);
-
+ 
         // Returns the number of skipped values.
         size_t Skip(size_t count);
-
+ 
         bool HasMore() const;
 
     private:

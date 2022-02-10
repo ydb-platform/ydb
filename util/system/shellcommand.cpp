@@ -508,8 +508,8 @@ public:
         }
         return nullptr;
     }
-
-    TString GetQuotedCommand() const;
+ 
+    TString GetQuotedCommand() const; 
 };
 
 #if defined(_win_)
@@ -1194,7 +1194,7 @@ TShellCommand& TShellCommand::CloseInput() {
     Impl->CloseInput();
     return *this;
 }
-
-TString TShellCommand::GetQuotedCommand() const {
-    return Impl->GetQuotedCommand();
-}
+ 
+TString TShellCommand::GetQuotedCommand() const { 
+    return Impl->GetQuotedCommand(); 
+} 

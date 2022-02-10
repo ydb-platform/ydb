@@ -9,7 +9,7 @@ TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
     Map_ = map;
     i64 len = Map_->Length();
     if (Hi32(len) != 0 && sizeof(size_t) <= sizeof(ui32))
-        ythrow yexception() << "File '" << dbgName << "' mapping error: " << len << " too large";
+        ythrow yexception() << "File '" << dbgName << "' mapping error: " << len << " too large"; 
 
     Map_->Map(0, static_cast<size_t>(len));
 }
@@ -17,7 +17,7 @@ TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
 TMappedFile::TMappedFile(const TFile& file, TFileMap::EOpenMode om, const char* dbgName)
     : Map_(nullptr)
 {
-    init(file, om, dbgName);
+    init(file, om, dbgName); 
 }
 
 void TMappedFile::precharge(size_t off, size_t size) const {
@@ -45,7 +45,7 @@ void TMappedFile::init(const TString& name, size_t length, TFileMap::EOpenMode o
 
 void TMappedFile::init(const TFile& file, TFileMap::EOpenMode om, const char* dbgName) {
     THolder<TFileMap> map(new TFileMap(file, om));
-    TMappedFile newFile(map.Get(), dbgName);
+    TMappedFile newFile(map.Get(), dbgName); 
     Y_UNUSED(map.Release());
     newFile.swap(*this);
     newFile.term();

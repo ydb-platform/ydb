@@ -11,7 +11,7 @@
 class THttpServerOptions {
 public:
     inline THttpServerOptions(ui16 port = 17000) noexcept
-        : Port(port)
+        : Port(port) 
     {
     }
 
@@ -146,8 +146,8 @@ public:
 
     typedef TVector<TAddr> TAddrs;
 
-    bool KeepAliveEnabled = true;
-    bool CompressionEnabled = false;
+    bool KeepAliveEnabled = true; 
+    bool CompressionEnabled = false; 
     bool RejectExcessConnections = false;
     bool ReusePort = false; // set SO_REUSEPORT socket option
     bool ReuseAddress = true; // set SO_REUSEADDR socket option
@@ -157,10 +157,10 @@ public:
     const char* ServerName = "YWS/1.0"; // The Web server name to return in HTTP headers
     ui32 nThreads = 0;                  // Thread count for requests processing
     ui32 MaxQueueSize = 0;              // Max allowed request count in queue
-    ui32 nFThreads = 1;
-    ui32 MaxFQueueSize = 0;
-    ui32 MaxConnections = 100;
-    int ListenBacklog = SOMAXCONN;
+    ui32 nFThreads = 1; 
+    ui32 MaxFQueueSize = 0; 
+    ui32 MaxConnections = 100; 
+    int ListenBacklog = SOMAXCONN; 
     TDuration ClientTimeout;
     size_t OutputBufferSize = 0;
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;

@@ -128,7 +128,7 @@ TTimeLogger::~TTimeLogger() {
     ui64 endCycles = GetCycleCount();
     if (Verbose) {
         const char* prefix = (OK) ? "" : "!";
-        fprintf(stderr, "%s%s ended: %.24s (%lu) (%d) (took %lus = %s)\n",
+        fprintf(stderr, "%s%s ended: %.24s (%lu) (%d) (took %lus = %s)\n", 
                 prefix, Message.data(), ctime(&tim), (unsigned long)tim, (int)getpid(),
                 (unsigned long)tim - (unsigned long)Begin, FormatCycles(endCycles - BeginCycles).data());
         fprintf(stderr, "%s=========================================================\n", prefix);

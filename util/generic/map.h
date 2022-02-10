@@ -37,7 +37,7 @@ public:
     inline explicit operator bool() const noexcept {
         return !this->empty();
     }
-
+ 
     inline bool contains(const K& key) const {
         return this->find(key) != this->end();
     }

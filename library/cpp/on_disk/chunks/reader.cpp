@@ -12,11 +12,11 @@ static inline void ReadAux(const char* data, T* aux, T count, TVector<const char
     }
 }
 
-TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
+TChunkedDataReader::TChunkedDataReader(const TBlob& blob) { 
     const char* cdata = blob.AsCharPtr();
     const size_t size = blob.Size();
-    Y_ENSURE(size >= sizeof(ui32), "Empty file with chunks. ");
-
+    Y_ENSURE(size >= sizeof(ui32), "Empty file with chunks. "); 
+ 
     ui32 last = ReadUnaligned<ui32>((ui32*)(cdata + size) - 1);
 
     if (last != 0) { // old version file
@@ -29,11 +29,11 @@ TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
         return;
     }
 
-    Y_ENSURE(size >= 3 * sizeof(ui64), "Blob size must be >= 3 * sizeof(ui64). ");
-
+    Y_ENSURE(size >= 3 * sizeof(ui64), "Blob size must be >= 3 * sizeof(ui64). "); 
+ 
     ui64* aux = (ui64*)(cdata + size);
     Version = ReadUnaligned<ui64>(aux - 2);
-    Y_ENSURE(Version > 0, "Invalid chunked array version. ");
+    Y_ENSURE(Version > 0, "Invalid chunked array version. "); 
 
     ui64 count = ReadUnaligned<ui64>(aux - 3);
 

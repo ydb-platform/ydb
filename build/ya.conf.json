@@ -460,9 +460,9 @@
         "iceflame": {
             "description": "Performance data collection and analysis"
         },
-        "cs": {
-            "description": "Fast CodeSearch CLI tool"
-        },
+        "cs": { 
+            "description": "Fast CodeSearch CLI tool" 
+        }, 
         "wall-e": {
             "description": "Client for Wall-E"
         },
@@ -3508,13 +3508,13 @@
                 }
             ]
         },
-        "ag": {
-            "tools": {
+        "ag": { 
+            "tools": { 
                 "ag": {
                     "bottle": "ag",
                     "executable": "ag"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3523,7 +3523,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "yf": {
             "tools": {
                 "yf": {
@@ -5578,28 +5578,28 @@
                 }
             ]
         },
-        "cs": {
-            "tools": {
-                "cs": {
-                    "bottle": "cs",
-                    "executable": "cs"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "cs": { 
+            "tools": { 
+                "cs": { 
+                    "bottle": "cs", 
+                    "executable": "cs" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "wall-e": {
             "tools": {
                 "wall-e": {
@@ -6768,17 +6768,17 @@
                 ]
             }
         },
-        "ag": {
-            "formula": {
+        "ag": { 
+            "formula": { 
                 "sandbox_id": 75851513,
-                "match": "Ag"
-            },
-            "executable": {
+                "match": "Ag" 
+            }, 
+            "executable": { 
                 "ag": [
                     "ag"
                 ]
-            }
-        },
+            } 
+        }, 
         "valgrind": {
             "formula": {
                 "sandbox_id": 944969271,
@@ -7885,17 +7885,17 @@
                 ]
             }
         },
-        "cs": {
-            "formula": {
+        "cs": { 
+            "formula": { 
                 "sandbox_id": 1206856496,
-                "match": "cs"
-            },
-            "executable": {
-                "cs": [
-                    "cs"
-                ]
-            }
-        },
+                "match": "cs" 
+            }, 
+            "executable": { 
+                "cs": [ 
+                    "cs" 
+                ] 
+            } 
+        }, 
         "wall-e": {
             "formula": {
                 "sandbox_id": 1085675590,

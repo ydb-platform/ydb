@@ -21,9 +21,9 @@ namespace NBus {
             , Acquired(0)
             , WakeLev(wake < 1 ? Max<size_t>(1, tokens / 2) : 0)
             , Tokens_(tokens)
-        {
+        { 
             Y_UNUSED(padd_);
-        }
+        } 
 
         bool Acquire(TAtomic level = 1, bool force = false) {
             level = Max(TAtomicBase(level), TAtomicBase(1));

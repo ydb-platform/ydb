@@ -9,14 +9,14 @@
 
 Y_UNIT_TEST_SUITE(THttpCompressionTest) {
     static const TString DATA = "I'm a teapot";
-
+ 
     Y_UNIT_TEST(TestGetBestCodecs) {
         UNIT_ASSERT(TCompressionCodecFactory::Instance().GetBestCodecs().size() > 0);
     }
-
+ 
     Y_UNIT_TEST(TestEncoder) {
         TStringStream buffer;
-
+ 
         {
             auto encoder = TCompressionCodecFactory::Instance().FindEncoder("gzip");
             UNIT_ASSERT(encoder);
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(THttpCompressionTest) {
 
         TZLibDecompress decompressor(&buffer);
         UNIT_ASSERT_EQUAL(decompressor.ReadAll(), DATA);
-    }
+    } 
 
     Y_UNIT_TEST(TestDecoder) {
         TStringStream buffer;

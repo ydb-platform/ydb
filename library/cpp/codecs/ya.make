@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     g:base
-    velavokr
-)
+    velavokr 
+) 
 
 SRCS(
     tls_cache.cpp

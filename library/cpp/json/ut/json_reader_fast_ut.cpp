@@ -173,7 +173,7 @@ namespace NJson {
 class TFastJsonTest: public TTestBase {
     UNIT_TEST_SUITE(TFastJsonTest)
     UNIT_TEST(TestParse)
-    UNIT_TEST(TestReadJsonFastTree)
+    UNIT_TEST(TestReadJsonFastTree) 
     UNIT_TEST(TestNoInlineComment)
     UNIT_TEST_SUITE_END();
 
@@ -232,7 +232,7 @@ public:
         va_end(vl);
 
         TTestHandler h;
-        const bool res = ReadJsonFast(json, &h);
+        const bool res = ReadJsonFast(json, &h); 
         UNIT_ASSERT_VALUES_EQUAL_C(res, accept, Sprintf("%s (%s)", ToString(json).data(), h.Events.back().Str.data()));
         h.Assert(evs, ToString(json));
     }
@@ -279,17 +279,17 @@ public:
         DoTestParse<true>("{g:{x:{a:{b:c,e:f},q:{x:y}},y:fff}}", 22, E_DICT_OPEN, E_KEY, "g", E_DICT_OPEN, E_KEY, "x", E_DICT_OPEN, E_KEY, "a", E_DICT_OPEN, E_KEY, "b", E_STR, "c", E_KEY, "e", E_STR, "f", E_DICT_CLOSE, E_KEY, "q", E_DICT_OPEN, E_KEY, "x", E_STR, "y", E_DICT_CLOSE, E_DICT_CLOSE, E_KEY, "y", E_STR, "fff", E_DICT_CLOSE, E_DICT_CLOSE);
     }
 
-    void TestReadJsonFastTree() {
+    void TestReadJsonFastTree() { 
         const TString json = R"(
-            {
-                "a": {
-                    "b": {}
-                 }
-            }}
-        )";
-        NJson::TJsonValue value;
-        UNIT_ASSERT(!ReadJsonFastTree(json, &value));
-    }
+            { 
+                "a": { 
+                    "b": {} 
+                 } 
+            }} 
+        )"; 
+        NJson::TJsonValue value; 
+        UNIT_ASSERT(!ReadJsonFastTree(json, &value)); 
+    } 
 
     void TestNoInlineComment() {
         using namespace NJson::NTest;

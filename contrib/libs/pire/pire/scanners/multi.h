@@ -205,12 +205,12 @@ public:
 		}
 	}
 
-	Scanner(Scanner&& s) 
-	{ 
-		Alias(Null()); 
-		Swap(s); 
-	} 
- 
+	Scanner(Scanner&& s)
+	{
+		Alias(Null());
+		Swap(s);
+	}
+
 	template<class AnotherRelocation>
 	Scanner(const Scanner<AnotherRelocation, Shortcutting>& s)
 	{
@@ -248,7 +248,7 @@ public:
 		Scanner s;
 
 		const size_t* p = reinterpret_cast<const size_t*>(ptr);
-		Impl::ValidateHeader(p, size, ScannerIOTypes::Scanner, sizeof(m)); 
+		Impl::ValidateHeader(p, size, ScannerIOTypes::Scanner, sizeof(m));
 		if (size < sizeof(s.m))
 			throw Error("EOF reached while mapping Pire::Scanner");
 
@@ -311,7 +311,7 @@ public:
 	ScannerRowHeader& Header(State s) { return *(ScannerRowHeader*) s; }
 	const ScannerRowHeader& Header(State s) const { return *(const ScannerRowHeader*) s; }
 
-protected: 
+protected:
 
 	struct Locals {
 		ui32 statesCount;
@@ -558,7 +558,7 @@ struct ScannerSaver {
 
 		typename ScannerType::Locals mc = scanner.m;
 		mc.initial -= reinterpret_cast<size_t>(scanner.m_transitions);
-		SavePodType(s, Pire::Header(ScannerIOTypes::Scanner, sizeof(mc))); 
+		SavePodType(s, Pire::Header(ScannerIOTypes::Scanner, sizeof(mc)));
 		Impl::AlignSave(s, sizeof(Pire::Header));
 		SavePodType(s, mc);
 		Impl::AlignSave(s, sizeof(mc));
@@ -574,7 +574,7 @@ struct ScannerSaver {
 		typedef Scanner<Relocatable, Shortcutting> ScannerType;
 
 		Scanner<Relocatable, Shortcutting> sc;
-		Impl::ValidateHeader(s, ScannerIOTypes::Scanner, sizeof(sc.m)); 
+		Impl::ValidateHeader(s, ScannerIOTypes::Scanner, sizeof(sc.m));
 		LoadPodType(s, sc.m);
 		Impl::AlignLoad(s, sizeof(sc.m));
 		if (Shortcutting::Signature != sc.m.shortcuttingSignature)
@@ -1118,11 +1118,11 @@ typedef Impl::Scanner<Impl::Nonrelocatable, Impl::NoShortcuts> NonrelocScannerNo
 }
 
 namespace std {
-	inline void swap(Pire::Scanner& a, Pire::Scanner& b) { 
+	inline void swap(Pire::Scanner& a, Pire::Scanner& b) {
 		a.Swap(b);
 	}
 
-	inline void swap(Pire::NonrelocScanner& a, Pire::NonrelocScanner& b) { 
+	inline void swap(Pire::NonrelocScanner& a, Pire::NonrelocScanner& b) {
 		a.Swap(b);
 	}
 }

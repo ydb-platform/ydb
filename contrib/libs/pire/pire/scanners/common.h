@@ -30,16 +30,16 @@
 #include <contrib/libs/pire/pire/platform.h>
 
 namespace Pire {
-	namespace ScannerIOTypes { 
-		enum { 
-			NoScanner = 0, 
-			Scanner = 1, 
-			SimpleScanner = 2, 
-			SlowScanner = 3, 
+	namespace ScannerIOTypes {
+		enum {
+			NoScanner = 0,
+			Scanner = 1,
+			SimpleScanner = 2,
+			SlowScanner = 3,
 			LoadedScanner = 4,
 			NoGlueLimitCountingScanner = 5,
-		}; 
-	} 
+		};
+	}
 
 	struct Header {
 		ui32 Magic;
@@ -111,7 +111,7 @@ namespace Pire {
 
 		inline Header ValidateHeader(yistream* s, ui32 type, size_t hdrsize)
 		{
-			Header hdr(ScannerIOTypes::NoScanner, 0); 
+			Header hdr(ScannerIOTypes::NoScanner, 0);
 			LoadPodType(s, hdr);
 			AlignLoad(s, sizeof(hdr));
 			hdr.Validate(type, hdrsize);

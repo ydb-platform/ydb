@@ -574,22 +574,22 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         return input;
     }
 
-    THttpInput SendRequestWithBody(TSocket& socket, ui16 port, TString body) {
-        TSocketInput si(socket);
-        TSocketOutput so(socket);
-        THttpOutput out(&so);
-        out << "POST / HTTP/1.1" << CrLf;
-        out << "Host: localhost:" + ToString(port) << CrLf;
-        out << "Content-Length: " + ToString(body.size()) << CrLf;
-        out << CrLf;
-        out << body;
-        out.Flush();
-
-        THttpInput input(&si);
-        input.ReadAll();
-        return input;
-    }
-
+    THttpInput SendRequestWithBody(TSocket& socket, ui16 port, TString body) { 
+        TSocketInput si(socket); 
+        TSocketOutput so(socket); 
+        THttpOutput out(&so); 
+        out << "POST / HTTP/1.1" << CrLf; 
+        out << "Host: localhost:" + ToString(port) << CrLf; 
+        out << "Content-Length: " + ToString(body.size()) << CrLf; 
+        out << CrLf; 
+        out << body; 
+        out.Flush(); 
+ 
+        THttpInput input(&si); 
+        input.ReadAll(); 
+        return input; 
+    } 
+ 
     Y_UNIT_TEST(TTestExpirationTimeout) {
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -616,32 +616,32 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
     }
 
-    Y_UNIT_TEST(TTestContentLengthTooLarge) {
-        TPortManager pm;
-        const ui16 port = pm.GetPort();
-
-        TEchoServer serverImpl("test_data");
-        THttpServer::TOptions options(port);
-        options.nThreads = 1;
-        options.MaxQueueSize = 0;
-        options.MaxInputContentLength = 2_KB;
-        options.MaxConnections = 0;
-        options.KeepAliveEnabled = false;
-        options.ExpirationTimeout = TDuration::Seconds(1);
-        options.PollTimeout = TDuration::MilliSeconds(100);
-        THttpServer server(&serverImpl, options);
-        UNIT_ASSERT(server.Start());
-
-        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(5));
-        UNIT_ASSERT_STRING_CONTAINS(SendRequestWithBody(socket, port, TString(1_KB, 'a')).FirstLine(), "HTTP/1.1 200 Ok");
-
-        TSocket socket2(TNetworkAddress("localhost", port), TDuration::Seconds(5));
-        UNIT_ASSERT_STRING_CONTAINS(SendRequestWithBody(socket2, port, TString(10_KB, 'a')).FirstLine(), "HTTP/1.1 413 Payload Too Large");
-
-        server.Stop();
-    }
-
-
+    Y_UNIT_TEST(TTestContentLengthTooLarge) { 
+        TPortManager pm; 
+        const ui16 port = pm.GetPort(); 
+ 
+        TEchoServer serverImpl("test_data"); 
+        THttpServer::TOptions options(port); 
+        options.nThreads = 1; 
+        options.MaxQueueSize = 0; 
+        options.MaxInputContentLength = 2_KB; 
+        options.MaxConnections = 0; 
+        options.KeepAliveEnabled = false; 
+        options.ExpirationTimeout = TDuration::Seconds(1); 
+        options.PollTimeout = TDuration::MilliSeconds(100); 
+        THttpServer server(&serverImpl, options); 
+        UNIT_ASSERT(server.Start()); 
+ 
+        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(5)); 
+        UNIT_ASSERT_STRING_CONTAINS(SendRequestWithBody(socket, port, TString(1_KB, 'a')).FirstLine(), "HTTP/1.1 200 Ok"); 
+ 
+        TSocket socket2(TNetworkAddress("localhost", port), TDuration::Seconds(5)); 
+        UNIT_ASSERT_STRING_CONTAINS(SendRequestWithBody(socket2, port, TString(10_KB, 'a')).FirstLine(), "HTTP/1.1 413 Payload Too Large"); 
+ 
+        server.Stop(); 
+    } 
+ 
+ 
     Y_UNIT_TEST(TTestCloseConnectionOnRequestLimit) {
         TPortManager pm;
         const ui16 port = pm.GetPort();

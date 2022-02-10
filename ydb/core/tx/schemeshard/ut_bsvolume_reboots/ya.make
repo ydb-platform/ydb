@@ -35,7 +35,7 @@ IF (NOT WITH_VALGRIND)
         ut_bsvolume_reboots.cpp
     )
 
-    REQUIREMENTS(ram:9) 
- 
-END() 
+    REQUIREMENTS(ram:9)
+
+END()
 ENDIF()

@@ -35,7 +35,7 @@ IF (NOT WITH_VALGRIND)
         ut_rtmr_reboots.cpp
     )
 
-    REQUIREMENTS(ram:12) 
- 
-END() 
+    REQUIREMENTS(ram:12)
+
+END()
 ENDIF()

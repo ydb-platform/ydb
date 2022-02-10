@@ -35,6 +35,6 @@ PEERDIR(
     ydb/public/sdk/python/ydb
 )
 
-REQUIREMENTS(ram:10) 
- 
+REQUIREMENTS(ram:10)
+
 END()

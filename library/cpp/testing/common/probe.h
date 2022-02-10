@@ -104,7 +104,7 @@ namespace NTesting {
             Y_ASSERT(State);
             other.State = nullptr;
             ++State->MoveConstructors;
-        } 
+        }
 
         TProbe& operator=(const TProbe& other) {
             State = other.State;

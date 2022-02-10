@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/platform.h>
 
 // Check platform bitness.

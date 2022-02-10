@@ -170,7 +170,7 @@ size_t TYsonString::ComputeHash() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TYsonString& yson) 
+TString ToString(const TYsonString& yson)
 {
     return yson.ToString();
 }

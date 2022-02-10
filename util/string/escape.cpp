@@ -7,30 +7,30 @@
 
 /// @todo: escape trigraphs (eg "??/" is "\")
 
-/* REFEREBCES FOR ESCAPE SEQUENCE INTERPRETATION: 
- *   C99 p. 6.4.3   Universal character names. 
- *   C99 p. 6.4.4.4 Character constants. 
- * 
- * <simple-escape-sequence> ::= { 
- *      \' , \" , \? , \\ , 
- *      \a , \b , \f , \n , \r , \t , \v 
- * } 
- * 
- * <octal-escape-sequence>       ::= \  <octal-digit> {1, 3} 
- * <hexadecimal-escape-sequence> ::= \x <hexadecimal-digit> + 
- * <universal-character-name>    ::= \u <hexadecimal-digit> {4} 
- *                                || \U <hexadecimal-digit> {8} 
- * 
- * NOTE (6.4.4.4.7): 
- * Each octal or hexadecimal escape sequence is the longest sequence of characters that can 
- * constitute the escape sequence. 
- * 
+/* REFEREBCES FOR ESCAPE SEQUENCE INTERPRETATION:
+ *   C99 p. 6.4.3   Universal character names.
+ *   C99 p. 6.4.4.4 Character constants.
+ *
+ * <simple-escape-sequence> ::= {
+ *      \' , \" , \? , \\ ,
+ *      \a , \b , \f , \n , \r , \t , \v
+ * }
+ *
+ * <octal-escape-sequence>       ::= \  <octal-digit> {1, 3}
+ * <hexadecimal-escape-sequence> ::= \x <hexadecimal-digit> +
+ * <universal-character-name>    ::= \u <hexadecimal-digit> {4}
+ *                                || \U <hexadecimal-digit> {8}
+ *
+ * NOTE (6.4.4.4.7):
+ * Each octal or hexadecimal escape sequence is the longest sequence of characters that can
+ * constitute the escape sequence.
+ *
  * THEREFORE:
- *  - Octal escape sequence spans until rightmost non-octal-digit character. 
- *  - Octal escape sequence always terminates after three octal digits. 
- *  - Hexadecimal escape sequence spans until rightmost non-hexadecimal-digit character. 
- *  - Universal character name consists of exactly 4 or 8 hexadecimal digit. 
- * 
+ *  - Octal escape sequence spans until rightmost non-octal-digit character.
+ *  - Octal escape sequence always terminates after three octal digits.
+ *  - Hexadecimal escape sequence spans until rightmost non-hexadecimal-digit character.
+ *  - Universal character name consists of exactly 4 or 8 hexadecimal digit.
+ *
  * by kerzum@
  * It is also required to escape trigraphs that are enabled in compilers by default and
  * are also processed inside string literals
@@ -39,7 +39,7 @@
  *      Trigraph:       ??(  ??)  ??<  ??>  ??=  ??/  ??'  ??!  ??-
  *      Replacement:      [    ]    {    }    #    \    ^    |    ~
  *
- */ 
+ */
 namespace {
     template <typename TChar>
     static inline char HexDigit(TChar value) {
@@ -152,24 +152,24 @@ template <class TChar>
 TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TChar>& r) {
     using TEscapeUtil = ::TEscapeUtil<TChar>;
 
-    TChar buffer[TEscapeUtil::ESCAPE_C_BUFFER_SIZE]; 
+    TChar buffer[TEscapeUtil::ESCAPE_C_BUFFER_SIZE];
 
-    size_t i, j; 
-    for (i = 0, j = 0; i < len; ++i) { 
-        size_t rlen = TEscapeUtil::EscapeC(str[i], (i + 1 < len ? str[i + 1] : 0), buffer); 
+    size_t i, j;
+    for (i = 0, j = 0; i < len; ++i) {
+        size_t rlen = TEscapeUtil::EscapeC(str[i], (i + 1 < len ? str[i + 1] : 0), buffer);
 
-        if (rlen > 1) { 
-            r.append(str + j, i - j); 
-            j = i + 1; 
-            r.append(buffer, rlen); 
-        } 
+        if (rlen > 1) {
+            r.append(str + j, i - j);
+            j = i + 1;
+            r.append(buffer, rlen);
+        }
     }
- 
-    if (j > 0) { 
-        r.append(str + j, len - j); 
-    } else { 
+
+    if (j > 0) {
+        r.append(str + j, len - j);
+    } else {
         r.append(str, len);
-    } 
+    }
 
     return r;
 }
@@ -415,7 +415,7 @@ TString EscapeC(const TString& str) {
 TUtf16String EscapeC(const TUtf16String& str) {
     return EscapeC(str.data(), str.size());
 }
- 
+
 TString& UnescapeC(const TStringBuf str, TString& s) {
     return UnescapeC(str.data(), str.size(), s);
 }

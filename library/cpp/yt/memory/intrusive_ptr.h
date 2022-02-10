@@ -13,9 +13,9 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-class TIntrusivePtr 
-{ 
-public: 
+class TIntrusivePtr
+{
+public:
     typedef T TUnderlying;
 
     constexpr TIntrusivePtr() noexcept
@@ -34,67 +34,67 @@ public:
      */
     TIntrusivePtr(T* obj, bool addReference = true) noexcept
         : T_(obj)
-    { 
+    {
         if (T_ && addReference) {
             Ref(T_);
         }
     }
 
-    //! Copy constructor. 
+    //! Copy constructor.
     TIntrusivePtr(const TIntrusivePtr& other) noexcept
         : T_(other.Get())
-    { 
+    {
         if (T_) {
             Ref(T_);
-        } 
-    } 
+        }
+    }
 
     //! Copy constructor with an upcast.
     template <class U, class = typename std::enable_if_t<std::is_convertible_v<U*, T*>>>
     TIntrusivePtr(const TIntrusivePtr<U>& other) noexcept
-        : T_(other.Get()) 
-    { 
+        : T_(other.Get())
+    {
         static_assert(
             std::is_base_of_v<TRefCountedBase, T>,
             "Cast allowed only for types derived from TRefCountedBase");
         if (T_) {
             Ref(T_);
         }
-    } 
+    }
 
-    //! Move constructor. 
+    //! Move constructor.
     TIntrusivePtr(TIntrusivePtr&& other) noexcept
         : T_(other.Get())
-    { 
+    {
         other.T_ = nullptr;
-    } 
- 
+    }
+
     //! Move constructor with an upcast.
     template <class U, class = typename std::enable_if_t<std::is_convertible_v<U*, T*>>>
     TIntrusivePtr(TIntrusivePtr<U>&& other) noexcept
-        : T_(other.Get()) 
-    { 
+        : T_(other.Get())
+    {
         static_assert(
             std::is_base_of_v<TRefCountedBase, T>,
             "Cast allowed only for types derived from TRefCountedBase");
         other.T_ = nullptr;
-    } 
- 
-    //! Destructor. 
-    ~TIntrusivePtr() 
-    { 
+    }
+
+    //! Destructor.
+    ~TIntrusivePtr()
+    {
         if (T_) {
             Unref(T_);
         }
-    } 
+    }
 
-    //! Copy assignment operator. 
+    //! Copy assignment operator.
     TIntrusivePtr& operator=(const TIntrusivePtr& other) noexcept
-    { 
-        TIntrusivePtr(other).Swap(*this); 
-        return *this; 
-    } 
- 
+    {
+        TIntrusivePtr(other).Swap(*this);
+        return *this;
+    }
+
     //! Copy assignment operator with an upcast.
     template <class U>
     TIntrusivePtr& operator=(const TIntrusivePtr<U>& other) noexcept
@@ -109,13 +109,13 @@ public:
         return *this;
     }
 
-    //! Move assignment operator. 
+    //! Move assignment operator.
     TIntrusivePtr& operator=(TIntrusivePtr&& other) noexcept
-    { 
+    {
         TIntrusivePtr(std::move(other)).Swap(*this);
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     //! Move assignment operator with an upcast.
     template <class U>
     TIntrusivePtr& operator=(TIntrusivePtr<U>&& other) noexcept
@@ -132,22 +132,22 @@ public:
 
     //! Drop the pointer.
     void Reset() // noexcept
-    { 
-        TIntrusivePtr().Swap(*this); 
-    } 
- 
+    {
+        TIntrusivePtr().Swap(*this);
+    }
+
     //! Replace the pointer with a specified one.
     void Reset(T* p) // noexcept
-    { 
-        TIntrusivePtr(p).Swap(*this); 
-    } 
- 
+    {
+        TIntrusivePtr(p).Swap(*this);
+    }
+
     //! Returns the pointer.
     T* Get() const noexcept
     {
-        return T_; 
-    } 
- 
+        return T_;
+    }
+
     //! Returns the pointer and releases the ownership.
     T* Release() noexcept
     {
@@ -157,17 +157,17 @@ public:
     }
 
     T& operator*() const noexcept
-    { 
+    {
         YT_ASSERT(T_);
-        return *T_; 
-    } 
- 
+        return *T_;
+    }
+
     T* operator->() const noexcept
-    { 
+    {
         YT_ASSERT(T_);
         return T_;
-    } 
- 
+    }
+
     explicit operator bool() const noexcept
     {
         return T_ != nullptr;
@@ -176,12 +176,12 @@ public:
     //! Swap the pointer with the other one.
     void Swap(TIntrusivePtr& r) noexcept
     {
-        DoSwap(T_, r.T_); 
-    } 
- 
-private: 
+        DoSwap(T_, r.T_);
+    }
+
+private:
     template <class U>
-    friend class TIntrusivePtr; 
+    friend class TIntrusivePtr;
 
     T* T_ = nullptr;
 };
@@ -268,59 +268,59 @@ bool operator>(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 }
 
 template <class T, class U>
-bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs) 
-{ 
+bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs.Get() == rhs.Get(); 
-} 
- 
+    return lhs.Get() == rhs.Get();
+}
+
 template <class T, class U>
-bool operator!=(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs) 
-{ 
+bool operator!=(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs.Get() != rhs.Get(); 
-} 
- 
+    return lhs.Get() != rhs.Get();
+}
+
 template <class T, class U>
 bool operator==(const TIntrusivePtr<T>& lhs, U* rhs)
-{ 
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs.Get() == rhs; 
-} 
- 
+    return lhs.Get() == rhs;
+}
+
 template <class T, class U>
 bool operator!=(const TIntrusivePtr<T>& lhs, U* rhs)
-{ 
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs.Get() != rhs; 
-} 
- 
+    return lhs.Get() != rhs;
+}
+
 template <class T, class U>
 bool operator==(T* lhs, const TIntrusivePtr<U>& rhs)
-{ 
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs == rhs.Get(); 
-} 
- 
+    return lhs == rhs.Get();
+}
+
 template <class T, class U>
 bool operator!=(T* lhs, const TIntrusivePtr<U>& rhs)
-{ 
+{
     static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
-    return lhs != rhs.Get(); 
-} 
- 
+    return lhs != rhs.Get();
+}
+
 template <class T>
 bool operator==(std::nullptr_t, const TIntrusivePtr<T>& rhs)
 {

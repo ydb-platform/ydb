@@ -21,7 +21,7 @@ namespace {
 }
 
 static const TExample CommonTestData[] = {
-    // Should be valid UTF-8. 
+    // Should be valid UTF-8.
     {"http://ya.ru/", "http://ya.ru/"},
     {"http://ya.ru/\\x17\\n", "http://ya.ru/\x17\n"},
 
@@ -31,12 +31,12 @@ static const TExample CommonTestData[] = {
                                "0"sv},
     {"http://ya.ru/\\0\\0001", "http://ya.ru/\0\x00"
                                "1"sv},
- 
+
     {R"(\2\4\00678)", "\2\4\6"
                       "78"sv}, // \6 -> \006 because next char '7' is "octal"
     {R"(\2\4\689)", "\2\4\6"
                     "89"sv}, // \6 -> \6 because next char '8' is not "octal"
- 
+
     {R"(\"Hello\", Alice said.)", "\"Hello\", Alice said."},
     {"Slash\\\\dash!", "Slash\\dash!"},
     {R"(There\nare\r\nnewlines.)", "There\nare\r\nnewlines."},
@@ -45,7 +45,7 @@ static const TExample CommonTestData[] = {
     {"There are questions \\x3F\\x3F?", "There are questions ???"},
     {"There are questions \\x3F?", "There are questions ??"},
 };
- 
+
 Y_UNIT_TEST_SUITE(TEscapeCTest) {
     Y_UNIT_TEST(TestStrokaEscapeC) {
         for (const auto& e : CommonTestData) {
@@ -53,18 +53,18 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
             TString source(e.Source);
             TString actual(EscapeC(e.Source));
             TString actual2(UnescapeC(e.Expected));
- 
+
             UNIT_ASSERT_VALUES_EQUAL(e.Expected, actual);
             UNIT_ASSERT_VALUES_EQUAL(e.Source, actual2);
-        } 
- 
+        }
+
         UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\x17\\n\\xAB", EscapeC(TString("http://ya.ru/\x17\n\xab")));
         UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\x17\n\xab", UnescapeC(TString("http://ya.ru/\\x17\\n\\xAB")));
         UNIT_ASSERT_VALUES_EQUAL("h", EscapeC('h'));
         UNIT_ASSERT_VALUES_EQUAL("h", UnescapeC(TString("h")));
         UNIT_ASSERT_VALUES_EQUAL("\\xFF", EscapeC('\xFF'));
         UNIT_ASSERT_VALUES_EQUAL("\xFF", UnescapeC(TString("\\xFF")));
- 
+
         UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeC(TString("\xff"
                                                            "f")));
         UNIT_ASSERT_VALUES_EQUAL("\xff"
@@ -85,11 +85,11 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
             TUtf16String source(UTF8ToWide(e.Source));
             TUtf16String actual(EscapeC(source));
             TUtf16String actual2(UnescapeC(expected));
- 
-            UNIT_ASSERT_VALUES_EQUAL(expected, actual); 
+
+            UNIT_ASSERT_VALUES_EQUAL(expected, actual);
             UNIT_ASSERT_VALUES_EQUAL(source, actual2);
-        } 
- 
+        }
+
         UNIT_ASSERT_VALUES_EQUAL(u"http://ya.ru/\\x17\\n\\u1234", EscapeC(u"http://ya.ru/\x17\n\u1234"));
         UNIT_ASSERT_VALUES_EQUAL(u"h", EscapeC(u'h'));
         UNIT_ASSERT_VALUES_EQUAL(u"\\xFF", EscapeC(wchar16(255)));

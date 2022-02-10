@@ -22,7 +22,7 @@ private:
     template <class T>                   \
     friend class ::NYT::TLeakyStorage;
 
-template <class T> 
+template <class T>
 T* LeakySingleton();
 
 ////////////////////////////////////////////////////////////////////////////////

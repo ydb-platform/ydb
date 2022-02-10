@@ -33,7 +33,7 @@ namespace NYT {
  *
  *  The following argument types are supported:
  *
- *  Strings (including |const char*|, |TStringBuf|, and |TString|) and chars: 
+ *  Strings (including |const char*|, |TStringBuf|, and |TString|) and chars:
  *  Emitted as is. Fast.
  *
  *  Numerics and pointers:

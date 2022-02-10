@@ -13,22 +13,22 @@ namespace NYT {
 
 void UnderscoreCaseToCamelCase(TStringBuilderBase* builder, TStringBuf str)
 {
-    bool first = true; 
+    bool first = true;
     bool upper = true;
     for (char c : str) {
         if (c == '_') {
             upper = true;
         } else {
             if (upper) {
-                if (!std::isalpha(c) && !first) { 
+                if (!std::isalpha(c) && !first) {
                     builder->AppendChar('_');
-                } 
+                }
                 c = std::toupper(c);
             }
             builder->AppendChar(c);
             upper = false;
         }
-        first = false; 
+        first = false;
     }
 }
 
@@ -43,11 +43,11 @@ void CamelCaseToUnderscoreCase(TStringBuilderBase* builder, TStringBuf str)
 {
     bool first = true;
     for (char c : str) {
-        if (std::isupper(c) && std::isalpha(c)) { 
+        if (std::isupper(c) && std::isalpha(c)) {
             if (!first) {
                 builder->AppendChar('_');
             }
-            c = std::tolower(c); 
+            c = std::tolower(c);
         }
         builder->AppendChar(c);
         first = false;
@@ -63,7 +63,7 @@ TString CamelCaseToUnderscoreCase(TStringBuf str)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TrimLeadingWhitespaces(const TString& str) 
+TString TrimLeadingWhitespaces(const TString& str)
 {
     for (int i = 0; i < static_cast<int>(str.size()); ++i) {
         if (str[i] != ' ') {
@@ -73,7 +73,7 @@ TString TrimLeadingWhitespaces(const TString& str)
     return "";
 }
 
-TString Trim(const TString& str, const TString& whitespaces) 
+TString Trim(const TString& str, const TString& whitespaces)
 {
     size_t end = str.size();
     while (end > 0) {

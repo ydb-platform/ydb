@@ -109,7 +109,7 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
     }
 }
 
-// TString 
+// TString
 inline void FormatValue(TStringBuilderBase* builder, const TString& value, TStringBuf format)
 {
     FormatValue(builder, TStringBuf(value), format);
@@ -450,7 +450,7 @@ void FormatValueViaSprintf(
 
     auto copyFormat = [] (char* destination, const char* source, int length) {
         int position = 0;
-        for (int index = 0; index < length; ++index) { 
+        for (int index = 0; index < length; ++index) {
             if (IsQuotationSpecSymbol(source[index])) {
                 continue;
             }
@@ -730,7 +730,7 @@ TString Format(
 }
 
 template <class... TArgs>
-TString Format( 
+TString Format(
     TStringBuf format,
     TArgs&&... args)
 {

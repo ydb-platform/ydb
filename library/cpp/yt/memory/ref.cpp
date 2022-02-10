@@ -271,10 +271,10 @@ TSharedMutableRef TSharedMutableRef::MakeCopy(TRef ref, TRefCountedTypeCookie ta
 
 TString ToString(TRef ref)
 {
-    return TString(ref.Begin(), ref.End()); 
+    return TString(ref.Begin(), ref.End());
 }
 
-TString ToString(const TMutableRef& ref) 
+TString ToString(const TMutableRef& ref)
 {
     return ToString(TRef(ref));
 }
@@ -284,17 +284,17 @@ TString ToString(const TSharedRef& ref)
     return ToString(TRef(ref));
 }
 
-TString ToString(const TSharedMutableRef& ref) 
+TString ToString(const TSharedMutableRef& ref)
 {
     return ToString(TRef(ref));
 }
 
-size_t GetPageSize() 
-{ 
-    static const size_t PageSize = NSystemInfo::GetPageSize(); 
-    return PageSize; 
-} 
- 
+size_t GetPageSize()
+{
+    static const size_t PageSize = NSystemInfo::GetPageSize();
+    return PageSize;
+}
+
 size_t RoundUpToPage(size_t bytes)
 {
     static const size_t PageSize = NSystemInfo::GetPageSize();

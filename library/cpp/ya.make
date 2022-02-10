@@ -404,7 +404,7 @@ RECURSE(
     xmlrpc
     xsltransform
     xsltransform/ut
-    yaml
+    yaml 
     yappy
     yconf
     yconf/patcher

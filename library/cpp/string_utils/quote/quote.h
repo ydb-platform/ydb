@@ -32,7 +32,7 @@ char* CGIUnescape(char* to, const char* from);
 char* CGIUnescape(char* to, const char* from, size_t len);
 void CGIUnescape(TString& url);
 TString CGIUnescapeRet(const TStringBuf from);
- 
+
 inline TStringBuf CgiUnescapeBuf(char* to, const TStringBuf from) {
     return TStringBuf(to, CGIUnescape(to, from.data(), from.size()));
 }

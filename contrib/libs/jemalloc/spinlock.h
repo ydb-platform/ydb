@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
-typedef volatile intptr_t spinlock_t; 
- 
+typedef volatile intptr_t spinlock_t;
+
 #define SPIN_L AllocAcquireAdaptiveLock
 #define SPIN_U AllocReleaseAdaptiveLock
 

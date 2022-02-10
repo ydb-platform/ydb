@@ -18,7 +18,7 @@ class TRegExBaseImpl;
 
 class TRegExBase {
 protected:
-    TSimpleIntrusivePtr<TRegExBaseImpl> Impl; 
+    TSimpleIntrusivePtr<TRegExBaseImpl> Impl;
 
 public:
     TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED);

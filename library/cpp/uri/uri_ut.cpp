@@ -552,7 +552,7 @@ namespace NUri {
                 URL_TEST(url, test);
             }
         }
- 
+
         Y_UNIT_TEST(test11) {
             {
                 TTest test = {
@@ -568,7 +568,7 @@ namespace NUri {
                 URL_TEST(url, test);
             }
         }
- 
+
         Y_UNIT_TEST(test12) {
             // test characters which are not always safe
             {

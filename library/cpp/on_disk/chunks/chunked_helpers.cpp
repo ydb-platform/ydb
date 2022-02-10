@@ -1,21 +1,21 @@
-#include <util/ysaveload.h>
-
-#include "chunked_helpers.h"
-
-TBlob GetBlock(const TBlob& blob, size_t index) {
-    TChunkedDataReader reader(blob);
+#include <util/ysaveload.h> 
+ 
+#include "chunked_helpers.h" 
+ 
+TBlob GetBlock(const TBlob& blob, size_t index) { 
+    TChunkedDataReader reader(blob); 
     if (index >= reader.GetBlocksCount())
         ythrow yexception() << "index " << index << " is >= than block count " << reader.GetBlocksCount();
-    size_t begin = (const char*)reader.GetBlock(index) - (const char*)blob.Data();
-    return blob.SubBlob(begin, begin + reader.GetBlockLen(index));
-}
+    size_t begin = (const char*)reader.GetBlock(index) - (const char*)blob.Data(); 
+    return blob.SubBlob(begin, begin + reader.GetBlockLen(index)); 
+} 
 
 /*************************** TNamedChunkedDataReader ***************************/
 
 static const char* NamedChunkedDataMagic = "NamedChunkedData";
 
-TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob)
-    : TChunkedDataReader(blob)
+TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob) 
+    : TChunkedDataReader(blob) 
 {
     if (TChunkedDataReader::GetBlocksCount() < 1)
         throw yexception() << "Too few blocks";

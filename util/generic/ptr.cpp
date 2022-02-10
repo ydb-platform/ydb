@@ -7,11 +7,11 @@
 #include <cstdlib>
 
 void TFree::DoDestroy(void* t) noexcept {
-    free(t);
+    free(t); 
 }
 
 void TDelete::Destroy(void* t) noexcept {
-    ::operator delete(t);
+    ::operator delete(t); 
 }
 
 TThrRefBase::~TThrRefBase() = default;

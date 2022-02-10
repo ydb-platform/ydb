@@ -189,7 +189,7 @@ using disk_type = enum {
     dk_error = 8
 };
 
-// root slash (if any) - part of disk
+// root slash (if any) - part of disk 
 template <typename T>
 static int skip_disk(T*& ptr) {
     int result = dk_noflags;
@@ -240,7 +240,7 @@ int correctpath(char* cpath, const char* path) {
     *cptr = 0;
     // replace '/' by '\'
     int dk = skip_disk(cpath);
-
+ 
     if (dk == dk_error)
         return 0;
 
@@ -366,15 +366,15 @@ bool resolvepath(TString& folder, const TString& home) {
     return false;
 }
 
-#endif // !defined _win32_
-
+#endif // !defined _win32_ 
+ 
 char GetDirectorySeparator() {
-    return LOCSLASH_C;
-}
-
+    return LOCSLASH_C; 
+} 
+ 
 const char* GetDirectorySeparatorS() {
-    return LOCSLASH_S;
-}
+    return LOCSLASH_S; 
+} 
 
 void RemoveDirWithContents(TString dirName) {
     SlashFolderLocal(dirName);

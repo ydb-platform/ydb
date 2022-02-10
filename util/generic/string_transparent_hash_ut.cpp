@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-
+ 
 #include <util/str_stl.h>
 
 Y_UNIT_TEST_SUITE(StringHashFunctorTests) {

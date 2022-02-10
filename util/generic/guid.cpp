@@ -67,8 +67,8 @@ TGUID TGUID::CreateTimebased() {
 
 TString GetGuidAsString(const TGUID& g) {
     return g.AsGuidString();
-}
-
+} 
+ 
 TString CreateGuidAsString() {
     return TGUID::Create().AsGuidString();
 }

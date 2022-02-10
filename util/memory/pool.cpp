@@ -1,4 +1,4 @@
-
+ 
 #include "pool.h"
 
 TMemoryPool::IGrowPolicy* TMemoryPool::TLinearGrow::Instance() noexcept {

@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("some_blender_url", GetHost("some_blender_url"));
         UNIT_ASSERT_VALUES_EQUAL("", GetHost(""));
     }
-
+ 
     Y_UNIT_TEST(TestGetPathAndQuery) {
         UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org"));
         UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org/"));
@@ -40,14 +40,14 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     }
 
     Y_UNIT_TEST(TestGetDomain) {
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("www.ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("a.b.ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya", GetDomain("ya"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("www.ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("a.b.ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya", GetDomain("ya")); 
         UNIT_ASSERT_VALUES_EQUAL("", GetDomain(""));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestGetParentDomain) {
         UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("www.ya.ru", 0));
         UNIT_ASSERT_VALUES_EQUAL("ru", GetParentDomain("www.ya.ru", 1));
@@ -63,12 +63,12 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     }
 
     Y_UNIT_TEST(TestGetZone) {
-        UNIT_ASSERT_VALUES_EQUAL("ru", GetZone("www.ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("com", GetZone("ya.com"));
-        UNIT_ASSERT_VALUES_EQUAL("RU", GetZone("RU"));
-        UNIT_ASSERT_VALUES_EQUAL("FHFBN", GetZone("ya.FHFBN"));
-        UNIT_ASSERT_VALUES_EQUAL("", GetZone(""));
-    }
+        UNIT_ASSERT_VALUES_EQUAL("ru", GetZone("www.ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("com", GetZone("ya.com")); 
+        UNIT_ASSERT_VALUES_EQUAL("RU", GetZone("RU")); 
+        UNIT_ASSERT_VALUES_EQUAL("FHFBN", GetZone("ya.FHFBN")); 
+        UNIT_ASSERT_VALUES_EQUAL("", GetZone("")); 
+    } 
 
     Y_UNIT_TEST(TestAddSchemePrefix) {
         UNIT_ASSERT_VALUES_EQUAL("http://yandex.ru", AddSchemePrefix("yandex.ru"));

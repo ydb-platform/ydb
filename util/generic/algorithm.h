@@ -452,7 +452,7 @@ template <class T>
 static inline void Rotate(T f, T m, T l) {
     std::rotate(f, m, l);
 }
-
+ 
 template <typename It, typename Val>
 Val Accumulate(It begin, It end, Val val) {
     // std::move since C++20
@@ -463,7 +463,7 @@ template <typename It, typename Val, typename BinOp>
 Val Accumulate(It begin, It end, Val val, BinOp binOp) {
     // std::move since C++20
     return std::accumulate(begin, end, std::move(val), binOp);
-}
+} 
 
 template <typename C, typename Val>
 Val Accumulate(const C& c, Val val) {

@@ -6,14 +6,14 @@
 #include <util/generic/string.h>
 #include <util/stream/str.h>
 
-class TTimer {
+class TTimer { 
 private:
     TInstant Start_;
     TStringStream Message_;
 
 public:
     TTimer(const TStringBuf message = TStringBuf(" took: "));
-    ~TTimer();
+    ~TTimer(); 
 };
 
 class TSimpleTimer {
@@ -56,38 +56,38 @@ public:
 /// Return cached processor cycle count per second. Method takes 1 second at first invocation.
 /// Note, on older systems cycle rate may change during program lifetime,
 /// so returned value may be incorrect. Modern Intel and AMD processors keep constant TSC rate.
-ui64 GetCyclesPerMillisecond();
+ui64 GetCyclesPerMillisecond(); 
 void SetCyclesPerSecond(ui64 cycles);
-
+ 
 TDuration CyclesToDuration(ui64 cycles);
 ui64 DurationToCycles(TDuration duration);
 
 class TPrecisionTimer {
-private:
+private: 
     ui64 Start = 0;
-
-public:
+ 
+public: 
     TPrecisionTimer();
 
     ui64 GetCycleCount() const;
-};
-
+}; 
+ 
 TString FormatCycles(ui64 cycles);
-
+ 
 class TFormattedPrecisionTimer {
-private:
-    ui64 Start;
-    const char* Message;
+private: 
+    ui64 Start; 
+    const char* Message; 
     IOutputStream* Out;
-
-public:
+ 
+public: 
     TFormattedPrecisionTimer(const char* message = "took ", IOutputStream* out = &Cout);
-    ~TFormattedPrecisionTimer();
-};
-
+    ~TFormattedPrecisionTimer(); 
+}; 
+ 
 class TFuncTimer {
 public:
-    TFuncTimer(const char* func);
+    TFuncTimer(const char* func); 
     ~TFuncTimer();
 
 private:
@@ -105,20 +105,20 @@ public:
     #define TDebugTimer TFuncTimer
 #else
     #define TDebugTimer TFakeTimer
-#endif
+#endif 
 
 class TTimeLogger {
 private:
     TString Message;
-    bool Verbose;
+    bool Verbose; 
     bool OK;
-    time_t Begin;
-    ui64 BeginCycles;
+    time_t Begin; 
+    ui64 BeginCycles; 
 
 public:
     TTimeLogger(const TString& message, bool verbose = true);
     ~TTimeLogger();
 
     void SetOK();
-    double ElapsedTime() const;
+    double ElapsedTime() const; 
 };

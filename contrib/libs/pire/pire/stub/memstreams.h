@@ -8,4 +8,4 @@ namespace Pire {
     typedef TBuffer::TIterator BufferIterator;
     typedef TBufferOutput BufferOutput;
     typedef TAlignedOutput AlignedOutput;
-}
+} 

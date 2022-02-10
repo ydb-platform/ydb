@@ -1,12 +1,12 @@
-#include "cputimer.h"
+#include "cputimer.h" 
 
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/system/hp_timer.h>
 #include <util/string/printf.h>
 #include <util/stream/output.h>
-#include <util/generic/singleton.h>
+#include <util/generic/singleton.h> 
 
-#if defined(_unix_)
+#if defined(_unix_) 
     #include <unistd.h>
     #include <sched.h>
     #include <sys/types.h>
@@ -21,15 +21,15 @@ TTimer::TTimer(const TStringBuf message) {
     Message_.Reserve(message.length() + SMALL_DURATION_CHAR_LENGTH + 1); // +"\n"
     Message_ << message;
     // Do not measure the allocations above.
-    Start_ = TInstant::Now();
-}
-
-TTimer::~TTimer() {
+    Start_ = TInstant::Now(); 
+} 
+ 
+TTimer::~TTimer() { 
     const TDuration duration = TInstant::Now() - Start_;
     Message_ << duration << "\n";
     Cerr << Message_.Str();
-}
-
+} 
+ 
 static ui64 ManuallySetCyclesPerSecond = 0;
 
 static ui64 GetCyclesPerSecond() {
@@ -38,8 +38,8 @@ static ui64 GetCyclesPerSecond() {
     } else {
         return NHPTimer::GetCyclesPerSecond();
     }
-}
-
+} 
+ 
 void SetCyclesPerSecond(ui64 cycles) {
     ManuallySetCyclesPerSecond = cycles;
 }
@@ -58,79 +58,79 @@ ui64 DurationToCycles(TDuration duration) {
 
 TPrecisionTimer::TPrecisionTimer()
     : Start(::GetCycleCount())
-{
-}
-
+{ 
+} 
+ 
 ui64 TPrecisionTimer::GetCycleCount() const {
     return ::GetCycleCount() - Start;
-}
-
+} 
+ 
 TString FormatCycles(ui64 cycles) {
-    ui64 milliseconds = cycles / GetCyclesPerMillisecond();
-    ui32 ms = ui32(milliseconds % 1000);
-    milliseconds /= 1000;
-    ui32 secs = ui32(milliseconds % 60);
-    milliseconds /= 60;
-    ui32 mins = ui32(milliseconds);
+    ui64 milliseconds = cycles / GetCyclesPerMillisecond(); 
+    ui32 ms = ui32(milliseconds % 1000); 
+    milliseconds /= 1000; 
+    ui32 secs = ui32(milliseconds % 60); 
+    milliseconds /= 60; 
+    ui32 mins = ui32(milliseconds); 
     TString result;
-    sprintf(result, "%" PRIu32 " m %.2" PRIu32 " s %.3" PRIu32 " ms", mins, secs, ms);
-    return result;
-}
-
+    sprintf(result, "%" PRIu32 " m %.2" PRIu32 " s %.3" PRIu32 " ms", mins, secs, ms); 
+    return result; 
+} 
+ 
 TFormattedPrecisionTimer::TFormattedPrecisionTimer(const char* message, IOutputStream* out)
     : Message(message)
     , Out(out)
-{
-    Start = GetCycleCount();
-}
-
+{ 
+    Start = GetCycleCount(); 
+} 
+ 
 TFormattedPrecisionTimer::~TFormattedPrecisionTimer() {
     const ui64 end = GetCycleCount();
     const ui64 diff = end - Start;
 
     *Out << Message << ": " << diff << " ticks " << FormatCycles(diff) << Endl;
-}
+} 
 
-TFuncTimer::TFuncTimer(const char* func)
-    : Start_(TInstant::Now())
-    , Func_(func)
-{
-    Cerr << "enter " << Func_ << Endl;
-}
-
+TFuncTimer::TFuncTimer(const char* func) 
+    : Start_(TInstant::Now()) 
+    , Func_(func) 
+{ 
+    Cerr << "enter " << Func_ << Endl; 
+} 
+ 
 TFuncTimer::~TFuncTimer() {
-    Cerr << "leave " << Func_ << " -> " << (TInstant::Now() - Start_) << Endl;
-}
-
+    Cerr << "leave " << Func_ << " -> " << (TInstant::Now() - Start_) << Endl; 
+} 
+ 
 TTimeLogger::TTimeLogger(const TString& message, bool verbose)
     : Message(message)
-    , Verbose(verbose)
+    , Verbose(verbose) 
     , OK(false)
     , Begin(time(nullptr))
-    , BeginCycles(GetCycleCount())
+    , BeginCycles(GetCycleCount()) 
 {
-    if (Verbose) {
-        fprintf(stderr, "=========================================================\n");
+    if (Verbose) { 
+        fprintf(stderr, "=========================================================\n"); 
         fprintf(stderr, "%s started: %.24s (%lu) (%d)\n", Message.data(), ctime(&Begin), (unsigned long)Begin, (int)getpid());
-    }
+    } 
 }
 
-double TTimeLogger::ElapsedTime() const {
+double TTimeLogger::ElapsedTime() const { 
     return time(nullptr) - Begin;
-}
-
+} 
+ 
 void TTimeLogger::SetOK() {
     OK = true;
 }
 
 TTimeLogger::~TTimeLogger() {
     time_t tim = time(nullptr);
-    ui64 endCycles = GetCycleCount();
-    if (Verbose) {
-        const char* prefix = (OK) ? "" : "!";
+    ui64 endCycles = GetCycleCount(); 
+    if (Verbose) { 
+        const char* prefix = (OK) ? "" : "!"; 
         fprintf(stderr, "%s%s ended: %.24s (%lu) (%d) (took %lus = %s)\n",
                 prefix, Message.data(), ctime(&tim), (unsigned long)tim, (int)getpid(),
                 (unsigned long)tim - (unsigned long)Begin, FormatCycles(endCycles - BeginCycles).data());
-        fprintf(stderr, "%s=========================================================\n", prefix);
-    }
+        fprintf(stderr, "%s=========================================================\n", prefix); 
+    } 
 }

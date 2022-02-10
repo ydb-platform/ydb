@@ -248,7 +248,7 @@ public:
 
             if (result.Ptr == (char*)(-1)) {
                 result.Ptr = nullptr;
-            }
+            } 
     #if defined(_unix_)
         } else {
             result.Ptr = PtrStart_ ? static_cast<caddr_t>(PtrStart_) + base : nullptr;
@@ -314,7 +314,7 @@ public:
         if (PtrStart_) {
             munmap((caddr_t)PtrStart_, Length_);
         }
-#endif
+#endif 
     }
 
     inline i64 Length() const noexcept {
@@ -345,7 +345,7 @@ private:
     void* PtrStart_;
 #endif
 };
-
+ 
 TMemoryMap::TMemoryMap(const TString& name)
     : Impl_(new TImpl(name, EOpenModeFlag::oRdOnly))
 {
@@ -355,7 +355,7 @@ TMemoryMap::TMemoryMap(const TString& name, EOpenMode om)
     : Impl_(new TImpl(name, om))
 {
 }
-
+ 
 TMemoryMap::TMemoryMap(const TString& name, i64 length, EOpenMode om)
     : Impl_(new TImpl(name, length, om))
 {
@@ -453,27 +453,27 @@ TFileMap::TFileMap(const TString& name, EOpenMode om)
     : Map_(name, om)
 {
 }
-
+ 
 TFileMap::TFileMap(const TString& name, i64 length, EOpenMode om)
     : Map_(name, length, om)
 {
 }
-
+ 
 TFileMap::TFileMap(FILE* f, EOpenMode om, TString dbgName)
     : Map_(f, om, dbgName)
 {
 }
-
+ 
 TFileMap::TFileMap(const TFile& file, EOpenMode om, TString dbgName)
     : Map_(file, om, dbgName)
 {
 }
-
+ 
 TFileMap::TFileMap(const TFileMap& fm) noexcept
     : Map_(fm.Map_)
 {
 }
-
+ 
 void TFileMap::Flush(void* ptr, size_t size, bool sync) {
     Y_ASSERT(ptr >= Ptr());
     Y_ASSERT(static_cast<char*>(ptr) + size <= static_cast<char*>(Ptr()) + MappedSize());
@@ -486,11 +486,11 @@ void TFileMap::Flush(void* ptr, size_t size, bool sync) {
     if (sync) {
         FlushViewOfFile(ptr, size);
     }
-#else
+#else 
     msync(ptr, size, sync ? MS_SYNC : MS_ASYNC);
-#endif
+#endif 
 }
-
+ 
 TFileMap::TMapResult TFileMap::Map(i64 offset, size_t size) {
     Unmap();
     Region_ = Map_.Map(offset, size);
@@ -508,14 +508,14 @@ void TFileMap::Unmap() {
     if (!Region_.IsMapped()) {
         return;
     }
-
+ 
     if (Map_.Unmap(Region_)) {
         Region_.Reset();
     } else {
         ythrow yexception() << "can't unmap file";
     }
 }
-
+ 
 TFileMap::~TFileMap() {
     try {
         // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area

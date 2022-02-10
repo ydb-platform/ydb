@@ -215,7 +215,7 @@ protected:
 
     const TStdStr& StdStr() const noexcept {
         return *S_;
-    }
+    } 
 
     /**
      * Makes a distinct copy of this string. `IsDetached()` is always true after this call.
@@ -238,7 +238,7 @@ public:
 #else
         return StdStr();
 #endif
-    }
+    } 
 
     inline TStringType& MutRef() {
 #ifdef TSTRING_IS_STD_STRING
@@ -296,7 +296,7 @@ public:
 
     inline size_t length() const noexcept {
         return ConstRef().length();
-    }
+    } 
 
     inline const TCharType* data() const noexcept {
         return ConstRef().data();
@@ -309,7 +309,7 @@ public:
     // ~~~ STL compatible method to obtain data pointer ~~~
     iterator begin() {
         return &*MutRef().begin();
-    }
+    } 
 
     iterator vend() {
         return &*MutRef().end();
@@ -342,7 +342,7 @@ public:
 
         return S_->capacity();
 #endif
-    }
+    } 
 
     TCharType* Detach() {
 #ifdef TSTRING_IS_STD_STRING
@@ -364,7 +364,7 @@ public:
 #endif
     }
 
-    // ~~~ Size and capacity ~~~
+    // ~~~ Size and capacity ~~~ 
     TBasicString& resize(size_t n, TCharType c = ' ') { // remove or append
         MutRef().resize(n, c);
 
@@ -377,7 +377,7 @@ public:
         : S_(Construct())
 #endif
     {
-    }
+    } 
 
     inline explicit TBasicString(::NDetail::TReserveTag rt)
 #ifndef TSTRING_IS_STD_STRING
@@ -394,7 +394,7 @@ public:
         : S_(s.S_)
 #endif
     {
-    }
+    } 
 
     inline TBasicString(TBasicString&& s) noexcept
 #ifdef TSTRING_IS_STD_STRING
@@ -573,8 +573,8 @@ public:
 
         Construct().Swap(S_);
 #endif
-    }
-
+    } 
+ 
     template <typename... R>
     static inline TBasicString Join(const R&... r) {
         TBasicString s{TUninitialized{SumLength(r...)}};
@@ -595,15 +595,15 @@ public:
         TBasicString(s).swap(*this);
 
         return *this;
-    }
+    } 
 
     TBasicString& assign(const TBasicString& s, size_t pos, size_t n) {
         return assign(TBasicString(s, pos, n));
-    }
+    } 
 
     TBasicString& assign(const TCharType* pc) {
         return assign(pc, TBase::StrLen(pc));
-    }
+    } 
 
     TBasicString& assign(TCharType ch) {
         return assign(&ch, 1);
@@ -620,7 +620,7 @@ public:
         }
 
         return *this;
-    }
+    } 
 
     TBasicString& assign(const TCharType* first, const TCharType* last) {
         return assign(first, last - first);
@@ -628,7 +628,7 @@ public:
 
     TBasicString& assign(const TCharType* pc, size_t pos, size_t n) {
         return assign(pc + pos, n);
-    }
+    } 
 
     TBasicString& assign(const TBasicStringBuf<TCharType, TTraits> s) {
         return assign(s.data(), s.size());
@@ -722,19 +722,19 @@ public:
         MutRef().append(s.ConstRef());
 
         return *this;
-    }
+    } 
 
     inline TBasicString& append(const TBasicString& s, size_t pos, size_t n) {
         MutRef().append(s.ConstRef(), pos, n);
 
         return *this;
-    }
+    } 
 
     inline TBasicString& append(const TCharType* pc) Y_NOEXCEPT {
         MutRef().append(pc);
 
         return *this;
-    }
+    } 
 
     inline TBasicString& append(TCharType c) {
         MutRef().push_back(c);
@@ -787,7 +787,7 @@ public:
 
     TBasicString& append(const TCharType* pc, size_t pos, size_t n, size_t pc_len = TBase::npos) {
         return append(pc + pos, Min(n, pc_len - pos));
-    }
+    } 
 
     /**
      * WARN:
@@ -802,26 +802,26 @@ public:
 
     inline void push_back(TCharType c) {
         // TODO
-        append(c);
+        append(c); 
     }
 
     template <class T>
     TBasicString& operator+=(const T& s) {
         return append(s);
-    }
+    } 
 
-    template <class T>
+    template <class T> 
     friend TBasicString operator*(const TBasicString& s, T count) {
         TBasicString result;
 
         for (T i = 0; i < count; ++i) {
-            result += s;
+            result += s; 
         }
 
-        return result;
-    }
-
-    template <class T>
+        return result; 
+    } 
+ 
+    template <class T> 
     TBasicString& operator*=(T count) {
         TBasicString temp;
 
@@ -829,10 +829,10 @@ public:
             temp += *this;
         }
 
-        swap(temp);
+        swap(temp); 
 
         return *this;
-    }
+    } 
 
     operator const TStringType&() const noexcept {
         return this->ConstRef();
@@ -866,7 +866,7 @@ public:
     friend TBasicString operator+(TBasicString&& s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
-    }
+    } 
 
     friend TBasicString operator+(const TBasicString& s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
         s2.prepend(s1);
@@ -887,12 +887,12 @@ public:
     friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
-    }
+    } 
 
     friend TBasicString operator+(TBasicString&& s1, const TCharType* s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
-    }
+    } 
 
     friend TBasicString operator+(TBasicString&& s1, TCharType s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
@@ -950,19 +950,19 @@ public:
         MutRef().insert(0, s.ConstRef());
 
         return *this;
-    }
+    } 
 
     TBasicString& prepend(const TBasicString& s, size_t pos, size_t n) {
         MutRef().insert(0, s.ConstRef(), pos, n);
 
         return *this;
-    }
+    } 
 
     TBasicString& prepend(const TCharType* pc) {
         MutRef().insert(0, pc);
 
         return *this;
-    }
+    } 
 
     TBasicString& prepend(size_t n, TCharType c) {
         MutRef().insert(size_t(0), n, c);
@@ -974,7 +974,7 @@ public:
         MutRef().insert(size_t(0), 1, c);
 
         return *this;
-    }
+    } 
 
     TBasicString& prepend(const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
         return insert(0, s, spos, sn);
@@ -985,19 +985,19 @@ public:
         MutRef().insert(pos, s.ConstRef());
 
         return *this;
-    }
+    } 
 
     TBasicString& insert(size_t pos, const TBasicString& s, size_t pos1, size_t n1) {
         MutRef().insert(pos, s.ConstRef(), pos1, n1);
 
         return *this;
-    }
+    } 
 
     TBasicString& insert(size_t pos, const TCharType* pc) {
         MutRef().insert(pos, pc);
 
         return *this;
-    }
+    } 
 
     TBasicString& insert(size_t pos, const TCharType* pc, size_t len) {
         MutRef().insert(pos, pc, len);
@@ -1035,14 +1035,14 @@ public:
         return *this;
     }
 
-    // ~~~ Removing ~~~
+    // ~~~ Removing ~~~ 
     TBasicString& remove(size_t pos, size_t n) Y_NOEXCEPT {
         if (pos < length()) {
             MutRef().erase(pos, n);
         }
 
         return *this;
-    }
+    } 
 
     TBasicString& remove(size_t pos = 0) Y_NOEXCEPT {
         if (pos < length()) {
@@ -1056,7 +1056,7 @@ public:
         MutRef().erase(pos, n);
 
         return *this;
-    }
+    } 
 
     TBasicString& erase(const_iterator b, const_iterator e) Y_NOEXCEPT {
         return erase(this->off(b), e - b);
@@ -1079,19 +1079,19 @@ public:
         MutRef().replace(pos, n, s.ConstRef());
 
         return *this;
-    }
+    } 
 
     TBasicString& replace(size_t pos, size_t n, const TBasicString& s, size_t pos1, size_t n1) Y_NOEXCEPT {
         MutRef().replace(pos, n, s.ConstRef(), pos1, n1);
 
         return *this;
-    }
+    } 
 
     TBasicString& replace(size_t pos, size_t n, const TCharType* pc) Y_NOEXCEPT {
         MutRef().replace(pos, n, pc);
 
         return *this;
-    }
+    } 
 
     TBasicString& replace(size_t pos, size_t n, const TCharType* s, size_t len) Y_NOEXCEPT {
         MutRef().replace(pos, n, s, len);
@@ -1115,7 +1115,7 @@ public:
         MutRef().replace(pos, n, s, spos, sn);
 
         return *this;
-    }
+    } 
 
     void swap(TBasicString& s) noexcept {
 #ifdef TSTRING_IS_STD_STRING

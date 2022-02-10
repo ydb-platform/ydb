@@ -15,8 +15,8 @@ SRCS(
     wide.cpp
 )
 
-PEERDIR(
+PEERDIR( 
     contrib/libs/libiconv
-)
-
+) 
+ 
 END()

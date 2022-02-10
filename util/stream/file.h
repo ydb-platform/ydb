@@ -84,8 +84,8 @@ public:
     }
 
     ~TFileInput() override = default;
-};
-
+}; 
+ 
 /**
  * Buffered file output stream.
  *
@@ -103,6 +103,6 @@ public:
     }
 
     ~TFixedBufferFileOutput() override = default;
-};
-
+}; 
+ 
 /** @} */

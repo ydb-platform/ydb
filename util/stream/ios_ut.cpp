@@ -254,30 +254,30 @@ void TStreamsTest::TestBufferedIO() {
         bo.Finish();
     }
 }
-
+ 
 void TStreamsTest::TestBufferStream() {
-    TBufferStream stream;
+    TBufferStream stream; 
     TString s = "test";
 
     stream.Write(s.data(), s.size());
-    char buf[5];
+    char buf[5]; 
     size_t bytesRead = stream.Read(buf, 4);
     UNIT_ASSERT_EQUAL(4, bytesRead);
     UNIT_ASSERT_EQUAL(0, strncmp(s.data(), buf, 4));
-
+ 
     stream.Write(s.data(), s.size());
     bytesRead = stream.Read(buf, 2);
     UNIT_ASSERT_EQUAL(2, bytesRead);
-    UNIT_ASSERT_EQUAL(0, strncmp("te", buf, 2));
+    UNIT_ASSERT_EQUAL(0, strncmp("te", buf, 2)); 
 
     bytesRead = stream.Read(buf, 2);
     UNIT_ASSERT_EQUAL(2, bytesRead);
-    UNIT_ASSERT_EQUAL(0, strncmp("st", buf, 2));
-
+    UNIT_ASSERT_EQUAL(0, strncmp("st", buf, 2)); 
+ 
     bytesRead = stream.Read(buf, 2);
     UNIT_ASSERT_EQUAL(0, bytesRead);
-}
-
+} 
+ 
 namespace {
     class TStringListInput: public IWalkInput {
     public:

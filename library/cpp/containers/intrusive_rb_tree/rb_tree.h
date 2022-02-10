@@ -16,7 +16,7 @@ struct TRbTreeNodeBase {
     TBasePtr Parent_;
     TBasePtr Left_;
     TBasePtr Right_;
-    size_t Children_;
+    size_t Children_; 
 
     inline TRbTreeNodeBase() noexcept {
         ReInitNode();
@@ -27,7 +27,7 @@ struct TRbTreeNodeBase {
         Parent_ = nullptr;
         Left_ = nullptr;
         Right_ = nullptr;
-        Children_ = 1;
+        Children_ = 1; 
     }
 
     static TBasePtr MinimumNode(TBasePtr x) {
@@ -43,19 +43,19 @@ struct TRbTreeNodeBase {
 
         return x;
     }
-
-    static TBasePtr ByIndex(TBasePtr x, size_t index) {
+ 
+    static TBasePtr ByIndex(TBasePtr x, size_t index) { 
         if (x->Left_ != nullptr) {
-            if (index < x->Left_->Children_)
-                return ByIndex(x->Left_, index);
-            index -= x->Left_->Children_;
-        }
-        if (0 == index)
-            return x;
-        if (!x->Right_)
-            ythrow yexception() << "index not found";
-        return ByIndex(x->Right_, index - 1);
-    }
+            if (index < x->Left_->Children_) 
+                return ByIndex(x->Left_, index); 
+            index -= x->Left_->Children_; 
+        } 
+        if (0 == index) 
+            return x; 
+        if (!x->Right_) 
+            ythrow yexception() << "index not found"; 
+        return ByIndex(x->Right_, index - 1); 
+    } 
 };
 
 struct TRbTreeBaseIterator;
@@ -397,7 +397,7 @@ public:
 
         return y;
     }
-
+ 
     template <class T1>
     inline size_t LessCount(const T1& k) const {
         auto x = LowerBound(k);
@@ -544,8 +544,8 @@ void TRbGlobal<TDummy>::RotateLeft(TRbTreeNodeBase* x, TRbTreeNodeBase*& root) {
         x->Parent_->Right_ = y;
     y->Left_ = x;
     x->Parent_ = y;
-    y->Children_ = x->Children_;
-    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1;
+    y->Children_ = x->Children_; 
+    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1; 
 }
 
 template <class TDummy>
@@ -564,8 +564,8 @@ void TRbGlobal<TDummy>::RotateRight(TRbTreeNodeBase* x, TRbTreeNodeBase*& root) 
         x->Parent_->Left_ = y;
     y->Right_ = x;
     x->Parent_ = y;
-    y->Children_ = x->Children_;
-    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1;
+    y->Children_ = x->Children_; 
+    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1; 
 }
 
 template <class TDummy>

@@ -223,8 +223,8 @@ void TCoroTest::TestSimpleX2() {
 
         UNIT_ASSERT_EQUAL(i0, 100000);
     }
-}
-
+} 
+ 
 struct TRunner {
     inline TRunner()
         : Runs(0)

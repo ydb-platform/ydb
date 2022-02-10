@@ -22,12 +22,12 @@ public:
     TFileEntitiesList(EMask mask)
         : Mask(mask)
     {
-        Clear();
+        Clear(); 
     }
 
     void Clear() {
         Cur = nullptr;
-        FileNamesSize = CurName = 0;
+        FileNamesSize = CurName = 0; 
         FileNames.Clear();
         FileNames.Append("", 1);
     }
@@ -36,8 +36,8 @@ public:
         return Cur = (CurName++ < FileNamesSize ? strchr(Cur, 0) + 1 : nullptr);
     }
 
-    size_t Size() {
-        return FileNamesSize;
+    size_t Size() { 
+        return FileNamesSize; 
     }
 
     inline void Fill(const TString& dirname, bool sort = false) {
@@ -57,25 +57,25 @@ public:
 
 protected:
     TBuffer FileNames;
-    size_t FileNamesSize, CurName;
+    size_t FileNamesSize, CurName; 
     const char* Cur;
-    EMask Mask;
+    EMask Mask; 
 };
 
 Y_DECLARE_OPERATORS_FOR_FLAGS(TFileEntitiesList::EMask)
 
 class TFileList: public TFileEntitiesList {
-public:
+public: 
     TFileList()
         : TFileEntitiesList(TFileEntitiesList::EM_FILES)
     {
     }
-};
-
+}; 
+ 
 class TDirsList: public TFileEntitiesList {
-public:
+public: 
     TDirsList()
         : TFileEntitiesList(TFileEntitiesList::EM_DIRS)
     {
     }
-};
+}; 

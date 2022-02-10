@@ -95,12 +95,12 @@ public:
         return Get(key.data(), key.size());
     }
     TData GetDefault(const TKeyBuf& key, const TData& def) const {
-        TData value;
+        TData value; 
         if (!Find(key.data(), key.size(), &value))
-            return def;
-        else
-            return value;
-    }
+            return def; 
+        else 
+            return value; 
+    } 
 
     const TBlob& Data() const {
         return DataHolder;

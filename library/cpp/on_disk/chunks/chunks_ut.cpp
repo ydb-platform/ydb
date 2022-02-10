@@ -1,11 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/stream/file.h>
 #include <util/system/filemap.h>
 #include <util/system/tempfile.h>
-
-#include "chunked_helpers.h"
-
+ 
+#include "chunked_helpers.h" 
+ 
 /// Data for TChunkedHelpersTest::TestGeneralVector
 struct TPodStruct {
     int x;
@@ -82,13 +82,13 @@ public:
     void TestGeneralVector() {
         { /// ui32
             const size_t N = 3;
-            TBufferStream stream;
-            {
+            TBufferStream stream; 
+            { 
                 TGeneralVectorWriter<ui32> writer;
                 for (size_t i = 0; i < N; ++i)
                     writer.PushBack(i);
-                writer.Save(stream);
-            }
+                writer.Save(stream); 
+            } 
             {
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TGeneralVector<ui32> reader(temp);
@@ -138,7 +138,7 @@ public:
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TGeneralVector<TItem> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
-
+ 
                 TItem value;
                 reader.Get(0, value);
                 UNIT_ASSERT(value.x == 1 && value.y == 2.0);
@@ -154,14 +154,14 @@ public:
             TVector<int> data_holder(N);
             int* a = &(data_holder[0]);
             TBufferStream stream;
-            {
+            { 
                 TGeneralVectorWriter<int*> writer;
                 for (size_t i = 0; i < N; ++i) {
                     a[i] = i;
                     writer.PushBack(a + i);
                 }
                 writer.Save(stream);
-            }
+            } 
             {
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TGeneralVector<int*> reader(temp);
@@ -174,7 +174,7 @@ public:
                 }
                 UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(int*));
             }
-        }
+        } 
         { /// std::pair<int, int>
             typedef std::pair<int, int> TItem;
             const size_t N = 3;
@@ -197,8 +197,8 @@ public:
                 UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(TItem));
             }
         }
-    }
-
+    } 
+ 
     void TestStrings() {
         const TString FILENAME = "chunked_helpers_test.bin";
         TTempFileHandle file(FILENAME.c_str());

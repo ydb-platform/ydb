@@ -3,7 +3,7 @@
 #include "writeable_node.h"
 #include "write_trie_backwards.h"
 #include "comptrie_impl.h"
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 

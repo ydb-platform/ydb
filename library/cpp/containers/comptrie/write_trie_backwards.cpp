@@ -5,7 +5,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>
-
+ 
 namespace NCompactTrie {
     size_t WriteTrieBackwards(IOutputStream& os, TReverseNodeEnumerator& enumerator, bool verbose) {
         if (verbose) {

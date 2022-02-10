@@ -60,7 +60,7 @@ public:
     void TestRelCanonical();
     void TestHreflang();
     void TestHreflangOnLongInput();
-    void TestMimeType();
+    void TestMimeType(); 
     void TestRepeatedContentEncoding();
 };
 
@@ -447,20 +447,20 @@ void THttpHeaderParserTestSuite::TestRequestHeaderOnResponse() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestMimeType() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
+void THttpHeaderParserTestSuite::TestMimeType() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
     const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: application/json; charset=utf-8\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON));
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: application/json; charset=utf-8\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON)); 
     UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8));
-    TestFinish();
-}
-
+    TestFinish(); 
+} 
+ 
 void THttpHeaderParserTestSuite::TestRepeatedContentEncoding() {
     TestStart();
     THttpHeader httpHeader;

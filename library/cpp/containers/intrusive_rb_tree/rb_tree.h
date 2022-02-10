@@ -350,26 +350,26 @@ public:
         return static_cast<TValue*>(y);
     }
 
-    size_t GetIndex(TBasePtr x) const { 
-        size_t index = 0; 
- 
-        if (x->Left_ != nullptr) { 
-            index += x->Left_->Children_; 
-        } 
- 
-        while (x != nullptr && x->Parent_ != nullptr && x->Parent_ != const_cast<TBasePtr>(&this->Data_)) { 
-            if (x->Parent_->Right_ == x && x->Parent_->Left_ != nullptr) { 
-                index += x->Parent_->Left_->Children_; 
-            } 
-            if (x->Parent_->Right_ == x) { 
-                index += 1; 
-            } 
-            x = x->Parent_; 
-        } 
- 
-        return index; 
-    } 
- 
+    size_t GetIndex(TBasePtr x) const {
+        size_t index = 0;
+
+        if (x->Left_ != nullptr) {
+            index += x->Left_->Children_;
+        }
+
+        while (x != nullptr && x->Parent_ != nullptr && x->Parent_ != const_cast<TBasePtr>(&this->Data_)) {
+            if (x->Parent_->Right_ == x && x->Parent_->Left_ != nullptr) {
+                index += x->Parent_->Left_->Children_;
+            }
+            if (x->Parent_->Right_ == x) {
+                index += 1;
+            }
+            x = x->Parent_;
+        }
+
+        return index;
+    }
+
     template <class T1>
     inline TBasePtr LowerBound(const T1& k) const {
         TBasePtr y = const_cast<TBasePtr>(&this->Data_); /* Last node which is not less than k. */
@@ -398,40 +398,40 @@ public:
         return y;
     }
 
-    template <class T1> 
-    inline size_t LessCount(const T1& k) const { 
-        auto x = LowerBound(k); 
-        if (x == const_cast<TBasePtr>(&this->Data_)) { 
+    template <class T1>
+    inline size_t LessCount(const T1& k) const {
+        auto x = LowerBound(k);
+        if (x == const_cast<TBasePtr>(&this->Data_)) {
             if (const auto root = Root()) {
                 return root->Children_;
             } else {
                 return 0;
             }
-        } else { 
-            return GetIndex(x); 
-        } 
-    } 
- 
-    template <class T1> 
-    inline size_t NotLessCount(const T1& k) const { 
-        return Root()->Children_ - LessCount<T1>(k); 
-    } 
- 
-    template <class T1> 
-    inline size_t GreaterCount(const T1& k) const { 
-        auto x = UpperBound(k); 
-        if (x == const_cast<TBasePtr>(&this->Data_)) { 
-            return 0; 
-        } else { 
-            return Root()->Children_ - GetIndex(x); 
-        } 
-    } 
- 
-    template <class T1> 
-    inline size_t NotGreaterCount(const T1& k) const { 
-        return Root()->Children_ - GreaterCount<T1>(k); 
-    } 
- 
+        } else {
+            return GetIndex(x);
+        }
+    }
+
+    template <class T1>
+    inline size_t NotLessCount(const T1& k) const {
+        return Root()->Children_ - LessCount<T1>(k);
+    }
+
+    template <class T1>
+    inline size_t GreaterCount(const T1& k) const {
+        auto x = UpperBound(k);
+        if (x == const_cast<TBasePtr>(&this->Data_)) {
+            return 0;
+        } else {
+            return Root()->Children_ - GetIndex(x);
+        }
+    }
+
+    template <class T1>
+    inline size_t NotGreaterCount(const T1& k) const {
+        return Root()->Children_ - GreaterCount<T1>(k);
+    }
+
     TValue* ByIndex(size_t index) {
         return static_cast<TValue*>(TRbTreeNodeBase::ByIndex(Root(), index));
     }

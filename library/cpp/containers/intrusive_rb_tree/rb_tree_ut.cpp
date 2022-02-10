@@ -4,7 +4,7 @@
 
 #include <util/random/fast.h>
 #include <util/random/easy.h>
-#include <util/random/shuffle.h> 
+#include <util/random/shuffle.h>
 
 class TRedBlackTreeTest: public TTestBase {
     struct TCmp {
@@ -42,10 +42,10 @@ class TRedBlackTreeTest: public TTestBase {
     UNIT_TEST(TestErase)
     UNIT_TEST(TestFind)
     UNIT_TEST(TestStress)
-    UNIT_TEST(TestGettingIndexWithDifferentValues) 
+    UNIT_TEST(TestGettingIndexWithDifferentValues)
     UNIT_TEST(TestCheckChildrenAfterErase)
     UNIT_TEST(TestGettingIndexWithDifferentValuesAfterErase)
-    UNIT_TEST(TestGettingIndexWithEqualValues) 
+    UNIT_TEST(TestGettingIndexWithEqualValues)
     UNIT_TEST(TestLessCountOnEmptyTree)
     UNIT_TEST_SUITE_END();
 
@@ -77,33 +77,33 @@ private:
         }
     }
 
-    inline void TestGettingIndexWithDifferentValues() { 
+    inline void TestGettingIndexWithDifferentValues() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
-        size_t N = 1000; 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            nodes.push_back(new TNode(int(i))); 
-        } 
- 
-        TTree tree; 
-        Shuffle(nodes.begin(), nodes.end()); 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            tree.Insert(nodes[i].Get()); 
-        } 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            UNIT_ASSERT_EQUAL(tree.LessCount(i), i); 
-            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(i), i + 1); 
-            UNIT_ASSERT_EQUAL(tree.GreaterCount(i), N - i - 1); 
-            UNIT_ASSERT_EQUAL(tree.NotLessCount(i), N - i); 
- 
-            auto nodePtr = tree.Find(i); 
-            UNIT_ASSERT_EQUAL(tree.GetIndex(nodePtr), i); 
-            UNIT_ASSERT_EQUAL(tree.GetIndex(nodes[i].Get()), static_cast<size_t>(nodes[i]->N)); 
-        } 
-    } 
- 
+        size_t N = 1000;
+
+        for (size_t i = 0; i < N; ++i) {
+            nodes.push_back(new TNode(int(i)));
+        }
+
+        TTree tree;
+        Shuffle(nodes.begin(), nodes.end());
+
+        for (size_t i = 0; i < N; ++i) {
+            tree.Insert(nodes[i].Get());
+        }
+
+        for (size_t i = 0; i < N; ++i) {
+            UNIT_ASSERT_EQUAL(tree.LessCount(i), i);
+            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(i), i + 1);
+            UNIT_ASSERT_EQUAL(tree.GreaterCount(i), N - i - 1);
+            UNIT_ASSERT_EQUAL(tree.NotLessCount(i), N - i);
+
+            auto nodePtr = tree.Find(i);
+            UNIT_ASSERT_EQUAL(tree.GetIndex(nodePtr), i);
+            UNIT_ASSERT_EQUAL(tree.GetIndex(nodes[i].Get()), static_cast<size_t>(nodes[i]->N));
+        }
+    }
+
     inline void TestCheckChildrenAfterErase() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
@@ -175,33 +175,33 @@ private:
         }
     }
 
-    inline void TestGettingIndexWithEqualValues() { 
+    inline void TestGettingIndexWithEqualValues() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
-        size_t N = 1000; 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            nodes.push_back(new TNode(0)); 
-        } 
- 
-        TTree tree; 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            tree.Insert(nodes[i].Get()); 
-        } 
- 
-        for (size_t i = 0; i < N; ++i) { 
-            UNIT_ASSERT_EQUAL(tree.LessCount(nodes[i]->N), 0); 
-            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(nodes[i]->N), N); 
-            UNIT_ASSERT_EQUAL(tree.GreaterCount(nodes[i]->N), 0); 
-            UNIT_ASSERT_EQUAL(tree.NotLessCount(nodes[i]->N), N); 
- 
-            UNIT_ASSERT_EQUAL(tree.LessCount(*nodes[i].Get()), 0); 
-            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(*nodes[i].Get()), N); 
-            UNIT_ASSERT_EQUAL(tree.GreaterCount(*nodes[i].Get()), 0); 
-            UNIT_ASSERT_EQUAL(tree.NotLessCount(*nodes[i].Get()), N); 
-        } 
-    } 
- 
+        size_t N = 1000;
+
+        for (size_t i = 0; i < N; ++i) {
+            nodes.push_back(new TNode(0));
+        }
+
+        TTree tree;
+
+        for (size_t i = 0; i < N; ++i) {
+            tree.Insert(nodes[i].Get());
+        }
+
+        for (size_t i = 0; i < N; ++i) {
+            UNIT_ASSERT_EQUAL(tree.LessCount(nodes[i]->N), 0);
+            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(nodes[i]->N), N);
+            UNIT_ASSERT_EQUAL(tree.GreaterCount(nodes[i]->N), 0);
+            UNIT_ASSERT_EQUAL(tree.NotLessCount(nodes[i]->N), N);
+
+            UNIT_ASSERT_EQUAL(tree.LessCount(*nodes[i].Get()), 0);
+            UNIT_ASSERT_EQUAL(tree.NotGreaterCount(*nodes[i].Get()), N);
+            UNIT_ASSERT_EQUAL(tree.GreaterCount(*nodes[i].Get()), 0);
+            UNIT_ASSERT_EQUAL(tree.NotLessCount(*nodes[i].Get()), N);
+        }
+    }
+
     inline void TestFind() {
         TTree tree;
 

@@ -7,15 +7,15 @@ OWNER(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND) 
     SPLIT_FACTOR(60)
-    TIMEOUT(3600)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    TIMEOUT(300)
-    SIZE(MEDIUM)
-ENDIF()
+    TIMEOUT(3600) 
+    SIZE(LARGE) 
+    TAG(ya:fat) 
+ELSE() 
+    TIMEOUT(300) 
+    SIZE(MEDIUM) 
+ENDIF() 
 
 SRCS(
     ydb_bulk_upsert_ut.cpp
@@ -28,7 +28,7 @@ SRCS(
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
     ydb_table_split_ut.cpp
-    ydb_stats_ut.cpp
+    ydb_stats_ut.cpp 
     ydb_long_tx_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp

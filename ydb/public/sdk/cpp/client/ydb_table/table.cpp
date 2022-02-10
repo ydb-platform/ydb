@@ -1319,7 +1319,7 @@ class TSessionPoolImpl {
             (std::shared_ptr<TTableClient::TImpl> client, const TCreateSessionSettings& settings);
 public:
     using TKeepAliveCmd = std::function<void(TSession session)>;
-    using TDeletePredicate = std::function<bool(TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount)>;
+    using TDeletePredicate = std::function<bool(TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount)>; 
     TSessionPoolImpl(ui32 maxActiveSessions);
     // TAwareSessonProvider:
     // function is called if session pool is empty,
@@ -1334,27 +1334,27 @@ public:
     bool DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, const TString& endpoint);
     // Returns true if session returned to pool successfully
     bool ReturnSession(TSession::TImpl* impl, bool active);
-    TPeriodicCb CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient, TKeepAliveCmd&& cmd, TDeletePredicate&& predicate);
+    TPeriodicCb CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient, TKeepAliveCmd&& cmd, TDeletePredicate&& predicate); 
     i64 GetActiveSessions() const;
     i64 GetActiveSessionsLimit() const;
     i64 GetCurrentPoolSize() const;
     void DecrementActiveCounter();
 
     void Drain(std::function<bool(std::unique_ptr<TSession::TImpl>&&)> cb, bool close);
-    void SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector collector);
+    void SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector collector); 
 
     static void CreateFakeSession(NThreading::TPromise<TCreateSessionResult>& promise,
         std::shared_ptr<TTableClient::TImpl> client);
 private:
-    void UpdateStats();
-
+    void UpdateStats(); 
+ 
     mutable std::mutex Mtx_;
     TMultiMap<TInstant, std::unique_ptr<TSession::TImpl>> Sessions_;
     bool Closed_;
     i64 ActiveSessions_;
     const ui32 MaxActiveSessions_;
-    NSdkStats::TSessionCounter ActiveSessionsCounter_;
-    NSdkStats::TSessionCounter InPoolSessionsCounter_;
+    NSdkStats::TSessionCounter ActiveSessionsCounter_; 
+    NSdkStats::TSessionCounter InPoolSessionsCounter_; 
     NSdkStats::TAtomicCounter<NMonitoring::TRate> FakeSessionsCounter_;
 };
 
@@ -1471,19 +1471,19 @@ public:
         , Settings_(settings)
         , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
         , SettlerPool_(0)
-    {
-        if (!DbDriverState_->StatCollector.IsCollecting()) {
-            return;
-        }
-
-        SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector());
-        SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector(
-            NSdkStats::TStatCollector::TSessionPoolStatCollector::EStatCollectorType::SESSIONPOOL
-        ));
-        SettlerPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector(
-            NSdkStats::TStatCollector::TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL
-        ));
-    }
+    { 
+        if (!DbDriverState_->StatCollector.IsCollecting()) { 
+            return; 
+        } 
+ 
+        SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector()); 
+        SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector( 
+            NSdkStats::TStatCollector::TSessionPoolStatCollector::EStatCollectorType::SESSIONPOOL 
+        )); 
+        SettlerPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector( 
+            NSdkStats::TStatCollector::TSessionPoolStatCollector::EStatCollectorType::SETTLERPOOL 
+        )); 
+    } 
 
     ~TImpl() {
         RequestMigrator_.Wait();
@@ -1506,10 +1506,10 @@ public:
                 promise.SetException("no more client");
                 return promise.GetFuture();
             }
-            return strong->Drain();
+            return strong->Drain(); 
         };
-
-        DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP);
+ 
+        DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP); 
     }
 
     NThreading::TFuture<void> Drain() {
@@ -1557,21 +1557,21 @@ public:
     }
 
     void StartPeriodicSessionPoolTask() {
-
-        auto deletePredicate = [](TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount) {
-
-            const auto sessionPoolSettings = client->Settings_.SessionPoolSettings_;
-            const auto spentTime = session->GetTimeToTouchFast() - session->GetTimeInPastFast();
-
-            if (spentTime >= sessionPoolSettings.CloseIdleThreshold_) {
-                if (sessionsCount > sessionPoolSettings.MinPoolSize_) {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
+ 
+        auto deletePredicate = [](TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount) { 
+ 
+            const auto sessionPoolSettings = client->Settings_.SessionPoolSettings_; 
+            const auto spentTime = session->GetTimeToTouchFast() - session->GetTimeInPastFast(); 
+ 
+            if (spentTime >= sessionPoolSettings.CloseIdleThreshold_) { 
+                if (sessionsCount > sessionPoolSettings.MinPoolSize_) { 
+                    return true; 
+                } 
+            } 
+ 
+            return false; 
+        }; 
+ 
         auto keepAliveCmd = [](TSession session) {
             Y_VERIFY(session.GetId());
 
@@ -1619,8 +1619,8 @@ public:
         Connections_->AddPeriodicTask(
             SessionPool_.CreatePeriodicTask(
                 weak,
-                std::move(keepAliveCmd),
-                std::move(deletePredicate)
+                std::move(keepAliveCmd), 
+                std::move(deletePredicate) 
             ), PERIODIC_ACTION_INTERVAL);
     }
 
@@ -1679,10 +1679,10 @@ public:
 
     void StartPeriodicSettlerTask() {
 
-        auto deletePredicate = [](TSession::TImpl* , TTableClient::TImpl* , size_t) {
-            return false;
-        };
-
+        auto deletePredicate = [](TSession::TImpl* , TTableClient::TImpl* , size_t) { 
+            return false; 
+        }; 
+ 
         auto ttl = Settings_.SettlerSessionPoolTTL_;
         auto keepAliveCmd = [ttl](TSession session) {
             Y_VERIFY(session.GetId());
@@ -1699,8 +1699,8 @@ public:
         Connections_->AddPeriodicTask(
             SettlerPool_.CreatePeriodicTask(
                 weak,
-                std::move(keepAliveCmd),
-                std::move(deletePredicate)
+                std::move(keepAliveCmd), 
+                std::move(deletePredicate) 
             ), SETTLER_PERIODIC_ACTION_INTERVAL);
     }
 
@@ -1976,8 +1976,8 @@ public:
             settings.ClientTimeout_,
             preferedLocation);
 
-        std::weak_ptr<TDbDriverState> state = DbDriverState_;
-
+        std::weak_ptr<TDbDriverState> state = DbDriverState_; 
+ 
         return createSessionPromise.GetFuture();
     }
 
@@ -2149,8 +2149,8 @@ public:
             return ExecuteDataQuery(session, dataQuery, txControl, params, settings, true);
         }
 
-        CacheMissCounter.Inc();
-
+        CacheMissCounter.Inc(); 
+ 
         return InjectSessionStatusInterception(session.SessionImpl_,
             ExecuteDataQueryInternal(session, query, txControl, params, settings, false),
             true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
@@ -2207,8 +2207,8 @@ public:
                 promise.SetValue(std::move(prepareQueryResult));
             };
 
-        CollectQuerySize(query, QuerySizeHistogram);
-
+        CollectQuerySize(query, QuerySizeHistogram); 
+ 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::PrepareDataQueryRequest, Ydb::Table::PrepareDataQueryResponse>(
             std::move(request),
             extractor,
@@ -2513,15 +2513,15 @@ public:
         return Settings_.SessionPoolSettings_.RetryLimit_;
     }
 
-    void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector) {
-        CacheMissCounter.Set(collector.CacheMiss);
-        QuerySizeHistogram.Set(collector.QuerySize);
-        ParamsSizeHistogram.Set(collector.ParamsSize);
-        RetryOperationStatCollector = collector.RetryOperationStatCollector;
+    void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector) { 
+        CacheMissCounter.Set(collector.CacheMiss); 
+        QuerySizeHistogram.Set(collector.QuerySize); 
+        ParamsSizeHistogram.Set(collector.ParamsSize); 
+        RetryOperationStatCollector = collector.RetryOperationStatCollector; 
         SessionRemovedDueBalancing.Set(collector.SessionRemovedDueBalancing);
         RequestMigrated.Set(collector.RequestMigrated);
-    }
-
+    } 
+ 
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, const TBulkUpsertSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
         request.set_table(table);
@@ -2675,42 +2675,42 @@ private:
         *request->mutable_parameters() = params;
     }
 
-    static void CollectParams(
-        ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
-        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram)
-    {
-
-        if (params && histgoram.IsCollecting()) {
-            size_t size = 0;
-            for (auto& keyvalue: *params) {
-                size += keyvalue.second.ByteSizeLong();
-            }
-            histgoram.Record(size);
-        }
-    }
-
-    static void CollectParams(
-        const ::google::protobuf::Map<TString, Ydb::TypedValue>& params,
-        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram)
-    {
-
-        if (histgoram.IsCollecting()) {
-            size_t size = 0;
-            for (auto& keyvalue: params) {
-                size += keyvalue.second.ByteSizeLong();
-            }
-            histgoram.Record(size);
-        }
-    }
-
-    static void CollectQuerySize(const TString& query, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>& querySizeHistogram) {
-        if (querySizeHistogram.IsCollecting()) {
-            querySizeHistogram.Record(query.size());
-        }
-    }
-
-    static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>&) {}
-
+    static void CollectParams( 
+        ::google::protobuf::Map<TString, Ydb::TypedValue>* params, 
+        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram) 
+    { 
+ 
+        if (params && histgoram.IsCollecting()) { 
+            size_t size = 0; 
+            for (auto& keyvalue: *params) { 
+                size += keyvalue.second.ByteSizeLong(); 
+            } 
+            histgoram.Record(size); 
+        } 
+    } 
+ 
+    static void CollectParams( 
+        const ::google::protobuf::Map<TString, Ydb::TypedValue>& params, 
+        NSdkStats::TAtomicHistogram<NMonitoring::THistogram> histgoram) 
+    { 
+ 
+        if (histgoram.IsCollecting()) { 
+            size_t size = 0; 
+            for (auto& keyvalue: params) { 
+                size += keyvalue.second.ByteSizeLong(); 
+            } 
+            histgoram.Record(size); 
+        } 
+    } 
+ 
+    static void CollectQuerySize(const TString& query, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>& querySizeHistogram) { 
+        if (querySizeHistogram.IsCollecting()) { 
+            querySizeHistogram.Record(query.size()); 
+        } 
+    } 
+ 
+    static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<NMonitoring::THistogram>&) {} 
+ 
     template <typename TQueryType, typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQueryInternal(const TSession& session, const TQueryType& query,
         const TTxControl& txControl, TParamsType params,
@@ -2729,10 +2729,10 @@ private:
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
         SetQuery(query, request.mutable_query());
-        CollectQuerySize(query, QuerySizeHistogram);
+        CollectQuerySize(query, QuerySizeHistogram); 
 
         SetParams(params, &request);
-        CollectParams(params, ParamsSizeHistogram);
+        CollectParams(params, ParamsSizeHistogram); 
 
         SetQueryCachePolicy(query, settings, request.mutable_query_cache_policy());
 
@@ -2855,11 +2855,11 @@ private:
         std::shared_ptr<TTableClient::TImpl> client,
         const TCreateSessionSettings& settings);
 
-public:
+public: 
     NSdkStats::TAtomicCounter<NMonitoring::TRate> CacheMissCounter;
-    NSdkStats::TStatCollector::TClientRetryOperationStatCollector RetryOperationStatCollector;
-    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> QuerySizeHistogram;
-    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> ParamsSizeHistogram;
+    NSdkStats::TStatCollector::TClientRetryOperationStatCollector RetryOperationStatCollector; 
+    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> QuerySizeHistogram; 
+    NSdkStats::TAtomicHistogram<NMonitoring::THistogram> ParamsSizeHistogram; 
     NSdkStats::TAtomicCounter<NMonitoring::TRate> SessionRemovedDueBalancing;
     NSdkStats::TAtomicCounter<NMonitoring::TRate> RequestMigrated;
 
@@ -2966,10 +2966,10 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
             sessionImpl = std::move(it->second);
             Sessions_.erase(it);
         }
-        UpdateStats();
+        UpdateStats(); 
     }
     if (returnFakeSession) {
-        FakeSessionsCounter_.Inc();
+        FakeSessionsCounter_.Inc(); 
         CreateFakeSession(createSessionPromise, client);
         return createSessionPromise.GetFuture();
     } else if (sessionImpl) {
@@ -3028,7 +3028,7 @@ bool TSessionPoolImpl::ReturnSession(TSession::TImpl* impl, bool active) {
             ActiveSessions_--;
             impl->SetNeedUpdateActiveCounter(false);
         }
-        UpdateStats();
+        UpdateStats(); 
     }
     return true;
 }
@@ -3053,9 +3053,9 @@ void TSessionPoolImpl::Drain(std::function<bool(std::unique_ptr<TSession::TImpl>
 }
 
 TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient,
-    TKeepAliveCmd&& cmd, TDeletePredicate&& deletePredicate)
+    TKeepAliveCmd&& cmd, TDeletePredicate&& deletePredicate) 
 {
-    auto periodicCb = [this, weakClient, cmd=std::move(cmd), deletePredicate=std::move(deletePredicate)](NYql::TIssues&&, EStatus status) {
+    auto periodicCb = [this, weakClient, cmd=std::move(cmd), deletePredicate=std::move(deletePredicate)](NYql::TIssues&&, EStatus status) { 
         if (status != EStatus::SUCCESS) {
             return false;
         }
@@ -3069,8 +3069,8 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
             auto keepAliveBatchSize = PERIODIC_ACTION_BATCH_SIZE;
             TVector<std::unique_ptr<TSession::TImpl>> sessionsToTouch;
             sessionsToTouch.reserve(keepAliveBatchSize);
-            TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete;
-            sessionsToDelete.reserve(keepAliveBatchSize);
+            TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete; 
+            sessionsToDelete.reserve(keepAliveBatchSize); 
             auto now = TInstant::Now();
             {
                 std::lock_guard guard(Mtx_);
@@ -3080,15 +3080,15 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
                 while (it != sessions.end() && keepAliveBatchSize--) {
                     if (now < it->second->GetTimeToTouchFast())
                         break;
-
-                    if (deletePredicate(it->second.get(), strongClient.get(), sessions.size())) {
-                        sessionsToDelete.emplace_back(std::move(it->second));
-                    } else {
-                        sessionsToTouch.emplace_back(std::move(it->second));
-                    }
+ 
+                    if (deletePredicate(it->second.get(), strongClient.get(), sessions.size())) { 
+                        sessionsToDelete.emplace_back(std::move(it->second)); 
+                    } else { 
+                        sessionsToTouch.emplace_back(std::move(it->second)); 
+                    } 
                     sessions.erase(it++);
                 }
-                UpdateStats();
+                UpdateStats(); 
             }
 
             for (auto& sessionImpl : sessionsToTouch) {
@@ -3101,14 +3101,14 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
                     cmd(session);
                 }
             }
-
-            for (auto& sessionImpl : sessionsToDelete) {
-                if (sessionImpl) {
-                    Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE ||
-                             sessionImpl->GetState() == TSession::TImpl::S_DISCONNECTED);
+ 
+            for (auto& sessionImpl : sessionsToDelete) { 
+                if (sessionImpl) { 
+                    Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE || 
+                             sessionImpl->GetState() == TSession::TImpl::S_DISCONNECTED); 
                     TTableClient::TImpl::CloseAndDeleteSession(std::move(sessionImpl), strongClient);
-                }
-            }
+                } 
+            } 
         }
 
         return true;
@@ -3171,17 +3171,17 @@ TSessionInspectorFn TSession::TImpl::GetSessionInspector(
     };
 }
 
-void TSessionPoolImpl::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector statCollector) {
-    ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
-    InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
-    FakeSessionsCounter_.Set(statCollector.FakeSessions);
-}
-
-void TSessionPoolImpl::UpdateStats() {
-    ActiveSessionsCounter_.Apply(ActiveSessions_);
-    InPoolSessionsCounter_.Apply(Sessions_.size());
-}
-
+void TSessionPoolImpl::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector statCollector) { 
+    ActiveSessionsCounter_.Set(statCollector.ActiveSessions); 
+    InPoolSessionsCounter_.Set(statCollector.InPoolSessions); 
+    FakeSessionsCounter_.Set(statCollector.FakeSessions); 
+} 
+ 
+void TSessionPoolImpl::UpdateStats() { 
+    ActiveSessionsCounter_.Apply(ActiveSessions_); 
+    InPoolSessionsCounter_.Apply(Sessions_.size()); 
+} 
+ 
 TTableClient::TTableClient(const TDriver& driver, const TClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings)) {
     Impl_->StartPeriodicSessionPoolTask();
@@ -3265,7 +3265,7 @@ protected:
         , Promise(NThreading::NewPromise<TStatus>())
         , RetryNumber(0)
     {}
-
+ 
     static void RunOp(TRetryContextPtr self) {
         self->Execute();
     }
@@ -3432,7 +3432,7 @@ TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operati
 TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings) {
     TRetryState retryState;
     TMaybe<NYdb::TStatus> status;
-
+ 
     for (ui32 retryNumber = 0; retryNumber <= settings.MaxRetries_; ++retryNumber) {
         status = operationWrapper(retryState);
 
@@ -3488,7 +3488,7 @@ TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& 
             default:
                 return *status;
         }
-        Impl_->RetryOperationStatCollector.IncSyncRetryOperation(status->GetStatus());
+        Impl_->RetryOperationStatCollector.IncSyncRetryOperation(status->GetStatus()); 
     }
 
     return *status;
@@ -3905,8 +3905,8 @@ TAsyncPrepareQueryResult TSession::PrepareDataQuery(const TString& query, const 
         return MakeFuture(result);
     }
 
-    Client_->CacheMissCounter.Inc();
-
+    Client_->CacheMissCounter.Inc(); 
+ 
     return InjectSessionStatusInterception(
         SessionImpl_,
         Client_->PrepareDataQuery(*this, query, settings),

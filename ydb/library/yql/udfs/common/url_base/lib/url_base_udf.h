@@ -1,7 +1,7 @@
 #pragma once
 
 #include "url_parse.h"
-#include "url_query.h" 
+#include "url_query.h"
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
@@ -341,8 +341,8 @@ namespace {
     TForceHostNameToPunycode, \
     TPunycodeToHostName, \
     TForcePunycodeToHostName, \
-    TCanBePunycodeHostName, \ 
-    TQueryStringToList, \ 
-    TQueryStringToDict, \ 
-    TBuildQueryString 
+    TCanBePunycodeHostName, \
+    TQueryStringToList, \
+    TQueryStringToDict, \
+    TBuildQueryString
 }

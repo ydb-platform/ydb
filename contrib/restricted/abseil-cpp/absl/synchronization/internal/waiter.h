@@ -58,7 +58,7 @@
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // Waiter is an OS-specific semaphore.
@@ -96,8 +96,8 @@ class Waiter {
   }
 
   // How many periods to remain idle before releasing resources
-#ifndef ABSL_HAVE_THREAD_SANITIZER 
-  static constexpr int kIdlePeriods = 60; 
+#ifndef ABSL_HAVE_THREAD_SANITIZER
+  static constexpr int kIdlePeriods = 60;
 #else
   // Memory consumption under ThreadSanitizer is a serious concern,
   // so we release resources sooner. The value of 1 leads to 1 to 2 second
@@ -136,10 +136,10 @@ class Waiter {
   // REQUIRES: WinHelper::GetLock(this) must be held.
   void InternalCondVarPoke();
 
-  // We can't include Windows.h in our headers, so we use aligned charachter 
-  // buffers to define the storage of SRWLOCK and CONDITION_VARIABLE. 
-  alignas(void*) unsigned char mu_storage_[sizeof(void*)]; 
-  alignas(void*) unsigned char cv_storage_[sizeof(void*)]; 
+  // We can't include Windows.h in our headers, so we use aligned charachter
+  // buffers to define the storage of SRWLOCK and CONDITION_VARIABLE.
+  alignas(void*) unsigned char mu_storage_[sizeof(void*)];
+  alignas(void*) unsigned char cv_storage_[sizeof(void*)];
   int waiter_count_;
   int wakeup_count_;
 
@@ -149,7 +149,7 @@ class Waiter {
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_

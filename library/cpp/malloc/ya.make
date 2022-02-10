@@ -2,7 +2,7 @@ RECURSE(
     api
     api/helpers
     api/ut
-    tcmalloc 
+    tcmalloc
     galloc
     jemalloc
     lockless

@@ -51,7 +51,7 @@
 #include "absl/meta/type_traits.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // integer_sequence
 //
@@ -236,10 +236,10 @@ namespace utility_internal {
 // Helper method for expanding tuple into a called method.
 template <typename Functor, typename Tuple, std::size_t... Indexes>
 auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
-    -> decltype(absl::base_internal::invoke( 
+    -> decltype(absl::base_internal::invoke(
         absl::forward<Functor>(functor),
         std::get<Indexes>(absl::forward<Tuple>(t))...)) {
-  return absl::base_internal::invoke( 
+  return absl::base_internal::invoke(
       absl::forward<Functor>(functor),
       std::get<Indexes>(absl::forward<Tuple>(t))...);
 }
@@ -344,7 +344,7 @@ constexpr T make_from_tuple(Tuple&& tup) {
           std::tuple_size<absl::decay_t<Tuple>>::value>{});
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_UTILITY_UTILITY_H_

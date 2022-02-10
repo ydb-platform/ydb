@@ -15,28 +15,28 @@
 
 #include "absl/flags/marshalling.h"
 
-#include <stddef.h> 
- 
-#include <cmath> 
-#include <limits>
-#include <string> 
-#include <type_traits>
-#include <vector> 
+#include <stddef.h>
 
-#include "absl/base/config.h" 
-#include "absl/base/log_severity.h" 
+#include <cmath>
+#include <limits>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "absl/base/config.h"
+#include "absl/base/log_severity.h"
 #include "absl/base/macros.h"
-#include "absl/strings/ascii.h" 
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
-#include "absl/strings/string_view.h" 
+#include "absl/strings/string_view.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace flags_internal {
 
 // --------------------------------------------------------------------
@@ -74,16 +74,16 @@ static int NumericBase(absl::string_view text) {
 }
 
 template <typename IntType>
-inline bool ParseFlagImpl(absl::string_view text, IntType& dst) { 
+inline bool ParseFlagImpl(absl::string_view text, IntType& dst) {
   text = absl::StripAsciiWhitespace(text);
 
-  return absl::numbers_internal::safe_strtoi_base(text, &dst, 
-                                                  NumericBase(text)); 
+  return absl::numbers_internal::safe_strtoi_base(text, &dst,
+                                                  NumericBase(text));
 }
 
 bool AbslParseFlag(absl::string_view text, short* dst, std::string*) {
   int val;
-  if (!ParseFlagImpl(text, val)) return false; 
+  if (!ParseFlagImpl(text, val)) return false;
   if (static_cast<short>(val) != val)  // worked, but number out of range
     return false;
   *dst = static_cast<short>(val);
@@ -92,7 +92,7 @@ bool AbslParseFlag(absl::string_view text, short* dst, std::string*) {
 
 bool AbslParseFlag(absl::string_view text, unsigned short* dst, std::string*) {
   unsigned int val;
-  if (!ParseFlagImpl(text, val)) return false; 
+  if (!ParseFlagImpl(text, val)) return false;
   if (static_cast<unsigned short>(val) !=
       val)  // worked, but number out of range
     return false;
@@ -101,28 +101,28 @@ bool AbslParseFlag(absl::string_view text, unsigned short* dst, std::string*) {
 }
 
 bool AbslParseFlag(absl::string_view text, int* dst, std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 bool AbslParseFlag(absl::string_view text, unsigned int* dst, std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 bool AbslParseFlag(absl::string_view text, long* dst, std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 bool AbslParseFlag(absl::string_view text, unsigned long* dst, std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 bool AbslParseFlag(absl::string_view text, long long* dst, std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 bool AbslParseFlag(absl::string_view text, unsigned long long* dst,
                    std::string*) {
-  return ParseFlagImpl(text, *dst); 
+  return ParseFlagImpl(text, *dst);
 }
 
 // --------------------------------------------------------------------
@@ -173,7 +173,7 @@ std::string Unparse(long long v) { return absl::StrCat(v); }
 std::string Unparse(unsigned long long v) { return absl::StrCat(v); }
 template <typename T>
 std::string UnparseFloatingPointVal(T v) {
-  // digits10 is guaranteed to roundtrip correctly in string -> value -> string 
+  // digits10 is guaranteed to roundtrip correctly in string -> value -> string
   // conversions, but may not be enough to represent all the values correctly.
   std::string digit10_str =
       absl::StrFormat("%.*g", std::numeric_limits<T>::digits10, v);
@@ -237,5 +237,5 @@ std::string AbslUnparseFlag(absl::LogSeverity v) {
   return absl::UnparseFlag(static_cast<int>(v));
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

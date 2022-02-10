@@ -31,16 +31,16 @@
 #include "absl/random/internal/traits.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 
 // Helper object to multiply two 64-bit values to a 128-bit value.
 // MultiplyU64ToU128 multiplies two 64-bit values to a 128-bit value.
 // If an intrinsic is available, it is used, otherwise use native 32-bit
 // multiplies to construct the result.
-inline absl::uint128 MultiplyU64ToU128(uint64_t a, uint64_t b) { 
+inline absl::uint128 MultiplyU64ToU128(uint64_t a, uint64_t b) {
 #if defined(ABSL_HAVE_INTRINSIC_INT128)
-  return absl::uint128(static_cast<__uint128_t>(a) * b); 
+  return absl::uint128(static_cast<__uint128_t>(a) * b);
 #elif defined(ABSL_INTERNAL_USE_UMUL128)
   // uint64_t * uint64_t => uint128 multiply using imul intrinsic on MSVC.
   uint64_t high = 0;
@@ -93,19 +93,19 @@ struct wide_multiply {
 template <>
 struct wide_multiply<uint64_t> {
   using input_type = uint64_t;
-  using result_type = absl::uint128; 
+  using result_type = absl::uint128;
 
   static result_type multiply(uint64_t a, uint64_t b) {
     return MultiplyU64ToU128(a, b);
   }
 
-  static uint64_t hi(result_type r) { return absl::Uint128High64(r); } 
-  static uint64_t lo(result_type r) { return absl::Uint128Low64(r); } 
+  static uint64_t hi(result_type r) { return absl::Uint128High64(r); }
+  static uint64_t lo(result_type r) { return absl::Uint128Low64(r); }
 };
 #endif
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_RANDOM_INTERNAL_WIDE_MULTIPLY_H_

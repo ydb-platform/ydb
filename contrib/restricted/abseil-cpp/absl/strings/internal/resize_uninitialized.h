@@ -26,7 +26,7 @@
 #include "absl/meta/type_traits.h"  //  for void_t
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // In this type trait, we look for a __resize_default_init member function, and
@@ -113,7 +113,7 @@ void STLStringResizeUninitializedAmortized(string_type* s, size_t new_size) {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_INTERNAL_RESIZE_UNINITIALIZED_H_

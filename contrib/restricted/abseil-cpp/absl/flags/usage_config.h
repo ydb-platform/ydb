@@ -27,7 +27,7 @@
 #include <functional>
 #include <string>
 
-#include "absl/base/config.h" 
+#include "absl/base/config.h"
 #include "absl/strings/string_view.h"
 
 // -----------------------------------------------------------------------------
@@ -55,7 +55,7 @@
 //     Shows help on modules whose name contains the specified substring
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 namespace flags_internal {
 using FlagKindFilter = std::function<bool (absl::string_view)>;
@@ -90,7 +90,7 @@ struct FlagsUsageConfig {
   // program output.
   flags_internal::FlagKindFilter contains_helppackage_flags;
 
-  // Generates string containing program version. This is the string reported 
+  // Generates string containing program version. This is the string reported
   // when user specifies --version in a command line.
   std::function<std::string()> version_string;
 
@@ -120,7 +120,7 @@ FlagsUsageConfig GetUsageConfig();
 void ReportUsageError(absl::string_view msg, bool is_fatal);
 
 }  // namespace flags_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 extern "C" {

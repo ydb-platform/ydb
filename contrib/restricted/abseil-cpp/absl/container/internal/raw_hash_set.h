@@ -114,7 +114,7 @@
 #include <utility>
 
 #include "absl/base/internal/endian.h"
-#include "absl/base/optimization.h" 
+#include "absl/base/optimization.h"
 #include "absl/base/port.h"
 #include "absl/container/internal/common.h"
 #include "absl/container/internal/compressed_tuple.h"
@@ -129,19 +129,19 @@
 #include "absl/utility/utility.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
-template <typename AllocType> 
-void SwapAlloc(AllocType& lhs, AllocType& rhs, 
-               std::true_type /* propagate_on_container_swap */) { 
-  using std::swap; 
-  swap(lhs, rhs); 
-} 
-template <typename AllocType> 
-void SwapAlloc(AllocType& /*lhs*/, AllocType& /*rhs*/, 
-               std::false_type /* propagate_on_container_swap */) {} 
- 
+template <typename AllocType>
+void SwapAlloc(AllocType& lhs, AllocType& rhs,
+               std::true_type /* propagate_on_container_swap */) {
+  using std::swap;
+  swap(lhs, rhs);
+}
+template <typename AllocType>
+void SwapAlloc(AllocType& /*lhs*/, AllocType& /*rhs*/,
+               std::false_type /* propagate_on_container_swap */) {}
+
 template <size_t Width>
 class probe_seq {
  public:
@@ -189,14 +189,14 @@ struct IsDecomposable<
 
 // TODO(alkis): Switch to std::is_nothrow_swappable when gcc/clang supports it.
 template <class T>
-constexpr bool IsNoThrowSwappable(std::true_type = {} /* is_swappable */) { 
+constexpr bool IsNoThrowSwappable(std::true_type = {} /* is_swappable */) {
   using std::swap;
   return noexcept(swap(std::declval<T&>(), std::declval<T&>()));
 }
-template <class T> 
-constexpr bool IsNoThrowSwappable(std::false_type /* is_swappable */) { 
-  return false; 
-} 
+template <class T>
+constexpr bool IsNoThrowSwappable(std::false_type /* is_swappable */) {
+  return false;
+}
 
 template <typename T>
 uint32_t TrailingZeros(T x) {
@@ -331,7 +331,7 @@ inline bool IsFull(ctrl_t c) { return c >= static_cast<ctrl_t>(0); }
 inline bool IsDeleted(ctrl_t c) { return c == ctrl_t::kDeleted; }
 inline bool IsEmptyOrDeleted(ctrl_t c) { return c < ctrl_t::kSentinel; }
 
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2 
+#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 
 // https://github.com/abseil/abseil-cpp/issues/209
 // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87853
@@ -365,7 +365,7 @@ struct GroupSse2Impl {
 
   // Returns a bitmask representing the positions of empty slots.
   BitMask<uint32_t, kWidth> MatchEmpty() const {
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3 
+#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
     // This only works because ctrl_t::kEmpty is -128.
     return BitMask<uint32_t, kWidth>(
         _mm_movemask_epi8(_mm_sign_epi8(ctrl, ctrl)));
@@ -391,7 +391,7 @@ struct GroupSse2Impl {
   void ConvertSpecialToEmptyAndFullToDeleted(ctrl_t* dst) const {
     auto msbs = _mm_set1_epi8(static_cast<char>(-128));
     auto x126 = _mm_set1_epi8(126);
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3 
+#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
     auto res = _mm_or_si128(_mm_shuffle_epi8(x126, ctrl), msbs);
 #else
     auto zero = _mm_setzero_si128();
@@ -403,7 +403,7 @@ struct GroupSse2Impl {
 
   __m128i ctrl;
 };
-#endif  // ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2 
+#endif  // ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 
 struct GroupPortableImpl {
   static constexpr size_t kWidth = 8;
@@ -457,7 +457,7 @@ struct GroupPortableImpl {
   uint64_t ctrl;
 };
 
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2 
+#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 using Group = GroupSse2Impl;
 #else
 using Group = GroupPortableImpl;
@@ -533,18 +533,18 @@ size_t SelectBucketCountForIterRange(InputIter first, InputIter last,
   return 0;
 }
 
-inline void AssertIsFull(ctrl_t* ctrl) { 
-  ABSL_HARDENING_ASSERT((ctrl != nullptr && IsFull(*ctrl)) && 
-                        "Invalid operation on iterator. The element might have " 
-                        "been erased, or the table might have rehashed."); 
-} 
- 
-inline void AssertIsValid(ctrl_t* ctrl) { 
-  ABSL_HARDENING_ASSERT((ctrl == nullptr || IsFull(*ctrl)) && 
-                        "Invalid operation on iterator. The element might have " 
-                        "been erased, or the table might have rehashed."); 
-} 
- 
+inline void AssertIsFull(ctrl_t* ctrl) {
+  ABSL_HARDENING_ASSERT((ctrl != nullptr && IsFull(*ctrl)) &&
+                        "Invalid operation on iterator. The element might have "
+                        "been erased, or the table might have rehashed.");
+}
+
+inline void AssertIsValid(ctrl_t* ctrl) {
+  ABSL_HARDENING_ASSERT((ctrl == nullptr || IsFull(*ctrl)) &&
+                        "Invalid operation on iterator. The element might have "
+                        "been erased, or the table might have rehashed.");
+}
+
 struct FindInfo {
   size_t offset;
   size_t probe_length;
@@ -669,8 +669,8 @@ inline size_t AllocSize(size_t capacity, size_t slot_size, size_t slot_align) {
 // if they are equal, false if they are not. If two keys compare equal, then
 // their hash values as defined by Hash MUST be equal.
 //
-// Allocator: an Allocator 
-// [https://en.cppreference.com/w/cpp/named_req/Allocator] with which 
+// Allocator: an Allocator
+// [https://en.cppreference.com/w/cpp/named_req/Allocator] with which
 // the storage of the hashtable will be allocated and the elements will be
 // constructed and destroyed.
 template <class Policy, class Hash, class Eq, class Alloc>
@@ -769,7 +769,7 @@ class raw_hash_set {
 
     // PRECONDITION: not an end() iterator.
     reference operator*() const {
-      AssertIsFull(ctrl_); 
+      AssertIsFull(ctrl_);
       return PolicyTraits::element(slot_);
     }
 
@@ -778,7 +778,7 @@ class raw_hash_set {
 
     // PRECONDITION: not an end() iterator.
     iterator& operator++() {
-      AssertIsFull(ctrl_); 
+      AssertIsFull(ctrl_);
       ++ctrl_;
       ++slot_;
       skip_empty_or_deleted();
@@ -792,8 +792,8 @@ class raw_hash_set {
     }
 
     friend bool operator==(const iterator& a, const iterator& b) {
-      AssertIsValid(a.ctrl_); 
-      AssertIsValid(b.ctrl_); 
+      AssertIsValid(a.ctrl_);
+      AssertIsValid(b.ctrl_);
       return a.ctrl_ == b.ctrl_;
     }
     friend bool operator!=(const iterator& a, const iterator& b) {
@@ -801,10 +801,10 @@ class raw_hash_set {
     }
 
    private:
-    iterator(ctrl_t* ctrl, slot_type* slot) : ctrl_(ctrl), slot_(slot) { 
-      // This assumption helps the compiler know that any non-end iterator is 
-      // not equal to any end iterator. 
-      ABSL_INTERNAL_ASSUME(ctrl != nullptr); 
+    iterator(ctrl_t* ctrl, slot_type* slot) : ctrl_(ctrl), slot_(slot) {
+      // This assumption helps the compiler know that any non-end iterator is
+      // not equal to any end iterator.
+      ABSL_INTERNAL_ASSUME(ctrl != nullptr);
     }
 
     void skip_empty_or_deleted() {
@@ -1056,12 +1056,12 @@ class raw_hash_set {
     it.skip_empty_or_deleted();
     return it;
   }
-  iterator end() { return {}; } 
+  iterator end() { return {}; }
 
   const_iterator begin() const {
     return const_cast<raw_hash_set*>(this)->begin();
   }
-  const_iterator end() const { return {}; } 
+  const_iterator end() const { return {}; }
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
 
@@ -1220,7 +1220,7 @@ class raw_hash_set {
   template <class... Args, typename std::enable_if<
                                !IsDecomposable<Args...>::value, int>::type = 0>
   std::pair<iterator, bool> emplace(Args&&... args) {
-    alignas(slot_type) unsigned char raw[sizeof(slot_type)]; 
+    alignas(slot_type) unsigned char raw[sizeof(slot_type)];
     slot_type* slot = reinterpret_cast<slot_type*>(&raw);
 
     PolicyTraits::construct(&alloc_ref(), slot, std::forward<Args>(args)...);
@@ -1236,16 +1236,16 @@ class raw_hash_set {
   // Extension API: support for lazy emplace.
   //
   // Looks up key in the table. If found, returns the iterator to the element.
-  // Otherwise calls `f` with one argument of type `raw_hash_set::constructor`. 
+  // Otherwise calls `f` with one argument of type `raw_hash_set::constructor`.
   //
-  // `f` must abide by several restrictions: 
-  //  - it MUST call `raw_hash_set::constructor` with arguments as if a 
-  //    `raw_hash_set::value_type` is constructed, 
-  //  - it MUST NOT access the container before the call to 
-  //    `raw_hash_set::constructor`, and 
-  //  - it MUST NOT erase the lazily emplaced element. 
-  // Doing any of these is undefined behavior. 
-  // 
+  // `f` must abide by several restrictions:
+  //  - it MUST call `raw_hash_set::constructor` with arguments as if a
+  //    `raw_hash_set::value_type` is constructed,
+  //  - it MUST NOT access the container before the call to
+  //    `raw_hash_set::constructor`, and
+  //  - it MUST NOT erase the lazily emplaced element.
+  // Doing any of these is undefined behavior.
+  //
   // For example:
   //
   //   std::unordered_set<ArenaString> s;
@@ -1324,7 +1324,7 @@ class raw_hash_set {
   // This overload is necessary because otherwise erase<K>(const K&) would be
   // a better match if non-const iterator is passed as an argument.
   void erase(iterator it) {
-    AssertIsFull(it.ctrl_); 
+    AssertIsFull(it.ctrl_);
     PolicyTraits::destroy(&alloc_ref(), it.slot_);
     erase_meta_only(it);
   }
@@ -1358,7 +1358,7 @@ class raw_hash_set {
   }
 
   node_type extract(const_iterator position) {
-    AssertIsFull(position.inner_.ctrl_); 
+    AssertIsFull(position.inner_.ctrl_);
     auto node =
         CommonAccess::Transfer<node_type>(alloc_ref(), position.inner_.slot_);
     erase_meta_only(position);
@@ -1375,8 +1375,8 @@ class raw_hash_set {
 
   void swap(raw_hash_set& that) noexcept(
       IsNoThrowSwappable<hasher>() && IsNoThrowSwappable<key_equal>() &&
-      IsNoThrowSwappable<allocator_type>( 
-          typename AllocTraits::propagate_on_container_swap{})) { 
+      IsNoThrowSwappable<allocator_type>(
+          typename AllocTraits::propagate_on_container_swap{})) {
     using std::swap;
     swap(ctrl_, that.ctrl_);
     swap(slots_, that.slots_);
@@ -1386,8 +1386,8 @@ class raw_hash_set {
     swap(hash_ref(), that.hash_ref());
     swap(eq_ref(), that.eq_ref());
     swap(infoz(), that.infoz());
-    SwapAlloc(alloc_ref(), that.alloc_ref(), 
-              typename AllocTraits::propagate_on_container_swap{}); 
+    SwapAlloc(alloc_ref(), that.alloc_ref(),
+              typename AllocTraits::propagate_on_container_swap{});
   }
 
   void rehash(size_t n) {
@@ -1727,7 +1727,7 @@ class raw_hash_set {
     //       mark target as FULL
     //       repeat procedure for current slot with moved from element (target)
     ConvertDeletedToEmptyAndFullToDeleted(ctrl_, capacity_);
-    alignas(slot_type) unsigned char raw[sizeof(slot_type)]; 
+    alignas(slot_type) unsigned char raw[sizeof(slot_type)];
     size_t total_probe_length = 0;
     slot_type* slot = reinterpret_cast<slot_type*>(&raw);
     for (size_t i = 0; i != capacity_; ++i) {
@@ -1956,18 +1956,18 @@ class raw_hash_set {
                 allocator_type{}};
 };
 
-// Erases all elements that satisfy the predicate `pred` from the container `c`. 
-template <typename P, typename H, typename E, typename A, typename Predicate> 
+// Erases all elements that satisfy the predicate `pred` from the container `c`.
+template <typename P, typename H, typename E, typename A, typename Predicate>
 void EraseIf(Predicate& pred, raw_hash_set<P, H, E, A>* c) {
-  for (auto it = c->begin(), last = c->end(); it != last;) { 
+  for (auto it = c->begin(), last = c->end(); it != last;) {
     if (pred(*it)) {
       c->erase(it++);
     } else {
       ++it;
-    } 
-  } 
-} 
- 
+    }
+  }
+}
+
 namespace hashtable_debug_internal {
 template <typename Set>
 struct HashtableDebugAccess<Set, absl::void_t<typename Set::raw_hash_set>> {
@@ -2028,7 +2028,7 @@ struct HashtableDebugAccess<Set, absl::void_t<typename Set::raw_hash_set>> {
 
 }  // namespace hashtable_debug_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_

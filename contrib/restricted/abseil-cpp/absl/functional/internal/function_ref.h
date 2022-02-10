@@ -23,7 +23,7 @@
 #include "absl/meta/type_traits.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace functional_internal {
 
 // Like a void* that can handle function pointers as well. The standard does not
@@ -71,14 +71,14 @@ template <typename Obj, typename R, typename... Args>
 R InvokeObject(VoidPtr ptr, typename ForwardT<Args>::type... args) {
   auto o = static_cast<const Obj*>(ptr.obj);
   return static_cast<R>(
-      absl::base_internal::invoke(*o, std::forward<Args>(args)...)); 
+      absl::base_internal::invoke(*o, std::forward<Args>(args)...));
 }
 
 template <typename Fun, typename R, typename... Args>
 R InvokeFunction(VoidPtr ptr, typename ForwardT<Args>::type... args) {
   auto f = reinterpret_cast<Fun>(ptr.fun);
   return static_cast<R>(
-      absl::base_internal::invoke(f, std::forward<Args>(args)...)); 
+      absl::base_internal::invoke(f, std::forward<Args>(args)...));
 }
 
 template <typename Sig>
@@ -100,7 +100,7 @@ template <bool C>
 using EnableIf = typename ::std::enable_if<C, int>::type;
 
 }  // namespace functional_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_FUNCTIONAL_INTERNAL_FUNCTION_REF_H_

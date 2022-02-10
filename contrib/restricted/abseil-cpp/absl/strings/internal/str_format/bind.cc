@@ -1,17 +1,17 @@
-// Copyright 2020 The Abseil Authors. 
-// 
-// Licensed under the Apache License, Version 2.0 (the "License"); 
-// you may not use this file except in compliance with the License. 
-// You may obtain a copy of the License at 
-// 
-//      https://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, software 
-// distributed under the License is distributed on an "AS IS" BASIS, 
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-// See the License for the specific language governing permissions and 
-// limitations under the License. 
- 
+// Copyright 2020 The Abseil Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "absl/strings/internal/str_format/bind.h"
 
 #include <cerrno>
@@ -20,7 +20,7 @@
 #include <string>
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 namespace {
@@ -80,21 +80,21 @@ inline bool ArgContext::Bind(const UnboundConversion* unbound,
         return false;
     }
 
-    FormatConversionSpecImplFriend::SetWidth(width, bound); 
-    FormatConversionSpecImplFriend::SetPrecision(precision, bound); 
- 
-    if (force_left) { 
+    FormatConversionSpecImplFriend::SetWidth(width, bound);
+    FormatConversionSpecImplFriend::SetPrecision(precision, bound);
+
+    if (force_left) {
       FormatConversionSpecImplFriend::SetFlags(unbound->flags | Flags::kLeft,
                                                bound);
-    } else { 
-      FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound); 
-    } 
+    } else {
+      FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
+    }
   } else {
-    FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound); 
-    FormatConversionSpecImplFriend::SetWidth(-1, bound); 
-    FormatConversionSpecImplFriend::SetPrecision(-1, bound); 
+    FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
+    FormatConversionSpecImplFriend::SetWidth(-1, bound);
+    FormatConversionSpecImplFriend::SetPrecision(-1, bound);
   }
-  FormatConversionSpecImplFriend::SetConversionChar(unbound->conv, bound); 
+  FormatConversionSpecImplFriend::SetConversionChar(unbound->conv, bound);
   bound->set_arg(arg);
   return true;
 }
@@ -156,11 +156,11 @@ class SummarizingConverter {
     UntypedFormatSpecImpl spec("%d");
 
     std::ostringstream ss;
-    ss << "{" << Streamable(spec, {*bound.arg()}) << ":" 
-       << FormatConversionSpecImplFriend::FlagsToString(bound); 
+    ss << "{" << Streamable(spec, {*bound.arg()}) << ":"
+       << FormatConversionSpecImplFriend::FlagsToString(bound);
     if (bound.width() >= 0) ss << bound.width();
     if (bound.precision() >= 0) ss << "." << bound.precision();
-    ss << bound.conversion_char() << "}"; 
+    ss << bound.conversion_char() << "}";
     Append(ss.str());
     return true;
   }
@@ -254,5 +254,5 @@ int SnprintF(char* output, size_t size, const UntypedFormatSpecImpl format,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

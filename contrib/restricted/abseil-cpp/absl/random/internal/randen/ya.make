@@ -11,7 +11,7 @@ LICENSE(Apache-2.0)
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/random/internal/randen_detect
     contrib/restricted/abseil-cpp/absl/random/internal/randen_hwaes
-    contrib/restricted/abseil-cpp/absl/random/internal/randen_round_keys 
+    contrib/restricted/abseil-cpp/absl/random/internal/randen_round_keys
     contrib/restricted/abseil-cpp/absl/random/internal/randen_slow
 )
 
@@ -23,10 +23,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS( 
-    -DNOMINMAX 
-) 
- 
+CFLAGS(
+    -DNOMINMAX
+)
+
 SRCDIR(contrib/restricted/abseil-cpp/absl/random/internal)
 
 SRCS(

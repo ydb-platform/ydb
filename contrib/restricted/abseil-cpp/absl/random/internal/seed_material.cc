@@ -46,9 +46,9 @@
 #define ABSL_RANDOM_USE_BCRYPT 1
 #pragma comment(lib, "bcrypt.lib")
 
-#elif defined(__Fuchsia__) 
-#include <zircon/syscalls.h> 
- 
+#elif defined(__Fuchsia__)
+#include <zircon/syscalls.h>
+
 #endif
 
 #if defined(__GLIBC__) && \
@@ -74,7 +74,7 @@
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 namespace {
 
@@ -124,15 +124,15 @@ bool ReadSeedMaterialFromOSEntropyImpl(absl::Span<uint32_t> values) {
   return true;
 }
 
-#elif defined(__Fuchsia__) 
- 
-bool ReadSeedMaterialFromOSEntropyImpl(absl::Span<uint32_t> values) { 
-  auto buffer = reinterpret_cast<uint8_t*>(values.data()); 
-  size_t buffer_size = sizeof(uint32_t) * values.size(); 
-  zx_cprng_draw(buffer, buffer_size); 
-  return true; 
-} 
- 
+#elif defined(__Fuchsia__)
+
+bool ReadSeedMaterialFromOSEntropyImpl(absl::Span<uint32_t> values) {
+  auto buffer = reinterpret_cast<uint8_t*>(values.data());
+  size_t buffer_size = sizeof(uint32_t) * values.size();
+  zx_cprng_draw(buffer, buffer_size);
+  return true;
+}
+
 #else
 
 #if defined(ABSL_RANDOM_USE_GET_ENTROPY)
@@ -263,5 +263,5 @@ absl::optional<uint32_t> GetSaltMaterial() {
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

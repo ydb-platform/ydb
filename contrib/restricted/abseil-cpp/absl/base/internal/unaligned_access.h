@@ -18,11 +18,11 @@
 #define ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
 
 #include <string.h>
- 
+
 #include <cstdint>
 
 #include "absl/base/attributes.h"
-#include "absl/base/config.h" 
+#include "absl/base/config.h"
 
 // unaligned APIs
 
@@ -32,7 +32,7 @@
 // (namespaces, inline) which are absent or incompatible in C.
 #if defined(__cplusplus)
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 inline uint16_t UnalignedLoad16(const void *p) {
@@ -60,7 +60,7 @@ inline void UnalignedStore32(void *p, uint32_t v) { memcpy(p, &v, sizeof v); }
 inline void UnalignedStore64(void *p, uint64_t v) { memcpy(p, &v, sizeof v); }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #define ABSL_INTERNAL_UNALIGNED_LOAD16(_p) \

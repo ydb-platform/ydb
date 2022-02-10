@@ -26,7 +26,7 @@
 #include "absl/synchronization/mutex.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // BlockingCounter
 //
@@ -95,7 +95,7 @@ class BlockingCounter {
   bool done_ ABSL_GUARDED_BY(lock_);
 };
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_SYNCHRONIZATION_BLOCKING_COUNTER_H_

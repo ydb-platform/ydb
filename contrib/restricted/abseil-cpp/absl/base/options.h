@@ -63,16 +63,16 @@
 // NOTE: the defaults within this file all assume that Abseil can select the
 // proper Abseil implementation at compile-time, which will not be sufficient
 // to guarantee ABI stability to package managers.
- 
-#ifndef ABSL_BASE_OPTIONS_H_ 
-#define ABSL_BASE_OPTIONS_H_ 
- 
-// Include a standard library header to allow configuration based on the 
-// standard library in use. 
-#ifdef __cplusplus 
-#include <ciso646> 
-#endif 
- 
+
+#ifndef ABSL_BASE_OPTIONS_H_
+#define ABSL_BASE_OPTIONS_H_
+
+// Include a standard library header to allow configuration based on the
+// standard library in use.
+#ifdef __cplusplus
+#include <ciso646>
+#endif
+
 // -----------------------------------------------------------------------------
 // Type Compatibility Options
 // -----------------------------------------------------------------------------
@@ -182,57 +182,57 @@
 
 #define ABSL_OPTION_USE_STD_VARIANT 2
 
- 
-// ABSL_OPTION_USE_INLINE_NAMESPACE 
-// ABSL_OPTION_INLINE_NAMESPACE_NAME 
-// 
-// These options controls whether all entities in the absl namespace are 
-// contained within an inner inline namespace.  This does not affect the 
-// user-visible API of Abseil, but it changes the mangled names of all symbols. 
-// 
-// This can be useful as a version tag if you are distributing Abseil in 
-// precompiled form.  This will prevent a binary library build of Abseil with 
-// one inline namespace being used with headers configured with a different 
-// inline namespace name.  Binary packagers are reminded that Abseil does not 
-// guarantee any ABI stability in Abseil, so any update of Abseil or 
-// configuration change in such a binary package should be combined with a 
-// new, unique value for the inline namespace name. 
-// 
-// A value of 0 means not to use inline namespaces. 
-// 
-// A value of 1 means to use an inline namespace with the given name inside 
-// namespace absl.  If this is set, ABSL_OPTION_INLINE_NAMESPACE_NAME must also 
-// be changed to a new, unique identifier name.  In particular "head" is not 
-// allowed. 
- 
+
+// ABSL_OPTION_USE_INLINE_NAMESPACE
+// ABSL_OPTION_INLINE_NAMESPACE_NAME
+//
+// These options controls whether all entities in the absl namespace are
+// contained within an inner inline namespace.  This does not affect the
+// user-visible API of Abseil, but it changes the mangled names of all symbols.
+//
+// This can be useful as a version tag if you are distributing Abseil in
+// precompiled form.  This will prevent a binary library build of Abseil with
+// one inline namespace being used with headers configured with a different
+// inline namespace name.  Binary packagers are reminded that Abseil does not
+// guarantee any ABI stability in Abseil, so any update of Abseil or
+// configuration change in such a binary package should be combined with a
+// new, unique value for the inline namespace name.
+//
+// A value of 0 means not to use inline namespaces.
+//
+// A value of 1 means to use an inline namespace with the given name inside
+// namespace absl.  If this is set, ABSL_OPTION_INLINE_NAMESPACE_NAME must also
+// be changed to a new, unique identifier name.  In particular "head" is not
+// allowed.
+
 #define ABSL_OPTION_USE_INLINE_NAMESPACE 1
 #define ABSL_OPTION_INLINE_NAMESPACE_NAME lts_20211102
- 
-// ABSL_OPTION_HARDENED 
-// 
-// This option enables a "hardened" build in release mode (in this context, 
-// release mode is defined as a build where the `NDEBUG` macro is defined). 
-// 
-// A value of 0 means that "hardened" mode is not enabled. 
-// 
-// A value of 1 means that "hardened" mode is enabled. 
-// 
-// Hardened builds have additional security checks enabled when `NDEBUG` is 
-// defined. Defining `NDEBUG` is normally used to turn `assert()` macro into a 
-// no-op, as well as disabling other bespoke program consistency checks. By 
-// defining ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in 
-// release mode. These checks guard against programming errors that may lead to 
-// security vulnerabilities. In release mode, when one of these programming 
-// errors is encountered, the program will immediately abort, possibly without 
-// any attempt at logging. 
-// 
-// The checks enabled by this option are not free; they do incur runtime cost. 
-// 
-// The checks enabled by this option are always active when `NDEBUG` is not 
-// defined, even in the case when ABSL_OPTION_HARDENED is defined to 0. The 
-// checks enabled by this option may abort the program in a different way and 
-// log additional information when `NDEBUG` is not defined. 
- 
-#define ABSL_OPTION_HARDENED 0 
- 
+
+// ABSL_OPTION_HARDENED
+//
+// This option enables a "hardened" build in release mode (in this context,
+// release mode is defined as a build where the `NDEBUG` macro is defined).
+//
+// A value of 0 means that "hardened" mode is not enabled.
+//
+// A value of 1 means that "hardened" mode is enabled.
+//
+// Hardened builds have additional security checks enabled when `NDEBUG` is
+// defined. Defining `NDEBUG` is normally used to turn `assert()` macro into a
+// no-op, as well as disabling other bespoke program consistency checks. By
+// defining ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in
+// release mode. These checks guard against programming errors that may lead to
+// security vulnerabilities. In release mode, when one of these programming
+// errors is encountered, the program will immediately abort, possibly without
+// any attempt at logging.
+//
+// The checks enabled by this option are not free; they do incur runtime cost.
+//
+// The checks enabled by this option are always active when `NDEBUG` is not
+// defined, even in the case when ABSL_OPTION_HARDENED is defined to 0. The
+// checks enabled by this option may abort the program in a different way and
+// log additional information when `NDEBUG` is not defined.
+
+#define ABSL_OPTION_HARDENED 0
+
 #endif  // ABSL_BASE_OPTIONS_H_

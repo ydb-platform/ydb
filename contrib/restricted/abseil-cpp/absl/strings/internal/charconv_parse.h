@@ -17,11 +17,11 @@
 
 #include <cstdint>
 
-#include "absl/base/config.h" 
+#include "absl/base/config.h"
 #include "absl/strings/charconv.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // Enum indicating whether a parsed float is a number or special value.
@@ -94,6 +94,6 @@ extern template ParsedFloat ParseFloat<16>(const char* begin, const char* end,
                                            absl::chars_format format_flags);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 #endif  // ABSL_STRINGS_INTERNAL_CHARCONV_PARSE_H_

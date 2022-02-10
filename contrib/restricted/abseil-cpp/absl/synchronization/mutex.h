@@ -74,7 +74,7 @@
 #include "absl/time/time.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 class Condition;
 struct SynchWaitParams;
@@ -323,16 +323,16 @@ class ABSL_LOCKABLE Mutex {
   // Mutex::AwaitWithTimeout()
   // Mutex::AwaitWithDeadline()
   //
-  // Unlocks this `Mutex` and blocks until simultaneously: 
+  // Unlocks this `Mutex` and blocks until simultaneously:
   //   - either `cond` is true or the {timeout has expired, deadline has passed}
   //     and
   //   - this `Mutex` can be reacquired,
   // then reacquire this `Mutex` in the same mode in which it was previously
   // held, returning `true` iff `cond` is `true` on return.
   //
-  // If the condition is initially `true`, the implementation *may* skip the 
-  // release/re-acquire step and return immediately. 
-  // 
+  // If the condition is initially `true`, the implementation *may* skip the
+  // release/re-acquire step and return immediately.
+  //
   // Deadlines in the past are equivalent to an immediate deadline.
   // Negative timeouts are equivalent to a zero timeout.
   //
@@ -701,11 +701,11 @@ class Condition {
   //     return processed_ >= current;
   //   };
   //   mu_.Await(Condition(&reached));
-  // 
-  // NOTE: never use "mu_.AssertHeld()" instead of "mu_.AssertReaderHeld()" in 
-  // the lambda as it may be called when the mutex is being unlocked from a 
-  // scope holding only a reader lock, which will make the assertion not 
-  // fulfilled and crash the binary. 
+  //
+  // NOTE: never use "mu_.AssertHeld()" instead of "mu_.AssertReaderHeld()" in
+  // the lambda as it may be called when the mutex is being unlocked from a
+  // scope holding only a reader lock, which will make the assertion not
+  // fulfilled and crash the binary.
 
   // See class comment for performance advice. In particular, if there
   // might be more than one waiter for the same condition, make sure
@@ -790,8 +790,8 @@ class Condition {
 //
 class CondVar {
  public:
-  // A `CondVar` allocated on the heap or on the stack can use the this 
-  // constructor. 
+  // A `CondVar` allocated on the heap or on the stack can use the this
+  // constructor.
   CondVar();
   ~CondVar();
 
@@ -1005,7 +1005,7 @@ void RegisterMutexProfiler(void (*fn)(int64_t wait_timestamp));
 //
 // This has the same memory ordering concerns as RegisterMutexProfiler() above.
 void RegisterMutexTracer(void (*fn)(const char *msg, const void *obj,
-                                    int64_t wait_cycles)); 
+                                    int64_t wait_cycles));
 
 // TODO(gfalcon): Combine RegisterMutexProfiler() and RegisterMutexTracer()
 // into a single interface, since they are only ever called in pairs.
@@ -1027,7 +1027,7 @@ void RegisterCondVarTracer(void (*fn)(const char *msg, const void *cv));
 //
 // 'pc' is the program counter being symbolized, 'out' is the buffer to write
 // into, and 'out_size' is the size of the buffer.  This function can return
-// false if symbolizing failed, or true if a NUL-terminated symbol was written 
+// false if symbolizing failed, or true if a NUL-terminated symbol was written
 // to 'out.'
 //
 // This has the same memory ordering concerns as RegisterMutexProfiler() above.
@@ -1066,7 +1066,7 @@ enum class OnDeadlockCycle {
 // the manner chosen here.
 void SetMutexDeadlockDetectionMode(OnDeadlockCycle mode);
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 // In some build configurations we pass --detect-odr-violations to the

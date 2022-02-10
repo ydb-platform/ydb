@@ -17,10 +17,10 @@
 
 #include <system_error>  // NOLINT(build/c++11)
 
-#include "absl/base/config.h" 
- 
+#include "absl/base/config.h"
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // Workalike compatibilty version of std::chars_format from C++17.
 //
@@ -114,7 +114,7 @@ inline chars_format& operator^=(chars_format& lhs, chars_format rhs) {
   return lhs;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_CHARCONV_H_

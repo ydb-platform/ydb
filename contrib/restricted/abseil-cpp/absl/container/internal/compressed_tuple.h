@@ -48,7 +48,7 @@
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <typename... Ts>
@@ -169,34 +169,34 @@ constexpr bool ShouldAnyUseBase() {
 }
 
 template <typename T, typename V>
-using TupleElementMoveConstructible = 
-    typename std::conditional<std::is_reference<T>::value, 
-                              std::is_convertible<V, T>, 
-                              std::is_constructible<T, V&&>>::type; 
+using TupleElementMoveConstructible =
+    typename std::conditional<std::is_reference<T>::value,
+                              std::is_convertible<V, T>,
+                              std::is_constructible<T, V&&>>::type;
 
-template <bool SizeMatches, class T, class... Vs> 
-struct TupleMoveConstructible : std::false_type {}; 
- 
-template <class... Ts, class... Vs> 
-struct TupleMoveConstructible<true, CompressedTuple<Ts...>, Vs...> 
-    : std::integral_constant< 
-          bool, absl::conjunction< 
-                    TupleElementMoveConstructible<Ts, Vs&&>...>::value> {}; 
- 
-template <typename T> 
-struct compressed_tuple_size; 
- 
-template <typename... Es> 
-struct compressed_tuple_size<CompressedTuple<Es...>> 
-    : public std::integral_constant<std::size_t, sizeof...(Es)> {}; 
- 
-template <class T, class... Vs> 
-struct TupleItemsMoveConstructible 
-    : std::integral_constant< 
-          bool, TupleMoveConstructible<compressed_tuple_size<T>::value == 
-                                           sizeof...(Vs), 
-                                       T, Vs...>::value> {}; 
- 
+template <bool SizeMatches, class T, class... Vs>
+struct TupleMoveConstructible : std::false_type {};
+
+template <class... Ts, class... Vs>
+struct TupleMoveConstructible<true, CompressedTuple<Ts...>, Vs...>
+    : std::integral_constant<
+          bool, absl::conjunction<
+                    TupleElementMoveConstructible<Ts, Vs&&>...>::value> {};
+
+template <typename T>
+struct compressed_tuple_size;
+
+template <typename... Es>
+struct compressed_tuple_size<CompressedTuple<Es...>>
+    : public std::integral_constant<std::size_t, sizeof...(Es)> {};
+
+template <class T, class... Vs>
+struct TupleItemsMoveConstructible
+    : std::integral_constant<
+          bool, TupleMoveConstructible<compressed_tuple_size<T>::value ==
+                                           sizeof...(Vs),
+                                       T, Vs...>::value> {};
+
 }  // namespace internal_compressed_tuple
 
 // Helper class to perform the Empty Base Class Optimization.
@@ -241,23 +241,23 @@ class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
   explicit constexpr CompressedTuple(const Ts&... base)
       : CompressedTuple::CompressedTupleImpl(absl::in_place, base...) {}
 
-  template <typename First, typename... Vs, 
+  template <typename First, typename... Vs,
             absl::enable_if_t<
                 absl::conjunction<
                     // Ensure we are not hiding default copy/move constructors.
                     absl::negation<std::is_same<void(CompressedTuple),
-                                                void(absl::decay_t<First>)>>, 
-                    internal_compressed_tuple::TupleItemsMoveConstructible< 
-                        CompressedTuple<Ts...>, First, Vs...>>::value, 
+                                                void(absl::decay_t<First>)>>,
+                    internal_compressed_tuple::TupleItemsMoveConstructible<
+                        CompressedTuple<Ts...>, First, Vs...>>::value,
                 bool> = true>
-  explicit constexpr CompressedTuple(First&& first, Vs&&... base) 
+  explicit constexpr CompressedTuple(First&& first, Vs&&... base)
       : CompressedTuple::CompressedTupleImpl(absl::in_place,
-                                             absl::forward<First>(first), 
+                                             absl::forward<First>(first),
                                              absl::forward<Vs>(base)...) {}
 
   template <int I>
   ElemT<I>& get() & {
-    return StorageT<I>::get(); 
+    return StorageT<I>::get();
   }
 
   template <int I>
@@ -282,7 +282,7 @@ template <>
 class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple<> {};
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #undef ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC

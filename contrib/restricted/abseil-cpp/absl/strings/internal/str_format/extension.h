@@ -17,23 +17,23 @@
 #define ABSL_STRINGS_INTERNAL_STR_FORMAT_EXTENSION_H_
 
 #include <limits.h>
- 
+
 #include <cstddef>
 #include <cstring>
 #include <ostream>
 
-#include "absl/base/config.h" 
+#include "absl/base/config.h"
 #include "absl/base/port.h"
-#include "absl/meta/type_traits.h" 
+#include "absl/meta/type_traits.h"
 #include "absl/strings/internal/str_format/output.h"
 #include "absl/strings/string_view.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
-enum class FormatConversionChar : uint8_t; 
-enum class FormatConversionCharSet : uint64_t; 
- 
+enum class FormatConversionChar : uint8_t;
+enum class FormatConversionCharSet : uint64_t;
+
 namespace str_format_internal {
 
 class FormatRawSinkImpl {
@@ -107,7 +107,7 @@ class FormatSinkImpl {
   size_t size() const { return size_; }
 
   // Put 'v' to 'sink' with specified width, precision, and left flag.
-  bool PutPaddedString(string_view v, int width, int precision, bool left); 
+  bool PutPaddedString(string_view v, int width, int precision, bool left);
 
   template <typename T>
   T Wrap() {
@@ -156,9 +156,9 @@ inline std::ostream& operator<<(std::ostream& os, Flags v) {
 }
 
 // clang-format off
-#define ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(X_VAL, X_SEP) \ 
+#define ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(X_VAL, X_SEP) \
   /* text */ \
-  X_VAL(c) X_SEP X_VAL(s) X_SEP \ 
+  X_VAL(c) X_SEP X_VAL(s) X_SEP \
   /* ints */ \
   X_VAL(d) X_SEP X_VAL(i) X_SEP X_VAL(o) X_SEP \
   X_VAL(u) X_SEP X_VAL(x) X_SEP X_VAL(X) X_SEP \
@@ -169,108 +169,108 @@ inline std::ostream& operator<<(std::ostream& os, Flags v) {
   X_VAL(n) X_SEP X_VAL(p)
 // clang-format on
 
-// This type should not be referenced, it exists only to provide labels 
-// internally that match the values declared in FormatConversionChar in 
-// str_format.h. This is meant to allow internal libraries to use the same 
-// declared interface type as the public interface 
-// (absl::StrFormatConversionChar) while keeping the definition in a public 
-// header. 
-// Internal libraries should use the form 
-// `FormatConversionCharInternal::c`, `FormatConversionCharInternal::kNone` for 
-// comparisons.  Use in switch statements is not recommended due to a bug in how 
-// gcc 4.9 -Wswitch handles declared but undefined enums. 
-struct FormatConversionCharInternal { 
-  FormatConversionCharInternal() = delete; 
- 
- private: 
-  // clang-format off 
-  enum class Enum : uint8_t { 
-    c, s,                    // text 
+// This type should not be referenced, it exists only to provide labels
+// internally that match the values declared in FormatConversionChar in
+// str_format.h. This is meant to allow internal libraries to use the same
+// declared interface type as the public interface
+// (absl::StrFormatConversionChar) while keeping the definition in a public
+// header.
+// Internal libraries should use the form
+// `FormatConversionCharInternal::c`, `FormatConversionCharInternal::kNone` for
+// comparisons.  Use in switch statements is not recommended due to a bug in how
+// gcc 4.9 -Wswitch handles declared but undefined enums.
+struct FormatConversionCharInternal {
+  FormatConversionCharInternal() = delete;
+
+ private:
+  // clang-format off
+  enum class Enum : uint8_t {
+    c, s,                    // text
     d, i, o, u, x, X,        // int
     f, F, e, E, g, G, a, A,  // float
     n, p,                    // misc
-    kNone 
+    kNone
   };
-  // clang-format on 
+  // clang-format on
  public:
-#define ABSL_INTERNAL_X_VAL(id)              \ 
-  static constexpr FormatConversionChar id = \ 
-      static_cast<FormatConversionChar>(Enum::id); 
-  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, ) 
-#undef ABSL_INTERNAL_X_VAL 
-  static constexpr FormatConversionChar kNone = 
-      static_cast<FormatConversionChar>(Enum::kNone); 
-}; 
-// clang-format on 
+#define ABSL_INTERNAL_X_VAL(id)              \
+  static constexpr FormatConversionChar id = \
+      static_cast<FormatConversionChar>(Enum::id);
+  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, )
+#undef ABSL_INTERNAL_X_VAL
+  static constexpr FormatConversionChar kNone =
+      static_cast<FormatConversionChar>(Enum::kNone);
+};
+// clang-format on
 
-inline FormatConversionChar FormatConversionCharFromChar(char c) { 
-  switch (c) { 
-#define ABSL_INTERNAL_X_VAL(id) \ 
-  case #id[0]:                  \ 
-    return FormatConversionCharInternal::id; 
-    ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, ) 
-#undef ABSL_INTERNAL_X_VAL 
+inline FormatConversionChar FormatConversionCharFromChar(char c) {
+  switch (c) {
+#define ABSL_INTERNAL_X_VAL(id) \
+  case #id[0]:                  \
+    return FormatConversionCharInternal::id;
+    ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, )
+#undef ABSL_INTERNAL_X_VAL
   }
-  return FormatConversionCharInternal::kNone; 
-} 
+  return FormatConversionCharInternal::kNone;
+}
 
-inline bool FormatConversionCharIsUpper(FormatConversionChar c) { 
-  if (c == FormatConversionCharInternal::X || 
-      c == FormatConversionCharInternal::F || 
-      c == FormatConversionCharInternal::E || 
-      c == FormatConversionCharInternal::G || 
-      c == FormatConversionCharInternal::A) { 
-    return true; 
-  } else { 
-    return false; 
+inline bool FormatConversionCharIsUpper(FormatConversionChar c) {
+  if (c == FormatConversionCharInternal::X ||
+      c == FormatConversionCharInternal::F ||
+      c == FormatConversionCharInternal::E ||
+      c == FormatConversionCharInternal::G ||
+      c == FormatConversionCharInternal::A) {
+    return true;
+  } else {
+    return false;
   }
-} 
+}
 
-inline bool FormatConversionCharIsFloat(FormatConversionChar c) { 
-  if (c == FormatConversionCharInternal::a || 
-      c == FormatConversionCharInternal::e || 
-      c == FormatConversionCharInternal::f || 
-      c == FormatConversionCharInternal::g || 
-      c == FormatConversionCharInternal::A || 
-      c == FormatConversionCharInternal::E || 
-      c == FormatConversionCharInternal::F || 
-      c == FormatConversionCharInternal::G) { 
-    return true; 
-  } else { 
-    return false; 
+inline bool FormatConversionCharIsFloat(FormatConversionChar c) {
+  if (c == FormatConversionCharInternal::a ||
+      c == FormatConversionCharInternal::e ||
+      c == FormatConversionCharInternal::f ||
+      c == FormatConversionCharInternal::g ||
+      c == FormatConversionCharInternal::A ||
+      c == FormatConversionCharInternal::E ||
+      c == FormatConversionCharInternal::F ||
+      c == FormatConversionCharInternal::G) {
+    return true;
+  } else {
+    return false;
   }
-} 
+}
 
-inline char FormatConversionCharToChar(FormatConversionChar c) { 
-  if (c == FormatConversionCharInternal::kNone) { 
-    return '\0'; 
+inline char FormatConversionCharToChar(FormatConversionChar c) {
+  if (c == FormatConversionCharInternal::kNone) {
+    return '\0';
 
-#define ABSL_INTERNAL_X_VAL(e)                       \ 
-  } else if (c == FormatConversionCharInternal::e) { \ 
-    return #e[0]; 
-#define ABSL_INTERNAL_X_SEP 
-  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, 
-                                         ABSL_INTERNAL_X_SEP) 
-  } else { 
-    return '\0'; 
+#define ABSL_INTERNAL_X_VAL(e)                       \
+  } else if (c == FormatConversionCharInternal::e) { \
+    return #e[0];
+#define ABSL_INTERNAL_X_SEP
+  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL,
+                                         ABSL_INTERNAL_X_SEP)
+  } else {
+    return '\0';
   }
 
-#undef ABSL_INTERNAL_X_VAL 
-#undef ABSL_INTERNAL_X_SEP 
-} 
+#undef ABSL_INTERNAL_X_VAL
+#undef ABSL_INTERNAL_X_SEP
+}
 
-// The associated char. 
-inline std::ostream& operator<<(std::ostream& os, FormatConversionChar v) { 
-  char c = FormatConversionCharToChar(v); 
-  if (!c) c = '?'; 
-  return os << c; 
-} 
+// The associated char.
+inline std::ostream& operator<<(std::ostream& os, FormatConversionChar v) {
+  char c = FormatConversionCharToChar(v);
+  if (!c) c = '?';
+  return os << c;
+}
 
-struct FormatConversionSpecImplFriend; 
+struct FormatConversionSpecImplFriend;
 
-class FormatConversionSpecImpl { 
- public: 
-  // Width and precison are not specified, no flags are set. 
+class FormatConversionSpecImpl {
+ public:
+  // Width and precison are not specified, no flags are set.
   bool is_basic() const { return flags_ == Flags::kBasic; }
   bool has_left_flag() const { return FlagsContains(flags_, Flags::kLeft); }
   bool has_show_pos_flag() const {
@@ -282,10 +282,10 @@ class FormatConversionSpecImpl {
   bool has_alt_flag() const { return FlagsContains(flags_, Flags::kAlt); }
   bool has_zero_flag() const { return FlagsContains(flags_, Flags::kZero); }
 
-  FormatConversionChar conversion_char() const { 
+  FormatConversionChar conversion_char() const {
     // Keep this field first in the struct . It generates better code when
     // accessing it when ConversionSpec is passed by value in registers.
-    static_assert(offsetof(FormatConversionSpecImpl, conv_) == 0, ""); 
+    static_assert(offsetof(FormatConversionSpecImpl, conv_) == 0, "");
     return conv_;
   }
 
@@ -296,96 +296,36 @@ class FormatConversionSpecImpl {
   // negative value.
   int precision() const { return precision_; }
 
-  template <typename T> 
-  T Wrap() { 
-    return T(*this); 
-  } 
+  template <typename T>
+  T Wrap() {
+    return T(*this);
+  }
 
  private:
-  friend struct str_format_internal::FormatConversionSpecImplFriend; 
-  FormatConversionChar conv_ = FormatConversionCharInternal::kNone; 
+  friend struct str_format_internal::FormatConversionSpecImplFriend;
+  FormatConversionChar conv_ = FormatConversionCharInternal::kNone;
   Flags flags_;
   int width_;
   int precision_;
 };
 
-struct FormatConversionSpecImplFriend final { 
-  static void SetFlags(Flags f, FormatConversionSpecImpl* conv) { 
-    conv->flags_ = f; 
-  } 
-  static void SetConversionChar(FormatConversionChar c, 
-                                FormatConversionSpecImpl* conv) { 
-    conv->conv_ = c; 
-  } 
-  static void SetWidth(int w, FormatConversionSpecImpl* conv) { 
-    conv->width_ = w; 
-  } 
-  static void SetPrecision(int p, FormatConversionSpecImpl* conv) { 
-    conv->precision_ = p; 
-  } 
-  static std::string FlagsToString(const FormatConversionSpecImpl& spec) { 
+struct FormatConversionSpecImplFriend final {
+  static void SetFlags(Flags f, FormatConversionSpecImpl* conv) {
+    conv->flags_ = f;
+  }
+  static void SetConversionChar(FormatConversionChar c,
+                                FormatConversionSpecImpl* conv) {
+    conv->conv_ = c;
+  }
+  static void SetWidth(int w, FormatConversionSpecImpl* conv) {
+    conv->width_ = w;
+  }
+  static void SetPrecision(int p, FormatConversionSpecImpl* conv) {
+    conv->precision_ = p;
+  }
+  static std::string FlagsToString(const FormatConversionSpecImpl& spec) {
     return str_format_internal::FlagsToString(spec.flags_);
-  } 
-}; 
- 
-// Type safe OR operator. 
-// We need this for two reasons: 
-//  1. operator| on enums makes them decay to integers and the result is an 
-//     integer. We need the result to stay as an enum. 
-//  2. We use "enum class" which would not work even if we accepted the decay. 
-constexpr FormatConversionCharSet FormatConversionCharSetUnion( 
-    FormatConversionCharSet a) { 
-  return a; 
-} 
- 
-template <typename... CharSet> 
-constexpr FormatConversionCharSet FormatConversionCharSetUnion( 
-    FormatConversionCharSet a, CharSet... rest) { 
-  return static_cast<FormatConversionCharSet>( 
-      static_cast<uint64_t>(a) | 
-      static_cast<uint64_t>(FormatConversionCharSetUnion(rest...))); 
-} 
- 
-constexpr uint64_t FormatConversionCharToConvInt(FormatConversionChar c) { 
-  return uint64_t{1} << (1 + static_cast<uint8_t>(c)); 
-} 
- 
-constexpr uint64_t FormatConversionCharToConvInt(char conv) { 
-  return
-#define ABSL_INTERNAL_CHAR_SET_CASE(c)                                 \ 
-  conv == #c[0]                                                        \ 
-      ? FormatConversionCharToConvInt(FormatConversionCharInternal::c) \ 
-      : 
-      ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_CHAR_SET_CASE, ) 
-#undef ABSL_INTERNAL_CHAR_SET_CASE 
-                  conv == '*'
-          ? 1
-          : 0;
-}
-
-constexpr FormatConversionCharSet FormatConversionCharToConvValue(char conv) { 
-  return static_cast<FormatConversionCharSet>( 
-      FormatConversionCharToConvInt(conv)); 
-} 
-
-struct FormatConversionCharSetInternal { 
-#define ABSL_INTERNAL_CHAR_SET_CASE(c)         \ 
-  static constexpr FormatConversionCharSet c = \ 
-      FormatConversionCharToConvValue(#c[0]); 
-  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_CHAR_SET_CASE, ) 
-#undef ABSL_INTERNAL_CHAR_SET_CASE 
- 
-  // Used for width/precision '*' specification.
-  static constexpr FormatConversionCharSet kStar = 
-      FormatConversionCharToConvValue('*'); 
-
-  static constexpr FormatConversionCharSet kIntegral = 
-      FormatConversionCharSetUnion(d, i, u, o, x, X); 
-  static constexpr FormatConversionCharSet kFloating = 
-      FormatConversionCharSetUnion(a, e, f, g, A, E, F, G); 
-  static constexpr FormatConversionCharSet kNumeric = 
-      FormatConversionCharSetUnion(kIntegral, kFloating); 
-  static constexpr FormatConversionCharSet kPointer = p; 
+  }
 };
 
 // Type safe OR operator.
@@ -393,44 +333,104 @@ struct FormatConversionCharSetInternal {
 //  1. operator| on enums makes them decay to integers and the result is an
 //     integer. We need the result to stay as an enum.
 //  2. We use "enum class" which would not work even if we accepted the decay.
-constexpr FormatConversionCharSet operator|(FormatConversionCharSet a, 
-                                            FormatConversionCharSet b) { 
-  return FormatConversionCharSetUnion(a, b); 
+constexpr FormatConversionCharSet FormatConversionCharSetUnion(
+    FormatConversionCharSet a) {
+  return a;
 }
 
-// Overloaded conversion functions to support absl::ParsedFormat. 
+template <typename... CharSet>
+constexpr FormatConversionCharSet FormatConversionCharSetUnion(
+    FormatConversionCharSet a, CharSet... rest) {
+  return static_cast<FormatConversionCharSet>(
+      static_cast<uint64_t>(a) |
+      static_cast<uint64_t>(FormatConversionCharSetUnion(rest...)));
+}
+
+constexpr uint64_t FormatConversionCharToConvInt(FormatConversionChar c) {
+  return uint64_t{1} << (1 + static_cast<uint8_t>(c));
+}
+
+constexpr uint64_t FormatConversionCharToConvInt(char conv) {
+  return
+#define ABSL_INTERNAL_CHAR_SET_CASE(c)                                 \
+  conv == #c[0]                                                        \
+      ? FormatConversionCharToConvInt(FormatConversionCharInternal::c) \
+      :
+      ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_CHAR_SET_CASE, )
+#undef ABSL_INTERNAL_CHAR_SET_CASE
+                  conv == '*'
+          ? 1
+          : 0;
+}
+
+constexpr FormatConversionCharSet FormatConversionCharToConvValue(char conv) {
+  return static_cast<FormatConversionCharSet>(
+      FormatConversionCharToConvInt(conv));
+}
+
+struct FormatConversionCharSetInternal {
+#define ABSL_INTERNAL_CHAR_SET_CASE(c)         \
+  static constexpr FormatConversionCharSet c = \
+      FormatConversionCharToConvValue(#c[0]);
+  ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_CHAR_SET_CASE, )
+#undef ABSL_INTERNAL_CHAR_SET_CASE
+
+  // Used for width/precision '*' specification.
+  static constexpr FormatConversionCharSet kStar =
+      FormatConversionCharToConvValue('*');
+
+  static constexpr FormatConversionCharSet kIntegral =
+      FormatConversionCharSetUnion(d, i, u, o, x, X);
+  static constexpr FormatConversionCharSet kFloating =
+      FormatConversionCharSetUnion(a, e, f, g, A, E, F, G);
+  static constexpr FormatConversionCharSet kNumeric =
+      FormatConversionCharSetUnion(kIntegral, kFloating);
+  static constexpr FormatConversionCharSet kPointer = p;
+};
+
+// Type safe OR operator.
+// We need this for two reasons:
+//  1. operator| on enums makes them decay to integers and the result is an
+//     integer. We need the result to stay as an enum.
+//  2. We use "enum class" which would not work even if we accepted the decay.
+constexpr FormatConversionCharSet operator|(FormatConversionCharSet a,
+                                            FormatConversionCharSet b) {
+  return FormatConversionCharSetUnion(a, b);
+}
+
+// Overloaded conversion functions to support absl::ParsedFormat.
 // Get a conversion with a single character in it.
-constexpr FormatConversionCharSet ToFormatConversionCharSet(char c) { 
-  return static_cast<FormatConversionCharSet>( 
-      FormatConversionCharToConvValue(c)); 
+constexpr FormatConversionCharSet ToFormatConversionCharSet(char c) {
+  return static_cast<FormatConversionCharSet>(
+      FormatConversionCharToConvValue(c));
 }
 
-// Get a conversion with a single character in it. 
-constexpr FormatConversionCharSet ToFormatConversionCharSet( 
-    FormatConversionCharSet c) { 
-  return c; 
-} 
- 
-template <typename T> 
-void ToFormatConversionCharSet(T) = delete; 
- 
+// Get a conversion with a single character in it.
+constexpr FormatConversionCharSet ToFormatConversionCharSet(
+    FormatConversionCharSet c) {
+  return c;
+}
+
+template <typename T>
+void ToFormatConversionCharSet(T) = delete;
+
 // Checks whether `c` exists in `set`.
-constexpr bool Contains(FormatConversionCharSet set, char c) { 
-  return (static_cast<uint64_t>(set) & 
-          static_cast<uint64_t>(FormatConversionCharToConvValue(c))) != 0; 
+constexpr bool Contains(FormatConversionCharSet set, char c) {
+  return (static_cast<uint64_t>(set) &
+          static_cast<uint64_t>(FormatConversionCharToConvValue(c))) != 0;
 }
 
 // Checks whether all the characters in `c` are contained in `set`
-constexpr bool Contains(FormatConversionCharSet set, 
-                        FormatConversionCharSet c) { 
+constexpr bool Contains(FormatConversionCharSet set,
+                        FormatConversionCharSet c) {
   return (static_cast<uint64_t>(set) & static_cast<uint64_t>(c)) ==
          static_cast<uint64_t>(c);
 }
 
-// Checks whether all the characters in `c` are contained in `set` 
-constexpr bool Contains(FormatConversionCharSet set, FormatConversionChar c) { 
-  return (static_cast<uint64_t>(set) & FormatConversionCharToConvInt(c)) != 0; 
-} 
+// Checks whether all the characters in `c` are contained in `set`
+constexpr bool Contains(FormatConversionCharSet set, FormatConversionChar c) {
+  return (static_cast<uint64_t>(set) & FormatConversionCharToConvInt(c)) != 0;
+}
 
 // Return capacity - used, clipped to a minimum of 0.
 inline size_t Excess(size_t used, size_t capacity) {
@@ -439,7 +439,7 @@ inline size_t Excess(size_t used, size_t capacity) {
 
 }  // namespace str_format_internal
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_EXTENSION_H_

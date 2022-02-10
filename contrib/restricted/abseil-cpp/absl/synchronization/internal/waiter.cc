@@ -48,9 +48,9 @@
 #include "absl/base/optimization.h"
 #include "absl/synchronization/internal/kernel_timeout.h"
 
- 
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 static void MaybeBecomeIdle() {
@@ -82,7 +82,7 @@ bool Waiter::Wait(KernelTimeout t) {
 
   while (true) {
     int32_t x = futex_.load(std::memory_order_relaxed);
-    while (x != 0) { 
+    while (x != 0) {
       if (!futex_.compare_exchange_weak(x, x - 1,
                                         std::memory_order_acquire,
                                         std::memory_order_relaxed)) {
@@ -258,7 +258,7 @@ bool Waiter::Wait(KernelTimeout t) {
   bool first_pass = true;
   while (true) {
     int x = wakeups_.load(std::memory_order_relaxed);
-    while (x != 0) { 
+    while (x != 0) {
       if (!wakeups_.compare_exchange_weak(x, x - 1,
                                           std::memory_order_acquire,
                                           std::memory_order_relaxed)) {
@@ -312,29 +312,29 @@ class Waiter::WinHelper {
     return reinterpret_cast<CONDITION_VARIABLE *>(&w->cv_storage_);
   }
 
-  static_assert(sizeof(SRWLOCK) == sizeof(void *), 
-                "`mu_storage_` does not have the same size as SRWLOCK"); 
-  static_assert(alignof(SRWLOCK) == alignof(void *), 
-                "`mu_storage_` does not have the same alignment as SRWLOCK"); 
- 
-  static_assert(sizeof(CONDITION_VARIABLE) == sizeof(void *), 
-                "`ABSL_CONDITION_VARIABLE_STORAGE` does not have the same size " 
-                "as `CONDITION_VARIABLE`"); 
+  static_assert(sizeof(SRWLOCK) == sizeof(void *),
+                "`mu_storage_` does not have the same size as SRWLOCK");
+  static_assert(alignof(SRWLOCK) == alignof(void *),
+                "`mu_storage_` does not have the same alignment as SRWLOCK");
+
+  static_assert(sizeof(CONDITION_VARIABLE) == sizeof(void *),
+                "`ABSL_CONDITION_VARIABLE_STORAGE` does not have the same size "
+                "as `CONDITION_VARIABLE`");
   static_assert(
-      alignof(CONDITION_VARIABLE) == alignof(void *), 
-      "`cv_storage_` does not have the same alignment as `CONDITION_VARIABLE`"); 
+      alignof(CONDITION_VARIABLE) == alignof(void *),
+      "`cv_storage_` does not have the same alignment as `CONDITION_VARIABLE`");
 
   // The SRWLOCK and CONDITION_VARIABLE types must be trivially constructible
   // and destructible because we never call their constructors or destructors.
   static_assert(std::is_trivially_constructible<SRWLOCK>::value,
-                "The `SRWLOCK` type must be trivially constructible"); 
-  static_assert( 
-      std::is_trivially_constructible<CONDITION_VARIABLE>::value, 
-      "The `CONDITION_VARIABLE` type must be trivially constructible"); 
+                "The `SRWLOCK` type must be trivially constructible");
+  static_assert(
+      std::is_trivially_constructible<CONDITION_VARIABLE>::value,
+      "The `CONDITION_VARIABLE` type must be trivially constructible");
   static_assert(std::is_trivially_destructible<SRWLOCK>::value,
-                "The `SRWLOCK` type must be trivially destructible"); 
+                "The `SRWLOCK` type must be trivially destructible");
   static_assert(std::is_trivially_destructible<CONDITION_VARIABLE>::value,
-                "The `CONDITION_VARIABLE` type must be trivially destructible"); 
+                "The `CONDITION_VARIABLE` type must be trivially destructible");
 };
 
 class LockHolder {
@@ -424,5 +424,5 @@ void Waiter::InternalCondVarPoke() {
 #endif
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

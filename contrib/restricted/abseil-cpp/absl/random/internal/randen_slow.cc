@@ -18,11 +18,11 @@
 #include <cstdint>
 #include <cstring>
 
-#include "absl/base/attributes.h" 
+#include "absl/base/attributes.h"
 #include "absl/base/internal/endian.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/internal/platform.h"
-#include "absl/random/internal/randen_traits.h" 
+#include "absl/random/internal/randen_traits.h"
 
 #if ABSL_HAVE_ATTRIBUTE(always_inline) || \
     (defined(__GNUC__) && !defined(__clang__))
@@ -231,19 +231,19 @@ constexpr uint32_t te3[256] = {
 
 // Software implementation of the Vector128 class, using uint32_t
 // as an underlying vector register.
-struct alignas(16) Vector128 { 
+struct alignas(16) Vector128 {
   uint32_t s[4];
 };
 
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128
-Vector128Load(const void* from) { 
+Vector128Load(const void* from) {
   Vector128 result;
   std::memcpy(result.s, from, sizeof(Vector128));
   return result;
 }
 
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Vector128Store(
-    const Vector128& v, void* to) { 
+    const Vector128& v, void* to) {
   std::memcpy(to, v.s, sizeof(Vector128));
 }
 
@@ -253,22 +253,22 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128
 AesRound(const Vector128& state, const Vector128& round_key) {
   Vector128 result;
 #ifdef ABSL_IS_LITTLE_ENDIAN
-  result.s[0] = round_key.s[0] ^                  // 
+  result.s[0] = round_key.s[0] ^                  //
                 te0[uint8_t(state.s[0])] ^        //
                 te1[uint8_t(state.s[1] >> 8)] ^   //
                 te2[uint8_t(state.s[2] >> 16)] ^  //
                 te3[uint8_t(state.s[3] >> 24)];
-  result.s[1] = round_key.s[1] ^                  // 
+  result.s[1] = round_key.s[1] ^                  //
                 te0[uint8_t(state.s[1])] ^        //
                 te1[uint8_t(state.s[2] >> 8)] ^   //
                 te2[uint8_t(state.s[3] >> 16)] ^  //
                 te3[uint8_t(state.s[0] >> 24)];
-  result.s[2] = round_key.s[2] ^                  // 
+  result.s[2] = round_key.s[2] ^                  //
                 te0[uint8_t(state.s[2])] ^        //
                 te1[uint8_t(state.s[3] >> 8)] ^   //
                 te2[uint8_t(state.s[0] >> 16)] ^  //
                 te3[uint8_t(state.s[1] >> 24)];
-  result.s[3] = round_key.s[3] ^                  // 
+  result.s[3] = round_key.s[3] ^                  //
                 te0[uint8_t(state.s[3])] ^        //
                 te1[uint8_t(state.s[0] >> 8)] ^   //
                 te2[uint8_t(state.s[1] >> 16)] ^  //
@@ -298,28 +298,28 @@ AesRound(const Vector128& state, const Vector128& round_key) {
   return result;
 }
 
-using ::absl::random_internal::RandenTraits; 
+using ::absl::random_internal::RandenTraits;
 
 // The improved Feistel block shuffle function for 16 blocks.
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle(
     absl::uint128* state) {
-  static_assert(RandenTraits::kFeistelBlocks == 16, 
+  static_assert(RandenTraits::kFeistelBlocks == 16,
                 "Feistel block shuffle only works for 16 blocks.");
 
-  constexpr size_t shuffle[RandenTraits::kFeistelBlocks] = { 
-      7, 2, 13, 4, 11, 8, 3, 6, 15, 0, 9, 10, 1, 14, 5, 12}; 
+  constexpr size_t shuffle[RandenTraits::kFeistelBlocks] = {
+      7, 2, 13, 4, 11, 8, 3, 6, 15, 0, 9, 10, 1, 14, 5, 12};
 
   // The fully unrolled loop without the memcpy improves the speed by about
-  // 30% over the equivalent: 
-#if 0 
+  // 30% over the equivalent:
+#if 0
   absl::uint128 source[RandenTraits::kFeistelBlocks];
-  std::memcpy(source, state, sizeof(source)); 
-  for (size_t i = 0; i < RandenTraits::kFeistelBlocks; i++) { 
+  std::memcpy(source, state, sizeof(source));
+  for (size_t i = 0; i < RandenTraits::kFeistelBlocks; i++) {
     const absl::uint128 v0 = source[shuffle[i]];
-    state[i] = v0; 
+    state[i] = v0;
   }
-  return; 
-#endif 
+  return;
+#endif
 
   const absl::uint128 v0 = state[shuffle[0]];
   const absl::uint128 v1 = state[shuffle[1]];
@@ -363,21 +363,21 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle(
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE const absl::uint128*
 FeistelRound(absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT state,
              const absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT keys) {
-  for (size_t branch = 0; branch < RandenTraits::kFeistelBlocks; branch += 4) { 
-    const Vector128 s0 = Vector128Load(state + branch); 
-    const Vector128 s1 = Vector128Load(state + branch + 1); 
+  for (size_t branch = 0; branch < RandenTraits::kFeistelBlocks; branch += 4) {
+    const Vector128 s0 = Vector128Load(state + branch);
+    const Vector128 s1 = Vector128Load(state + branch + 1);
     const Vector128 f0 = AesRound(s0, Vector128Load(keys));
     keys++;
     const Vector128 o1 = AesRound(f0, s1);
-    Vector128Store(o1, state + branch + 1); 
+    Vector128Store(o1, state + branch + 1);
 
     // Manually unroll this loop once. about 10% better than not unrolled.
-    const Vector128 s2 = Vector128Load(state + branch + 2); 
-    const Vector128 s3 = Vector128Load(state + branch + 3); 
+    const Vector128 s2 = Vector128Load(state + branch + 2);
+    const Vector128 s3 = Vector128Load(state + branch + 3);
     const Vector128 f2 = AesRound(s2, Vector128Load(keys));
     keys++;
     const Vector128 o3 = AesRound(f2, s3);
-    Vector128Store(o3, state + branch + 3); 
+    Vector128Store(o3, state + branch + 3);
   }
   return keys;
 }
@@ -389,8 +389,8 @@ FeistelRound(absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT state,
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Permute(
     absl::uint128* state,
     const absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT keys) {
-  for (size_t round = 0; round < RandenTraits::kFeistelRounds; ++round) { 
-    keys = FeistelRound(state, keys); 
+  for (size_t round = 0; round < RandenTraits::kFeistelRounds; ++round) {
+    keys = FeistelRound(state, keys);
     BlockShuffle(state);
   }
 }
@@ -415,41 +415,41 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void SwapEndian(
 }  // namespace
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 
 const void* RandenSlow::GetKeys() {
   // Round keys for one AES per Feistel round and branch.
   // The canonical implementation uses first digits of Pi.
 #ifdef ABSL_IS_LITTLE_ENDIAN
-  return kRandenRoundKeys; 
+  return kRandenRoundKeys;
 #else
   return kRandenRoundKeysBE;
 #endif
 }
 
 void RandenSlow::Absorb(const void* seed_void, void* state_void) {
-  auto* state = 
-      reinterpret_cast<uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>(state_void); 
-  const auto* seed = 
-      reinterpret_cast<const uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>( 
-          seed_void); 
+  auto* state =
+      reinterpret_cast<uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>(state_void);
+  const auto* seed =
+      reinterpret_cast<const uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>(
+          seed_void);
 
-  constexpr size_t kCapacityBlocks = 
-      RandenTraits::kCapacityBytes / sizeof(uint64_t); 
-  static_assert( 
-      kCapacityBlocks * sizeof(uint64_t) == RandenTraits::kCapacityBytes, 
-      "Not i*V"); 
- 
-  for (size_t i = kCapacityBlocks; 
-       i < RandenTraits::kStateBytes / sizeof(uint64_t); ++i) { 
+  constexpr size_t kCapacityBlocks =
+      RandenTraits::kCapacityBytes / sizeof(uint64_t);
+  static_assert(
+      kCapacityBlocks * sizeof(uint64_t) == RandenTraits::kCapacityBytes,
+      "Not i*V");
+
+  for (size_t i = kCapacityBlocks;
+       i < RandenTraits::kStateBytes / sizeof(uint64_t); ++i) {
     state[i] ^= seed[i - kCapacityBlocks];
   }
 }
 
-void RandenSlow::Generate(const void* keys_void, void* state_void) { 
+void RandenSlow::Generate(const void* keys_void, void* state_void) {
   static_assert(RandenTraits::kCapacityBytes == sizeof(absl::uint128),
-                "Capacity mismatch"); 
+                "Capacity mismatch");
 
   auto* state = reinterpret_cast<absl::uint128*>(state_void);
   const auto* keys = reinterpret_cast<const absl::uint128*>(keys_void);
@@ -458,7 +458,7 @@ void RandenSlow::Generate(const void* keys_void, void* state_void) {
 
   SwapEndian(state);
 
-  Permute(state, keys); 
+  Permute(state, keys);
 
   SwapEndian(state);
 
@@ -467,5 +467,5 @@ void RandenSlow::Generate(const void* keys_void, void* state_void) {
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

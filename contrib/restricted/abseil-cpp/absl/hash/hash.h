@@ -37,12 +37,12 @@
 // types. Hashing of that combined state is separately done by `absl::Hash`.
 //
 // One should assume that a hash algorithm is chosen randomly at the start of
-// each process.  E.g., `absl::Hash<int>{}(9)` in one process and 
-// `absl::Hash<int>{}(9)` in another process are likely to differ. 
+// each process.  E.g., `absl::Hash<int>{}(9)` in one process and
+// `absl::Hash<int>{}(9)` in another process are likely to differ.
 //
-// `absl::Hash` is intended to strongly mix input bits with a target of passing 
-// an [Avalanche Test](https://en.wikipedia.org/wiki/Avalanche_effect). 
-// 
+// `absl::Hash` is intended to strongly mix input bits with a target of passing
+// an [Avalanche Test](https://en.wikipedia.org/wiki/Avalanche_effect).
+//
 // Example:
 //
 //   // Suppose we have a class `Circle` for which we want to add hashing:
@@ -78,7 +78,7 @@
 #include "absl/hash/internal/hash.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // `absl::Hash`
@@ -102,7 +102,7 @@ ABSL_NAMESPACE_BEGIN
 //   * std::tuple<Ts...>, if all the Ts... are hashable
 //   * std::unique_ptr and std::shared_ptr
 //   * All string-like types including:
-//     * absl::Cord 
+//     * absl::Cord
 //     * std::string
 //     * std::string_view (as well as any instance of std::basic_string that
 //       uses char and std::char_traits)
@@ -341,7 +341,7 @@ class HashState : public hash_internal::HashStateBase<HashState> {
   void (*combine_contiguous_)(void*, const unsigned char*, size_t);
 };
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_HASH_HASH_H_

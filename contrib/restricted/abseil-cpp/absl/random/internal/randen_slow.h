@@ -17,10 +17,10 @@
 
 #include <cstddef>
 
-#include "absl/base/config.h" 
- 
+#include "absl/base/config.h"
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 
 // RANDen = RANDom generator or beetroots in Swiss High German.
@@ -34,7 +34,7 @@ class RandenSlow {
 };
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_RANDOM_INTERNAL_RANDEN_SLOW_H_

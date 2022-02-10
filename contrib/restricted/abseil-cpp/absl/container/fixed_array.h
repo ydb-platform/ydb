@@ -41,7 +41,7 @@
 #include <type_traits>
 
 #include "absl/algorithm/algorithm.h"
-#include "absl/base/config.h" 
+#include "absl/base/config.h"
 #include "absl/base/dynamic_annotations.h"
 #include "absl/base/internal/throw_delegate.h"
 #include "absl/base/macros.h"
@@ -51,7 +51,7 @@
 #include "absl/memory/memory.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 constexpr static auto kFixedArrayUseDefault = static_cast<size_t>(-1);
 
@@ -102,13 +102,13 @@ class FixedArray {
 
  public:
   using allocator_type = typename AllocatorTraits::allocator_type;
-  using value_type = typename AllocatorTraits::value_type; 
-  using pointer = typename AllocatorTraits::pointer; 
-  using const_pointer = typename AllocatorTraits::const_pointer; 
-  using reference = value_type&; 
-  using const_reference = const value_type&; 
-  using size_type = typename AllocatorTraits::size_type; 
-  using difference_type = typename AllocatorTraits::difference_type; 
+  using value_type = typename AllocatorTraits::value_type;
+  using pointer = typename AllocatorTraits::pointer;
+  using const_pointer = typename AllocatorTraits::const_pointer;
+  using reference = value_type&;
+  using const_reference = const value_type&;
+  using size_type = typename AllocatorTraits::size_type;
+  using difference_type = typename AllocatorTraits::difference_type;
   using iterator = pointer;
   using const_iterator = const_pointer;
   using reverse_iterator = std::reverse_iterator<iterator>;
@@ -213,7 +213,7 @@ class FixedArray {
   // Returns a reference the ith element of the fixed array.
   // REQUIRES: 0 <= i < size()
   reference operator[](size_type i) {
-    ABSL_HARDENING_ASSERT(i < size()); 
+    ABSL_HARDENING_ASSERT(i < size());
     return data()[i];
   }
 
@@ -221,7 +221,7 @@ class FixedArray {
   // ith element of the fixed array.
   // REQUIRES: 0 <= i < size()
   const_reference operator[](size_type i) const {
-    ABSL_HARDENING_ASSERT(i < size()); 
+    ABSL_HARDENING_ASSERT(i < size());
     return data()[i];
   }
 
@@ -248,32 +248,32 @@ class FixedArray {
   // FixedArray::front()
   //
   // Returns a reference to the first element of the fixed array.
-  reference front() { 
-    ABSL_HARDENING_ASSERT(!empty()); 
-    return data()[0]; 
-  } 
+  reference front() {
+    ABSL_HARDENING_ASSERT(!empty());
+    return data()[0];
+  }
 
   // Overload of FixedArray::front() to return a reference to the first element
   // of a fixed array of const values.
-  const_reference front() const { 
-    ABSL_HARDENING_ASSERT(!empty()); 
-    return data()[0]; 
-  } 
+  const_reference front() const {
+    ABSL_HARDENING_ASSERT(!empty());
+    return data()[0];
+  }
 
   // FixedArray::back()
   //
   // Returns a reference to the last element of the fixed array.
-  reference back() { 
-    ABSL_HARDENING_ASSERT(!empty()); 
-    return data()[size() - 1]; 
-  } 
+  reference back() {
+    ABSL_HARDENING_ASSERT(!empty());
+    return data()[size() - 1];
+  }
 
   // Overload of FixedArray::back() to return a reference to the last element
   // of a fixed array of const values.
-  const_reference back() const { 
-    ABSL_HARDENING_ASSERT(!empty()); 
-    return data()[size() - 1]; 
-  } 
+  const_reference back() const {
+    ABSL_HARDENING_ASSERT(!empty());
+    return data()[size() - 1];
+  }
 
   // FixedArray::begin()
   //
@@ -418,15 +418,15 @@ class FixedArray {
     void AnnotateConstruct(size_type n);
     void AnnotateDestruct(size_type n);
 
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER 
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER
     void* RedzoneBegin() { return &redzone_begin_; }
     void* RedzoneEnd() { return &redzone_end_ + 1; }
-#endif  // ABSL_HAVE_ADDRESS_SANITIZER 
+#endif  // ABSL_HAVE_ADDRESS_SANITIZER
 
    private:
-    ABSL_ADDRESS_SANITIZER_REDZONE(redzone_begin_); 
+    ABSL_ADDRESS_SANITIZER_REDZONE(redzone_begin_);
     alignas(StorageElement) char buff_[sizeof(StorageElement[inline_elements])];
-    ABSL_ADDRESS_SANITIZER_REDZONE(redzone_end_); 
+    ABSL_ADDRESS_SANITIZER_REDZONE(redzone_end_);
   };
 
   class EmptyInlinedStorage {
@@ -499,29 +499,29 @@ constexpr typename FixedArray<T, N, A>::size_type
 template <typename T, size_t N, typename A>
 void FixedArray<T, N, A>::NonEmptyInlinedStorage::AnnotateConstruct(
     typename FixedArray<T, N, A>::size_type n) {
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER 
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER
   if (!n) return;
-  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(data(), RedzoneEnd(), RedzoneEnd(), 
-                                     data() + n); 
-  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(RedzoneBegin(), data(), data(), 
-                                     RedzoneBegin()); 
-#endif  // ABSL_HAVE_ADDRESS_SANITIZER 
+  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(data(), RedzoneEnd(), RedzoneEnd(),
+                                     data() + n);
+  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(RedzoneBegin(), data(), data(),
+                                     RedzoneBegin());
+#endif  // ABSL_HAVE_ADDRESS_SANITIZER
   static_cast<void>(n);  // Mark used when not in asan mode
 }
 
 template <typename T, size_t N, typename A>
 void FixedArray<T, N, A>::NonEmptyInlinedStorage::AnnotateDestruct(
     typename FixedArray<T, N, A>::size_type n) {
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER 
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER
   if (!n) return;
-  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(data(), RedzoneEnd(), data() + n, 
-                                     RedzoneEnd()); 
-  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(RedzoneBegin(), data(), RedzoneBegin(), 
-                                     data()); 
-#endif  // ABSL_HAVE_ADDRESS_SANITIZER 
+  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(data(), RedzoneEnd(), data() + n,
+                                     RedzoneEnd());
+  ABSL_ANNOTATE_CONTIGUOUS_CONTAINER(RedzoneBegin(), data(), RedzoneBegin(),
+                                     data());
+#endif  // ABSL_HAVE_ADDRESS_SANITIZER
   static_cast<void>(n);  // Mark used when not in asan mode
 }
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_FIXED_ARRAY_H_

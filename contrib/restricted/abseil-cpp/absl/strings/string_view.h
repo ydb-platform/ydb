@@ -28,29 +28,29 @@
 #define ABSL_STRINGS_STRING_VIEW_H_
 
 #include <algorithm>
-#include <cassert> 
-#include <cstddef> 
-#include <cstring> 
-#include <iosfwd> 
-#include <iterator> 
-#include <limits> 
-#include <string> 
- 
+#include <cassert>
+#include <cstddef>
+#include <cstring>
+#include <iosfwd>
+#include <iterator>
+#include <limits>
+#include <string>
+
 #include "absl/base/attributes.h"
 #include "absl/base/config.h"
-#include "absl/base/internal/throw_delegate.h" 
-#include "absl/base/macros.h" 
-#include "absl/base/optimization.h" 
-#include "absl/base/port.h" 
+#include "absl/base/internal/throw_delegate.h"
+#include "absl/base/macros.h"
+#include "absl/base/optimization.h"
+#include "absl/base/port.h"
 
 #ifdef ABSL_USES_STD_STRING_VIEW
 
 #include <string_view>  // IWYU pragma: export
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
-using string_view = std::string_view; 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_BEGIN
+using string_view = std::string_view;
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #else  // ABSL_USES_STD_STRING_VIEW
@@ -71,7 +71,7 @@ ABSL_NAMESPACE_END
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // absl::string_view
 //
@@ -120,22 +120,22 @@ ABSL_NAMESPACE_BEGIN
 // example, when splitting a string, `std::vector<absl::string_view>` is a
 // natural data type for the output.
 //
-// For another example, a Cord is a non-contiguous, potentially very 
-// long string-like object.  The Cord class has an interface that iteratively 
-// provides string_view objects that point to the successive pieces of a Cord 
-// object. 
-// 
-// When constructed from a source which is NUL-terminated, the `string_view` 
-// itself will not include the NUL-terminator unless a specific size (including 
-// the NUL) is passed to the constructor. As a result, common idioms that work 
-// on NUL-terminated strings do not work on `string_view` objects. If you write 
+// For another example, a Cord is a non-contiguous, potentially very
+// long string-like object.  The Cord class has an interface that iteratively
+// provides string_view objects that point to the successive pieces of a Cord
+// object.
+//
+// When constructed from a source which is NUL-terminated, the `string_view`
+// itself will not include the NUL-terminator unless a specific size (including
+// the NUL) is passed to the constructor. As a result, common idioms that work
+// on NUL-terminated strings do not work on `string_view` objects. If you write
 // code that scans a `string_view`, you must check its length rather than test
 // for nul, for example. Note, however, that nuls may still be embedded within
 // a `string_view` explicitly.
 //
 // You may create a null `string_view` in two ways:
 //
-//   absl::string_view sv; 
+//   absl::string_view sv;
 //   absl::string_view sv(nullptr, 0);
 //
 // For the above, `sv.data() == nullptr`, `sv.length() == 0`, and
@@ -197,7 +197,7 @@ class string_view {
       // code bloat.
       : string_view(str.data(), str.size(), SkipCheckLengthTag{}) {}
 
-  // Implicit constructor of a `string_view` from NUL-terminated `str`. When 
+  // Implicit constructor of a `string_view` from NUL-terminated `str`. When
   // accepting possibly null strings, use `absl::NullSafeStringView(str)`
   // instead (see below).
   // The length check is skipped since it is unnecessary and causes code bloat.
@@ -296,9 +296,9 @@ class string_view {
   //
   // Returns the ith element of the `string_view` using the array operator.
   // Note that this operator does not perform any bounds checking.
-  constexpr const_reference operator[](size_type i) const { 
-    return ABSL_HARDENING_ASSERT(i < size()), ptr_[i]; 
-  } 
+  constexpr const_reference operator[](size_type i) const {
+    return ABSL_HARDENING_ASSERT(i < size()), ptr_[i];
+  }
 
   // string_view::at()
   //
@@ -316,24 +316,24 @@ class string_view {
   // string_view::front()
   //
   // Returns the first element of a `string_view`.
-  constexpr const_reference front() const { 
-    return ABSL_HARDENING_ASSERT(!empty()), ptr_[0]; 
-  } 
+  constexpr const_reference front() const {
+    return ABSL_HARDENING_ASSERT(!empty()), ptr_[0];
+  }
 
   // string_view::back()
   //
   // Returns the last element of a `string_view`.
-  constexpr const_reference back() const { 
-    return ABSL_HARDENING_ASSERT(!empty()), ptr_[size() - 1]; 
-  } 
+  constexpr const_reference back() const {
+    return ABSL_HARDENING_ASSERT(!empty()), ptr_[size() - 1];
+  }
 
   // string_view::data()
   //
   // Returns a pointer to the underlying character array (which is of course
   // stored elsewhere). Note that `string_view::data()` may contain embedded nul
-  // characters, but the returned buffer may or may not be NUL-terminated; 
-  // therefore, do not pass `data()` to a routine that expects a NUL-terminated 
-  // string. 
+  // characters, but the returned buffer may or may not be NUL-terminated;
+  // therefore, do not pass `data()` to a routine that expects a NUL-terminated
+  // string.
   constexpr const_pointer data() const noexcept { return ptr_; }
 
   // Modifiers
@@ -341,9 +341,9 @@ class string_view {
   // string_view::remove_prefix()
   //
   // Removes the first `n` characters from the `string_view`. Note that the
-  // underlying string is not changed, only the view. 
+  // underlying string is not changed, only the view.
   ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR void remove_prefix(size_type n) {
-    ABSL_HARDENING_ASSERT(n <= length_); 
+    ABSL_HARDENING_ASSERT(n <= length_);
     ptr_ += n;
     length_ -= n;
   }
@@ -351,9 +351,9 @@ class string_view {
   // string_view::remove_suffix()
   //
   // Removes the last `n` characters from the `string_view`. Note that the
-  // underlying string is not changed, only the view. 
+  // underlying string is not changed, only the view.
   ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR void remove_suffix(size_type n) {
-    ABSL_HARDENING_ASSERT(n <= length_); 
+    ABSL_HARDENING_ASSERT(n <= length_);
     length_ -= n;
   }
 
@@ -396,13 +396,13 @@ class string_view {
   // Returns a "substring" of the `string_view` (at offset `pos` and length
   // `n`) as another string_view. This function throws `std::out_of_bounds` if
   // `pos > size`.
-  // Use absl::ClippedSubstr if you need a truncating substr operation. 
+  // Use absl::ClippedSubstr if you need a truncating substr operation.
   constexpr string_view substr(size_type pos = 0, size_type n = npos) const {
-    return ABSL_PREDICT_FALSE(pos > length_) 
-               ? (base_internal::ThrowStdOutOfRange( 
-                      "absl::string_view::substr"), 
-                  string_view()) 
-               : string_view(ptr_ + pos, Min(n, length_ - pos)); 
+    return ABSL_PREDICT_FALSE(pos > length_)
+               ? (base_internal::ThrowStdOutOfRange(
+                      "absl::string_view::substr"),
+                  string_view())
+               : string_view(ptr_ + pos, Min(n, length_ - pos));
   }
 
   // string_view::compare()
@@ -412,11 +412,11 @@ class string_view {
   // than `x`, 0 if `*this` is equal to `x`, and a positive value if `*this`
   // is greater than `x`.
   constexpr int compare(string_view x) const noexcept {
-    return CompareImpl(length_, x.length_, 
-                       Min(length_, x.length_) == 0 
-                           ? 0 
-                           : ABSL_INTERNAL_STRING_VIEW_MEMCMP( 
-                                 ptr_, x.ptr_, Min(length_, x.length_))); 
+    return CompareImpl(length_, x.length_,
+                       Min(length_, x.length_) == 0
+                           ? 0
+                           : ABSL_INTERNAL_STRING_VIEW_MEMCMP(
+                                 ptr_, x.ptr_, Min(length_, x.length_)));
   }
 
   // Overload of `string_view::compare()` for comparing a substring of the
@@ -437,13 +437,13 @@ class string_view {
   constexpr int compare(const char* s) const { return compare(string_view(s)); }
 
   // Overload of `string_view::compare()` for comparing a substring of the
-  // `string_view` and a different string C-style string `s`. 
+  // `string_view` and a different string C-style string `s`.
   constexpr int compare(size_type pos1, size_type count1, const char* s) const {
     return substr(pos1, count1).compare(string_view(s));
   }
 
   // Overload of `string_view::compare()` for comparing a substring of the
-  // `string_view` and a substring of a different C-style string `s`. 
+  // `string_view` and a substring of a different C-style string `s`.
   constexpr int compare(size_type pos1, size_type count1, const char* s,
                         size_type count2) const {
     return substr(pos1, count1).compare(string_view(s, count2));
@@ -608,7 +608,7 @@ class string_view {
       (std::numeric_limits<difference_type>::max)();
 
   static constexpr size_type CheckLengthInternal(size_type len) {
-    return ABSL_HARDENING_ASSERT(len <= kMaxSize), len; 
+    return ABSL_HARDENING_ASSERT(len <= kMaxSize), len;
   }
 
   static constexpr size_type StrlenInternal(const char* str) {
@@ -629,15 +629,15 @@ class string_view {
 #endif
   }
 
-  static constexpr size_t Min(size_type length_a, size_type length_b) { 
-    return length_a < length_b ? length_a : length_b; 
-  } 
- 
+  static constexpr size_t Min(size_type length_a, size_type length_b) {
+    return length_a < length_b ? length_a : length_b;
+  }
+
   static constexpr int CompareImpl(size_type length_a, size_type length_b,
                                    int compare_result) {
     return compare_result == 0 ? static_cast<int>(length_a > length_b) -
                                      static_cast<int>(length_a < length_b)
-                               : (compare_result < 0 ? -1 : 1); 
+                               : (compare_result < 0 ? -1 : 1);
   }
 
   const char* ptr_;
@@ -676,7 +676,7 @@ constexpr bool operator>=(string_view x, string_view y) noexcept {
 // IO Insertion Operator
 std::ostream& operator<<(std::ostream& o, string_view piece);
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #undef ABSL_INTERNAL_STRING_VIEW_CXX14_CONSTEXPR
@@ -685,7 +685,7 @@ ABSL_NAMESPACE_END
 #endif  // ABSL_USES_STD_STRING_VIEW
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // ClippedSubstr()
 //
@@ -702,11 +702,11 @@ inline string_view ClippedSubstr(string_view s, size_t pos,
 // Creates an `absl::string_view` from a pointer `p` even if it's null-valued.
 // This function should be used where an `absl::string_view` can be created from
 // a possibly-null pointer.
-constexpr string_view NullSafeStringView(const char* p) { 
+constexpr string_view NullSafeStringView(const char* p) {
   return p ? string_view(p) : string_view();
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_STRINGS_STRING_VIEW_H_

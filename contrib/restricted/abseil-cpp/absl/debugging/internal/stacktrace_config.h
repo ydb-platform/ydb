@@ -30,56 +30,56 @@
 #define ABSL_STACKTRACE_INL_HEADER \
     "absl/debugging/internal/stacktrace_win32-inl.inc"
 
-#elif defined(__APPLE__) 
+#elif defined(__APPLE__)
 #ifdef ABSL_HAVE_THREAD_LOCAL
-// Thread local support required for UnwindImpl. 
-#define ABSL_STACKTRACE_INL_HEADER \ 
-  "absl/debugging/internal/stacktrace_generic-inl.inc" 
+// Thread local support required for UnwindImpl.
+#define ABSL_STACKTRACE_INL_HEADER \
+  "absl/debugging/internal/stacktrace_generic-inl.inc"
 #endif  // defined(ABSL_HAVE_THREAD_LOCAL)
- 
+
 #elif defined(__EMSCRIPTEN__)
 #define ABSL_STACKTRACE_INL_HEADER \
   "absl/debugging/internal/stacktrace_emscripten-inl.inc"
 
 #elif defined(__linux__) && !defined(__ANDROID__)
 
-#if defined(NO_FRAME_POINTER) && \ 
-    (defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)) 
-// Note: The libunwind-based implementation is not available to open-source 
-// users. 
+#if defined(NO_FRAME_POINTER) && \
+    (defined(__i386__) || defined(__x86_64__) || defined(__aarch64__))
+// Note: The libunwind-based implementation is not available to open-source
+// users.
 #define ABSL_STACKTRACE_INL_HEADER \
-  "absl/debugging/internal/stacktrace_libunwind-inl.inc" 
-#define STACKTRACE_USES_LIBUNWIND 1 
-#elif defined(NO_FRAME_POINTER) && defined(__has_include) 
-#if __has_include(<execinfo.h>) 
+  "absl/debugging/internal/stacktrace_libunwind-inl.inc"
+#define STACKTRACE_USES_LIBUNWIND 1
+#elif defined(NO_FRAME_POINTER) && defined(__has_include)
+#if __has_include(<execinfo.h>)
 // Note: When using glibc this may require -funwind-tables to function properly.
 #define ABSL_STACKTRACE_INL_HEADER \
   "absl/debugging/internal/stacktrace_generic-inl.inc"
 #endif  // __has_include(<execinfo.h>)
-#elif defined(__i386__) || defined(__x86_64__) 
+#elif defined(__i386__) || defined(__x86_64__)
 #define ABSL_STACKTRACE_INL_HEADER \
-  "absl/debugging/internal/stacktrace_x86-inl.inc" 
-#elif defined(__ppc__) || defined(__PPC__) 
+  "absl/debugging/internal/stacktrace_x86-inl.inc"
+#elif defined(__ppc__) || defined(__PPC__)
 #define ABSL_STACKTRACE_INL_HEADER \
-  "absl/debugging/internal/stacktrace_powerpc-inl.inc" 
-#elif defined(__aarch64__) 
+  "absl/debugging/internal/stacktrace_powerpc-inl.inc"
+#elif defined(__aarch64__)
 #define ABSL_STACKTRACE_INL_HEADER \
-  "absl/debugging/internal/stacktrace_aarch64-inl.inc" 
+  "absl/debugging/internal/stacktrace_aarch64-inl.inc"
 #elif defined(__riscv)
 #define ABSL_STACKTRACE_INL_HEADER \
   "absl/debugging/internal/stacktrace_riscv-inl.inc"
-#elif defined(__has_include) 
-#if __has_include(<execinfo.h>) 
-// Note: When using glibc this may require -funwind-tables to function properly. 
+#elif defined(__has_include)
+#if __has_include(<execinfo.h>)
+// Note: When using glibc this may require -funwind-tables to function properly.
 #define ABSL_STACKTRACE_INL_HEADER \
-  "absl/debugging/internal/stacktrace_generic-inl.inc" 
+  "absl/debugging/internal/stacktrace_generic-inl.inc"
 #endif  // __has_include(<execinfo.h>)
 #endif  // defined(__has_include)
 
 #endif  // defined(__linux__) && !defined(__ANDROID__)
- 
-// Fallback to the empty implementation. 
-#if !defined(ABSL_STACKTRACE_INL_HEADER) 
+
+// Fallback to the empty implementation.
+#if !defined(ABSL_STACKTRACE_INL_HEADER)
 #define ABSL_STACKTRACE_INL_HEADER \
   "absl/debugging/internal/stacktrace_unimplemented-inl.inc"
 #endif

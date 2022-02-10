@@ -47,9 +47,9 @@
 // this abstraction, make sure that you should not instead be rewriting your
 // code to be more specific.
 //
-// Abseil has also released an `absl::variant` type (a C++11 compatible version 
-// of the C++17 `std::variant`), which is generally preferred for use over 
-// `absl::any`. 
+// Abseil has also released an `absl::variant` type (a C++11 compatible version
+// of the C++17 `std::variant`), which is generally preferred for use over
+// `absl::any`.
 #ifndef ABSL_TYPES_ANY_H_
 #define ABSL_TYPES_ANY_H_
 
@@ -61,12 +61,12 @@
 #include <any>  // IWYU pragma: export
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 using std::any;
 using std::any_cast;
 using std::bad_any_cast;
 using std::make_any;
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #else  // ABSL_USES_STD_ANY
@@ -80,7 +80,7 @@ ABSL_NAMESPACE_END
 #include <typeinfo>
 #include <utility>
 
-#include "absl/base/internal/fast_type_id.h" 
+#include "absl/base/internal/fast_type_id.h"
 #include "absl/base/macros.h"
 #include "absl/meta/type_traits.h"
 #include "absl/types/bad_any_cast.h"
@@ -94,7 +94,7 @@ ABSL_NAMESPACE_END
 #endif  // !defined(__GNUC__) || defined(__GXX_RTTI)
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 class any;
 
@@ -404,11 +404,11 @@ class any {
     using NormalizedType =
         typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 
-    return base_internal::FastTypeId<NormalizedType>(); 
+    return base_internal::FastTypeId<NormalizedType>();
   }
 
   const void* GetObjTypeId() const {
-    return obj_ ? obj_->ObjTypeId() : base_internal::FastTypeId<void>(); 
+    return obj_ ? obj_->ObjTypeId() : base_internal::FastTypeId<void>();
   }
 
   // `absl::any` nonmember functions //
@@ -518,7 +518,7 @@ T* any_cast(any* operand) noexcept {
              : nullptr;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #undef ABSL_ANY_DETAIL_HAS_RTTI

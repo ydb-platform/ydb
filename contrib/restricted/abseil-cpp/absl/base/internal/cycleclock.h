@@ -44,10 +44,10 @@
 
 #include <cstdint>
 
-#include "absl/base/config.h" 
- 
+#include "absl/base/config.h"
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // -----------------------------------------------------------------------------
@@ -88,7 +88,7 @@ class CycleClockSource {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_BASE_INTERNAL_CYCLECLOCK_H_

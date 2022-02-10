@@ -59,7 +59,7 @@
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace {
 
 typedef int (*Unwinder)(void**, int*, int, int, const void*, int*);
@@ -138,5 +138,5 @@ int DefaultStackUnwinder(void** pcs, int* sizes, int depth, int skip,
   return n;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

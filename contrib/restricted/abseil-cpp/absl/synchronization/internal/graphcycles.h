@@ -40,10 +40,10 @@
 
 #include <cstdint>
 
-#include "absl/base/config.h" 
- 
+#include "absl/base/config.h"
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // Opaque identifier for a graph node.
@@ -135,7 +135,7 @@ class GraphCycles {
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif

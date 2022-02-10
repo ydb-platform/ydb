@@ -55,7 +55,7 @@
 #include "absl/meta/type_traits.h"
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_algorithm_internal {
 
 // NOTE: it is important to defer to ADL lookup for building with C++ modules,
@@ -90,10 +90,10 @@ using ContainerPointerType =
 // lookup of std::begin and std::end, i.e.
 //   using std::begin;
 //   using std::end;
-//   std::foo(begin(c), end(c)); 
+//   std::foo(begin(c), end(c));
 // becomes
 //   std::foo(container_algorithm_internal::begin(c),
-//            container_algorithm_internal::end(c)); 
+//            container_algorithm_internal::end(c));
 // These are meant for internal use only.
 
 template <typename C>
@@ -269,8 +269,8 @@ container_algorithm_internal::ContainerIter<Sequence1> c_find_end(
 // c_find_first_of()
 //
 // Container-based version of the <algorithm> `std::find_first_of()` function to
-// find the first element within the container that is also within the options 
-// container. 
+// find the first element within the container that is also within the options
+// container.
 template <typename C1, typename C2>
 container_algorithm_internal::ContainerIter<C1> c_find_first_of(C1& container,
                                                                 C2& options) {
@@ -340,45 +340,45 @@ container_algorithm_internal::ContainerDifferenceType<const C> c_count_if(
 // c_mismatch()
 //
 // Container-based version of the <algorithm> `std::mismatch()` function to
-// return the first element where two ordered containers differ. Applies `==` to 
-// the first N elements of `c1` and `c2`, where N = min(size(c1), size(c2)). 
+// return the first element where two ordered containers differ. Applies `==` to
+// the first N elements of `c1` and `c2`, where N = min(size(c1), size(c2)).
 template <typename C1, typename C2>
 container_algorithm_internal::ContainerIterPairType<C1, C2>
 c_mismatch(C1& c1, C2& c2) {
-  auto first1 = container_algorithm_internal::c_begin(c1); 
-  auto last1 = container_algorithm_internal::c_end(c1); 
-  auto first2 = container_algorithm_internal::c_begin(c2); 
-  auto last2 = container_algorithm_internal::c_end(c2); 
- 
-  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) { 
-    // Negates equality because Cpp17EqualityComparable doesn't require clients 
-    // to overload both `operator==` and `operator!=`. 
-    if (!(*first1 == *first2)) { 
-      break; 
-    } 
-  } 
- 
-  return std::make_pair(first1, first2); 
+  auto first1 = container_algorithm_internal::c_begin(c1);
+  auto last1 = container_algorithm_internal::c_end(c1);
+  auto first2 = container_algorithm_internal::c_begin(c2);
+  auto last2 = container_algorithm_internal::c_end(c2);
+
+  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) {
+    // Negates equality because Cpp17EqualityComparable doesn't require clients
+    // to overload both `operator==` and `operator!=`.
+    if (!(*first1 == *first2)) {
+      break;
+    }
+  }
+
+  return std::make_pair(first1, first2);
 }
 
 // Overload of c_mismatch() for using a predicate evaluation other than `==` as
-// the function's test condition. Applies `pred`to the first N elements of `c1` 
-// and `c2`, where N = min(size(c1), size(c2)). 
+// the function's test condition. Applies `pred`to the first N elements of `c1`
+// and `c2`, where N = min(size(c1), size(c2)).
 template <typename C1, typename C2, typename BinaryPredicate>
 container_algorithm_internal::ContainerIterPairType<C1, C2>
-c_mismatch(C1& c1, C2& c2, BinaryPredicate pred) { 
-  auto first1 = container_algorithm_internal::c_begin(c1); 
-  auto last1 = container_algorithm_internal::c_end(c1); 
-  auto first2 = container_algorithm_internal::c_begin(c2); 
-  auto last2 = container_algorithm_internal::c_end(c2); 
- 
-  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) { 
-    if (!pred(*first1, *first2)) { 
-      break; 
-    } 
-  } 
- 
-  return std::make_pair(first1, first2); 
+c_mismatch(C1& c1, C2& c2, BinaryPredicate pred) {
+  auto first1 = container_algorithm_internal::c_begin(c1);
+  auto last1 = container_algorithm_internal::c_end(c1);
+  auto first2 = container_algorithm_internal::c_begin(c2);
+  auto last2 = container_algorithm_internal::c_end(c2);
+
+  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) {
+    if (!pred(*first1, *first2)) {
+      break;
+    }
+  }
+
+  return std::make_pair(first1, first2);
 }
 
 // c_equal()
@@ -560,20 +560,20 @@ BidirectionalIterator c_move_backward(C&& src, BidirectionalIterator dest) {
 // c_swap_ranges()
 //
 // Container-based version of the <algorithm> `std::swap_ranges()` function to
-// swap a container's elements with another container's elements. Swaps the 
-// first N elements of `c1` and `c2`, where N = min(size(c1), size(c2)). 
+// swap a container's elements with another container's elements. Swaps the
+// first N elements of `c1` and `c2`, where N = min(size(c1), size(c2)).
 template <typename C1, typename C2>
 container_algorithm_internal::ContainerIter<C2> c_swap_ranges(C1& c1, C2& c2) {
-  auto first1 = container_algorithm_internal::c_begin(c1); 
-  auto last1 = container_algorithm_internal::c_end(c1); 
-  auto first2 = container_algorithm_internal::c_begin(c2); 
-  auto last2 = container_algorithm_internal::c_end(c2); 
- 
-  using std::swap; 
-  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) { 
-    swap(*first1, *first2); 
-  } 
-  return first2; 
+  auto first1 = container_algorithm_internal::c_begin(c1);
+  auto last1 = container_algorithm_internal::c_end(c1);
+  auto first2 = container_algorithm_internal::c_begin(c2);
+  auto last2 = container_algorithm_internal::c_end(c2);
+
+  using std::swap;
+  for (; first1 != last1 && first2 != last2; ++first1, (void)++first2) {
+    swap(*first1, *first2);
+  }
+  return first2;
 }
 
 // c_transform()
@@ -591,23 +591,23 @@ OutputIterator c_transform(const InputSequence& input, OutputIterator output,
 }
 
 // Overload of c_transform() for performing a transformation using a binary
-// predicate. Applies `binary_op` to the first N elements of `c1` and `c2`, 
-// where N = min(size(c1), size(c2)). 
+// predicate. Applies `binary_op` to the first N elements of `c1` and `c2`,
+// where N = min(size(c1), size(c2)).
 template <typename InputSequence1, typename InputSequence2,
           typename OutputIterator, typename BinaryOp>
 OutputIterator c_transform(const InputSequence1& input1,
                            const InputSequence2& input2, OutputIterator output,
                            BinaryOp&& binary_op) {
-  auto first1 = container_algorithm_internal::c_begin(input1); 
-  auto last1 = container_algorithm_internal::c_end(input1); 
-  auto first2 = container_algorithm_internal::c_begin(input2); 
-  auto last2 = container_algorithm_internal::c_end(input2); 
-  for (; first1 != last1 && first2 != last2; 
-       ++first1, (void)++first2, ++output) { 
-    *output = binary_op(*first1, *first2); 
-  } 
- 
-  return output; 
+  auto first1 = container_algorithm_internal::c_begin(input1);
+  auto last1 = container_algorithm_internal::c_end(input1);
+  auto first2 = container_algorithm_internal::c_begin(input2);
+  auto last2 = container_algorithm_internal::c_end(input2);
+  for (; first1 != last1 && first2 != last2;
+       ++first1, (void)++first2, ++output) {
+    *output = binary_op(*first1, *first2);
+  }
+
+  return output;
 }
 
 // c_replace()
@@ -979,10 +979,10 @@ void c_partial_sort(
 // c_partial_sort_copy()
 //
 // Container-based version of the <algorithm> `std::partial_sort_copy()`
-// function to sort the elements in the given range `result` within the larger 
-// `sequence` in ascending order (and using `result` as the output parameter). 
-// At most min(result.last - result.first, sequence.last - sequence.first) 
-// elements from the sequence will be stored in the result. 
+// function to sort the elements in the given range `result` within the larger
+// `sequence` in ascending order (and using `result` as the output parameter).
+// At most min(result.last - result.first, sequence.last - sequence.first)
+// elements from the sequence will be stored in the result.
 template <typename C, typename RandomAccessContainer>
 container_algorithm_internal::ContainerIter<RandomAccessContainer>
 c_partial_sort_copy(const C& sequence, RandomAccessContainer& result) {
@@ -1768,7 +1768,7 @@ OutputIt c_partial_sum(const InputSequence& input, OutputIt output_first,
                           output_first, std::forward<BinaryOp>(op));
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_ALGORITHM_CONTAINER_H_

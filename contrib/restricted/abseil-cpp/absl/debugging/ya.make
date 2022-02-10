@@ -21,10 +21,10 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS( 
-    -DNOMINMAX 
-) 
- 
+CFLAGS(
+    -DNOMINMAX
+)
+
 SRCS(
     internal/address_is_readable.cc
     internal/elf_mem_image.cc

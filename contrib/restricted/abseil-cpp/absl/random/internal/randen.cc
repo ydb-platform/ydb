@@ -41,7 +41,7 @@
 // structured/low-entropy counters to digits of Pi.
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 namespace {
 
@@ -87,5 +87,5 @@ Randen::Randen() {
 }
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl

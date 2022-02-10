@@ -39,7 +39,7 @@
 #define VERSYM_VERSION 0x7fff
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 namespace {
@@ -377,7 +377,7 @@ void ElfMemImage::SymbolIterator::Update(int increment) {
 }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_HAVE_ELF_MEM_IMAGE

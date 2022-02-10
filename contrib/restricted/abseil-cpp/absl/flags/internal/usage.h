@@ -19,8 +19,8 @@
 #include <iosfwd>
 #include <string>
 
-#include "absl/base/config.h" 
-#include "absl/flags/commandlineflag.h" 
+#include "absl/base/config.h"
+#include "absl/flags/commandlineflag.h"
 #include "absl/flags/declare.h"
 #include "absl/strings/string_view.h"
 
@@ -28,7 +28,7 @@
 // Usage reporting interfaces
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace flags_internal {
 
 // The format to report the help messages in.
@@ -36,9 +36,9 @@ enum class HelpFormat {
   kHumanReadable,
 };
 
-// Streams the help message describing `flag` to `out`. 
-// The default value for `flag` is included in the output. 
-void FlagHelp(std::ostream& out, const CommandLineFlag& flag, 
+// Streams the help message describing `flag` to `out`.
+// The default value for `flag` is included in the output.
+void FlagHelp(std::ostream& out, const CommandLineFlag& flag,
               HelpFormat format = HelpFormat::kHumanReadable);
 
 // Produces the help messages for all flags matching the filter. A flag matches
@@ -98,7 +98,7 @@ void SetFlagsHelpFormat(HelpFormat);
 bool DeduceUsageFlags(absl::string_view name, absl::string_view value);
 
 }  // namespace flags_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_FLAGS_INTERNAL_USAGE_H_

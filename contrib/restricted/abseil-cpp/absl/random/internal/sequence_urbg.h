@@ -21,10 +21,10 @@
 #include <type_traits>
 #include <vector>
 
-#include "absl/base/config.h" 
- 
+#include "absl/base/config.h"
+
 namespace absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace random_internal {
 
 // `sequence_urbg` is a simple random number generator which meets the
@@ -54,7 +54,7 @@ class sequence_urbg {
 };
 
 }  // namespace random_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_RANDOM_INTERNAL_SEQUENCE_URBG_H_

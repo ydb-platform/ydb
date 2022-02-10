@@ -281,14 +281,14 @@ private:                                                   \
     virtual void Execute() override {                      \
         this->AtStart();
 
-#ifndef UT_SKIP_EXCEPTIONS 
+#ifndef UT_SKIP_EXCEPTIONS
 #define CATCH_REACTION(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), context)
 #define CATCH_REACTION_BT(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), (e.BackTrace() ? e.BackTrace()->PrintToString() : TString()), context)
-#else 
+#else
 #define CATCH_REACTION(FN, e, context) throw
 #define CATCH_REACTION_BT(FN, e, context) throw
-#endif 
- 
+#endif
+
 #define UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F)                                       \
     /* If you see this message - delete multiple UNIT_TEST(TestName) with same TestName. */ \
     /* It's forbidden to declare same test twice because it breaks --fork-tests logic.  */  \

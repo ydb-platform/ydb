@@ -812,7 +812,7 @@ RECURSE(
     pydub
     pyelftools
     pyelftools/readelf
-    pyfakefs 
+    pyfakefs
     pyflakes
     pyfst
     pygit2

@@ -459,18 +459,18 @@ migrations:
     - orgvisits/library/python/text_tools
     - orgvisits/library/python/yt_jobs/tests
     - orgvisits/metrics/ugc_feedback/ctr
-    - passport/backend/adm_api/views/meltingpot 
-    - passport/backend/core 
-    - passport/backend/core/builders/frodo 
-    - passport/backend/core/builders/yasms 
-    - passport/backend/core/conf 
-    - passport/backend/core/cookies/utils 
-    - passport/backend/core/cookies/utils/werkzeug_ports 
-    - passport/backend/core/db 
-    - passport/backend/core/grants/tests 
-    - passport/backend/core/historydb/tests 
-    - passport/backend/core/suggest 
-    - passport/backend/core/types 
+    - passport/backend/adm_api/views/meltingpot
+    - passport/backend/core
+    - passport/backend/core/builders/frodo
+    - passport/backend/core/builders/yasms
+    - passport/backend/core/conf
+    - passport/backend/core/cookies/utils
+    - passport/backend/core/cookies/utils/werkzeug_ports
+    - passport/backend/core/db
+    - passport/backend/core/grants/tests
+    - passport/backend/core/historydb/tests
+    - passport/backend/core/suggest
+    - passport/backend/core/types
     - portal/tools/morda-release/server
     - quality/ab_testing/abt_resources_lib/loaders/tests/long_metrics
     - quality/ab_testing/cofe/bin/cofe_ctl
@@ -1029,9 +1029,9 @@ migrations:
     - mssngr/botfarm/src/bot
     - music/analytics/jam-sox/music_lib/financial_reports/tests/unit
     - music/tools/download-info
-    - passport/backend/library/distprim 
-    - passport/backend/library/distprim/threading 
-    - passport/backend/meltingpot/utils 
+    - passport/backend/library/distprim
+    - passport/backend/library/distprim/threading
+    - passport/backend/meltingpot/utils
     - plus/gift/gift
     - plus/gift/gift/admin
     - quality/ab_testing/cofe/projects/zalogin
@@ -1201,7 +1201,7 @@ migrations:
     - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/inbound
     - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/outbound
     - mlp/mail/aspam/nirvana_operations/conveyor/calc_dsats
-    - passport/backend/api/tests/views/bundle/change_avatar 
+    - passport/backend/api/tests/views/bundle/change_avatar
     - quality/ab_testing/cofe/projects/alice/sesame/v1_1
     - quality/neural_net/bert/bert/utils/distributed
     - quality/neural_net/bert/bert/utils/fs
@@ -1562,7 +1562,7 @@ migrations:
     - modadvert/programs/cv_app/tools/create_yt_env/it
     - modadvert/programs/grep_img_rejects/it
     - modadvert/programs/multik/it
-    - passport/backend/api/tests/views/bundle/change_avatar 
+    - passport/backend/api/tests/views/bundle/change_avatar
     - quality/ab_testing/cofe/projects/alice/sesame/v1_1
     - quality/functionality/chats/feedback/src/feedback/core
     - quality/functionality/chats/feedback/src/feedback/core/celery_tasks
@@ -2171,26 +2171,26 @@ migrations:
     - orgvisits/metrics/toloka/preparations
     - orgvisits/toloka/taskuploader
     - orgvisits/viewers/geotrack/backend
-    - passport/backend/adm_api/common 
-    - passport/backend/adm_api/settings 
-    - passport/backend/adm_api/tests/views 
-    - passport/backend/api 
-    - passport/backend/core/yasms/test 
-    - passport/backend/library/historydbloader 
-    - passport/backend/logbroker_client/core 
-    - passport/backend/meltingpot/core/meltingpot 
-    - passport/backend/configs/golovan 
-    - passport/backend/contrib/cassandra 
-    - passport/backend/contrib/django_contrib_comments 
-    - passport/backend/contrib/elementflow 
-    - passport/backend/contrib/formencode 
-    - passport/backend/contrib/gsm0338 
-    - passport/backend/contrib/nose_parameterized 
-    - passport/backend/contrib/oauthlib 
-    - passport/backend/contrib/py-radix 
-    - passport/backend/contrib/py2casefold 
-    - passport/backend/contrib/pyisemail 
-    - passport/backend/tools/rm_attrs 
+    - passport/backend/adm_api/common
+    - passport/backend/adm_api/settings
+    - passport/backend/adm_api/tests/views
+    - passport/backend/api
+    - passport/backend/core/yasms/test
+    - passport/backend/library/historydbloader
+    - passport/backend/logbroker_client/core
+    - passport/backend/meltingpot/core/meltingpot
+    - passport/backend/configs/golovan
+    - passport/backend/contrib/cassandra
+    - passport/backend/contrib/django_contrib_comments
+    - passport/backend/contrib/elementflow
+    - passport/backend/contrib/formencode
+    - passport/backend/contrib/gsm0338
+    - passport/backend/contrib/nose_parameterized
+    - passport/backend/contrib/oauthlib
+    - passport/backend/contrib/py-radix
+    - passport/backend/contrib/py2casefold
+    - passport/backend/contrib/pyisemail
+    - passport/backend/tools/rm_attrs
     - payplatform/balance_support_dev/dev_kpi_counter
     - payplatform/balance_support_dev/support_kpi_counter
     - payplatform/findep/findepstbot
@@ -3216,11 +3216,11 @@ migrations:
     - nirvana/valhalla/tests
     - ofd/notifier/tests/test_unit/test_sender/test_event_types
     - ofd/notifier/tests/test_unit/test_sender/test_notification_types
-    - passport/backend/logbroker_client/account_events/tests 
-    - passport/backend/logbroker_client/oauth/tests 
-    - passport/backend/logbroker_client/xiva/tests 
-    - passport/backend/tools/metrics/ut 
-    - passport/backend/vault/cli/yav/tests 
+    - passport/backend/logbroker_client/account_events/tests
+    - passport/backend/logbroker_client/oauth/tests
+    - passport/backend/logbroker_client/xiva/tests
+    - passport/backend/tools/metrics/ut
+    - passport/backend/vault/cli/yav/tests
     - quality/ab_testing/scripts/exp_veles/exp_mr_server/scripts/ut
     - quality/ab_testing/tools/postgres_local/tests
     - quality/click_machine/tests

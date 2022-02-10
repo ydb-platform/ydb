@@ -1,36 +1,36 @@
-package tvm_keys;
-
+package tvm_keys; 
+ 
 option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos";
 
-enum KeyType {
+enum KeyType { 
     RabinWilliams = 0;
-}
-
-enum BbEnvType {
-   Prod = 0;
-   Test = 1;
-   ProdYateam = 2;
-   TestYateam = 3;
-   Stress = 4;
-}
-
-message General {
-    required uint32 id = 1;
-    required KeyType type = 2;
-    required bytes body = 3;
-    optional int64 createdTime = 4;
-}
-
-message BbKey {
-    required General gen = 1;
-    required BbEnvType env = 2;
-}
-
-message TvmKey {
-    required General gen = 1;
-}
-
-message Keys {
-    repeated BbKey bb = 1;
-    repeated TvmKey tvm = 2;
-}
+} 
+ 
+enum BbEnvType { 
+   Prod = 0; 
+   Test = 1; 
+   ProdYateam = 2; 
+   TestYateam = 3; 
+   Stress = 4; 
+} 
+ 
+message General { 
+    required uint32 id = 1; 
+    required KeyType type = 2; 
+    required bytes body = 3; 
+    optional int64 createdTime = 4; 
+} 
+ 
+message BbKey { 
+    required General gen = 1; 
+    required BbEnvType env = 2; 
+} 
+ 
+message TvmKey { 
+    required General gen = 1; 
+} 
+ 
+message Keys { 
+    repeated BbKey bb = 1; 
+    repeated TvmKey tvm = 2; 
+} 

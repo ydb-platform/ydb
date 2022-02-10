@@ -1,16 +1,16 @@
-#include "user_impl.h"
-
-#include "parser.h"
-
+#include "user_impl.h" 
+ 
+#include "parser.h" 
+ 
 #include <library/cpp/tvmauth/exception.h>
 #include <library/cpp/tvmauth/ticket_status.h>
-
-#include <util/generic/strbuf.h>
-#include <util/string/cast.h>
-#include <util/string/split.h>
-
-#include <algorithm>
-
+ 
+#include <util/generic/strbuf.h> 
+#include <util/string/cast.h> 
+#include <util/string/split.h> 
+ 
+#include <algorithm> 
+ 
 namespace NTvmAuth {
     static const char* EX_MSG = "Method cannot be used in non-valid ticket";
 
@@ -33,47 +33,47 @@ namespace NTvmAuth {
 
     TCheckedUserTicket::TImpl::operator bool() const {
         return (Status_ == ETicketStatus::Ok);
-    }
-
+    } 
+ 
     TUid TCheckedUserTicket::TImpl::GetDefaultUid() const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         return ProtobufTicket_.user().defaultuid();
-    }
+    } 
 
     time_t TCheckedUserTicket::TImpl::GetExpirationTime() const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         return ProtobufTicket_.expirationtime();
-    }
-
+    } 
+ 
     const TScopes& TCheckedUserTicket::TImpl::GetScopes() const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         if (CachedScopes_.empty()) {
             for (const auto& el : ProtobufTicket_.user().scopes()) {
                 CachedScopes_.push_back(el);
-            }
-        }
+            } 
+        } 
         return CachedScopes_;
-    }
-
+    } 
+ 
     bool TCheckedUserTicket::TImpl::HasScope(TStringBuf scopeName) const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         return std::binary_search(ProtobufTicket_.user().scopes().begin(), ProtobufTicket_.user().scopes().end(), scopeName);
-    }
-
+    } 
+ 
     ETicketStatus TCheckedUserTicket::TImpl::GetStatus() const {
         return Status_;
-    }
-
+    } 
+ 
     const TUids& TCheckedUserTicket::TImpl::GetUids() const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         if (CachedUids_.empty()) {
             for (const auto& user : ProtobufTicket_.user().users()) {
                 CachedUids_.push_back(user.uid());
-            }
-        }
+            } 
+        } 
         return CachedUids_;
-    }
-
+    } 
+ 
     TString TCheckedUserTicket::TImpl::DebugInfo() const {
         if (CachedDebugInfo_) {
             return CachedDebugInfo_;
@@ -82,38 +82,38 @@ namespace NTvmAuth {
         if (Status_ == ETicketStatus::Malformed) {
             CachedDebugInfo_ = "status=malformed;";
             return CachedDebugInfo_;
-        }
+        } 
 
-        TString targetString = "ticket_type=";
+        TString targetString = "ticket_type="; 
         targetString.reserve(256);
         if (Status_ == ETicketStatus::InvalidTicketType) {
-            targetString.append("not-user;");
+            targetString.append("not-user;"); 
             CachedDebugInfo_ = targetString;
-            return targetString;
-        }
+            return targetString; 
+        } 
 
-        targetString.append("user");
+        targetString.append("user"); 
         if (ProtobufTicket_.expirationtime() > 0)
             targetString.append(";expiration_time=").append(IntToString<10>(ProtobufTicket_.expirationtime()));
         for (const auto& scope : ProtobufTicket_.user().scopes()) {
-            targetString.append(";scope=").append(scope);
-        }
+            targetString.append(";scope=").append(scope); 
+        } 
 
         if (ProtobufTicket_.user().defaultuid() > 0)
             targetString.append(";default_uid=").append(IntToString<10>(ProtobufTicket_.user().defaultuid()));
         for (const auto& user : ProtobufTicket_.user().users()) {
-            targetString.append(";uid=").append(IntToString<10>(user.uid()));
-        }
+            targetString.append(";uid=").append(IntToString<10>(user.uid())); 
+        } 
 
         targetString.append(";env=");
         EBlackboxEnv environment = static_cast<EBlackboxEnv>(ProtobufTicket_.user().env());
         targetString.append(GetBlackboxEnvAsString(environment));
-        targetString.append(";");
+        targetString.append(";"); 
 
         CachedDebugInfo_ = targetString;
-        return targetString;
-    }
-
+        return targetString; 
+    } 
+ 
     EBlackboxEnv TCheckedUserTicket::TImpl::GetEnv() const {
         return (EBlackboxEnv)ProtobufTicket_.user().env();
     }
@@ -125,9 +125,9 @@ namespace NTvmAuth {
     TCheckedUserTicket::TImpl::TImpl(ETicketStatus status, ticket2::Ticket&& protobufTicket)
         : Status_(status)
         , ProtobufTicket_(std::move(protobufTicket))
-    {
-    }
-
+    { 
+    } 
+ 
     TUserTicketImplPtr TCheckedUserTicket::TImpl::CreateTicketForTests(ETicketStatus status,
                                                                        TUid defaultUid,
                                                                        TScopes scopes,
@@ -167,75 +167,75 @@ namespace NTvmAuth {
         return MakeHolder<TImpl>(status, std::move(proto));
     }
 
-    TUserContext::TImpl::TImpl(EBlackboxEnv env, TStringBuf tvmKeysResponse)
+    TUserContext::TImpl::TImpl(EBlackboxEnv env, TStringBuf tvmKeysResponse) 
         : Env_(env)
-    {
-        ResetKeys(tvmKeysResponse);
-    }
-
-    void TUserContext::TImpl::ResetKeys(TStringBuf tvmKeysResponse) {
-        tvm_keys::Keys protoKeys;
-        if (!protoKeys.ParseFromString(TParserTvmKeys::ParseStrV1(tvmKeysResponse))) {
+    { 
+        ResetKeys(tvmKeysResponse); 
+    } 
+ 
+    void TUserContext::TImpl::ResetKeys(TStringBuf tvmKeysResponse) { 
+        tvm_keys::Keys protoKeys; 
+        if (!protoKeys.ParseFromString(TParserTvmKeys::ParseStrV1(tvmKeysResponse))) { 
             ythrow TMalformedTvmKeysException() << "Malformed TVM keys";
-        }
-
-        NRw::TPublicKeys keys;
-        for (int idx = 0; idx < protoKeys.bb_size(); ++idx) {
-            const tvm_keys::BbKey& k = protoKeys.bb(idx);
+        } 
+ 
+        NRw::TPublicKeys keys; 
+        for (int idx = 0; idx < protoKeys.bb_size(); ++idx) { 
+            const tvm_keys::BbKey& k = protoKeys.bb(idx); 
             if (IsAllowed(k.env())) {
-                keys.emplace(k.gen().id(),
-                             k.gen().body());
-            }
-        }
-
-        if (keys.empty()) {
+                keys.emplace(k.gen().id(), 
+                             k.gen().body()); 
+            } 
+        } 
+ 
+        if (keys.empty()) { 
             ythrow TEmptyTvmKeysException() << "Empty TVM keys";
-        }
-
+        } 
+ 
         Keys_ = std::move(keys);
-    }
-
-    TUserTicketImplPtr TUserContext::TImpl::Check(TStringBuf ticketBody) const {
+    } 
+ 
+    TUserTicketImplPtr TUserContext::TImpl::Check(TStringBuf ticketBody) const { 
         TParserTickets::TRes res = TParserTickets::ParseV3(ticketBody, Keys_, TParserTickets::UserFlag());
         ETicketStatus status = CheckProtobufUserTicket(res.Ticket);
-
+ 
         if (res.Status != ETicketStatus::Ok && !(res.Status == ETicketStatus::MissingKey && status == ETicketStatus::InvalidBlackboxEnv)) {
-            status = res.Status;
-        }
+            status = res.Status; 
+        } 
         return MakeHolder<TCheckedUserTicket::TImpl>(status, std::move(res.Ticket));
-    }
-
+    } 
+ 
     ETicketStatus TUserContext::TImpl::CheckProtobufUserTicket(const ticket2::Ticket& ticket) const {
-        if (!ticket.has_user()) {
+        if (!ticket.has_user()) { 
             return ETicketStatus::Malformed;
-        }
+        } 
         if (!IsAllowed(ticket.user().env())) {
             return ETicketStatus::InvalidBlackboxEnv;
-        }
+        } 
         return ETicketStatus::Ok;
-    }
-
-    const NRw::TPublicKeys& TUserContext::TImpl::GetKeys() const {
+    } 
+ 
+    const NRw::TPublicKeys& TUserContext::TImpl::GetKeys() const { 
         return Keys_;
-    }
-
+    } 
+ 
     bool TUserContext::TImpl::IsAllowed(tvm_keys::BbEnvType env) const {
         if (env == tvm_keys::Prod && (Env_ == EBlackboxEnv::Prod || Env_ == EBlackboxEnv::Stress)) {
-            return true;
-        }
+            return true; 
+        } 
         if (env == tvm_keys::ProdYateam && Env_ == EBlackboxEnv::ProdYateam) {
-            return true;
-        }
+            return true; 
+        } 
         if (env == tvm_keys::Test && Env_ == EBlackboxEnv::Test) {
-            return true;
-        }
+            return true; 
+        } 
         if (env == tvm_keys::TestYateam && Env_ == EBlackboxEnv::TestYateam) {
-            return true;
-        }
+            return true; 
+        } 
         if (env == tvm_keys::Stress && Env_ == EBlackboxEnv::Stress) {
-            return true;
-        }
-
-        return false;
-    }
+            return true; 
+        } 
+ 
+        return false; 
+    } 
 }

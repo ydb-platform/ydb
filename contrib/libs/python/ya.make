@@ -20,10 +20,10 @@ IF (USE_ARCADIA_PYTHON)
         library/python/symbols/python
     )
     IF (NOT OS_WINDOWS AND NOT OPENSOURCE)
-        PEERDIR(
-            library/python/symbols/uuid
-        )
-    ENDIF()
+        PEERDIR( 
+            library/python/symbols/uuid 
+        ) 
+    ENDIF() 
     IF (MODULE_TAG == "PY2")
         PEERDIR(
             contrib/tools/python/lib

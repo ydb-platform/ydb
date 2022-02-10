@@ -1,31 +1,31 @@
-package ticket2;
-
+package ticket2; 
+ 
 option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos";
 
 import "library/cpp/tvmauth/src/protos/tvm_keys.proto";
-
-message User {
-    required uint64 uid = 1;
-}
-
-message UserTicket {
-    repeated User users = 1;
-    required uint64 defaultUid = 2;
-    repeated string scopes = 3;
-    required uint32 entryPoint = 4;
-    required tvm_keys.BbEnvType env = 5;
-}
-
-message ServiceTicket {
-    required uint32 srcClientId = 1;
-    required uint32 dstClientId = 2;
-    repeated string scopes = 3;
-    optional uint64 issuerUid = 4;
-}
-
-message Ticket {
-    required uint32 keyId = 1;
-    required int64  expirationTime = 2;
-    optional UserTicket user = 3;
-    optional ServiceTicket service = 4;
-}
+ 
+message User { 
+    required uint64 uid = 1; 
+} 
+ 
+message UserTicket { 
+    repeated User users = 1; 
+    required uint64 defaultUid = 2; 
+    repeated string scopes = 3; 
+    required uint32 entryPoint = 4; 
+    required tvm_keys.BbEnvType env = 5; 
+} 
+ 
+message ServiceTicket { 
+    required uint32 srcClientId = 1; 
+    required uint32 dstClientId = 2; 
+    repeated string scopes = 3; 
+    optional uint64 issuerUid = 4; 
+} 
+ 
+message Ticket { 
+    required uint32 keyId = 1; 
+    required int64  expirationTime = 2; 
+    optional UserTicket user = 3; 
+    optional ServiceTicket service = 4; 
+} 

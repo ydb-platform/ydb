@@ -1,7 +1,7 @@
 #include <library/cpp/resource/resource.h>
 
 #include <util/string/strip.h>
-
+ 
 namespace {
     class TBuiltinVersion {
     public:
@@ -20,7 +20,7 @@ namespace {
 }
 
 namespace NTvmAuth {
-    TStringBuf LibVersion() {
+    TStringBuf LibVersion() { 
         return Singleton<TBuiltinVersion>()->Get();
-    }
+    } 
 }

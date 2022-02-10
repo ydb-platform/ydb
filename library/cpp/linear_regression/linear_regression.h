@@ -56,7 +56,7 @@ private:
     TStoreType SumWeights = TStoreType();
 
 public:
-    bool Add(const double feature, const double goal, const double weight = 1.) {
+    bool Add(const double feature, const double goal, const double weight = 1.) { 
         SumFeatures += feature * weight;
         SumSquaredFeatures += feature * feature * weight;
 
@@ -66,8 +66,8 @@ public:
         SumProducts += goal * feature * weight;
 
         SumWeights += weight;
-
-        return true;
+ 
+        return true; 
     }
 
     template <typename TFloatType>
@@ -140,7 +140,7 @@ private:
     double Covariation = 0.;
 
 public:
-    bool Add(const double feature, const double goal, const double weight = 1.);
+    bool Add(const double feature, const double goal, const double weight = 1.); 
 
     bool Add(const double* featuresBegin, const double* featuresEnd, const double* goalsBegin);
     bool Add(const double* featuresBegin, const double* featuresEnd, const double* goalsBegin, const double* weightsBegin);
@@ -188,8 +188,8 @@ public:
         for (size_t featureNumber = 0; featureNumber < features.size(); ++featureNumber) {
             SLRSolvers[featureNumber].Add(features[featureNumber], goal, weight);
         }
-
-        return true;
+ 
+        return true; 
     }
 
     TLinearModel Solve(const double regularizationParameter = 0.1) const {
@@ -201,9 +201,9 @@ public:
         }
 
         TVector<double> coefficients(SLRSolvers.size());
-        double intercept = 0.0;
+        double intercept = 0.0; 
         if (bestSolver) {
-            bestSolver->Solve(coefficients[bestSolver - SLRSolvers.begin()], intercept, regularizationParameter);
+            bestSolver->Solve(coefficients[bestSolver - SLRSolvers.begin()], intercept, regularizationParameter); 
         }
 
         TLinearModel model(std::move(coefficients), intercept);

@@ -41,8 +41,8 @@ bool TFastLinearRegressionSolver::Add(const TVector<double>& features, const dou
     *olsVectorElement += weightedGoal;
 
     SumSquaredGoals += goal * goal * weight;
-
-    return true;
+ 
+    return true; 
 }
 
 bool TLinearRegressionSolver::Add(const TVector<double>& features, const double goal, const double weight) {
@@ -59,7 +59,7 @@ bool TLinearRegressionSolver::Add(const TVector<double>& features, const double 
 
     SumWeights += weight;
     if (!SumWeights.Get()) {
-        return false;
+        return false; 
     }
 
     for (size_t featureNumber = 0; featureNumber < featuresCount; ++featureNumber) {
@@ -109,8 +109,8 @@ bool TLinearRegressionSolver::Add(const TVector<double>& features, const double 
     const double oldGoalsMean = GoalsMean;
     GoalsMean += weight * (goal - GoalsMean) / SumWeights.Get();
     GoalsDeviation += weight * (goal - oldGoalsMean) * (goal - GoalsMean);
-
-    return true;
+ 
+    return true; 
 }
 
 TLinearModel TFastLinearRegressionSolver::Solve() const {
@@ -147,10 +147,10 @@ double TLinearRegressionSolver::SumSquaredErrors() const {
     return ::SumSquaredErrors(LinearizedOLSMatrix, OLSVector, coefficients, GoalsDeviation);
 }
 
-bool TSLRSolver::Add(const double feature, const double goal, const double weight) {
+bool TSLRSolver::Add(const double feature, const double goal, const double weight) { 
     SumWeights += weight;
     if (!SumWeights.Get()) {
-        return false;
+        return false; 
     }
 
     const double weightedFeatureDiff = weight * (feature - FeaturesMean);
@@ -163,8 +163,8 @@ bool TSLRSolver::Add(const double feature, const double goal, const double weigh
     GoalsDeviation += weightedGoalDiff * (goal - GoalsMean);
 
     Covariation += weightedFeatureDiff * (goal - GoalsMean);
-
-    return true;
+ 
+    return true; 
 }
 
 bool TSLRSolver::Add(const double* featuresBegin,

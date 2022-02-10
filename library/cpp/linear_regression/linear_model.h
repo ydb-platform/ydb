@@ -7,7 +7,7 @@
 
 #include <utility>
 
-class TLinearModel {
+class TLinearModel { 
 private:
     TVector<double> Coefficients;
     double Intercept;
@@ -30,11 +30,11 @@ public:
     const TVector<double>& GetCoefficients() const {
         return Coefficients;
     }
-
+ 
     double GetIntercept() const {
         return Intercept;
     }
-
+ 
     template <typename T>
     double Prediction(const TVector<T>& features) const {
         return InnerProduct(Coefficients, features, Intercept);

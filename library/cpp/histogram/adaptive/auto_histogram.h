@@ -14,25 +14,25 @@ namespace NKiwiAggr {
     private:
         static const size_t DEFAULT_INTERVALS = 100;
 
-        ui64 Id;
+        ui64 Id; 
         size_t Intervals;
         THolder<IHistogram> HistogramImpl;
 
     public:
-        TAutoHistogram(size_t intervals, ui64 id = 0) {
+        TAutoHistogram(size_t intervals, ui64 id = 0) { 
             Y_UNUSED(intervals);
             Y_UNUSED(id);
             ythrow yexception() << "Empty constructor is not defined for TAutoHistogram";
         }
 
-        TAutoHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0)
+        TAutoHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0) 
             : Id(defaultId)
             , Intervals(defaultIntervals)
         {
             FromProto(histo);
         }
 
-        TAutoHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0) {
+        TAutoHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0) { 
             Y_UNUSED(histo);
             Y_UNUSED(defaultIntervals);
             Y_UNUSED(defaultId);
@@ -88,11 +88,11 @@ namespace NKiwiAggr {
             HistogramImpl->ToProto(histo);
         }
 
-        virtual void SetId(ui64 id) {
+        virtual void SetId(ui64 id) { 
             HistogramImpl->SetId(id);
         }
 
-        virtual ui64 GetId() {
+        virtual ui64 GetId() { 
             return HistogramImpl->GetId();
         }
 
@@ -131,14 +131,14 @@ namespace NKiwiAggr {
         virtual double CalcLowerBound(double sum) {
             return HistogramImpl->CalcLowerBound(sum);
         }
-
-        virtual double CalcUpperBoundSafe(double sum) {
-            return HistogramImpl->CalcUpperBoundSafe(sum);
-        }
-
-        virtual double CalcLowerBoundSafe(double sum) {
-            return HistogramImpl->CalcLowerBoundSafe(sum);
-        }
+ 
+        virtual double CalcUpperBoundSafe(double sum) { 
+            return HistogramImpl->CalcUpperBoundSafe(sum); 
+        } 
+ 
+        virtual double CalcLowerBoundSafe(double sum) { 
+            return HistogramImpl->CalcLowerBoundSafe(sum); 
+        } 
 
         virtual void PrecomputePartialSums() {
             return HistogramImpl->PrecomputePartialSums();

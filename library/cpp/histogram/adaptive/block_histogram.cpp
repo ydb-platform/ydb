@@ -82,7 +82,7 @@ namespace NKiwiAggr {
     ///////////////////
 
     TBlockHistogram::TBlockHistogram(EHistogramType type, TQualityFunction calcQuality,
-                                     size_t intervals, ui64 id, size_t shrinkSize)
+                                     size_t intervals, ui64 id, size_t shrinkSize) 
         : Type(type)
         , CalcQuality(calcQuality)
         , Intervals(intervals)
@@ -112,7 +112,7 @@ namespace NKiwiAggr {
 
     void TBlockHistogram::Add(double value, double weight) {
         if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight);
+            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight); 
         }
 
         if (weight <= 0.0) {
@@ -138,7 +138,7 @@ namespace NKiwiAggr {
 
     void TBlockHistogram::Merge(const THistogram& histo, double multiplier) {
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
-            fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue());
+            fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue()); 
             return;
         }
         if (histo.FreqSize() == 0) {
@@ -154,7 +154,7 @@ namespace NKiwiAggr {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
+                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight); 
                     continue;
                 }
                 Add(value, weight * multiplier);
@@ -167,7 +167,7 @@ namespace NKiwiAggr {
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(pos) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight);
+                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight); 
                     pos += histo.GetBinRange();
                     continue;
                 }
@@ -229,7 +229,7 @@ namespace NKiwiAggr {
             double value = histo.GetPosition(i);
             double weight = histo.GetFreq(i);
             if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
+                fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight); 
                 continue;
             }
             Bins[i].first = value;
@@ -238,7 +238,7 @@ namespace NKiwiAggr {
         }
 
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
-            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f", Id, histo.GetMinValue(), histo.GetMaxValue());
+            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f", Id, histo.GetMinValue(), histo.GetMaxValue()); 
         }
         MinValue = histo.GetMinValue();
         MaxValue = histo.GetMaxValue();
@@ -261,11 +261,11 @@ namespace NKiwiAggr {
         }
     }
 
-    void TBlockHistogram::SetId(ui64 id) {
+    void TBlockHistogram::SetId(ui64 id) { 
         Id = id;
     }
 
-    ui64 TBlockHistogram::GetId() {
+    ui64 TBlockHistogram::GetId() { 
         return Id;
     }
 
@@ -445,23 +445,23 @@ namespace NKiwiAggr {
         return 0;
     }
 
-    double TBlockHistogram::CalcUpperBoundSafe(double sum) {
+    double TBlockHistogram::CalcUpperBoundSafe(double sum) { 
         Y_UNUSED(sum);
-        ythrow yexception() << "Method is not implemented for TBlockHistogram";
-        return 0;
-    }
+        ythrow yexception() << "Method is not implemented for TBlockHistogram"; 
+        return 0; 
+    } 
 
-    double TBlockHistogram::CalcLowerBoundSafe(double sum) {
+    double TBlockHistogram::CalcLowerBoundSafe(double sum) { 
         Y_UNUSED(sum);
-        ythrow yexception() << "Method is not implemented for TBlockHistogram";
-        return 0;
-    }
-
+        ythrow yexception() << "Method is not implemented for TBlockHistogram"; 
+        return 0; 
+    } 
+ 
     /////////////////////////
     // TBlockWeightHistogram
     /////////////////////////
 
-    TBlockWeightHistogram::TBlockWeightHistogram(size_t intervals, ui64 id, size_t shrinkSize)
+    TBlockWeightHistogram::TBlockWeightHistogram(size_t intervals, ui64 id, size_t shrinkSize) 
         : TBlockHistogram(HT_ADAPTIVE_WEIGHT_HISTOGRAM, CalcWeightQuality, intervals, id, shrinkSize)
     {
     }
@@ -494,7 +494,7 @@ namespace NKiwiAggr {
     // TBlockWardHistogram
     ///////////////////////
 
-    TBlockWardHistogram::TBlockWardHistogram(size_t intervals, ui64 id, size_t shrinkSize)
+    TBlockWardHistogram::TBlockWardHistogram(size_t intervals, ui64 id, size_t shrinkSize) 
         : TBlockHistogram(HT_ADAPTIVE_WARD_HISTOGRAM, CalcWardQuality, intervals, id, shrinkSize)
     {
     }

@@ -65,8 +65,8 @@ private:
     UNIT_TEST(TestFindTails);
     UNIT_TEST(TestPrefixGrouped);
     UNIT_TEST(CrashTestPrefixGrouped);
-    UNIT_TEST(TestMergeFromFile);
-    UNIT_TEST(TestMergeFromBuffer);
+    UNIT_TEST(TestMergeFromFile); 
+    UNIT_TEST(TestMergeFromBuffer); 
     UNIT_TEST(TestUnique);
     UNIT_TEST(TestAddRetValue);
     UNIT_TEST(TestClear);
@@ -202,8 +202,8 @@ public:
     void TestFindTails();
     void TestPrefixGrouped();
     void CrashTestPrefixGrouped();
-    void TestMergeFromFile();
-    void TestMergeFromBuffer();
+    void TestMergeFromFile(); 
+    void TestMergeFromBuffer(); 
     void TestUnique();
     void TestAddRetValue();
     void TestClear();
@@ -841,7 +841,7 @@ void TCompactTrieTest::CrashTestPrefixGrouped() {
     UNIT_ASSERT_C(wasException, "CrashTestPrefixGrouped");
 }
 
-void TCompactTrieTest::TestMergeFromFile() {
+void TCompactTrieTest::TestMergeFromFile() { 
     {
         TCompactTrieBuilder<> b;
         b.Add("yandex", 12);
@@ -883,52 +883,52 @@ void TCompactTrieTest::TestMergeFromFile() {
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru").data());
 }
 
-void TCompactTrieTest::TestMergeFromBuffer() {
-    TArrayWithSizeHolder<char> buffer1;
-    {
-        TCompactTrieBuilder<> b;
-        b.Add("aaaaa", 1);
-        b.Add("bbbbb", 2);
-        b.Add("ccccc", 3);
-        buffer1.Resize(b.MeasureByteSize());
-        TMemoryOutput out(buffer1.Get(), buffer1.Size());
-        b.Save(out);
-    }
-
-    TArrayWithSizeHolder<char> buffer2;
-    {
-        TCompactTrieBuilder<> b;
-        b.Add("aaaaa", 10);
-        b.Add("bbbbb", 20);
-        b.Add("ccccc", 30);
-        b.Add("xxxxx", 40);
-        b.Add("yyyyy", 50);
-        buffer2.Resize(b.MeasureByteSize());
-        TMemoryOutput out(buffer2.Get(), buffer2.Size());
-        b.Save(out);
-    }
-
-    {
-        TCompactTrieBuilder<> b;
-        UNIT_ASSERT(b.AddSubtreeInBuffer("com.", std::move(buffer1)));
-        UNIT_ASSERT(b.Add("org.upyachka", 42));
-        UNIT_ASSERT(b.AddSubtreeInBuffer("ru.", std::move(buffer2)));
-        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res");
-        b.Save(out);
-    }
-
-    TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res"));
-    UNIT_ASSERT_VALUES_EQUAL(10u, trie.Get("ru.aaaaa"));
-    UNIT_ASSERT_VALUES_EQUAL(20u, trie.Get("ru.bbbbb"));
-    UNIT_ASSERT_VALUES_EQUAL(40u, trie.Get("ru.xxxxx"));
-    UNIT_ASSERT_VALUES_EQUAL(42u, trie.Get("org.upyachka"));
-    UNIT_ASSERT_VALUES_EQUAL(1u, trie.Get("com.aaaaa"));
-    UNIT_ASSERT_VALUES_EQUAL(2u, trie.Get("com.bbbbb"));
-    UNIT_ASSERT_VALUES_EQUAL(3u, trie.Get("com.ccccc"));
-
+void TCompactTrieTest::TestMergeFromBuffer() { 
+    TArrayWithSizeHolder<char> buffer1; 
+    { 
+        TCompactTrieBuilder<> b; 
+        b.Add("aaaaa", 1); 
+        b.Add("bbbbb", 2); 
+        b.Add("ccccc", 3); 
+        buffer1.Resize(b.MeasureByteSize()); 
+        TMemoryOutput out(buffer1.Get(), buffer1.Size()); 
+        b.Save(out); 
+    } 
+ 
+    TArrayWithSizeHolder<char> buffer2; 
+    { 
+        TCompactTrieBuilder<> b; 
+        b.Add("aaaaa", 10); 
+        b.Add("bbbbb", 20); 
+        b.Add("ccccc", 30); 
+        b.Add("xxxxx", 40); 
+        b.Add("yyyyy", 50); 
+        buffer2.Resize(b.MeasureByteSize()); 
+        TMemoryOutput out(buffer2.Get(), buffer2.Size()); 
+        b.Save(out); 
+    } 
+ 
+    { 
+        TCompactTrieBuilder<> b; 
+        UNIT_ASSERT(b.AddSubtreeInBuffer("com.", std::move(buffer1))); 
+        UNIT_ASSERT(b.Add("org.upyachka", 42)); 
+        UNIT_ASSERT(b.AddSubtreeInBuffer("ru.", std::move(buffer2))); 
+        TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res"); 
+        b.Save(out); 
+    } 
+ 
+    TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res")); 
+    UNIT_ASSERT_VALUES_EQUAL(10u, trie.Get("ru.aaaaa")); 
+    UNIT_ASSERT_VALUES_EQUAL(20u, trie.Get("ru.bbbbb")); 
+    UNIT_ASSERT_VALUES_EQUAL(40u, trie.Get("ru.xxxxx")); 
+    UNIT_ASSERT_VALUES_EQUAL(42u, trie.Get("org.upyachka")); 
+    UNIT_ASSERT_VALUES_EQUAL(1u, trie.Get("com.aaaaa")); 
+    UNIT_ASSERT_VALUES_EQUAL(2u, trie.Get("com.bbbbb")); 
+    UNIT_ASSERT_VALUES_EQUAL(3u, trie.Get("com.ccccc")); 
+ 
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res").data());
-}
-
+} 
+ 
 void TCompactTrieTest::TestUnique() {
     TestUniqueImpl(false);
     TestUniqueImpl(true);

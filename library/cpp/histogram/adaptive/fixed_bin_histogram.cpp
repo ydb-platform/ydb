@@ -9,7 +9,7 @@
 #include <util/string/printf.h>
 
 namespace NKiwiAggr {
-    TFixedBinHistogram::TFixedBinHistogram(size_t intervals, ui64 id, size_t trainingSetSize)
+    TFixedBinHistogram::TFixedBinHistogram(size_t intervals, ui64 id, size_t trainingSetSize) 
         : TrainingSetSize(trainingSetSize)
         , IsInitialized(false)
         , IsEmpty(true)
@@ -23,7 +23,7 @@ namespace NKiwiAggr {
     {
     }
 
-    TFixedBinHistogram::TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals, ui64 defaultId, size_t trainingSetSize)
+    TFixedBinHistogram::TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals, ui64 defaultId, size_t trainingSetSize) 
         : TrainingSetSize(trainingSetSize)
         , IsInitialized(false)
         , IsEmpty(true)
@@ -38,7 +38,7 @@ namespace NKiwiAggr {
         FromProto(histo);
     }
 
-    TFixedBinHistogram::TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, size_t trainingSetSize)
+    TFixedBinHistogram::TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, size_t trainingSetSize) 
         : TrainingSetSize(trainingSetSize)
         , IsInitialized(false)
         , IsEmpty(true)
@@ -91,7 +91,7 @@ namespace NKiwiAggr {
 
     void TFixedBinHistogram::Add(double value, double weight) {
         if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight);
+            ythrow yexception() << Sprintf("Histogram id %lu: bad value %f weight %f", Id, value, weight); 
         }
 
         if (weight <= 0.0) {
@@ -237,7 +237,7 @@ namespace NKiwiAggr {
         BaseIndex = Intervals / 2;
 
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue()) || !IsValidFloat(histo.GetBinRange())) {
-            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f binrange %f", Id, histo.GetMinValue(), histo.GetMaxValue(), histo.GetBinRange());
+            ythrow yexception() << Sprintf("FromProto in histogram id %lu: skip bad histo with minvalue %f maxvalue %f binrange %f", Id, histo.GetMinValue(), histo.GetMaxValue(), histo.GetBinRange()); 
         }
 
         double minValue = histo.GetMinValue();
@@ -248,7 +248,7 @@ namespace NKiwiAggr {
         for (i32 i = FirstUsedBin; i <= LastUsedBin; ++i) {
             Freqs[i] = histo.GetFreq(i - BaseIndex);
             if (!IsValidFloat(Freqs[i])) {
-                ythrow yexception() << Sprintf("FromProto in histogram id %lu: bad value %f", Id, Freqs[i]);
+                ythrow yexception() << Sprintf("FromProto in histogram id %lu: bad value %f", Id, Freqs[i]); 
             }
             Sum += Freqs[i];
         }
@@ -275,11 +275,11 @@ namespace NKiwiAggr {
         }
     }
 
-    void TFixedBinHistogram::SetId(ui64 id) {
+    void TFixedBinHistogram::SetId(ui64 id) { 
         Id = id;
     }
 
-    ui64 TFixedBinHistogram::GetId() {
+    ui64 TFixedBinHistogram::GetId() { 
         return Id;
     }
 
@@ -374,9 +374,9 @@ namespace NKiwiAggr {
         if (!IsInitialized) {
             Initialize();
         }
-        if (sum == 0.0) {
-            return MinValue;
-        }
+        if (sum == 0.0) { 
+            return MinValue; 
+        } 
         if (IsEmpty) {
             return MaxValue;
         }
@@ -387,7 +387,7 @@ namespace NKiwiAggr {
             ++currentBin;
         }
         --currentBin;
-        if ((gatheredSum <= sum && currentBin == LastUsedBin) || (Freqs[currentBin] == 0)) {
+        if ((gatheredSum <= sum && currentBin == LastUsedBin) || (Freqs[currentBin] == 0)) { 
             return MaxValue;
         }
         double binStart = BinStart(currentBin);
@@ -399,9 +399,9 @@ namespace NKiwiAggr {
         if (!IsInitialized) {
             Initialize();
         }
-        if (sum == 0.0) {
-            return MaxValue;
-        }
+        if (sum == 0.0) { 
+            return MaxValue; 
+        } 
         if (IsEmpty) {
             return MinValue;
         }
@@ -412,7 +412,7 @@ namespace NKiwiAggr {
             --currentBin;
         }
         ++currentBin;
-        if ((gatheredSum <= sum && currentBin == FirstUsedBin) || (Freqs[currentBin] == 0)) {
+        if ((gatheredSum <= sum && currentBin == FirstUsedBin) || (Freqs[currentBin] == 0)) { 
             return MinValue;
         }
         double binStart = BinStart(currentBin);
@@ -420,20 +420,20 @@ namespace NKiwiAggr {
         return binStart + (binEnd - binStart) * (gatheredSum - sum) / Freqs[currentBin];
     }
 
-    double TFixedBinHistogram::CalcUpperBoundSafe(double sum) {
-        if (!Empty()) {
-            sum = Max(Freqs[FirstUsedBin], sum);
-        }
-        return CalcUpperBound(sum);
-    }
-
-    double TFixedBinHistogram::CalcLowerBoundSafe(double sum) {
-        if (!Empty()) {
-            sum = Max(Freqs[LastUsedBin], sum);
-        }
-        return CalcLowerBound(sum);
-    }
-
+    double TFixedBinHistogram::CalcUpperBoundSafe(double sum) { 
+        if (!Empty()) { 
+            sum = Max(Freqs[FirstUsedBin], sum); 
+        } 
+        return CalcUpperBound(sum); 
+    } 
+ 
+    double TFixedBinHistogram::CalcLowerBoundSafe(double sum) { 
+        if (!Empty()) { 
+            sum = Max(Freqs[LastUsedBin], sum); 
+        } 
+        return CalcLowerBound(sum); 
+    } 
+ 
     double TFixedBinHistogram::CalcBinRange(double referencePoint, double maxValue) {
         return (maxValue - referencePoint) / ((double)Intervals - 0.02);
     }

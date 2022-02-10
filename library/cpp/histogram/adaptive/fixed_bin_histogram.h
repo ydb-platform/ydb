@@ -21,7 +21,7 @@ namespace NKiwiAggr {
         bool IsInitialized;
         bool IsEmpty;
 
-        ui64 Id;
+        ui64 Id; 
         double MinValue;
         double MaxValue;
         double Sum;
@@ -36,9 +36,9 @@ namespace NKiwiAggr {
         i32 BaseIndex;
 
     public:
-        TFixedBinHistogram(size_t intervals, ui64 id = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
-        TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
-        TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
+        TFixedBinHistogram(size_t intervals, ui64 id = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE); 
+        TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE); 
+        TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE); 
 
         virtual ~TFixedBinHistogram() {
         }
@@ -57,8 +57,8 @@ namespace NKiwiAggr {
         virtual void FromProto(const THistogram& histo);
         virtual void ToProto(THistogram& histo);
 
-        virtual void SetId(ui64 id);
-        virtual ui64 GetId();
+        virtual void SetId(ui64 id); 
+        virtual ui64 GetId(); 
         virtual bool Empty();
         virtual double GetMinValue();
         virtual double GetMaxValue();
@@ -68,8 +68,8 @@ namespace NKiwiAggr {
         virtual double GetSumBelowBound(double bound);
         virtual double CalcUpperBound(double sum);
         virtual double CalcLowerBound(double sum);
-        virtual double CalcUpperBoundSafe(double sum);
-        virtual double CalcLowerBoundSafe(double sum);
+        virtual double CalcUpperBoundSafe(double sum); 
+        virtual double CalcLowerBoundSafe(double sum); 
 
         double CalcDensity(double value);
 

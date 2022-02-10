@@ -79,7 +79,7 @@ public:
     bool AddEntry(const TSymbol* key, size_t keylen, const TData& value);
     bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value);
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
-    bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
+    bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer); 
     bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const;
 
@@ -441,11 +441,11 @@ bool TCompactTrieBuilder<T, D, S>::AddSubtreeInFile(const TSymbol* key, size_t k
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) {
-    return Impl->AddSubtreeInBuffer(key, keylen, std::move(buffer));
-}
-
-template <class T, class D, class S>
+bool TCompactTrieBuilder<T, D, S>::AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) { 
+    return Impl->AddSubtreeInBuffer(key, keylen, std::move(buffer)); 
+} 
+ 
+template <class T, class D, class S> 
 bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value) const {
     return Impl->FindEntry(key, keylen, value);
 }
@@ -580,23 +580,23 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInFile(
 }
 
 template <class T, class D, class S>
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInBuffer(
-        const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) {
-
-    typedef typename TNode::TBufferedSubtree TBufferedSubtree;
-
-    bool isNewAddition = false;
-    TNode* node = AddEntryForSomething(key, keylen, isNewAddition);
-    node->Subtree()->Destroy(this);
-    node->Subtree()->~ISubtree();
-
-    auto subtree = new (node->Subtree()) TBufferedSubtree();
-    subtree->Buffer.Swap(buffer);
-
-    return isNewAddition;
-}
-
-template <class T, class D, class S>
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInBuffer( 
+        const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) { 
+ 
+    typedef typename TNode::TBufferedSubtree TBufferedSubtree; 
+ 
+    bool isNewAddition = false; 
+    TNode* node = AddEntryForSomething(key, keylen, isNewAddition); 
+    node->Subtree()->Destroy(this); 
+    node->Subtree()->~ISubtree(); 
+ 
+    auto subtree = new (node->Subtree()) TBufferedSubtree(); 
+    subtree->Buffer.Swap(buffer); 
+ 
+    return isNewAddition; 
+} 
+ 
+template <class T, class D, class S> 
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForSomething(
                                 const TSymbol* key, size_t keylen, bool& isNewAddition) {

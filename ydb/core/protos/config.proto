@@ -676,6 +676,7 @@ message TFeatureFlags {
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
+    optional bool AllowVDiskDefrag = 63 [default = true];
 }
 
 message TSqsConfig {

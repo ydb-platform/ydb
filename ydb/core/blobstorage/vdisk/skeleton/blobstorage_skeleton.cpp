@@ -1765,7 +1765,7 @@ namespace NKikimr {
                     Db->AnubisRunnerID.Set(ctx.Register(CreateAnubisRunner(anubisCtx, GInfo)));
                 }
 
-                if (Config->RunDefrag) {
+                if (Config->RunDefrag && AppData()->FeatureFlags.GetAllowVDiskDefrag()) {
                     auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
                             Db->HugeKeeperID, true);
                     DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));

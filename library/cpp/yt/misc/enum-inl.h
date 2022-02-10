@@ -162,18 +162,18 @@ static constexpr bool AreValuesDistinct(const TValues& values)
     { \
         static_assert(!Values.empty()); \
         return *std::min_element(std::begin(Values), std::end(Values)); \
-    } \ 
-    \ 
+    } \
+    \
     static constexpr TType GetMaxValue() \
-    { \ 
+    { \
         static_assert(!Values.empty()); \
         return *std::max_element(std::begin(Values), std::end(Values)); \
-    } 
- 
+    }
+
 #define ENUM__VALIDATE_UNIQUE(name) \
     static_assert(::NYT::NDetail::AreValuesDistinct(Values), \
         "Enumeration " #name " contains duplicate values");
- 
+
 #define ENUM__END_TRAITS(name) \
     }; \
     \

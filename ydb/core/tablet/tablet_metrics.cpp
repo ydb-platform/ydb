@@ -4,17 +4,17 @@
 namespace NKikimr {
 namespace NMetrics {
 
-void TDecayingAverageWithSum::Increment(std::make_signed_t<ui64> value, TInstant now)
-{
-    RawValue += value;
-    return TDecayingAverageValue::Increment(value, now);
-}
-
-ui64 TDecayingAverageWithSum::GetRawValue() const
-{
-    return RawValue;
-}
-
+void TDecayingAverageWithSum::Increment(std::make_signed_t<ui64> value, TInstant now) 
+{ 
+    RawValue += value; 
+    return TDecayingAverageValue::Increment(value, now); 
+} 
+ 
+ui64 TDecayingAverageWithSum::GetRawValue() const 
+{ 
+    return RawValue; 
+} 
+ 
 void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     if (CPU.IsValueReady()) {
         metrics.SetCPU(CPU.GetValue());

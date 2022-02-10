@@ -154,7 +154,7 @@ public:
     //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(size_t startOffset, size_t endOffset) const;
 
-    //! Creates a TSharedRef for a part of existing range. 
+    //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(const void* begin, const void* end) const;
 
     //! Creates a vector of slices with specified size.

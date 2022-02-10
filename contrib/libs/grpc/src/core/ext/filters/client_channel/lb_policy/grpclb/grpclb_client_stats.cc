@@ -25,8 +25,8 @@
 #include <grpc/support/atm.h>
 #include <grpc/support/string_util.h>
 
-#include "src/core/lib/gprpp/sync.h" 
- 
+#include "src/core/lib/gprpp/sync.h"
+
 namespace grpc_core {
 
 void GrpcLbClientStats::AddCallStarted() {
@@ -45,14 +45,14 @@ void GrpcLbClientStats::AddCallFinished(
   }
 }
 
-void GrpcLbClientStats::AddCallDropped(const char* token) { 
+void GrpcLbClientStats::AddCallDropped(const char* token) {
   // Increment num_calls_started and num_calls_finished.
   gpr_atm_full_fetch_add(&num_calls_started_, (gpr_atm)1);
   gpr_atm_full_fetch_add(&num_calls_finished_, (gpr_atm)1);
   // Record the drop.
-  MutexLock lock(&drop_count_mu_); 
+  MutexLock lock(&drop_count_mu_);
   if (drop_token_counts_ == nullptr) {
-    drop_token_counts_.reset(new DroppedCallCounts()); 
+    drop_token_counts_.reset(new DroppedCallCounts());
   }
   for (size_t i = 0; i < drop_token_counts_->size(); ++i) {
     if (strcmp((*drop_token_counts_)[i].token.get(), token) == 0) {
@@ -61,8 +61,8 @@ void GrpcLbClientStats::AddCallDropped(const char* token) {
     }
   }
   // Not found, so add a new entry.
-  drop_token_counts_->emplace_back( 
-      grpc_core::UniquePtr<char>(gpr_strdup(token)), 1); 
+  drop_token_counts_->emplace_back(
+      grpc_core::UniquePtr<char>(gpr_strdup(token)), 1);
 }
 
 namespace {
@@ -73,18 +73,18 @@ void AtomicGetAndResetCounter(int64_t* value, gpr_atm* counter) {
 
 }  // namespace
 
-void GrpcLbClientStats::Get( 
+void GrpcLbClientStats::Get(
     int64_t* num_calls_started, int64_t* num_calls_finished,
     int64_t* num_calls_finished_with_client_failed_to_send,
     int64_t* num_calls_finished_known_received,
-    std::unique_ptr<DroppedCallCounts>* drop_token_counts) { 
+    std::unique_ptr<DroppedCallCounts>* drop_token_counts) {
   AtomicGetAndResetCounter(num_calls_started, &num_calls_started_);
   AtomicGetAndResetCounter(num_calls_finished, &num_calls_finished_);
   AtomicGetAndResetCounter(num_calls_finished_with_client_failed_to_send,
                            &num_calls_finished_with_client_failed_to_send_);
   AtomicGetAndResetCounter(num_calls_finished_known_received,
                            &num_calls_finished_known_received_);
-  MutexLock lock(&drop_count_mu_); 
+  MutexLock lock(&drop_count_mu_);
   *drop_token_counts = std::move(drop_token_counts_);
 }
 

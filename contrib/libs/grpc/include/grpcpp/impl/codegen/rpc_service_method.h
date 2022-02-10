@@ -32,7 +32,7 @@
 #include <grpcpp/impl/codegen/status.h>
 
 namespace grpc {
-class ServerContextBase; 
+class ServerContextBase;
 namespace internal {
 /// Base class for running an RPC handler.
 class MethodHandler {
@@ -45,26 +45,26 @@ class MethodHandler {
     /// \param context : the ServerContext structure for this server call
     /// \param req : the request payload, if appropriate for this RPC
     /// \param req_status : the request status after any interceptors have run
-    /// \param handler_data: internal data for the handler. 
-    /// \param requester : used only by the callback API. It is a function 
+    /// \param handler_data: internal data for the handler.
+    /// \param requester : used only by the callback API. It is a function
     ///        called by the RPC Controller to request another RPC (and also
     ///        to set up the state required to make that request possible)
     HandlerParameter(Call* c, ::grpc::ServerContextBase* context, void* req,
                      Status req_status, void* handler_data,
-                     std::function<void()> requester) 
+                     std::function<void()> requester)
         : call(c),
           server_context(context),
           request(req),
           status(req_status),
-          internal_data(handler_data), 
+          internal_data(handler_data),
           call_requester(std::move(requester)) {}
     ~HandlerParameter() {}
-    Call* const call; 
+    Call* const call;
     ::grpc::ServerContextBase* const server_context;
-    void* const request; 
-    const Status status; 
-    void* const internal_data; 
-    const std::function<void()> call_requester; 
+    void* const request;
+    const Status status;
+    void* const internal_data;
+    const std::function<void()> call_requester;
   };
   virtual void RunHandler(const HandlerParameter& param) = 0;
 
@@ -73,8 +73,8 @@ class MethodHandler {
      a HandlerParameter and passed to RunHandler. It is illegal to access the
      pointer after calling RunHandler. Ownership of the deserialized request is
      retained by the handler. Returns nullptr if deserialization failed. */
-  virtual void* Deserialize(grpc_call* /*call*/, grpc_byte_buffer* req, 
-                            Status* /*status*/, void** /*handler_data*/) { 
+  virtual void* Deserialize(grpc_call* /*call*/, grpc_byte_buffer* req,
+                            Status* /*status*/, void** /*handler_data*/) {
     GPR_CODEGEN_ASSERT(req == nullptr);
     return nullptr;
   }

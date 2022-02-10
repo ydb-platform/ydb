@@ -23,13 +23,13 @@ import time
 
 import grpc
 
-try: 
-    import asyncio 
-except ImportError: 
-    # TODO(https://github.com/grpc/grpc/issues/19728) Improve how Aio Cython is 
-    # distributed without breaking none compatible Python versions. For now, if 
-    # Asyncio package is not available we just skip it. 
-    pass 
+try:
+    import asyncio
+except ImportError:
+    # TODO(https://github.com/grpc/grpc/issues/19728) Improve how Aio Cython is
+    # distributed without breaking none compatible Python versions. For now, if
+    # Asyncio package is not available we just skip it.
+    pass
 
 # The only copy of Python logger for the Cython extension
 _LOGGER = logging.getLogger(__name__)
@@ -40,23 +40,23 @@ include "_cygrpc/grpc_string.pyx.pxi"
 include "_cygrpc/arguments.pyx.pxi"
 include "_cygrpc/call.pyx.pxi"
 include "_cygrpc/channel.pyx.pxi"
-include "_cygrpc/channelz.pyx.pxi" 
+include "_cygrpc/channelz.pyx.pxi"
 include "_cygrpc/credentials.pyx.pxi"
 include "_cygrpc/completion_queue.pyx.pxi"
 include "_cygrpc/event.pyx.pxi"
 include "_cygrpc/metadata.pyx.pxi"
 include "_cygrpc/operation.pyx.pxi"
-include "_cygrpc/propagation_bits.pyx.pxi" 
+include "_cygrpc/propagation_bits.pyx.pxi"
 include "_cygrpc/records.pyx.pxi"
 include "_cygrpc/security.pyx.pxi"
 include "_cygrpc/server.pyx.pxi"
 include "_cygrpc/tag.pyx.pxi"
 include "_cygrpc/time.pyx.pxi"
-include "_cygrpc/vtable.pyx.pxi" 
+include "_cygrpc/vtable.pyx.pxi"
 include "_cygrpc/_hooks.pyx.pxi"
 
-include "_cygrpc/iomgr.pyx.pxi" 
- 
+include "_cygrpc/iomgr.pyx.pxi"
+
 include "_cygrpc/grpc_gevent.pyx.pxi"
 
 include "_cygrpc/thread.pyx.pxi"
@@ -66,21 +66,21 @@ IF UNAME_SYSNAME == "Windows":
 ELSE:
     include "_cygrpc/fork_posix.pyx.pxi"
 
-# Following pxi files are part of the Aio module 
-include "_cygrpc/aio/iomgr/iomgr.pyx.pxi" 
-include "_cygrpc/aio/iomgr/socket.pyx.pxi" 
-include "_cygrpc/aio/iomgr/timer.pyx.pxi" 
-include "_cygrpc/aio/iomgr/resolver.pyx.pxi" 
+# Following pxi files are part of the Aio module
+include "_cygrpc/aio/iomgr/iomgr.pyx.pxi"
+include "_cygrpc/aio/iomgr/socket.pyx.pxi"
+include "_cygrpc/aio/iomgr/timer.pyx.pxi"
+include "_cygrpc/aio/iomgr/resolver.pyx.pxi"
 include "_cygrpc/aio/common.pyx.pxi"
 include "_cygrpc/aio/rpc_status.pyx.pxi"
 include "_cygrpc/aio/completion_queue.pyx.pxi"
 include "_cygrpc/aio/callback_common.pyx.pxi"
-include "_cygrpc/aio/grpc_aio.pyx.pxi" 
-include "_cygrpc/aio/call.pyx.pxi" 
-include "_cygrpc/aio/channel.pyx.pxi" 
-include "_cygrpc/aio/server.pyx.pxi" 
- 
- 
+include "_cygrpc/aio/grpc_aio.pyx.pxi"
+include "_cygrpc/aio/call.pyx.pxi"
+include "_cygrpc/aio/channel.pyx.pxi"
+include "_cygrpc/aio/server.pyx.pxi"
+
+
 #
 # initialize gRPC
 #

@@ -53,9 +53,9 @@ void grpc_ares_ev_driver_on_queries_complete_locked(
 /* Shutdown all the grpc_fds used by \a ev_driver */
 void grpc_ares_ev_driver_shutdown_locked(grpc_ares_ev_driver* ev_driver);
 
-/* Exposed in this header for C-core tests only */ 
-extern void (*grpc_ares_test_only_inject_config)(ares_channel channel); 
- 
+/* Exposed in this header for C-core tests only */
+extern void (*grpc_ares_test_only_inject_config)(ares_channel channel);
+
 namespace grpc_core {
 
 /* A wrapped fd that integrates with the grpc iomgr of the current platform.
@@ -66,18 +66,18 @@ class GrpcPolledFd {
  public:
   virtual ~GrpcPolledFd() {}
   /* Called when c-ares library is interested and there's no pending callback */
-  virtual void RegisterForOnReadableLocked(grpc_closure* read_closure) = 0; 
+  virtual void RegisterForOnReadableLocked(grpc_closure* read_closure) = 0;
   /* Called when c-ares library is interested and there's no pending callback */
-  virtual void RegisterForOnWriteableLocked(grpc_closure* write_closure) = 0; 
+  virtual void RegisterForOnWriteableLocked(grpc_closure* write_closure) = 0;
   /* Indicates if there is data left even after just being read from */
-  virtual bool IsFdStillReadableLocked() = 0; 
+  virtual bool IsFdStillReadableLocked() = 0;
   /* Called once and only once. Must cause cancellation of any pending
    * read/write callbacks. */
-  virtual void ShutdownLocked(grpc_error* error) = 0; 
+  virtual void ShutdownLocked(grpc_error* error) = 0;
   /* Get the underlying ares_socket_t that this was created from */
-  virtual ares_socket_t GetWrappedAresSocketLocked() = 0; 
+  virtual ares_socket_t GetWrappedAresSocketLocked() = 0;
   /* A unique name, for logging */
-  virtual const char* GetName() = 0; 
+  virtual const char* GetName() = 0;
 };
 
 /* A GrpcPolledFdFactory is 1-to-1 with and owned by the
@@ -92,7 +92,7 @@ class GrpcPolledFdFactory {
       ares_socket_t as, grpc_pollset_set* driver_pollset_set,
       std::shared_ptr<grpc_core::WorkSerializer> work_serializer) = 0;
   /* Optionally configures the ares channel after creation */
-  virtual void ConfigureAresChannelLocked(ares_channel channel) = 0; 
+  virtual void ConfigureAresChannelLocked(ares_channel channel) = 0;
 };
 
 std::unique_ptr<GrpcPolledFdFactory> NewGrpcPolledFdFactory(

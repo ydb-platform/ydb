@@ -61,8 +61,8 @@ class Executor {
   /** Is the executor multi-threaded? */
   bool IsThreaded() const;
 
-  /* Enable/disable threading - must be called after Init and Shutdown(). Never 
-   * call SetThreading(false) in the middle of an application */ 
+  /* Enable/disable threading - must be called after Init and Shutdown(). Never
+   * call SetThreading(false) in the middle of an application */
   void SetThreading(bool threading);
 
   /** Shutdown the executor, running all pending work as part of the call */
@@ -83,10 +83,10 @@ class Executor {
   // Initialize ALL the executors
   static void InitAll();
 
-  static void Run(grpc_closure* closure, grpc_error* error, 
-                  ExecutorType executor_type = ExecutorType::DEFAULT, 
-                  ExecutorJobType job_type = ExecutorJobType::SHORT); 
- 
+  static void Run(grpc_closure* closure, grpc_error* error,
+                  ExecutorType executor_type = ExecutorType::DEFAULT,
+                  ExecutorJobType job_type = ExecutorJobType::SHORT);
+
   // Shutdown ALL the executors
   static void ShutdownAll();
 
@@ -117,9 +117,9 @@ class Executor {
   gpr_spinlock adding_thread_lock_;
 };
 
-// Global initializer for executor 
-void grpc_executor_global_init(); 
- 
+// Global initializer for executor
+void grpc_executor_global_init();
+
 }  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_IOMGR_EXECUTOR_H */

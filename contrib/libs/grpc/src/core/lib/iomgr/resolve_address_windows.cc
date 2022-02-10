@@ -40,7 +40,7 @@
 #include <grpc/support/time.h>
 
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/host_port.h" 
+#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/thd.h"
 #include "src/core/lib/iomgr/block_annotate.h"
 #include "src/core/lib/iomgr/executor.h"
@@ -67,7 +67,7 @@ static grpc_error* windows_blocking_resolve_address(
   /* parse name, splitting it into host and port parts */
   TString host;
   TString port;
-  grpc_core::SplitHostPort(name, &host, &port); 
+  grpc_core::SplitHostPort(name, &host, &port);
   if (host.empty()) {
     error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
         y_absl::StrFormat("unparseable host:port: '%s'", name).c_str());
@@ -129,7 +129,7 @@ static void do_request_thread(void* rp, grpc_error* error) {
   } else {
     GRPC_ERROR_REF(error);
   }
-  grpc_core::ExecCtx::Run(DEBUG_LOCATION, r->on_done, error); 
+  grpc_core::ExecCtx::Run(DEBUG_LOCATION, r->on_done, error);
   gpr_free(r->name);
   gpr_free(r->default_port);
   gpr_free(r);
@@ -140,13 +140,13 @@ static void windows_resolve_address(const char* name, const char* default_port,
                                     grpc_closure* on_done,
                                     grpc_resolved_addresses** addresses) {
   request* r = (request*)gpr_malloc(sizeof(request));
-  GRPC_CLOSURE_INIT(&r->request_closure, do_request_thread, r, nullptr); 
+  GRPC_CLOSURE_INIT(&r->request_closure, do_request_thread, r, nullptr);
   r->name = gpr_strdup(name);
   r->default_port = gpr_strdup(default_port);
   r->on_done = on_done;
   r->addresses = addresses;
-  grpc_core::Executor::Run(&r->request_closure, GRPC_ERROR_NONE, 
-                           grpc_core::ExecutorType::RESOLVER); 
+  grpc_core::Executor::Run(&r->request_closure, GRPC_ERROR_NONE,
+                           grpc_core::ExecutorType::RESOLVER);
 }
 
 grpc_address_resolver_vtable grpc_windows_resolver_vtable = {

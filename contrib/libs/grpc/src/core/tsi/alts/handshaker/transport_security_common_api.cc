@@ -50,107 +50,107 @@ bool grpc_gcp_rpc_protocol_versions_set_min(
   return true;
 }
 
-bool grpc_gcp_rpc_protocol_versions_encode( 
-    const grpc_gcp_rpc_protocol_versions* versions, grpc_slice* slice) { 
-  if (versions == nullptr || slice == nullptr) { 
+bool grpc_gcp_rpc_protocol_versions_encode(
+    const grpc_gcp_rpc_protocol_versions* versions, grpc_slice* slice) {
+  if (versions == nullptr || slice == nullptr) {
     gpr_log(GPR_ERROR,
             "Invalid nullptr arguments to "
-            "grpc_gcp_rpc_protocol_versions_encode()."); 
-    return false; 
+            "grpc_gcp_rpc_protocol_versions_encode().");
+    return false;
   }
-  upb::Arena arena; 
-  grpc_gcp_RpcProtocolVersions* versions_msg = 
-      grpc_gcp_RpcProtocolVersions_new(arena.ptr()); 
-  grpc_gcp_RpcProtocolVersions_assign_from_struct(versions_msg, arena.ptr(), 
-                                                  versions); 
-  return grpc_gcp_rpc_protocol_versions_encode(versions_msg, arena.ptr(), 
-                                               slice); 
+  upb::Arena arena;
+  grpc_gcp_RpcProtocolVersions* versions_msg =
+      grpc_gcp_RpcProtocolVersions_new(arena.ptr());
+  grpc_gcp_RpcProtocolVersions_assign_from_struct(versions_msg, arena.ptr(),
+                                                  versions);
+  return grpc_gcp_rpc_protocol_versions_encode(versions_msg, arena.ptr(),
+                                               slice);
 }
 
-bool grpc_gcp_rpc_protocol_versions_encode( 
-    const grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena, 
-    grpc_slice* slice) { 
-  if (versions == nullptr || arena == nullptr || slice == nullptr) { 
+bool grpc_gcp_rpc_protocol_versions_encode(
+    const grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena,
+    grpc_slice* slice) {
+  if (versions == nullptr || arena == nullptr || slice == nullptr) {
     gpr_log(GPR_ERROR,
             "Invalid nullptr arguments to "
-            "grpc_gcp_rpc_protocol_versions_encode()."); 
+            "grpc_gcp_rpc_protocol_versions_encode().");
     return false;
   }
-  size_t buf_length; 
-  char* buf = 
-      grpc_gcp_RpcProtocolVersions_serialize(versions, arena, &buf_length); 
-  if (buf == nullptr) { 
+  size_t buf_length;
+  char* buf =
+      grpc_gcp_RpcProtocolVersions_serialize(versions, arena, &buf_length);
+  if (buf == nullptr) {
     return false;
   }
-  *slice = grpc_slice_from_copied_buffer(buf, buf_length); 
+  *slice = grpc_slice_from_copied_buffer(buf, buf_length);
   return true;
 }
 
 bool grpc_gcp_rpc_protocol_versions_decode(
-    const grpc_slice& slice, grpc_gcp_rpc_protocol_versions* versions) { 
+    const grpc_slice& slice, grpc_gcp_rpc_protocol_versions* versions) {
   if (versions == nullptr) {
     gpr_log(GPR_ERROR,
             "version is nullptr in "
             "grpc_gcp_rpc_protocol_versions_decode().");
     return false;
   }
-  upb::Arena arena; 
-  grpc_gcp_RpcProtocolVersions* versions_msg = 
-      grpc_gcp_RpcProtocolVersions_parse( 
-          reinterpret_cast<const char*>(GRPC_SLICE_START_PTR(slice)), 
-          GRPC_SLICE_LENGTH(slice), arena.ptr()); 
-  if (versions_msg == nullptr) { 
-    gpr_log(GPR_ERROR, "cannot deserialize RpcProtocolVersions message"); 
+  upb::Arena arena;
+  grpc_gcp_RpcProtocolVersions* versions_msg =
+      grpc_gcp_RpcProtocolVersions_parse(
+          reinterpret_cast<const char*>(GRPC_SLICE_START_PTR(slice)),
+          GRPC_SLICE_LENGTH(slice), arena.ptr());
+  if (versions_msg == nullptr) {
+    gpr_log(GPR_ERROR, "cannot deserialize RpcProtocolVersions message");
     return false;
   }
-  grpc_gcp_rpc_protocol_versions_assign_from_upb(versions, versions_msg); 
+  grpc_gcp_rpc_protocol_versions_assign_from_upb(versions, versions_msg);
   return true;
 }
 
-void grpc_gcp_rpc_protocol_versions_assign_from_upb( 
-    grpc_gcp_rpc_protocol_versions* versions, 
-    const grpc_gcp_RpcProtocolVersions* value) { 
-  const grpc_gcp_RpcProtocolVersions_Version* max_version_msg = 
-      grpc_gcp_RpcProtocolVersions_max_rpc_version(value); 
-  if (max_version_msg != nullptr) { 
-    versions->max_rpc_version.major = 
-        grpc_gcp_RpcProtocolVersions_Version_major(max_version_msg); 
-    versions->max_rpc_version.minor = 
-        grpc_gcp_RpcProtocolVersions_Version_minor(max_version_msg); 
-  } else { 
-    versions->max_rpc_version.major = 0; 
-    versions->max_rpc_version.minor = 0; 
-  } 
-  const grpc_gcp_RpcProtocolVersions_Version* min_version_msg = 
-      grpc_gcp_RpcProtocolVersions_min_rpc_version(value); 
-  if (min_version_msg != nullptr) { 
-    versions->min_rpc_version.major = 
-        grpc_gcp_RpcProtocolVersions_Version_major(min_version_msg); 
-    versions->min_rpc_version.minor = 
-        grpc_gcp_RpcProtocolVersions_Version_minor(min_version_msg); 
-  } else { 
-    versions->min_rpc_version.major = 0; 
-    versions->min_rpc_version.minor = 0; 
-  } 
-} 
- 
-void grpc_gcp_RpcProtocolVersions_assign_from_struct( 
-    grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena, 
-    const grpc_gcp_rpc_protocol_versions* value) { 
-  grpc_gcp_RpcProtocolVersions_Version* max_version_msg = 
-      grpc_gcp_RpcProtocolVersions_mutable_max_rpc_version(versions, arena); 
-  grpc_gcp_RpcProtocolVersions_Version_set_major(max_version_msg, 
-                                                 value->max_rpc_version.major); 
-  grpc_gcp_RpcProtocolVersions_Version_set_minor(max_version_msg, 
-                                                 value->max_rpc_version.minor); 
-  grpc_gcp_RpcProtocolVersions_Version* min_version_msg = 
-      grpc_gcp_RpcProtocolVersions_mutable_min_rpc_version(versions, arena); 
-  grpc_gcp_RpcProtocolVersions_Version_set_major(min_version_msg, 
-                                                 value->min_rpc_version.major); 
-  grpc_gcp_RpcProtocolVersions_Version_set_minor(min_version_msg, 
-                                                 value->min_rpc_version.minor); 
-} 
- 
+void grpc_gcp_rpc_protocol_versions_assign_from_upb(
+    grpc_gcp_rpc_protocol_versions* versions,
+    const grpc_gcp_RpcProtocolVersions* value) {
+  const grpc_gcp_RpcProtocolVersions_Version* max_version_msg =
+      grpc_gcp_RpcProtocolVersions_max_rpc_version(value);
+  if (max_version_msg != nullptr) {
+    versions->max_rpc_version.major =
+        grpc_gcp_RpcProtocolVersions_Version_major(max_version_msg);
+    versions->max_rpc_version.minor =
+        grpc_gcp_RpcProtocolVersions_Version_minor(max_version_msg);
+  } else {
+    versions->max_rpc_version.major = 0;
+    versions->max_rpc_version.minor = 0;
+  }
+  const grpc_gcp_RpcProtocolVersions_Version* min_version_msg =
+      grpc_gcp_RpcProtocolVersions_min_rpc_version(value);
+  if (min_version_msg != nullptr) {
+    versions->min_rpc_version.major =
+        grpc_gcp_RpcProtocolVersions_Version_major(min_version_msg);
+    versions->min_rpc_version.minor =
+        grpc_gcp_RpcProtocolVersions_Version_minor(min_version_msg);
+  } else {
+    versions->min_rpc_version.major = 0;
+    versions->min_rpc_version.minor = 0;
+  }
+}
+
+void grpc_gcp_RpcProtocolVersions_assign_from_struct(
+    grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena,
+    const grpc_gcp_rpc_protocol_versions* value) {
+  grpc_gcp_RpcProtocolVersions_Version* max_version_msg =
+      grpc_gcp_RpcProtocolVersions_mutable_max_rpc_version(versions, arena);
+  grpc_gcp_RpcProtocolVersions_Version_set_major(max_version_msg,
+                                                 value->max_rpc_version.major);
+  grpc_gcp_RpcProtocolVersions_Version_set_minor(max_version_msg,
+                                                 value->max_rpc_version.minor);
+  grpc_gcp_RpcProtocolVersions_Version* min_version_msg =
+      grpc_gcp_RpcProtocolVersions_mutable_min_rpc_version(versions, arena);
+  grpc_gcp_RpcProtocolVersions_Version_set_major(min_version_msg,
+                                                 value->min_rpc_version.major);
+  grpc_gcp_RpcProtocolVersions_Version_set_minor(min_version_msg,
+                                                 value->min_rpc_version.minor);
+}
+
 bool grpc_gcp_rpc_protocol_versions_copy(
     const grpc_gcp_rpc_protocol_versions* src,
     grpc_gcp_rpc_protocol_versions* dst) {

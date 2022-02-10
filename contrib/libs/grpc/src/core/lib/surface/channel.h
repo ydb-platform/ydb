@@ -36,10 +36,10 @@ grpc_channel* grpc_channel_create(const char* target,
                                   grpc_transport* optional_transport,
                                   grpc_resource_user* resource_user = nullptr);
 
-/** The same as grpc_channel_destroy, but doesn't create an ExecCtx, and so 
- * is safe to use from within core. */ 
-void grpc_channel_destroy_internal(grpc_channel* channel); 
- 
+/** The same as grpc_channel_destroy, but doesn't create an ExecCtx, and so
+ * is safe to use from within core. */
+void grpc_channel_destroy_internal(grpc_channel* channel);
+
 grpc_channel* grpc_channel_create_with_builder(
     grpc_channel_stack_builder* builder,
     grpc_channel_stack_type channel_stack_type);
@@ -100,13 +100,13 @@ struct CallRegistrationTable {
 
 }  // namespace grpc_core
 
-struct grpc_channel { 
-  int is_client; 
-  grpc_compression_options compression_options; 
- 
-  gpr_atm call_size_estimate; 
-  grpc_resource_user* resource_user; 
- 
+struct grpc_channel {
+  int is_client;
+  grpc_compression_options compression_options;
+
+  gpr_atm call_size_estimate;
+  grpc_resource_user* resource_user;
+
   // TODO(vjpai): Once the grpc_channel is allocated via new rather than malloc,
   //              expand the members of the CallRegistrationTable directly into
   //              the grpc_channel. For now it is kept separate so that all the
@@ -114,47 +114,47 @@ struct grpc_channel {
   //              a separate manual construction for each field.
   grpc_core::ManualConstructor<grpc_core::CallRegistrationTable>
       registration_table;
-  grpc_core::RefCountedPtr<grpc_core::channelz::ChannelNode> channelz_node; 
- 
-  char* target; 
-}; 
-#define CHANNEL_STACK_FROM_CHANNEL(c) ((grpc_channel_stack*)((c) + 1)) 
- 
-inline grpc_compression_options grpc_channel_compression_options( 
-    const grpc_channel* channel) { 
-  return channel->compression_options; 
-} 
- 
-inline grpc_channel_stack* grpc_channel_get_channel_stack( 
-    grpc_channel* channel) { 
-  return CHANNEL_STACK_FROM_CHANNEL(channel); 
-} 
- 
-inline grpc_core::channelz::ChannelNode* grpc_channel_get_channelz_node( 
-    grpc_channel* channel) { 
-  return channel->channelz_node.get(); 
-} 
- 
+  grpc_core::RefCountedPtr<grpc_core::channelz::ChannelNode> channelz_node;
+
+  char* target;
+};
+#define CHANNEL_STACK_FROM_CHANNEL(c) ((grpc_channel_stack*)((c) + 1))
+
+inline grpc_compression_options grpc_channel_compression_options(
+    const grpc_channel* channel) {
+  return channel->compression_options;
+}
+
+inline grpc_channel_stack* grpc_channel_get_channel_stack(
+    grpc_channel* channel) {
+  return CHANNEL_STACK_FROM_CHANNEL(channel);
+}
+
+inline grpc_core::channelz::ChannelNode* grpc_channel_get_channelz_node(
+    grpc_channel* channel) {
+  return channel->channelz_node.get();
+}
+
 #ifndef NDEBUG
-inline void grpc_channel_internal_ref(grpc_channel* channel, 
-                                      const char* reason) { 
-  GRPC_CHANNEL_STACK_REF(CHANNEL_STACK_FROM_CHANNEL(channel), reason); 
-} 
-inline void grpc_channel_internal_unref(grpc_channel* channel, 
-                                        const char* reason) { 
-  GRPC_CHANNEL_STACK_UNREF(CHANNEL_STACK_FROM_CHANNEL(channel), reason); 
-} 
+inline void grpc_channel_internal_ref(grpc_channel* channel,
+                                      const char* reason) {
+  GRPC_CHANNEL_STACK_REF(CHANNEL_STACK_FROM_CHANNEL(channel), reason);
+}
+inline void grpc_channel_internal_unref(grpc_channel* channel,
+                                        const char* reason) {
+  GRPC_CHANNEL_STACK_UNREF(CHANNEL_STACK_FROM_CHANNEL(channel), reason);
+}
 #define GRPC_CHANNEL_INTERNAL_REF(channel, reason) \
   grpc_channel_internal_ref(channel, reason)
 #define GRPC_CHANNEL_INTERNAL_UNREF(channel, reason) \
   grpc_channel_internal_unref(channel, reason)
 #else
-inline void grpc_channel_internal_ref(grpc_channel* channel) { 
-  GRPC_CHANNEL_STACK_REF(CHANNEL_STACK_FROM_CHANNEL(channel), "unused"); 
-} 
-inline void grpc_channel_internal_unref(grpc_channel* channel) { 
-  GRPC_CHANNEL_STACK_UNREF(CHANNEL_STACK_FROM_CHANNEL(channel), "unused"); 
-} 
+inline void grpc_channel_internal_ref(grpc_channel* channel) {
+  GRPC_CHANNEL_STACK_REF(CHANNEL_STACK_FROM_CHANNEL(channel), "unused");
+}
+inline void grpc_channel_internal_unref(grpc_channel* channel) {
+  GRPC_CHANNEL_STACK_UNREF(CHANNEL_STACK_FROM_CHANNEL(channel), "unused");
+}
 #define GRPC_CHANNEL_INTERNAL_REF(channel, reason) \
   grpc_channel_internal_ref(channel)
 #define GRPC_CHANNEL_INTERNAL_UNREF(channel, reason) \

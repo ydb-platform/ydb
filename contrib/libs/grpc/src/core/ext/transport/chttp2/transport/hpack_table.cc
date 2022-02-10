@@ -30,8 +30,8 @@
 
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gpr/murmur_hash.h"
-#include "src/core/lib/slice/slice_internal.h" 
-#include "src/core/lib/surface/validate_metadata.h" 
+#include "src/core/lib/slice/slice_internal.h"
+#include "src/core/lib/surface/validate_metadata.h"
 #include "src/core/lib/transport/static_metadata.h"
 
 extern grpc_core::TraceFlag grpc_http_trace;
@@ -42,37 +42,37 @@ void grpc_chttp2_hptbl_destroy(grpc_chttp2_hptbl* tbl) {
     GRPC_MDELEM_UNREF(tbl->ents[(tbl->first_ent + i) % tbl->cap_entries]);
   }
   gpr_free(tbl->ents);
-  tbl->ents = nullptr; 
+  tbl->ents = nullptr;
 }
 
-template <bool take_ref> 
-static grpc_mdelem lookup_dynamic_index(const grpc_chttp2_hptbl* tbl, 
-                                        uint32_t tbl_index) { 
-  /* Not static - find the value in the list of valid entries */ 
+template <bool take_ref>
+static grpc_mdelem lookup_dynamic_index(const grpc_chttp2_hptbl* tbl,
+                                        uint32_t tbl_index) {
+  /* Not static - find the value in the list of valid entries */
   tbl_index -= (GRPC_CHTTP2_LAST_STATIC_ENTRY + 1);
   if (tbl_index < tbl->num_ents) {
     uint32_t offset =
         (tbl->num_ents - 1u - tbl_index + tbl->first_ent) % tbl->cap_entries;
-    grpc_mdelem md = tbl->ents[offset]; 
-    if (take_ref) { 
-      GRPC_MDELEM_REF(md); 
-    } 
-    return md; 
+    grpc_mdelem md = tbl->ents[offset];
+    if (take_ref) {
+      GRPC_MDELEM_REF(md);
+    }
+    return md;
   }
   /* Invalid entry: return error */
   return GRPC_MDNULL;
 }
 
-grpc_mdelem grpc_chttp2_hptbl_lookup_dynamic_index(const grpc_chttp2_hptbl* tbl, 
-                                                   uint32_t tbl_index) { 
-  return lookup_dynamic_index<false>(tbl, tbl_index); 
-} 
- 
-grpc_mdelem grpc_chttp2_hptbl_lookup_ref_dynamic_index( 
-    const grpc_chttp2_hptbl* tbl, uint32_t tbl_index) { 
-  return lookup_dynamic_index<true>(tbl, tbl_index); 
-} 
- 
+grpc_mdelem grpc_chttp2_hptbl_lookup_dynamic_index(const grpc_chttp2_hptbl* tbl,
+                                                   uint32_t tbl_index) {
+  return lookup_dynamic_index<false>(tbl, tbl_index);
+}
+
+grpc_mdelem grpc_chttp2_hptbl_lookup_ref_dynamic_index(
+    const grpc_chttp2_hptbl* tbl, uint32_t tbl_index) {
+  return lookup_dynamic_index<true>(tbl, tbl_index);
+}
+
 /* Evict one element from the table */
 static void evict1(grpc_chttp2_hptbl* tbl) {
   grpc_mdelem first_ent = tbl->ents[tbl->first_ent];
@@ -105,7 +105,7 @@ void grpc_chttp2_hptbl_set_max_bytes(grpc_chttp2_hptbl* tbl,
   if (tbl->max_bytes == max_bytes) {
     return;
   }
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) { 
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) {
     gpr_log(GPR_INFO, "Update hpack parser max size to %d", max_bytes);
   }
   while (tbl->mem_used > max_bytes) {
@@ -126,14 +126,14 @@ grpc_error* grpc_chttp2_hptbl_set_current_table_size(grpc_chttp2_hptbl* tbl,
             tbl->max_bytes)
             .c_str());
   }
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) { 
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) {
     gpr_log(GPR_INFO, "Update hpack parser table size to %d", bytes);
   }
   while (tbl->mem_used > bytes) {
     evict1(tbl);
   }
   tbl->current_table_bytes = bytes;
-  tbl->max_entries = grpc_chttp2_hptbl::entries_for_bytes(bytes); 
+  tbl->max_entries = grpc_chttp2_hptbl::entries_for_bytes(bytes);
   if (tbl->max_entries > tbl->cap_entries) {
     rebuild_ents(tbl, GPR_MAX(tbl->max_entries, 2 * tbl->cap_entries));
   } else if (tbl->max_entries < tbl->cap_entries / 3) {
@@ -200,7 +200,7 @@ grpc_chttp2_hptbl_find_result grpc_chttp2_hptbl_find(
 
   /* See if the string is in the static table */
   for (i = 0; i < GRPC_CHTTP2_LAST_STATIC_ENTRY; i++) {
-    grpc_mdelem ent = grpc_static_mdelem_manifested()[i]; 
+    grpc_mdelem ent = grpc_static_mdelem_manifested()[i];
     if (!grpc_slice_eq(GRPC_MDKEY(md), GRPC_MDKEY(ent))) continue;
     r.index = i + 1u;
     r.has_value = grpc_slice_eq(GRPC_MDVALUE(md), GRPC_MDVALUE(ent));
@@ -228,11 +228,11 @@ static size_t get_base64_encoded_size(size_t raw_length) {
 
 size_t grpc_chttp2_get_size_in_hpack_table(grpc_mdelem elem,
                                            bool use_true_binary_metadata) {
-  const uint8_t* key_buf = GRPC_SLICE_START_PTR(GRPC_MDKEY(elem)); 
-  size_t key_len = GRPC_SLICE_LENGTH(GRPC_MDKEY(elem)); 
-  size_t overhead_and_key = 32 + key_len; 
+  const uint8_t* key_buf = GRPC_SLICE_START_PTR(GRPC_MDKEY(elem));
+  size_t key_len = GRPC_SLICE_LENGTH(GRPC_MDKEY(elem));
+  size_t overhead_and_key = 32 + key_len;
   size_t value_len = GRPC_SLICE_LENGTH(GRPC_MDVALUE(elem));
-  if (grpc_key_is_binary_header(key_buf, key_len)) { 
+  if (grpc_key_is_binary_header(key_buf, key_len)) {
     return overhead_and_key + (use_true_binary_metadata
                                    ? value_len + 1
                                    : get_base64_encoded_size(value_len));

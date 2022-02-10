@@ -62,7 +62,7 @@ class ProtoFileParser {
   /// \param is_json_format if \c true the \c formatted_proto is treated as a
   ///        json-formatted proto, otherwise it is treated as a text-formatted
   ///        proto
-  /// \return the serialised binary proto representation of \c formatted_proto 
+  /// \return the serialised binary proto representation of \c formatted_proto
   TString GetSerializedProtoFromMethod(const TString& method,
                                            const TString& formatted_proto,
                                            bool is_request,
@@ -71,7 +71,7 @@ class ProtoFileParser {
   /// Converts a text or json string to its proto representation for the given
   /// message type.
   /// \param formatted_proto the text- or json-formatted proto string
-  /// \return the serialised binary proto representation of \c formatted_proto 
+  /// \return the serialised binary proto representation of \c formatted_proto
   TString GetSerializedProtoFromMessageType(
       const TString& message_type_name, const TString& formatted_proto,
       bool is_json_format);

@@ -28,8 +28,8 @@
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 
-#include <grpc/grpc.h> 
-#include <grpc/impl/codegen/grpc_types.h> 
+#include <grpc/grpc.h>
+#include <grpc/impl/codegen/grpc_types.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -464,18 +464,18 @@ void Chttp2ServerListener::Orphan() {
 }
 
 }  // namespace
- 
+
 //
 // Chttp2ServerAddPort()
 //
- 
+
 grpc_error* Chttp2ServerAddPort(Server* server, const char* addr,
                                 grpc_channel_args* args, int* port_num) {
   if (strncmp(addr, "external:", 9) == 0) {
     return grpc_core::Chttp2ServerListener::CreateWithAcceptor(server, addr,
                                                                args);
-  } 
+  }
   return grpc_core::Chttp2ServerListener::Create(server, addr, args, port_num);
-} 
- 
+}
+
 }  // namespace grpc_core

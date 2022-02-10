@@ -20,7 +20,7 @@
 #define GRPC_INTERNAL_COMPILER_PYTHON_GENERATOR_H
 
 #include <utility>
-#include <vector> 
+#include <vector>
 
 #include "src/compiler/config.h"
 #include "src/compiler/schema_interface.h"

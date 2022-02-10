@@ -29,7 +29,7 @@ void* gpr_malloc(size_t size) {
   GPR_TIMER_SCOPE("gpr_malloc", 0);
   void* p;
   if (size == 0) return nullptr;
-  p = malloc(size); 
+  p = malloc(size);
   if (!p) {
     abort();
   }
@@ -40,7 +40,7 @@ void* gpr_zalloc(size_t size) {
   GPR_TIMER_SCOPE("gpr_zalloc", 0);
   void* p;
   if (size == 0) return nullptr;
-  p = calloc(size, 1); 
+  p = calloc(size, 1);
   if (!p) {
     abort();
   }
@@ -49,13 +49,13 @@ void* gpr_zalloc(size_t size) {
 
 void gpr_free(void* p) {
   GPR_TIMER_SCOPE("gpr_free", 0);
-  free(p); 
+  free(p);
 }
 
 void* gpr_realloc(void* p, size_t size) {
   GPR_TIMER_SCOPE("gpr_realloc", 0);
   if ((size == 0) && (p == nullptr)) return nullptr;
-  p = realloc(p, size); 
+  p = realloc(p, size);
   if (!p) {
     abort();
   }

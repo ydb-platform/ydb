@@ -128,10 +128,10 @@
 #endif
 
 #if GTEST_HAS_ABSL
-#error #include "absl/debugging/failure_signal_handler.h" 
-#error #include "absl/debugging/stacktrace.h" 
-#error #include "absl/debugging/symbolize.h" 
-#error #include "absl/strings/str_cat.h" 
+#error #include "absl/debugging/failure_signal_handler.h"
+#error #include "absl/debugging/stacktrace.h"
+#error #include "absl/debugging/symbolize.h"
+#error #include "absl/strings/str_cat.h"
 #endif  // GTEST_HAS_ABSL
 
 namespace testing {

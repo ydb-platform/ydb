@@ -32,7 +32,7 @@
 
 struct grpc_channel;
 
-namespace grpc { 
+namespace grpc {
 namespace testing {
 class ChannelTestPeer;
 }  // namespace testing

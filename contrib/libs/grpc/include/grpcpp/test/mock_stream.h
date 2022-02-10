@@ -62,7 +62,7 @@ class MockClientWriter : public ::grpc::ClientWriterInterface<W> {
 };
 
 template <class W, class R>
-class MockClientReaderWriter 
+class MockClientReaderWriter
     : public ::grpc::ClientReaderWriterInterface<W, R> {
  public:
   MockClientReaderWriter() = default;

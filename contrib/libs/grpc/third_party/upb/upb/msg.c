@@ -1,12 +1,12 @@
- 
-#include "upb/msg.h" 
- 
-#include "upb/table.int.h" 
- 
-#include "upb/port_def.inc" 
- 
+
+#include "upb/msg.h"
+
+#include "upb/table.int.h"
+
+#include "upb/port_def.inc"
+
 /** upb_msg *******************************************************************/
- 
+
 static const char _upb_fieldtype_to_sizelg2[12] = {
   0,
   0,  /* UPB_TYPE_BOOL */
@@ -21,76 +21,76 @@ static const char _upb_fieldtype_to_sizelg2[12] = {
   UPB_SIZE(3, 4),  /* UPB_TYPE_STRING */
   UPB_SIZE(3, 4),  /* UPB_TYPE_BYTES */
 };
- 
+
 static uintptr_t tag_arrptr(void* ptr, int elem_size_lg2) {
   UPB_ASSERT(elem_size_lg2 <= 4);
   return (uintptr_t)ptr | elem_size_lg2;
 }
- 
-static int upb_msg_internalsize(const upb_msglayout *l) { 
-  return sizeof(upb_msg_internal) - l->extendable * sizeof(void *); 
-} 
- 
-static size_t upb_msg_sizeof(const upb_msglayout *l) { 
-  return l->size + upb_msg_internalsize(l); 
-} 
- 
+
+static int upb_msg_internalsize(const upb_msglayout *l) {
+  return sizeof(upb_msg_internal) - l->extendable * sizeof(void *);
+}
+
+static size_t upb_msg_sizeof(const upb_msglayout *l) {
+  return l->size + upb_msg_internalsize(l);
+}
+
 static const upb_msg_internal *upb_msg_getinternal_const(const upb_msg *msg) {
   ptrdiff_t size = sizeof(upb_msg_internal);
   return UPB_PTR_AT(msg, -size, upb_msg_internal);
-} 
- 
+}
+
 static upb_msg_internal *upb_msg_getinternal(upb_msg *msg) {
   return (upb_msg_internal*)upb_msg_getinternal_const(msg);
-} 
- 
+}
+
 void _upb_msg_clear(upb_msg *msg, const upb_msglayout *l) {
   ptrdiff_t internal = upb_msg_internalsize(l);
   void *mem = UPB_PTR_AT(msg, -internal, char);
   memset(mem, 0, l->size + internal);
-} 
- 
+}
+
 upb_msg *_upb_msg_new(const upb_msglayout *l, upb_arena *a) {
   void *mem = upb_arena_malloc(a, upb_msg_sizeof(l));
-  upb_msg *msg; 
- 
-  if (!mem) { 
-    return NULL; 
-  } 
- 
+  upb_msg *msg;
+
+  if (!mem) {
+    return NULL;
+  }
+
   msg = UPB_PTR_AT(mem, upb_msg_internalsize(l), upb_msg);
   _upb_msg_clear(msg, l);
-  return msg; 
-} 
- 
+  return msg;
+}
+
 bool _upb_msg_addunknown(upb_msg *msg, const char *data, size_t len,
                          upb_arena *arena) {
-  upb_msg_internal *in = upb_msg_getinternal(msg); 
-  if (len > in->unknown_size - in->unknown_len) { 
-    upb_alloc *alloc = upb_arena_alloc(arena); 
-    size_t need = in->unknown_size + len; 
-    size_t newsize = UPB_MAX(in->unknown_size * 2, need); 
+  upb_msg_internal *in = upb_msg_getinternal(msg);
+  if (len > in->unknown_size - in->unknown_len) {
+    upb_alloc *alloc = upb_arena_alloc(arena);
+    size_t need = in->unknown_size + len;
+    size_t newsize = UPB_MAX(in->unknown_size * 2, need);
     void *mem = upb_realloc(alloc, in->unknown, in->unknown_size, newsize);
     if (!mem) return false;
     in->unknown = mem;
-    in->unknown_size = newsize; 
-  } 
-  memcpy(in->unknown + in->unknown_len, data, len); 
-  in->unknown_len += len; 
+    in->unknown_size = newsize;
+  }
+  memcpy(in->unknown + in->unknown_len, data, len);
+  in->unknown_len += len;
   return true;
-} 
- 
+}
+
 void _upb_msg_discardunknown_shallow(upb_msg *msg) {
   upb_msg_internal *in = upb_msg_getinternal(msg);
   in->unknown_len = 0;
 }
 
-const char *upb_msg_getunknown(const upb_msg *msg, size_t *len) { 
+const char *upb_msg_getunknown(const upb_msg *msg, size_t *len) {
   const upb_msg_internal *in = upb_msg_getinternal_const(msg);
-  *len = in->unknown_len; 
-  return in->unknown; 
-} 
- 
+  *len = in->unknown_len;
+  return in->unknown;
+}
+
 /** upb_array *****************************************************************/
 
 upb_array *_upb_array_new(upb_arena *a, upb_fieldtype_t type) {

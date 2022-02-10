@@ -24,7 +24,7 @@
 #include <grpcpp/impl/codegen/async_stream.h>
 #include <grpcpp/impl/codegen/byte_buffer.h>
 #include <grpcpp/impl/codegen/server_callback.h>
-#include <grpcpp/impl/codegen/server_callback_handlers.h> 
+#include <grpcpp/impl/codegen/server_callback_handlers.h>
 
 struct grpc_server;
 
@@ -80,62 +80,62 @@ class AsyncGenericService final {
 };
 
 #ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
-namespace experimental { 
+namespace experimental {
 #endif
- 
-/// \a ServerGenericBidiReactor is the reactor class for bidi streaming RPCs 
-/// invoked on a CallbackGenericService. It is just a ServerBidi reactor with 
-/// ByteBuffer arguments. 
+
+/// \a ServerGenericBidiReactor is the reactor class for bidi streaming RPCs
+/// invoked on a CallbackGenericService. It is just a ServerBidi reactor with
+/// ByteBuffer arguments.
 using ServerGenericBidiReactor = ServerBidiReactor<ByteBuffer, ByteBuffer>;
- 
+
 class GenericCallbackServerContext final : public grpc::CallbackServerContext {
- public: 
+ public:
   const TString& method() const { return method_; }
   const TString& host() const { return host_; }
- 
- private: 
+
+ private:
   friend class ::grpc::Server;
- 
+
   TString method_;
   TString host_;
-}; 
- 
-/// \a CallbackGenericService is the base class for generic services implemented 
-/// using the callback API and registered through the ServerBuilder using 
-/// RegisterCallbackGenericService. 
-class CallbackGenericService { 
- public: 
-  CallbackGenericService() {} 
-  virtual ~CallbackGenericService() {} 
- 
-  /// The "method handler" for the generic API. This function should be 
-  /// overridden to provide a ServerGenericBidiReactor that implements the 
-  /// application-level interface for this RPC. Unimplemented by default. 
-  virtual ServerGenericBidiReactor* CreateReactor( 
-      GenericCallbackServerContext* /*ctx*/) { 
-    class Reactor : public ServerGenericBidiReactor { 
-     public: 
-      Reactor() { this->Finish(Status(StatusCode::UNIMPLEMENTED, "")); } 
-      void OnDone() override { delete this; } 
-    }; 
-    return new Reactor; 
-  } 
- 
- private: 
+};
+
+/// \a CallbackGenericService is the base class for generic services implemented
+/// using the callback API and registered through the ServerBuilder using
+/// RegisterCallbackGenericService.
+class CallbackGenericService {
+ public:
+  CallbackGenericService() {}
+  virtual ~CallbackGenericService() {}
+
+  /// The "method handler" for the generic API. This function should be
+  /// overridden to provide a ServerGenericBidiReactor that implements the
+  /// application-level interface for this RPC. Unimplemented by default.
+  virtual ServerGenericBidiReactor* CreateReactor(
+      GenericCallbackServerContext* /*ctx*/) {
+    class Reactor : public ServerGenericBidiReactor {
+     public:
+      Reactor() { this->Finish(Status(StatusCode::UNIMPLEMENTED, "")); }
+      void OnDone() override { delete this; }
+    };
+    return new Reactor;
+  }
+
+ private:
   friend class grpc::Server;
- 
+
   internal::CallbackBidiHandler<ByteBuffer, ByteBuffer>* Handler() {
     return new internal::CallbackBidiHandler<ByteBuffer, ByteBuffer>(
         [this](::grpc::CallbackServerContext* ctx) {
-          return CreateReactor(static_cast<GenericCallbackServerContext*>(ctx)); 
-        }); 
-  } 
- 
+          return CreateReactor(static_cast<GenericCallbackServerContext*>(ctx));
+        });
+  }
+
   grpc::Server* server_{nullptr};
-}; 
+};
 
 #ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
-}  // namespace experimental 
+}  // namespace experimental
 #endif
 }  // namespace grpc
 

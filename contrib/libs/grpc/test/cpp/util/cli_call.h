@@ -27,7 +27,7 @@
 
 #include <map>
 
-namespace grpc { 
+namespace grpc {
 
 class ClientContext;
 

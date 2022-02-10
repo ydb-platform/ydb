@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import os
-import platform 
+import platform
 import random
 import shutil
 import socket
@@ -27,7 +27,7 @@ def add_common_arguments(parser):
     parser.add_argument('--untar-to')
     parser.add_argument('--rename', action='append', default=[], metavar='FILE', help='rename FILE to the corresponding output')
     parser.add_argument('--executable', action='store_true', help='make outputs executable')
-    parser.add_argument('--log-path') 
+    parser.add_argument('--log-path')
     parser.add_argument('-v', '--verbose', action='store_true', default=os.environ.get('YA_VERBOSE_FETCHER'), help='increase stderr verbosity')
     parser.add_argument('outputs', nargs='*', default=[])
 
@@ -90,36 +90,36 @@ class OutputNotExistError(Exception):
     pass
 
 
-def setup_logging(args, base_name): 
-    def makedirs(path): 
-        try: 
-            os.makedirs(path) 
-        except OSError: 
-            pass 
- 
-    if args.log_path: 
-        log_file_name = args.log_path 
-    else: 
-        log_file_name = base_name + ".log" 
- 
-    args.abs_log_path = os.path.abspath(log_file_name) 
-    makedirs(os.path.dirname(args.abs_log_path)) 
-    logging.basicConfig(filename=args.abs_log_path, level=logging.DEBUG) 
+def setup_logging(args, base_name):
+    def makedirs(path):
+        try:
+            os.makedirs(path)
+        except OSError:
+            pass
+
+    if args.log_path:
+        log_file_name = args.log_path
+    else:
+        log_file_name = base_name + ".log"
+
+    args.abs_log_path = os.path.abspath(log_file_name)
+    makedirs(os.path.dirname(args.abs_log_path))
+    logging.basicConfig(filename=args.abs_log_path, level=logging.DEBUG)
     if args.verbose:
         logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
- 
- 
+
+
 def is_temporary(e):
 
-    def is_broken(e): 
-        return isinstance(e, urllib2.HTTPError) and e.code in (410, 404) 
+    def is_broken(e):
+        return isinstance(e, urllib2.HTTPError) and e.code in (410, 404)
 
     if is_broken(e):
         return False
- 
+
     if isinstance(e, (BadChecksumFetchError, IncompleteFetchError, urllib2.URLError, socket.error)):
         return True
- 
+
     import error
 
     return error.is_temporary_error(e)
@@ -293,16 +293,16 @@ def fetch_url(url, unpack, resource_file_name, expected_md5=None, expected_sha1=
 
 
 def chmod(filename, mode):
-    if platform.system().lower() == 'windows': 
-        # https://docs.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions: 
-        # hard to reset read-only attribute for removal if there are multiple hardlinks 
-        return 
+    if platform.system().lower() == 'windows':
+        # https://docs.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions:
+        # hard to reset read-only attribute for removal if there are multiple hardlinks
+        return
     stat = os.stat(filename)
     if stat.st_mode & 0o777 != mode:
         try:
             os.chmod(filename, mode)
         except OSError:
-            import pwd 
+            import pwd
             sys.stderr.write("{} st_mode: {} pwuid: {}\n".format(filename, stat.st_mode, pwd.getpwuid(os.stat(filename).st_uid)))
             raise
 
@@ -356,9 +356,9 @@ def process(fetched_file, file_name, args, remove=True):
             logging.info('Renaming %s to %s', src, dst)
             if os.path.exists(dst):
                 raise ResourceUnpackingError("Target file already exists ({} -> {})".format(src, dst))
-            if remove: 
-                rename_or_copy_and_remove(src, dst) 
-            else: 
+            if remove:
+                rename_or_copy_and_remove(src, dst)
+            else:
                 hardlink_or_copy(src, dst)
 
     for path in args.outputs:

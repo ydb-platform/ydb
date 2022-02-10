@@ -42,7 +42,7 @@ void ProtoServerReflectionPlugin::Finish(grpc::ServerInitializer* si) {
 }
 
 void ProtoServerReflectionPlugin::ChangeArguments(const TString& /*name*/,
-                                                  void* /*value*/) {} 
+                                                  void* /*value*/) {}
 
 bool ProtoServerReflectionPlugin::has_sync_methods() const {
   if (reflection_service_) {

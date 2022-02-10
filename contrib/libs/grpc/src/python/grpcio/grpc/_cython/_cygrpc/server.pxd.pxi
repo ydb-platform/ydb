@@ -15,7 +15,7 @@
 cdef class Server:
 
   cdef grpc_server *c_server
- 
+
   cdef bint is_started  # start has been called
   cdef bint is_shutting_down  # shutdown has been called
   cdef bint is_shutdown  # notification of complete shutdown received

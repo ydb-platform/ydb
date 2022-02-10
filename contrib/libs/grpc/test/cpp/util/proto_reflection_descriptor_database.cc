@@ -44,16 +44,16 @@ ProtoReflectionDescriptorDatabase::~ProtoReflectionDescriptorDatabase() {
     Status status = stream_->Finish();
     if (!status.ok()) {
       if (status.error_code() == StatusCode::UNIMPLEMENTED) {
-        fprintf(stderr, 
+        fprintf(stderr,
                 "Reflection request not implemented; "
-                "is the ServerReflection service enabled?\n"); 
-      } else { 
-        fprintf(stderr, 
-                "ServerReflectionInfo rpc failed. Error code: %d, message: %s, " 
-                "debug info: %s\n", 
-                static_cast<int>(status.error_code()), 
-                status.error_message().c_str(), 
-                ctx_.debug_error_string().c_str()); 
+                "is the ServerReflection service enabled?\n");
+      } else {
+        fprintf(stderr,
+                "ServerReflectionInfo rpc failed. Error code: %d, message: %s, "
+                "debug info: %s\n",
+                static_cast<int>(status.error_code()),
+                status.error_message().c_str(),
+                ctx_.debug_error_string().c_str());
       }
     }
   }

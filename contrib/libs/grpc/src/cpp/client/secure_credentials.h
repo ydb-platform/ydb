@@ -22,7 +22,7 @@
 #include <grpc/grpc_security.h>
 
 #include <grpcpp/security/credentials.h>
-#include <grpcpp/security/tls_credentials_options.h> 
+#include <grpcpp/security/tls_credentials_options.h>
 #include <grpcpp/support/config.h>
 
 #include "y_absl/strings/str_cat.h"
@@ -31,8 +31,8 @@
 
 namespace grpc {
 
-class Channel; 
- 
+class Channel;
+
 class SecureChannelCredentials final : public ChannelCredentials {
  public:
   explicit SecureChannelCredentials(grpc_channel_credentials* c_creds);
@@ -41,16 +41,16 @@ class SecureChannelCredentials final : public ChannelCredentials {
   }
   grpc_channel_credentials* GetRawCreds() { return c_creds_; }
 
-  std::shared_ptr<Channel> CreateChannelImpl( 
+  std::shared_ptr<Channel> CreateChannelImpl(
       const TString& target, const ChannelArguments& args) override;
 
   SecureChannelCredentials* AsSecureCredentials() override { return this; }
 
  private:
-  std::shared_ptr<Channel> CreateChannelWithInterceptors( 
+  std::shared_ptr<Channel> CreateChannelWithInterceptors(
       const TString& target, const ChannelArguments& args,
-      std::vector<std::unique_ptr< 
-          ::grpc::experimental::ClientInterceptorFactoryInterface>> 
+      std::vector<std::unique_ptr<
+          ::grpc::experimental::ClientInterceptorFactoryInterface>>
           interceptor_creators) override;
   grpc_channel_credentials* const c_creds_;
 };
@@ -74,16 +74,16 @@ class SecureCallCredentials final : public CallCredentials {
   grpc_call_credentials* const c_creds_;
 };
 
-namespace experimental { 
- 
-// Transforms C++ STS Credentials options to core options. The pointers of the 
-// resulting core options point to the memory held by the C++ options so C++ 
-// options need to be kept alive until after the core credentials creation. 
-grpc_sts_credentials_options StsCredentialsCppToCoreOptions( 
-    const StsCredentialsOptions& options); 
- 
-}  // namespace experimental 
- 
+namespace experimental {
+
+// Transforms C++ STS Credentials options to core options. The pointers of the
+// resulting core options point to the memory held by the C++ options so C++
+// options need to be kept alive until after the core credentials creation.
+grpc_sts_credentials_options StsCredentialsCppToCoreOptions(
+    const StsCredentialsOptions& options);
+
+}  // namespace experimental
+
 class MetadataCredentialsPluginWrapper final : private GrpcLibraryCodegen {
  public:
   static void Destroy(void* wrapper);

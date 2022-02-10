@@ -8,8 +8,8 @@ call :dbg Ya: %YA_BAT_REAL%
 call :fix_env
 call :find_python
 if ERRORLEVEL 1 exit /b 1
-call :dbg Python: "%YA_BAT_PYTHON%" 
-call "%YA_BAT_PYTHON%" "%YA_BAT_REAL%" %* 
+call :dbg Python: "%YA_BAT_PYTHON%"
+call "%YA_BAT_PYTHON%" "%YA_BAT_REAL%" %*
 exit /b %ERRORLEVEL%
 
 :find_ya
@@ -31,8 +31,8 @@ exit /b 0
 
 :find_python
 call :dbg Searching for python in PATH...
-for /f "delims=" %%F in ('where python 2^>nul') do ( 
-    call :test_python %%~sF 
+for /f "delims=" %%F in ('where python 2^>nul') do (
+    call :test_python %%~sF
     if not ERRORLEVEL 1 (
         set YA_BAT_PYTHON=%%F
         exit /b 0

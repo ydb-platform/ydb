@@ -407,7 +407,7 @@ def process_free_args(args, wine, bld_root, mode):
         else:
             result.append(process_arg(arg))
     return pwa.ProcessWholeArchiveOption('WINDOWS', wa_peers, wa_libs).construct_cmd(result)
- 
+
 def run_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('wine', action='store')
@@ -507,8 +507,8 @@ def run_main():
 
             # non-zero return code - bad, return it immediately
             if rc:
-                print >>sys.stderr, '##win_cmd##' + ' '.join(cmd) 
-                print >>sys.stderr, '##args##' + ' '.join(free_args) 
+                print >>sys.stderr, '##win_cmd##' + ' '.join(cmd)
+                print >>sys.stderr, '##args##' + ' '.join(free_args)
                 return rc
 
             # check for output existence(if we expect it!) and real length

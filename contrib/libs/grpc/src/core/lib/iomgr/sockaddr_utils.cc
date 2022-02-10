@@ -33,7 +33,7 @@
 #include <grpc/support/log.h>
 
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/host_port.h" 
+#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/socket_utils.h"
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
@@ -200,7 +200,7 @@ TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
 
 void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr,
                              int port) {
-  memset(out, 0, sizeof(grpc_resolved_address)); 
+  memset(out, 0, sizeof(grpc_resolved_address));
   grpc_sockaddr_in6* addr6 = (grpc_sockaddr_in6*)out->addr;
   grpc_sockaddr_in* addr4 = (grpc_sockaddr_in*)out->addr;
   if (grpc_inet_pton(GRPC_AF_INET6, addr, &addr6->sin6_addr) == 1) {

@@ -57,13 +57,13 @@ static void custom_tcp_connect_cleanup(grpc_custom_tcp_connect* connect) {
   }
 }
 
-static void custom_close_callback(grpc_custom_socket* /*socket*/) {} 
+static void custom_close_callback(grpc_custom_socket* /*socket*/) {}
 
 static void on_alarm(void* acp, grpc_error* error) {
   int done;
   grpc_custom_socket* socket = (grpc_custom_socket*)acp;
   grpc_custom_tcp_connect* connect = socket->connector;
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
     const char* str = grpc_error_string(error);
     gpr_log(GPR_INFO, "CLIENT_CONNECT: %s: on_alarm: error=%s",
             connect->addr_name.c_str(), str);
@@ -95,12 +95,12 @@ static void custom_connect_callback_internal(grpc_custom_socket* socket,
     grpc_core::ExecCtx::Get()->Flush();
     custom_tcp_connect_cleanup(connect);
   }
-  grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error); 
+  grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
 }
 
 static void custom_connect_callback(grpc_custom_socket* socket,
                                     grpc_error* error) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   if (grpc_core::ExecCtx::Get() == nullptr) {
     /* If we are being run on a thread which does not have an exec_ctx created
      * yet, we should create one. */
@@ -144,7 +144,7 @@ static void tcp_connect(grpc_closure* closure, grpc_endpoint** ep,
   socket->listener = nullptr;
   connect->refs = 2;
 
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
     gpr_log(GPR_INFO, "CLIENT_CONNECT: %p %s: asynchronously connecting",
             socket, connect->addr_name.c_str());
   }

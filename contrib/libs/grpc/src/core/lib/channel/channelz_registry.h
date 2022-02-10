@@ -21,15 +21,15 @@
 
 #include <grpc/impl/codegen/port_platform.h>
 
-#include <stdint.h> 
- 
+#include <stdint.h>
+
 #include <map>
 #include <util/generic/string.h>
 
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"
-#include "src/core/lib/gprpp/map.h" 
-#include "src/core/lib/gprpp/sync.h" 
+#include "src/core/lib/gprpp/map.h"
+#include "src/core/lib/gprpp/sync.h"
 
 namespace grpc_core {
 namespace channelz {
@@ -48,9 +48,9 @@ class ChannelzRegistry {
     return Default()->InternalRegister(node);
   }
   static void Unregister(intptr_t uuid) { Default()->InternalUnregister(uuid); }
-  static RefCountedPtr<BaseNode> Get(intptr_t uuid) { 
-    return Default()->InternalGet(uuid); 
-  } 
+  static RefCountedPtr<BaseNode> Get(intptr_t uuid) {
+    return Default()->InternalGet(uuid);
+  }
 
   // Returns the allocated JSON string that represents the proto
   // GetTopChannelsResponse as per channelz.proto.
@@ -81,7 +81,7 @@ class ChannelzRegistry {
 
   // if object with uuid has previously been registered as the correct type,
   // returns the void* associated with that uuid. Else returns nullptr.
-  RefCountedPtr<BaseNode> InternalGet(intptr_t uuid); 
+  RefCountedPtr<BaseNode> InternalGet(intptr_t uuid);
 
   TString InternalGetTopChannels(intptr_t start_channel_id);
   TString InternalGetServers(intptr_t start_server_id);
@@ -89,8 +89,8 @@ class ChannelzRegistry {
   void InternalLogAllEntities();
 
   // protects members
-  Mutex mu_; 
-  std::map<intptr_t, BaseNode*> node_map_; 
+  Mutex mu_;
+  std::map<intptr_t, BaseNode*> node_map_;
   intptr_t uuid_generator_ = 0;
 };
 

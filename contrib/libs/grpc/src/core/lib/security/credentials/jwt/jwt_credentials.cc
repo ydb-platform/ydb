@@ -57,9 +57,9 @@ grpc_service_account_jwt_access_credentials::
 }
 
 bool grpc_service_account_jwt_access_credentials::get_request_metadata(
-    grpc_polling_entity* /*pollent*/, grpc_auth_metadata_context context, 
-    grpc_credentials_mdelem_array* md_array, 
-    grpc_closure* /*on_request_metadata*/, grpc_error** error) { 
+    grpc_polling_entity* /*pollent*/, grpc_auth_metadata_context context,
+    grpc_credentials_mdelem_array* md_array,
+    grpc_closure* /*on_request_metadata*/, grpc_error** error) {
   gpr_timespec refresh_threshold = gpr_time_from_seconds(
       GRPC_SECURE_TOKEN_REFRESH_THRESHOLD_SECS, GPR_TIMESPAN);
 
@@ -109,7 +109,7 @@ bool grpc_service_account_jwt_access_credentials::get_request_metadata(
 }
 
 void grpc_service_account_jwt_access_credentials::cancel_get_request_metadata(
-    grpc_credentials_mdelem_array* /*md_array*/, grpc_error* error) { 
+    grpc_credentials_mdelem_array* /*md_array*/, grpc_error* error) {
   GRPC_ERROR_UNREF(error);
 }
 
@@ -153,7 +153,7 @@ static char* redact_private_key(const char* json_key) {
 
 grpc_call_credentials* grpc_service_account_jwt_access_credentials_create(
     const char* json_key, gpr_timespec token_lifetime, void* reserved) {
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_api_trace)) { 
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_api_trace)) {
     char* clean_json = redact_private_key(json_key);
     gpr_log(GPR_INFO,
             "grpc_service_account_jwt_access_credentials_create("

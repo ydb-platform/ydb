@@ -76,75 +76,75 @@ private:
     }
 };
 
-static TString CompressPath(const TVector<TStringBuf>& replacements, TStringBuf in) { 
-    for (auto r : replacements) { 
-        TStringBuf from, to; 
-        r.Split('=', from, to); 
-        if (in.StartsWith(from)) { 
-            return Compress(TString(to) + in.SubStr(from.Size())); 
-        } 
-    } 
- 
-    return Compress(in); 
-} 
- 
+static TString CompressPath(const TVector<TStringBuf>& replacements, TStringBuf in) {
+    for (auto r : replacements) {
+        TStringBuf from, to;
+        r.Split('=', from, to);
+        if (in.StartsWith(from)) {
+            return Compress(TString(to) + in.SubStr(from.Size()));
+        }
+    }
+
+    return Compress(in);
+}
+
 int main(int argc, char** argv) {
-    int ind = 0; 
+    int ind = 0;
     if (argc < 4) {
-        Cerr << "usage: " << argv[ind] << "asm_output --prefix? [-? origin_resource ro_resource]+" << Endl; 
+        Cerr << "usage: " << argv[ind] << "asm_output --prefix? [-? origin_resource ro_resource]+" << Endl;
         return 1;
     }
 
-    TVector<TStringBuf> replacements; 
- 
-    ind++; 
-    TFixedBufferFileOutput asmout(argv[ind]); 
-    ind++; 
+    TVector<TStringBuf> replacements;
+
+    ind++;
+    TFixedBufferFileOutput asmout(argv[ind]);
+    ind++;
     TString prefix;
-    if (TStringBuf(argv[ind]) == "--prefix") { 
+    if (TStringBuf(argv[ind]) == "--prefix") {
         prefix = "_";
-        ind++; 
+        ind++;
     }
     else {
         prefix = "";
     }
 
-    while (TStringBuf(argv[ind]).StartsWith("--replace=")) { 
+    while (TStringBuf(argv[ind]).StartsWith("--replace=")) {
         replacements.push_back(TStringBuf(argv[ind]).SubStr(TStringBuf("--replace=").Size()));
-        ind++; 
-    } 
- 
+        ind++;
+    }
+
     TAsmWriter aw(asmout, prefix);
     bool raw;
-    bool error = false; 
-    while (ind < argc) { 
+    bool error = false;
+    while (ind < argc) {
         TString compressed;
         if ("-"sv == argv[ind]) {
-            ind++; 
-            if (ind >= argc) { 
-                error = true; 
-                break; 
-            } 
-            compressed = CompressPath(replacements, TStringBuf(argv[ind])); 
+            ind++;
+            if (ind >= argc) {
+                error = true;
+                break;
+            }
+            compressed = CompressPath(replacements, TStringBuf(argv[ind]));
             raw = true;
         }
         else {
-            TUnbufferedFileInput inp(argv[ind]); 
+            TUnbufferedFileInput inp(argv[ind]);
             TString data = inp.ReadAll();
             compressed = Compress(TStringBuf(data.data(), data.size()));
             raw = false;
         }
-        ind++; 
-        if (ind >= argc) { 
-            error = true; 
-            break; 
-        } 
-        aw.Write(argv[ind], compressed, raw); 
-        ind++; 
+        ind++;
+        if (ind >= argc) {
+            error = true;
+            break;
+        }
+        aw.Write(argv[ind], compressed, raw);
+        ind++;
     }
-    if (error) { 
-        Cerr << "Incorrect number of parameters at argument " << ind - 1 << argv[ind-1] << Endl; 
-        return 1; 
-    } 
+    if (error) {
+        Cerr << "Incorrect number of parameters at argument " << ind - 1 << argv[ind-1] << Endl;
+        return 1;
+    }
     return 0;
 }

@@ -1,24 +1,24 @@
 gRPC Python
 ===========
 
-|compat_check_pypi| 
- 
+|compat_check_pypi|
+
 Package for gRPC Python.
 
-.. |compat_check_pypi| image:: https://python-compatibility-tools.appspot.com/one_badge_image?package=grpcio 
-   :target: https://python-compatibility-tools.appspot.com/one_badge_target?package=grpcio 
- 
-Supported Python Versions 
-------------------------- 
-Python >= 3.5 
- 
+.. |compat_check_pypi| image:: https://python-compatibility-tools.appspot.com/one_badge_image?package=grpcio
+   :target: https://python-compatibility-tools.appspot.com/one_badge_target?package=grpcio
+
+Supported Python Versions
+-------------------------
+Python >= 3.5
+
 Installation
 ------------
 
 gRPC Python is available for Linux, macOS, and Windows.
 
-Installing From PyPI 
-~~~~~~~~~~~~~~~~~~~~ 
+Installing From PyPI
+~~~~~~~~~~~~~~~~~~~~
 
 If you are installing locally...
 
@@ -46,8 +46,8 @@ n.b. On Windows and on Mac OS X one *must* have a recent release of :code:`pip`
 to retrieve the proper wheel from PyPI. Be sure to upgrade to the latest
 version!
 
-Installing From Source 
-~~~~~~~~~~~~~~~~~~~~~~ 
+Installing From Source
+~~~~~~~~~~~~~~~~~~~~~~
 
 Building from source requires that you have the Python headers (usually a
 package named :code:`python-dev`).

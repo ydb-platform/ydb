@@ -10,7 +10,7 @@ PY_SRCS(
 
 PEERDIR(
     library/python/func
-    contrib/python/six 
+    contrib/python/six
 )
 
 END()

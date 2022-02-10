@@ -34,7 +34,7 @@ struct ping_result {
   grpc_completion_queue* cq;
   grpc_cq_completion completion_storage;
 };
-static void ping_destroy(void* arg, grpc_cq_completion* /*storage*/) { 
+static void ping_destroy(void* arg, grpc_cq_completion* /*storage*/) {
   gpr_free(arg);
 }
 

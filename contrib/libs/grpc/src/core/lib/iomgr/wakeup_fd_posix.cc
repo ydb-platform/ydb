@@ -63,7 +63,7 @@ grpc_error* grpc_wakeup_fd_wakeup(grpc_wakeup_fd* fd_info) {
 }
 
 void grpc_wakeup_fd_destroy(grpc_wakeup_fd* fd_info) {
-  wakeup_fd_vtable->destroy(fd_info); 
+  wakeup_fd_vtable->destroy(fd_info);
 }
 
 #endif /* GRPC_POSIX_WAKEUP_FD */

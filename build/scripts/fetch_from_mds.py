@@ -37,7 +37,7 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse_args()
-    fetch_from.setup_logging(args, os.path.basename(__file__)) 
+    fetch_from.setup_logging(args, os.path.basename(__file__))
 
     try:
         main(args)

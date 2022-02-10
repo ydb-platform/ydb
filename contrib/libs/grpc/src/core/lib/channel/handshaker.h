@@ -29,7 +29,7 @@
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/ref_counted.h"
-#include "src/core/lib/gprpp/sync.h" 
+#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
@@ -78,11 +78,11 @@ struct HandshakerArgs {
 class Handshaker : public RefCounted<Handshaker> {
  public:
   virtual ~Handshaker() = default;
-  virtual void Shutdown(grpc_error* why) = 0; 
+  virtual void Shutdown(grpc_error* why) = 0;
   virtual void DoHandshake(grpc_tcp_server_acceptor* acceptor,
                            grpc_closure* on_handshake_done,
-                           HandshakerArgs* args) = 0; 
-  virtual const char* name() const = 0; 
+                           HandshakerArgs* args) = 0;
+  virtual const char* name() const = 0;
 };
 
 //

@@ -28,7 +28,7 @@
 
 /* --- Constants. --- */
 
-#define GRPC_JWT_OAUTH2_AUDIENCE "https://oauth2.googleapis.com/token" 
+#define GRPC_JWT_OAUTH2_AUDIENCE "https://oauth2.googleapis.com/token"
 
 /* --- auth_json_key parsing. --- */
 

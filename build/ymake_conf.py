@@ -556,7 +556,7 @@ class Build(object):
 
     @property
     def with_ndebug(self):
-        return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts') 
+        return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts')
 
     @property
     def is_valgrind(self):
@@ -1547,11 +1547,11 @@ class GnuCompiler(Compiler):
                 FSTACK += -fstack-check
             }''')
 
-        c_builtins = [ 
+        c_builtins = [
             "-Wno-builtin-macro-redefined",
             '-D__DATE__=\\""Sep 31 2019\\""',
             '-D__TIME__=\\"00:00:00\\"',
-        ] 
+        ]
         compiler_supports_macro_prefix_map = (
             self.tc.is_clang and self.tc.version_at_least(10) or
             self.tc.is_gcc and self.tc.version_at_least(8)
@@ -1568,31 +1568,31 @@ class GnuCompiler(Compiler):
                 # XXX this macro substitution breaks __FILE__ in included sources
                 '-D__FILE__=\\""${input;qe;rootrel:SRC}\\""',
             ]
-        c_debug_map = [ 
-            # XXX does not support non-normalized paths 
-            "-fdebug-prefix-map=${ARCADIA_BUILD_ROOT}=/-B", 
-            "-fdebug-prefix-map=${ARCADIA_ROOT}=/-S", 
-            "-fdebug-prefix-map=$(TOOL_ROOT)=/-T", 
-        ] 
-        c_debug_map_cl = c_debug_map + [ 
-            "-Xclang", "-fdebug-compilation-dir", "-Xclang", "/tmp", 
-        ] 
-        c_debug_map_light = [ 
-            # XXX does not support non-normalized paths 
-            "-fdebug-prefix-map=${ARCADIA_BUILD_ROOT}=/-B", 
-        ] 
-        c_debug_map_light_cl = c_debug_map_light + [ 
-            "-Xclang", "-fdebug-compilation-dir", "-Xclang", "/tmp", 
-        ] 
-        yasm_debug_map = [ 
-            # XXX does not support non-normalized paths 
-            "--replace=${ARCADIA_BUILD_ROOT}=/-B", 
-            "--replace=${ARCADIA_ROOT}=/-S", 
-            "--replace=$(TOOL_ROOT)=/-T" 
-        ] 
-        emit_big(''' 
+        c_debug_map = [
+            # XXX does not support non-normalized paths
+            "-fdebug-prefix-map=${ARCADIA_BUILD_ROOT}=/-B",
+            "-fdebug-prefix-map=${ARCADIA_ROOT}=/-S",
+            "-fdebug-prefix-map=$(TOOL_ROOT)=/-T",
+        ]
+        c_debug_map_cl = c_debug_map + [
+            "-Xclang", "-fdebug-compilation-dir", "-Xclang", "/tmp",
+        ]
+        c_debug_map_light = [
+            # XXX does not support non-normalized paths
+            "-fdebug-prefix-map=${ARCADIA_BUILD_ROOT}=/-B",
+        ]
+        c_debug_map_light_cl = c_debug_map_light + [
+            "-Xclang", "-fdebug-compilation-dir", "-Xclang", "/tmp",
+        ]
+        yasm_debug_map = [
+            # XXX does not support non-normalized paths
+            "--replace=${ARCADIA_BUILD_ROOT}=/-B",
+            "--replace=${ARCADIA_ROOT}=/-S",
+            "--replace=$(TOOL_ROOT)=/-T"
+        ]
+        emit_big('''
             when ($FORCE_CONSISTENT_DEBUG == "yes") {{
-                when ($CLANG == "yes") {{ 
+                when ($CLANG == "yes") {{
                     CL_DEBUG_INFO={c_debug_cl}
                 }}
                 otherwise {{
@@ -1602,37 +1602,37 @@ class GnuCompiler(Compiler):
             }}
             elsewhen ($CONSISTENT_DEBUG == "yes") {{
                 when ($CLANG == "yes") {{
-                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_cl} 
-                }} 
-                otherwise {{ 
-                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug} 
-                }} 
-                YASM_DEBUG_INFO_DISABLE_CACHE__NO_UID__={yasm_debug} 
-            }} 
-            elsewhen ($CONSISTENT_DEBUG_LIGHT == "yes") {{ 
-                when ($CLANG == "yes") {{ 
-                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_light_cl} 
-                }} 
-                otherwise {{ 
-                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_light} 
-                }} 
-                YASM_DEBUG_INFO_DISABLE_CACHE__NO_UID__={yasm_debug_light} 
-            }} 
- 
+                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_cl}
+                }}
+                otherwise {{
+                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug}
+                }}
+                YASM_DEBUG_INFO_DISABLE_CACHE__NO_UID__={yasm_debug}
+            }}
+            elsewhen ($CONSISTENT_DEBUG_LIGHT == "yes") {{
+                when ($CLANG == "yes") {{
+                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_light_cl}
+                }}
+                otherwise {{
+                    CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__={c_debug_light}
+                }}
+                YASM_DEBUG_INFO_DISABLE_CACHE__NO_UID__={yasm_debug_light}
+            }}
+
             when ($FORCE_CONSISTENT_BUILD == "yes") {{
                 CL_MACRO_INFO={macro}
             }}
             elsewhen ($CONSISTENT_BUILD == "yes") {{
-                CL_MACRO_INFO_DISABLE_CACHE__NO_UID__={macro} 
-            }} 
-        '''.format(c_debug=' '.join(c_debug_map), 
-                   c_debug_cl=' '.join(c_debug_map_cl), 
-                   yasm_debug=' '.join(yasm_debug_map), 
-                   c_debug_light=' '.join(c_debug_map_light),  # build_root substitution only 
-                   c_debug_light_cl=' '.join(c_debug_map_light_cl),  # build_root substitution only 
-                   yasm_debug_light=yasm_debug_map[0],  # build_root substitution only 
-                   macro=' '.join(c_builtins))) 
- 
+                CL_MACRO_INFO_DISABLE_CACHE__NO_UID__={macro}
+            }}
+        '''.format(c_debug=' '.join(c_debug_map),
+                   c_debug_cl=' '.join(c_debug_map_cl),
+                   yasm_debug=' '.join(yasm_debug_map),
+                   c_debug_light=' '.join(c_debug_map_light),  # build_root substitution only
+                   c_debug_light_cl=' '.join(c_debug_map_light_cl),  # build_root substitution only
+                   yasm_debug_light=yasm_debug_map[0],  # build_root substitution only
+                   macro=' '.join(c_builtins)))
+
         # TODO(somov): Check whether this specific architecture is needed.
         if self.target.arch == 'i386':
             append('CFLAGS', '-march=pentiumpro')
@@ -1715,8 +1715,8 @@ class GnuCompiler(Compiler):
             '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
         ]
-        c_args_nodeps = [c if c != '$GCC_COMPILE_FLAGS' else '$EXTRA_C_FLAGS -c -o ${OUTFILE} ${SRC} ${pre=-I:INC}' for c in c_args if c not in ignore_c_args_no_deps] 
- 
+        c_args_nodeps = [c if c != '$GCC_COMPILE_FLAGS' else '$EXTRA_C_FLAGS -c -o ${OUTFILE} ${SRC} ${pre=-I:INC}' for c in c_args if c not in ignore_c_args_no_deps]
+
         emit('_SRC_C_NODEPS_CMD', ' '.join(c_args_nodeps))
         emit('_SRC_CPP_CMD', ' '.join(cxx_args))
         emit('_SRC_C_CMD', ' '.join(c_args))
@@ -1755,12 +1755,12 @@ class Linker(object):
         self.tc = tc
         self.build = build
         self.type = self._get_default_linker_type()
- 
+
     def _get_default_linker_type(self):
         if not self.tc.is_from_arcadia:
             # External (e.g. system) toolchain: disable linker selection logic
             return None
- 
+
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
@@ -1810,8 +1810,8 @@ class LD(Linker):
         self.strip = self.tc.strip
         self.objcopy = self.tc.objcopy
 
-        self.musl = Setting('MUSL', convert=to_bool) 
- 
+        self.musl = Setting('MUSL', convert=to_bool)
+
         if self.ar is None:
             if target.is_apple:
                 # Use libtool. cctools ar does not understand -M needed for archive merging
@@ -1867,23 +1867,23 @@ class LD(Linker):
         else:
             self.ld_icf_flag = ''
 
-        if self.musl.value: 
-            self.ld_flags.extend(['-Wl,--no-as-needed']) 
+        if self.musl.value:
+            self.ld_flags.extend(['-Wl,--no-as-needed'])
             if self.tc.is_gcc:
                 # MUSL_BFD: musl build uses --no-dynamic-linker linker flag
                 # which gold doesn't know about. And we can only specify linker
                 # type, not it's path as we do for Clang through linker selector.
                 self.ld_flags.append('-fuse-ld=bfd')
-        elif target.is_linux: 
+        elif target.is_linux:
             self.ld_flags.extend(['-ldl', '-lrt', '-Wl,--no-as-needed'])
             if self.tc.is_gcc:
                 self.ld_flags.extend(('-Wl,-Bstatic', '-latomic', '-Wl,-Bdynamic'))
-        elif target.is_android: 
+        elif target.is_android:
             self.ld_flags.extend(['-ldl', '-Wl,--no-as-needed'])
             if self.type == Linker.LLD and target.android_api < 29:
                 # https://github.com/android/ndk/issues/1196
                 self.ld_flags.append('-Wl,--no-rosegment')
-        elif target.is_macos: 
+        elif target.is_macos:
             self.ld_flags.append('-Wl,-no_deduplicate')
             if not self.tc.is_clang:
                 self.ld_flags.append('-Wl,-no_compact_unwind')
@@ -1989,10 +1989,10 @@ class LD(Linker):
 
         emit('C_LIBRARY_PATH')
         emit('C_SYSTEM_LIBRARIES_INTERCEPT')
-        if self.musl.value: 
-            emit('C_SYSTEM_LIBRARIES', '-nostdlib') 
-        else: 
-            emit('C_SYSTEM_LIBRARIES', self.use_stdlib, self.thread_library, self.sys_lib, '-lc') 
+        if self.musl.value:
+            emit('C_SYSTEM_LIBRARIES', '-nostdlib')
+        else:
+            emit('C_SYSTEM_LIBRARIES', self.use_stdlib, self.thread_library, self.sys_lib, '-lc')
 
         emit('START_WHOLE_ARCHIVE_VALUE', self.whole_archive)
         emit('END_WHOLE_ARCHIVE_VALUE', self.no_whole_archive)
@@ -2142,7 +2142,7 @@ class LD(Linker):
         else:
             emit('LINK_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
         emit('LINK_EXEC_DYN_LIB', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_LINK_EXEC_DYN_LIB && $DWARF_COMMAND && $LINK_ADDITIONAL_SECTIONS_COMMAND')
-        emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD && $DWARF_COMMAND') 
+        emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD && $DWARF_COMMAND')
 
         tail_link_lib = '$AUTO_INPUT ${requirements;hide:LIB_REQUIREMENTS} ${kv;hide:"p AR"} $TOOLCHAIN_ENV ${kv;hide:"pc light-red"} ${kv;hide:"show_out"}'
         if is_positive("TIDY"):
@@ -2534,7 +2534,7 @@ class MSVCCompiler(MSVC, Compiler):
 
         if not self.tc.ide_msvs:
             def include_flag(path):
-                return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc') 
+                return '{flag}"{path}"'.format(path=path, flag='/I ' if not self.tc.use_clang else '-imsvc')
 
             for name in ('shared', 'ucrt', 'um', 'winrt'):
                 flags.append(include_flag(os.path.join(self.tc.kit_includes, name)))

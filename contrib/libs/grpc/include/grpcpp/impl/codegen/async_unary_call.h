@@ -30,7 +30,7 @@ namespace grpc {
 
 /// An interface relevant for async client side unary RPCs (which send
 /// one request message to a server and receive one response message).
-template <class R> 
+template <class R>
 class ClientAsyncResponseReaderInterface {
  public:
   virtual ~ClientAsyncResponseReaderInterface() {}

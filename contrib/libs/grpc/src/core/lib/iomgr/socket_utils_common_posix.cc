@@ -30,11 +30,11 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <netinet/in.h>
-#ifdef GRPC_LINUX_TCP_H 
-#include <linux/tcp.h> 
-#else 
+#ifdef GRPC_LINUX_TCP_H
+#include <linux/tcp.h>
+#else
 #include <netinet/tcp.h>
-#endif 
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -111,16 +111,16 @@ grpc_error* grpc_set_socket_no_sigpipe_if_possible(int fd) {
   if ((newval != 0) != (val != 0)) {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Failed to set SO_NOSIGPIPE");
   }
-#else 
-  // Avoid unused parameter warning for conditional parameter 
-  (void)fd; 
+#else
+  // Avoid unused parameter warning for conditional parameter
+  (void)fd;
 #endif
   return GRPC_ERROR_NONE;
 }
 
 grpc_error* grpc_set_socket_ip_pktinfo_if_possible(int fd) {
-  // Use conditionally-important parameter to avoid warning 
-  (void)fd; 
+  // Use conditionally-important parameter to avoid warning
+  (void)fd;
 #ifdef GRPC_HAVE_IP_PKTINFO
   int get_local_ip = 1;
   if (0 != setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &get_local_ip,
@@ -132,8 +132,8 @@ grpc_error* grpc_set_socket_ip_pktinfo_if_possible(int fd) {
 }
 
 grpc_error* grpc_set_socket_ipv6_recvpktinfo_if_possible(int fd) {
-  // Use conditionally-important parameter to avoid warning 
-  (void)fd; 
+  // Use conditionally-important parameter to avoid warning
+  (void)fd;
 #ifdef GRPC_HAVE_IPV6_RECVPKTINFO
   int get_local_ip = 1;
   if (0 != setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &get_local_ip,
@@ -308,10 +308,10 @@ void config_default_tcp_user_timeout(bool enable, int timeout, bool is_client) {
 /* Set TCP_USER_TIMEOUT */
 grpc_error* grpc_set_socket_tcp_user_timeout(
     int fd, const grpc_channel_args* channel_args, bool is_client) {
-  // Use conditionally-important parameter to avoid warning 
-  (void)fd; 
-  (void)channel_args; 
-  (void)is_client; 
+  // Use conditionally-important parameter to avoid warning
+  (void)fd;
+  (void)channel_args;
+  (void)is_client;
   extern grpc_core::TraceFlag grpc_tcp_trace;
   if (g_socket_supports_tcp_user_timeout.load() >= 0) {
     bool enable;
@@ -389,7 +389,7 @@ grpc_error* grpc_set_socket_tcp_user_timeout(
       }
     }
   } else {
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
+    if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
       gpr_log(GPR_INFO, "TCP_USER_TIMEOUT not supported for this platform");
     }
   }
@@ -405,19 +405,19 @@ grpc_error* grpc_set_socket_with_mutator(int fd, grpc_socket_mutator* mutator) {
   return GRPC_ERROR_NONE;
 }
 
-grpc_error* grpc_apply_socket_mutator_in_args(int fd, 
-                                              const grpc_channel_args* args) { 
-  const grpc_arg* socket_mutator_arg = 
-      grpc_channel_args_find(args, GRPC_ARG_SOCKET_MUTATOR); 
-  if (socket_mutator_arg == nullptr) { 
-    return GRPC_ERROR_NONE; 
-  } 
-  GPR_DEBUG_ASSERT(socket_mutator_arg->type == GRPC_ARG_POINTER); 
-  grpc_socket_mutator* mutator = 
-      static_cast<grpc_socket_mutator*>(socket_mutator_arg->value.pointer.p); 
-  return grpc_set_socket_with_mutator(fd, mutator); 
-} 
- 
+grpc_error* grpc_apply_socket_mutator_in_args(int fd,
+                                              const grpc_channel_args* args) {
+  const grpc_arg* socket_mutator_arg =
+      grpc_channel_args_find(args, GRPC_ARG_SOCKET_MUTATOR);
+  if (socket_mutator_arg == nullptr) {
+    return GRPC_ERROR_NONE;
+  }
+  GPR_DEBUG_ASSERT(socket_mutator_arg->type == GRPC_ARG_POINTER);
+  grpc_socket_mutator* mutator =
+      static_cast<grpc_socket_mutator*>(socket_mutator_arg->value.pointer.p);
+  return grpc_set_socket_with_mutator(fd, mutator);
+}
+
 static gpr_once g_probe_ipv6_once = GPR_ONCE_INIT;
 static int g_ipv6_loopback_available;
 

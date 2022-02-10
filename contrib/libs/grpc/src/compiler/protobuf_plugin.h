@@ -55,23 +55,23 @@ class ProtoBufMethod : public grpc_generator::Method {
     return method_->output_type()->file()->name();
   }
 
-  // TODO(https://github.com/grpc/grpc/issues/18800): Clean this up. 
-  bool get_module_and_message_path_input( 
+  // TODO(https://github.com/grpc/grpc/issues/18800): Clean this up.
+  bool get_module_and_message_path_input(
       TString* str, TString generator_file_name,
       bool generate_in_pb2_grpc, TString import_prefix,
       const std::vector<TString>& prefixes_to_filter) const final {
     return grpc_python_generator::GetModuleAndMessagePath(
         method_->input_type(), str, generator_file_name, generate_in_pb2_grpc,
-        import_prefix, prefixes_to_filter); 
+        import_prefix, prefixes_to_filter);
   }
 
-  bool get_module_and_message_path_output( 
+  bool get_module_and_message_path_output(
       TString* str, TString generator_file_name,
       bool generate_in_pb2_grpc, TString import_prefix,
       const std::vector<TString>& prefixes_to_filter) const final {
     return grpc_python_generator::GetModuleAndMessagePath(
         method_->output_type(), str, generator_file_name, generate_in_pb2_grpc,
-        import_prefix, prefixes_to_filter); 
+        import_prefix, prefixes_to_filter);
   }
 
   bool NoStreaming() const {
@@ -109,11 +109,11 @@ class ProtoBufService : public grpc_generator::Service {
 
   TString name() const { return service_->name(); }
 
-  int method_count() const { return service_->method_count(); } 
+  int method_count() const { return service_->method_count(); }
   std::unique_ptr<const grpc_generator::Method> method(int i) const {
     return std::unique_ptr<const grpc_generator::Method>(
         new ProtoBufMethod(service_->method(i)));
-  } 
+  }
 
   TString GetLeadingComments(const TString prefix) const {
     return GetCommentsHelper(service_, true, prefix);
@@ -167,7 +167,7 @@ class ProtoBufFile : public grpc_generator::File {
 
   TString additional_headers() const { return ""; }
 
-  int service_count() const { return file_->service_count(); } 
+  int service_count() const { return file_->service_count(); }
   std::unique_ptr<const grpc_generator::Service> service(int i) const {
     return std::unique_ptr<const grpc_generator::Service>(
         new ProtoBufService(file_->service(i)));
@@ -192,13 +192,13 @@ class ProtoBufFile : public grpc_generator::File {
 
   vector<TString> GetImportNames() const {
     vector<TString> proto_names;
-    for (int i = 0; i < file_->dependency_count(); ++i) { 
-      const auto& dep = *file_->dependency(i); 
-      proto_names.push_back(dep.name()); 
-    } 
-    return proto_names; 
-  } 
- 
+    for (int i = 0; i < file_->dependency_count(); ++i) {
+      const auto& dep = *file_->dependency(i);
+      proto_names.push_back(dep.name());
+    }
+    return proto_names;
+  }
+
  private:
   const grpc::protobuf::FileDescriptor* file_;
 };

@@ -31,8 +31,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "src/core/lib/gprpp/global_config.h" 
-#include "src/core/lib/profiling/timers.h" 
+#include "src/core/lib/gprpp/global_config.h"
+#include "src/core/lib/profiling/timers.h"
 
 typedef enum { BEGIN = '{', END = '}', MARK = '.' } marker_type;
 
@@ -75,16 +75,16 @@ static __thread int g_thread_id;
 static int g_next_thread_id;
 static int g_writing_enabled = 1;
 
-GPR_GLOBAL_CONFIG_DEFINE_STRING(grpc_latency_trace, "latency_trace.txt", 
-                                "Output file name for latency trace") 
- 
+GPR_GLOBAL_CONFIG_DEFINE_STRING(grpc_latency_trace, "latency_trace.txt",
+                                "Output file name for latency trace")
+
 static const char* output_filename() {
   if (output_filename_or_null == NULL) {
-    grpc_core::UniquePtr<char> value = 
-        GPR_GLOBAL_CONFIG_GET(grpc_latency_trace); 
-    if (strlen(value.get()) > 0) { 
-      output_filename_or_null = value.release(); 
-    } else { 
+    grpc_core::UniquePtr<char> value =
+        GPR_GLOBAL_CONFIG_GET(grpc_latency_trace);
+    if (strlen(value.get()) > 0) {
+      output_filename_or_null = value.release();
+    } else {
       output_filename_or_null = "latency_trace.txt";
     }
   }
@@ -287,7 +287,7 @@ void gpr_timers_global_init(void) {}
 
 void gpr_timers_global_destroy(void) {}
 
-void gpr_timers_set_log_filename(const char* /*filename*/) {} 
+void gpr_timers_set_log_filename(const char* /*filename*/) {}
 
-void gpr_timer_set_enabled(int /*enabled*/) {} 
+void gpr_timer_set_enabled(int /*enabled*/) {}
 #endif /* GRPC_BASIC_PROFILER */

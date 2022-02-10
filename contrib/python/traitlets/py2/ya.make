@@ -44,7 +44,7 @@ RESOURCE_FILES(
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
+
+RECURSE_FOR_TESTS(
     tests
-) 
+)

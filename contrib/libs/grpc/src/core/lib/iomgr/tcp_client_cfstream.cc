@@ -34,7 +34,7 @@
 #include <netinet/in.h>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gprpp/host_port.h" 
+#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/cfstream_handle.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/endpoint_cfstream.h"
@@ -95,7 +95,7 @@ static void OnAlarm(void* arg, grpc_error* error) {
   } else {
     grpc_error* error =
         GRPC_ERROR_CREATE_FROM_STATIC_STRING("connect() timed out");
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error); 
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
   }
 }
 
@@ -137,7 +137,7 @@ static void OnOpen(void* arg, grpc_error* error) {
       GRPC_ERROR_REF(error);
     }
     gpr_mu_unlock(&connect->mu);
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error); 
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
   }
 }
 
@@ -146,7 +146,7 @@ static void ParseResolvedAddress(const grpc_resolved_address* addr,
   TString host_port = grpc_sockaddr_to_string(addr, true);
   TString host_string;
   TString port_string;
-  grpc_core::SplitHostPort(host_port, &host_string, &port_string); 
+  grpc_core::SplitHostPort(host_port, &host_string, &port_string);
   *host = CFStringCreateWithCString(NULL, host_string.c_str(),
                                     kCFStringEncodingUTF8);
   *port = grpc_sockaddr_get_port(addr);

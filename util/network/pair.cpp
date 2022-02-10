@@ -1,12 +1,12 @@
 #include "pair.h"
 
-int SocketPair(SOCKET socks[2], bool overlapped, bool cloexec) { 
+int SocketPair(SOCKET socks[2], bool overlapped, bool cloexec) {
 #if defined(_win_)
     struct sockaddr_in addr;
     SOCKET listener;
     int e;
     int addrlen = sizeof(addr);
-    DWORD flags = (overlapped ? WSA_FLAG_OVERLAPPED : 0) | (cloexec ? WSA_FLAG_NO_HANDLE_INHERIT : 0); 
+    DWORD flags = (overlapped ? WSA_FLAG_OVERLAPPED : 0) | (cloexec ? WSA_FLAG_NO_HANDLE_INHERIT : 0);
 
     if (socks == 0) {
         WSASetLastError(WSAEINVAL);
@@ -75,23 +75,23 @@ int SocketPair(SOCKET socks[2], bool overlapped, bool cloexec) {
     (void)overlapped;
 
     #if defined(_linux_)
-    return socketpair(AF_LOCAL, SOCK_STREAM | (cloexec ? SOCK_CLOEXEC : 0), 0, socks); 
+    return socketpair(AF_LOCAL, SOCK_STREAM | (cloexec ? SOCK_CLOEXEC : 0), 0, socks);
     #else
-    int r = socketpair(AF_LOCAL, SOCK_STREAM, 0, socks); 
-    // Non-atomic wrt exec 
-    if (r == 0 && cloexec) { 
-        for (int i = 0; i < 2; ++i) { 
-            int flags = fcntl(socks[i], F_GETFD, 0); 
-            if (flags < 0) { 
-                return flags; 
-            } 
-            r = fcntl(socks[i], F_SETFD, flags | FD_CLOEXEC); 
-            if (r < 0) { 
-                return r; 
-            } 
-        } 
-    } 
-    return r; 
+    int r = socketpair(AF_LOCAL, SOCK_STREAM, 0, socks);
+    // Non-atomic wrt exec
+    if (r == 0 && cloexec) {
+        for (int i = 0; i < 2; ++i) {
+            int flags = fcntl(socks[i], F_GETFD, 0);
+            if (flags < 0) {
+                return flags;
+            }
+            r = fcntl(socks[i], F_SETFD, flags | FD_CLOEXEC);
+            if (r < 0) {
+                return r;
+            }
+        }
+    }
+    return r;
     #endif
 #endif
 }

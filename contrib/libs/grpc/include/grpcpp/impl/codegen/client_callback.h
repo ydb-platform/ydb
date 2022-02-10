@@ -1194,12 +1194,12 @@ namespace experimental {
 
 template <class Response>
 using ClientCallbackReader = ::grpc::ClientCallbackReader<Response>;
- 
+
 template <class Request>
 using ClientCallbackWriter = ::grpc::ClientCallbackWriter<Request>;
 
 template <class Request, class Response>
-using ClientCallbackReaderWriter = 
+using ClientCallbackReaderWriter =
     ::grpc::ClientCallbackReaderWriter<Request, Response>;
 
 template <class Response>

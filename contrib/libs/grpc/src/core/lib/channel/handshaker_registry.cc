@@ -21,7 +21,7 @@
 #include "y_absl/container/inlined_vector.h"
 
 #include "src/core/lib/channel/handshaker_registry.h"
-#include "src/core/lib/gpr/alloc.h" 
+#include "src/core/lib/gpr/alloc.h"
 #include "src/core/lib/gprpp/memory.h"
 
 #include <string.h>
@@ -39,7 +39,7 @@ namespace {
 
 class HandshakerFactoryList {
  public:
-  void Register(bool at_start, std::unique_ptr<HandshakerFactory> factory); 
+  void Register(bool at_start, std::unique_ptr<HandshakerFactory> factory);
   void AddHandshakers(const grpc_channel_args* args,
                       grpc_pollset_set* interested_parties,
                       HandshakeManager* handshake_mgr);
@@ -52,8 +52,8 @@ HandshakerFactoryList* g_handshaker_factory_lists = nullptr;
 
 }  // namespace
 
-void HandshakerFactoryList::Register( 
-    bool at_start, std::unique_ptr<HandshakerFactory> factory) { 
+void HandshakerFactoryList::Register(
+    bool at_start, std::unique_ptr<HandshakerFactory> factory) {
   factories_.push_back(std::move(factory));
   if (at_start) {
     auto* end = &factories_[factories_.size() - 1];
@@ -87,7 +87,7 @@ void HandshakerRegistry::Shutdown() {
 
 void HandshakerRegistry::RegisterHandshakerFactory(
     bool at_start, HandshakerType handshaker_type,
-    std::unique_ptr<HandshakerFactory> factory) { 
+    std::unique_ptr<HandshakerFactory> factory) {
   GPR_ASSERT(g_handshaker_factory_lists != nullptr);
   auto& factory_list = g_handshaker_factory_lists[handshaker_type];
   factory_list.Register(at_start, std::move(factory));

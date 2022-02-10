@@ -29,7 +29,7 @@
 
 #include "src/core/lib/gpr/alloc.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/memory.h" 
+#include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/iomgr/executor.h"
 #include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/slice/slice_internal.h"
@@ -39,39 +39,39 @@
 grpc_core::DebugOnlyTraceFlag grpc_trace_stream_refcount(false,
                                                          "stream_refcount");
 
-void grpc_stream_destroy(grpc_stream_refcount* refcount) { 
-  if (!grpc_iomgr_is_any_background_poller_thread() && 
-      (grpc_core::ExecCtx::Get()->flags() & 
-       GRPC_EXEC_CTX_FLAG_THREAD_RESOURCE_LOOP)) { 
-    /* Ick. 
-       The thread we're running on MAY be owned (indirectly) by a call-stack. 
-       If that's the case, destroying the call-stack MAY try to destroy the 
-       thread, which is a tangled mess that we just don't want to ever have to 
-       cope with. 
-       Throw this over to the executor (on a core-owned thread) and process it 
-       there. */ 
-    grpc_core::Executor::Run(&refcount->destroy, GRPC_ERROR_NONE); 
-  } else { 
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, &refcount->destroy, 
-                            GRPC_ERROR_NONE); 
+void grpc_stream_destroy(grpc_stream_refcount* refcount) {
+  if (!grpc_iomgr_is_any_background_poller_thread() &&
+      (grpc_core::ExecCtx::Get()->flags() &
+       GRPC_EXEC_CTX_FLAG_THREAD_RESOURCE_LOOP)) {
+    /* Ick.
+       The thread we're running on MAY be owned (indirectly) by a call-stack.
+       If that's the case, destroying the call-stack MAY try to destroy the
+       thread, which is a tangled mess that we just don't want to ever have to
+       cope with.
+       Throw this over to the executor (on a core-owned thread) and process it
+       there. */
+    grpc_core::Executor::Run(&refcount->destroy, GRPC_ERROR_NONE);
+  } else {
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, &refcount->destroy,
+                            GRPC_ERROR_NONE);
   }
 }
 
-void slice_stream_destroy(void* arg) { 
-  grpc_stream_destroy(static_cast<grpc_stream_refcount*>(arg)); 
+void slice_stream_destroy(void* arg) {
+  grpc_stream_destroy(static_cast<grpc_stream_refcount*>(arg));
 }
 
 #define STREAM_REF_FROM_SLICE_REF(p)       \
   ((grpc_stream_refcount*)(((uint8_t*)p) - \
                            offsetof(grpc_stream_refcount, slice_refcount)))
 
-grpc_slice grpc_slice_from_stream_owned_buffer(grpc_stream_refcount* refcount, 
-                                               void* buffer, size_t length) { 
+grpc_slice grpc_slice_from_stream_owned_buffer(grpc_stream_refcount* refcount,
+                                               void* buffer, size_t length) {
 #ifndef NDEBUG
-  grpc_stream_ref(STREAM_REF_FROM_SLICE_REF(&refcount->slice_refcount), 
-                  "slice"); 
+  grpc_stream_ref(STREAM_REF_FROM_SLICE_REF(&refcount->slice_refcount),
+                  "slice");
 #else
-  grpc_stream_ref(STREAM_REF_FROM_SLICE_REF(&refcount->slice_refcount)); 
+  grpc_stream_ref(STREAM_REF_FROM_SLICE_REF(&refcount->slice_refcount));
 #endif
   grpc_slice res;
   res.refcount = &refcount->slice_refcount;
@@ -81,20 +81,20 @@ grpc_slice grpc_slice_from_stream_owned_buffer(grpc_stream_refcount* refcount,
 }
 
 #ifndef NDEBUG
-void grpc_stream_ref_init(grpc_stream_refcount* refcount, int /*initial_refs*/, 
+void grpc_stream_ref_init(grpc_stream_refcount* refcount, int /*initial_refs*/,
                           grpc_iomgr_cb_func cb, void* cb_arg,
                           const char* object_type) {
   refcount->object_type = object_type;
 #else
-void grpc_stream_ref_init(grpc_stream_refcount* refcount, int /*initial_refs*/, 
+void grpc_stream_ref_init(grpc_stream_refcount* refcount, int /*initial_refs*/,
                           grpc_iomgr_cb_func cb, void* cb_arg) {
 #endif
   GRPC_CLOSURE_INIT(&refcount->destroy, cb, cb_arg, grpc_schedule_on_exec_ctx);
- 
-  new (&refcount->refs) grpc_core::RefCount(1, &grpc_trace_stream_refcount); 
-  new (&refcount->slice_refcount) grpc_slice_refcount( 
-      grpc_slice_refcount::Type::REGULAR, &refcount->refs, slice_stream_destroy, 
-      refcount, &refcount->slice_refcount); 
+
+  new (&refcount->refs) grpc_core::RefCount(1, &grpc_trace_stream_refcount);
+  new (&refcount->slice_refcount) grpc_slice_refcount(
+      grpc_slice_refcount::Type::REGULAR, &refcount->refs, slice_stream_destroy,
+      refcount, &refcount->slice_refcount);
 }
 
 static void move64(uint64_t* from, uint64_t* to) {
@@ -125,8 +125,8 @@ void grpc_transport_destroy(grpc_transport* transport) {
 
 int grpc_transport_init_stream(grpc_transport* transport, grpc_stream* stream,
                                grpc_stream_refcount* refcount,
-                               const void* server_data, 
-                               grpc_core::Arena* arena) { 
+                               const void* server_data,
+                               grpc_core::Arena* arena) {
   return transport->vtable->init_stream(transport, stream, refcount,
                                         server_data, arena);
 }
@@ -176,7 +176,7 @@ grpc_endpoint* grpc_transport_get_endpoint(grpc_transport* transport) {
 // it's grpc_transport_stream_op_batch_finish_with_failure
 void grpc_transport_stream_op_batch_finish_with_failure(
     grpc_transport_stream_op_batch* batch, grpc_error* error,
-    grpc_core::CallCombiner* call_combiner) { 
+    grpc_core::CallCombiner* call_combiner) {
   if (batch->send_message) {
     batch->payload->send_message.send_message.reset();
   }
@@ -208,24 +208,24 @@ void grpc_transport_stream_op_batch_finish_with_failure(
   GRPC_ERROR_UNREF(error);
 }
 
-struct made_transport_op { 
+struct made_transport_op {
   grpc_closure outer_on_complete;
-  grpc_closure* inner_on_complete = nullptr; 
+  grpc_closure* inner_on_complete = nullptr;
   grpc_transport_op op;
-  made_transport_op() { 
-    memset(&outer_on_complete, 0, sizeof(outer_on_complete)); 
-  } 
-}; 
+  made_transport_op() {
+    memset(&outer_on_complete, 0, sizeof(outer_on_complete));
+  }
+};
 
 static void destroy_made_transport_op(void* arg, grpc_error* error) {
   made_transport_op* op = static_cast<made_transport_op*>(arg);
-  grpc_core::ExecCtx::Run(DEBUG_LOCATION, op->inner_on_complete, 
-                          GRPC_ERROR_REF(error)); 
-  delete op; 
+  grpc_core::ExecCtx::Run(DEBUG_LOCATION, op->inner_on_complete,
+                          GRPC_ERROR_REF(error));
+  delete op;
 }
 
 grpc_transport_op* grpc_make_transport_op(grpc_closure* on_complete) {
-  made_transport_op* op = new made_transport_op(); 
+  made_transport_op* op = new made_transport_op();
   GRPC_CLOSURE_INIT(&op->outer_on_complete, destroy_made_transport_op, op,
                     grpc_schedule_on_exec_ctx);
   op->inner_on_complete = on_complete;
@@ -243,7 +243,7 @@ static void destroy_made_transport_stream_op(void* arg, grpc_error* error) {
   made_transport_stream_op* op = static_cast<made_transport_stream_op*>(arg);
   grpc_closure* c = op->inner_on_complete;
   gpr_free(op);
-  grpc_core::Closure::Run(DEBUG_LOCATION, c, GRPC_ERROR_REF(error)); 
+  grpc_core::Closure::Run(DEBUG_LOCATION, c, GRPC_ERROR_REF(error));
 }
 
 grpc_transport_stream_op_batch* grpc_make_transport_stream_op(

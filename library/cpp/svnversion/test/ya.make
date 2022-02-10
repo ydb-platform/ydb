@@ -1,6 +1,6 @@
 OWNER(g:cpp-contrib)
 
-PROGRAM() 
+PROGRAM()
 PEERDIR(library/cpp/svnversion)
-SRCS(main.cpp) 
-END() 
+SRCS(main.cpp)
+END()

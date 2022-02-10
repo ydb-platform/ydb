@@ -20,70 +20,70 @@
 
 #include "src/core/ext/filters/client_channel/proxy_mapper_registry.h"
 
-#include <memory> 
-#include <vector> 
+#include <memory>
+#include <vector>
 
-namespace grpc_core { 
+namespace grpc_core {
 
-namespace { 
+namespace {
 
-using ProxyMapperList = std::vector<std::unique_ptr<ProxyMapperInterface>>; 
-ProxyMapperList* g_proxy_mapper_list; 
+using ProxyMapperList = std::vector<std::unique_ptr<ProxyMapperInterface>>;
+ProxyMapperList* g_proxy_mapper_list;
 
-}  // namespace 
- 
-void ProxyMapperRegistry::Init() { 
-  if (g_proxy_mapper_list == nullptr) { 
-    g_proxy_mapper_list = new ProxyMapperList(); 
-  } 
-} 
- 
-void ProxyMapperRegistry::Shutdown() { 
-  delete g_proxy_mapper_list; 
-  // Clean up in case we re-initialze later. 
-  // TODO(roth): This should ideally live in Init().  However, if we did this 
-  // there, then we would do it AFTER we start registering proxy mappers from 
-  // third-party plugins, so they'd never show up (and would leak memory). 
-  // We probably need some sort of dependency system for plugins to fix 
-  // this. 
-  g_proxy_mapper_list = nullptr; 
-} 
- 
-void ProxyMapperRegistry::Register( 
-    bool at_start, std::unique_ptr<ProxyMapperInterface> mapper) { 
-  Init(); 
+}  // namespace
+
+void ProxyMapperRegistry::Init() {
+  if (g_proxy_mapper_list == nullptr) {
+    g_proxy_mapper_list = new ProxyMapperList();
+  }
+}
+
+void ProxyMapperRegistry::Shutdown() {
+  delete g_proxy_mapper_list;
+  // Clean up in case we re-initialze later.
+  // TODO(roth): This should ideally live in Init().  However, if we did this
+  // there, then we would do it AFTER we start registering proxy mappers from
+  // third-party plugins, so they'd never show up (and would leak memory).
+  // We probably need some sort of dependency system for plugins to fix
+  // this.
+  g_proxy_mapper_list = nullptr;
+}
+
+void ProxyMapperRegistry::Register(
+    bool at_start, std::unique_ptr<ProxyMapperInterface> mapper) {
+  Init();
   if (at_start) {
-    g_proxy_mapper_list->insert(g_proxy_mapper_list->begin(), 
-                                std::move(mapper)); 
+    g_proxy_mapper_list->insert(g_proxy_mapper_list->begin(),
+                                std::move(mapper));
   } else {
-    g_proxy_mapper_list->emplace_back(std::move(mapper)); 
+    g_proxy_mapper_list->emplace_back(std::move(mapper));
   }
 }
 
-bool ProxyMapperRegistry::MapName(const char* server_uri, 
-                                  const grpc_channel_args* args, 
-                                  char** name_to_resolve, 
-                                  grpc_channel_args** new_args) { 
-  Init(); 
-  for (const auto& mapper : *g_proxy_mapper_list) { 
-    if (mapper->MapName(server_uri, args, name_to_resolve, new_args)) { 
+bool ProxyMapperRegistry::MapName(const char* server_uri,
+                                  const grpc_channel_args* args,
+                                  char** name_to_resolve,
+                                  grpc_channel_args** new_args) {
+  Init();
+  for (const auto& mapper : *g_proxy_mapper_list) {
+    if (mapper->MapName(server_uri, args, name_to_resolve, new_args)) {
       return true;
     }
   }
   return false;
 }
 
-bool ProxyMapperRegistry::MapAddress(const grpc_resolved_address& address, 
-                                     const grpc_channel_args* args, 
-                                     grpc_resolved_address** new_address, 
-                                     grpc_channel_args** new_args) { 
-  Init(); 
-  for (const auto& mapper : *g_proxy_mapper_list) { 
-    if (mapper->MapAddress(address, args, new_address, new_args)) { 
+bool ProxyMapperRegistry::MapAddress(const grpc_resolved_address& address,
+                                     const grpc_channel_args* args,
+                                     grpc_resolved_address** new_address,
+                                     grpc_channel_args** new_args) {
+  Init();
+  for (const auto& mapper : *g_proxy_mapper_list) {
+    if (mapper->MapAddress(address, args, new_address, new_args)) {
       return true;
     }
   }
   return false;
 }
 
-}  // namespace grpc_core 
+}  // namespace grpc_core

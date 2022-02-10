@@ -23,7 +23,7 @@ RECURSE(
     bluez-clean-headers
     breakpad
     brotli
-    c-ares 
+    c-ares
     cairo
     cbc
     cctools

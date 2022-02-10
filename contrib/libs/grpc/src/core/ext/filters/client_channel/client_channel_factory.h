@@ -25,23 +25,23 @@
 
 #include "src/core/ext/filters/client_channel/subchannel.h"
 
-namespace grpc_core { 
+namespace grpc_core {
 
-class ClientChannelFactory { 
- public: 
-  virtual ~ClientChannelFactory() = default; 
+class ClientChannelFactory {
+ public:
+  virtual ~ClientChannelFactory() = default;
 
-  // Creates a subchannel with the specified args. 
-  virtual Subchannel* CreateSubchannel(const grpc_channel_args* args) = 0; 
+  // Creates a subchannel with the specified args.
+  virtual Subchannel* CreateSubchannel(const grpc_channel_args* args) = 0;
 
-  // Returns a channel arg containing the specified factory. 
-  static grpc_arg CreateChannelArg(ClientChannelFactory* factory); 
+  // Returns a channel arg containing the specified factory.
+  static grpc_arg CreateChannelArg(ClientChannelFactory* factory);
 
-  // Returns the factory from args, or null if not found. 
-  static ClientChannelFactory* GetFromChannelArgs( 
-      const grpc_channel_args* args); 
+  // Returns the factory from args, or null if not found.
+  static ClientChannelFactory* GetFromChannelArgs(
+      const grpc_channel_args* args);
 };
 
-}  // namespace grpc_core 
+}  // namespace grpc_core
 
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_CLIENT_CHANNEL_FACTORY_H */

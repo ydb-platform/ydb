@@ -22,7 +22,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <util/generic/string.h>
- 
+
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/channel_trace.h"
@@ -36,22 +36,22 @@ class SubchannelNode : public BaseNode {
   SubchannelNode(TString target_address, size_t channel_tracer_max_nodes);
   ~SubchannelNode() override;
 
-  // Sets the subchannel's connectivity state without health checking. 
-  void UpdateConnectivityState(grpc_connectivity_state state); 
+  // Sets the subchannel's connectivity state without health checking.
+  void UpdateConnectivityState(grpc_connectivity_state state);
 
-  // Used when the subchannel's child socket changes. This should be set when 
-  // the subchannel's transport is created and set to nullptr when the 
-  // subchannel unrefs the transport. 
-  void SetChildSocket(RefCountedPtr<SocketNode> socket); 
- 
+  // Used when the subchannel's child socket changes. This should be set when
+  // the subchannel's transport is created and set to nullptr when the
+  // subchannel unrefs the transport.
+  void SetChildSocket(RefCountedPtr<SocketNode> socket);
+
   Json RenderJson() override;
 
   // proxy methods to composed classes.
-  void AddTraceEvent(ChannelTrace::Severity severity, const grpc_slice& data) { 
+  void AddTraceEvent(ChannelTrace::Severity severity, const grpc_slice& data) {
     trace_.AddTraceEvent(severity, data);
   }
   void AddTraceEventWithReference(ChannelTrace::Severity severity,
-                                  const grpc_slice& data, 
+                                  const grpc_slice& data,
                                   RefCountedPtr<BaseNode> referenced_channel) {
     trace_.AddTraceEventWithReference(severity, data,
                                       std::move(referenced_channel));
@@ -61,9 +61,9 @@ class SubchannelNode : public BaseNode {
   void RecordCallSucceeded() { call_counter_.RecordCallSucceeded(); }
 
  private:
-  Atomic<grpc_connectivity_state> connectivity_state_{GRPC_CHANNEL_IDLE}; 
-  Mutex socket_mu_; 
-  RefCountedPtr<SocketNode> child_socket_; 
+  Atomic<grpc_connectivity_state> connectivity_state_{GRPC_CHANNEL_IDLE};
+  Mutex socket_mu_;
+  RefCountedPtr<SocketNode> child_socket_;
   TString target_;
   CallCountingHelper call_counter_;
   ChannelTrace trace_;

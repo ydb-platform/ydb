@@ -26,19 +26,19 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/proto/grpc/gcp/transport_security_common.upb.h" 
+#include "src/proto/grpc/gcp/transport_security_common.upb.h"
 
-// C struct coresponding to protobuf message RpcProtocolVersions.Version 
-typedef struct _grpc_gcp_RpcProtocolVersions_Version { 
-  uint32_t major; 
-  uint32_t minor; 
-} grpc_gcp_rpc_protocol_versions_version; 
+// C struct coresponding to protobuf message RpcProtocolVersions.Version
+typedef struct _grpc_gcp_RpcProtocolVersions_Version {
+  uint32_t major;
+  uint32_t minor;
+} grpc_gcp_rpc_protocol_versions_version;
 
-// C struct coresponding to protobuf message RpcProtocolVersions 
-typedef struct _grpc_gcp_RpcProtocolVersions { 
-  grpc_gcp_rpc_protocol_versions_version max_rpc_version; 
-  grpc_gcp_rpc_protocol_versions_version min_rpc_version; 
-} grpc_gcp_rpc_protocol_versions; 
+// C struct coresponding to protobuf message RpcProtocolVersions
+typedef struct _grpc_gcp_RpcProtocolVersions {
+  grpc_gcp_rpc_protocol_versions_version max_rpc_version;
+  grpc_gcp_rpc_protocol_versions_version min_rpc_version;
+} grpc_gcp_rpc_protocol_versions;
 
 /**
  * This method sets the value for max_rpc_versions field of rpc protocol
@@ -69,30 +69,30 @@ bool grpc_gcp_rpc_protocol_versions_set_min(
     uint32_t min_minor);
 
 /**
- * This method serializes an rpc protocol version and returns serialized rpc 
- * versions in grpc slice. 
+ * This method serializes an rpc protocol version and returns serialized rpc
+ * versions in grpc slice.
  *
  * - versions: an rpc protocol versions instance.
- * - slice: grpc slice where the serialized result will be written. 
+ * - slice: grpc slice where the serialized result will be written.
  *
  * The method returns true on success and false otherwise.
  */
-bool grpc_gcp_rpc_protocol_versions_encode( 
-    const grpc_gcp_rpc_protocol_versions* versions, grpc_slice* slice); 
+bool grpc_gcp_rpc_protocol_versions_encode(
+    const grpc_gcp_rpc_protocol_versions* versions, grpc_slice* slice);
 
 /**
  * This method serializes an rpc protocol version and returns serialized rpc
  * versions in grpc slice.
  *
  * - versions: an rpc protocol versions instance.
- * - arena: upb arena. 
+ * - arena: upb arena.
  * - slice: grpc slice where the serialized result will be written.
  *
  * The method returns true on success and false otherwise.
  */
 bool grpc_gcp_rpc_protocol_versions_encode(
-    const grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena, 
-    grpc_slice* slice); 
+    const grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena,
+    grpc_slice* slice);
 
 /**
  * This method de-serializes input in grpc slice form and stores the result
@@ -105,24 +105,24 @@ bool grpc_gcp_rpc_protocol_versions_encode(
  * The method returns true on success and false otherwise.
  */
 bool grpc_gcp_rpc_protocol_versions_decode(
-    const grpc_slice& slice, grpc_gcp_rpc_protocol_versions* versions); 
+    const grpc_slice& slice, grpc_gcp_rpc_protocol_versions* versions);
 
 /**
- * Assigns value of upb RpcProtocolVersions to grpc_gcp_rpc_protocol_versions. 
- */ 
-void grpc_gcp_rpc_protocol_versions_assign_from_upb( 
-    grpc_gcp_rpc_protocol_versions* versions, 
-    const grpc_gcp_RpcProtocolVersions* value); 
- 
-/** 
- * Assigns value of struct grpc_gcp_rpc_protocol_versions to 
- * RpcProtocolVersions. 
- */ 
-void grpc_gcp_RpcProtocolVersions_assign_from_struct( 
-    grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena, 
-    const grpc_gcp_rpc_protocol_versions* value); 
- 
-/** 
+ * Assigns value of upb RpcProtocolVersions to grpc_gcp_rpc_protocol_versions.
+ */
+void grpc_gcp_rpc_protocol_versions_assign_from_upb(
+    grpc_gcp_rpc_protocol_versions* versions,
+    const grpc_gcp_RpcProtocolVersions* value);
+
+/**
+ * Assigns value of struct grpc_gcp_rpc_protocol_versions to
+ * RpcProtocolVersions.
+ */
+void grpc_gcp_RpcProtocolVersions_assign_from_struct(
+    grpc_gcp_RpcProtocolVersions* versions, upb_arena* arena,
+    const grpc_gcp_rpc_protocol_versions* value);
+
+/**
  * This method performs a deep copy operation on rpc protocol versions
  * instance.
  *

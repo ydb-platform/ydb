@@ -5,13 +5,13 @@ LICENSE(Apache-2.0)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(
-    akastornov 
-    g:contrib 
-    g:cpp-contrib 
+    akastornov
+    g:contrib
+    g:cpp-contrib
 )
 
 PEERDIR(
-    contrib/libs/grpc/grpc 
+    contrib/libs/grpc/grpc
     contrib/python/six
 )
 
@@ -31,10 +31,10 @@ ADDINCL(
 IF (SANITIZER_TYPE == undefined)
     # https://github.com/grpc/grpc/blob/v1.15.1/tools/bazel.rc#L43
     CXXFLAGS(-fno-sanitize=function)
-ENDIF() 
+ENDIF()
 
 NO_LINT()
- 
+
 NO_COMPILER_WARNINGS()
 
 PY_SRCS(
@@ -43,7 +43,7 @@ PY_SRCS(
     grpc/_auth.py
     grpc/_channel.py
     grpc/_common.py
-    grpc/_compression.py 
+    grpc/_compression.py
     grpc/_cython/__init__.py
     grpc/_cython/_cygrpc/__init__.py
     grpc/_cython/cygrpc.pyx
@@ -83,9 +83,9 @@ PY_SRCS(
     grpc/framework/interfaces/face/utilities.py
 )
 
-IF (PYTHON3) 
-    PY_SRCS( 
-        TOP_LEVEL 
+IF (PYTHON3)
+    PY_SRCS(
+        TOP_LEVEL
         grpc/_simple_stubs.py
         grpc/aio/_base_call.py
         grpc/aio/_base_channel.py
@@ -98,8 +98,8 @@ IF (PYTHON3)
         grpc/aio/_server.py
         grpc/aio/_typing.py
         grpc/aio/_utils.py
-        grpc/experimental/aio/__init__.py 
-    ) 
-ENDIF() 
- 
+        grpc/experimental/aio/__init__.py
+    )
+ENDIF()
+
 END()

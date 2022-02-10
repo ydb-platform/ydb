@@ -27,24 +27,24 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/core/ext/filters/client_channel/service_config.h" 
+#include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/service_config_call_data.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/surface/call.h" 
+#include "src/core/lib/surface/call.h"
 #include "src/core/lib/surface/channel_init.h"
 
-static void recv_message_ready(void* user_data, grpc_error* error); 
-static void recv_trailing_metadata_ready(void* user_data, grpc_error* error); 
+static void recv_message_ready(void* user_data, grpc_error* error);
+static void recv_trailing_metadata_ready(void* user_data, grpc_error* error);
 
 namespace grpc_core {
- 
+
 namespace {
-size_t g_message_size_parser_index; 
-}  // namespace 
+size_t g_message_size_parser_index;
+}  // namespace
 
 //
 // MessageSizeParsedConfig
@@ -68,7 +68,7 @@ const MessageSizeParsedConfig* MessageSizeParsedConfig::GetFromCallContext(
 std::unique_ptr<ServiceConfigParser::ParsedConfig>
 MessageSizeParser::ParsePerMethodParams(const grpc_channel_args* /*args*/,
                                         const Json& json, grpc_error** error) {
-  GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE); 
+  GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE);
   std::vector<grpc_error*> error_list;
   // Max request size.
   int max_request_message_bytes = -1;
@@ -82,7 +82,7 @@ MessageSizeParser::ParsePerMethodParams(const grpc_channel_args* /*args*/,
       max_request_message_bytes =
           gpr_parse_nonnegative_int(it->second.string_value().c_str());
       if (max_request_message_bytes == -1) {
-        error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
+        error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
             "field:maxRequestMessageBytes error:should be non-negative"));
       }
     }
@@ -99,25 +99,25 @@ MessageSizeParser::ParsePerMethodParams(const grpc_channel_args* /*args*/,
       max_response_message_bytes =
           gpr_parse_nonnegative_int(it->second.string_value().c_str());
       if (max_response_message_bytes == -1) {
-        error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
+        error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
             "field:maxResponseMessageBytes error:should be non-negative"));
       }
     }
   }
-  if (!error_list.empty()) { 
-    *error = GRPC_ERROR_CREATE_FROM_VECTOR("Message size parser", &error_list); 
-    return nullptr; 
-  } 
+  if (!error_list.empty()) {
+    *error = GRPC_ERROR_CREATE_FROM_VECTOR("Message size parser", &error_list);
+    return nullptr;
+  }
   return y_absl::make_unique<MessageSizeParsedConfig>(max_request_message_bytes,
                                                     max_response_message_bytes);
 }
 
-void MessageSizeParser::Register() { 
+void MessageSizeParser::Register() {
   g_message_size_parser_index = ServiceConfigParser::RegisterParser(
       y_absl::make_unique<MessageSizeParser>());
-} 
- 
-size_t MessageSizeParser::ParserIndex() { return g_message_size_parser_index; } 
+}
+
+size_t MessageSizeParser::ParserIndex() { return g_message_size_parser_index; }
 
 int GetMaxRecvSizeFromChannelArgs(const grpc_channel_args* args) {
   if (grpc_channel_args_want_minimal_stack(args)) return -1;
@@ -137,7 +137,7 @@ int GetMaxSendSizeFromChannelArgs(const grpc_channel_args* args) {
 
 namespace {
 struct channel_data {
-  grpc_core::MessageSizeParsedConfig::message_size_limits limits; 
+  grpc_core::MessageSizeParsedConfig::message_size_limits limits;
 };
 
 struct call_data {
@@ -155,24 +155,24 @@ struct call_data {
     // size to the receive limit.
     const grpc_core::MessageSizeParsedConfig* limits =
         grpc_core::MessageSizeParsedConfig::GetFromCallContext(args.context);
-    if (limits != nullptr) { 
-      if (limits->limits().max_send_size >= 0 && 
-          (limits->limits().max_send_size < this->limits.max_send_size || 
-           this->limits.max_send_size < 0)) { 
-        this->limits.max_send_size = limits->limits().max_send_size; 
-      } 
-      if (limits->limits().max_recv_size >= 0 && 
-          (limits->limits().max_recv_size < this->limits.max_recv_size || 
-           this->limits.max_recv_size < 0)) { 
-        this->limits.max_recv_size = limits->limits().max_recv_size; 
-      } 
-    } 
+    if (limits != nullptr) {
+      if (limits->limits().max_send_size >= 0 &&
+          (limits->limits().max_send_size < this->limits.max_send_size ||
+           this->limits.max_send_size < 0)) {
+        this->limits.max_send_size = limits->limits().max_send_size;
+      }
+      if (limits->limits().max_recv_size >= 0 &&
+          (limits->limits().max_recv_size < this->limits.max_recv_size ||
+           this->limits.max_recv_size < 0)) {
+        this->limits.max_recv_size = limits->limits().max_recv_size;
+      }
+    }
   }
 
   ~call_data() { GRPC_ERROR_UNREF(error); }
 
-  grpc_core::CallCombiner* call_combiner; 
-  grpc_core::MessageSizeParsedConfig::message_size_limits limits; 
+  grpc_core::CallCombiner* call_combiner;
+  grpc_core::MessageSizeParsedConfig::message_size_limits limits;
   // Receive closures are chained: we inject this closure as the
   // recv_message_ready up-call on transport_stream_op, and remember to
   // call our next_recv_message_ready member after handling it.
@@ -228,7 +228,7 @@ static void recv_message_ready(void* user_data, grpc_error* error) {
                              calld->recv_trailing_metadata_error,
                              "continue recv_trailing_metadata_ready");
   }
-  grpc_core::Closure::Run(DEBUG_LOCATION, closure, error); 
+  grpc_core::Closure::Run(DEBUG_LOCATION, closure, error);
 }
 
 // Callback invoked on completion of recv_trailing_metadata
@@ -247,12 +247,12 @@ static void recv_trailing_metadata_ready(void* user_data, grpc_error* error) {
   error =
       grpc_error_add_child(GRPC_ERROR_REF(error), GRPC_ERROR_REF(calld->error));
   // Invoke the next callback.
-  grpc_core::Closure::Run(DEBUG_LOCATION, 
-                          calld->original_recv_trailing_metadata_ready, error); 
+  grpc_core::Closure::Run(DEBUG_LOCATION,
+                          calld->original_recv_trailing_metadata_ready, error);
 }
 
 // Start transport stream op.
-static void message_size_start_transport_stream_op_batch( 
+static void message_size_start_transport_stream_op_batch(
     grpc_call_element* elem, grpc_transport_stream_op_batch* op) {
   call_data* calld = static_cast<call_data*>(elem->call_data);
   // Check max send message size.
@@ -291,89 +291,89 @@ static void message_size_start_transport_stream_op_batch(
 }
 
 // Constructor for call_data.
-static grpc_error* message_size_init_call_elem( 
-    grpc_call_element* elem, const grpc_call_element_args* args) { 
+static grpc_error* message_size_init_call_elem(
+    grpc_call_element* elem, const grpc_call_element_args* args) {
   channel_data* chand = static_cast<channel_data*>(elem->channel_data);
   new (elem->call_data) call_data(elem, *chand, *args);
   return GRPC_ERROR_NONE;
 }
 
 // Destructor for call_data.
-static void message_size_destroy_call_elem( 
-    grpc_call_element* elem, const grpc_call_final_info* /*final_info*/, 
-    grpc_closure* /*ignored*/) { 
+static void message_size_destroy_call_elem(
+    grpc_call_element* elem, const grpc_call_final_info* /*final_info*/,
+    grpc_closure* /*ignored*/) {
   call_data* calld = (call_data*)elem->call_data;
   calld->~call_data();
 }
 
-grpc_core::MessageSizeParsedConfig::message_size_limits get_message_size_limits( 
+grpc_core::MessageSizeParsedConfig::message_size_limits get_message_size_limits(
     const grpc_channel_args* channel_args) {
-  grpc_core::MessageSizeParsedConfig::message_size_limits lim; 
+  grpc_core::MessageSizeParsedConfig::message_size_limits lim;
   lim.max_send_size = grpc_core::GetMaxSendSizeFromChannelArgs(channel_args);
   lim.max_recv_size = grpc_core::GetMaxRecvSizeFromChannelArgs(channel_args);
   return lim;
 }
 
 // Constructor for channel_data.
-static grpc_error* message_size_init_channel_elem( 
-    grpc_channel_element* elem, grpc_channel_element_args* args) { 
+static grpc_error* message_size_init_channel_elem(
+    grpc_channel_element* elem, grpc_channel_element_args* args) {
   GPR_ASSERT(!args->is_last);
   channel_data* chand = static_cast<channel_data*>(elem->channel_data);
-  new (chand) channel_data(); 
+  new (chand) channel_data();
   chand->limits = get_message_size_limits(args->channel_args);
   return GRPC_ERROR_NONE;
 }
 
 // Destructor for channel_data.
-static void message_size_destroy_channel_elem(grpc_channel_element* elem) { 
+static void message_size_destroy_channel_elem(grpc_channel_element* elem) {
   channel_data* chand = static_cast<channel_data*>(elem->channel_data);
-  chand->~channel_data(); 
+  chand->~channel_data();
 }
 
 const grpc_channel_filter grpc_message_size_filter = {
-    message_size_start_transport_stream_op_batch, 
+    message_size_start_transport_stream_op_batch,
     grpc_channel_next_op,
     sizeof(call_data),
-    message_size_init_call_elem, 
+    message_size_init_call_elem,
     grpc_call_stack_ignore_set_pollset_or_pollset_set,
-    message_size_destroy_call_elem, 
+    message_size_destroy_call_elem,
     sizeof(channel_data),
-    message_size_init_channel_elem, 
-    message_size_destroy_channel_elem, 
+    message_size_init_channel_elem,
+    message_size_destroy_channel_elem,
     grpc_channel_next_get_info,
     "message_size"};
 
-// Used for GRPC_CLIENT_SUBCHANNEL 
-static bool maybe_add_message_size_filter_subchannel( 
-    grpc_channel_stack_builder* builder, void* /*arg*/) { 
-  const grpc_channel_args* channel_args = 
-      grpc_channel_stack_builder_get_channel_arguments(builder); 
-  if (grpc_channel_args_want_minimal_stack(channel_args)) { 
-    return true; 
-  } 
-  return grpc_channel_stack_builder_prepend_filter( 
-      builder, &grpc_message_size_filter, nullptr, nullptr); 
-} 
- 
-// Used for GRPC_CLIENT_DIRECT_CHANNEL and GRPC_SERVER_CHANNEL. Adds the filter 
-// only if message size limits or service config is specified. 
+// Used for GRPC_CLIENT_SUBCHANNEL
+static bool maybe_add_message_size_filter_subchannel(
+    grpc_channel_stack_builder* builder, void* /*arg*/) {
+  const grpc_channel_args* channel_args =
+      grpc_channel_stack_builder_get_channel_arguments(builder);
+  if (grpc_channel_args_want_minimal_stack(channel_args)) {
+    return true;
+  }
+  return grpc_channel_stack_builder_prepend_filter(
+      builder, &grpc_message_size_filter, nullptr, nullptr);
+}
+
+// Used for GRPC_CLIENT_DIRECT_CHANNEL and GRPC_SERVER_CHANNEL. Adds the filter
+// only if message size limits or service config is specified.
 static bool maybe_add_message_size_filter(grpc_channel_stack_builder* builder,
-                                          void* /*arg*/) { 
+                                          void* /*arg*/) {
   const grpc_channel_args* channel_args =
       grpc_channel_stack_builder_get_channel_arguments(builder);
   if (grpc_channel_args_want_minimal_stack(channel_args)) {
     return true;
   }
   bool enable = false;
-  grpc_core::MessageSizeParsedConfig::message_size_limits lim = 
-      get_message_size_limits(channel_args); 
+  grpc_core::MessageSizeParsedConfig::message_size_limits lim =
+      get_message_size_limits(channel_args);
   if (lim.max_send_size != -1 || lim.max_recv_size != -1) {
     enable = true;
   }
   const grpc_arg* a =
       grpc_channel_args_find(channel_args, GRPC_ARG_SERVICE_CONFIG);
-  const char* svc_cfg_str = grpc_channel_arg_get_string(a); 
-  if (svc_cfg_str != nullptr) { 
+  const char* svc_cfg_str = grpc_channel_arg_get_string(a);
+  if (svc_cfg_str != nullptr) {
     enable = true;
   }
   if (enable) {
@@ -385,16 +385,16 @@ static bool maybe_add_message_size_filter(grpc_channel_stack_builder* builder,
 }
 
 void grpc_message_size_filter_init(void) {
-  grpc_channel_init_register_stage( 
-      GRPC_CLIENT_SUBCHANNEL, GRPC_CHANNEL_INIT_BUILTIN_PRIORITY, 
-      maybe_add_message_size_filter_subchannel, nullptr); 
+  grpc_channel_init_register_stage(
+      GRPC_CLIENT_SUBCHANNEL, GRPC_CHANNEL_INIT_BUILTIN_PRIORITY,
+      maybe_add_message_size_filter_subchannel, nullptr);
   grpc_channel_init_register_stage(GRPC_CLIENT_DIRECT_CHANNEL,
                                    GRPC_CHANNEL_INIT_BUILTIN_PRIORITY,
                                    maybe_add_message_size_filter, nullptr);
   grpc_channel_init_register_stage(GRPC_SERVER_CHANNEL,
                                    GRPC_CHANNEL_INIT_BUILTIN_PRIORITY,
                                    maybe_add_message_size_filter, nullptr);
-  grpc_core::MessageSizeParser::Register(); 
+  grpc_core::MessageSizeParser::Register();
 }
 
 void grpc_message_size_filter_shutdown(void) {}

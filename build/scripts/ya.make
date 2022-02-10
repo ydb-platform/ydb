@@ -54,7 +54,7 @@ TEST_SRCS(
     java_pack_to_file.py
     link_asrc.py
     link_dyn_lib.py
-    link_exe.py 
+    link_exe.py
     link_fat_obj.py
     link_lib.py
     llvm_opt_wrapper.py
@@ -83,7 +83,7 @@ TEST_SRCS(
     tared_protoc.py
     touch.py
     unpacking_jtest_runner.py
-    vcs_info.py 
+    vcs_info.py
     with_coverage.py
     with_crash_on_timeout.py
     with_pathsep_resolve.py

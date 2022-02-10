@@ -32,7 +32,7 @@
 #include <grpcpp/support/config.h>
 
 namespace grpc {
-class SecureChannelCredentials; 
+class SecureChannelCredentials;
 namespace testing {
 class ChannelArgumentsTest;
 }  // namespace testing

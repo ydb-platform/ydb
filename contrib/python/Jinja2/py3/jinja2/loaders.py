@@ -681,6 +681,6 @@ class ResourceLoader(BaseLoader):
         if self.module_loader is None:
             raise TemplateNotFound(template)
         try:
-            return self.module_loader.get_data(os.path.join(self.prefix, template)).decode('utf-8'), None, None 
+            return self.module_loader.get_data(os.path.join(self.prefix, template)).decode('utf-8'), None, None
         except IOError:
             raise TemplateNotFound(template)

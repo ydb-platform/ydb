@@ -31,8 +31,8 @@ std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
       args->SetString(name_, value_);
     }
     virtual void UpdatePlugins(
-        std::vector<std::unique_ptr<ServerBuilderPlugin>>* /*plugins*/) 
-        override {} 
+        std::vector<std::unique_ptr<ServerBuilderPlugin>>* /*plugins*/)
+        override {}
 
    private:
     const TString name_;
@@ -52,8 +52,8 @@ std::unique_ptr<ServerBuilderOption> MakeChannelArgumentOption(
       args->SetInt(name_, value_);
     }
     virtual void UpdatePlugins(
-        std::vector<std::unique_ptr<ServerBuilderPlugin>>* /*plugins*/) 
-        override {} 
+        std::vector<std::unique_ptr<ServerBuilderPlugin>>* /*plugins*/)
+        override {}
 
    private:
     const TString name_;

@@ -94,7 +94,7 @@ grpc_tls_server_authorization_check_config::
 
 /** -- Wrapper APIs declared in grpc_security.h -- **/
 grpc_tls_credentials_options* grpc_tls_credentials_options_create() {
-  return new grpc_tls_credentials_options(); 
+  return new grpc_tls_credentials_options();
 }
 
 int grpc_tls_credentials_options_set_cert_request_type(
@@ -171,7 +171,7 @@ int grpc_tls_credentials_options_set_server_authorization_check_config(
 }
 
 grpc_tls_key_materials_config* grpc_tls_key_materials_config_create() {
-  return new grpc_tls_key_materials_config(); 
+  return new grpc_tls_key_materials_config();
 }
 
 int grpc_tls_key_materials_config_set_key_materials(
@@ -187,29 +187,29 @@ int grpc_tls_key_materials_config_set_key_materials(
   return 1;
 }
 
-int grpc_tls_key_materials_config_set_version( 
-    grpc_tls_key_materials_config* config, int version) { 
-  if (config == nullptr) { 
-    gpr_log(GPR_ERROR, 
-            "Invalid arguments to " 
-            "grpc_tls_key_materials_config_set_version()"); 
-    return 0; 
-  } 
-  config->set_version(version); 
-  return 1; 
-} 
- 
-int grpc_tls_key_materials_config_get_version( 
-    grpc_tls_key_materials_config* config) { 
-  if (config == nullptr) { 
-    gpr_log(GPR_ERROR, 
-            "Invalid arguments to " 
-            "grpc_tls_key_materials_config_get_version()"); 
-    return -1; 
-  } 
-  return config->version(); 
-} 
- 
+int grpc_tls_key_materials_config_set_version(
+    grpc_tls_key_materials_config* config, int version) {
+  if (config == nullptr) {
+    gpr_log(GPR_ERROR,
+            "Invalid arguments to "
+            "grpc_tls_key_materials_config_set_version()");
+    return 0;
+  }
+  config->set_version(version);
+  return 1;
+}
+
+int grpc_tls_key_materials_config_get_version(
+    grpc_tls_key_materials_config* config) {
+  if (config == nullptr) {
+    gpr_log(GPR_ERROR,
+            "Invalid arguments to "
+            "grpc_tls_key_materials_config_get_version()");
+    return -1;
+  }
+  return config->version();
+}
+
 grpc_tls_credential_reload_config* grpc_tls_credential_reload_config_create(
     const void* config_user_data,
     int (*schedule)(void* config_user_data,
@@ -222,8 +222,8 @@ grpc_tls_credential_reload_config* grpc_tls_credential_reload_config_create(
         "Schedule API is nullptr in creating TLS credential reload config.");
     return nullptr;
   }
-  return new grpc_tls_credential_reload_config(config_user_data, schedule, 
-                                               cancel, destruct); 
+  return new grpc_tls_credential_reload_config(config_user_data, schedule,
+                                               cancel, destruct);
 }
 
 grpc_tls_server_authorization_check_config*
@@ -240,6 +240,6 @@ grpc_tls_server_authorization_check_config_create(
             "check config.");
     return nullptr;
   }
-  return new grpc_tls_server_authorization_check_config( 
+  return new grpc_tls_server_authorization_check_config(
       config_user_data, schedule, cancel, destruct);
 }

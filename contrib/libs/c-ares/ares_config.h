@@ -122,10 +122,10 @@
 #undef HAVE_GETSERVBYPORT_R
 #endif
 
-#if defined(__ANDROID__) 
-#undef HAVE_GETSERVBYPORT_R 
-#endif 
- 
+#if defined(__ANDROID__)
+#undef HAVE_GETSERVBYPORT_R
+#endif
+
 /* Define to 1 if you have the `gettimeofday' function. */
 #define HAVE_GETTIMEOFDAY 1
 
@@ -254,8 +254,8 @@
 /* Define to 1 if you have the strcmpi function. */
 /* #undef HAVE_STRCMPI */
 
-/* Potential ares_malloc/ares_free mismatch in ares_strdup.c/ares_strsplit.c. */ 
-/* #undef HAVE_STRDUP */ 
+/* Potential ares_malloc/ares_free mismatch in ares_strdup.c/ares_strsplit.c. */
+/* #undef HAVE_STRDUP */
 
 /* Define to 1 if you have the stricmp function. */
 /* #undef HAVE_STRICMP */
@@ -370,7 +370,7 @@
 #define PACKAGE_NAME "c-ares"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "c-ares 1.15.0" 
+#define PACKAGE_STRING "c-ares 1.15.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "c-ares"
@@ -379,7 +379,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.15.0" 
+#define PACKAGE_VERSION "1.15.0"
 
 /* a suitable file/device to read random data from */
 #define RANDOM_FILE "/dev/urandom"
@@ -491,7 +491,7 @@
 /* #undef USE_BLOCKING_SOCKETS */
 
 /* Version number of package */
-#define VERSION "1.15.0" 
+#define VERSION "1.15.0"
 
 /* Define to avoid automatic inclusion of winsock.h */
 /* #undef WIN32_LEAN_AND_MEAN */

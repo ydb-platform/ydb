@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-# This function will ascii encode unicode string inputs if necessary. 
+# This function will ascii encode unicode string inputs if necessary.
 # In Python3, unicode strings are the default str type.
 cdef bytes str_to_bytes(object s):
   if s is None or isinstance(s, bytes):

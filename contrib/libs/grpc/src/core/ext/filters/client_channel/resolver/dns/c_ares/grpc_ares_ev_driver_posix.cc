@@ -92,13 +92,13 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
   GrpcPolledFd* NewGrpcPolledFdLocked(
       ares_socket_t as, grpc_pollset_set* driver_pollset_set,
       std::shared_ptr<WorkSerializer> /*work_serializer*/) override {
-    return new GrpcPolledFdPosix(as, driver_pollset_set); 
+    return new GrpcPolledFdPosix(as, driver_pollset_set);
   }
 
-  void ConfigureAresChannelLocked(ares_channel /*channel*/) override {} 
+  void ConfigureAresChannelLocked(ares_channel /*channel*/) override {}
 };
 
-std::unique_ptr<GrpcPolledFdFactory> NewGrpcPolledFdFactory( 
+std::unique_ptr<GrpcPolledFdFactory> NewGrpcPolledFdFactory(
     std::shared_ptr<WorkSerializer> work_serializer) {
   (void)work_serializer;
   return y_absl::make_unique<GrpcPolledFdFactoryPosix>();

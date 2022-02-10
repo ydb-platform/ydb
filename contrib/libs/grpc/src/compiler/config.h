@@ -19,7 +19,7 @@
 #ifndef SRC_COMPILER_CONFIG_H
 #define SRC_COMPILER_CONFIG_H
 
-#include "src/compiler/config_protobuf.h" 
+#include "src/compiler/config_protobuf.h"
 
 #include <util/generic/string.h>
 

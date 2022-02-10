@@ -45,7 +45,7 @@ class Orphanable {
   // Gives up ownership of the object.  The implementation must arrange
   // to eventually destroy the object without further interaction from the
   // caller.
-  virtual void Orphan() = 0; 
+  virtual void Orphan() = 0;
 
   // Not copyable or movable.
   Orphanable(const Orphanable&) = delete;
@@ -58,18 +58,18 @@ class Orphanable {
 
 class OrphanableDelete {
  public:
-  template <typename T> 
-  void operator()(T* p) { 
-    p->Orphan(); 
-  } 
+  template <typename T>
+  void operator()(T* p) {
+    p->Orphan();
+  }
 };
 
-template <typename T, typename Deleter = OrphanableDelete> 
+template <typename T, typename Deleter = OrphanableDelete>
 using OrphanablePtr = std::unique_ptr<T, Deleter>;
 
 template <typename T, typename... Args>
 inline OrphanablePtr<T> MakeOrphanable(Args&&... args) {
-  return OrphanablePtr<T>(new T(std::forward<Args>(args)...)); 
+  return OrphanablePtr<T>(new T(std::forward<Args>(args)...));
 }
 
 // A type of Orphanable with internal ref-counting.
@@ -89,9 +89,9 @@ class InternallyRefCounted : public Orphanable {
   // Note: RefCount tracing is only enabled on debug builds, even when a
   //       TraceFlag is used.
   template <typename TraceFlagT = TraceFlag>
-  explicit InternallyRefCounted(TraceFlagT* trace_flag = nullptr, 
-                                intptr_t initial_refcount = 1) 
-      : refs_(initial_refcount, trace_flag) {} 
+  explicit InternallyRefCounted(TraceFlagT* trace_flag = nullptr,
+                                intptr_t initial_refcount = 1)
+      : refs_(initial_refcount, trace_flag) {}
   virtual ~InternallyRefCounted() = default;
 
   RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
@@ -105,13 +105,13 @@ class InternallyRefCounted : public Orphanable {
   }
 
   void Unref() {
-    if (GPR_UNLIKELY(refs_.Unref())) { 
-      delete this; 
+    if (GPR_UNLIKELY(refs_.Unref())) {
+      delete this;
     }
   }
   void Unref(const DebugLocation& location, const char* reason) {
-    if (GPR_UNLIKELY(refs_.Unref(location, reason))) { 
-      delete this; 
+    if (GPR_UNLIKELY(refs_.Unref(location, reason))) {
+      delete this;
     }
   }
 

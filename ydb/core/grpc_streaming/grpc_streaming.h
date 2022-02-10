@@ -9,8 +9,8 @@
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <contrib/libs/grpc/include/grpcpp/support/async_stream.h> 
-#include <contrib/libs/grpc/include/grpcpp/support/async_unary_call.h> 
+#include <contrib/libs/grpc/include/grpcpp/support/async_stream.h>
+#include <contrib/libs/grpc/include/grpcpp/support/async_unary_call.h>
 #include <google/protobuf/text_format.h>
 
 #include <atomic>

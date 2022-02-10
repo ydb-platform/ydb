@@ -1,15 +1,15 @@
 PY2TEST()
- 
-OWNER(g:python-contrib borman nslus) 
- 
-PEERDIR( 
+
+OWNER(g:python-contrib borman nslus)
+
+PEERDIR(
     contrib/python/traitlets
-) 
- 
+)
+
 ENV(
     YA_PYTEST_DISABLE_DOCTEST=yes
 )
- 
+
 SRCDIR(contrib/python/traitlets/py2/traitlets)
 
 TEST_SRCS(
@@ -18,8 +18,8 @@ TEST_SRCS(
     tests/test_traitlets.py
     tests/test_traitlets_enum.py
     tests/utils.py
-) 
- 
-NO_LINT() 
- 
-END() 
+)
+
+NO_LINT()
+
+END()

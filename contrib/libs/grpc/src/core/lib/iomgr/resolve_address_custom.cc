@@ -31,7 +31,7 @@
 
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/useful.h"
-#include "src/core/lib/gprpp/host_port.h" 
+#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/iomgr_custom.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/sockaddr_utils.h"
@@ -73,7 +73,7 @@ void grpc_custom_resolve_callback(grpc_custom_resolver* r,
                                   grpc_resolved_addresses* result,
                                   grpc_error* error) {
   GRPC_CUSTOM_IOMGR_ASSERT_SAME_THREAD();
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   if (error == GRPC_ERROR_NONE) {
     *r->addresses = result;
@@ -81,16 +81,16 @@ void grpc_custom_resolve_callback(grpc_custom_resolver* r,
     return;
   }
   if (r->on_done) {
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, r->on_done, error); 
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, r->on_done, error);
   }
   delete r;
 }
 
 static grpc_error* try_split_host_port(const char* name,
-                                       const char* default_port, 
+                                       const char* default_port,
                                        TString* host, TString* port) {
   /* parse name, splitting it into host and port parts */
-  grpc_core::SplitHostPort(name, host, port); 
+  grpc_core::SplitHostPort(name, host, port);
   if (host->empty()) {
     return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
         y_absl::StrFormat("unparseable host:port: '%s'", name).c_str());
@@ -138,7 +138,7 @@ static grpc_error* blocking_resolve_address_impl(
 }
 
 static void resolve_address_impl(const char* name, const char* default_port,
-                                 grpc_pollset_set* /*interested_parties*/, 
+                                 grpc_pollset_set* /*interested_parties*/,
                                  grpc_closure* on_done,
                                  grpc_resolved_addresses** addrs) {
   GRPC_CUSTOM_IOMGR_ASSERT_SAME_THREAD();
@@ -146,7 +146,7 @@ static void resolve_address_impl(const char* name, const char* default_port,
   TString port;
   grpc_error* err = try_split_host_port(name, default_port, &host, &port);
   if (err != GRPC_ERROR_NONE) {
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, on_done, err); 
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, on_done, err);
     return;
   }
   grpc_custom_resolver* r = new grpc_custom_resolver();

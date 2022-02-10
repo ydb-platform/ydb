@@ -1,28 +1,28 @@
-# Copyright 2019 gRPC authors. 
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0 
-# 
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
- 
+# Copyright 2019 gRPC authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import enum
- 
+
 cdef str _GRPC_ASYNCIO_ENGINE = os.environ.get('GRPC_ASYNCIO_ENGINE', 'poller').upper()
 cdef _AioState _global_aio_state = _AioState()
- 
- 
+
+
 class AsyncIOEngine(enum.Enum):
     CUSTOM_IO_MANAGER = 'custom_io_manager'
     POLLER = 'poller'
- 
- 
+
+
 cdef _default_asyncio_engine():
     return AsyncIOEngine.POLLER
 
@@ -45,20 +45,20 @@ cdef _initialize_custom_io_manager():
     # NOTE(lidiz) Custom IO manager must be activated before the first
     # `grpc_init()`. Otherwise, some special configurations in Core won't
     # pick up the change, and resulted in SEGFAULT or ABORT.
-    install_asyncio_iomgr() 
+    install_asyncio_iomgr()
 
     # Initializes gRPC Core, must be called before other Core API
-    grpc_init() 
- 
-    # Timers are triggered by the Asyncio loop. We disable 
-    # the background thread that is being used by the native 
-    # gRPC iomgr. 
+    grpc_init()
+
+    # Timers are triggered by the Asyncio loop. We disable
+    # the background thread that is being used by the native
+    # gRPC iomgr.
     grpc_timer_manager_set_threading(False)
- 
-    # gRPC callbaks are executed within the same thread used by the Asyncio 
-    # event loop, as it is being done by the other Asyncio callbacks. 
+
+    # gRPC callbaks are executed within the same thread used by the Asyncio
+    # event loop, as it is being done by the other Asyncio callbacks.
     Executor.SetThreadingAll(False)
- 
+
     # Creates the only completion queue
     _global_aio_state.cq = CallbackCompletionQueue()
 

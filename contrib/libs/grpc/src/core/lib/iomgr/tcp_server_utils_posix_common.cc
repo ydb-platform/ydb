@@ -180,8 +180,8 @@ grpc_error* grpc_tcp_server_prepare_socket(grpc_tcp_server* s, int fd,
   err = grpc_set_socket_no_sigpipe_if_possible(fd);
   if (err != GRPC_ERROR_NONE) goto error;
 
-  err = grpc_apply_socket_mutator_in_args(fd, s->channel_args); 
-  if (err != GRPC_ERROR_NONE) goto error; 
+  err = grpc_apply_socket_mutator_in_args(fd, s->channel_args);
+  if (err != GRPC_ERROR_NONE) goto error;
 
   if (bind(fd, reinterpret_cast<grpc_sockaddr*>(const_cast<char*>(addr->addr)),
            addr->len) < 0) {

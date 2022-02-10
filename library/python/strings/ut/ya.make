@@ -1,6 +1,6 @@
 OWNER(g:yatool)
 
-PY23_TEST() 
+PY23_TEST()
 
 TEST_SRCS(test_strings.py)
 

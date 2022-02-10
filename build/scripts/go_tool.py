@@ -474,12 +474,12 @@ def do_link_exe(args):
     compile_args.output = os.path.join(args.output_root, 'main.a')
     compile_args.real_import_path = compile_args.import_path
     compile_args.import_path = 'main'
- 
-    if args.vcs and os.path.isfile(compile_args.vcs): 
-        build_info = os.path.join('library', 'go', 'core', 'buildinfo') 
+
+    if args.vcs and os.path.isfile(compile_args.vcs):
+        build_info = os.path.join('library', 'go', 'core', 'buildinfo')
         if any([x.startswith(build_info) for x in compile_args.peers]):
-            compile_args.go_srcs.append(compile_args.vcs) 
- 
+            compile_args.go_srcs.append(compile_args.vcs)
+
     do_link_lib(compile_args)
     cmd = [args.go_link, '-o', args.output]
     import_config_name = create_import_config(args.peers + args.non_local_peers, False, args.import_map, args.module_map)
@@ -814,7 +814,7 @@ if __name__ == '__main__':
     parser.add_argument('++asm-flags', nargs='*')
     parser.add_argument('++compile-flags', nargs='*')
     parser.add_argument('++link-flags', nargs='*')
-    parser.add_argument('++vcs', nargs='?', default=None) 
+    parser.add_argument('++vcs', nargs='?', default=None)
     parser.add_argument('++vet', nargs='?', const=True, default=False)
     parser.add_argument('++vet-flags', nargs='*', default=None)
     parser.add_argument('++vet-info-ext', default=vet_info_ext)

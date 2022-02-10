@@ -103,10 +103,10 @@ std::shared_ptr<ServerCredentials> AltsServerCredentials(
 std::shared_ptr<ServerCredentials> LocalServerCredentials(
     grpc_local_connect_type type);
 
-/// Builds TLS ServerCredentials given TLS options. 
+/// Builds TLS ServerCredentials given TLS options.
 std::shared_ptr<ServerCredentials> TlsServerCredentials(
     const experimental::TlsCredentialsOptions& options);
- 
+
 }  // namespace experimental
 }  // namespace grpc
 

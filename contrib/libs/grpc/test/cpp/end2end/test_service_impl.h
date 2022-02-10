@@ -1,64 +1,64 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
-#ifndef GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H 
-#define GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H 
- 
+#ifndef GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H
+#define GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H
+
 #include <condition_variable>
-#include <memory> 
-#include <mutex> 
- 
-#include <grpc/grpc.h> 
+#include <memory>
+#include <mutex>
+
+#include <grpc/grpc.h>
 #include <grpc/support/log.h>
 #include <grpcpp/alarm.h>
 #include <grpcpp/security/credentials.h>
-#include <grpcpp/server_context.h> 
+#include <grpcpp/server_context.h>
 #include <gtest/gtest.h>
- 
+
 #include <util/generic/string.h>
 #include <thread>
 
-#include "src/proto/grpc/testing/echo.grpc.pb.h" 
+#include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/cpp/util/string_ref_helper.h"
- 
+
 #include <util/string/cast.h>
 
 using std::chrono::system_clock;
 
-namespace grpc { 
-namespace testing { 
- 
-const int kServerDefaultResponseStreamsToSend = 3; 
-const char* const kServerResponseStreamsToSend = "server_responses_to_send"; 
-const char* const kServerTryCancelRequest = "server_try_cancel"; 
-const char* const kDebugInfoTrailerKey = "debug-info-bin"; 
-const char* const kServerFinishAfterNReads = "server_finish_after_n_reads"; 
-const char* const kServerUseCoalescingApi = "server_use_coalescing_api"; 
-const char* const kCheckClientInitialMetadataKey = "custom_client_metadata"; 
-const char* const kCheckClientInitialMetadataVal = "Value for client metadata"; 
- 
-typedef enum { 
-  DO_NOT_CANCEL = 0, 
-  CANCEL_BEFORE_PROCESSING, 
-  CANCEL_DURING_PROCESSING, 
-  CANCEL_AFTER_PROCESSING 
-} ServerTryCancelRequestPhase; 
- 
+namespace grpc {
+namespace testing {
+
+const int kServerDefaultResponseStreamsToSend = 3;
+const char* const kServerResponseStreamsToSend = "server_responses_to_send";
+const char* const kServerTryCancelRequest = "server_try_cancel";
+const char* const kDebugInfoTrailerKey = "debug-info-bin";
+const char* const kServerFinishAfterNReads = "server_finish_after_n_reads";
+const char* const kServerUseCoalescingApi = "server_use_coalescing_api";
+const char* const kCheckClientInitialMetadataKey = "custom_client_metadata";
+const char* const kCheckClientInitialMetadataVal = "Value for client metadata";
+
+typedef enum {
+  DO_NOT_CANCEL = 0,
+  CANCEL_BEFORE_PROCESSING,
+  CANCEL_DURING_PROCESSING,
+  CANCEL_AFTER_PROCESSING
+} ServerTryCancelRequestPhase;
+
 namespace internal {
 // When echo_deadline is requested, deadline seen in the ServerContext is set in
 // the response in seconds.
@@ -119,19 +119,19 @@ class TestServiceSignaller {
 
 template <typename RpcService>
 class TestMultipleServiceImpl : public RpcService {
- public: 
+ public:
   TestMultipleServiceImpl() : signal_client_(false), host_() {}
   explicit TestMultipleServiceImpl(const TString& host)
       : signal_client_(false), host_(new TString(host)) {}
- 
-  Status Echo(ServerContext* context, const EchoRequest* request, 
+
+  Status Echo(ServerContext* context, const EchoRequest* request,
               EchoResponse* response) {
     if (request->has_param() &&
         request->param().server_notify_client_when_started()) {
       signaller_.SignalClientThatRpcStarted();
       signaller_.ServerWaitToContinue();
     }
- 
+
     // A bit of sleep to make sure that short deadline tests fail
     if (request->has_param() && request->param().server_sleep_us() > 0) {
       gpr_sleep_until(
@@ -248,7 +248,7 @@ class TestMultipleServiceImpl : public RpcService {
     return Echo(context, request, response);
   }
 
-  Status CheckClientInitialMetadata(ServerContext* context, 
+  Status CheckClientInitialMetadata(ServerContext* context,
                                     const SimpleRequest42* /*request*/,
                                     SimpleResponse42* /*response*/) {
     EXPECT_EQ(internal::MetadataMatchCount(context->client_metadata(),
@@ -259,11 +259,11 @@ class TestMultipleServiceImpl : public RpcService {
               context->client_metadata().count(kCheckClientInitialMetadataKey));
     return Status::OK;
   }
- 
-  // Unimplemented is left unimplemented to test the returned error. 
- 
-  Status RequestStream(ServerContext* context, 
-                       ServerReader<EchoRequest>* reader, 
+
+  // Unimplemented is left unimplemented to test the returned error.
+
+  Status RequestStream(ServerContext* context,
+                       ServerReader<EchoRequest>* reader,
                        EchoResponse* response) {
     // If 'server_try_cancel' is set in the metadata, the RPC is cancelled by
     // the server by calling ServerContext::TryCancel() depending on the value:
@@ -275,7 +275,7 @@ class TestMultipleServiceImpl : public RpcService {
     //   all the messages from the client
     int server_try_cancel = internal::GetIntValueFromMetadata(
         kServerTryCancelRequest, context->client_metadata(), DO_NOT_CANCEL);
- 
+
     EchoRequest request;
     response->set_message("");
 
@@ -312,7 +312,7 @@ class TestMultipleServiceImpl : public RpcService {
 
   // Return 'kNumResponseStreamMsgs' messages.
   // TODO(yangg) make it generic by adding a parameter into EchoRequest
-  Status ResponseStream(ServerContext* context, const EchoRequest* request, 
+  Status ResponseStream(ServerContext* context, const EchoRequest* request,
                         ServerWriter<EchoResponse>* writer) {
     // If server_try_cancel is set in the metadata, the RPC is cancelled by the
     // server by calling ServerContext::TryCancel() depending on the value:
@@ -324,10 +324,10 @@ class TestMultipleServiceImpl : public RpcService {
     //   all the messages to the client
     int server_try_cancel = internal::GetIntValueFromMetadata(
         kServerTryCancelRequest, context->client_metadata(), DO_NOT_CANCEL);
- 
+
     int server_coalescing_api = internal::GetIntValueFromMetadata(
         kServerUseCoalescingApi, context->client_metadata(), 0);
- 
+
     int server_responses_to_send = internal::GetIntValueFromMetadata(
         kServerResponseStreamsToSend, context->client_metadata(),
         kServerDefaultResponseStreamsToSend);
@@ -426,70 +426,70 @@ class TestMultipleServiceImpl : public RpcService {
   }
 
   // Unimplemented is left unimplemented to test the returned error.
-  bool signal_client() { 
-    std::unique_lock<std::mutex> lock(mu_); 
-    return signal_client_; 
-  } 
+  bool signal_client() {
+    std::unique_lock<std::mutex> lock(mu_);
+    return signal_client_;
+  }
   void ClientWaitUntilRpcStarted() { signaller_.ClientWaitUntilRpcStarted(); }
   void SignalServerToContinue() { signaller_.SignalServerToContinue(); }
   uint64_t RpcsWaitingForClientCancel() {
     std::unique_lock<std::mutex> lock(mu_);
     return rpcs_waiting_for_client_cancel_;
   }
- 
- private: 
-  bool signal_client_; 
-  std::mutex mu_; 
+
+ private:
+  bool signal_client_;
+  std::mutex mu_;
   TestServiceSignaller signaller_;
   std::unique_ptr<TString> host_;
   uint64_t rpcs_waiting_for_client_cancel_ = 0;
-}; 
- 
-class CallbackTestServiceImpl 
-    : public ::grpc::testing::EchoTestService::ExperimentalCallbackService { 
- public: 
-  CallbackTestServiceImpl() : signal_client_(false), host_() {} 
+};
+
+class CallbackTestServiceImpl
+    : public ::grpc::testing::EchoTestService::ExperimentalCallbackService {
+ public:
+  CallbackTestServiceImpl() : signal_client_(false), host_() {}
   explicit CallbackTestServiceImpl(const TString& host)
       : signal_client_(false), host_(new TString(host)) {}
- 
-  experimental::ServerUnaryReactor* Echo( 
-      experimental::CallbackServerContext* context, const EchoRequest* request, 
-      EchoResponse* response) override; 
- 
-  experimental::ServerUnaryReactor* CheckClientInitialMetadata( 
+
+  experimental::ServerUnaryReactor* Echo(
+      experimental::CallbackServerContext* context, const EchoRequest* request,
+      EchoResponse* response) override;
+
+  experimental::ServerUnaryReactor* CheckClientInitialMetadata(
       experimental::CallbackServerContext* context, const SimpleRequest42*,
       SimpleResponse42*) override;
- 
-  experimental::ServerReadReactor<EchoRequest>* RequestStream( 
-      experimental::CallbackServerContext* context, 
-      EchoResponse* response) override; 
- 
-  experimental::ServerWriteReactor<EchoResponse>* ResponseStream( 
-      experimental::CallbackServerContext* context, 
-      const EchoRequest* request) override; 
- 
-  experimental::ServerBidiReactor<EchoRequest, EchoResponse>* BidiStream( 
-      experimental::CallbackServerContext* context) override; 
- 
-  // Unimplemented is left unimplemented to test the returned error. 
-  bool signal_client() { 
-    std::unique_lock<std::mutex> lock(mu_); 
-    return signal_client_; 
-  } 
+
+  experimental::ServerReadReactor<EchoRequest>* RequestStream(
+      experimental::CallbackServerContext* context,
+      EchoResponse* response) override;
+
+  experimental::ServerWriteReactor<EchoResponse>* ResponseStream(
+      experimental::CallbackServerContext* context,
+      const EchoRequest* request) override;
+
+  experimental::ServerBidiReactor<EchoRequest, EchoResponse>* BidiStream(
+      experimental::CallbackServerContext* context) override;
+
+  // Unimplemented is left unimplemented to test the returned error.
+  bool signal_client() {
+    std::unique_lock<std::mutex> lock(mu_);
+    return signal_client_;
+  }
   void ClientWaitUntilRpcStarted() { signaller_.ClientWaitUntilRpcStarted(); }
   void SignalServerToContinue() { signaller_.SignalServerToContinue(); }
- 
- private: 
-  bool signal_client_; 
-  std::mutex mu_; 
+
+ private:
+  bool signal_client_;
+  std::mutex mu_;
   TestServiceSignaller signaller_;
   std::unique_ptr<TString> host_;
-}; 
- 
+};
+
 using TestServiceImpl =
     TestMultipleServiceImpl<::grpc::testing::EchoTestService::Service>;
 
-}  // namespace testing 
-}  // namespace grpc 
- 
-#endif  // GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H 
+}  // namespace testing
+}  // namespace grpc
+
+#endif  // GRPC_TEST_CPP_END2END_TEST_SERVICE_IMPL_H

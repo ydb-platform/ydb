@@ -38,13 +38,13 @@ namespace {
 const char* kContent1 = "hello xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 const char* kContent2 = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy world";
 
-class ByteBufferTest : public ::testing::Test { 
- protected: 
-  static void SetUpTestCase() { grpc_init(); } 
+class ByteBufferTest : public ::testing::Test {
+ protected:
+  static void SetUpTestCase() { grpc_init(); }
 
-  static void TearDownTestCase() { grpc_shutdown(); } 
-}; 
- 
+  static void TearDownTestCase() { grpc_shutdown(); }
+};
+
 TEST_F(ByteBufferTest, CopyCtor) {
   ByteBuffer buffer1;
   EXPECT_FALSE(buffer1.Valid());

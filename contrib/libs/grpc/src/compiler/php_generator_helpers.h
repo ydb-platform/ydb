@@ -63,7 +63,7 @@ inline TString GetPHPServiceFilename(
 }
 
 // Get leading or trailing comments in a string. Comment lines start with "// ".
-// Leading detached comments are put in front of leading comments. 
+// Leading detached comments are put in front of leading comments.
 template <typename DescriptorType>
 inline TString GetPHPComments(const DescriptorType* desc,
                                   TString prefix) {

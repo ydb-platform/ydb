@@ -27,13 +27,13 @@ PY_SRCS(
     markupsafe/_speedups.pyi
 )
 
-RESOURCE_FILES( 
+RESOURCE_FILES(
     PREFIX contrib/python/MarkupSafe/py3/
-    .dist-info/METADATA 
-    .dist-info/top_level.txt 
+    .dist-info/METADATA
+    .dist-info/top_level.txt
     markupsafe/py.typed
-) 
- 
+)
+
 END()
 
 RECURSE_FOR_TESTS(

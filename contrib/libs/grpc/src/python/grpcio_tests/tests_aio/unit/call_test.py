@@ -1,31 +1,31 @@
-# Copyright 2019 The gRPC Authors. 
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0 
-# 
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
+# Copyright 2019 The gRPC Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Tests behavior of the Call classes."""
 
-import asyncio 
-import logging 
-import unittest 
+import asyncio
+import logging
+import unittest
 import datetime
- 
-import grpc 
+
+import grpc
 from grpc.experimental import aio
- 
+
 from src.proto.grpc.testing import messages_pb2, test_pb2_grpc
 from tests_aio.unit._test_base import AioTestBase
-from tests_aio.unit._test_server import start_test_server 
+from tests_aio.unit._test_server import start_test_server
 from tests_aio.unit._constants import UNREACHABLE_TARGET
- 
+
 _SHORT_TIMEOUT_S = datetime.timedelta(seconds=1).total_seconds()
 
 _NUM_STREAM_RESPONSES = 5
@@ -34,22 +34,22 @@ _REQUEST_PAYLOAD_SIZE = 7
 _LOCAL_CANCEL_DETAILS_EXPECTATION = 'Locally cancelled by application!'
 _RESPONSE_INTERVAL_US = int(_SHORT_TIMEOUT_S * 1000 * 1000)
 _INFINITE_INTERVAL_US = 2**31 - 1
- 
- 
+
+
 class _MulticallableTestMixin():
- 
+
     async def setUp(self):
         address, self._server = await start_test_server()
         self._channel = aio.insecure_channel(address)
         self._stub = test_pb2_grpc.TestServiceStub(self._channel)
- 
+
     async def tearDown(self):
         await self._channel.close()
         await self._server.stop(None)
- 
- 
+
+
 class TestUnaryUnaryCall(_MulticallableTestMixin, AioTestBase):
- 
+
     async def test_call_to_string(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
 
@@ -63,47 +63,47 @@ class TestUnaryUnaryCall(_MulticallableTestMixin, AioTestBase):
 
     async def test_call_ok(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
- 
+
         self.assertFalse(call.done())
- 
+
         response = await call
- 
+
         self.assertTrue(call.done())
         self.assertIsInstance(response, messages_pb2.SimpleResponse)
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
         # Response is cached at call object level, reentrance
         # returns again the same response
         response_retry = await call
         self.assertIs(response, response_retry)
- 
+
     async def test_call_rpc_error(self):
         async with aio.insecure_channel(UNREACHABLE_TARGET) as channel:
             stub = test_pb2_grpc.TestServiceStub(channel)
- 
+
             call = stub.UnaryCall(messages_pb2.SimpleRequest())
- 
+
             with self.assertRaises(aio.AioRpcError) as exception_context:
                 await call
- 
+
             self.assertEqual(grpc.StatusCode.UNAVAILABLE,
                              exception_context.exception.code())
- 
+
             self.assertTrue(call.done())
             self.assertEqual(grpc.StatusCode.UNAVAILABLE, await call.code())
- 
+
     async def test_call_code_awaitable(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_call_details_awaitable(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
         self.assertEqual('', await call.details())
- 
+
     async def test_call_initial_metadata_awaitable(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
         self.assertEqual(aio.Metadata(), await call.initial_metadata())
- 
+
     async def test_call_trailing_metadata_awaitable(self):
         call = self._stub.UnaryCall(messages_pb2.SimpleRequest())
         self.assertEqual(aio.Metadata(), await call.trailing_metadata())
@@ -450,56 +450,56 @@ class TestUnaryStreamCall(_MulticallableTestMixin, AioTestBase):
                 size=_RESPONSE_PAYLOAD_SIZE,
                 interval_us=_RESPONSE_INTERVAL_US,
             ))
- 
+
         call = self._stub.StreamingOutputCall(request,
                                               timeout=_SHORT_TIMEOUT_S * 2)
- 
+
         response = await call.read()
         self.assertEqual(_RESPONSE_PAYLOAD_SIZE, len(response.payload.body))
- 
+
         # Should be around the same as the timeout
         remained_time = call.time_remaining()
         self.assertGreater(remained_time, _SHORT_TIMEOUT_S * 3 / 2)
         self.assertLess(remained_time, _SHORT_TIMEOUT_S * 5 / 2)
- 
+
         response = await call.read()
         self.assertEqual(_RESPONSE_PAYLOAD_SIZE, len(response.payload.body))
- 
+
         # Should be around the timeout minus a unit of wait time
         remained_time = call.time_remaining()
         self.assertGreater(remained_time, _SHORT_TIMEOUT_S / 2)
         self.assertLess(remained_time, _SHORT_TIMEOUT_S * 3 / 2)
- 
+
         self.assertEqual(grpc.StatusCode.OK, await call.code())
- 
- 
+
+
 class TestStreamUnaryCall(_MulticallableTestMixin, AioTestBase):
- 
+
     async def test_cancel_stream_unary(self):
         call = self._stub.StreamingInputCall()
- 
+
         # Prepares the request
         payload = messages_pb2.Payload(body=b'\0' * _REQUEST_PAYLOAD_SIZE)
         request = messages_pb2.StreamingInputCallRequest(payload=payload)
- 
+
         # Sends out requests
         for _ in range(_NUM_STREAM_RESPONSES):
             await call.write(request)
- 
+
         # Cancels the RPC
         self.assertFalse(call.done())
         self.assertFalse(call.cancelled())
         self.assertTrue(call.cancel())
         self.assertTrue(call.cancelled())
- 
+
         await call.done_writing()
- 
+
         with self.assertRaises(asyncio.CancelledError):
             await call
- 
+
     async def test_early_cancel_stream_unary(self):
         call = self._stub.StreamingInputCall()
- 
+
         # Cancels the RPC
         self.assertFalse(call.done())
         self.assertFalse(call.cancelled())
@@ -809,6 +809,6 @@ class TestStreamStreamCall(_MulticallableTestMixin, AioTestBase):
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    unittest.main(verbosity=2) 
+    unittest.main(verbosity=2)

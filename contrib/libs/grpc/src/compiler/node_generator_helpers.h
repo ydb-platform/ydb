@@ -31,7 +31,7 @@ inline TString GetJSServiceFilename(const TString& filename) {
 }
 
 // Get leading or trailing comments in a string. Comment lines start with "// ".
-// Leading detached comments are put in front of leading comments. 
+// Leading detached comments are put in front of leading comments.
 template <typename DescriptorType>
 inline TString GetNodeComments(const DescriptorType* desc, bool leading) {
   return grpc_generator::GetPrefixedComments(desc, leading, "//");

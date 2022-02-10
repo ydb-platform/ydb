@@ -1,27 +1,27 @@
-# Copyright 2019 The gRPC Authors 
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0 
-# 
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
- 
+# Copyright 2019 The gRPC Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 import datetime
- 
+
 import grpc
-from grpc.experimental import aio 
+from grpc.experimental import aio
 from tests.unit import resources
- 
+
 from src.proto.grpc.testing import empty_pb2, messages_pb2, test_pb2_grpc
 from tests_aio.unit import _constants
- 
+
 _INITIAL_METADATA_KEY = "x-grpc-test-echo-initial"
 _TRAILING_METADATA_KEY = "x-grpc-test-echo-trailing-bin"
 
@@ -48,14 +48,14 @@ async def _maybe_echo_status(request: messages_pb2.SimpleRequest,
 
 
 class TestServiceServicer(test_pb2_grpc.TestServiceServicer):
- 
+
     async def UnaryCall(self, request, context):
         await _maybe_echo_metadata(context)
         await _maybe_echo_status(request, context)
         return messages_pb2.SimpleResponse(
             payload=messages_pb2.Payload(type=messages_pb2.COMPRESSABLE,
                                          body=b'\x00' * request.response_size))
- 
+
     async def EmptyCall(self, request, context):
         return empty_pb2.Empty()
 
@@ -71,14 +71,14 @@ class TestServiceServicer(test_pb2_grpc.TestServiceServicer):
                 payload=messages_pb2.Payload(type=request.response_type,
                                              body=b'\x00' *
                                              response_parameters.size))
- 
+
     # Next methods are extra ones that are registred programatically
     # when the sever is instantiated. They are not being provided by
     # the proto file.
     async def UnaryCallWithSleep(self, unused_request, unused_context):
         await asyncio.sleep(_constants.UNARY_CALL_WITH_SLEEP_VALUE)
         return messages_pb2.SimpleResponse()
- 
+
     async def StreamingInputCall(self, request_async_iterator, unused_context):
         aggregate_size = 0
         async for request in request_async_iterator:
@@ -137,7 +137,7 @@ async def start_test_server(port=0,
     else:
         port = server.add_insecure_port('[::]:%d' % port)
 
-    await server.start() 
+    await server.start()
 
-    # NOTE(lidizheng) returning the server to prevent it from deallocation 
-    return 'localhost:%d' % port, server 
+    # NOTE(lidizheng) returning the server to prevent it from deallocation
+    return 'localhost:%d' % port, server

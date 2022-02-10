@@ -47,14 +47,14 @@ inline ::TString LocalImport(const ::TString& import) {
 
 inline ::TString FrameworkImport(const ::TString& import,
                                      const ::TString& framework) {
-  // Flattens the directory structure: grab the file name only 
-  std::size_t pos = import.rfind("/"); 
-  // If pos is npos, pos + 1 is 0, which gives us the entire string, 
-  // so there's no need to check that 
+  // Flattens the directory structure: grab the file name only
+  std::size_t pos = import.rfind("/");
+  // If pos is npos, pos + 1 is 0, which gives us the entire string,
+  // so there's no need to check that
   ::TString filename = import.substr(pos + 1, import.size() - (pos + 1));
   return ::TString("#import <" + framework + "/" + filename + ">\n");
-} 
- 
+}
+
 inline ::TString SystemImport(const ::TString& import) {
   return ::TString("#import <" + import + ">\n");
 }

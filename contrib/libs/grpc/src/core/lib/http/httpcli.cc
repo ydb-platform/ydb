@@ -32,7 +32,7 @@
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/memory.h" 
+#include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/http/format_request.h"
 #include "src/core/lib/http/parser.h"
 #include "src/core/lib/iomgr/endpoint.h"
@@ -69,7 +69,7 @@ static grpc_httpcli_get_override g_get_override = nullptr;
 static grpc_httpcli_post_override g_post_override = nullptr;
 
 static void plaintext_handshake(void* arg, grpc_endpoint* endpoint,
-                                const char* /*host*/, grpc_millis /*deadline*/, 
+                                const char* /*host*/, grpc_millis /*deadline*/,
                                 void (*on_done)(void* arg,
                                                 grpc_endpoint* endpoint)) {
   on_done(arg, endpoint);
@@ -91,7 +91,7 @@ static void next_address(internal_request* req, grpc_error* due_to_error);
 static void finish(internal_request* req, grpc_error* error) {
   grpc_polling_entity_del_from_pollset_set(req->pollent,
                                            req->context->pollset_set);
-  grpc_core::ExecCtx::Run(DEBUG_LOCATION, req->on_done, error); 
+  grpc_core::ExecCtx::Run(DEBUG_LOCATION, req->on_done, error);
   grpc_http_parser_destroy(&req->parser);
   if (req->addresses != nullptr) {
     grpc_resolved_addresses_destroy(req->addresses);
@@ -124,7 +124,7 @@ static void append_error(internal_request* req, grpc_error* error) {
 }
 
 static void do_read(internal_request* req) {
-  grpc_endpoint_read(req->ep, &req->incoming, &req->on_read, /*urgent=*/true); 
+  grpc_endpoint_read(req->ep, &req->incoming, &req->on_read, /*urgent=*/true);
 }
 
 static void on_read(void* user_data, grpc_error* error) {
@@ -232,8 +232,8 @@ static void internal_request_begin(grpc_httpcli_context* context,
                                    const grpc_httpcli_request* request,
                                    grpc_millis deadline, grpc_closure* on_done,
                                    grpc_httpcli_response* response,
-                                   const char* name, 
-                                   const grpc_slice& request_text) { 
+                                   const char* name,
+                                   const grpc_slice& request_text) {
   internal_request* req =
       static_cast<internal_request*>(gpr_malloc(sizeof(internal_request)));
   memset(req, 0, sizeof(*req));

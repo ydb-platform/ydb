@@ -471,9 +471,9 @@ TEST_F(GrpcToolTest, TypeNotFound) {
   const char* argv[] = {"grpc_cli", "type", server_address.c_str(),
                         "grpc.testing.DummyRequest"};
 
-  EXPECT_TRUE(1 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
+  EXPECT_TRUE(1 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
   ShutdownServer();
 }
 

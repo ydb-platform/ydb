@@ -118,18 +118,18 @@ TString grpc_transport_stream_op_batch_string(
 TString grpc_transport_op_string(grpc_transport_op* op) {
   std::vector<TString> out;
 
-  if (op->start_connectivity_watch != nullptr) { 
+  if (op->start_connectivity_watch != nullptr) {
     out.push_back(y_absl::StrFormat(
         " START_CONNECTIVITY_WATCH:watcher=%p:from=%s",
-        op->start_connectivity_watch.get(), 
+        op->start_connectivity_watch.get(),
         grpc_core::ConnectivityStateName(op->start_connectivity_watch_state)));
   }
 
-  if (op->stop_connectivity_watch != nullptr) { 
+  if (op->stop_connectivity_watch != nullptr) {
     out.push_back(y_absl::StrFormat(" STOP_CONNECTIVITY_WATCH:watcher=%p",
                                   op->stop_connectivity_watch));
-  } 
- 
+  }
+
   if (op->disconnect_with_error != GRPC_ERROR_NONE) {
     out.push_back(y_absl::StrCat(" DISCONNECT:",
                                grpc_error_string(op->disconnect_with_error)));

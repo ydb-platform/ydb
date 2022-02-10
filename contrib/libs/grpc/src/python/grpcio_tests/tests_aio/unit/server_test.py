@@ -1,34 +1,34 @@
-# Copyright 2019 The gRPC Authors. 
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0 
-# 
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
- 
-import asyncio 
+# Copyright 2019 The gRPC Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import asyncio
 import gc
-import logging 
+import logging
 import socket
 import time
-import unittest 
- 
-import grpc 
-from grpc.experimental import aio 
+import unittest
+
+import grpc
+from grpc.experimental import aio
 
 from tests.unit import resources
 from tests.unit.framework.common import test_constants
-from tests_aio.unit._test_base import AioTestBase 
- 
-_SIMPLE_UNARY_UNARY = '/test/SimpleUnaryUnary' 
-_BLOCK_FOREVER = '/test/BlockForever' 
-_BLOCK_BRIEFLY = '/test/BlockBriefly' 
+from tests_aio.unit._test_base import AioTestBase
+
+_SIMPLE_UNARY_UNARY = '/test/SimpleUnaryUnary'
+_BLOCK_FOREVER = '/test/BlockForever'
+_BLOCK_BRIEFLY = '/test/BlockBriefly'
 _UNARY_STREAM_ASYNC_GEN = '/test/UnaryStreamAsyncGen'
 _UNARY_STREAM_READER_WRITER = '/test/UnaryStreamReaderWriter'
 _UNARY_STREAM_EVILLY_MIXED = '/test/UnaryStreamEvillyMixed'
@@ -42,17 +42,17 @@ _UNIMPLEMENTED_METHOD = '/test/UnimplementedMethod'
 _ERROR_IN_STREAM_STREAM = '/test/ErrorInStreamStream'
 _ERROR_WITHOUT_RAISE_IN_UNARY_UNARY = '/test/ErrorWithoutRaiseInUnaryUnary'
 _ERROR_WITHOUT_RAISE_IN_STREAM_STREAM = '/test/ErrorWithoutRaiseInStreamStream'
- 
-_REQUEST = b'\x00\x00\x00' 
-_RESPONSE = b'\x01\x01\x01' 
+
+_REQUEST = b'\x00\x00\x00'
+_RESPONSE = b'\x01\x01\x01'
 _NUM_STREAM_REQUESTS = 3
 _NUM_STREAM_RESPONSES = 5
- 
- 
-class _GenericHandler(grpc.GenericRpcHandler): 
- 
-    def __init__(self): 
-        self._called = asyncio.get_event_loop().create_future() 
+
+
+class _GenericHandler(grpc.GenericRpcHandler):
+
+    def __init__(self):
+        self._called = asyncio.get_event_loop().create_future()
         self._routing_table = {
             _SIMPLE_UNARY_UNARY:
                 grpc.unary_unary_rpc_method_handler(self._unary_unary),
@@ -97,18 +97,18 @@ class _GenericHandler(grpc.GenericRpcHandler):
                 grpc.stream_stream_rpc_method_handler(
                     self._error_without_raise_in_stream_stream),
         }
- 
-    @staticmethod 
-    async def _unary_unary(unused_request, unused_context): 
-        return _RESPONSE 
- 
-    async def _block_forever(self, unused_request, unused_context): 
-        await asyncio.get_event_loop().create_future() 
- 
+
+    @staticmethod
+    async def _unary_unary(unused_request, unused_context):
+        return _RESPONSE
+
+    async def _block_forever(self, unused_request, unused_context):
+        await asyncio.get_event_loop().create_future()
+
     async def _block_briefly(self, unused_request, unused_context):
-        await asyncio.sleep(test_constants.SHORT_TIMEOUT / 2) 
-        return _RESPONSE 
- 
+        await asyncio.sleep(test_constants.SHORT_TIMEOUT / 2)
+        return _RESPONSE
+
     async def _unary_stream_async_gen(self, unused_request, unused_context):
         for _ in range(_NUM_STREAM_RESPONSES):
             yield _RESPONSE
@@ -188,164 +188,164 @@ class _GenericHandler(grpc.GenericRpcHandler):
             assert _REQUEST == request
         context.set_code(grpc.StatusCode.INTERNAL)
 
-    def service(self, handler_details): 
-        self._called.set_result(None) 
+    def service(self, handler_details):
+        self._called.set_result(None)
         return self._routing_table.get(handler_details.method)
- 
-    async def wait_for_call(self): 
-        await self._called 
- 
- 
-async def _start_test_server(): 
-    server = aio.server() 
-    port = server.add_insecure_port('[::]:0') 
-    generic_handler = _GenericHandler() 
-    server.add_generic_rpc_handlers((generic_handler,)) 
-    await server.start() 
-    return 'localhost:%d' % port, server, generic_handler 
- 
- 
-class TestServer(AioTestBase): 
- 
+
+    async def wait_for_call(self):
+        await self._called
+
+
+async def _start_test_server():
+    server = aio.server()
+    port = server.add_insecure_port('[::]:0')
+    generic_handler = _GenericHandler()
+    server.add_generic_rpc_handlers((generic_handler,))
+    await server.start()
+    return 'localhost:%d' % port, server, generic_handler
+
+
+class TestServer(AioTestBase):
+
     async def setUp(self):
         addr, self._server, self._generic_handler = await _start_test_server()
         self._channel = aio.insecure_channel(addr)
- 
+
     async def tearDown(self):
         await self._channel.close()
         await self._server.stop(None)
- 
+
     async def test_unary_unary(self):
         unary_unary_call = self._channel.unary_unary(_SIMPLE_UNARY_UNARY)
         response = await unary_unary_call(_REQUEST)
         self.assertEqual(response, _RESPONSE)
- 
+
     async def test_unary_stream_async_generator(self):
         unary_stream_call = self._channel.unary_stream(_UNARY_STREAM_ASYNC_GEN)
         call = unary_stream_call(_REQUEST)
- 
+
         response_cnt = 0
         async for response in call:
             response_cnt += 1
             self.assertEqual(_RESPONSE, response)
- 
+
         self.assertEqual(_NUM_STREAM_RESPONSES, response_cnt)
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_unary_stream_reader_writer(self):
         unary_stream_call = self._channel.unary_stream(
             _UNARY_STREAM_READER_WRITER)
         call = unary_stream_call(_REQUEST)
- 
+
         for _ in range(_NUM_STREAM_RESPONSES):
             response = await call.read()
             self.assertEqual(_RESPONSE, response)
- 
+
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_unary_stream_evilly_mixed(self):
         unary_stream_call = self._channel.unary_stream(
             _UNARY_STREAM_EVILLY_MIXED)
         call = unary_stream_call(_REQUEST)
- 
+
         # Uses reader API
         self.assertEqual(_RESPONSE, await call.read())
- 
+
         # Uses async generator API, mixed!
         with self.assertRaises(aio.UsageError):
             async for response in call:
                 self.assertEqual(_RESPONSE, response)
- 
+
     async def test_stream_unary_async_generator(self):
         stream_unary_call = self._channel.stream_unary(_STREAM_UNARY_ASYNC_GEN)
         call = stream_unary_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         response = await call
         self.assertEqual(_RESPONSE, response)
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_stream_unary_reader_writer(self):
         stream_unary_call = self._channel.stream_unary(
             _STREAM_UNARY_READER_WRITER)
         call = stream_unary_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         response = await call
         self.assertEqual(_RESPONSE, response)
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_stream_unary_evilly_mixed(self):
         stream_unary_call = self._channel.stream_unary(
             _STREAM_UNARY_EVILLY_MIXED)
         call = stream_unary_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         response = await call
         self.assertEqual(_RESPONSE, response)
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_stream_stream_async_generator(self):
         stream_stream_call = self._channel.stream_stream(
             _STREAM_STREAM_ASYNC_GEN)
         call = stream_stream_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         for _ in range(_NUM_STREAM_RESPONSES):
             response = await call.read()
             self.assertEqual(_RESPONSE, response)
- 
+
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_stream_stream_reader_writer(self):
         stream_stream_call = self._channel.stream_stream(
             _STREAM_STREAM_READER_WRITER)
         call = stream_stream_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         for _ in range(_NUM_STREAM_RESPONSES):
             response = await call.read()
             self.assertEqual(_RESPONSE, response)
- 
+
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_stream_stream_evilly_mixed(self):
         stream_stream_call = self._channel.stream_stream(
             _STREAM_STREAM_EVILLY_MIXED)
         call = stream_stream_call()
- 
+
         for _ in range(_NUM_STREAM_REQUESTS):
             await call.write(_REQUEST)
         await call.done_writing()
- 
+
         for _ in range(_NUM_STREAM_RESPONSES):
             response = await call.read()
             self.assertEqual(_RESPONSE, response)
- 
+
         self.assertEqual(await call.code(), grpc.StatusCode.OK)
- 
+
     async def test_shutdown(self):
         await self._server.stop(None)
         # Ensures no SIGSEGV triggered, and ends within timeout.
- 
+
     async def test_shutdown_after_call(self):
         await self._channel.unary_unary(_SIMPLE_UNARY_UNARY)(_REQUEST)
- 
+
         await self._server.stop(None)
 
     async def test_graceful_shutdown_success(self):
@@ -410,24 +410,24 @@ class TestServer(AioTestBase):
 
     async def test_shutdown_before_call(self):
         await self._server.stop(None)
- 
+
         # Ensures the server is cleaned up at this point.
         # Some proper exception should be raised.
         with self.assertRaises(aio.AioRpcError):
             await self._channel.unary_unary(_SIMPLE_UNARY_UNARY)(_REQUEST)
- 
+
     async def test_unimplemented(self):
         call = self._channel.unary_unary(_UNIMPLEMENTED_METHOD)
         with self.assertRaises(aio.AioRpcError) as exception_context:
             await call(_REQUEST)
         rpc_error = exception_context.exception
         self.assertEqual(grpc.StatusCode.UNIMPLEMENTED, rpc_error.code())
- 
+
     async def test_shutdown_during_stream_stream(self):
         stream_stream_call = self._channel.stream_stream(
             _STREAM_STREAM_ASYNC_GEN)
         call = stream_stream_call()
- 
+
         # Don't half close the RPC yet, keep it alive.
         await call.write(_REQUEST)
         await self._server.stop(None)
@@ -481,6 +481,6 @@ class TestServer(AioTestBase):
             server.add_secure_port(bind_address, server_credentials)
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    unittest.main(verbosity=2) 
+    unittest.main(verbosity=2)

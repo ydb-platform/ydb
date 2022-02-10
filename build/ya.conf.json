@@ -4646,14 +4646,14 @@
                 }
             ]
         },
-        "ya-tc": { 
-            "tools": { 
+        "ya-tc": {
+            "tools": {
                 "ya-tc": {
                     "bottle": "ya-tc",
                     "executable": "ya-tc"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4666,8 +4666,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "crypta": {
             "tools": {
                 "crypta": {
@@ -7304,17 +7304,17 @@
                 ]
             }
         },
-        "ya-tc": { 
-            "formula": { 
+        "ya-tc": {
+            "formula": {
                 "sandbox_id": 981372621,
-                "match": "ya-tc" 
-            }, 
-            "executable": { 
+                "match": "ya-tc"
+            },
+            "executable": {
                 "ya-tc": [
                     "ya-tc"
                 ]
-            } 
-        }, 
+            }
+        },
         "crypta": {
             "formula": {
                 "sandbox_id": 550700694,

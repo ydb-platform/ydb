@@ -1,35 +1,35 @@
-/* 
+/*
 ** Our memory representation for parsing tables and messages themselves.
 ** Functions in this file are used by generated code and possibly reflection.
-** 
-** The definitions in this file are internal to upb. 
-**/ 
- 
-#ifndef UPB_MSG_H_ 
-#define UPB_MSG_H_ 
- 
-#include <stdint.h> 
-#include <string.h> 
+**
+** The definitions in this file are internal to upb.
+**/
+
+#ifndef UPB_MSG_H_
+#define UPB_MSG_H_
+
+#include <stdint.h>
+#include <string.h>
 
 #include "upb/table.int.h"
-#include "upb/upb.h" 
- 
+#include "upb/upb.h"
+
 #include "upb/port_def.inc"
 
-#ifdef __cplusplus 
-extern "C" { 
-#endif 
- 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define PTR_AT(msg, ofs, type) (type*)((const char*)msg + ofs)
 
-typedef void upb_msg; 
- 
-/** upb_msglayout *************************************************************/ 
- 
-/* upb_msglayout represents the memory layout of a given upb_msgdef.  The 
- * members are public so generated code can initialize them, but users MUST NOT 
- * read or write any of its members. */ 
- 
+typedef void upb_msg;
+
+/** upb_msglayout *************************************************************/
+
+/* upb_msglayout represents the memory layout of a given upb_msgdef.  The
+ * members are public so generated code can initialize them, but users MUST NOT
+ * read or write any of its members. */
+
 /* These aren't real labels according to descriptor.proto, but in the table we
  * use these for map/packed fields instead of UPB_LABEL_REPEATED. */
 enum {
@@ -37,33 +37,33 @@ enum {
   _UPB_LABEL_PACKED = 7  /* Low 3 bits are common with UPB_LABEL_REPEATED. */
 };
 
-typedef struct { 
-  uint32_t number; 
-  uint16_t offset; 
+typedef struct {
+  uint32_t number;
+  uint16_t offset;
   int16_t presence;       /* If >0, hasbit_index.  If <0, ~oneof_index. */
-  uint16_t submsg_index;  /* undefined if descriptortype != MESSAGE or GROUP. */ 
-  uint8_t descriptortype; 
+  uint16_t submsg_index;  /* undefined if descriptortype != MESSAGE or GROUP. */
+  uint8_t descriptortype;
   uint8_t label;          /* google.protobuf.Label or _UPB_LABEL_* above. */
-} upb_msglayout_field; 
- 
-typedef struct upb_msglayout { 
-  const struct upb_msglayout *const* submsgs; 
-  const upb_msglayout_field *fields; 
-  /* Must be aligned to sizeof(void*).  Doesn't include internal members like 
-   * unknown fields, extension dict, pointer to msglayout, etc. */ 
-  uint16_t size; 
-  uint16_t field_count; 
-  bool extendable; 
-} upb_msglayout; 
- 
+} upb_msglayout_field;
+
+typedef struct upb_msglayout {
+  const struct upb_msglayout *const* submsgs;
+  const upb_msglayout_field *fields;
+  /* Must be aligned to sizeof(void*).  Doesn't include internal members like
+   * unknown fields, extension dict, pointer to msglayout, etc. */
+  uint16_t size;
+  uint16_t field_count;
+  bool extendable;
+} upb_msglayout;
+
 /** upb_msg *******************************************************************/
- 
+
 /* Internal members of a upb_msg.  We can change this without breaking binary
  * compatibility.  We put these before the user's data.  The user's upb_msg*
  * points after the upb_msg_internal. */
 
 /* Used when a message is not extendable. */
-typedef struct { 
+typedef struct {
   char *unknown;
   size_t unknown_len;
   size_t unknown_size;
@@ -171,21 +171,21 @@ UPB_INLINE bool _upb_repeated_or_map(const upb_msglayout_field *field) {
 /* Our internal representation for repeated fields.  */
 typedef struct {
   uintptr_t data;   /* Tagged ptr: low 3 bits of ptr are lg2(elem size). */
-  size_t len;   /* Measured in elements. */ 
-  size_t size;  /* Measured in elements. */ 
-} upb_array; 
- 
+  size_t len;   /* Measured in elements. */
+  size_t size;  /* Measured in elements. */
+} upb_array;
+
 UPB_INLINE const void *_upb_array_constptr(const upb_array *arr) {
   return (void*)(arr->data & ~(uintptr_t)7);
 }
- 
+
 UPB_INLINE void *_upb_array_ptr(upb_array *arr) {
   return (void*)_upb_array_constptr(arr);
 }
- 
+
 /* Creates a new array on the given arena. */
 upb_array *_upb_array_new(upb_arena *a, upb_fieldtype_t type);
- 
+
 /* Resizes the capacity of the array to be at least min_size. */
 bool _upb_array_realloc(upb_array *arr, size_t min_size, upb_arena *arena);
 
@@ -464,10 +464,10 @@ UPB_INLINE void _upb_msg_map_set_value(void* msg, const void* val, size_t size) 
 
 #undef PTR_AT
 
-#ifdef __cplusplus 
-}  /* extern "C" */ 
-#endif 
- 
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
+
 #include "upb/port_undef.inc"
 
-#endif /* UPB_MSG_H_ */ 
+#endif /* UPB_MSG_H_ */

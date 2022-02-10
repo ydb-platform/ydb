@@ -46,13 +46,13 @@ class ResolverRegistry {
     /// Registers a resolver factory.  The factory will be used to create a
     /// resolver for any URI whose scheme matches that of the factory.
     /// Calls InitRegistry() if it has not already been called.
-    static void RegisterResolverFactory( 
-        std::unique_ptr<ResolverFactory> factory); 
+    static void RegisterResolverFactory(
+        std::unique_ptr<ResolverFactory> factory);
   };
 
-  /// Checks whether the user input \a target is valid to create a resolver. 
-  static bool IsValidTarget(const char* target); 
- 
+  /// Checks whether the user input \a target is valid to create a resolver.
+  static bool IsValidTarget(const char* target);
+
   /// Creates a resolver given \a target.
   /// First tries to parse \a target as a URI. If this succeeds, tries
   /// to locate a registered resolver factory based on the URI scheme.
@@ -66,18 +66,18 @@ class ResolverRegistry {
   /// name resolution process. \a work_serializer is the work_serializer under
   /// which all resolver calls will be run. \a result_handler is used to return
   /// results from the resolver.
-  static OrphanablePtr<Resolver> CreateResolver( 
-      const char* target, const grpc_channel_args* args, 
+  static OrphanablePtr<Resolver> CreateResolver(
+      const char* target, const grpc_channel_args* args,
       grpc_pollset_set* pollset_set,
       std::shared_ptr<WorkSerializer> work_serializer,
-      std::unique_ptr<Resolver::ResultHandler> result_handler); 
+      std::unique_ptr<Resolver::ResultHandler> result_handler);
 
   /// Returns the default authority to pass from a client for \a target.
-  static grpc_core::UniquePtr<char> GetDefaultAuthority(const char* target); 
+  static grpc_core::UniquePtr<char> GetDefaultAuthority(const char* target);
 
   /// Returns \a target with the default prefix prepended, if needed.
-  static grpc_core::UniquePtr<char> AddDefaultPrefixIfNeeded( 
-      const char* target); 
+  static grpc_core::UniquePtr<char> AddDefaultPrefixIfNeeded(
+      const char* target);
 
   /// Returns the resolver factory for \a scheme.
   /// Caller does NOT own the return value.

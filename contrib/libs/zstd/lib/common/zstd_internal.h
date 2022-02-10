@@ -22,7 +22,7 @@
 #include "compiler.h"
 #include "cpu.h"
 #include "mem.h"
-#include "debug.h"                 /* assert, DEBUGLOG, RAWLOG, g_debuglevel */
+#include "debug.h"                 /* assert, DEBUGLOG, RAWLOG, g_debuglevel */ 
 #include "error_private.h"
 #define ZSTD_STATIC_LINKING_ONLY
 #include "../zstd.h"
@@ -44,11 +44,11 @@
 extern "C" {
 #endif
 
-/* ---- static assert (debug) --- */
-#define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
-#define ZSTD_isError ERR_isError   /* for inlining */
-#define FSE_isError  ERR_isError
-#define HUF_isError  ERR_isError
+/* ---- static assert (debug) --- */ 
+#define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c) 
+#define ZSTD_isError ERR_isError   /* for inlining */ 
+#define FSE_isError  ERR_isError 
+#define HUF_isError  ERR_isError 
 
 
 /*-*************************************
@@ -84,7 +84,7 @@ static UNUSED_ATTR const U32 repStartValue[ZSTD_REP_NUM] = { 1, 4, 8 };
 static UNUSED_ATTR const size_t ZSTD_fcs_fieldSize[4] = { 0, 2, 4, 8 };
 static UNUSED_ATTR const size_t ZSTD_did_fieldSize[4] = { 0, 1, 2, 4 };
 
-#define ZSTD_FRAMEIDSIZE 4   /* magic number size */
+#define ZSTD_FRAMEIDSIZE 4   /* magic number size */ 
 
 #define ZSTD_BLOCKHEADERSIZE 3   /* C standard doesn't allow `static const` variable to be init using another `static const` variable */
 static UNUSED_ATTR const size_t ZSTD_blockHeaderSize = ZSTD_BLOCKHEADERSIZE;
@@ -304,8 +304,8 @@ typedef struct {
     BYTE* llCode;
     BYTE* mlCode;
     BYTE* ofCode;
-    size_t maxNbSeq;
-    size_t maxNbLit;
+    size_t maxNbSeq; 
+    size_t maxNbLit; 
 
     /* longLengthPos and longLengthType to allow us to represent either a single litLength or matchLength
      * in the seqStore that has a value larger than U16 (if it exists). To do so, we increment
@@ -320,7 +320,7 @@ typedef struct {
     U32 matchLength;
 } ZSTD_sequenceLength;
 
-/**
+/** 
  * Returns the ZSTD_sequenceLength for the given sequences. It handles the decoding of long sequences
  * indicated by longLengthPos and longLengthType, and adds MINMATCH back to matchLength.
  */
@@ -341,16 +341,16 @@ MEM_STATIC ZSTD_sequenceLength ZSTD_getSequenceLength(seqStore_t const* seqStore
 }
 
 /**
- * Contains the compressed frame size and an upper-bound for the decompressed frame size.
- * Note: before using `compressedSize`, check for errors using ZSTD_isError().
- *       similarly, before using `decompressedBound`, check for errors using:
- *          `decompressedBound != ZSTD_CONTENTSIZE_ERROR`
- */
-typedef struct {
-    size_t compressedSize;
-    unsigned long long decompressedBound;
-} ZSTD_frameSizeInfo;   /* decompress & legacy */
-
+ * Contains the compressed frame size and an upper-bound for the decompressed frame size. 
+ * Note: before using `compressedSize`, check for errors using ZSTD_isError(). 
+ *       similarly, before using `decompressedBound`, check for errors using: 
+ *          `decompressedBound != ZSTD_CONTENTSIZE_ERROR` 
+ */ 
+typedef struct { 
+    size_t compressedSize; 
+    unsigned long long decompressedBound; 
+} ZSTD_frameSizeInfo;   /* decompress & legacy */ 
+ 
 const seqStore_t* ZSTD_getSeqStore(const ZSTD_CCtx* ctx);   /* compress & dictBuilder */
 void ZSTD_seqToCodes(const seqStore_t* seqStorePtr);   /* compress, dictBuilder, decodeCorpus (shouldn't get its definition from here) */
 
@@ -463,7 +463,7 @@ typedef struct {
     blockType_e blockType;
     U32 lastBlock;
     U32 origSize;
-} blockProperties_t;   /* declared here for decompress and fullbench */
+} blockProperties_t;   /* declared here for decompress and fullbench */ 
 
 /*! ZSTD_getcBlockSize() :
  *  Provides the size of compressed block from block header `src` */
@@ -471,12 +471,12 @@ typedef struct {
 size_t ZSTD_getcBlockSize(const void* src, size_t srcSize,
                           blockProperties_t* bpPtr);
 
-/*! ZSTD_decodeSeqHeaders() :
- *  decode sequence header from src */
-/* Used by: decompress, fullbench (does not get its definition from here) */
-size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
-                       const void* src, size_t srcSize);
-
+/*! ZSTD_decodeSeqHeaders() : 
+ *  decode sequence header from src */ 
+/* Used by: decompress, fullbench (does not get its definition from here) */ 
+size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr, 
+                       const void* src, size_t srcSize); 
+ 
 /**
  * @returns true iff the CPU supports dynamic BMI2 dispatch.
  */
@@ -485,7 +485,7 @@ MEM_STATIC int ZSTD_cpuSupportsBmi2(void)
     ZSTD_cpuid_t cpuid = ZSTD_cpuid();
     return ZSTD_cpuid_bmi1(cpuid) && ZSTD_cpuid_bmi2(cpuid);
 }
-
+ 
 #if defined (__cplusplus)
 }
 #endif

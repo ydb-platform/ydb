@@ -48,7 +48,7 @@ enum MimeTypes {
     MIME_CSS = 34,
     MIME_IMAGE_WEBP = 35,
     MIME_DJVU = 36,
-    MIME_CHM = 37,
+    MIME_CHM = 37, 
     MIME_FB2ZIP = 38,
     MIME_IMAGE_TIFF = 39,
     MIME_IMAGE_PNM = 40,

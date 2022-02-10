@@ -26,7 +26,7 @@
 #include "../common/zstd_deps.h"     /* ZSTD_memcpy, ZSTD_memset */
 #include "../common/compiler.h"
 #include "../common/bitstream.h"
-#include "hist.h"
+#include "hist.h" 
 #define FSE_STATIC_LINKING_ONLY   /* FSE_optimalTableLog_internal */
 #include "../common/fse.h"        /* header compression */
 #define HUF_STATIC_LINKING_ONLY
@@ -38,7 +38,7 @@
 *  Error Management
 ****************************************************************/
 #define HUF_isError ERR_isError
-#define HUF_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
+#define HUF_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */ 
 
 
 /* **************************************************************
@@ -95,7 +95,7 @@ static size_t HUF_compressWeights(void* dst, size_t dstSize, const void* weightT
     BYTE* op = ostart;
     BYTE* const oend = ostart + dstSize;
 
-    unsigned maxSymbolValue = HUF_TABLELOG_MAX;
+    unsigned maxSymbolValue = HUF_TABLELOG_MAX; 
     U32 tableLog = MAX_FSE_TABLELOG_FOR_HUFF_HEADER;
     HUF_CompressWeightsWksp* wksp = (HUF_CompressWeightsWksp*)HUF_alignUpWorkspace(workspace, &workspaceSize, ZSTD_ALIGNOF(U32));
 
@@ -107,7 +107,7 @@ static size_t HUF_compressWeights(void* dst, size_t dstSize, const void* weightT
     /* Scan input and build symbol stats */
     {   unsigned const maxCount = HIST_count_simple(wksp->count, &maxSymbolValue, weightTable, wtSize);   /* never fails */
         if (maxCount == wtSize) return 1;   /* only a single symbol in src : rle */
-        if (maxCount == 1) return 0;        /* each symbol present maximum once => not compressible */
+        if (maxCount == 1) return 0;        /* each symbol present maximum once => not compressible */ 
     }
 
     tableLog = FSE_optimalTableLog(tableLog, wtSize, maxSymbolValue);
@@ -271,13 +271,13 @@ size_t HUF_readCTable (HUF_CElt* CTable, unsigned* maxSymbolValuePtr, const void
 }
 
 U32 HUF_getNbBitsFromCTable(HUF_CElt const* CTable, U32 symbolValue)
-{
+{ 
     const HUF_CElt* ct = CTable + 1;
-    assert(symbolValue <= HUF_SYMBOLVALUE_MAX);
+    assert(symbolValue <= HUF_SYMBOLVALUE_MAX); 
     return (U32)HUF_getNbBits(ct[symbolValue]);
-}
+} 
 
-
+ 
 typedef struct nodeElt_s {
     U32 count;
     U16 parent;
@@ -1139,14 +1139,14 @@ size_t HUF_compress4X_usingCTable_bmi2(void* dst, size_t dstSize, const void* sr
     return HUF_compress4X_usingCTable_internal(dst, dstSize, src, srcSize, CTable, bmi2);
 }
 
-typedef enum { HUF_singleStream, HUF_fourStreams } HUF_nbStreams_e;
+typedef enum { HUF_singleStream, HUF_fourStreams } HUF_nbStreams_e; 
 
 static size_t HUF_compressCTable_internal(
                 BYTE* const ostart, BYTE* op, BYTE* const oend,
                 const void* src, size_t srcSize,
-                HUF_nbStreams_e nbStreams, const HUF_CElt* CTable, const int bmi2)
+                HUF_nbStreams_e nbStreams, const HUF_CElt* CTable, const int bmi2) 
 {
-    size_t const cSize = (nbStreams==HUF_singleStream) ?
+    size_t const cSize = (nbStreams==HUF_singleStream) ? 
                          HUF_compress1X_usingCTable_internal(op, (size_t)(oend - op), src, srcSize, CTable, bmi2) :
                          HUF_compress4X_usingCTable_internal(op, (size_t)(oend - op), src, srcSize, CTable, bmi2);
     if (HUF_isError(cSize)) { return cSize; }
@@ -1159,7 +1159,7 @@ static size_t HUF_compressCTable_internal(
 }
 
 typedef struct {
-    unsigned count[HUF_SYMBOLVALUE_MAX + 1];
+    unsigned count[HUF_SYMBOLVALUE_MAX + 1]; 
     HUF_CElt CTable[HUF_CTABLE_SIZE_ST(HUF_SYMBOLVALUE_MAX)];
     union {
         HUF_buildCTable_wksp_tables buildCTable_wksp;
@@ -1174,13 +1174,13 @@ typedef struct {
 /* HUF_compress_internal() :
  * `workSpace_align4` must be aligned on 4-bytes boundaries,
  * and occupies the same space as a table of HUF_WORKSPACE_SIZE_U64 unsigned */
-static size_t
-HUF_compress_internal (void* dst, size_t dstSize,
-                 const void* src, size_t srcSize,
-                       unsigned maxSymbolValue, unsigned huffLog,
-                       HUF_nbStreams_e nbStreams,
+static size_t 
+HUF_compress_internal (void* dst, size_t dstSize, 
+                 const void* src, size_t srcSize, 
+                       unsigned maxSymbolValue, unsigned huffLog, 
+                       HUF_nbStreams_e nbStreams, 
                        void* workSpace, size_t wkspSize,
-                       HUF_CElt* oldHufTable, HUF_repeat* repeat, int preferRepeat,
+                       HUF_CElt* oldHufTable, HUF_repeat* repeat, int preferRepeat, 
                  const int bmi2, unsigned suspectUncompressible)
 {
     HUF_compress_tables_t* const table = (HUF_compress_tables_t*)HUF_alignUpWorkspace(workSpace, &wkspSize, ZSTD_ALIGNOF(size_t));
@@ -1204,7 +1204,7 @@ HUF_compress_internal (void* dst, size_t dstSize,
     if (preferRepeat && repeat && *repeat == HUF_repeat_valid) {
         return HUF_compressCTable_internal(ostart, op, oend,
                                            src, srcSize,
-                                           nbStreams, oldHufTable, bmi2);
+                                           nbStreams, oldHufTable, bmi2); 
     }
 
     /* If uncompressible data is suspected, do a smaller sampling first */
@@ -1225,7 +1225,7 @@ HUF_compress_internal (void* dst, size_t dstSize,
     /* Scan input and build symbol stats */
     {   CHECK_V_F(largest, HIST_count_wksp (table->count, &maxSymbolValue, (const BYTE*)src, srcSize, table->wksps.hist_wksp, sizeof(table->wksps.hist_wksp)) );
         if (largest == srcSize) { *ostart = ((const BYTE*)src)[0]; return 1; }   /* single symbol, rle */
-        if (largest <= (srcSize >> 7)+4) return 0;   /* heuristic : probably not compressible enough */
+        if (largest <= (srcSize >> 7)+4) return 0;   /* heuristic : probably not compressible enough */ 
     }
 
     /* Check validity of previous table */
@@ -1238,15 +1238,15 @@ HUF_compress_internal (void* dst, size_t dstSize,
     if (preferRepeat && repeat && *repeat != HUF_repeat_none) {
         return HUF_compressCTable_internal(ostart, op, oend,
                                            src, srcSize,
-                                           nbStreams, oldHufTable, bmi2);
+                                           nbStreams, oldHufTable, bmi2); 
     }
 
     /* Build Huffman Tree */
     huffLog = HUF_optimalTableLog(huffLog, srcSize, maxSymbolValue);
-    {   size_t const maxBits = HUF_buildCTable_wksp(table->CTable, table->count,
-                                            maxSymbolValue, huffLog,
+    {   size_t const maxBits = HUF_buildCTable_wksp(table->CTable, table->count, 
+                                            maxSymbolValue, huffLog, 
                                             &table->wksps.buildCTable_wksp, sizeof(table->wksps.buildCTable_wksp));
-        CHECK_F(maxBits);
+        CHECK_F(maxBits); 
         huffLog = (U32)maxBits;
     }
     /* Zero unused symbols in CTable, so we can check it for validity */
@@ -1266,7 +1266,7 @@ HUF_compress_internal (void* dst, size_t dstSize,
             if (oldSize <= hSize + newSize || hSize + 12 >= srcSize) {
                 return HUF_compressCTable_internal(ostart, op, oend,
                                                    src, srcSize,
-                                                   nbStreams, oldHufTable, bmi2);
+                                                   nbStreams, oldHufTable, bmi2); 
         }   }
 
         /* Use the new huffman table */
@@ -1278,7 +1278,7 @@ HUF_compress_internal (void* dst, size_t dstSize,
     }
     return HUF_compressCTable_internal(ostart, op, oend,
                                        src, srcSize,
-                                       nbStreams, table->CTable, bmi2);
+                                       nbStreams, table->CTable, bmi2); 
 }
 
 
@@ -1288,7 +1288,7 @@ size_t HUF_compress1X_wksp (void* dst, size_t dstSize,
                       void* workSpace, size_t wkspSize)
 {
     return HUF_compress_internal(dst, dstSize, src, srcSize,
-                                 maxSymbolValue, huffLog, HUF_singleStream,
+                                 maxSymbolValue, huffLog, HUF_singleStream, 
                                  workSpace, wkspSize,
                                  NULL, NULL, 0, 0 /*bmi2*/, 0);
 }
@@ -1301,7 +1301,7 @@ size_t HUF_compress1X_repeat (void* dst, size_t dstSize,
                       int bmi2, unsigned suspectUncompressible)
 {
     return HUF_compress_internal(dst, dstSize, src, srcSize,
-                                 maxSymbolValue, huffLog, HUF_singleStream,
+                                 maxSymbolValue, huffLog, HUF_singleStream, 
                                  workSpace, wkspSize, hufTable,
                                  repeat, preferRepeat, bmi2, suspectUncompressible);
 }
@@ -1315,7 +1315,7 @@ size_t HUF_compress4X_wksp (void* dst, size_t dstSize,
                       void* workSpace, size_t wkspSize)
 {
     return HUF_compress_internal(dst, dstSize, src, srcSize,
-                                 maxSymbolValue, huffLog, HUF_fourStreams,
+                                 maxSymbolValue, huffLog, HUF_fourStreams, 
                                  workSpace, wkspSize,
                                  NULL, NULL, 0, 0 /*bmi2*/, 0);
 }
@@ -1331,7 +1331,7 @@ size_t HUF_compress4X_repeat (void* dst, size_t dstSize,
                       HUF_CElt* hufTable, HUF_repeat* repeat, int preferRepeat, int bmi2, unsigned suspectUncompressible)
 {
     return HUF_compress_internal(dst, dstSize, src, srcSize,
-                                 maxSymbolValue, huffLog, HUF_fourStreams,
+                                 maxSymbolValue, huffLog, HUF_fourStreams, 
                                  workSpace, wkspSize,
                                  hufTable, repeat, preferRepeat, bmi2, suspectUncompressible);
 }

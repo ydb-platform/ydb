@@ -1,15 +1,15 @@
-LIBRARY()
-
-OWNER(g:messagebus)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(g:messagebus) 
+ 
+PEERDIR( 
     library/cpp/getopt
     library/cpp/deprecated/enum_codegen
-)
-
-SRCS(
-    netaddr.cpp
-    session_config.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    netaddr.cpp 
+    session_config.cpp 
+) 
+ 
+END() 

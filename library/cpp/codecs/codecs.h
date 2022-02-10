@@ -76,11 +76,11 @@ namespace NCodecs {
             Trained = t;
         }
 
-        bool TryToLearn(ISequenceReader& r) {
-            Trained = DoTryToLearn(r);
-            return Trained;
-        }
-
+        bool TryToLearn(ISequenceReader& r) { 
+            Trained = DoTryToLearn(r); 
+            return Trained; 
+        } 
+ 
         void Learn(ISequenceReader& r) {
             LearnX(r, 1);
         }
@@ -110,11 +110,11 @@ namespace NCodecs {
     protected:
         virtual void DoLearn(ISequenceReader&) = 0;
 
-        virtual bool DoTryToLearn(ISequenceReader& r) {
-            DoLearn(r);
-            return true;
-        }
-
+        virtual bool DoTryToLearn(ISequenceReader& r) { 
+            DoLearn(r); 
+            return true; 
+        } 
+ 
         // so the pipeline codec will know to adjust the sample for the subcodecs
         virtual void DoLearnX(ISequenceReader& r, double /*sampleSizeMultiplier*/) {
             DoLearn(r);

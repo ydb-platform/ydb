@@ -166,9 +166,9 @@ public:
     ui64 MaxInputContentLength = sizeof(size_t) <= 4 ? 2_GB : 64_GB;
     size_t MaxRequestsPerConnection = 0;  // If keep-alive is enabled, request limit before connection is closed
     bool UseElasticQueues = false;
-
-    TDuration PollTimeout; // timeout of TSocketPoller::WaitT call
-    TDuration ExpirationTimeout; // drop inactive connections after ExpirationTimeout (should be > 0)
+ 
+    TDuration PollTimeout; // timeout of TSocketPoller::WaitT call 
+    TDuration ExpirationTimeout; // drop inactive connections after ExpirationTimeout (should be > 0) 
 
     TString ListenThreadName = "HttpListen";
     TString RequestsThreadName = "HttpServer";

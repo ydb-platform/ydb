@@ -664,17 +664,17 @@ static size_t FSE_initDStream(FSE_DStream_t* bitD, const void* srcBuffer, size_t
         switch(srcSize)
         {
             case 7: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[6]) << (sizeof(size_t)*8 - 16);
-                    /* fallthrough */
+                    /* fallthrough */ 
             case 6: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[5]) << (sizeof(size_t)*8 - 24);
-                    /* fallthrough */
+                    /* fallthrough */ 
             case 5: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[4]) << (sizeof(size_t)*8 - 32);
-                    /* fallthrough */
+                    /* fallthrough */ 
             case 4: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[3]) << 24;
-                    /* fallthrough */
+                    /* fallthrough */ 
             case 3: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[2]) << 16;
-                    /* fallthrough */
+                    /* fallthrough */ 
             case 2: bitD->bitContainer += (size_t)(((const BYTE*)(bitD->start))[1]) <<  8;
-                    /* fallthrough */
+                    /* fallthrough */ 
             default:;
         }
         contain32 = ((const BYTE*)srcBuffer)[srcSize-1];
@@ -1339,8 +1339,8 @@ static const U32 ZSTD_magicNumber = 0xFD2FB51E;   /* 3rd version : seqNb header 
 #define LITERAL_NOENTROPY 63
 #define COMMAND_NOENTROPY 7   /* to remove */
 
-#define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2)
-
+#define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2) 
+ 
 static const size_t ZSTD_blockHeaderSize = 3;
 static const size_t ZSTD_frameHeaderSize = 4;
 
@@ -1460,7 +1460,7 @@ unsigned ZSTDv01_isError(size_t code) { return ERR_isError(code); }
 *   Decompression code
 **************************************************************/
 
-static size_t ZSTDv01_getcBlockSize(const void* src, size_t srcSize, blockProperties_t* bpPtr)
+static size_t ZSTDv01_getcBlockSize(const void* src, size_t srcSize, blockProperties_t* bpPtr) 
 {
     const BYTE* const in = (const BYTE* const)src;
     BYTE headerFlags;
@@ -1515,7 +1515,7 @@ static size_t ZSTD_decompressLiterals(void* ctx,
 }
 
 
-static size_t ZSTDv01_decodeLiteralsBlock(void* ctx,
+static size_t ZSTDv01_decodeLiteralsBlock(void* ctx, 
                                 void* dst, size_t maxDstSize,
                           const BYTE** litStart, size_t* litSize,
                           const void* src, size_t srcSize)
@@ -1569,7 +1569,7 @@ static size_t ZSTDv01_decodeLiteralsBlock(void* ctx,
 }
 
 
-static size_t ZSTDv01_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t* dumpsLengthPtr,
+static size_t ZSTDv01_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t* dumpsLengthPtr, 
                          FSE_DTable* DTableLL, FSE_DTable* DTableML, FSE_DTable* DTableOffb,
                          const void* src, size_t srcSize)
 {
@@ -1757,7 +1757,7 @@ static size_t ZSTD_execSequence(BYTE* op,
                                 BYTE* const base, BYTE* const oend)
 {
     static const int dec32table[] = {0, 1, 2, 1, 4, 4, 4, 4};   /* added */
-    static const int dec64table[] = {8, 8, 8, 7, 8, 9,10,11};   /* subtracted */
+    static const int dec64table[] = {8, 8, 8, 7, 8, 9,10,11};   /* subtracted */ 
     const BYTE* const ostart = op;
     const size_t litLength = sequence.litLength;
     BYTE* const endMatch = op + litLength + sequence.matchLength;    /* risk : address space overflow (32-bits) */
@@ -2001,59 +2001,59 @@ size_t ZSTDv01_decompress(void* dst, size_t maxDstSize, const void* src, size_t 
     return ZSTDv01_decompressDCtx(&ctx, dst, maxDstSize, src, srcSize);
 }
 
-/* ZSTD_errorFrameSizeInfoLegacy() :
-   assumes `cSize` and `dBound` are _not_ NULL */
-static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret)
+/* ZSTD_errorFrameSizeInfoLegacy() : 
+   assumes `cSize` and `dBound` are _not_ NULL */ 
+static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret) 
 {
-    *cSize = ret;
-    *dBound = ZSTD_CONTENTSIZE_ERROR;
-}
-
-void ZSTDv01_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound)
-{
+    *cSize = ret; 
+    *dBound = ZSTD_CONTENTSIZE_ERROR; 
+} 
+ 
+void ZSTDv01_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound) 
+{ 
     const BYTE* ip = (const BYTE*)src;
     size_t remainingSize = srcSize;
-    size_t nbBlocks = 0;
+    size_t nbBlocks = 0; 
     U32 magicNumber;
     blockProperties_t blockProperties;
 
     /* Frame Header */
-    if (srcSize < ZSTD_frameHeaderSize+ZSTD_blockHeaderSize) {
-        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
-        return;
-    }
+    if (srcSize < ZSTD_frameHeaderSize+ZSTD_blockHeaderSize) { 
+        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong)); 
+        return; 
+    } 
     magicNumber = ZSTD_readBE32(src);
-    if (magicNumber != ZSTD_magicNumber) {
-        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown));
-        return;
-    }
+    if (magicNumber != ZSTD_magicNumber) { 
+        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown)); 
+        return; 
+    } 
     ip += ZSTD_frameHeaderSize; remainingSize -= ZSTD_frameHeaderSize;
 
     /* Loop on each block */
     while (1)
     {
         size_t blockSize = ZSTDv01_getcBlockSize(ip, remainingSize, &blockProperties);
-        if (ZSTDv01_isError(blockSize)) {
-            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, blockSize);
-            return;
-        }
+        if (ZSTDv01_isError(blockSize)) { 
+            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, blockSize); 
+            return; 
+        } 
 
         ip += ZSTD_blockHeaderSize;
         remainingSize -= ZSTD_blockHeaderSize;
-        if (blockSize > remainingSize) {
-            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
-            return;
-        }
+        if (blockSize > remainingSize) { 
+            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong)); 
+            return; 
+        } 
 
         if (blockSize == 0) break;   /* bt_end */
 
         ip += blockSize;
         remainingSize -= blockSize;
-        nbBlocks++;
+        nbBlocks++; 
     }
 
-    *cSize = ip - (const BYTE*)src;
-    *dBound = nbBlocks * BLOCKSIZE;
+    *cSize = ip - (const BYTE*)src; 
+    *dBound = nbBlocks * BLOCKSIZE; 
 }
 
 /*******************************

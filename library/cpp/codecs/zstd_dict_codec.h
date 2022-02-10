@@ -30,7 +30,7 @@ namespace NCodecs {
 
     protected:
         void DoLearn(ISequenceReader& in) override;
-        bool DoTryToLearn(ISequenceReader& in) final;
+        bool DoTryToLearn(ISequenceReader& in) final; 
         void Save(IOutputStream* out) const override;
         void Load(IInputStream* in) override;
     };

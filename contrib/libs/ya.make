@@ -340,7 +340,7 @@ RECURSE(
     tinyalsa
     tlsh
     trace_viewer
-    tralics
+    tralics 
     tree_sitter
     uatraits
     usrsctp

@@ -60,25 +60,25 @@ extern "C" {
   typedef  uint64_t U64;
   typedef   int64_t S64;
 #else
-# include <limits.h>
-#if CHAR_BIT != 8
-#  error "this implementation requires char to be exactly 8-bit type"
-#endif
+# include <limits.h> 
+#if CHAR_BIT != 8 
+#  error "this implementation requires char to be exactly 8-bit type" 
+#endif 
   typedef unsigned char      BYTE;
   typedef unsigned char      U8;
   typedef   signed char      S8;
-#if USHRT_MAX != 65535
-#  error "this implementation requires short to be exactly 16-bit type"
-#endif
+#if USHRT_MAX != 65535 
+#  error "this implementation requires short to be exactly 16-bit type" 
+#endif 
   typedef unsigned short      U16;
   typedef   signed short      S16;
-#if UINT_MAX != 4294967295
-#  error "this implementation requires int to be exactly 32-bit type"
-#endif
+#if UINT_MAX != 4294967295 
+#  error "this implementation requires int to be exactly 32-bit type" 
+#endif 
   typedef unsigned int        U32;
   typedef   signed int        S32;
-/* note : there are no limits defined for long long type in C90.
- * limits exist in C99, however, in such case, <stdint.h> is preferred */
+/* note : there are no limits defined for long long type in C90. 
+ * limits exist in C99, however, in such case, <stdint.h> is preferred */ 
   typedef unsigned long long  U64;
   typedef   signed long long  S64;
 #endif
@@ -261,8 +261,8 @@ MEM_STATIC U32 MEM_swap32(U32 in)
 {
 #if defined(_MSC_VER)     /* Visual Studio */
     return _byteswap_ulong(in);
-#elif (defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 403)) \
-  || (defined(__clang__) && __has_builtin(__builtin_bswap32))
+#elif (defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 403)) \ 
+  || (defined(__clang__) && __has_builtin(__builtin_bswap32)) 
     return __builtin_bswap32(in);
 #else
     return  ((in << 24) & 0xff000000 ) |
@@ -276,8 +276,8 @@ MEM_STATIC U64 MEM_swap64(U64 in)
 {
 #if defined(_MSC_VER)     /* Visual Studio */
     return _byteswap_uint64(in);
-#elif (defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 403)) \
-  || (defined(__clang__) && __has_builtin(__builtin_bswap64))
+#elif (defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 403)) \ 
+  || (defined(__clang__) && __has_builtin(__builtin_bswap64)) 
     return __builtin_bswap64(in);
 #else
     return  ((in << 56) & 0xff00000000000000ULL) |

@@ -37,14 +37,14 @@ namespace {
         virtual ~IPollAble() {
         }
 
-        virtual void OnPollEvent(TInstant now) = 0;
+        virtual void OnPollEvent(TInstant now) = 0; 
     };
 
     struct TShouldStop {
     };
 
     struct TWakeupPollAble: public IPollAble {
-        void OnPollEvent(TInstant) override {
+        void OnPollEvent(TInstant) override { 
             throw TShouldStop();
         }
     };
@@ -55,9 +55,9 @@ public:
     TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef);
     ~TClientConnection() override;
 
-    void OnPollEvent(TInstant now) override;
+    void OnPollEvent(TInstant now) override; 
 
-    inline void Activate(TInstant now) noexcept;
+    inline void Activate(TInstant now) noexcept; 
     inline void DeActivate();
     inline void Reject();
 
@@ -66,7 +66,7 @@ public:
     NAddr::IRemoteAddrRef ListenerSockAddrRef_;
     THttpServer::TImpl* HttpServ_ = nullptr;
     bool Reject_ = false;
-    TInstant LastUsed;
+    TInstant LastUsed; 
     TInstant AcceptMoment;
     size_t ReceivedRequests = 0;
 };
@@ -75,9 +75,9 @@ class THttpServer::TImpl {
 public:
     class TConnections {
     public:
-        inline TConnections(TSocketPoller* poller, const THttpServerOptions& options)
+        inline TConnections(TSocketPoller* poller, const THttpServerOptions& options) 
             : Poller_(poller)
-            , Options(options)
+            , Options(options) 
         {
         }
 
@@ -91,12 +91,12 @@ public:
             Poller_->WaitRead(c->Socket_, (void*)static_cast<const IPollAble*>(c));
         }
 
-        inline void Erase(TClientConnection* c, TInstant now) noexcept {
+        inline void Erase(TClientConnection* c, TInstant now) noexcept { 
             TGuard<TMutex> g(Mutex_);
-            EraseUnsafe(c);
-            if (Options.ExpirationTimeout > TDuration::Zero()) {
-                TryRemovingUnsafe(now - Options.ExpirationTimeout);
-            }
+            EraseUnsafe(c); 
+            if (Options.ExpirationTimeout > TDuration::Zero()) { 
+                TryRemovingUnsafe(now - Options.ExpirationTimeout); 
+            } 
         }
 
         inline void Clear() noexcept {
@@ -105,34 +105,34 @@ public:
             Conns_.Clear();
         }
 
-        inline bool RemoveOld(TInstant border) noexcept {
+        inline bool RemoveOld(TInstant border) noexcept { 
             TGuard<TMutex> g(Mutex_);
-            return TryRemovingUnsafe(border);
-        }
+            return TryRemovingUnsafe(border); 
+        } 
 
-        bool TryRemovingUnsafe(TInstant border) noexcept {
+        bool TryRemovingUnsafe(TInstant border) noexcept { 
             if (Conns_.Empty()) {
                 return false;
             }
             TClientConnection* c = &*(Conns_.Begin());
-            if (c->LastUsed > border) {
-                return false;
-            }
-            EraseUnsafe(c);
+            if (c->LastUsed > border) { 
+                return false; 
+            } 
+            EraseUnsafe(c); 
             delete c;
             return true;
         }
 
-        void EraseUnsafe(TClientConnection* c) noexcept {
-            Poller_->Unwait(c->Socket_);
-            c->Unlink();
-        }
-
+        void EraseUnsafe(TClientConnection* c) noexcept { 
+            Poller_->Unwait(c->Socket_); 
+            c->Unlink(); 
+        } 
+ 
     public:
         TMutex Mutex_;
         TIntrusiveListWithAutoDelete<TClientConnection, TDelete> Conns_;
         TSocketPoller* Poller_ = nullptr;
-        const THttpServerOptions& Options;
+        const THttpServerOptions& Options; 
     };
 
     static void* ListenSocketFunction(void* param) {
@@ -156,7 +156,7 @@ public:
     void AddRequestFromSocket(const TSocket& s, TInstant now, NAddr::IRemoteAddrRef listenerSockAddrRef) {
         if (MaxRequestsReached()) {
             Cb_->OnMaxConn();
-            bool wasRemoved = Connections->RemoveOld(TInstant::Max());
+            bool wasRemoved = Connections->RemoveOld(TInstant::Max()); 
             if (!wasRemoved && Options_.RejectExcessConnections) {
                 (new TClientConnection(s, this, listenerSockAddrRef))->Reject();
                 return;
@@ -164,8 +164,8 @@ public:
         }
 
         auto connection = new TClientConnection(s, this, listenerSockAddrRef);
-        connection->LastUsed = now;
-        connection->DeActivate();
+        connection->LastUsed = now; 
+        connection->DeActivate(); 
     }
 
     void SaveErrorCode() {
@@ -182,7 +182,7 @@ public:
 
     bool Start() {
         Poller.Reset(new TSocketPoller());
-        Connections.Reset(new TConnections(Poller.Get(), Options_));
+        Connections.Reset(new TConnections(Poller.Get(), Options_)); 
 
         // Start the listener thread
         ListenerRunningOK = false;
@@ -348,26 +348,26 @@ public:
         TVector<void*> events;
         events.resize(1);
 
-        TInstant now = TInstant::Now();
+        TInstant now = TInstant::Now(); 
         for (;;) {
             try {
-                const TInstant deadline = Options_.PollTimeout == TDuration::Zero() ? TInstant::Max() : now + Options_.PollTimeout;
+                const TInstant deadline = Options_.PollTimeout == TDuration::Zero() ? TInstant::Max() : now + Options_.PollTimeout; 
                 const size_t ret = Poller->WaitD(events.data(), events.size(), deadline);
 
-                now = TInstant::Now();
+                now = TInstant::Now(); 
                 for (size_t i = 0; i < ret; ++i) {
-                    ((IPollAble*)events[i])->OnPollEvent(now);
+                    ((IPollAble*)events[i])->OnPollEvent(now); 
                 }
 
-                if (ret == 0 && Options_.ExpirationTimeout > TDuration::Zero()) {
-                    Connections->RemoveOld(now - Options_.ExpirationTimeout);
-                }
-
-                // When MaxConnections is limited or ExpirationTimeout is set, OnPollEvent can call
+                if (ret == 0 && Options_.ExpirationTimeout > TDuration::Zero()) { 
+                    Connections->RemoveOld(now - Options_.ExpirationTimeout); 
+                } 
+ 
+                // When MaxConnections is limited or ExpirationTimeout is set, OnPollEvent can call 
                 // RemoveOld and destroy other IPollAble* objects in the
                 // poller. Thus in this case we can safely process only one
                 // event from the poller at a time.
-                if (!Options_.MaxConnections && Options_.ExpirationTimeout == TDuration::Zero()) {
+                if (!Options_.MaxConnections && Options_.ExpirationTimeout == TDuration::Zero()) { 
                     if (ret >= events.size()) {
                         events.resize(ret * 2);
                     }
@@ -570,9 +570,9 @@ TClientConnection::~TClientConnection() {
     HttpServ_->DecreaseConnections();
 }
 
-void TClientConnection::OnPollEvent(TInstant now) {
+void TClientConnection::OnPollEvent(TInstant now) { 
     THolder<TClientConnection> this_(this);
-    Activate(now);
+    Activate(now); 
 
     {
         char tmp[1];
@@ -594,9 +594,9 @@ void TClientConnection::OnPollEvent(TInstant now) {
     HttpServ_->AddRequest(obj, Reject_);
 }
 
-void TClientConnection::Activate(TInstant now) noexcept {
-    HttpServ_->Connections->Erase(this, now);
-    LastUsed = now;
+void TClientConnection::Activate(TInstant now) noexcept { 
+    HttpServ_->Connections->Erase(this, now); 
+    LastUsed = now; 
     ++ReceivedRequests;
 }
 

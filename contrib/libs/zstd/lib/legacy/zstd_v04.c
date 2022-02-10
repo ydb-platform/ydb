@@ -9,19 +9,19 @@
  */
 
 
- /******************************************
- *  Includes
- ******************************************/
-#include <stddef.h>    /* size_t, ptrdiff_t */
-#include <string.h>    /* memcpy */
-
+ /****************************************** 
+ *  Includes 
+ ******************************************/ 
+#include <stddef.h>    /* size_t, ptrdiff_t */ 
+#include <string.h>    /* memcpy */ 
+ 
 #include "zstd_v04.h"
 #include "../common/error_private.h"
 
 
 /* ******************************************************************
- *   mem.h
- *******************************************************************/
+ *   mem.h 
+ *******************************************************************/ 
 #ifndef MEM_H_MODULE
 #define MEM_H_MODULE
 
@@ -79,8 +79,8 @@ extern "C" {
 *  Debug
 ***************************************/
 #include "../common/debug.h"
-#ifndef assert
-#  define assert(condition) ((void)0)
+#ifndef assert 
+#  define assert(condition) ((void)0) 
 #endif
 
 
@@ -379,8 +379,8 @@ static const size_t ZSTD_frameHeaderSize_min = 5;
 #define MIN_SEQUENCES_SIZE (2 /*seqNb*/ + 2 /*dumps*/ + 3 /*seqTables*/ + 1 /*bitStream*/)
 #define MIN_CBLOCK_SIZE (3 /*litCSize*/ + MIN_SEQUENCES_SIZE)
 
-#define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2)
-
+#define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2) 
+ 
 typedef enum { bt_compressed, bt_raw, bt_rle, bt_end } blockType_t;
 
 
@@ -1090,7 +1090,7 @@ static size_t FSE_buildDTable(FSE_DTable* dt, const short* normalizedCounter, un
     if (tableLog > FSE_MAX_TABLELOG) return ERROR(tableLog_tooLarge);
 
     /* Init, lay down lowprob symbols */
-    memset(tableDecode, 0, sizeof(FSE_DECODE_TYPE) * (maxSymbolValue+1) );   /* useless init, but keep static analyzer happy, and we don't need to performance optimize legacy decoders */
+    memset(tableDecode, 0, sizeof(FSE_DECODE_TYPE) * (maxSymbolValue+1) );   /* useless init, but keep static analyzer happy, and we don't need to performance optimize legacy decoders */ 
     DTableH.tableLog = (U16)tableLog;
     for (s=0; s<=maxSymbolValue; s++)
     {
@@ -2868,7 +2868,7 @@ static size_t ZSTD_execSequence(BYTE* op,
                                 const BYTE* const base, const BYTE* const vBase, const BYTE* const dictEnd)
 {
     static const int dec32table[] = { 0, 1, 2, 1, 4, 4, 4, 4 };   /* added */
-    static const int dec64table[] = { 8, 8, 8, 7, 8, 9,10,11 };   /* subtracted */
+    static const int dec64table[] = { 8, 8, 8, 7, 8, 9,10,11 };   /* subtracted */ 
     BYTE* const oLitEnd = op + sequence.litLength;
     const size_t sequenceLength = sequence.litLength + sequence.matchLength;
     BYTE* const oMatchEnd = op + sequenceLength;   /* risk : address space overflow (32-bits) */
@@ -2941,7 +2941,7 @@ static size_t ZSTD_execSequence(BYTE* op,
     }
     else
     {
-        ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength-8);   /* works even if matchLength < 8, but must be signed */
+        ZSTD_wildcopy(op, match, (ptrdiff_t)sequence.matchLength-8);   /* works even if matchLength < 8, but must be signed */ 
     }
     return sequenceLength;
 }
@@ -3132,57 +3132,57 @@ static size_t ZSTD_decompress_usingDict(ZSTD_DCtx* ctx,
     return op-ostart;
 }
 
-/* ZSTD_errorFrameSizeInfoLegacy() :
-   assumes `cSize` and `dBound` are _not_ NULL */
-static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret)
+/* ZSTD_errorFrameSizeInfoLegacy() : 
+   assumes `cSize` and `dBound` are _not_ NULL */ 
+static void ZSTD_errorFrameSizeInfoLegacy(size_t* cSize, unsigned long long* dBound, size_t ret) 
 {
-    *cSize = ret;
-    *dBound = ZSTD_CONTENTSIZE_ERROR;
-}
-
-void ZSTDv04_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound)
-{
+    *cSize = ret; 
+    *dBound = ZSTD_CONTENTSIZE_ERROR; 
+} 
+ 
+void ZSTDv04_findFrameSizeInfoLegacy(const void *src, size_t srcSize, size_t* cSize, unsigned long long* dBound) 
+{ 
     const BYTE* ip = (const BYTE*)src;
     size_t remainingSize = srcSize;
-    size_t nbBlocks = 0;
+    size_t nbBlocks = 0; 
     blockProperties_t blockProperties;
 
     /* Frame Header */
-    if (srcSize < ZSTD_frameHeaderSize_min) {
-        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
-        return;
-    }
-    if (MEM_readLE32(src) != ZSTD_MAGICNUMBER) {
-        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown));
-        return;
-    }
+    if (srcSize < ZSTD_frameHeaderSize_min) { 
+        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong)); 
+        return; 
+    } 
+    if (MEM_readLE32(src) != ZSTD_MAGICNUMBER) { 
+        ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(prefix_unknown)); 
+        return; 
+    } 
     ip += ZSTD_frameHeaderSize_min; remainingSize -= ZSTD_frameHeaderSize_min;
 
     /* Loop on each block */
     while (1)
     {
         size_t cBlockSize = ZSTD_getcBlockSize(ip, remainingSize, &blockProperties);
-        if (ZSTD_isError(cBlockSize)) {
-            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, cBlockSize);
-            return;
-        }
+        if (ZSTD_isError(cBlockSize)) { 
+            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, cBlockSize); 
+            return; 
+        } 
 
         ip += ZSTD_blockHeaderSize;
         remainingSize -= ZSTD_blockHeaderSize;
-        if (cBlockSize > remainingSize) {
-            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong));
-            return;
-        }
+        if (cBlockSize > remainingSize) { 
+            ZSTD_errorFrameSizeInfoLegacy(cSize, dBound, ERROR(srcSize_wrong)); 
+            return; 
+        } 
 
         if (cBlockSize == 0) break;   /* bt_end */
 
         ip += cBlockSize;
         remainingSize -= cBlockSize;
-        nbBlocks++;
+        nbBlocks++; 
     }
 
-    *cSize = ip - (const BYTE*)src;
-    *dBound = nbBlocks * BLOCKSIZE;
+    *cSize = ip - (const BYTE*)src; 
+    *dBound = nbBlocks * BLOCKSIZE; 
 }
 
 /* ******************************

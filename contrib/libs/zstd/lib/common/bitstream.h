@@ -28,7 +28,7 @@ extern "C" {
 ******************************************/
 #include "mem.h"            /* unaligned access routines */
 #include "compiler.h"       /* UNLIKELY() */
-#include "debug.h"          /* assert(), DEBUGLOG(), RAWLOG() */
+#include "debug.h"          /* assert(), DEBUGLOG(), RAWLOG() */ 
 #include "error_private.h"  /* error codes and messages */
 
 
@@ -55,7 +55,7 @@ extern "C" {
  * A critical property of these streams is that they encode and decode in **reverse** direction.
  * So the first bit sequence you add will be the last to be read, like a LIFO stack.
  */
-typedef struct {
+typedef struct { 
     size_t bitContainer;
     unsigned bitPos;
     char*  startPtr;
@@ -89,7 +89,7 @@ MEM_STATIC size_t BIT_closeCStream(BIT_CStream_t* bitC);
 /*-********************************************
 *  bitStream decoding API (read backward)
 **********************************************/
-typedef struct {
+typedef struct { 
     size_t   bitContainer;
     unsigned bitsConsumed;
     const char* ptr;
@@ -217,8 +217,8 @@ MEM_STATIC void BIT_addBits(BIT_CStream_t* bitC,
 }
 
 /*! BIT_addBitsFast() :
- *  works only if `value` is _clean_,
- *  meaning all high bits above nbBits are 0 */
+ *  works only if `value` is _clean_, 
+ *  meaning all high bits above nbBits are 0 */ 
 MEM_STATIC void BIT_addBitsFast(BIT_CStream_t* bitC,
                                 size_t value, unsigned nbBits)
 {
@@ -335,8 +335,8 @@ MEM_STATIC FORCE_INLINE_ATTR size_t BIT_getUpperBits(size_t bitContainer, U32 co
 
 MEM_STATIC FORCE_INLINE_ATTR size_t BIT_getMiddleBits(size_t bitContainer, U32 const start, U32 const nbBits)
 {
-    U32 const regMask = sizeof(bitContainer)*8 - 1;
-    /* if start > regMask, bitstream is corrupted, and result is undefined */
+    U32 const regMask = sizeof(bitContainer)*8 - 1; 
+    /* if start > regMask, bitstream is corrupted, and result is undefined */ 
     assert(nbBits < BIT_MASK_SIZE);
     /* x86 transform & ((1 << nbBits) - 1) to bzhi instruction, it is better
      * than accessing memory. When bmi2 instruction is not present, we consider
@@ -346,7 +346,7 @@ MEM_STATIC FORCE_INLINE_ATTR size_t BIT_getMiddleBits(size_t bitContainer, U32 c
 #if defined(__x86_64__) || defined(_M_X86)
     return (bitContainer >> (start & regMask)) & ((((U64)1) << nbBits) - 1);
 #else
-    return (bitContainer >> (start & regMask)) & BIT_mask[nbBits];
+    return (bitContainer >> (start & regMask)) & BIT_mask[nbBits]; 
 #endif
 }
 
@@ -368,13 +368,13 @@ MEM_STATIC FORCE_INLINE_ATTR size_t BIT_getLowerBits(size_t bitContainer, U32 co
  * @return : value extracted */
 MEM_STATIC  FORCE_INLINE_ATTR size_t BIT_lookBits(const BIT_DStream_t*  bitD, U32 nbBits)
 {
-    /* arbitrate between double-shift and shift+mask */
-#if 1
-    /* if bitD->bitsConsumed + nbBits > sizeof(bitD->bitContainer)*8,
-     * bitstream is likely corrupted, and result is undefined */
+    /* arbitrate between double-shift and shift+mask */ 
+#if 1 
+    /* if bitD->bitsConsumed + nbBits > sizeof(bitD->bitContainer)*8, 
+     * bitstream is likely corrupted, and result is undefined */ 
     return BIT_getMiddleBits(bitD->bitContainer, (sizeof(bitD->bitContainer)*8) - bitD->bitsConsumed - nbBits, nbBits);
 #else
-    /* this code path is slower on my os-x laptop */
+    /* this code path is slower on my os-x laptop */ 
     U32 const regMask = sizeof(bitD->bitContainer)*8 - 1;
     return ((bitD->bitContainer << (bitD->bitsConsumed & regMask)) >> 1) >> ((regMask-nbBits) & regMask);
 #endif
@@ -407,7 +407,7 @@ MEM_STATIC FORCE_INLINE_ATTR size_t BIT_readBits(BIT_DStream_t* bitD, unsigned n
 
 /*! BIT_readBitsFast() :
  *  unsafe version; only works only if nbBits >= 1 */
-MEM_STATIC size_t BIT_readBitsFast(BIT_DStream_t* bitD, unsigned nbBits)
+MEM_STATIC size_t BIT_readBitsFast(BIT_DStream_t* bitD, unsigned nbBits) 
 {
     size_t const value = BIT_lookBitsFast(bitD, nbBits);
     assert(nbBits >= 1);

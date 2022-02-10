@@ -320,7 +320,7 @@ RECURSE(
     docutils
     dohq-teamcity
     dominate
-    dotmap
+    dotmap 
     dparse
     dpath
     dpkt

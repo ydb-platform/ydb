@@ -210,23 +210,23 @@ function itself instead of examining the flags.
 
 Note that the ε-link flags do not use the MT_SIZEMASK <<
 MT_LEFTSHIFT` bits, which allows us to start using ε-links for some other purpose.
-
-Pattern Searcher
-================
-
-This is an implementation of Aho-Corasick algorithm on compact trie structure.
-In order to create a pattern searcher one must fill a TCompactPatternSearcherBuilder
-with patterns and call SaveAsPatternSearcher or SaveToFileAsPatternSearcher.
-Then TCompactPatternSearcher must be created from the builder output.
-
-### Implementation details ###
-
-Aho-Corasick algorithm stores a suffix link in each node.
-A suffix link of a node is the offset (relative to this node) of the largest suffix
-of a string this node represents which is present in a trie.
-Current implementation also stores a shortcut link to the largest suffix
-for which the corresponding node in a trie is a final node.
-These two links are stored as NCompactTrie::TSuffixLink structure of two 64-bit
-integers.
-In a trie layout these links are stored for each node right after the two bytes
-containing service flags and a symbol.
+ 
+Pattern Searcher 
+================ 
+ 
+This is an implementation of Aho-Corasick algorithm on compact trie structure. 
+In order to create a pattern searcher one must fill a TCompactPatternSearcherBuilder 
+with patterns and call SaveAsPatternSearcher or SaveToFileAsPatternSearcher. 
+Then TCompactPatternSearcher must be created from the builder output. 
+ 
+### Implementation details ### 
+ 
+Aho-Corasick algorithm stores a suffix link in each node. 
+A suffix link of a node is the offset (relative to this node) of the largest suffix 
+of a string this node represents which is present in a trie. 
+Current implementation also stores a shortcut link to the largest suffix 
+for which the corresponding node in a trie is a final node. 
+These two links are stored as NCompactTrie::TSuffixLink structure of two 64-bit 
+integers. 
+In a trie layout these links are stored for each node right after the two bytes 
+containing service flags and a symbol. 

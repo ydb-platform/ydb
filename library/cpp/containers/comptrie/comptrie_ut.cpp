@@ -15,7 +15,7 @@
 #include <util/folder/dirut.h>
 
 #include <util/random/random.h>
-#include <util/random/fast.h>
+#include <util/random/fast.h> 
 
 #include <util/string/hex.h>
 #include <util/string/cast.h>
@@ -24,7 +24,7 @@
 #include "set.h"
 #include "first_symbol_iterator.h"
 #include "search_iterator.h"
-#include "pattern_searcher.h"
+#include "pattern_searcher.h" 
 
 #include <array>
 #include <iterator>
@@ -109,10 +109,10 @@ private:
     UNIT_TEST(TestBuilderFindLongestPrefix);
     UNIT_TEST(TestBuilderFindLongestPrefixWithEmptyValue);
 
-    UNIT_TEST(TestPatternSearcherEmpty);
-    UNIT_TEST(TestPatternSearcherSimple);
-    UNIT_TEST(TestPatternSearcherRandom);
-
+    UNIT_TEST(TestPatternSearcherEmpty); 
+    UNIT_TEST(TestPatternSearcherSimple); 
+    UNIT_TEST(TestPatternSearcherRandom); 
+ 
     UNIT_TEST_SUITE_END();
 
     static const char* SampleData[];
@@ -246,21 +246,21 @@ public:
     void TestBuilderFindLongestPrefix();
     void TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey);
     void TestBuilderFindLongestPrefixWithEmptyValue();
-
-    void TestPatternSearcherOnDataset(
-        const TVector<TString>& patterns,
-        const TVector<TString>& samples
-    );
-    void TestPatternSearcherEmpty();
-    void TestPatternSearcherSimple();
-    void TestPatternSearcherRandom(
-        size_t patternsNum,
-        size_t patternMaxLength,
-        size_t strMaxLength,
-        int maxChar,
-        TFastRng<ui64>& rng
-    );
-    void TestPatternSearcherRandom();
+ 
+    void TestPatternSearcherOnDataset( 
+        const TVector<TString>& patterns, 
+        const TVector<TString>& samples 
+    ); 
+    void TestPatternSearcherEmpty(); 
+    void TestPatternSearcherSimple(); 
+    void TestPatternSearcherRandom( 
+        size_t patternsNum, 
+        size_t patternMaxLength, 
+        size_t strMaxLength, 
+        int maxChar, 
+        TFastRng<ui64>& rng 
+    ); 
+    void TestPatternSearcherRandom(); 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TCompactTrieTest);
@@ -1580,212 +1580,212 @@ void TCompactTrieTest::TestBuilderFindLongestPrefixWithEmptyValue() {
     TBufferOutput buffer;
     builder.Save(buffer);
 }
-
-void TCompactTrieTest::TestPatternSearcherEmpty() {
-    TCompactPatternSearcherBuilder<char, ui32> builder;
-
-    TBufferOutput searcherData;
-    builder.Save(searcherData);
-
-    TCompactPatternSearcher<char, ui32> searcher(
-        searcherData.Buffer().Data(),
-        searcherData.Buffer().Size()
-    );
-
-    UNIT_ASSERT(searcher.SearchMatches("a").empty());
-    UNIT_ASSERT(searcher.SearchMatches("").empty());
-    UNIT_ASSERT(searcher.SearchMatches("abc").empty());
-}
-
-void TCompactTrieTest::TestPatternSearcherOnDataset(
-    const TVector<TString>& patterns,
-    const TVector<TString>& samples
-) {
-    TCompactPatternSearcherBuilder<char, ui32> builder;
-
-    for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
-        builder.Add(patterns[patternIdx], patternIdx);
-    }
-
-    TBufferOutput searcherData;
-    builder.Save(searcherData);
-
-    TCompactPatternSearcher<char, ui32> searcher(
-        searcherData.Buffer().Data(),
-        searcherData.Buffer().Size()
-    );
-
-    for (const auto& sample : samples) {
-        const auto matches = searcher.SearchMatches(sample);
-
-        size_t matchesNum = 0;
-        THashSet<TString> processedPatterns;
-        for (const auto& pattern : patterns) {
-            if (pattern.Empty() || processedPatterns.contains(pattern)) {
-                continue;
-            }
-            for (size_t start = 0; start + pattern.Size() <= sample.Size(); ++start) {
-                matchesNum += (pattern == sample.substr(start, pattern.Size()));
-            }
-            processedPatterns.insert(pattern);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(matchesNum, matches.size());
-
-
-        TSet<std::pair<size_t, ui32>> foundMatches;
-        for (const auto& match : matches) {
-            std::pair<size_t, ui32> matchParams(match.End, match.Data);
-            UNIT_ASSERT(!foundMatches.contains(matchParams));
-            foundMatches.insert(matchParams);
-
-            const auto& pattern = patterns[match.Data];
-            UNIT_ASSERT_VALUES_EQUAL(
-                sample.substr(match.End - pattern.size() + 1, pattern.size()),
-                pattern
-            );
-        }
-    }
-}
-
-void TCompactTrieTest::TestPatternSearcherSimple() {
-    TestPatternSearcherOnDataset(
-        { // patterns
-            "abcd",
-            "abc",
-            "ab",
-            "a",
-            ""
-        },
-        { // samples
-            "abcde",
-            "abcd",
-            "abc",
-            "ab",
-            "a",
-            ""
-        }
-    );
-    TestPatternSearcherOnDataset(
-        { // patterns
-            "a"
-            "ab",
-            "abcd",
-        },
-        { // samples
-            "abcde",
-            "abcd",
-            "abc",
-            "ab",
-            "a",
-            ""
-        }
-    );
-    TestPatternSearcherOnDataset(
-        { // patterns
-            "aaaa",
-            "aaa",
-            "aa",
-            "a",
-        },
-        { // samples
-            "aaaaaaaaaaaa"
-        }
-    );
-    TestPatternSearcherOnDataset(
-        { // patterns
-            "aa", "ab", "ac", "ad", "ae", "af",
-            "ba", "bb", "bc", "bd", "be", "bf",
-            "ca", "cb", "cc", "cd", "ce", "cf",
-            "da", "db", "dc", "dd", "de", "df",
-            "ea", "eb", "ec", "ed", "ee", "ef",
-            "fa", "fb", "fc", "fd", "fe", "ff"
-        },
-        { // samples
-            "dcabafeebfdcbacddacadbaabecdbaeffecdbfabcdcabcfaefecdfebacfedacefbdcacfeb",
-            "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefancdefancdef",
-            "fedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcba",
-            "",
-            "a", "b", "c", "d", "e", "f",
-            "aa", "ab", "ac", "ad", "ae", "af",
-            "ba", "bb", "bc", "bd", "be", "bf",
-            "ca", "cb", "cc", "cd", "ce", "cf",
-            "da", "db", "dc", "dd", "de", "df",
-            "ea", "eb", "ec", "ed", "ee", "ef",
-            "fa", "fb", "fc", "fd", "fe", "ff"
-        }
-    );
-}
-
-static char RandChar(
-    TFastRng<ui64>& rng,
-    int maxChar
-) {
-    return static_cast<char>(rng.GenRand() % (maxChar + 1));
-}
-
-static TString RandStr(
-    TFastRng<ui64>& rng,
-    size_t maxLength,
-    int maxChar,
-    bool nonEmpty = false
-) {
-    Y_ASSERT(maxLength > 0);
-
-    size_t length;
-    if (nonEmpty) {
-        length = rng.GenRand() % maxLength + 1;
-    } else {
-        length = rng.GenRand() % (maxLength + 1);
-    }
-
-    TString result;
-    while (result.size() < length) {
-        result += RandChar(rng, maxChar);
-    }
-
-    return result;
-}
-
-void TCompactTrieTest::TestPatternSearcherRandom(
-    size_t patternsNum,
-    size_t patternMaxLength,
-    size_t strMaxLength,
-    int maxChar,
-    TFastRng<ui64>& rng
-) {
-    auto patternToSearch = RandStr(rng, patternMaxLength, maxChar, /*nonEmpty*/true);
-
-    TVector<TString> patterns = {patternToSearch};
-    while (patterns.size() < patternsNum) {
-        patterns.push_back(RandStr(rng, patternMaxLength, maxChar, /*nonEmpty*/true));
-    }
-
-    auto filler = RandStr(rng, strMaxLength - patternToSearch.Size() + 1, maxChar);
-    size_t leftFillerSize = rng.GenRand() % (filler.size() + 1);
-    auto leftFiller = filler.substr(0, leftFillerSize);
-    auto rightFiller = filler.substr(leftFillerSize, filler.size() - leftFillerSize);
-    auto sample = leftFiller + patternToSearch + rightFiller;
-
-    TestPatternSearcherOnDataset(patterns, {sample});
-}
-
-void TCompactTrieTest::TestPatternSearcherRandom() {
-    TFastRng<ui64> rng(0);
-    for (size_t patternMaxLen : {1, 2, 10}) {
-        for (size_t strMaxLen : TVector<size_t>{patternMaxLen, 2 * patternMaxLen, 10}) {
-            for (int maxChar : {0, 1, 5, 255}) {
-                for (size_t patternsNum : {1, 10}) {
-                    for (size_t testIdx = 0; testIdx < 3; ++testIdx) {
-                        TestPatternSearcherRandom(
-                            patternsNum,
-                            patternMaxLen,
-                            strMaxLen,
-                            maxChar,
-                            rng
-                        );
-                    }
-                }
-            }
-        }
-    }
-}
+ 
+void TCompactTrieTest::TestPatternSearcherEmpty() { 
+    TCompactPatternSearcherBuilder<char, ui32> builder; 
+ 
+    TBufferOutput searcherData; 
+    builder.Save(searcherData); 
+ 
+    TCompactPatternSearcher<char, ui32> searcher( 
+        searcherData.Buffer().Data(), 
+        searcherData.Buffer().Size() 
+    ); 
+ 
+    UNIT_ASSERT(searcher.SearchMatches("a").empty()); 
+    UNIT_ASSERT(searcher.SearchMatches("").empty()); 
+    UNIT_ASSERT(searcher.SearchMatches("abc").empty()); 
+} 
+ 
+void TCompactTrieTest::TestPatternSearcherOnDataset( 
+    const TVector<TString>& patterns, 
+    const TVector<TString>& samples 
+) { 
+    TCompactPatternSearcherBuilder<char, ui32> builder; 
+ 
+    for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) { 
+        builder.Add(patterns[patternIdx], patternIdx); 
+    } 
+ 
+    TBufferOutput searcherData; 
+    builder.Save(searcherData); 
+ 
+    TCompactPatternSearcher<char, ui32> searcher( 
+        searcherData.Buffer().Data(), 
+        searcherData.Buffer().Size() 
+    ); 
+ 
+    for (const auto& sample : samples) { 
+        const auto matches = searcher.SearchMatches(sample); 
+ 
+        size_t matchesNum = 0; 
+        THashSet<TString> processedPatterns; 
+        for (const auto& pattern : patterns) { 
+            if (pattern.Empty() || processedPatterns.contains(pattern)) { 
+                continue; 
+            } 
+            for (size_t start = 0; start + pattern.Size() <= sample.Size(); ++start) { 
+                matchesNum += (pattern == sample.substr(start, pattern.Size())); 
+            } 
+            processedPatterns.insert(pattern); 
+        } 
+        UNIT_ASSERT_VALUES_EQUAL(matchesNum, matches.size()); 
+ 
+ 
+        TSet<std::pair<size_t, ui32>> foundMatches; 
+        for (const auto& match : matches) { 
+            std::pair<size_t, ui32> matchParams(match.End, match.Data); 
+            UNIT_ASSERT(!foundMatches.contains(matchParams)); 
+            foundMatches.insert(matchParams); 
+ 
+            const auto& pattern = patterns[match.Data]; 
+            UNIT_ASSERT_VALUES_EQUAL( 
+                sample.substr(match.End - pattern.size() + 1, pattern.size()), 
+                pattern 
+            ); 
+        } 
+    } 
+} 
+ 
+void TCompactTrieTest::TestPatternSearcherSimple() { 
+    TestPatternSearcherOnDataset( 
+        { // patterns 
+            "abcd", 
+            "abc", 
+            "ab", 
+            "a", 
+            "" 
+        }, 
+        { // samples 
+            "abcde", 
+            "abcd", 
+            "abc", 
+            "ab", 
+            "a", 
+            "" 
+        } 
+    ); 
+    TestPatternSearcherOnDataset( 
+        { // patterns 
+            "a" 
+            "ab", 
+            "abcd", 
+        }, 
+        { // samples 
+            "abcde", 
+            "abcd", 
+            "abc", 
+            "ab", 
+            "a", 
+            "" 
+        } 
+    ); 
+    TestPatternSearcherOnDataset( 
+        { // patterns 
+            "aaaa", 
+            "aaa", 
+            "aa", 
+            "a", 
+        }, 
+        { // samples 
+            "aaaaaaaaaaaa" 
+        } 
+    ); 
+    TestPatternSearcherOnDataset( 
+        { // patterns 
+            "aa", "ab", "ac", "ad", "ae", "af", 
+            "ba", "bb", "bc", "bd", "be", "bf", 
+            "ca", "cb", "cc", "cd", "ce", "cf", 
+            "da", "db", "dc", "dd", "de", "df", 
+            "ea", "eb", "ec", "ed", "ee", "ef", 
+            "fa", "fb", "fc", "fd", "fe", "ff" 
+        }, 
+        { // samples 
+            "dcabafeebfdcbacddacadbaabecdbaeffecdbfabcdcabcfaefecdfebacfedacefbdcacfeb", 
+            "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefancdefancdef", 
+            "fedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcbafedcba", 
+            "", 
+            "a", "b", "c", "d", "e", "f", 
+            "aa", "ab", "ac", "ad", "ae", "af", 
+            "ba", "bb", "bc", "bd", "be", "bf", 
+            "ca", "cb", "cc", "cd", "ce", "cf", 
+            "da", "db", "dc", "dd", "de", "df", 
+            "ea", "eb", "ec", "ed", "ee", "ef", 
+            "fa", "fb", "fc", "fd", "fe", "ff" 
+        } 
+    ); 
+} 
+ 
+static char RandChar( 
+    TFastRng<ui64>& rng, 
+    int maxChar 
+) { 
+    return static_cast<char>(rng.GenRand() % (maxChar + 1)); 
+} 
+ 
+static TString RandStr( 
+    TFastRng<ui64>& rng, 
+    size_t maxLength, 
+    int maxChar, 
+    bool nonEmpty = false 
+) { 
+    Y_ASSERT(maxLength > 0); 
+ 
+    size_t length; 
+    if (nonEmpty) { 
+        length = rng.GenRand() % maxLength + 1; 
+    } else { 
+        length = rng.GenRand() % (maxLength + 1); 
+    } 
+ 
+    TString result; 
+    while (result.size() < length) { 
+        result += RandChar(rng, maxChar); 
+    } 
+ 
+    return result; 
+} 
+ 
+void TCompactTrieTest::TestPatternSearcherRandom( 
+    size_t patternsNum, 
+    size_t patternMaxLength, 
+    size_t strMaxLength, 
+    int maxChar, 
+    TFastRng<ui64>& rng 
+) { 
+    auto patternToSearch = RandStr(rng, patternMaxLength, maxChar, /*nonEmpty*/true); 
+ 
+    TVector<TString> patterns = {patternToSearch}; 
+    while (patterns.size() < patternsNum) { 
+        patterns.push_back(RandStr(rng, patternMaxLength, maxChar, /*nonEmpty*/true)); 
+    } 
+ 
+    auto filler = RandStr(rng, strMaxLength - patternToSearch.Size() + 1, maxChar); 
+    size_t leftFillerSize = rng.GenRand() % (filler.size() + 1); 
+    auto leftFiller = filler.substr(0, leftFillerSize); 
+    auto rightFiller = filler.substr(leftFillerSize, filler.size() - leftFillerSize); 
+    auto sample = leftFiller + patternToSearch + rightFiller; 
+ 
+    TestPatternSearcherOnDataset(patterns, {sample}); 
+} 
+ 
+void TCompactTrieTest::TestPatternSearcherRandom() { 
+    TFastRng<ui64> rng(0); 
+    for (size_t patternMaxLen : {1, 2, 10}) { 
+        for (size_t strMaxLen : TVector<size_t>{patternMaxLen, 2 * patternMaxLen, 10}) { 
+            for (int maxChar : {0, 1, 5, 255}) { 
+                for (size_t patternsNum : {1, 10}) { 
+                    for (size_t testIdx = 0; testIdx < 3; ++testIdx) { 
+                        TestPatternSearcherRandom( 
+                            patternsNum, 
+                            patternMaxLen, 
+                            strMaxLen, 
+                            maxChar, 
+                            rng 
+                        ); 
+                    } 
+                } 
+            } 
+        } 
+    } 
+} 

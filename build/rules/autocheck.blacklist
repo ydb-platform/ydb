@@ -1,10 +1,10 @@
 # Atocheck blacklist
 # The list of directories excluded from autocheck (with all subdirs)
 browser/frontend
-data-ui/abc
+data-ui/abc 
 data-ui/arcanum
-data-ui/idm
-data-ui/sandbox
+data-ui/idm 
+data-ui/sandbox 
 data-ui/unity
 direct/frontend/services
 direct/frontend/packages

@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:yt)
 
 SRCS(
-    guid.cpp
+    guid.cpp 
     source_location.cpp
 )
 

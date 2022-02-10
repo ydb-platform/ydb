@@ -9,7 +9,7 @@
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-
+ 
 bool TNode::TNull::operator==(const TNull&) const {
     return true;
 }
@@ -905,8 +905,8 @@ bool GetBool(const TNode& node)
     } else if (node.IsString()) {
         return node.AsString() == "true";
     } else {
-        ythrow TNode::TTypeError()
-            << "GetBool(): not a boolean or string type";
+        ythrow TNode::TTypeError() 
+            << "GetBool(): not a boolean or string type"; 
     }
 }
 

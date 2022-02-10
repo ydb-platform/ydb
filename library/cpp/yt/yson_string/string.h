@@ -24,7 +24,7 @@ public:
     //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(
         const TString& data,
-        EYsonType type = EYsonType::Node);
+        EYsonType type = EYsonType::Node); 
 
     //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(

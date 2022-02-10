@@ -2,8 +2,8 @@
 
 #include <util/generic/hash.h>
 
-#include <util/random/random.h>
-
+#include <util/random/random.h> 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -18,25 +18,25 @@ template <class T>
 void HashCombine(size_t& h, const T& k);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-//! Provides a hasher that randomizes the results of another one.
-template <class TElement, class TUnderlying = ::THash<TElement>>
-class TRandomizedHash
-{
-public:
+ 
+//! Provides a hasher that randomizes the results of another one. 
+template <class TElement, class TUnderlying = ::THash<TElement>> 
+class TRandomizedHash 
+{ 
+public: 
     TRandomizedHash();
     size_t operator () (const TElement& element) const;
-
-private:
-    size_t Seed_;
-    TUnderlying Underlying_;
-
-};
-
+ 
+private: 
+    size_t Seed_; 
+    TUnderlying Underlying_; 
+ 
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
-
+} // namespace NYT 
+ 
 #define HASH_INL_H_
 #include "hash-inl.h"
 #undef HASH_INL_H_

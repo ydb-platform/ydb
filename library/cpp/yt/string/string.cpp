@@ -2,9 +2,9 @@
 #include "format.h"
 
 #include <library/cpp/yt/assert/assert.h>
-
+ 
 #include <util/generic/hash.h>
-
+ 
 #include <util/string/ascii.h>
 
 namespace NYT {
@@ -103,117 +103,117 @@ TString Trim(const TString& str, const TString& whitespaces)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-ui16 DecimalDigits2[100] = {
-    12336,  12592,  12848,  13104,  13360,  13616,  13872,  14128,  14384,  14640,
-    12337,  12593,  12849,  13105,  13361,  13617,  13873,  14129,  14385,  14641,
-    12338,  12594,  12850,  13106,  13362,  13618,  13874,  14130,  14386,  14642,
-    12339,  12595,  12851,  13107,  13363,  13619,  13875,  14131,  14387,  14643,
-    12340,  12596,  12852,  13108,  13364,  13620,  13876,  14132,  14388,  14644,
-    12341,  12597,  12853,  13109,  13365,  13621,  13877,  14133,  14389,  14645,
-    12342,  12598,  12854,  13110,  13366,  13622,  13878,  14134,  14390,  14646,
-    12343,  12599,  12855,  13111,  13367,  13623,  13879,  14135,  14391,  14647,
-    12344,  12600,  12856,  13112,  13368,  13624,  13880,  14136,  14392,  14648,
-    12345,  12601,  12857,  13113,  13369,  13625,  13881,  14137,  14393,  14649
-};
-
-template <class T>
+namespace { 
+ 
+ui16 DecimalDigits2[100] = { 
+    12336,  12592,  12848,  13104,  13360,  13616,  13872,  14128,  14384,  14640, 
+    12337,  12593,  12849,  13105,  13361,  13617,  13873,  14129,  14385,  14641, 
+    12338,  12594,  12850,  13106,  13362,  13618,  13874,  14130,  14386,  14642, 
+    12339,  12595,  12851,  13107,  13363,  13619,  13875,  14131,  14387,  14643, 
+    12340,  12596,  12852,  13108,  13364,  13620,  13876,  14132,  14388,  14644, 
+    12341,  12597,  12853,  13109,  13365,  13621,  13877,  14133,  14389,  14645, 
+    12342,  12598,  12854,  13110,  13366,  13622,  13878,  14134,  14390,  14646, 
+    12343,  12599,  12855,  13111,  13367,  13623,  13879,  14135,  14391,  14647, 
+    12344,  12600,  12856,  13112,  13368,  13624,  13880,  14136,  14392,  14648, 
+    12345,  12601,  12857,  13113,  13369,  13625,  13881,  14137,  14393,  14649 
+}; 
+ 
+template <class T> 
 char* WriteSignedIntToBufferBackwardsImpl(char* ptr, T value, TStringBuf min)
-{
-    if (value == 0) {
-        --ptr;
-        *ptr = '0';
-        return ptr;
-    }
-
-    // The negative value handling code below works incorrectly for min values.
-    if (value == std::numeric_limits<T>::min()) {
-        ptr -= min.length();
+{ 
+    if (value == 0) { 
+        --ptr; 
+        *ptr = '0'; 
+        return ptr; 
+    } 
+ 
+    // The negative value handling code below works incorrectly for min values. 
+    if (value == std::numeric_limits<T>::min()) { 
+        ptr -= min.length(); 
         ::memcpy(ptr, min.begin(), min.length());
-        return ptr;
-    }
-
-    bool negative = false;
-    if (value < 0) {
-        negative = true;
-        value = -value;
-    }
-
-    while (value >= 10) {
-        i64 rem = value % 100;
-        i64 quot = value / 100;
-        ptr -= 2;
+        return ptr; 
+    } 
+ 
+    bool negative = false; 
+    if (value < 0) { 
+        negative = true; 
+        value = -value; 
+    } 
+ 
+    while (value >= 10) { 
+        i64 rem = value % 100; 
+        i64 quot = value / 100; 
+        ptr -= 2; 
         ::memcpy(ptr, &DecimalDigits2[rem], 2);
-        value = quot;
-    }
-
-    if (value > 0) {
-        --ptr;
-        *ptr = ('0' + value);
-    }
-
-    if (negative) {
-        --ptr;
-        *ptr = '-';
-    }
-
-    return ptr;
-}
-
-template <class T>
-char* WriteUnsignedIntToBufferBackwardsImpl(char* ptr, T value)
-{
-    if (value == 0) {
-        --ptr;
-        *ptr = '0';
-        return ptr;
-    }
-
-    while (value >= 10) {
-        i64 rem = value % 100;
-        i64 quot = value / 100;
-        ptr -= 2;
+        value = quot; 
+    } 
+ 
+    if (value > 0) { 
+        --ptr; 
+        *ptr = ('0' + value); 
+    } 
+ 
+    if (negative) { 
+        --ptr; 
+        *ptr = '-'; 
+    } 
+ 
+    return ptr; 
+} 
+ 
+template <class T> 
+char* WriteUnsignedIntToBufferBackwardsImpl(char* ptr, T value) 
+{ 
+    if (value == 0) { 
+        --ptr; 
+        *ptr = '0'; 
+        return ptr; 
+    } 
+ 
+    while (value >= 10) { 
+        i64 rem = value % 100; 
+        i64 quot = value / 100; 
+        ptr -= 2; 
         ::memcpy(ptr, &DecimalDigits2[rem], 2);
-        value = quot;
-    }
-
-    if (value > 0) {
-        --ptr;
-        *ptr = ('0' + value);
-    }
-
-    return ptr;
-}
-
-} // namespace
-
-template <>
-char* WriteIntToBufferBackwards(char* ptr, i32 value)
-{
+        value = quot; 
+    } 
+ 
+    if (value > 0) { 
+        --ptr; 
+        *ptr = ('0' + value); 
+    } 
+ 
+    return ptr; 
+} 
+ 
+} // namespace 
+ 
+template <> 
+char* WriteIntToBufferBackwards(char* ptr, i32 value) 
+{ 
     return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-2147483647"));
-}
-
-template <>
-char* WriteIntToBufferBackwards(char* ptr, i64 value)
-{
+} 
+ 
+template <> 
+char* WriteIntToBufferBackwards(char* ptr, i64 value) 
+{ 
     return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-9223372036854775808"));
-}
-
-template <>
-char* WriteIntToBufferBackwards(char* ptr, ui32 value)
-{
-    return WriteUnsignedIntToBufferBackwardsImpl(ptr, value);
-}
-
-template <>
-char* WriteIntToBufferBackwards(char* ptr, ui64 value)
-{
-    return WriteUnsignedIntToBufferBackwardsImpl(ptr, value);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+} 
+ 
+template <> 
+char* WriteIntToBufferBackwards(char* ptr, ui32 value) 
+{ 
+    return WriteUnsignedIntToBufferBackwardsImpl(ptr, value); 
+} 
+ 
+template <> 
+char* WriteIntToBufferBackwards(char* ptr, ui64 value) 
+{ 
+    return WriteUnsignedIntToBufferBackwardsImpl(ptr, value); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 size_t TCaseInsensitiveStringHasher::operator()(TStringBuf arg) const
 {
     auto compute = [&] (char* buffer) {
@@ -240,33 +240,33 @@ bool TCaseInsensitiveStringEqualityComparer::operator()(TStringBuf lhs, TStringB
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TryParseBool(TStringBuf value, bool* result)
-{
-    if (value == "true" || value == "1") {
+{ 
+    if (value == "true" || value == "1") { 
         *result = true;
-        return true;
-    } else if (value == "false" || value == "0") {
+        return true; 
+    } else if (value == "false" || value == "0") { 
         *result = false;
-        return true;
-    } else {
-        return false;
-    }
-}
-
+        return true; 
+    } else { 
+        return false; 
+    } 
+} 
+ 
 bool ParseBool(TStringBuf value)
-{
-    bool result;
+{ 
+    bool result; 
     if (!TryParseBool(value, &result)) {
         throw TSimpleException(Format("Error parsing boolean value %Qv",
             value));
-    }
-    return result;
-}
-
-TStringBuf FormatBool(bool value)
-{
-    return value ? TStringBuf("true") : TStringBuf("false");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+    } 
+    return result; 
+} 
+ 
+TStringBuf FormatBool(bool value) 
+{ 
+    return value ? TStringBuf("true") : TStringBuf("false"); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 } // namespace NYT

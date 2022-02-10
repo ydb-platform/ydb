@@ -35,7 +35,7 @@ private:
     template <class TOther>
     void ConstructFrom(TOther&& rhs)
     {
-        Y_VERIFY_DEBUG(Small == rhs.Small);
+        Y_VERIFY_DEBUG(Small == rhs.Small); 
 
         if (Small) {
             new (&VIter)TVectorConstIterator(std::forward<TOther>(rhs).VIter);
@@ -251,7 +251,7 @@ std::pair<typename TCompactSet<T, N, C>::const_iterator, bool> TCompactSet<T, N,
     Vector.clear();
 
     auto [newIt, inserted] = Set.insert(v);
-    Y_VERIFY_DEBUG(inserted);
+    Y_VERIFY_DEBUG(inserted); 
     return {const_iterator(std::move(newIt)), true};
 }
 

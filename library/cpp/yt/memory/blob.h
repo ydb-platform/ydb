@@ -187,11 +187,11 @@ public:
     //! Appends a single char to the end.
     void Append(char ch);
 
-    //! Swaps the current and other instances
-    void Swap(TBlob& other);
+    //! Swaps the current and other instances 
+    void Swap(TBlob& other); 
 
-    friend void swap(TBlob& left, TBlob& right);
-
+    friend void swap(TBlob& left, TBlob& right); 
+ 
 private:
     char* Begin_ = nullptr;
     size_t Size_ = 0;
@@ -213,8 +213,8 @@ private:
     void SetTagCookie(const TBlob& other);
 };
 
-void swap(TBlob& left, TBlob& right);
-
+void swap(TBlob& left, TBlob& right); 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

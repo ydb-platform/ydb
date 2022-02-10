@@ -209,10 +209,10 @@ def onpy_srcs(unit, *args):
     if unit_needs_main:
         py_program(unit, py3)
 
-    py_namespace_value = unit.get('PY_NAMESPACE_VALUE')
-    if py_namespace_value == ".":
-        ns = ""
-    else:
+    py_namespace_value = unit.get('PY_NAMESPACE_VALUE') 
+    if py_namespace_value == ".": 
+        ns = "" 
+    else: 
         ns = (unit.get('PY_NAMESPACE_VALUE') or upath.replace('/', '.')) + '.'
 
     cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes'

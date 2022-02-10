@@ -8,7 +8,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
 #include <util/string/cast.h>
-
+ 
 #include <cmath>
 #include <variant>
 
@@ -27,7 +27,7 @@ public:
     { };
 
     class TTypeError
-        : public TWithBackTrace<yexception>
+        : public TWithBackTrace<yexception> 
     { };
 
     enum EType {

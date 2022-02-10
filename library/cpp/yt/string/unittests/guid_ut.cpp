@@ -1,7 +1,7 @@
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/gtest/gtest.h> 
 
-#include <library/cpp/yt/string/guid.h>
-#include <library/cpp/yt/string/format.h>
+#include <library/cpp/yt/string/guid.h> 
+#include <library/cpp/yt/string/format.h> 
 
 #include <util/string/hex.h>
 
@@ -10,7 +10,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static_assert(TFormatTraits<TGuid>::HasCustomFormatValue);
+static_assert(TFormatTraits<TGuid>::HasCustomFormatValue); 
 
 TString CanonicalToString(TGuid value)
 {

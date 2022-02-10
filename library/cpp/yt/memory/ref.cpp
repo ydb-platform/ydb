@@ -5,8 +5,8 @@
 
 #include <util/system/info.h>
 
-namespace NYT {
-
+namespace NYT { 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
@@ -275,20 +275,20 @@ TString ToString(TRef ref)
 }
 
 TString ToString(const TMutableRef& ref)
-{
-    return ToString(TRef(ref));
-}
-
+{ 
+    return ToString(TRef(ref)); 
+} 
+ 
 TString ToString(const TSharedRef& ref)
 {
     return ToString(TRef(ref));
 }
 
 TString ToString(const TSharedMutableRef& ref)
-{
-    return ToString(TRef(ref));
-}
-
+{ 
+    return ToString(TRef(ref)); 
+} 
+ 
 size_t GetPageSize()
 {
     static const size_t PageSize = NSystemInfo::GetPageSize();
@@ -375,4 +375,4 @@ TSharedRefArray TSharedRefArrayBuilder::Finish()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT 

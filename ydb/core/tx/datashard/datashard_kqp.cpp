@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
- 
+
 #include <util/generic/size_literals.h>
 
 namespace NKikimr {

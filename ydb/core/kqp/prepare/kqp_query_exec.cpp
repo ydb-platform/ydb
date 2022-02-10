@@ -53,7 +53,7 @@ NKikimrKqp::TParameterBinding GetParameterBinding(TCoParameter param) {
     return binding;
 }
 
-NDq::TMkqlValueRef GetParamFromResult(const NKikimrKqp::TParameterBinding& binding, 
+NDq::TMkqlValueRef GetParamFromResult(const NKikimrKqp::TParameterBinding& binding,
     const TKqlTransformContext& transformCtx)
 {
     YQL_ENSURE(binding.HasMkqlIndex());
@@ -67,7 +67,7 @@ NDq::TMkqlValueRef GetParamFromResult(const NKikimrKqp::TParameterBinding& bindi
     YQL_ENSURE(type);
     YQL_ENSURE(value);
 
-    return NDq::TMkqlValueRef(*type, *value); 
+    return NDq::TMkqlValueRef(*type, *value);
 }
 
 NKikimrMiniKQL::TParams BuildParamFromResult(const NKikimrKqp::TParameterBinding& binding,
@@ -580,19 +580,19 @@ TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindi
     for (auto& binding : bindings) {
         auto name = binding.GetName();
 
-        TMaybe<NDq::TMkqlValueRef> paramRef; 
+        TMaybe<NDq::TMkqlValueRef> paramRef;
         if (binding.GetName() == LocksAcquireParamName) {
             auto& param = txState->Tx().ParamsState->Values[LocksAcquireParamName];
             param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
             param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id);
             param.MutableValue()->SetBool(acquireLocks);
-            paramRef = NDq::TMkqlValueRef(param); 
+            paramRef = NDq::TMkqlValueRef(param);
         } else if (binding.GetName() == LocksTxIdParamName) {
             auto& param = txState->Tx().ParamsState->Values[LocksTxIdParamName];
             param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
             param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
             param.MutableValue()->SetUint64(txState->Tx().Locks.GetLockTxId());
-            paramRef = NDq::TMkqlValueRef(param); 
+            paramRef = NDq::TMkqlValueRef(param);
         } else if (binding.GetName() == ReadTargetParamName) {
             YQL_ENSURE(txState->Tx().EffectiveIsolationLevel);
 
@@ -612,7 +612,7 @@ TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindi
             param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
             param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui32>::Id);
             param.MutableValue()->SetUint32(readTarget);
-            paramRef = NDq::TMkqlValueRef(param); 
+            paramRef = NDq::TMkqlValueRef(param);
         } else if (binding.GetName() == NowParamName) {
             auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
             param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
@@ -665,12 +665,12 @@ TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindi
         } else {
             auto clientParam = transformCtx->QueryCtx->Parameters.FindPtr(binding.GetName());
             if (clientParam) {
-                paramRef = NDq::TMkqlValueRef(*clientParam); 
+                paramRef = NDq::TMkqlValueRef(*clientParam);
             } else {
                 auto paramValue = txState->Tx().ParamsState->Values.FindPtr(binding.GetName());
                 YQL_ENSURE(paramValue, "Parameter not found: " << binding.GetName());
 
-                paramRef = NDq::TMkqlValueRef(*paramValue); 
+                paramRef = NDq::TMkqlValueRef(*paramValue);
             }
         }
 

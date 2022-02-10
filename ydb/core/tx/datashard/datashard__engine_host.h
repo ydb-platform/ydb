@@ -111,7 +111,7 @@ private:
     TEngineHostCounters EngineHostCounters;
     ui64 LockTxId;
     TString TraceMessage;
-    NYql::NDq::TLogFunc KqpLogFunc; 
+    NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
     THolder<NMiniKQL::TScopedAlloc> KqpAlloc;

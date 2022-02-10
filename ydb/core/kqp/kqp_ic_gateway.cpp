@@ -603,7 +603,7 @@ private:
         structBuilder.Reserve(paramsMap.Values.size());
         for (auto& pair : paramsMap.Values) {
             const TString& name = pair.first;
-            const NYql::NDq::TMkqlValueRef& param = pair.second; 
+            const NYql::NDq::TMkqlValueRef& param = pair.second;
 
             auto valueNode = NMiniKQL::ImportValueFromProto(param.GetType(), param.GetValue(), env);
             structBuilder.Add(name, valueNode);

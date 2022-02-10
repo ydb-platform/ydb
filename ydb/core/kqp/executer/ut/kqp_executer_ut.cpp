@@ -71,7 +71,7 @@ TKqpParamsRefMap GetParamRefsMap(const TKikimrParamsMap& paramsMap) {
     TKqpParamsRefMap refsMap;
 
     for (auto& pair : paramsMap) {
-        refsMap.emplace(std::make_pair(pair.first, NDq::TMkqlValueRef(pair.second))); 
+        refsMap.emplace(std::make_pair(pair.first, NDq::TMkqlValueRef(pair.second)));
     }
 
     return refsMap;

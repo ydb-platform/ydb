@@ -6,7 +6,7 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_source.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
- 
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -757,6 +757,6 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, c
     const TLogFunc& logFunc)
 {
     return new TDqTaskRunner(ctx, settings, logFunc);
-} 
- 
+}
+
 } // namespace NYql::NDq

@@ -9,7 +9,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
- 
+
 namespace NKikimr {
 
 class TBalanceCoverageBuilder;

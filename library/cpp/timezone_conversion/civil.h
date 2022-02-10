@@ -107,23 +107,23 @@ namespace NDatetime {
      */
     TTimeZone GetFixedTimeZone(const long offset);
 
-    /** Convert civil time from one timezone to another
-     * @param[in] src is source time with 'from' timezone 
-     * @param[in] from is a initial timezone
-     * @param[in] from is a destination timezone
-     * @return a civil time
-     */
-    template <typename T>
-    T Convert(const T& src, const TTimeZone& from, const TTimeZone& to) {
-        return cctz::convert(cctz::convert(src, from), to);
-    }
-
+    /** Convert civil time from one timezone to another 
+     * @param[in] src is source time with 'from' timezone  
+     * @param[in] from is a initial timezone 
+     * @param[in] from is a destination timezone 
+     * @return a civil time 
+     */ 
+    template <typename T> 
+    T Convert(const T& src, const TTimeZone& from, const TTimeZone& to) { 
+        return cctz::convert(cctz::convert(src, from), to); 
+    } 
+ 
     /** Convert absolute time to civil time by rules from timezone.
      * @param[in] absTime is an absolute time which is used to convert
      * @param[in] tz is a loaded timezone
      * @return a civil time
-     *
-     * Note: This function doesn't work properly for dates before 1 Jan 1970!
+     * 
+     * Note: This function doesn't work properly for dates before 1 Jan 1970! 
      */
     TCivilSecond Convert(const TInstant& absTime, const TTimeZone& tz);
 
@@ -132,14 +132,14 @@ namespace NDatetime {
      * @param[in] absTime is an absolute time which is used to convert
      * @param[in] tzName is a timezone name which will be loaded
      * @return a civil time
-     *
-     * Note: This function doesn't work properly for dates before 1 Jan 1970!
+     * 
+     * Note: This function doesn't work properly for dates before 1 Jan 1970! 
      */
     TCivilSecond Convert(const TInstant& absTime, TStringBuf tzName);
 
     /** Convert a civil time to absolute by using rules from timezone
-     *
-     * Note: This function doesn't work properly for dates before 1 Jan 1970!
+     * 
+     * Note: This function doesn't work properly for dates before 1 Jan 1970! 
      */
     TInstant Convert(const TCivilSecond& s, const TTimeZone& tz);
 
@@ -302,35 +302,35 @@ namespace NDatetime {
     CONSTEXPR_M int DaysPerMonth(TYear year, TMonth month) noexcept {
         return cctz::detail::impl::days_per_month(year, month);
     }
-
-    CONSTEXPR_M int DaysPerYear(TYear year, TMonth month) noexcept {
-        return cctz::detail::impl::days_per_year(year, month);
-    }
-
-    /** Calculate week number for the given date
-     * @param[in] cd is a current day
-     * @param[in] usePreviousYear (optional) true if calculate week number from previous year
-     *
-     * The week number starts from 1 for the first week, where Thursday exist (see ISO8601), i.e.
-     * Jan 2021
-     * week#  mo tu we th fr sa su
-     * 53                  1  2  3
-     * 01      4  5  6  7  8  9 10
-     * 02     11 ...
-     * Jan 2020
-     * week#  mo tu we th fr sa su
-     * 01            1  2  3  4  5
-     * 02      6  7  8  9 10 11...
-     *
-     * In case if you received zero value, you may call function again with usePreviousYear=true
-     * Also you may use usePreviousYear to calculate week difference between two dates in different year 
-     */
-     CONSTEXPR_M int GetYearWeek(const TCivilDay& cd, bool usePreviousYear = false) noexcept {
-         const auto jan1 = NDatetime::GetWeekday(NDatetime::TCivilDay{cd.year() - (usePreviousYear ? 1 : 0), 1, 1});
-         const auto daysCount = GetYearDay(cd) + (usePreviousYear ? DaysPerYear(cd.year()-1, 1) : 0);
-
-         return (daysCount + static_cast<int>(jan1) - 1) / 7 + (jan1 == cctz::weekday::monday || jan1 == cctz::weekday::tuesday || jan1 == cctz::weekday::wednesday);
-     }
+ 
+    CONSTEXPR_M int DaysPerYear(TYear year, TMonth month) noexcept { 
+        return cctz::detail::impl::days_per_year(year, month); 
+    } 
+ 
+    /** Calculate week number for the given date 
+     * @param[in] cd is a current day 
+     * @param[in] usePreviousYear (optional) true if calculate week number from previous year 
+     * 
+     * The week number starts from 1 for the first week, where Thursday exist (see ISO8601), i.e. 
+     * Jan 2021 
+     * week#  mo tu we th fr sa su 
+     * 53                  1  2  3 
+     * 01      4  5  6  7  8  9 10 
+     * 02     11 ... 
+     * Jan 2020 
+     * week#  mo tu we th fr sa su 
+     * 01            1  2  3  4  5 
+     * 02      6  7  8  9 10 11... 
+     * 
+     * In case if you received zero value, you may call function again with usePreviousYear=true 
+     * Also you may use usePreviousYear to calculate week difference between two dates in different year  
+     */ 
+     CONSTEXPR_M int GetYearWeek(const TCivilDay& cd, bool usePreviousYear = false) noexcept { 
+         const auto jan1 = NDatetime::GetWeekday(NDatetime::TCivilDay{cd.year() - (usePreviousYear ? 1 : 0), 1, 1}); 
+         const auto daysCount = GetYearDay(cd) + (usePreviousYear ? DaysPerYear(cd.year()-1, 1) : 0); 
+ 
+         return (daysCount + static_cast<int>(jan1) - 1) / 7 + (jan1 == cctz::weekday::monday || jan1 == cctz::weekday::tuesday || jan1 == cctz::weekday::wednesday); 
+     } 
 }
 
 #include "civil-inl.h"

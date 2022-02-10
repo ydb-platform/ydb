@@ -134,22 +134,22 @@ TEST(TimeZoneConversion, Local) {
     EXPECT_EQ(nowAbsolute.Seconds(), ToAbsoluteTime(nowCivilLocal, local).Seconds());
 }
 
-TEST(TimeZoneConversion, BeforeEpoch) {
-    {
-        //NOTE: This test will not work because NDatetime::Convert() with TInstant does not work properly for dates before 1/1/1970
-        NDatetime::TCivilSecond civilTime = NDatetime::TCivilSecond{1969, 12, 1, 0, 0, 0};
-        TInstant absTime = NDatetime::Convert(civilTime, NDatetime::GetUtcTimeZone());
-        NDatetime::TCivilSecond civilTime2 = NDatetime::Convert(absTime, NDatetime::GetUtcTimeZone());
-        EXPECT_NE(civilTime2, civilTime); // ERROR. Must be EXPECT_EQ, but Convert() functions with TInstant doesnot wotk properly for dates before EPOCH
-    }
-
-    // Right test
-    NDatetime::TCivilSecond civilTime = NDatetime::TCivilSecond{1969, 12, 1, 0, 0, 0};
-    NDatetime::TCivilSecond civilTime2 = Convert<NDatetime::TCivilSecond>(civilTime, NDatetime::GetUtcTimeZone(), NDatetime::GetUtcTimeZone());
-    EXPECT_EQ(civilTime2, civilTime);
-
-}
-
+TEST(TimeZoneConversion, BeforeEpoch) { 
+    { 
+        //NOTE: This test will not work because NDatetime::Convert() with TInstant does not work properly for dates before 1/1/1970 
+        NDatetime::TCivilSecond civilTime = NDatetime::TCivilSecond{1969, 12, 1, 0, 0, 0}; 
+        TInstant absTime = NDatetime::Convert(civilTime, NDatetime::GetUtcTimeZone()); 
+        NDatetime::TCivilSecond civilTime2 = NDatetime::Convert(absTime, NDatetime::GetUtcTimeZone()); 
+        EXPECT_NE(civilTime2, civilTime); // ERROR. Must be EXPECT_EQ, but Convert() functions with TInstant doesnot wotk properly for dates before EPOCH 
+    } 
+ 
+    // Right test 
+    NDatetime::TCivilSecond civilTime = NDatetime::TCivilSecond{1969, 12, 1, 0, 0, 0}; 
+    NDatetime::TCivilSecond civilTime2 = Convert<NDatetime::TCivilSecond>(civilTime, NDatetime::GetUtcTimeZone(), NDatetime::GetUtcTimeZone()); 
+    EXPECT_EQ(civilTime2, civilTime); 
+ 
+} 
+ 
 TEST(TimeZoneConversion, InvalidTimeZone) {
     EXPECT_THROW(GetTimeZone("Europe/Mscow"), yexception);
     EXPECT_THROW(GetTimeZone(""), yexception);

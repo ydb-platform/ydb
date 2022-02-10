@@ -117,41 +117,41 @@ Y_UNIT_TEST_SUITE(DateTime) {
             GetCivilDiff(TCivilSecond(2017, 10, 1), TCivilSecond(2017, 9, 31), ECivilUnit::Month),
             TCivilDiff(0, ECivilUnit::Month));
     }
-
-    Y_UNIT_TEST(TestYearWeekNmb) {
-
-        // YEAR 2021 - start from Friday, first dates (1-3) will have week# 0
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 1}), 0);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 2}), 0);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 3}), 0);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 4}), 1);
-
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 1}, true), 53);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 2}, true), 53);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 3}, true), 53);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 4}, true), 54);
-
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 2, 28}), 8);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 2, 29}), 9); // <- this is invalid date, should be normalized to March 1
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 3, 1}), 9);
-
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 26}), 51);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 27}), 52);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 31}), 52);
-
-        // YEAR 2020 - start from Wednesday, all dates start from week# 1
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 1}), 1);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 5}), 1);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 6}), 2);
-
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 2, 28}), 9);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 2, 29}), 9);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 3, 1}), 9);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 3, 2}), 10);
-
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 12, 31}), 53);
-
-        // Max possible delta - calcuate week # for 31 Dec 2021 from 1 Jan 2020
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 31}, true), 105);
-    }
+ 
+    Y_UNIT_TEST(TestYearWeekNmb) { 
+ 
+        // YEAR 2021 - start from Friday, first dates (1-3) will have week# 0 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 1}), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 2}), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 3}), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 4}), 1); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 1}, true), 53); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 2}, true), 53); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 3}, true), 53); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 1, 4}, true), 54); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 2, 28}), 8); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 2, 29}), 9); // <- this is invalid date, should be normalized to March 1 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 3, 1}), 9); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 26}), 51); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 27}), 52); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 31}), 52); 
+ 
+        // YEAR 2020 - start from Wednesday, all dates start from week# 1 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 1}), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 5}), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 1, 6}), 2); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 2, 28}), 9); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 2, 29}), 9); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 3, 1}), 9); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 3, 2}), 10); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2020, 12, 31}), 53); 
+ 
+        // Max possible delta - calcuate week # for 31 Dec 2021 from 1 Jan 2020 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 31}, true), 105); 
+    } 
 }

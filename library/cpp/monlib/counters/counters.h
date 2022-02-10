@@ -27,7 +27,7 @@ namespace NMonitoring {
     }
 
 #define OUTPUT_NAMED_COUNTER(var, name) out << name << ": \t" << var << NMonitoring::PrettyNum(var, prettyBuf, 32) << '\n'
-#define OUTPUT_COUNTER(var) OUTPUT_NAMED_COUNTER(var, #var);
+#define OUTPUT_COUNTER(var) OUTPUT_NAMED_COUNTER(var, #var); 
 
     char* PrettyNumShort(i64 val, char* buf, size_t size);
     char* PrettyNum(i64 val, char* buf, size_t size);

@@ -18,15 +18,15 @@ inline void Shuffle(TRandIter begin, TRandIterEnd end) {
         Shuffle(begin, end, TFastRng64(Seed()));
     }
 }
-
-template <typename TRandIter, typename TRandIterEnd, typename TRandGen>
+ 
+template <typename TRandIter, typename TRandIterEnd, typename TRandGen> 
 inline void Shuffle(TRandIter begin, TRandIterEnd end, TRandGen&& gen) {
-    const size_t sz = end - begin;
-
-    for (size_t i = 1; i < sz; ++i) {
+    const size_t sz = end - begin; 
+ 
+    for (size_t i = 1; i < sz; ++i) { 
         DoSwap(*(begin + i), *(begin + gen.Uniform(i + 1)));
-    }
-}
+    } 
+} 
 
 template <typename TRange>
 inline void ShuffleRange(TRange& range) {

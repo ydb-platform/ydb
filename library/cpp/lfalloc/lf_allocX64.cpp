@@ -49,10 +49,10 @@ extern "C" void* malloc(size_t size) {
     return LFAlloc(size);
 }
 
-extern "C" void* valloc(size_t size) {
+extern "C" void* valloc(size_t size) { 
     return LFVAlloc(size);
-}
-
+} 
+ 
 extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) {
     return LFPosixMemalign(memptr, alignment, size);
 }

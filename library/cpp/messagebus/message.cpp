@@ -163,8 +163,8 @@ namespace NBus {
         } else {
             GetHeader()->FlagsInternal &= ~(MESSAGE_COMPRESS_INTERNAL);
         }
-    }
-
+    } 
+ 
     void TBusMessage::SetCompressedResponse(bool v) {
         if (v) {
             GetHeader()->FlagsInternal |= MESSAGE_COMPRESS_RESPONSE;

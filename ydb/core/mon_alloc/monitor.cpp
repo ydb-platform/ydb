@@ -45,21 +45,21 @@ namespace NKikimr {
                 TMemCounters Total;
             };
 
-            struct TTagStats {
-                struct TBucket {
-                    ui64 Count = 0;
-                    ui64 Size = 0;
-
-                    void Update(ui64 count, ui64 size) {
-                        Count += count;
-                        Size += size;
-                    }
-                };
-
-                TVector<TBucket> Buckets;
-                TBucket Total;
-            };
-
+            struct TTagStats { 
+                struct TBucket { 
+                    ui64 Count = 0; 
+                    ui64 Size = 0; 
+ 
+                    void Update(ui64 count, ui64 size) { 
+                        Count += count; 
+                        Size += size; 
+                    } 
+                }; 
+ 
+                TVector<TBucket> Buckets; 
+                TBucket Total; 
+            }; 
+ 
         private:
             TDynamicCountersPtr CounterGroup;
 
@@ -77,11 +77,11 @@ namespace NKikimr {
                 int numSizes = 0;
                 auto info = NAllocDbg::GetPerTagAllocInfo(true, maxTag, numSizes);
 
-                THashMap<TString, TTagStats> stats;
+                THashMap<TString, TTagStats> stats; 
 
-                auto& totalStats = stats["total"];
-                totalStats.Buckets.resize(numSizes);
-
+                auto& totalStats = stats["total"]; 
+                totalStats.Buckets.resize(numSizes); 
+ 
                 // enumerate through all memory tags
                 for (int tag = 0; tag < maxTag; ++tag) {
                     auto tagName = NProfiling::GetTag(tag);
@@ -89,8 +89,8 @@ namespace NKikimr {
                         tagName = "__DEFAULT__";
                     }
 
-                    auto& tagStats = stats[tagName];
-                    tagStats.Buckets.resize(numSizes);
+                    auto& tagStats = stats[tagName]; 
+                    tagStats.Buckets.resize(numSizes); 
 
                     // enumerate through all sizes of objects
                     for (int sizeIdx = 0; sizeIdx < numSizes; ++sizeIdx) {
@@ -99,16 +99,16 @@ namespace NKikimr {
                             continue;
                         }
 
-                        tagStats.Buckets[sizeIdx].Update(entry.Count, entry.Size);
-                        tagStats.Total.Update(entry.Count, entry.Size);
+                        tagStats.Buckets[sizeIdx].Update(entry.Count, entry.Size); 
+                        tagStats.Total.Update(entry.Count, entry.Size); 
 
-                        totalStats.Buckets[sizeIdx].Update(entry.Count, entry.Size);
-                        totalStats.Total.Update(entry.Count, entry.Size);
+                        totalStats.Buckets[sizeIdx].Update(entry.Count, entry.Size); 
+                        totalStats.Total.Update(entry.Count, entry.Size); 
                     }
-                }
+                } 
 
-                // update counters
-                for (const auto& [tagName, tagStats] : stats) {
+                // update counters 
+                for (const auto& [tagName, tagStats] : stats) { 
                     const auto& total = tagStats.Total;
                     TPerTagCounters& perTag = PerTag[tagName];
 
@@ -117,30 +117,30 @@ namespace NKikimr {
                         continue;
                     }
 
-                    auto tagCounters = CounterGroup->GetSubgroup("tag", tagName);
+                    auto tagCounters = CounterGroup->GetSubgroup("tag", tagName); 
                     if (!perTag.Total.Count) {
                         perTag.Total.Init(tagCounters->GetSubgroup("bucket", "total"));
                     }
 
-                    perTag.Total.Set(total.Count, total.Size);
+                    perTag.Total.Set(total.Count, total.Size); 
 
-                    for (int sizeIdx = 0; sizeIdx < numSizes; ++sizeIdx) {
-                        const auto sizeName = ToString(sizeIdx);
-
+                    for (int sizeIdx = 0; sizeIdx < numSizes; ++sizeIdx) { 
+                        const auto sizeName = ToString(sizeIdx); 
+ 
                         const auto& bucket = tagStats.Buckets[sizeIdx];
-                        TMemCounters& bySize = perTag.BySize[sizeName];
+                        TMemCounters& bySize = perTag.BySize[sizeName]; 
 
                         if (bucket.Count == 0 && bucket.Size == 0 && !bySize.Count) {
                             // Skip the bucket that didn't have any allocations so far
                             continue;
                         }
 
-                        if (!bySize.Count) {
-                            bySize.Init(tagCounters->GetSubgroup("bucket", sizeName));
-                        }
-
-                        bySize.Set(bucket.Count, bucket.Size);
-                    }
+                        if (!bySize.Count) { 
+                            bySize.Init(tagCounters->GetSubgroup("bucket", sizeName)); 
+                        } 
+ 
+                        bySize.Set(bucket.Count, bucket.Size); 
+                    } 
                 }
 #endif
             }

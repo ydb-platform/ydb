@@ -45,18 +45,18 @@ namespace NPrivate {
         };
 
     public:
-        TStackBasedAllocator() = default;
-
-        template <
-            typename... TArgs,
-            typename = std::enable_if_t<
-                std::is_constructible_v<Alloc, TArgs...>
-            >
-        >
-        TStackBasedAllocator(TArgs&&... args)
-            : Alloc(std::forward<TArgs>(args)...)
-        {}
-
+        TStackBasedAllocator() = default; 
+ 
+        template < 
+            typename... TArgs, 
+            typename = std::enable_if_t< 
+                std::is_constructible_v<Alloc, TArgs...> 
+            > 
+        > 
+        TStackBasedAllocator(TArgs&&... args) 
+            : Alloc(std::forward<TArgs>(args)...) 
+        {} 
+ 
         T* allocate(size_type n) {
             if (!IsStorageUsed && CountOnStack >= n) {
                 IsStorageUsed = true;
@@ -95,7 +95,7 @@ template <typename T, size_t CountOnStack, bool UseFallbackAlloc, class Alloc>
 class TStackVec: public TVector<T, ::NPrivate::TStackBasedAllocator<T, CountOnStack, UseFallbackAlloc, TReboundAllocator<Alloc, T>>> {
 private:
     using TBase = TVector<T, ::NPrivate::TStackBasedAllocator<T, CountOnStack, UseFallbackAlloc, TReboundAllocator<Alloc, T>>>;
-    using TAllocator = typename TBase::allocator_type;
+    using TAllocator = typename TBase::allocator_type; 
 
 public:
     using typename TBase::const_iterator;
@@ -106,14 +106,14 @@ public:
     using typename TBase::value_type;
 
 public:
-    TStackVec(const TAllocator& alloc = TAllocator())
-        : TBase(alloc)
+    TStackVec(const TAllocator& alloc = TAllocator()) 
+        : TBase(alloc) 
     {
         TBase::reserve(CountOnStack);
     }
 
-    explicit TStackVec(size_type count, const TAllocator& alloc = TAllocator())
-        : TBase(alloc)
+    explicit TStackVec(size_type count, const TAllocator& alloc = TAllocator()) 
+        : TBase(alloc) 
     {
         if (count <= CountOnStack) {
             TBase::reserve(CountOnStack);
@@ -121,8 +121,8 @@ public:
         TBase::resize(count);
     }
 
-    TStackVec(size_type count, const T& val, const TAllocator& alloc = TAllocator())
-        : TBase(alloc)
+    TStackVec(size_type count, const T& val, const TAllocator& alloc = TAllocator()) 
+        : TBase(alloc) 
     {
         if (count <= CountOnStack) {
             TBase::reserve(CountOnStack);
@@ -141,14 +141,14 @@ public:
     {
     }
 
-    TStackVec(std::initializer_list<T> il, const TAllocator& alloc = TAllocator())
-        : TStackVec(il.begin(), il.end(), alloc)
+    TStackVec(std::initializer_list<T> il, const TAllocator& alloc = TAllocator()) 
+        : TStackVec(il.begin(), il.end(), alloc) 
     {
     }
 
     template <class TIter>
-    TStackVec(TIter first, TIter last, const TAllocator& alloc = TAllocator())
-        : TBase(alloc)
+    TStackVec(TIter first, TIter last, const TAllocator& alloc = TAllocator()) 
+        : TBase(alloc) 
     {
         // NB(eeight) Since we want to call 'reserve' here, we cannot just delegate to TVector ctor.
         // The best way to insert values afterwards is to call TVector::insert. However there is a caveat.

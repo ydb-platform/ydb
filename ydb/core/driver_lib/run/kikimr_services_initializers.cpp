@@ -1138,7 +1138,7 @@ void TRestartsCountPublisher::InitializeServices(
     if (Config.HasRestartsCountConfig()) {
         const auto& restartsCountConfig = Config.GetRestartsCountConfig();
         if (restartsCountConfig.HasRestartsCountFile()) {
-            PublishRestartsCount(utilsCounters->GetCounter("RestartsCount", false), restartsCountConfig.GetRestartsCountFile());
+            PublishRestartsCount(utilsCounters->GetCounter("RestartsCount", false), restartsCountConfig.GetRestartsCountFile()); 
         }
     }
 }

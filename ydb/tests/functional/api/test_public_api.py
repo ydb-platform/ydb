@@ -1310,10 +1310,10 @@ class TestSessionNotFound(Base):
         data_query = ydb.DataQuery('select 1', {})
         session = ydb.retry_operation_sync(lambda: table_client.session().create())
         session.transaction().execute(data_query, commit_tx=True)
-        assert_that(session.has_prepared('select 1'), is_(True)) 
-        assert_that(session._state.lookup('select 1')[1], is_(none())) 
-        assert_that(session.has_prepared(data_query), is_(True)) 
-        assert_that(session._state.lookup(data_query)[1], is_(none())) 
+        assert_that(session.has_prepared('select 1'), is_(True))
+        assert_that(session._state.lookup('select 1')[1], is_(none()))
+        assert_that(session.has_prepared(data_query), is_(True))
+        assert_that(session._state.lookup(data_query)[1], is_(none()))
 
     def test_explicit_partitions_case_1(self):
 
@@ -1343,8 +1343,8 @@ class TestSessionNotFound(Base):
         response = session.describe_table(
             '/Root/test_explicit_partitions', ydb.DescribeTableSettings().with_include_shard_key_bounds(
                 True
-            ).with_include_table_stats( 
-                True 
+            ).with_include_table_stats(
+                True
             )
         )
 
@@ -1354,12 +1354,12 @@ class TestSessionNotFound(Base):
                 4
             )
         )
-        assert_that( 
-            response.table_stats.partitions, 
-            equal_to( 
-                4 
-            ) 
-        ) 
+        assert_that(
+            response.table_stats.partitions,
+            equal_to(
+                4
+            )
+        )
 
     def test_explict_partitions_case_2(self):
 
@@ -1394,8 +1394,8 @@ class TestSessionNotFound(Base):
         response = session.describe_table(
             '/Root/test_explicit_partitions', ydb.DescribeTableSettings().with_include_shard_key_bounds(
                 True
-            ).with_include_table_stats( 
-                True 
+            ).with_include_table_stats(
+                True
             )
         )
 
@@ -1405,12 +1405,12 @@ class TestSessionNotFound(Base):
                 4
             )
         )
-        assert_that( 
-            response.table_stats.partitions, 
-            equal_to( 
-                4 
-            ) 
-        ) 
+        assert_that(
+            response.table_stats.partitions,
+            equal_to(
+                4
+            )
+        )
 
     def test_simple_table_profile_settings(self):
         description = ydb.TableDescription().with_column(ydb.Column('key', ydb.PrimitiveType.Utf8))

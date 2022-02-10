@@ -50,12 +50,12 @@ class AlterTableOperation(operation.Operation):
         self.ready = response_pb.operation.ready
 
 
-def copy_tables_request_factory(session_state, source_destination_pairs): 
-    request = session_state.attach_request(_apis.ydb_table.CopyTablesRequest()) 
-    for source_path, destination_path in source_destination_pairs: 
-        table_item = request.tables.add() 
-        table_item.source_path = source_path 
-        table_item.destination_path = destination_path 
+def copy_tables_request_factory(session_state, source_destination_pairs):
+    request = session_state.attach_request(_apis.ydb_table.CopyTablesRequest())
+    for source_path, destination_path in source_destination_pairs:
+        table_item = request.tables.add()
+        table_item.source_path = source_path
+        table_item.destination_path = destination_path
     return request
 
 
@@ -272,8 +272,8 @@ def describe_table_request_factory(session_state, path, settings=None):
         and hasattr(settings, "include_table_stats")
         and settings.include_table_stats
     ):
-        request.include_table_stats = settings.include_table_stats 
- 
+        request.include_table_stats = settings.include_table_stats
+
     return request
 
 
@@ -459,7 +459,7 @@ class SessionState(object):
     def keep(self, query, query_id):
         if self._client_cache_enabled:
             self._query_cache.put(query.name, (query, query_id))
-        else: 
+        else:
             self._query_cache.put(query.name, (query, None))
         return self
 
@@ -475,7 +475,7 @@ class SessionState(object):
         return self._query_cache.get(self._query_key(query), self._default)
 
     def erase(self, query):
-        query, _ = self.lookup(query) 
+        query, _ = self.lookup(query)
         self._query_cache.erase(query.name)
 
     def complete_query(self):

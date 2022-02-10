@@ -126,11 +126,11 @@ def execute_request_factory(
         query_pb = _apis.ydb_table.Query(id=query_id)
         parameters_types = data_query.parameters_types
     else:
-        if data_query is not None: 
-            # client cache disabled for send query text every time 
-            yql_text = data_query.yql_text 
-            parameters_types = data_query.parameters_types 
-        elif isinstance(query, types.DataQuery): 
+        if data_query is not None:
+            # client cache disabled for send query text every time
+            yql_text = data_query.yql_text
+            parameters_types = data_query.parameters_types
+        elif isinstance(query, types.DataQuery):
             if settings is not None and hasattr(settings, "keep_in_cache"):
                 keep_in_cache = settings.keep_in_cache
             else:

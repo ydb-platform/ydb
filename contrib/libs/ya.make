@@ -92,7 +92,7 @@ RECURSE(
     google-compute-engine-oslogin
     googleapis-common-protos
     gost-engine
-    gpsd 
+    gpsd
     grpc
     grpc/python
     grpc/src/proto

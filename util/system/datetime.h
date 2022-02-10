@@ -6,7 +6,7 @@
 #if defined(_win_)
     #include <intrin.h>
     #pragma intrinsic(__rdtsc)
-#endif // _win_
+#endif // _win_ 
 
 #if defined(_darwin_) && !defined(_x86_)
     #include <mach/mach_time.h>
@@ -44,7 +44,7 @@ void NanoSleep(ui64 ns) noexcept;
 Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
 #if defined(_MSC_VER)
     // Generates the rdtscp instruction, which returns the processor time stamp.
-    // The processor time stamp records the number of clock cycles since the last reset.
+    // The processor time stamp records the number of clock cycles since the last reset. 
     extern const bool HaveRdtscp;
 
     if (HaveRdtscp) {

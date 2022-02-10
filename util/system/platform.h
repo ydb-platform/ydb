@@ -81,13 +81,13 @@
     #define _arm_
 #endif
 
-/* __ia64__ and __x86_64__      - defined by GNU C.
- * _M_IA64, _M_X64, _M_AMD64    - defined by Visual Studio.
- *
- * Microsoft can define _M_IX86, _M_AMD64 (before Visual Studio 8)
- * or _M_X64 (starting in Visual Studio 8).
- */
-#if defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
+/* __ia64__ and __x86_64__      - defined by GNU C. 
+ * _M_IA64, _M_X64, _M_AMD64    - defined by Visual Studio. 
+ * 
+ * Microsoft can define _M_IX86, _M_AMD64 (before Visual Studio 8) 
+ * or _M_X64 (starting in Visual Studio 8). 
+ */ 
+#if defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64) 
     #define _x86_64_
 #endif
 
@@ -95,7 +95,7 @@
     #define _i386_
 #endif
 
-#if defined(__ia64__) || defined(_M_IA64)
+#if defined(__ia64__) || defined(_M_IA64) 
     #define _ia64_
 #endif
 
@@ -109,8 +109,8 @@
 
 #if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_)
     #error "platform not defined, please, define one"
-#endif
-
+#endif 
+ 
 #if defined(_x86_64_) || defined(_i386_)
     #define _x86_
 #endif
@@ -189,18 +189,18 @@
     #define _32_
 #endif
 
-/* All modern 64-bit Unix systems use scheme LP64 (long, pointers are 64-bit).
- * Microsoft uses a different scheme: LLP64 (long long, pointers are 64-bit).
- *
- * Scheme          LP64   LLP64
- * char              8      8
- * short            16     16
- * int              32     32
- * long             64     32
- * long long        64     64
- * pointer          64     64
- */
-
+/* All modern 64-bit Unix systems use scheme LP64 (long, pointers are 64-bit). 
+ * Microsoft uses a different scheme: LLP64 (long long, pointers are 64-bit). 
+ * 
+ * Scheme          LP64   LLP64 
+ * char              8      8 
+ * short            16     16 
+ * int              32     32 
+ * long             64     32 
+ * long long        64     64 
+ * pointer          64     64 
+ */ 
+ 
 #if defined(_32_)
     #define SIZEOF_PTR 4
 #elif defined(_64_)
@@ -231,7 +231,7 @@
         #define SIZEOF_LONG 8
         #define SIZEOF_UNSIGNED_LONG 8
     #endif // _win_
-#endif // _32_
+#endif // _32_ 
 
 #if !defined(SIZEOF_LONG)
     #error todo

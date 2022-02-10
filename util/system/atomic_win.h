@@ -48,7 +48,7 @@ static inline intptr_t AtomicGetAndCas(TAtomic* a, intptr_t exchange, intptr_t c
     return _InterlockedCompareExchange((volatile long*)a, exchange, compare);
 }
 
-#else // _x86_64_
+#else // _x86_64_ 
 
     #pragma intrinsic(_InterlockedIncrement64)
     #pragma intrinsic(_InterlockedDecrement64)
@@ -104,7 +104,7 @@ static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) {
     return _InterlockedXor64(&a, b) ^ b;
 }
 
-#endif // _x86_
+#endif // _x86_ 
 
 //TODO
 static inline void AtomicBarrier() {

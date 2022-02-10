@@ -1,11 +1,11 @@
-#include "tld.h"
-
+#include "tld.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <library/cpp/charset/doccodes.h>
-
-using namespace NTld;
-
+ 
+using namespace NTld; 
+ 
 Y_UNIT_TEST_SUITE(TTldTest) {
     Y_UNIT_TEST(TestFindTld) {
         UNIT_ASSERT(FindTld("yandex.ru") == "ru");
@@ -23,19 +23,19 @@ Y_UNIT_TEST_SUITE(TTldTest) {
     }
 
     Y_UNIT_TEST(TestTLDs) {
-        UNIT_ASSERT(IsTld("ru"));
-        UNIT_ASSERT(IsTld("Ru"));
-        UNIT_ASSERT(IsTld("BMW"));
-        UNIT_ASSERT(IsTld("TiReS"));
-        UNIT_ASSERT(IsTld("xn--p1ai"));
-        UNIT_ASSERT(IsTld("YaHOO"));
-        UNIT_ASSERT(!IsTld("xn"));
-
-        UNIT_ASSERT(InTld("ru.ru"));
-        UNIT_ASSERT(!InTld("ru"));
-        UNIT_ASSERT(!InTld("ru."));
-        UNIT_ASSERT(!InTld("ru.xn"));
-    }
+        UNIT_ASSERT(IsTld("ru")); 
+        UNIT_ASSERT(IsTld("Ru")); 
+        UNIT_ASSERT(IsTld("BMW")); 
+        UNIT_ASSERT(IsTld("TiReS")); 
+        UNIT_ASSERT(IsTld("xn--p1ai")); 
+        UNIT_ASSERT(IsTld("YaHOO")); 
+        UNIT_ASSERT(!IsTld("xn")); 
+ 
+        UNIT_ASSERT(InTld("ru.ru")); 
+        UNIT_ASSERT(!InTld("ru")); 
+        UNIT_ASSERT(!InTld("ru.")); 
+        UNIT_ASSERT(!InTld("ru.xn")); 
+    } 
 
     Y_UNIT_TEST(TestVeryGoodTlds) {
         UNIT_ASSERT(IsVeryGoodTld("ru"));
@@ -56,4 +56,4 @@ Y_UNIT_TEST_SUITE(TTldTest) {
         UNIT_ASSERT(!InVeryGoodTld("ru."));
         UNIT_ASSERT(!InVeryGoodTld("ru.xn"));
     }
-}
+} 

@@ -1,14 +1,14 @@
-#include "tld.h"
-
+#include "tld.h" 
+ 
 #include <library/cpp/digest/lower_case/hash_ops.h>
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 #include <util/generic/singleton.h>
-
+ 
 namespace NTld {
     namespace {
 #include <library/cpp/tld/tld.inc>
-
+ 
         using TCiHash = THashSet<TStringBuf, TCIOps, TCIOps>;
 
         struct TTLDHash: public TCiHash {
@@ -36,13 +36,13 @@ namespace NTld {
     const char* const* GetTlds() {
         return TopLevelDomains;
     }
-
+ 
     bool IsTld(const TStringBuf& s) {
         return Default<TTLDHash>().contains(s);
     }
-
+ 
     bool IsVeryGoodTld(const TStringBuf& s) {
         return Default<TVeryGoodTld>().contains(s);
     }
 
-}
+} 

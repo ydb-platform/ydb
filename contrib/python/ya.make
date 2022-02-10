@@ -821,7 +821,7 @@ RECURSE(
     pygrib
     pygtrie
     PyHamcrest
-    pyjavaproperties
+    pyjavaproperties 
     PyJWT
     pykdtree
     pyketama

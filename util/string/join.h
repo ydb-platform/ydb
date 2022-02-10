@@ -1,10 +1,10 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/string.h>
-#include <util/generic/typetraits.h>
+#include <util/generic/typetraits.h> 
 #include <util/string/cast.h>
 #include "cast.h"
-
+ 
 /*
  * Default implementation of AppendToString uses a temporary TString object which is inefficient. You can overload it
  * for your type to speed up string joins. If you already have an Out() or operator<<() implementation you can simply
@@ -30,18 +30,18 @@ inline std::enable_if_t<std::is_arithmetic<std::remove_cv_t<T>>::value, void>
 AppendToString(TBasicString<TCharType>& dst, const T& t) {
     char buf[512];
     dst.append(buf, ToString<std::remove_cv_t<T>>(t, buf, sizeof(buf)));
-}
-
+} 
+ 
 template <typename TCharType>
 inline void AppendToString(TBasicString<TCharType>& dst, const TCharType* t) {
     dst.append(t);
-}
-
+} 
+ 
 template <typename TCharType>
 inline void AppendToString(TBasicString<TCharType>& dst, TBasicStringBuf<TCharType> t) {
     dst.append(t);
-}
-
+} 
+ 
 namespace NPrivate {
     template <typename T>
     inline size_t GetLength(const T&) {
@@ -73,8 +73,8 @@ namespace NPrivate {
     size_t GetAppendLength(const TStringBuf delim, const TFirst& f, const TRest&... r) {
         return delim.length() + ::NPrivate::GetLength(f) + ::NPrivate::GetAppendLength(delim, r...);
     }
-}
-
+} 
+ 
 template <typename TCharType>
 inline void AppendJoinNoReserve(TBasicString<TCharType>&, TBasicStringBuf<TCharType>) {
 }
@@ -130,7 +130,7 @@ namespace NPrivate {
         }
 
         return out;
-    }
+    } 
 
 } // namespace NPrivate
 
@@ -172,7 +172,7 @@ inline TBasicString<TCharType> JoinSeq(std::basic_string_view<TCharType> delim, 
     using std::begin;
     using std::end;
     return JoinRange(delim, begin(data), end(data));
-}
+} 
 
 template <typename TCharType, typename TContainer>
 inline TBasicString<TCharType> JoinSeq(const TCharType* delim, const TContainer& data) {

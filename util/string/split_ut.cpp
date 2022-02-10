@@ -25,7 +25,7 @@ static inline void OldSplit(char* pszBuf, T* pRes) {
 template <class T1, class T2>
 inline void Cmp(const T1& t1, const T2& t2) {
     try {
-        UNIT_ASSERT_EQUAL(t1.size(), t2.size());
+        UNIT_ASSERT_EQUAL(t1.size(), t2.size()); 
     } catch (...) {
         Print(t1);
         Cerr << "---------------" << Endl;
@@ -39,9 +39,9 @@ inline void Cmp(const T1& t1, const T2& t2) {
 
     for (; i != t1.end() && j != t2.end(); ++i, ++j) {
         try {
-            UNIT_ASSERT_EQUAL(*i, *j);
+            UNIT_ASSERT_EQUAL(*i, *j); 
         } catch (...) {
-            Cerr << "(" << *i << ")->(" << *j << ")" << Endl;
+            Cerr << "(" << *i << ")->(" << *j << ")" << Endl; 
 
             throw;
         }
@@ -50,8 +50,8 @@ inline void Cmp(const T1& t1, const T2& t2) {
 
 template <class T>
 inline void Print(const T& t) {
-    for (typename T::const_iterator i = t.begin(); i != t.end(); ++i) {
-        Cerr << *i << Endl;
+    for (typename T::const_iterator i = t.begin(); i != t.end(); ++i) { 
+        Cerr << *i << Endl; 
     }
 }
 

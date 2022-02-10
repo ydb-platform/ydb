@@ -98,7 +98,7 @@ public:
         return Handle_;
     }
 
-    size_t Read(void* buffer, size_t count) const {
+    size_t Read(void* buffer, size_t count) const { 
         ssize_t r = Handle_.Read(buffer, count);
         if (r < 0) {
             ythrow TFileError() << "failed to read from pipe";
@@ -106,7 +106,7 @@ public:
         return r;
     }
 
-    size_t Write(const void* buffer, size_t count) const {
+    size_t Write(const void* buffer, size_t count) const { 
         ssize_t r = Handle_.Write(buffer, count);
         if (r < 0) {
             ythrow TFileError() << "failed to write to pipe";
@@ -142,11 +142,11 @@ bool TPipe::IsOpen() const noexcept {
     return Impl_->IsOpen();
 }
 
-size_t TPipe::Read(void* buf, size_t len) const {
+size_t TPipe::Read(void* buf, size_t len) const { 
     return Impl_->Read(buf, len);
 }
 
-size_t TPipe::Write(const void* buf, size_t len) const {
+size_t TPipe::Write(const void* buf, size_t len) const { 
     return Impl_->Write(buf, len);
 }
 

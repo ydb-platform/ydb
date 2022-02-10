@@ -174,7 +174,7 @@ ui16* http2status = prepare_flags(HTTP_FLAG);
 
 TStringBuf ExtHttpCodeStr(int code) noexcept {
     if (code < HTTP_CODE_MAX) {
-        return HttpCodeStr(code);
+        return HttpCodeStr(code); 
     }
     switch (code) {
         case HTTP_BAD_RESPONSE_HEADER:

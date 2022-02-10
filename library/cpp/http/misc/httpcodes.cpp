@@ -1,7 +1,7 @@
 #include "httpcodes.h"
 
 TStringBuf HttpCodeStrEx(int code) noexcept {
-    switch (code) {
+    switch (code) { 
         case HTTP_CONTINUE:
             return TStringBuf("100 Continue");
         case HTTP_SWITCHING_PROTOCOLS:
@@ -137,5 +137,5 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
 
         default:
             return TStringBuf("000 Unknown HTTP code");
-    }
+    } 
 }

@@ -69,8 +69,8 @@ public:
     inline void AddLog(ELogPriority priority, const char* format, va_list args) const {
         if (!IsOpen()) {
             return;
-        }
-
+        } 
+ 
         TPriorityLogStream ls(priority, this);
 
         Printf(ls, format, args);
@@ -223,9 +223,9 @@ bool TLog::IsNullLog() const noexcept {
 }
 
 THolder<TLogBackend> TLog::ReleaseBackend() noexcept {
-    return Impl_->ReleaseBackend();
-}
-
+    return Impl_->ReleaseBackend(); 
+} 
+ 
 void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
     if (Formatter_) {
         const auto formated = Formatter_(priority, TStringBuf{data, len});

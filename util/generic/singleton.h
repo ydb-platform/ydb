@@ -56,7 +56,7 @@ namespace NPrivate {
 
         return ret;
     }
-
+ 
     template <class T, size_t P, class... TArgs>
     T* SingletonInt(TArgs&&... args) {
         static_assert(sizeof(T) < 32000, "use HugeSingleton instead");
@@ -71,22 +71,22 @@ namespace NPrivate {
         return ret;
     }
 
-    template <class T>
-    class TDefault {
-    public:
+    template <class T> 
+    class TDefault { 
+    public: 
         template <class... TArgs>
         inline TDefault(TArgs&&... args)
             : T_(std::forward<TArgs>(args)...)
-        {
-        }
-
+        { 
+        } 
+ 
         inline const T* Get() const noexcept {
-            return &T_;
-        }
-
-    private:
-        T T_;
-    };
+            return &T_; 
+        } 
+ 
+    private: 
+        T T_; 
+    }; 
 
     template <class T>
     struct THeapStore {
@@ -130,7 +130,7 @@ T* HugeSingletonWithPriority(TArgs&&... args) {
     return SingletonWithPriority<::NPrivate::THeapStore<T>, P>(std::forward<TArgs>(args)...)->D;
 }
 
-template <class T>
-const T& Default() {
+template <class T> 
+const T& Default() { 
     return *(::NPrivate::SingletonInt<typename ::NPrivate::TDefault<T>, TSingletonTraits<T>::Priority>()->Get());
 }

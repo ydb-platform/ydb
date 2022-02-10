@@ -91,7 +91,7 @@ namespace NAddr {
         }
 
     private:
-        const addrinfo* const AI_;
+        const addrinfo* const AI_; 
     };
 
     //compat, for TIpAddress
@@ -111,7 +111,7 @@ namespace NAddr {
         }
 
     private:
-        const TIpAddress A_;
+        const TIpAddress A_; 
     };
 
     //same, for ipv6 addresses
@@ -131,6 +131,6 @@ namespace NAddr {
         }
 
     private:
-        const sockaddr_in6 A_;
+        const sockaddr_in6 A_; 
     };
 }

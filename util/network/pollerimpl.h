@@ -160,29 +160,29 @@ public:
     }
 
     static inline int ExtractStatus(const TEvent* event) noexcept {
-        if (event->flags & EV_ERROR) {
-            return EIO;
-        }
-
+        if (event->flags & EV_ERROR) { 
+            return EIO; 
+        } 
+ 
         return event->fflags;
     }
 
     static inline int ExtractFilterImpl(const TEvent* event) noexcept {
         if (event->filter == EVFILT_READ) {
-            return CONT_POLL_READ;
-        }
+            return CONT_POLL_READ; 
+        } 
 
-        if (event->filter == EVFILT_WRITE) {
-            return CONT_POLL_WRITE;
-        }
-
+        if (event->filter == EVFILT_WRITE) { 
+            return CONT_POLL_WRITE; 
+        } 
+ 
         if (event->flags & EV_EOF) {
             return CONT_POLL_READ | CONT_POLL_WRITE;
         }
 
-        return 0;
-    }
-
+        return 0; 
+    } 
+ 
 private:
     int Fd_;
 };
@@ -287,23 +287,23 @@ public:
     }
 
     static inline int ExtractFilterImpl(const TEvent* event) noexcept {
-        int ret = 0;
+        int ret = 0; 
+ 
+        if (event->events & EPOLLIN) { 
+            ret |= CONT_POLL_READ; 
+        } 
 
-        if (event->events & EPOLLIN) {
-            ret |= CONT_POLL_READ;
-        }
-
-        if (event->events & EPOLLOUT) {
-            ret |= CONT_POLL_WRITE;
-        }
-
+        if (event->events & EPOLLOUT) { 
+            ret |= CONT_POLL_WRITE; 
+        } 
+ 
         if (event->events & EPOLLRDHUP) {
             ret |= CONT_POLL_RDHUP;
         }
 
-        return ret;
-    }
-
+        return ret; 
+    } 
+ 
 private:
     int Fd_;
 };
@@ -585,8 +585,8 @@ public:
 
     static inline int ExtractFilterImpl(const TEvent* event) noexcept {
         return event->Filter();
-    }
-
+    } 
+ 
 private:
     inline void Signal() noexcept {
         char ch = 13;

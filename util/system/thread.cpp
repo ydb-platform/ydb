@@ -355,18 +355,18 @@ TThread::TId TThread::CurrentThreadNumericId() noexcept {
 TThread::TId TThread::ImpossibleThreadId() noexcept {
     return Max<TThread::TId>();
 }
-
-namespace {
+ 
+namespace { 
     template <class T>
     static void* ThreadProcWrapper(void* param) {
         return reinterpret_cast<T*>(param)->ThreadProc();
     }
-}
-
+} 
+ 
 ISimpleThread::ISimpleThread(size_t stackSize)
     : TThread(TParams(ThreadProcWrapper<ISimpleThread>, reinterpret_cast<void*>(this), stackSize))
-{
-}
+{ 
+} 
 
 #if defined(_MSC_VER)
     // This beautiful piece of code is borrowed from

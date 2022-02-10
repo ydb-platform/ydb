@@ -1008,7 +1008,7 @@ public:
         struct addrinfo hints;
 
         memset(&hints, 0, sizeof(hints));
-
+ 
         hints.ai_flags = flags;
         hints.ai_family = PF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
@@ -1071,9 +1071,9 @@ TNetworkAddress::TNetworkAddress(const TUnixSocketPath& unixSocketPath, int flag
 
 TNetworkAddress::TNetworkAddress(const TString& host, ui16 port, int flags)
     : Impl_(new TImpl(host.data(), port, flags))
-{
-}
-
+{ 
+} 
+ 
 TNetworkAddress::TNetworkAddress(const TString& host, ui16 port)
     : Impl_(new TImpl(host.data(), port, 0))
 {

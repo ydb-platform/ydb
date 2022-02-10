@@ -270,24 +270,24 @@ static inline void LoadArray(IInputStream* in, T* t, size_t len, TStorage& pool)
 }
 
 static inline void SaveSize(IOutputStream* rh, size_t len) {
-    if ((ui64)len < 0xffffffff) {
-        ::Save(rh, (ui32)len);
-    } else {
-        ::Save(rh, (ui32)0xffffffff);
-        ::Save(rh, (ui64)len);
-    }
+    if ((ui64)len < 0xffffffff) { 
+        ::Save(rh, (ui32)len); 
+    } else { 
+        ::Save(rh, (ui32)0xffffffff); 
+        ::Save(rh, (ui64)len); 
+    } 
 }
 
 static inline size_t LoadSize(IInputStream* rh) {
-    ui32 oldVerSize;
-    ui64 newVerSize;
-    ::Load(rh, oldVerSize);
-    if (oldVerSize != 0xffffffff) {
-        return oldVerSize;
-    } else {
-        ::Load(rh, newVerSize);
-        return newVerSize;
-    }
+    ui32 oldVerSize; 
+    ui64 newVerSize; 
+    ::Load(rh, oldVerSize); 
+    if (oldVerSize != 0xffffffff) { 
+        return oldVerSize; 
+    } else { 
+        ::Load(rh, newVerSize); 
+        return newVerSize; 
+    } 
 }
 
 template <class C>

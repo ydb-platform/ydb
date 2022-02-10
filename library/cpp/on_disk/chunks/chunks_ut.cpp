@@ -53,7 +53,7 @@ public:
             {
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TPlainHash<ui64, ui16> reader(temp);
-                ui16 value = 0; 
+                ui16 value = 0;
                 UNIT_ASSERT(reader.Find(5, &value));
                 UNIT_ASSERT_EQUAL(7, value);
                 UNIT_ASSERT(!reader.Find(6, &value));
@@ -202,7 +202,7 @@ public:
     void TestStrings() {
         const TString FILENAME = "chunked_helpers_test.bin";
         TTempFileHandle file(FILENAME.c_str());
- 
+
         {
             TFixedBufferFileOutput fOut(FILENAME);
             TStringsVectorWriter stringsWriter;
@@ -274,56 +274,56 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TChunkedHelpersTest);
 
-class TChunkedDataTest: public TTestBase { 
-private: 
-    UNIT_TEST_SUITE(TChunkedDataTest); 
+class TChunkedDataTest: public TTestBase {
+private:
+    UNIT_TEST_SUITE(TChunkedDataTest);
     UNIT_TEST(Test)
     UNIT_TEST(TestEmpty)
-    UNIT_TEST_SUITE_END(); 
- 
-    void Test() { 
-        TBuffer buffer; 
-        { 
-            TBufferOutput out(buffer); 
-            TChunkedDataWriter writer(out); 
-            writer.NewBlock(); 
-            writer << "test"; 
-            writer.NewBlock(); 
-            writer << 4; 
-            writer.NewBlock(); 
-            writer.NewBlock(); 
-            writer << 1; 
-            writer << 2; 
-            writer.WriteFooter(); 
-        } 
-        { 
+    UNIT_TEST_SUITE_END();
+
+    void Test() {
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            TChunkedDataWriter writer(out);
+            writer.NewBlock();
+            writer << "test";
+            writer.NewBlock();
+            writer << 4;
+            writer.NewBlock();
+            writer.NewBlock();
+            writer << 1;
+            writer << 2;
+            writer.WriteFooter();
+        }
+        {
             TBlob blob = TBlob::FromBufferSingleThreaded(buffer);
-            TChunkedDataReader data(blob); 
-            // printf("%d\n", (int)data.GetBlockLen(3)); 
-            UNIT_ASSERT_EQUAL(4, data.GetBlockLen(0)); 
-            UNIT_ASSERT_EQUAL(1, data.GetBlockLen(1)); 
-            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(2)); 
-            UNIT_ASSERT_EQUAL(2, data.GetBlockLen(3)); 
-        } 
-    } 
- 
-    void TestEmpty() { 
-        TBuffer buffer; 
-        { 
-            TBufferOutput out(buffer); 
-            TChunkedDataWriter writer(out); 
-            writer.NewBlock(); 
-            writer.NewBlock(); 
-            writer.WriteFooter(); 
-        } 
-        { 
+            TChunkedDataReader data(blob);
+            // printf("%d\n", (int)data.GetBlockLen(3));
+            UNIT_ASSERT_EQUAL(4, data.GetBlockLen(0));
+            UNIT_ASSERT_EQUAL(1, data.GetBlockLen(1));
+            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(2));
+            UNIT_ASSERT_EQUAL(2, data.GetBlockLen(3));
+        }
+    }
+
+    void TestEmpty() {
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            TChunkedDataWriter writer(out);
+            writer.NewBlock();
+            writer.NewBlock();
+            writer.WriteFooter();
+        }
+        {
             TBlob blob = TBlob::FromBufferSingleThreaded(buffer);
-            TChunkedDataReader data(blob); 
-            // printf("%d\n", (int)data.GetBlockLen(1)); 
-            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(0)); 
-            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(1)); 
-        } 
-    } 
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TChunkedDataTest); 
+            TChunkedDataReader data(blob);
+            // printf("%d\n", (int)data.GetBlockLen(1));
+            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(0));
+            UNIT_ASSERT_EQUAL(0, data.GetBlockLen(1));
+        }
+    }
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TChunkedDataTest);

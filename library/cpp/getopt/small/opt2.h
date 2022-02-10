@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/defaults.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

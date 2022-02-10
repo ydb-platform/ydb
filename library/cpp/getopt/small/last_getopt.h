@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "last_getopt_opts.h"
 #include "last_getopt_easy_setup.h"

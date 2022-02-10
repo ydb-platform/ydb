@@ -4,7 +4,7 @@
 #include "write_trie_backwards.h"
 #include "comptrie_impl.h"
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/utility.h>
 
 // Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.

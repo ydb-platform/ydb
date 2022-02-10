@@ -1,59 +1,59 @@
-// Protocol Buffers - Google's data interchange format 
-// Copyright 2008 Google Inc.  All rights reserved. 
-// https://developers.google.com/protocol-buffers/ 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions are 
-// met: 
-// 
-//     * Redistributions of source code must retain the above copyright 
-// notice, this list of conditions and the following disclaimer. 
-//     * Redistributions in binary form must reproduce the above 
-// copyright notice, this list of conditions and the following disclaimer 
-// in the documentation and/or other materials provided with the 
-// distribution. 
-//     * Neither the name of Google Inc. nor the names of its 
-// contributors may be used to endorse or promote products derived from 
-// this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-#ifndef GOOGLE_PROTOBUF_ARENASTRING_H__ 
-#define GOOGLE_PROTOBUF_ARENASTRING_H__ 
- 
+// Protocol Buffers - Google's data interchange format
+// Copyright 2008 Google Inc.  All rights reserved.
+// https://developers.google.com/protocol-buffers/
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#ifndef GOOGLE_PROTOBUF_ARENASTRING_H__
+#define GOOGLE_PROTOBUF_ARENASTRING_H__
+
 #include <string>
 #include <type_traits>
 #include <utility>
- 
+
 #include <google/protobuf/stubs/logging.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/arena.h>
 #include <google/protobuf/port.h>
- 
+
 #include <google/protobuf/port_def.inc>
- 
+
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
 #endif
- 
- 
-namespace google { 
-namespace protobuf { 
-namespace internal { 
- 
+
+
+namespace google {
+namespace protobuf {
+namespace internal {
+
 template <typename T>
 class ExplicitlyConstructed;
- 
+
 class SwapFieldHelper;
 
 // Lazy string instance to support string fields with non-empty default.
@@ -75,14 +75,14 @@ class PROTOBUF_EXPORT LazyString {
     alignas(TProtoStringType) mutable char string_buf_[sizeof(TProtoStringType)];
   };
   mutable std::atomic<const TProtoStringType*> inited_;
- 
+
   const TProtoStringType& get() const {
     // This check generates less code than a call-once invocation.
     auto* res = inited_.load(std::memory_order_acquire);
     if (PROTOBUF_PREDICT_FALSE(res == nullptr)) return Init();
     return *res;
-  } 
- 
+  }
+
  private:
   // Initialize the string in `string_buf_`, update `inited_` and return it.
   // We return it here to avoid having to read it again in the inlined code.
@@ -99,11 +99,11 @@ class TaggedPtr {
   void SetTagged(T* p) {
     Set(p);
     ptr_ = reinterpret_cast<void*>(as_int() | 1);
-  } 
+  }
   void Set(T* p) { ptr_ = p; }
   T* Get() const { return reinterpret_cast<T*>(as_int() & -2); }
   bool IsTagged() const { return as_int() & 1; }
- 
+
   // Returned value is only safe to dereference if IsTagged() == false.
   // It is safe to compare.
   T* UnsafeGet() const { return static_cast<T*>(ptr_); }
@@ -228,12 +228,12 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
   PROTOBUF_NDEBUG_INLINE const TProtoStringType& Get() const {
     // Unconditionally mask away the tag.
     return *tagged_ptr_.Get();
-  } 
+  }
   PROTOBUF_NDEBUG_INLINE const TProtoStringType* GetPointer() const {
     // Unconditionally mask away the tag.
     return tagged_ptr_.Get();
   }
- 
+
   // For fields with an empty default value.
   TProtoStringType* Mutable(EmptyDefault, ::google::protobuf::Arena* arena);
   // For fields with a non-empty default value.
@@ -250,48 +250,48 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
 
   // Takes a TProtoStringType that is heap-allocated, and takes ownership. The
   // TProtoStringType's destructor is registered with the arena. Used to implement
-  // set_allocated_<field> in generated classes. 
+  // set_allocated_<field> in generated classes.
   void SetAllocated(const TProtoStringType* default_value, TProtoStringType* value,
                     ::google::protobuf::Arena* arena);
- 
-  // Swaps internal pointers. Arena-safety semantics: this is guarded by the 
-  // logic in Swap()/UnsafeArenaSwap() at the message level, so this method is 
-  // 'unsafe' if called directly. 
+
+  // Swaps internal pointers. Arena-safety semantics: this is guarded by the
+  // logic in Swap()/UnsafeArenaSwap() at the message level, so this method is
+  // 'unsafe' if called directly.
   inline PROTOBUF_NDEBUG_INLINE static void InternalSwap(
       const TProtoStringType* default_value, ArenaStringPtr* rhs, Arena* rhs_arena,
       ArenaStringPtr* lhs, Arena* lhs_arena);
- 
+
   // Frees storage (if not on an arena).
   void Destroy(const TProtoStringType* default_value, ::google::protobuf::Arena* arena);
   void Destroy(EmptyDefault, ::google::protobuf::Arena* arena);
   void Destroy(NonEmptyDefault, ::google::protobuf::Arena* arena);
- 
+
   // Clears content, but keeps allocated TProtoStringType, to avoid the overhead of
   // heap operations. After this returns, the content (as seen by the user) will
   // always be the empty TProtoStringType. Assumes that |default_value| is an empty
   // TProtoStringType.
   void ClearToEmpty();
- 
+
   // Clears content, assuming that the current value is not the empty
   // string default.
   void ClearNonDefaultToEmpty();
- 
+
   // Clears content, but keeps allocated TProtoStringType if arena != NULL, to avoid
   // the overhead of heap operations. After this returns, the content (as seen
   // by the user) will always be equal to |default_value|.
   void ClearToDefault(const LazyString& default_value, ::google::protobuf::Arena* arena);
 
-  // Called from generated code / reflection runtime only. Resets value to point 
+  // Called from generated code / reflection runtime only. Resets value to point
   // to a default string pointer, with the semantics that this
   // ArenaStringPtr does not own the pointed-to memory. Disregards initial value
   // of ptr_ (so this is the *ONLY* safe method to call after construction or
   // when reinitializing after becoming the active field in a oneof union).
   inline void UnsafeSetDefault(const TProtoStringType* default_value);
- 
+
   // Returns a mutable pointer, but doesn't initialize the string to the
   // default value.
   TProtoStringType* MutableNoArenaNoDefault(const TProtoStringType* default_value);
- 
+
   // Get a mutable pointer with unspecified contents.
   // Similar to `MutableNoArenaNoDefault`, but also handles the arena case.
   // If the value was donated, the contents are discarded.
@@ -300,30 +300,30 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
 
   // Destroy the string. Assumes `arena == nullptr`.
   void DestroyNoArena(const TProtoStringType* default_value);
- 
+
   // Internal setter used only at parse time to directly set a donated string
   // value.
   void UnsafeSetTaggedPointer(TaggedPtr<TProtoStringType> value) {
     tagged_ptr_ = value;
-  } 
+  }
   // Generated code only! An optimization, in certain cases the generated
   // code is certain we can obtain a TProtoStringType with no default checks and
   // tag tests.
   TProtoStringType* UnsafeMutablePointer() PROTOBUF_RETURNS_NONNULL;
- 
+
   inline bool IsDefault(const TProtoStringType* default_value) const {
     // Relies on the fact that kPtrTagString == 0, so if IsString(), ptr_ is the
     // actual TProtoStringType pointer (and if !IsString(), ptr_ will never be equal
     // to any aligned |default_value| pointer). The key is that we want to avoid
     // masking in the fastpath const-pointer Get() case for non-arena code.
     return tagged_ptr_.UnsafeGet() == default_value;
-  } 
- 
+  }
+
  private:
   TaggedPtr<TProtoStringType> tagged_ptr_;
- 
+
   bool IsDonatedString() const { return false; }
- 
+
   // Swaps tagged pointer without debug hardening. This is to allow python
   // protobuf to maintain pointer stability even in DEBUG builds.
   inline PROTOBUF_NDEBUG_INLINE static void UnsafeShallowSwap(
@@ -334,12 +334,12 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
   friend class ::google::protobuf::internal::SwapFieldHelper;
 
   // Slow paths.
- 
+
   // MutableSlow requires that !IsString() || IsDefault
   // Variadic to support 0 args for EmptyDefault and 1 arg for LazyString.
   template <typename... Lazy>
   TProtoStringType* MutableSlow(::google::protobuf::Arena* arena, const Lazy&... lazy_default);
- 
+
   // Sets value to a newly allocated string and returns it
   TProtoStringType* SetAndReturnNewString();
 
@@ -347,7 +347,7 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
   void DestroyNoArenaSlowPath();
 
 };
- 
+
 inline void ArenaStringPtr::UnsafeSetDefault(const TProtoStringType* value) {
   tagged_ptr_.Set(const_cast<TProtoStringType*>(value));
 }
@@ -374,12 +374,12 @@ inline PROTOBUF_NDEBUG_INLINE void ArenaStringPtr::InternalSwap(  //
   force_realloc(rhs, rhs_arena);
 #endif  // PROTOBUF_FORCE_COPY_IN_SWAP
 }
- 
+
 inline void ArenaStringPtr::ClearNonDefaultToEmpty() {
   // Unconditionally mask away the tag.
   tagged_ptr_.Get()->clear();
 }
- 
+
 inline TProtoStringType* ArenaStringPtr::MutableNoArenaNoDefault(
     const TProtoStringType* default_value) {
   // VERY IMPORTANT for performance and code size: this will reduce to a member
@@ -392,7 +392,7 @@ inline TProtoStringType* ArenaStringPtr::MutableNoArenaNoDefault(
     return UnsafeMutablePointer();
   }
 }
- 
+
 inline void ArenaStringPtr::DestroyNoArena(const TProtoStringType* default_value) {
   if (!IsDefault(default_value)) {
     DestroyNoArenaSlowPath();
@@ -412,4 +412,4 @@ inline TProtoStringType* ArenaStringPtr::UnsafeMutablePointer() {
 
 #include <google/protobuf/port_undef.inc>
 
-#endif  // GOOGLE_PROTOBUF_ARENASTRING_H__ 
+#endif  // GOOGLE_PROTOBUF_ARENASTRING_H__

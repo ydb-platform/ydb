@@ -1,20 +1,20 @@
-#pragma once 
+#pragma once
 
-#include "impl.h" 
-#include "events.h" 
- 
+#include "impl.h"
+#include "events.h"
+
 class TContMutex {
 public:
-    TContMutex() noexcept 
+    TContMutex() noexcept
         : Token_(true)
     {
     }
 
-    ~TContMutex() { 
+    ~TContMutex() {
         Y_ASSERT(Token_);
     }
 
-    int LockD(TCont* current, TInstant deadline) { 
+    int LockD(TCont* current, TInstant deadline) {
         while (!Token_) {
             const int ret = WaitQueue_.WaitD(current, deadline);
 
@@ -28,15 +28,15 @@ public:
         return 0;
     }
 
-    int LockT(TCont* current, TDuration timeout) { 
+    int LockT(TCont* current, TDuration timeout) {
         return LockD(current, timeout.ToDeadLine());
     }
 
-    int LockI(TCont* current) { 
+    int LockI(TCont* current) {
         return LockD(current, TInstant::Max());
     }
 
-    void UnLock() noexcept { 
+    void UnLock() noexcept {
         Y_ASSERT(!Token_);
 
         Token_ = true;

@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /*
     zstd - standard compression library
     Header File for static linking only
@@ -104,7 +104,7 @@ ZSTDLIB_API unsigned ZSTD_maxCLevel (void);
 /*! ZSTD_getCParams() :
 *   @return ZSTD_compressionParameters structure for a selected compression level and srcSize.
 *   `srcSize` value is optional, select 0 if not known */
-ZSTDLIB_API ZSTD_compressionParameters ZSTD_getCParams(int compressionLevel, U64 srcSize, size_t dictSize); 
+ZSTDLIB_API ZSTD_compressionParameters ZSTD_getCParams(int compressionLevel, U64 srcSize, size_t dictSize);
 
 /*! ZSTD_checkParams() :
 *   Ensure param values remain within authorized range */
@@ -251,8 +251,8 @@ ZSTDLIB_API size_t ZSTD_decompressContinue(ZSTD_DCtx* dctx, void* dst, size_t ds
 */
 
 #define ZSTD_BLOCKSIZE_MAX (128 * 1024)   /* define, for static allocation */
-ZSTDLIB_API size_t ZSTD_compressBlock  (ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize); 
-ZSTDLIB_API size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize); 
+ZSTDLIB_API size_t ZSTD_compressBlock  (ZSTD_CCtx* cctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
+ZSTDLIB_API size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx, void* dst, size_t dstCapacity, const void* src, size_t srcSize);
 
 
 /*-*************************************
@@ -262,8 +262,8 @@ ZSTDLIB_API size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx, void* dst, size_t dstCa
 /*! ZSTD_getErrorCode() :
     convert a `size_t` function result into a `ZSTD_ErrorCode` enum type,
     which can be used to compare directly with enum list published into "error_public.h" */
-ZSTDLIB_API ZSTD_ErrorCode ZSTD_getErrorCode(size_t functionResult); 
-ZSTDLIB_API const char* ZSTD_getErrorString(ZSTD_ErrorCode code); 
+ZSTDLIB_API ZSTD_ErrorCode ZSTD_getErrorCode(size_t functionResult);
+ZSTDLIB_API const char* ZSTD_getErrorString(ZSTD_ErrorCode code);
 
 
 #if defined (__cplusplus)

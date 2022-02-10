@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <stddef.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>

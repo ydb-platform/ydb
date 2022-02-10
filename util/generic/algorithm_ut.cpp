@@ -517,18 +517,18 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
     Y_UNIT_TEST(SortUniqueByTest) {
         TVector<int> collection = {404, 101, 101, 203, 101, 203, 404};
-        StableSortUniqueBy(collection, [](int x) { return x / 100; }); 
+        StableSortUniqueBy(collection, [](int x) { return x / 100; });
         TVector<int> expected = {101, 203, 404};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
+    }
+
     Y_UNIT_TEST(StableSortUniqueByTest) {
         TVector<int> collection = {404, 101, 106, 203, 102, 205, 401};
-        StableSortUniqueBy(collection, [](int x) { return x / 100; }); 
+        StableSortUniqueBy(collection, [](int x) { return x / 100; });
         TVector<int> expected = {101, 203, 404};
-        UNIT_ASSERT_VALUES_EQUAL(collection, expected); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(collection, expected);
+    }
+
     Y_UNIT_TEST(IotaTest) {
         TVector<int> v(10);
 

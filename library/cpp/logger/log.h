@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "backend.h"
 #include "element.h"

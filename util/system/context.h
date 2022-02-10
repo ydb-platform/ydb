@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "align.h"
 #include "defaults.h"

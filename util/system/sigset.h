@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 // Functions for manipulating signal sets
 

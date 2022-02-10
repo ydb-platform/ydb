@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "zerocopy.h"
 #include "zerocopy_output.h"

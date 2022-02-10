@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "httpfsm.h"
 #include "httpheader.h"

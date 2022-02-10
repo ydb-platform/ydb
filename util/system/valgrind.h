@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #if defined(WITH_VALGRIND) && defined(HAVE_VALGRIND)
     #include <valgrind/valgrind.h>

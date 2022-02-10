@@ -1,7 +1,7 @@
-UNITTEST() 
+UNITTEST()
 
-OWNER(velavokr) 
- 
+OWNER(velavokr)
+
 PEERDIR(
     library/cpp/protobuf/util
     library/cpp/scheme/tests/fuzz_ops/lib
@@ -11,12 +11,12 @@ PEERDIR(
 )
 
 SRCS(
-    fuzz_ops_found_bugs_ut.cpp 
-    scheme_cast_ut.cpp 
-    scheme_json_ut.cpp 
-    scheme_merge_ut.cpp 
-    scheme_path_ut.cpp 
-    scheme_proto_ut.cpp 
+    fuzz_ops_found_bugs_ut.cpp
+    scheme_cast_ut.cpp
+    scheme_json_ut.cpp
+    scheme_merge_ut.cpp
+    scheme_path_ut.cpp
+    scheme_proto_ut.cpp
     scheme_ut.cpp
     scheme_ut.proto
 )

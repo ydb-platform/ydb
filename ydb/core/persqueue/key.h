@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/generic/buffer.h> 
+#include <util/generic/buffer.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
- 
+
 namespace NKikimr {
 namespace NPQ {
 

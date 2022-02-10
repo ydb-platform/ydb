@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/system/defaults.h>
 #include <util/system/sysstat.h>
@@ -72,7 +72,7 @@ TString RealPath(const TString& path);     // throws
 TString RealLocation(const TString& path); /// throws; last file name component doesn't need to exist
 
 TString GetSystemTempDir();
- 
+
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix);
 
 int ResolvePath(const char* rel, const char* abs, char res[/*FILENAME_MAX*/], bool isdir = false);

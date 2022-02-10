@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 //////////////////////////////////////////////////////////////
 /// \file
 /// \brief Definitions for asynchonous connection queue

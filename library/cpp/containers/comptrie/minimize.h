@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "leaf_skipper.h"
 #include <cstddef>

@@ -1,75 +1,75 @@
-// Protocol Buffers - Google's data interchange format 
-// Copyright 2008 Google Inc.  All rights reserved. 
-// https://developers.google.com/protocol-buffers/ 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions are 
-// met: 
-// 
-//     * Redistributions of source code must retain the above copyright 
-// notice, this list of conditions and the following disclaimer. 
-//     * Redistributions in binary form must reproduce the above 
-// copyright notice, this list of conditions and the following disclaimer 
-// in the documentation and/or other materials provided with the 
-// distribution. 
-//     * Neither the name of Google Inc. nor the names of its 
-// contributors may be used to endorse or promote products derived from 
-// this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-// Author: kenton@google.com (Kenton Varda) 
-//  Based on original Protocol Buffers design by 
-//  Sanjay Ghemawat, Jeff Dean, and others. 
-// 
-// DynamicMessage is implemented by constructing a data structure which 
-// has roughly the same memory layout as a generated message would have. 
+// Protocol Buffers - Google's data interchange format
+// Copyright 2008 Google Inc.  All rights reserved.
+// https://developers.google.com/protocol-buffers/
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Author: kenton@google.com (Kenton Varda)
+//  Based on original Protocol Buffers design by
+//  Sanjay Ghemawat, Jeff Dean, and others.
+//
+// DynamicMessage is implemented by constructing a data structure which
+// has roughly the same memory layout as a generated message would have.
 // Then, we use Reflection to implement our reflection interface.  All
 // the other operations we need to implement (e.g.  parsing, copying,
 // etc.) are already implemented in terms of Reflection, so the rest is
 // easy.
-// 
-// The up side of this strategy is that it's very efficient.  We don't 
-// need to use hash_maps or generic representations of fields.  The 
-// down side is that this is a low-level memory management hack which 
-// can be tricky to get right. 
-// 
-// As mentioned in the header, we only expose a DynamicMessageFactory 
-// publicly, not the DynamicMessage class itself.  This is because 
-// GenericMessageReflection wants to have a pointer to a "default" 
-// copy of the class, with all fields initialized to their default 
-// values.  We only want to construct one of these per message type, 
-// so DynamicMessageFactory stores a cache of default messages for 
-// each type it sees (each unique Descriptor pointer).  The code 
-// refers to the "default" copy of the class as the "prototype". 
-// 
-// Note on memory allocation:  This module often calls "operator new()" 
-// to allocate untyped memory, rather than calling something like 
-// "new uint8[]".  This is because "operator new()" means "Give me some 
-// space which I can use as I please." while "new uint8[]" means "Give 
-// me an array of 8-bit integers.".  In practice, the later may return 
-// a pointer that is not aligned correctly for general use.  I believe 
-// Item 8 of "More Effective C++" discusses this in more detail, though 
-// I don't have the book on me right now so I'm not sure. 
- 
+//
+// The up side of this strategy is that it's very efficient.  We don't
+// need to use hash_maps or generic representations of fields.  The
+// down side is that this is a low-level memory management hack which
+// can be tricky to get right.
+//
+// As mentioned in the header, we only expose a DynamicMessageFactory
+// publicly, not the DynamicMessage class itself.  This is because
+// GenericMessageReflection wants to have a pointer to a "default"
+// copy of the class, with all fields initialized to their default
+// values.  We only want to construct one of these per message type,
+// so DynamicMessageFactory stores a cache of default messages for
+// each type it sees (each unique Descriptor pointer).  The code
+// refers to the "default" copy of the class as the "prototype".
+//
+// Note on memory allocation:  This module often calls "operator new()"
+// to allocate untyped memory, rather than calling something like
+// "new uint8[]".  This is because "operator new()" means "Give me some
+// space which I can use as I please." while "new uint8[]" means "Give
+// me an array of 8-bit integers.".  In practice, the later may return
+// a pointer that is not aligned correctly for general use.  I believe
+// Item 8 of "More Effective C++" discusses this in more detail, though
+// I don't have the book on me right now so I'm not sure.
+
 #include <google/protobuf/dynamic_message.h>
 
-#include <algorithm> 
+#include <algorithm>
 #include <cstddef>
-#include <memory> 
+#include <memory>
 #include <new>
 #include <unordered_map>
- 
+
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_message_reflection.h>
@@ -84,24 +84,24 @@
 #include <google/protobuf/reflection_ops.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/wire_format.h>
- 
+
 #include <google/protobuf/port_def.inc>  // NOLINT
 
-namespace google { 
-namespace protobuf { 
- 
+namespace google {
+namespace protobuf {
+
 using internal::DynamicMapField;
-using internal::ExtensionSet; 
-using internal::MapField; 
- 
- 
-using internal::ArenaStringPtr; 
- 
-// =================================================================== 
-// Some helper tables and functions... 
- 
-namespace { 
- 
+using internal::ExtensionSet;
+using internal::MapField;
+
+
+using internal::ArenaStringPtr;
+
+// ===================================================================
+// Some helper tables and functions...
+
+namespace {
+
 bool IsMapFieldInApi(const FieldDescriptor* field) { return field->is_map(); }
 
 // Sync with helpers.h.
@@ -119,18 +119,18 @@ inline bool HasHasbit(const FieldDescriptor* field) {
   // primitive fields also.
   return (field->has_optional_keyword() || field->is_required()) &&
          !field->options().weak();
-} 
- 
+}
+
 inline bool InRealOneof(const FieldDescriptor* field) {
   return field->containing_oneof() &&
          !field->containing_oneof()->is_synthetic();
 }
 
-// Compute the byte size of the in-memory representation of the field. 
-int FieldSpaceUsed(const FieldDescriptor* field) { 
-  typedef FieldDescriptor FD;  // avoid line wrapping 
-  if (field->label() == FD::LABEL_REPEATED) { 
-    switch (field->cpp_type()) { 
+// Compute the byte size of the in-memory representation of the field.
+int FieldSpaceUsed(const FieldDescriptor* field) {
+  typedef FieldDescriptor FD;  // avoid line wrapping
+  if (field->label() == FD::LABEL_REPEATED) {
+    switch (field->cpp_type()) {
       case FD::CPPTYPE_INT32:
         return sizeof(RepeatedField<int32>);
       case FD::CPPTYPE_INT64:
@@ -147,23 +147,23 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
         return sizeof(RepeatedField<bool>);
       case FD::CPPTYPE_ENUM:
         return sizeof(RepeatedField<int>);
-      case FD::CPPTYPE_MESSAGE: 
-        if (IsMapFieldInApi(field)) { 
-          return sizeof(DynamicMapField); 
-        } else { 
-          return sizeof(RepeatedPtrField<Message>); 
-        } 
- 
-      case FD::CPPTYPE_STRING: 
-        switch (field->options().ctype()) { 
-          default:  // TODO(kenton):  Support other string reps. 
-          case FieldOptions::STRING: 
+      case FD::CPPTYPE_MESSAGE:
+        if (IsMapFieldInApi(field)) {
+          return sizeof(DynamicMapField);
+        } else {
+          return sizeof(RepeatedPtrField<Message>);
+        }
+
+      case FD::CPPTYPE_STRING:
+        switch (field->options().ctype()) {
+          default:  // TODO(kenton):  Support other string reps.
+          case FieldOptions::STRING:
             return sizeof(RepeatedPtrField<TProtoStringType>);
-        } 
-        break; 
-    } 
-  } else { 
-    switch (field->cpp_type()) { 
+        }
+        break;
+    }
+  } else {
+    switch (field->cpp_type()) {
       case FD::CPPTYPE_INT32:
         return sizeof(int32);
       case FD::CPPTYPE_INT64:
@@ -180,53 +180,53 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
         return sizeof(bool);
       case FD::CPPTYPE_ENUM:
         return sizeof(int);
- 
-      case FD::CPPTYPE_MESSAGE: 
-        return sizeof(Message*); 
- 
-      case FD::CPPTYPE_STRING: 
-        switch (field->options().ctype()) { 
-          default:  // TODO(kenton):  Support other string reps. 
-          case FieldOptions::STRING: 
-            return sizeof(ArenaStringPtr); 
-        } 
-        break; 
-    } 
-  } 
- 
-  GOOGLE_LOG(DFATAL) << "Can't get here."; 
-  return 0; 
-} 
- 
+
+      case FD::CPPTYPE_MESSAGE:
+        return sizeof(Message*);
+
+      case FD::CPPTYPE_STRING:
+        switch (field->options().ctype()) {
+          default:  // TODO(kenton):  Support other string reps.
+          case FieldOptions::STRING:
+            return sizeof(ArenaStringPtr);
+        }
+        break;
+    }
+  }
+
+  GOOGLE_LOG(DFATAL) << "Can't get here.";
+  return 0;
+}
+
 inline int DivideRoundingUp(int i, int j) { return (i + (j - 1)) / j; }
- 
-static const int kSafeAlignment = sizeof(uint64); 
-static const int kMaxOneofUnionSize = sizeof(uint64); 
- 
-inline int AlignTo(int offset, int alignment) { 
-  return DivideRoundingUp(offset, alignment) * alignment; 
-} 
- 
-// Rounds the given byte offset up to the next offset aligned such that any 
-// type may be stored at it. 
+
+static const int kSafeAlignment = sizeof(uint64);
+static const int kMaxOneofUnionSize = sizeof(uint64);
+
+inline int AlignTo(int offset, int alignment) {
+  return DivideRoundingUp(offset, alignment) * alignment;
+}
+
+// Rounds the given byte offset up to the next offset aligned such that any
+// type may be stored at it.
 inline int AlignOffset(int offset) { return AlignTo(offset, kSafeAlignment); }
- 
-#define bitsizeof(T) (sizeof(T) * 8) 
- 
-}  // namespace 
- 
-// =================================================================== 
- 
-class DynamicMessage : public Message { 
- public: 
+
+#define bitsizeof(T) (sizeof(T) * 8)
+
+}  // namespace
+
+// ===================================================================
+
+class DynamicMessage : public Message {
+ public:
   explicit DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info);
- 
+
   // This should only be used by GetPrototypeNoLock() to avoid dead lock.
   DynamicMessage(DynamicMessageFactory::TypeInfo* type_info, bool lock_factory);
 
-  ~DynamicMessage(); 
- 
-  // Called on the prototype after construction to initialize message fields. 
+  ~DynamicMessage();
+
+  // Called on the prototype after construction to initialize message fields.
   // Cross linking the default instances allows for fast reflection access of
   // unset message fields. Without it we would have to go to the MessageFactory
   // to get the prototype, which is a much more expensive operation.
@@ -234,54 +234,54 @@ class DynamicMessage : public Message {
   // Generated messages do not cross-link to avoid dynamic initialization of the
   // global instances.
   // Instead, they keep the default instances in the FieldDescriptor objects.
-  void CrossLinkPrototypes(); 
- 
-  // implements Message ---------------------------------------------- 
- 
+  void CrossLinkPrototypes();
+
+  // implements Message ----------------------------------------------
+
   Message* New() const override;
   Message* New(Arena* arena) const override;
- 
+
   int GetCachedSize() const override;
   void SetCachedSize(int size) const override;
- 
+
   Metadata GetMetadata() const override;
- 
+
 #if defined(__cpp_lib_destroying_delete) && defined(__cpp_sized_deallocation)
   static void operator delete(DynamicMessage* msg, std::destroying_delete_t);
 #else
-  // We actually allocate more memory than sizeof(*this) when this 
-  // class's memory is allocated via the global operator new. Thus, we need to 
-  // manually call the global operator delete. Calling the destructor is taken 
-  // care of for us. This makes DynamicMessage compatible with -fsized-delete. 
-  // It doesn't work for MSVC though. 
-#ifndef _MSC_VER 
+  // We actually allocate more memory than sizeof(*this) when this
+  // class's memory is allocated via the global operator new. Thus, we need to
+  // manually call the global operator delete. Calling the destructor is taken
+  // care of for us. This makes DynamicMessage compatible with -fsized-delete.
+  // It doesn't work for MSVC though.
+#ifndef _MSC_VER
   static void operator delete(void* ptr) { ::operator delete(ptr); }
-#endif  // !_MSC_VER 
+#endif  // !_MSC_VER
 #endif
- 
- private: 
+
+ private:
   DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info,
                  Arena* arena);
- 
+
   void SharedCtor(bool lock_factory);
 
   // Needed to get the offset of the internal metadata member.
   friend class DynamicMessageFactory;
- 
+
   bool is_prototype() const;
 
-  inline void* OffsetToPointer(int offset) { 
-    return reinterpret_cast<uint8*>(this) + offset; 
-  } 
-  inline const void* OffsetToPointer(int offset) const { 
-    return reinterpret_cast<const uint8*>(this) + offset; 
-  } 
- 
+  inline void* OffsetToPointer(int offset) {
+    return reinterpret_cast<uint8*>(this) + offset;
+  }
+  inline const void* OffsetToPointer(int offset) const {
+    return reinterpret_cast<const uint8*>(this) + offset;
+  }
+
   const DynamicMessageFactory::TypeInfo* type_info_;
   mutable std::atomic<int> cached_byte_size_;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(DynamicMessage);
-}; 
- 
+};
+
 struct DynamicMessageFactory::TypeInfo {
   int size;
   int has_bits_offset;
@@ -313,14 +313,14 @@ struct DynamicMessageFactory::TypeInfo {
 DynamicMessage::DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info)
     : type_info_(type_info), cached_byte_size_(0) {
   SharedCtor(true);
-} 
- 
+}
+
 DynamicMessage::DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info,
                                Arena* arena)
     : Message(arena), type_info_(type_info), cached_byte_size_(0) {
   SharedCtor(true);
-} 
- 
+}
+
 DynamicMessage::DynamicMessage(DynamicMessageFactory::TypeInfo* type_info,
                                bool lock_factory)
     : type_info_(type_info), cached_byte_size_(0) {
@@ -335,35 +335,35 @@ DynamicMessage::DynamicMessage(DynamicMessageFactory::TypeInfo* type_info,
 }
 
 void DynamicMessage::SharedCtor(bool lock_factory) {
-  // We need to call constructors for various fields manually and set 
-  // default values where appropriate.  We use placement new to call 
-  // constructors.  If you haven't heard of placement new, I suggest Googling 
-  // it now.  We use placement new even for primitive types that don't have 
-  // constructors for consistency.  (In theory, placement new should be used 
-  // any time you are trying to convert untyped memory to typed memory, though 
-  // in practice that's not strictly necessary for types that don't have a 
-  // constructor.) 
- 
-  const Descriptor* descriptor = type_info_->type; 
-  // Initialize oneof cases. 
+  // We need to call constructors for various fields manually and set
+  // default values where appropriate.  We use placement new to call
+  // constructors.  If you haven't heard of placement new, I suggest Googling
+  // it now.  We use placement new even for primitive types that don't have
+  // constructors for consistency.  (In theory, placement new should be used
+  // any time you are trying to convert untyped memory to typed memory, though
+  // in practice that's not strictly necessary for types that don't have a
+  // constructor.)
+
+  const Descriptor* descriptor = type_info_->type;
+  // Initialize oneof cases.
   int oneof_count = 0;
   for (int i = 0; i < descriptor->oneof_decl_count(); ++i) {
     if (descriptor->oneof_decl(i)->is_synthetic()) continue;
     new (OffsetToPointer(type_info_->oneof_case_offset +
                          sizeof(uint32) * oneof_count++)) uint32(0);
-  } 
- 
-  if (type_info_->extensions_offset != -1) { 
+  }
+
+  if (type_info_->extensions_offset != -1) {
     new (OffsetToPointer(type_info_->extensions_offset))
         ExtensionSet(GetArenaForAllocation());
-  } 
-  for (int i = 0; i < descriptor->field_count(); i++) { 
-    const FieldDescriptor* field = descriptor->field(i); 
-    void* field_ptr = OffsetToPointer(type_info_->offsets[i]); 
+  }
+  for (int i = 0; i < descriptor->field_count(); i++) {
+    const FieldDescriptor* field = descriptor->field(i);
+    void* field_ptr = OffsetToPointer(type_info_->offsets[i]);
     if (InRealOneof(field)) {
-      continue; 
-    } 
-    switch (field->cpp_type()) { 
+      continue;
+    }
+    switch (field->cpp_type()) {
 #define HANDLE_TYPE(CPPTYPE, TYPE)                                  \
   case FieldDescriptor::CPPTYPE_##CPPTYPE:                          \
     if (!field->is_repeated()) {                                    \
@@ -372,48 +372,48 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
       new (field_ptr) RepeatedField<TYPE>(GetArenaForAllocation()); \
     }                                                               \
     break;
- 
+
       HANDLE_TYPE(INT32, int32);
       HANDLE_TYPE(INT64, int64);
-      HANDLE_TYPE(UINT32, uint32); 
-      HANDLE_TYPE(UINT64, uint64); 
-      HANDLE_TYPE(DOUBLE, double); 
+      HANDLE_TYPE(UINT32, uint32);
+      HANDLE_TYPE(UINT64, uint64);
+      HANDLE_TYPE(DOUBLE, double);
       HANDLE_TYPE(FLOAT, float);
       HANDLE_TYPE(BOOL, bool);
-#undef HANDLE_TYPE 
- 
-      case FieldDescriptor::CPPTYPE_ENUM: 
-        if (!field->is_repeated()) { 
+#undef HANDLE_TYPE
+
+      case FieldDescriptor::CPPTYPE_ENUM:
+        if (!field->is_repeated()) {
           new (field_ptr) int(field->default_value_enum()->number());
-        } else { 
+        } else {
           new (field_ptr) RepeatedField<int>(GetArenaForAllocation());
-        } 
-        break; 
- 
-      case FieldDescriptor::CPPTYPE_STRING: 
-        switch (field->options().ctype()) { 
-          default:  // TODO(kenton):  Support other string reps. 
-          case FieldOptions::STRING: 
-            if (!field->is_repeated()) { 
+        }
+        break;
+
+      case FieldDescriptor::CPPTYPE_STRING:
+        switch (field->options().ctype()) {
+          default:  // TODO(kenton):  Support other string reps.
+          case FieldOptions::STRING:
+            if (!field->is_repeated()) {
               const TProtoStringType* default_value =
                   field->default_value_string().empty()
                       ? &internal::GetEmptyStringAlreadyInited()
                       : nullptr;
               ArenaStringPtr* asp = new (field_ptr) ArenaStringPtr();
-              asp->UnsafeSetDefault(default_value); 
-            } else { 
+              asp->UnsafeSetDefault(default_value);
+            } else {
               new (field_ptr)
                   RepeatedPtrField<TProtoStringType>(GetArenaForAllocation());
-            } 
-            break; 
-        } 
-        break; 
- 
-      case FieldDescriptor::CPPTYPE_MESSAGE: { 
-        if (!field->is_repeated()) { 
+            }
+            break;
+        }
+        break;
+
+      case FieldDescriptor::CPPTYPE_MESSAGE: {
+        if (!field->is_repeated()) {
           new (field_ptr) Message*(NULL);
-        } else { 
-          if (IsMapFieldInApi(field)) { 
+        } else {
+          if (IsMapFieldInApi(field)) {
             // We need to lock in most cases to avoid data racing. Only not lock
             // when the constructor is called inside GetPrototype(), in which
             // case we have already locked the factory.
@@ -448,16 +448,16 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
                         field->message_type()));
               }
             }
-          } else { 
+          } else {
             new (field_ptr) RepeatedPtrField<Message>(GetArenaForAllocation());
-          } 
-        } 
-        break; 
-      } 
-    } 
-  } 
-} 
- 
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
 bool DynamicMessage::is_prototype() const {
   return type_info_->prototype == this ||
          // If type_info_->prototype is NULL, then we must be constructing
@@ -474,27 +474,27 @@ void DynamicMessage::operator delete(DynamicMessage* msg,
 }
 #endif
 
-DynamicMessage::~DynamicMessage() { 
-  const Descriptor* descriptor = type_info_->type; 
- 
+DynamicMessage::~DynamicMessage() {
+  const Descriptor* descriptor = type_info_->type;
+
   _internal_metadata_.Delete<UnknownFieldSet>();
- 
-  if (type_info_->extensions_offset != -1) { 
-    reinterpret_cast<ExtensionSet*>( 
+
+  if (type_info_->extensions_offset != -1) {
+    reinterpret_cast<ExtensionSet*>(
         OffsetToPointer(type_info_->extensions_offset))
         ->~ExtensionSet();
-  } 
- 
-  // We need to manually run the destructors for repeated fields and strings, 
-  // just as we ran their constructors in the DynamicMessage constructor. 
-  // We also need to manually delete oneof fields if it is set and is string 
-  // or message. 
-  // Additionally, if any singular embedded messages have been allocated, we 
-  // need to delete them, UNLESS we are the prototype message of this type, 
-  // in which case any embedded messages are other prototypes and shouldn't 
-  // be touched. 
-  for (int i = 0; i < descriptor->field_count(); i++) { 
-    const FieldDescriptor* field = descriptor->field(i); 
+  }
+
+  // We need to manually run the destructors for repeated fields and strings,
+  // just as we ran their constructors in the DynamicMessage constructor.
+  // We also need to manually delete oneof fields if it is set and is string
+  // or message.
+  // Additionally, if any singular embedded messages have been allocated, we
+  // need to delete them, UNLESS we are the prototype message of this type,
+  // in which case any embedded messages are other prototypes and shouldn't
+  // be touched.
+  for (int i = 0; i < descriptor->field_count(); i++) {
+    const FieldDescriptor* field = descriptor->field(i);
     if (InRealOneof(field)) {
       void* field_ptr =
           OffsetToPointer(type_info_->oneof_case_offset +
@@ -503,70 +503,70 @@ DynamicMessage::~DynamicMessage() {
         field_ptr = OffsetToPointer(
             type_info_->offsets[descriptor->field_count() +
                                 field->containing_oneof()->index()]);
-        if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) { 
-          switch (field->options().ctype()) { 
-            default: 
-            case FieldOptions::STRING: { 
+        if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+          switch (field->options().ctype()) {
+            default:
+            case FieldOptions::STRING: {
               // Oneof string fields are never set as a default instance.
               // We just need to pass some arbitrary default string to make it
               // work. This allows us to not have the real default accessible
               // from reflection.
               const TProtoStringType* default_value = nullptr;
-              reinterpret_cast<ArenaStringPtr*>(field_ptr)->Destroy( 
-                  default_value, NULL); 
-              break; 
-            } 
-          } 
-        } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) { 
-            delete *reinterpret_cast<Message**>(field_ptr); 
-        } 
-      } 
-      continue; 
-    } 
-    void* field_ptr = OffsetToPointer(type_info_->offsets[i]); 
- 
-    if (field->is_repeated()) { 
-      switch (field->cpp_type()) { 
+              reinterpret_cast<ArenaStringPtr*>(field_ptr)->Destroy(
+                  default_value, NULL);
+              break;
+            }
+          }
+        } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+            delete *reinterpret_cast<Message**>(field_ptr);
+        }
+      }
+      continue;
+    }
+    void* field_ptr = OffsetToPointer(type_info_->offsets[i]);
+
+    if (field->is_repeated()) {
+      switch (field->cpp_type()) {
 #define HANDLE_TYPE(UPPERCASE, LOWERCASE)                  \
   case FieldDescriptor::CPPTYPE_##UPPERCASE:               \
     reinterpret_cast<RepeatedField<LOWERCASE>*>(field_ptr) \
         ->~RepeatedField<LOWERCASE>();                     \
     break
- 
+
         HANDLE_TYPE(INT32, int32);
         HANDLE_TYPE(INT64, int64);
-        HANDLE_TYPE(UINT32, uint32); 
-        HANDLE_TYPE(UINT64, uint64); 
-        HANDLE_TYPE(DOUBLE, double); 
+        HANDLE_TYPE(UINT32, uint32);
+        HANDLE_TYPE(UINT64, uint64);
+        HANDLE_TYPE(DOUBLE, double);
         HANDLE_TYPE(FLOAT, float);
         HANDLE_TYPE(BOOL, bool);
         HANDLE_TYPE(ENUM, int);
-#undef HANDLE_TYPE 
- 
-        case FieldDescriptor::CPPTYPE_STRING: 
-          switch (field->options().ctype()) { 
-            default:  // TODO(kenton):  Support other string reps. 
-            case FieldOptions::STRING: 
+#undef HANDLE_TYPE
+
+        case FieldDescriptor::CPPTYPE_STRING:
+          switch (field->options().ctype()) {
+            default:  // TODO(kenton):  Support other string reps.
+            case FieldOptions::STRING:
               reinterpret_cast<RepeatedPtrField<TProtoStringType>*>(field_ptr)
                   ->~RepeatedPtrField<TProtoStringType>();
-              break; 
-          } 
-          break; 
- 
-        case FieldDescriptor::CPPTYPE_MESSAGE: 
-          if (IsMapFieldInApi(field)) { 
-            reinterpret_cast<DynamicMapField*>(field_ptr)->~DynamicMapField(); 
-          } else { 
-            reinterpret_cast<RepeatedPtrField<Message>*>(field_ptr) 
-                ->~RepeatedPtrField<Message>(); 
-          } 
-          break; 
-      } 
- 
-    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) { 
-      switch (field->options().ctype()) { 
-        default:  // TODO(kenton):  Support other string reps. 
-        case FieldOptions::STRING: { 
+              break;
+          }
+          break;
+
+        case FieldDescriptor::CPPTYPE_MESSAGE:
+          if (IsMapFieldInApi(field)) {
+            reinterpret_cast<DynamicMapField*>(field_ptr)->~DynamicMapField();
+          } else {
+            reinterpret_cast<RepeatedPtrField<Message>*>(field_ptr)
+                ->~RepeatedPtrField<Message>();
+          }
+          break;
+      }
+
+    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+      switch (field->options().ctype()) {
+        default:  // TODO(kenton):  Support other string reps.
+        case FieldOptions::STRING: {
           const TProtoStringType* default_value =
               reinterpret_cast<const ArenaStringPtr*>(
                   type_info_->prototype->OffsetToPointer(
@@ -574,137 +574,137 @@ DynamicMessage::~DynamicMessage() {
                   ->GetPointer();
           reinterpret_cast<ArenaStringPtr*>(field_ptr)->Destroy(default_value,
                                                                 NULL);
-          break; 
-        } 
-      } 
-    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) { 
+          break;
+        }
+      }
+    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
           if (!is_prototype()) {
-        Message* message = *reinterpret_cast<Message**>(field_ptr); 
-        if (message != NULL) { 
-          delete message; 
-        } 
-      } 
-    } 
-  } 
-} 
- 
-void DynamicMessage::CrossLinkPrototypes() { 
-  // This should only be called on the prototype message. 
-  GOOGLE_CHECK(is_prototype()); 
- 
-  DynamicMessageFactory* factory = type_info_->factory; 
-  const Descriptor* descriptor = type_info_->type; 
- 
-  // Cross-link default messages. 
-  for (int i = 0; i < descriptor->field_count(); i++) { 
-    const FieldDescriptor* field = descriptor->field(i); 
-    void* field_ptr = OffsetToPointer(type_info_->offsets[i]); 
-    if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE && 
+        Message* message = *reinterpret_cast<Message**>(field_ptr);
+        if (message != NULL) {
+          delete message;
+        }
+      }
+    }
+  }
+}
+
+void DynamicMessage::CrossLinkPrototypes() {
+  // This should only be called on the prototype message.
+  GOOGLE_CHECK(is_prototype());
+
+  DynamicMessageFactory* factory = type_info_->factory;
+  const Descriptor* descriptor = type_info_->type;
+
+  // Cross-link default messages.
+  for (int i = 0; i < descriptor->field_count(); i++) {
+    const FieldDescriptor* field = descriptor->field(i);
+    void* field_ptr = OffsetToPointer(type_info_->offsets[i]);
+    if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
         !field->options().weak() && !InRealOneof(field) &&
-        !field->is_repeated()) { 
-      // For fields with message types, we need to cross-link with the 
-      // prototype for the field's type. 
-      // For singular fields, the field is just a pointer which should 
-      // point to the prototype. 
-      *reinterpret_cast<const Message**>(field_ptr) = 
+        !field->is_repeated()) {
+      // For fields with message types, we need to cross-link with the
+      // prototype for the field's type.
+      // For singular fields, the field is just a pointer which should
+      // point to the prototype.
+      *reinterpret_cast<const Message**>(field_ptr) =
           factory->GetPrototypeNoLock(field->message_type());
-    } 
-  } 
-} 
- 
+    }
+  }
+}
+
 Message* DynamicMessage::New() const { return New(NULL); }
- 
+
 Message* DynamicMessage::New(Arena* arena) const {
-  if (arena != NULL) { 
+  if (arena != NULL) {
     void* new_base = Arena::CreateArray<char>(arena, type_info_->size);
     memset(new_base, 0, type_info_->size);
     return new (new_base) DynamicMessage(type_info_, arena);
-  } else { 
+  } else {
     void* new_base = operator new(type_info_->size);
     memset(new_base, 0, type_info_->size);
     return new (new_base) DynamicMessage(type_info_);
-  } 
-} 
- 
-int DynamicMessage::GetCachedSize() const { 
+  }
+}
+
+int DynamicMessage::GetCachedSize() const {
   return cached_byte_size_.load(std::memory_order_relaxed);
-} 
- 
-void DynamicMessage::SetCachedSize(int size) const { 
+}
+
+void DynamicMessage::SetCachedSize(int size) const {
   cached_byte_size_.store(size, std::memory_order_relaxed);
-} 
- 
-Metadata DynamicMessage::GetMetadata() const { 
-  Metadata metadata; 
-  metadata.descriptor = type_info_->type; 
-  metadata.reflection = type_info_->reflection.get(); 
-  return metadata; 
-} 
- 
-// =================================================================== 
- 
-DynamicMessageFactory::DynamicMessageFactory() 
+}
+
+Metadata DynamicMessage::GetMetadata() const {
+  Metadata metadata;
+  metadata.descriptor = type_info_->type;
+  metadata.reflection = type_info_->reflection.get();
+  return metadata;
+}
+
+// ===================================================================
+
+DynamicMessageFactory::DynamicMessageFactory()
     : pool_(nullptr), delegate_to_generated_factory_(false) {}
- 
-DynamicMessageFactory::DynamicMessageFactory(const DescriptorPool* pool) 
+
+DynamicMessageFactory::DynamicMessageFactory(const DescriptorPool* pool)
     : pool_(pool), delegate_to_generated_factory_(false) {}
- 
-DynamicMessageFactory::~DynamicMessageFactory() { 
+
+DynamicMessageFactory::~DynamicMessageFactory() {
   for (auto iter = prototypes_.begin(); iter != prototypes_.end(); ++iter) {
-    delete iter->second; 
-  } 
-} 
- 
-const Message* DynamicMessageFactory::GetPrototype(const Descriptor* type) { 
-  MutexLock lock(&prototypes_mutex_); 
-  return GetPrototypeNoLock(type); 
-} 
- 
-const Message* DynamicMessageFactory::GetPrototypeNoLock( 
-    const Descriptor* type) { 
-  if (delegate_to_generated_factory_ && 
-      type->file()->pool() == DescriptorPool::generated_pool()) { 
-    return MessageFactory::generated_factory()->GetPrototype(type); 
-  } 
- 
+    delete iter->second;
+  }
+}
+
+const Message* DynamicMessageFactory::GetPrototype(const Descriptor* type) {
+  MutexLock lock(&prototypes_mutex_);
+  return GetPrototypeNoLock(type);
+}
+
+const Message* DynamicMessageFactory::GetPrototypeNoLock(
+    const Descriptor* type) {
+  if (delegate_to_generated_factory_ &&
+      type->file()->pool() == DescriptorPool::generated_pool()) {
+    return MessageFactory::generated_factory()->GetPrototype(type);
+  }
+
   const TypeInfo** target = &prototypes_[type];
-  if (*target != NULL) { 
-    // Already exists. 
-    return (*target)->prototype; 
-  } 
- 
+  if (*target != NULL) {
+    // Already exists.
+    return (*target)->prototype;
+  }
+
   TypeInfo* type_info = new TypeInfo;
-  *target = type_info; 
- 
-  type_info->type = type; 
-  type_info->pool = (pool_ == NULL) ? type->file()->pool() : pool_; 
-  type_info->factory = this; 
- 
+  *target = type_info;
+
+  type_info->type = type;
+  type_info->pool = (pool_ == NULL) ? type->file()->pool() : pool_;
+  type_info->factory = this;
+
   // We need to construct all the structures passed to Reflection's constructor.
   // This includes:
-  // - A block of memory that contains space for all the message's fields. 
-  // - An array of integers indicating the byte offset of each field within 
-  //   this block. 
-  // - A big bitfield containing a bit for each field indicating whether 
-  //   or not that field is set. 
+  // - A block of memory that contains space for all the message's fields.
+  // - An array of integers indicating the byte offset of each field within
+  //   this block.
+  // - A big bitfield containing a bit for each field indicating whether
+  //   or not that field is set.
   int real_oneof_count = 0;
   for (int i = 0; i < type->oneof_decl_count(); i++) {
     if (!type->oneof_decl(i)->is_synthetic()) {
       real_oneof_count++;
     }
   }
- 
-  // Compute size and offsets. 
+
+  // Compute size and offsets.
   uint32* offsets = new uint32[type->field_count() + real_oneof_count];
-  type_info->offsets.reset(offsets); 
- 
-  // Decide all field offsets by packing in order. 
-  // We place the DynamicMessage object itself at the beginning of the allocated 
-  // space. 
-  int size = sizeof(DynamicMessage); 
-  size = AlignOffset(size); 
- 
-  // Next the has_bits, which is an array of uint32s. 
+  type_info->offsets.reset(offsets);
+
+  // Decide all field offsets by packing in order.
+  // We place the DynamicMessage object itself at the beginning of the allocated
+  // space.
+  int size = sizeof(DynamicMessage);
+  size = AlignOffset(size);
+
+  // Next the has_bits, which is an array of uint32s.
   type_info->has_bits_offset = -1;
   int max_hasbit = 0;
   for (int i = 0; i < type->field_count(); i++) {
@@ -726,56 +726,56 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
 
   if (max_hasbit > 0) {
     int has_bits_array_size = DivideRoundingUp(max_hasbit, bitsizeof(uint32));
-    size += has_bits_array_size * sizeof(uint32); 
-    size = AlignOffset(size); 
-  } 
- 
-  // The oneof_case, if any. It is an array of uint32s. 
+    size += has_bits_array_size * sizeof(uint32);
+    size = AlignOffset(size);
+  }
+
+  // The oneof_case, if any. It is an array of uint32s.
   if (real_oneof_count > 0) {
-    type_info->oneof_case_offset = size; 
+    type_info->oneof_case_offset = size;
     size += real_oneof_count * sizeof(uint32);
-    size = AlignOffset(size); 
-  } 
- 
-  // The ExtensionSet, if any. 
-  if (type->extension_range_count() > 0) { 
-    type_info->extensions_offset = size; 
-    size += sizeof(ExtensionSet); 
-    size = AlignOffset(size); 
-  } else { 
-    // No extensions. 
-    type_info->extensions_offset = -1; 
-  } 
- 
-  // All the fields. 
+    size = AlignOffset(size);
+  }
+
+  // The ExtensionSet, if any.
+  if (type->extension_range_count() > 0) {
+    type_info->extensions_offset = size;
+    size += sizeof(ExtensionSet);
+    size = AlignOffset(size);
+  } else {
+    // No extensions.
+    type_info->extensions_offset = -1;
+  }
+
+  // All the fields.
   //
   // TODO(b/31226269):  Optimize the order of fields to minimize padding.
-  for (int i = 0; i < type->field_count(); i++) { 
-    // Make sure field is aligned to avoid bus errors. 
-    // Oneof fields do not use any space. 
+  for (int i = 0; i < type->field_count(); i++) {
+    // Make sure field is aligned to avoid bus errors.
+    // Oneof fields do not use any space.
     if (!InRealOneof(type->field(i))) {
-      int field_size = FieldSpaceUsed(type->field(i)); 
-      size = AlignTo(size, std::min(kSafeAlignment, field_size)); 
-      offsets[i] = size; 
-      size += field_size; 
-    } 
-  } 
- 
-  // The oneofs. 
-  for (int i = 0; i < type->oneof_decl_count(); i++) { 
+      int field_size = FieldSpaceUsed(type->field(i));
+      size = AlignTo(size, std::min(kSafeAlignment, field_size));
+      offsets[i] = size;
+      size += field_size;
+    }
+  }
+
+  // The oneofs.
+  for (int i = 0; i < type->oneof_decl_count(); i++) {
     if (!type->oneof_decl(i)->is_synthetic()) {
       size = AlignTo(size, kSafeAlignment);
       offsets[type->field_count() + i] = size;
       size += kMaxOneofUnionSize;
     }
-  } 
- 
+  }
+
   type_info->weak_field_map_offset = -1;
 
-  // Align the final size to make sure no clever allocators think that 
-  // alignment is not necessary. 
-  type_info->size = size; 
- 
+  // Align the final size to make sure no clever allocators think that
+  // alignment is not necessary.
+  type_info->size = size;
+
   // Construct the reflection object.
 
   // Compute the size of default oneof instance and offsets of default
@@ -794,8 +794,8 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   }
 
   // Allocate the prototype fields.
-  void* base = operator new(size); 
-  memset(base, 0, size); 
+  void* base = operator new(size);
+  memset(base, 0, size);
 
   // We have already locked the factory so we should not lock in the constructor
   // of dynamic message to avoid dead lock.
@@ -815,13 +815,13 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   type_info->reflection.reset(
       new Reflection(type_info->type, schema, type_info->pool, this));
 
-  // Cross link prototypes. 
-  prototype->CrossLinkPrototypes(); 
- 
-  return prototype; 
-} 
- 
-}  // namespace protobuf 
-}  // namespace google 
+  // Cross link prototypes.
+  prototype->CrossLinkPrototypes();
+
+  return prototype;
+}
+
+}  // namespace protobuf
+}  // namespace google
 
 #include <google/protobuf/port_undef.inc>  // NOLINT

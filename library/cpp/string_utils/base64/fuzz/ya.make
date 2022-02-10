@@ -6,5 +6,5 @@ OWNER(
 RECURSE(
     generic
     lib
-    uneven 
+    uneven
 )

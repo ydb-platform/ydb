@@ -12,17 +12,17 @@ template <class TNumber, class TCodec>
 void CheckCodec(const TVector<TNumber> &v, TCodecPtr codec = new TCodec) {
     const char *begin = (const char *)(&v[0]);
     const char *end = begin + sizeof(v[0]) * v.size();
-    TStringBuf src(begin, end); 
+    TStringBuf src(begin, end);
 
     TBuffer encoded;
     codec->Encode(src, encoded);
     STR << "v size: " << sizeof(v[0]) * v.size() << "; encoded size: " << encoded.Size() << "\n";
 
     TBuffer decoded;
-    TStringBuf dst(encoded.Begin(), encoded.End()); 
+    TStringBuf dst(encoded.Begin(), encoded.End());
     codec->Decode(dst, decoded);
 
-    TStringBuf res(decoded.Begin(), decoded.End()); 
+    TStringBuf res(decoded.Begin(), decoded.End());
 
     UNIT_ASSERT(src.size() == res.size());
     UNIT_ASSERT(memcmp(src.data(), res.data(), src.size()) == 0);

@@ -1,16 +1,16 @@
-#include "madvise.h" 
-#include "align.h" 
-#include "info.h" 
- 
-#include <util/generic/yexception.h> 
- 
-#if defined(_win_) 
+#include "madvise.h"
+#include "align.h"
+#include "info.h"
+
+#include <util/generic/yexception.h>
+
+#if defined(_win_)
     #include <util/system/winint.h>
-#else 
+#else
     #include <sys/types.h>
     #include <sys/mman.h>
-#endif 
- 
+#endif
+
 #ifndef MADV_DONTDUMP        /* This flag is defined in sys/mman.h since Linux 3.4, but currently old libc header is in use \
                                 for capability with Ubuntu 12.04, so we need to define it here manually */
     #define MADV_DONTDUMP 16 /* Explicity exclude from the core dump, overrides the coredump filter bits */
@@ -21,34 +21,34 @@
     #define MADV_DODUMP 17 /* Undo the effect of an earlier MADV_DONTDUMP */
 #endif
 
-namespace { 
+namespace {
     void Madvise(int flag, const void* cbegin, size_t size) {
-        static const size_t pageSize = NSystemInfo::GetPageSize(); 
-        void* begin = AlignDown(const_cast<void*>(cbegin), pageSize); 
-        size = AlignUp(size, pageSize); 
- 
-#if defined(_win_) 
+        static const size_t pageSize = NSystemInfo::GetPageSize();
+        void* begin = AlignDown(const_cast<void*>(cbegin), pageSize);
+        size = AlignUp(size, pageSize);
+
+#if defined(_win_)
         if (!VirtualFree((LPVOID)begin, size, flag)) {
             TString err(LastSystemErrorText());
             ythrow yexception() << "VirtualFree(" << begin << ", " << size << ", " << flag << ")"
                                 << " returned error: " << err;
-        } 
-#else 
+        }
+#else
         if (-1 == madvise(begin, size, flag)) {
             TString err(LastSystemErrorText());
             ythrow yexception() << "madvise(" << begin << ", " << size << ", " << flag << ")"
                                 << " returned error: " << err;
-        } 
-#endif 
-    } 
-} 
- 
-void MadviseSequentialAccess(const void* begin, size_t size) { 
+        }
+#endif
+    }
+}
+
+void MadviseSequentialAccess(const void* begin, size_t size) {
 #if !defined(_win_)
     Madvise(MADV_SEQUENTIAL, begin, size);
 #endif
-} 
- 
+}
+
 void MadviseSequentialAccess(TArrayRef<const char> data) {
     MadviseSequentialAccess(data.data(), data.size());
 }
@@ -57,12 +57,12 @@ void MadviseSequentialAccess(TArrayRef<const ui8> data) {
     MadviseSequentialAccess(data.data(), data.size());
 }
 
-void MadviseRandomAccess(const void* begin, size_t size) { 
+void MadviseRandomAccess(const void* begin, size_t size) {
 #if !defined(_win_)
     Madvise(MADV_RANDOM, begin, size);
 #endif
-} 
- 
+}
+
 void MadviseRandomAccess(TArrayRef<const char> data) {
     MadviseRandomAccess(data.data(), data.size());
 }
@@ -71,7 +71,7 @@ void MadviseRandomAccess(TArrayRef<const ui8> data) {
     MadviseRandomAccess(data.data(), data.size());
 }
 
-void MadviseEvict(const void* begin, size_t size) { 
+void MadviseEvict(const void* begin, size_t size) {
 #if defined(_win_)
     Madvise(MEM_DECOMMIT, begin, size);
 #elif defined(_linux_) || defined(_cygwin_)
@@ -79,7 +79,7 @@ void MadviseEvict(const void* begin, size_t size) {
 #else // freebsd, osx
     Madvise(MADV_FREE, begin, size);
 #endif
-} 
+}
 
 void MadviseEvict(TArrayRef<const char> data) {
     MadviseEvict(data.data(), data.size());

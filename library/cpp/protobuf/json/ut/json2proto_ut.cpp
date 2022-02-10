@@ -506,14 +506,14 @@ class TBytesTransform: public IStringTransform {
 public:
     int GetType() const override {
         return 0;
-    } 
+    }
     void Transform(TString&) const override {
     }
     void TransformBytes(TString& str) const override {
         str = "transformed_bytes";
     }
 };
- 
+
 Y_UNIT_TEST(TestInvalidJson) {
     NJson::TJsonValue val{"bad value"};
     TFlatOptional proto;

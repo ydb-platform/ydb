@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 //THIS FILE A COMPAT STUB HEADER
 
@@ -8,7 +8,7 @@
 
 #include <util/system/defaults.h>
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 
 /// @addtogroup Strings_Miscellaneous
 /// @{

@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /*
     zstd_v03 - decoder for 0.3 format
     Header File

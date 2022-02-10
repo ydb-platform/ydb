@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "pool.h"
 #include "alloc.h"
@@ -16,14 +16,14 @@ class TFixedSizeAllocator {
             return (TAlloc*)ptr;
         }
 
-        static constexpr size_t EntitySize(size_t alloc) noexcept { 
+        static constexpr size_t EntitySize(size_t alloc) noexcept {
             return Max(sizeof(TAlloc), alloc);
         }
 
-        static constexpr size_t EntityAlign(size_t align) noexcept { 
-            return Max(alignof(TAlloc), align); 
-        } 
- 
+        static constexpr size_t EntityAlign(size_t align) noexcept {
+            return Max(alignof(TAlloc), align);
+        }
+
         static inline TAlloc* Construct(void* ptr) noexcept {
             return (TAlloc*)ptr;
         }
@@ -32,31 +32,31 @@ class TFixedSizeAllocator {
 public:
     using IGrowPolicy = TMemoryPool::IGrowPolicy;
 
-    TFixedSizeAllocator(size_t allocSize, IAllocator* alloc) 
-        : TFixedSizeAllocator(allocSize, alignof(TAlloc), TMemoryPool::TExpGrow::Instance(), alloc) 
+    TFixedSizeAllocator(size_t allocSize, IAllocator* alloc)
+        : TFixedSizeAllocator(allocSize, alignof(TAlloc), TMemoryPool::TExpGrow::Instance(), alloc)
     {
     }
 
-    TFixedSizeAllocator(size_t allocSize, size_t alignSize, IAllocator* alloc) 
-        : TFixedSizeAllocator(allocSize, alignSize, TMemoryPool::TExpGrow::Instance(), alloc) 
-    { 
-    } 
- 
-    TFixedSizeAllocator(size_t allocSize, IGrowPolicy* grow, IAllocator* alloc) 
-        : TFixedSizeAllocator(allocSize, alignof(TAlloc), grow, alloc) 
-    { 
-    } 
- 
-    TFixedSizeAllocator(size_t allocSize, size_t alignSize, IGrowPolicy* grow, IAllocator* alloc) 
+    TFixedSizeAllocator(size_t allocSize, size_t alignSize, IAllocator* alloc)
+        : TFixedSizeAllocator(allocSize, alignSize, TMemoryPool::TExpGrow::Instance(), alloc)
+    {
+    }
+
+    TFixedSizeAllocator(size_t allocSize, IGrowPolicy* grow, IAllocator* alloc)
+        : TFixedSizeAllocator(allocSize, alignof(TAlloc), grow, alloc)
+    {
+    }
+
+    TFixedSizeAllocator(size_t allocSize, size_t alignSize, IGrowPolicy* grow, IAllocator* alloc)
         : Pool_(allocSize, grow, alloc)
-        , AlignSize_(TAlloc::EntityAlign(alignSize)) 
-        , AllocSize_(TAlloc::EntitySize(allocSize)) 
+        , AlignSize_(TAlloc::EntityAlign(alignSize))
+        , AllocSize_(TAlloc::EntitySize(allocSize))
     {
     }
 
     inline void* Allocate() {
         if (Y_UNLIKELY(Free_.Empty())) {
-            return Pool_.Allocate(AllocSize_, AlignSize_); 
+            return Pool_.Allocate(AllocSize_, AlignSize_);
         }
 
         return Free_.PopFront()->ToPointer();
@@ -72,7 +72,7 @@ public:
 
 private:
     TMemoryPool Pool_;
-    const size_t AlignSize_; 
+    const size_t AlignSize_;
     const size_t AllocSize_;
     TIntrusiveSList<TAlloc> Free_;
 };
@@ -83,12 +83,12 @@ public:
     using IGrowPolicy = TFixedSizeAllocator::IGrowPolicy;
 
     inline TSmallObjAllocator(IAllocator* alloc)
-        : Alloc_(sizeof(T), alignof(T), alloc) 
+        : Alloc_(sizeof(T), alignof(T), alloc)
     {
     }
 
     inline TSmallObjAllocator(IGrowPolicy* grow, IAllocator* alloc)
-        : Alloc_(sizeof(T), alignof(T), grow, alloc) 
+        : Alloc_(sizeof(T), alignof(T), grow, alloc)
     {
     }
 

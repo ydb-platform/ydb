@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 // probably you do not need to include this file directly, use "util/datetime/base.h"
 

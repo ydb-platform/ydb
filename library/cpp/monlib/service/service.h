@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <library/cpp/coroutine/engine/impl.h>
 #include <library/cpp/coroutine/listener/listen.h>

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/stream/input.h>
 #include <util/stream/output.h>

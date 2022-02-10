@@ -1,45 +1,45 @@
-// Protocol Buffers - Google's data interchange format 
-// Copyright 2008 Google Inc.  All rights reserved. 
-// https://developers.google.com/protocol-buffers/ 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions are 
-// met: 
-// 
-//     * Redistributions of source code must retain the above copyright 
-// notice, this list of conditions and the following disclaimer. 
-//     * Redistributions in binary form must reproduce the above 
-// copyright notice, this list of conditions and the following disclaimer 
-// in the documentation and/or other materials provided with the 
-// distribution. 
-//     * Neither the name of Google Inc. nor the names of its 
-// contributors may be used to endorse or promote products derived from 
-// this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-// Author: kenton@google.com (Kenton Varda) 
-//  Based on original Protocol Buffers design by 
-//  Sanjay Ghemawat, Jeff Dean, and others. 
-// 
-// This header is logically internal, but is made public because it is used 
-// from protocol-compiler-generated code, which may reside in other components. 
- 
-#ifndef GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__ 
-#define GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__ 
- 
+// Protocol Buffers - Google's data interchange format
+// Copyright 2008 Google Inc.  All rights reserved.
+// https://developers.google.com/protocol-buffers/
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Author: kenton@google.com (Kenton Varda)
+//  Based on original Protocol Buffers design by
+//  Sanjay Ghemawat, Jeff Dean, and others.
+//
+// This header is logically internal, but is made public because it is used
+// from protocol-compiler-generated code, which may reside in other components.
+
+#ifndef GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__
+#define GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__
+
 #include <string>
-#include <vector> 
+#include <vector>
 #include <google/protobuf/stubs/casts.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/descriptor.h>
@@ -47,32 +47,32 @@
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/port.h>
 #include <google/protobuf/unknown_field_set.h>
- 
- 
+
+
 #include <google/protobuf/port_def.inc>
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
 #endif
 
-namespace google { 
-namespace protobuf { 
-class MapKey; 
-class MapValueRef; 
+namespace google {
+namespace protobuf {
+class MapKey;
+class MapValueRef;
 class MessageLayoutInspector;
 class Message;
 struct Metadata;
 }  // namespace protobuf
 }  // namespace google
- 
+
 namespace google {
-namespace protobuf { 
-namespace internal { 
-class DefaultEmptyOneof; 
-// Defined in other files. 
+namespace protobuf {
+namespace internal {
+class DefaultEmptyOneof;
+// Defined in other files.
 class ExtensionSet;  // extension_set.h
 class WeakFieldMap;  // weak_field_map.h
- 
+
 // This struct describes the internal layout of the message, hence this is
 // used to act on the message reflectively.
 //   default_instance:  The default instance of the message.  This is only
@@ -284,14 +284,14 @@ struct PROTOBUF_EXPORT DescriptorTable {
   const EnumDescriptor** file_level_enum_descriptors;
   const ServiceDescriptor** file_level_service_descriptors;
 };
- 
+
 enum {
   // Tag used on offsets for fields that don't have a real offset.
   // For example, weak message fields go into the WeakFieldMap and not in an
   // actual field.
   kInvalidFieldOffsetTag = 0x40000000u,
 };
- 
+
 // AssignDescriptors() pulls the compiled FileDescriptor from the DescriptorPool
 // and uses it to populate all of the global variables which store pointers to
 // the descriptor objects.  It also constructs the reflection objects.  It is
@@ -299,7 +299,7 @@ enum {
 // the types defined in the file.  AssignDescriptors() is thread-safe.
 void PROTOBUF_EXPORT AssignDescriptors(const DescriptorTable* table,
                                        bool eager = false);
- 
+
 // Overload used to implement GetMetadataStatic in the generated code.
 // See comments in compiler/cpp/internal/file.cc as to why.
 // It takes a `Metadata` and returns it to allow for tail calls and reduce
@@ -312,15 +312,15 @@ Metadata PROTOBUF_EXPORT AssignDescriptors(const DescriptorTable* (*table)(),
 PROTOBUF_EXPORT void UnknownFieldSetSerializer(const uint8* base, uint32 offset,
                                                uint32 tag, uint32 has_offset,
                                                io::CodedOutputStream* output);
- 
+
 struct PROTOBUF_EXPORT AddDescriptorsRunner {
   explicit AddDescriptorsRunner(const DescriptorTable* table);
-}; 
- 
-}  // namespace internal 
-}  // namespace protobuf 
+};
+
+}  // namespace internal
+}  // namespace protobuf
 }  // namespace google
- 
+
 #include <google/protobuf/port_undef.inc>
 
-#endif  // GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__ 
+#endif  // GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__

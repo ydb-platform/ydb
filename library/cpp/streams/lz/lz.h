@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/stream/output.h>
 #include <util/stream/input.h>
@@ -23,7 +23,7 @@ struct TDecompressorError: public yexception {
 /**
  * @addtogroup Streams_Archs
  * @{
- */ 
+ */
 
 /**
  * Lz4 compressing stream.
@@ -34,17 +34,17 @@ class TLz4Compress: public IOutputStream {
 public:
     TLz4Compress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TLz4Compress() override;
- 
+
 private:
     void DoWrite(const void* buf, size_t len) override;
     void DoFlush() override;
     void DoFinish() override;
- 
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * Lz4 decompressing stream.
  *
@@ -54,35 +54,35 @@ class TLz4Decompress: public IInputStream {
 public:
     TLz4Decompress(IInputStream* slave);
     ~TLz4Decompress() override;
- 
+
 private:
     size_t DoRead(void* buf, size_t len) override;
- 
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * Snappy compressing stream.
  *
  * @see http://code.google.com/p/snappy/
- */ 
+ */
 class TSnappyCompress: public IOutputStream {
 public:
     TSnappyCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TSnappyCompress() override;
- 
+
 private:
     void DoWrite(const void* buf, size_t len) override;
     void DoFlush() override;
     void DoFinish() override;
- 
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * Snappy decompressing stream.
  *
@@ -92,15 +92,15 @@ class TSnappyDecompress: public IInputStream {
 public:
     TSnappyDecompress(IInputStream* slave);
     ~TSnappyDecompress() override;
- 
+
 private:
     size_t DoRead(void* buf, size_t len) override;
- 
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * MiniLZO compressing stream.
  */

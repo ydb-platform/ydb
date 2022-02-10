@@ -1,15 +1,15 @@
-#include "mem_info.h" 
- 
-#include <util/generic/strbuf.h> 
-#include <util/generic/utility.h> 
-#include <util/generic/yexception.h> 
-#include <util/stream/file.h> 
-#include <util/string/cast.h> 
+#include "mem_info.h"
+
+#include <util/generic/strbuf.h>
+#include <util/generic/utility.h>
+#include <util/generic/yexception.h>
+#include <util/stream/file.h>
+#include <util/string/cast.h>
 #include <util/string/builder.h>
 #include "error.h"
 #include "info.h"
- 
-#if defined(_unix_) 
+
+#if defined(_unix_)
     #include <errno.h>
     #include <unistd.h>
     #if defined(_freebsd_)
@@ -94,20 +94,20 @@ typedef enum _SYSTEM_INFORMATION_CLASS {
     SystemProcessInformation = 5,
 } SYSTEM_INFORMATION_CLASS;
 
-#else 
- 
-#endif 
- 
-namespace NMemInfo { 
+#else
+
+#endif
+
+namespace NMemInfo {
     TMemInfo GetMemInfo(pid_t pid) {
         TMemInfo result;
- 
-#if defined(_unix_) 
- 
+
+#if defined(_unix_)
+
     #if defined(_linux_) || defined(_freebsd_) || defined(_cygwin_)
         const ui32 pagesize = NSystemInfo::GetPageSize();
     #endif
- 
+
     #if defined(_linux_) || defined(_cygwin_)
         TString path;
         if (!pid) {
@@ -129,17 +129,17 @@ namespace NMemInfo {
     #elif defined(_freebsd_)
         int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
         size_t size = sizeof(struct kinfo_proc);
- 
+
         struct kinfo_proc proc;
         Zero(proc);
- 
+
         errno = 0;
         if (sysctl((int*)mib, 4, &proc, &size, nullptr, 0) == -1) {
             int err = errno;
             TString errtxt = LastSystemErrorText(err);
             ythrow yexception() << "sysctl({CTL_KERN,KERN_PROC,KERN_PROC_PID,pid},4,proc,&size,NULL,0) returned -1, errno: " << err << " (" << errtxt << ")" << Endl;
         }
- 
+
         result.VMS = proc.ki_size;
         result.RSS = proc.ki_rssize * pagesize;
     #elif defined(_darwin_) && !defined(_arm_) && !defined(__IOS__)
@@ -213,7 +213,7 @@ namespace NMemInfo {
 
         result.VMS = process->VirtualSize;
         result.RSS = process->WorkingSetSize;
-#endif 
+#endif
         return result;
     }
-} 
+}

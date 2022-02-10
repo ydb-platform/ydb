@@ -1,10 +1,10 @@
-#pragma once 
+#pragma once
 
 #include <util/memory/alloc.h>
 #include <util/digest/numeric.h>
 #include <util/generic/string.h>
 #include <util/generic/string_hash.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/generic/typetraits.h>
 
 #include <functional>

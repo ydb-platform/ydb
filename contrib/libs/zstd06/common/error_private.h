@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /* ******************************************************************
    Error codes and messages
    Copyright (C) 2013-2016, Yann Collet
@@ -79,17 +79,17 @@ typedef ZSTD_ErrorCode ERR_enum;
 
 ERR_STATIC unsigned ERR_isError(size_t code) { return (code > ERROR(maxCode)); }
 
-ERR_STATIC ERR_enum ERR_getErrorCode(size_t code) { if (!ERR_isError(code)) return (ERR_enum)0; return (ERR_enum) (0-code); } 
+ERR_STATIC ERR_enum ERR_getErrorCode(size_t code) { if (!ERR_isError(code)) return (ERR_enum)0; return (ERR_enum) (0-code); }
 
 
 /*-****************************************
 *  Error Strings
 ******************************************/
 
-ERR_STATIC const char* ERR_getErrorString(ERR_enum code) 
+ERR_STATIC const char* ERR_getErrorString(ERR_enum code)
 {
     static const char* notErrorCode = "Unspecified error code";
-    switch( code ) 
+    switch( code )
     {
     case PREFIX(no_error): return "No error detected";
     case PREFIX(GENERIC):  return "Error (generic)";
@@ -108,14 +108,14 @@ ERR_STATIC const char* ERR_getErrorString(ERR_enum code)
     case PREFIX(maxSymbolValue_tooSmall): return "Specified maxSymbolValue is too small";
     case PREFIX(dictionary_corrupted): return "Dictionary is corrupted";
     case PREFIX(maxCode):
-    default: return notErrorCode; 
+    default: return notErrorCode;
     }
 }
 
-ERR_STATIC const char* ERR_getErrorName(size_t code) 
-{ 
-    return ERR_getErrorString(ERR_getErrorCode(code)); 
-} 
+ERR_STATIC const char* ERR_getErrorName(size_t code)
+{
+    return ERR_getErrorString(ERR_getErrorCode(code));
+}
 
 #if defined (__cplusplus)
 }

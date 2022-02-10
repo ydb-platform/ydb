@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "typetraits.h"
 #include "yexception.h"

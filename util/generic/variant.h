@@ -1,18 +1,18 @@
 #pragma once
 
 #include "hash.h"
- 
+
 #include <variant>
- 
-template <class... Ts> 
+
+template <class... Ts>
 struct THash<std::variant<Ts...>> {
-public: 
+public:
     size_t operator()(const std::variant<Ts...>& v) const noexcept {
         return CombineHashes(
             IntHash(v.index()),
             v.valueless_by_exception() ? 0 : std::visit([](const auto& value) { return ComputeHash(value); }, v));
-    } 
-}; 
+    }
+};
 
 template <>
 struct THash<std::monostate> {

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/charset/recode_result.h>
 #include <util/charset/utf8.h>

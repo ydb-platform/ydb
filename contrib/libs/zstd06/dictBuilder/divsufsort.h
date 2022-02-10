@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /*
  * divsufsort.h for libdivsufsort-lite
  * Copyright (c) 2003-2008 Yuta Mori All Rights Reserved.

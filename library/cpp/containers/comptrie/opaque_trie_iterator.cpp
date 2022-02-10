@@ -1,5 +1,5 @@
 #include "opaque_trie_iterator.h"
-#include "comptrie_impl.h" 
+#include "comptrie_impl.h"
 #include "node.h"
 
 namespace NCompactTrie {
@@ -157,8 +157,8 @@ namespace NCompactTrie {
         } else {
             return Key.size() == 1 && Key[0] == '\0';
         }
-    } 
- 
+    }
+
     size_t TForkStack::MeasureKey() const {
         size_t result = Key.size() + (TopHasLabelInKey() ? 1 : 0);
         if (result == 1 && HasEmptyKey()) {

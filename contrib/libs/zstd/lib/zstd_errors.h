@@ -7,17 +7,17 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
- 
+
 #ifndef ZSTD_ERRORS_H_398273423
 #define ZSTD_ERRORS_H_398273423
- 
-#if defined (__cplusplus) 
-extern "C" { 
-#endif 
- 
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
+
 /*===== dependency =====*/
 #include <stddef.h>   /* size_t */
- 
+
 
 /* =====   ZSTDERRORLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDERRORLIB_VISIBILITY
@@ -49,7 +49,7 @@ extern "C" {
  *           This is the only supported way to use the error list < v1.3.1
  *  note 3 : ZSTD_isError() is always correct, whatever the library version.
  **********************************************/
-typedef enum { 
+typedef enum {
   ZSTD_error_no_error = 0,
   ZSTD_error_GENERIC  = 1,
   ZSTD_error_prefix_unknown                = 10,
@@ -79,17 +79,17 @@ typedef enum {
   ZSTD_error_dstBuffer_wrong     = 104,
   ZSTD_error_srcBuffer_wrong     = 105,
   ZSTD_error_maxCode = 120  /* never EVER use this value directly, it can change in future versions! Use ZSTD_isError() instead */
-} ZSTD_ErrorCode; 
- 
-/*! ZSTD_getErrorCode() : 
-    convert a `size_t` function result into a `ZSTD_ErrorCode` enum type, 
+} ZSTD_ErrorCode;
+
+/*! ZSTD_getErrorCode() :
+    convert a `size_t` function result into a `ZSTD_ErrorCode` enum type,
     which can be used to compare with enum list published above */
 ZSTDERRORLIB_API ZSTD_ErrorCode ZSTD_getErrorCode(size_t functionResult);
 ZSTDERRORLIB_API const char* ZSTD_getErrorString(ZSTD_ErrorCode code);   /**< Same as ZSTD_getErrorName, but using a `ZSTD_ErrorCode` enum argument */
- 
- 
-#if defined (__cplusplus) 
-} 
-#endif 
- 
+
+
+#if defined (__cplusplus)
+}
+#endif
+
 #endif /* ZSTD_ERRORS_H_398273423 */

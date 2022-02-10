@@ -1,4 +1,4 @@
 This is a viewer for generated codec and utility for verification of the compression quality on a new data.
- 
+
 Usage:
-static_codec_checker -t -c 029b29ff64a74927.codec_info -f plain samples.txt 
+static_codec_checker -t -c 029b29ff64a74927.codec_info -f plain samples.txt

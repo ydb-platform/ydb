@@ -2,8 +2,8 @@
 
 // Deprecated. Use library/cpp/json/writer in new code.
 
-#include "json_value.h" 
- 
+#include "json_value.h"
+
 #include <library/cpp/json/writer/json.h>
 
 #include <util/stream/output.h>
@@ -86,7 +86,7 @@ namespace NJson {
         void Write(bool value);
         void Write(const TJsonValue* value);
         void Write(const TJsonValue& value);
- 
+
         // must use all variations of integer types since long
         // and long long are different types but with same size
         void Write(long long value);
@@ -151,7 +151,7 @@ namespace NJson {
                 Write(key, *value);
             }
         }
- 
+
         void WriteOptional(const TStringBuf&, const TNothing&) {
             // nothing to do
         }

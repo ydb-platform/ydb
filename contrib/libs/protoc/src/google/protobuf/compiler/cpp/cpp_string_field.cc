@@ -1,57 +1,57 @@
-// Protocol Buffers - Google's data interchange format 
-// Copyright 2008 Google Inc.  All rights reserved. 
-// https://developers.google.com/protocol-buffers/ 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions are 
-// met: 
-// 
-//     * Redistributions of source code must retain the above copyright 
-// notice, this list of conditions and the following disclaimer. 
-//     * Redistributions in binary form must reproduce the above 
-// copyright notice, this list of conditions and the following disclaimer 
-// in the documentation and/or other materials provided with the 
-// distribution. 
-//     * Neither the name of Google Inc. nor the names of its 
-// contributors may be used to endorse or promote products derived from 
-// this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-// Author: kenton@google.com (Kenton Varda) 
-//  Based on original Protocol Buffers design by 
-//  Sanjay Ghemawat, Jeff Dean, and others. 
- 
+// Protocol Buffers - Google's data interchange format
+// Copyright 2008 Google Inc.  All rights reserved.
+// https://developers.google.com/protocol-buffers/
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Author: kenton@google.com (Kenton Varda)
+//  Based on original Protocol Buffers design by
+//  Sanjay Ghemawat, Jeff Dean, and others.
+
 #include <google/protobuf/compiler/cpp/cpp_string_field.h>
 #include <google/protobuf/compiler/cpp/cpp_helpers.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/stubs/strutil.h>
- 
 
-namespace google { 
-namespace protobuf { 
-namespace compiler { 
-namespace cpp { 
- 
-namespace { 
- 
-void SetStringVariables(const FieldDescriptor* descriptor, 
+
+namespace google {
+namespace protobuf {
+namespace compiler {
+namespace cpp {
+
+namespace {
+
+void SetStringVariables(const FieldDescriptor* descriptor,
                         std::map<TProtoStringType, TProtoStringType>* variables,
-                        const Options& options) { 
-  SetCommonFieldVariables(descriptor, variables, options); 
+                        const Options& options) {
+  SetCommonFieldVariables(descriptor, variables, options);
   (*variables)["default"] = DefaultValue(options, descriptor);
-  (*variables)["default_length"] = 
+  (*variables)["default_length"] =
       StrCat(descriptor->default_value_string().length());
   TProtoStringType default_variable_string = MakeDefaultName(descriptor);
   (*variables)["default_variable_name"] = default_variable_string;
@@ -63,7 +63,7 @@ void SetStringVariables(const FieldDescriptor* descriptor,
   }
 
   (*variables)["default_string"] =
-      descriptor->default_value_string().empty() 
+      descriptor->default_value_string().empty()
           ? "::" + (*variables)["proto_ns"] +
                 "::internal::GetEmptyStringAlreadyInited()"
           : (*variables)["lazy_variable"] + ".get()";
@@ -80,81 +80,81 @@ void SetStringVariables(const FieldDescriptor* descriptor,
       (*variables)[descriptor->default_value_string().empty()
                        ? "default_value_tag"
                        : "lazy_variable"];
-  (*variables)["pointer_type"] = 
-      descriptor->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char"; 
+  (*variables)["pointer_type"] =
+      descriptor->type() == FieldDescriptor::TYPE_BYTES ? "void" : "char";
   (*variables)["setter"] =
       descriptor->type() == FieldDescriptor::TYPE_BYTES ? "SetBytes" : "Set";
   (*variables)["null_check"] = (*variables)["DCHK"] + "(value != nullptr);\n";
-  // NOTE: Escaped here to unblock proto1->proto2 migration. 
-  // TODO(liujisi): Extend this to apply for other conflicting methods. 
-  (*variables)["release_name"] = 
+  // NOTE: Escaped here to unblock proto1->proto2 migration.
+  // TODO(liujisi): Extend this to apply for other conflicting methods.
+  (*variables)["release_name"] =
       SafeFunctionName(descriptor->containing_type(), descriptor, "release_");
-  (*variables)["full_name"] = descriptor->full_name(); 
- 
+  (*variables)["full_name"] = descriptor->full_name();
+
   if (options.opensource_runtime) {
     (*variables)["string_piece"] = "TProtoStringType";
   } else {
     (*variables)["string_piece"] = "::StringPiece";
   }
-} 
- 
-}  // namespace 
- 
-// =================================================================== 
- 
-StringFieldGenerator::StringFieldGenerator(const FieldDescriptor* descriptor, 
-                                           const Options& options) 
+}
+
+}  // namespace
+
+// ===================================================================
+
+StringFieldGenerator::StringFieldGenerator(const FieldDescriptor* descriptor,
+                                           const Options& options)
     : FieldGenerator(descriptor, options) {
-  SetStringVariables(descriptor, &variables_, options); 
-} 
- 
-StringFieldGenerator::~StringFieldGenerator() {} 
- 
+  SetStringVariables(descriptor, &variables_, options);
+}
+
+StringFieldGenerator::~StringFieldGenerator() {}
+
 void StringFieldGenerator::GeneratePrivateMembers(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("::$proto_ns$::internal::ArenaStringPtr $name$_;\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateStaticMembers(io::Printer* printer) const {
   Formatter format(printer, variables_);
-  if (!descriptor_->default_value_string().empty()) { 
+  if (!descriptor_->default_value_string().empty()) {
     format(
         "static const ::$proto_ns$::internal::LazyString"
         " $default_variable_name$;\n");
-  } 
-} 
- 
+  }
+}
+
 void StringFieldGenerator::GenerateAccessorDeclarations(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  // If we're using StringFieldGenerator for a field with a ctype, it's 
-  // because that ctype isn't actually implemented.  In particular, this is 
-  // true of ctype=CORD and ctype=STRING_PIECE in the open source release. 
-  // We aren't releasing Cord because it has too many Google-specific 
-  // dependencies and we aren't releasing StringPiece because it's hardly 
-  // useful outside of Google and because it would get confusing to have 
-  // multiple instances of the StringPiece class in different libraries (PCRE 
-  // already includes it for their C++ bindings, which came from Google). 
-  // 
-  // In any case, we make all the accessors private while still actually 
-  // using a string to represent the field internally.  This way, we can 
-  // guarantee that if we do ever implement the ctype, it won't break any 
-  // existing users who might be -- for whatever reason -- already using .proto 
-  // files that applied the ctype.  The field can still be accessed via the 
-  // reflection interface since the reflection interface is independent of 
-  // the string's underlying representation. 
- 
+  // If we're using StringFieldGenerator for a field with a ctype, it's
+  // because that ctype isn't actually implemented.  In particular, this is
+  // true of ctype=CORD and ctype=STRING_PIECE in the open source release.
+  // We aren't releasing Cord because it has too many Google-specific
+  // dependencies and we aren't releasing StringPiece because it's hardly
+  // useful outside of Google and because it would get confusing to have
+  // multiple instances of the StringPiece class in different libraries (PCRE
+  // already includes it for their C++ bindings, which came from Google).
+  //
+  // In any case, we make all the accessors private while still actually
+  // using a string to represent the field internally.  This way, we can
+  // guarantee that if we do ever implement the ctype, it won't break any
+  // existing users who might be -- for whatever reason -- already using .proto
+  // files that applied the ctype.  The field can still be accessed via the
+  // reflection interface since the reflection interface is independent of
+  // the string's underlying representation.
+
   bool unknown_ctype = descriptor_->options().ctype() !=
                        EffectiveStringCType(descriptor_, options_);
- 
-  if (unknown_ctype) { 
+
+  if (unknown_ctype) {
     format.Outdent();
     format(
         " private:\n"
         "  // Hidden due to unknown ctype option.\n");
     format.Indent();
-  } 
- 
+  }
+
   format(
       "$deprecated_attr$const TProtoStringType& ${1$$name$$}$() const;\n"
       "template <typename ArgT0 = const TProtoStringType&, typename... ArgT>\n"
@@ -174,14 +174,14 @@ void StringFieldGenerator::GenerateAccessorDeclarations(
       "_internal_set_$name$(const TProtoStringType& value);\n"
       "TProtoStringType* _internal_mutable_$name$();\n"
       "public:\n");
- 
-  if (unknown_ctype) { 
+
+  if (unknown_ctype) {
     format.Outdent();
     format(" public:\n");
     format.Indent();
-  } 
-} 
- 
+  }
+}
+
 void StringFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -238,10 +238,10 @@ void StringFieldGenerator::GenerateInlineAccessorDefinitions(
         "  $clear_hasbit$\n"
         "  return $name$_.ReleaseNonDefault($init_value$, "
         "GetArenaForAllocation());\n");
-  } else { 
+  } else {
     format(
         "  return $name$_.Release($init_value$, GetArenaForAllocation());\n");
-  } 
+  }
 
   format(
       "}\n"
@@ -256,29 +256,29 @@ void StringFieldGenerator::GenerateInlineAccessorDefinitions(
       "$annotate_set$"
       "  // @@protoc_insertion_point(field_set_allocated:$full_name$)\n"
       "}\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateNonInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  if (!descriptor_->default_value_string().empty()) { 
+  if (!descriptor_->default_value_string().empty()) {
     format(
         "const ::$proto_ns$::internal::LazyString "
         "$classname$::$default_variable_name$"
         "{{{$default$, $default_length$}}, {nullptr}};\n");
-  } 
-} 
- 
+  }
+}
+
 void StringFieldGenerator::GenerateClearingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   if (descriptor_->default_value_string().empty()) {
     format("$name$_.ClearToEmpty();\n");
-  } else { 
+  } else {
     format(
         "$name$_.ClearToDefault($lazy_variable$, GetArenaForAllocation());\n");
-  } 
-} 
- 
+  }
+}
+
 void StringFieldGenerator::GenerateMessageClearingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -310,8 +310,8 @@ void StringFieldGenerator::GenerateMergingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   // TODO(gpike): improve this
   format("_internal_set_$name$(from._internal_$name$());\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
@@ -320,13 +320,13 @@ void StringFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
       "    &$name$_, GetArenaForAllocation(),\n"
       "    &other->$name$_, other->GetArenaForAllocation()\n"
       ");\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateConstructorCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.UnsafeSetDefault($init_value$);\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -352,31 +352,31 @@ void StringFieldGenerator::GenerateCopyConstructorCode(
 void StringFieldGenerator::GenerateDestructorCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.DestroyNoArena($init_value$);\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  if (descriptor_->type() == FieldDescriptor::TYPE_STRING) { 
-    GenerateUtf8CheckCodeForString( 
+  if (descriptor_->type() == FieldDescriptor::TYPE_STRING) {
+    GenerateUtf8CheckCodeForString(
         descriptor_, options_, false,
         "this->_internal_$name$().data(), "
         "static_cast<int>(this->_internal_$name$().length()),\n",
         format);
-  } 
+  }
   format(
       "target = stream->Write$declared_type$MaybeAliased(\n"
       "    $number$, this->_internal_$name$(), target);\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateByteSize(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
       "total_size += $tag_size$ +\n"
       "  ::$proto_ns$::internal::WireFormatLite::$declared_type$Size(\n"
       "    this->_internal_$name$());\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateConstinitInitializer(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -384,22 +384,22 @@ void StringFieldGenerator::GenerateConstinitInitializer(
     format("$name$_(&::$proto_ns$::internal::fixed_address_empty_string)");
   } else {
     format("$name$_(nullptr)");
-  } 
-} 
- 
-// =================================================================== 
- 
+  }
+}
+
+// ===================================================================
+
 StringOneofFieldGenerator::StringOneofFieldGenerator(
     const FieldDescriptor* descriptor, const Options& options)
     : StringFieldGenerator(descriptor, options) {
-  SetCommonOneofFieldVariables(descriptor, &variables_); 
+  SetCommonOneofFieldVariables(descriptor, &variables_);
   variables_["field_name"] = UnderscoresToCamelCase(descriptor->name(), true);
   variables_["oneof_index"] =
       StrCat(descriptor->containing_oneof()->index());
-} 
- 
-StringOneofFieldGenerator::~StringOneofFieldGenerator() {} 
- 
+}
+
+StringOneofFieldGenerator::~StringOneofFieldGenerator() {}
+
 void StringOneofFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -479,16 +479,16 @@ void StringOneofFieldGenerator::GenerateInlineAccessorDefinitions(
       "$annotate_set$"
       "  // @@protoc_insertion_point(field_set_allocated:$full_name$)\n"
       "}\n");
-} 
- 
+}
+
 void StringOneofFieldGenerator::GenerateClearingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
       "$field_member$.Destroy($default_value_tag$, "
       "GetArenaForAllocation());\n");
-} 
- 
+}
+
 void StringOneofFieldGenerator::GenerateMessageClearingCode(
     io::Printer* printer) const {
   return GenerateClearingCode(printer);
@@ -496,45 +496,45 @@ void StringOneofFieldGenerator::GenerateMessageClearingCode(
 
 void StringOneofFieldGenerator::GenerateSwappingCode(
     io::Printer* printer) const {
-  // Don't print any swapping code. Swapping the union will swap this field. 
-} 
- 
+  // Don't print any swapping code. Swapping the union will swap this field.
+}
+
 void StringOneofFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
   // Nothing required here.
-} 
- 
-// =================================================================== 
- 
-RepeatedStringFieldGenerator::RepeatedStringFieldGenerator( 
-    const FieldDescriptor* descriptor, const Options& options) 
+}
+
+// ===================================================================
+
+RepeatedStringFieldGenerator::RepeatedStringFieldGenerator(
+    const FieldDescriptor* descriptor, const Options& options)
     : FieldGenerator(descriptor, options) {
-  SetStringVariables(descriptor, &variables_, options); 
-} 
- 
-RepeatedStringFieldGenerator::~RepeatedStringFieldGenerator() {} 
- 
+  SetStringVariables(descriptor, &variables_, options);
+}
+
+RepeatedStringFieldGenerator::~RepeatedStringFieldGenerator() {}
+
 void RepeatedStringFieldGenerator::GeneratePrivateMembers(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("::$proto_ns$::RepeatedPtrField<TProtoStringType> $name$_;\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateAccessorDeclarations(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  // See comment above about unknown ctypes. 
+  // See comment above about unknown ctypes.
   bool unknown_ctype = descriptor_->options().ctype() !=
                        EffectiveStringCType(descriptor_, options_);
- 
-  if (unknown_ctype) { 
+
+  if (unknown_ctype) {
     format.Outdent();
     format(
         " private:\n"
         "  // Hidden due to unknown ctype option.\n");
     format.Indent();
-  } 
- 
+  }
+
   format(
       "$deprecated_attr$const TProtoStringType& ${1$$name$$}$(int index) const;\n"
       "$deprecated_attr$TProtoStringType* ${1$mutable_$name$$}$(int index);\n"
@@ -579,14 +579,14 @@ void RepeatedStringFieldGenerator::GenerateAccessorDeclarations(
       "TProtoStringType* _internal_add_$name$();\n"
       "public:\n",
       descriptor_);
- 
-  if (unknown_ctype) { 
+
+  if (unknown_ctype) {
     format.Outdent();
     format(" public:\n");
     format.Indent();
-  } 
-} 
- 
+  }
+}
+
 void RepeatedStringFieldGenerator::GenerateInlineAccessorDefinitions(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -704,31 +704,31 @@ void RepeatedStringFieldGenerator::GenerateInlineAccessorDefinitions(
       "  // @@protoc_insertion_point(field_mutable_list:$full_name$)\n"
       "  return &$name$_;\n"
       "}\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateClearingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.Clear();\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateMergingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.MergeFrom(from.$name$_);\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateSwappingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.InternalSwap(&other->$name$_);\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
-  // Not needed for repeated fields. 
-} 
- 
+  // Not needed for repeated fields.
+}
+
 void RepeatedStringFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -743,17 +743,17 @@ void RepeatedStringFieldGenerator::GenerateSerializeWithCachedSizesToArray(
       "  const auto& s = this->_internal_$name$(i);\n");
   // format("for (const TProtoStringType& s : this->$name$()) {\n");
   format.Indent();
-  if (descriptor_->type() == FieldDescriptor::TYPE_STRING) { 
+  if (descriptor_->type() == FieldDescriptor::TYPE_STRING) {
     GenerateUtf8CheckCodeForString(descriptor_, options_, false,
                                    "s.data(), static_cast<int>(s.length()),\n",
                                    format);
-  } 
+  }
   format.Outdent();
   format(
       "  target = stream->Write$declared_type$($number$, s, target);\n"
       "}\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateByteSize(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -765,15 +765,15 @@ void RepeatedStringFieldGenerator::GenerateByteSize(
       "::$proto_ns$::internal::WireFormatLite::$declared_type$Size(\n"
       "    $name$_.Get(i));\n"
       "}\n");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateConstinitInitializer(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_()");
-} 
- 
-}  // namespace cpp 
-}  // namespace compiler 
-}  // namespace protobuf 
-}  // namespace google 
+}
+
+}  // namespace cpp
+}  // namespace compiler
+}  // namespace protobuf
+}  // namespace google

@@ -5,7 +5,7 @@
 #include <util/generic/strbuf.h>
 
 #include <array>
- 
+
 namespace NCodecs::NFloatHuff {
     TString Encode(TArrayRef<const float> factors);
 

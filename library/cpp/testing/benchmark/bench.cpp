@@ -276,7 +276,7 @@ namespace {
             NCpu::TParams params{n};
 
             F(params);
-        }, opts.TimeBudget, *this); 
+        }, opts.TimeBudget, *this);
     }
 
     enum EOutFormat {

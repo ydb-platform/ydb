@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>

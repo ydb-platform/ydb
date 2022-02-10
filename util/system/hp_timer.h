@@ -1,7 +1,7 @@
-#pragma once 
+#pragma once
 
 #include "defaults.h"
- 
+
 namespace NHPTimer {
     using STime = i64;
     // May delay for ~50ms to compute frequency

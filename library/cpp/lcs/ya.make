@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(velavokr)
 
 PEERDIR(

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "mem.h"
 #include "output.h"

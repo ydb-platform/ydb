@@ -1,7 +1,7 @@
-#pragma once 
+#pragma once
 
 #include "bt_exception.h"
-#include "strbuf.h" 
+#include "strbuf.h"
 #include "string.h"
 #include "utility.h"
 #include "va_args.h"

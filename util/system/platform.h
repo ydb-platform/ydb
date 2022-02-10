@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 // ya style breaks indentation in ifdef's and code becomes unreadable
 // clang-format off

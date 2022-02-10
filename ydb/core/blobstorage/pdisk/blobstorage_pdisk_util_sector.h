@@ -4,7 +4,7 @@
 #include "blobstorage_pdisk_data.h"
 
 #include <util/generic/strbuf.h>
-#include <util/stream/format.h> 
+#include <util/stream/format.h>
 
 namespace NKikimr::NPDisk {
 

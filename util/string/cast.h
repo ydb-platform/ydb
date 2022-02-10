@@ -1,11 +1,11 @@
-#pragma once 
+#pragma once
 
 #include <util/system/defaults.h>
 #include <util/stream/str.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 /*
  * specialized for all arithmetic types

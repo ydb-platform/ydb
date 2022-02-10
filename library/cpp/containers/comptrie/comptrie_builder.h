@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "comptrie_packer.h"
 #include "minimize.h"
@@ -17,7 +17,7 @@
 // then all the keys that we add between these two also have the same prefix.
 // Actually in this mode the builder can accept even more freely ordered input,
 // but for input as above it is guaranteed to work.
-enum ECompactTrieBuilderFlags { 
+enum ECompactTrieBuilderFlags {
     CTBF_NONE = 0,
     CTBF_PREFIX_GROUPED = 1 << 0,
     CTBF_VERBOSE = 1 << 1,
@@ -25,7 +25,7 @@ enum ECompactTrieBuilderFlags {
 };
 
 using TCompactTrieBuilderFlags = ECompactTrieBuilderFlags;
- 
+
 inline TCompactTrieBuilderFlags operator|(TCompactTrieBuilderFlags first, TCompactTrieBuilderFlags second) {
     return static_cast<TCompactTrieBuilderFlags>(static_cast<int>(first) | second);
 }
@@ -51,13 +51,13 @@ public:
     // All Add.. methods return true if it was a new key, false if the key already existed.
 
     bool Add(const TSymbol* key, size_t keylen, const TData& value);
-    bool Add(const TKeyBuf& key, const TData& value) { 
+    bool Add(const TKeyBuf& key, const TData& value) {
         return Add(key.data(), key.size(), value);
     }
 
     // add already serialized data
     bool AddPtr(const TSymbol* key, size_t keylen, const char* data);
-    bool AddPtr(const TKeyBuf& key, const char* data) { 
+    bool AddPtr(const TKeyBuf& key, const char* data) {
         return AddPtr(key.data(), key.size(), data);
     }
 
@@ -88,8 +88,8 @@ public:
         return Save(out);
     }
 
-    void Clear(); // Returns all memory to the system and resets the builder state. 
- 
+    void Clear(); // Returns all memory to the system and resets the builder state.
+
     size_t GetEntryCount() const;
     size_t GetNodeCount() const;
 
@@ -98,7 +98,7 @@ public:
         return Impl->MeasureByteSize();
     }
 
-protected: 
+protected:
     class TCompactTrieBuilderImpl;
     THolder<TCompactTrieBuilderImpl> Impl;
 };
@@ -133,12 +133,12 @@ size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool 
 // by Maxim Babenko and Ivan Puzyrevsky. The difference is that when we cut the tree into levels
 // two nodes connected by a forward link are put into the same level (because they usually lie near each other in the original tree).
 // The original paper (describing the layout in Section 2.1) is:
-// Michael A. Bender, Erik D. Demaine, Martin Farach-Colton. Cache-Oblivious B-Trees 
-//      SIAM Journal on Computing, volume 35, number 2, 2005, pages 341-358. 
+// Michael A. Bender, Erik D. Demaine, Martin Farach-Colton. Cache-Oblivious B-Trees
+//      SIAM Journal on Computing, volume 35, number 2, 2005, pages 341-358.
 // Available on the web: http://erikdemaine.org/papers/CacheObliviousBTrees_SICOMP/
-// Or: Michael A. Bender, Erik D. Demaine, and Martin Farach-Colton. Cache-Oblivious B-Trees 
-//      Proceedings of the 41st Annual Symposium 
-//      on Foundations of Computer Science (FOCS 2000), Redondo Beach, California, November 12-14, 2000, pages 399-409. 
+// Or: Michael A. Bender, Erik D. Demaine, and Martin Farach-Colton. Cache-Oblivious B-Trees
+//      Proceedings of the 41st Annual Symposium
+//      on Foundations of Computer Science (FOCS 2000), Redondo Beach, California, November 12-14, 2000, pages 399-409.
 // Available on the web: http://erikdemaine.org/papers/FOCS2000b/
 // (there is not much difference between these papers, actually).
 //

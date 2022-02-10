@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <library/cpp/deprecated/kmp/kmp.h>
 #include <util/string/cast.h>

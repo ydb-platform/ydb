@@ -701,7 +701,7 @@ public:
         *ins = tmp;
         ++num_elements;
         return iterator(tmp);
-    } 
+    }
 
     template <typename... Args>
     std::pair<iterator, bool> emplace_unique(Args&&... args) {
@@ -1616,7 +1616,7 @@ public:
     const_iterator find(const TheKey& key) const {
         return rep.find(key);
     }
- 
+
     template <class TheKey>
     iterator find(const TheKey& key, insert_ctx& ins) {
         return rep.find_i(key, ins);

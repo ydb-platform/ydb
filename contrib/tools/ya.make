@@ -14,7 +14,7 @@ RECURSE(
     fluent-bit
     fusermount
     gperf
-    gprof2dot 
+    gprof2dot
     grpc_cli
     kyotocabinet
     langid

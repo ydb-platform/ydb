@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "input.h"
 #include "output.h"
@@ -13,58 +13,58 @@
  * treat these as separate streams.
  */
 class TLengthLimitedInput: public IInputStream {
-public: 
+public:
     inline TLengthLimitedInput(IInputStream* slave, ui64 length) noexcept
         : Slave_(slave)
         , Length_(length)
     {
-    } 
+    }
 
     ~TLengthLimitedInput() override = default;
 
     inline ui64 Left() const noexcept {
-        return Length_; 
-    } 
+        return Length_;
+    }
 
-private: 
+private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
 
-private: 
+private:
     IInputStream* Slave_;
-    ui64 Length_; 
-}; 
+    ui64 Length_;
+};
 
 /**
  * Proxy input stream that counts the number of characters read.
  */
 class TCountingInput: public IInputStream {
-public: 
+public:
     inline TCountingInput(IInputStream* slave) noexcept
         : Slave_(slave)
         , Count_()
     {
-    } 
- 
+    }
+
     ~TCountingInput() override = default;
- 
+
     /**
      * \returns                         The total number of characters read from
      *                                  this stream.
      */
     inline ui64 Counter() const noexcept {
-        return Count_; 
-    } 
- 
-private: 
+        return Count_;
+    }
+
+private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
     size_t DoReadTo(TString& st, char ch) override;
     ui64 DoReadAll(IOutputStream& out) override;
- 
-private: 
+
+private:
     IInputStream* Slave_;
-    ui64 Count_; 
+    ui64 Count_;
 };
 
 /**

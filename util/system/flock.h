@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "error.h"
 #include "defaults.h"

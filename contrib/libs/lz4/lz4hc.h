@@ -1,48 +1,48 @@
-/* 
-   LZ4 HC - High Compression Mode of LZ4 
-   Header File 
+/*
+   LZ4 HC - High Compression Mode of LZ4
+   Header File
    Copyright (C) 2011-2017, Yann Collet.
-   BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php) 
- 
-   Redistribution and use in source and binary forms, with or without 
-   modification, are permitted provided that the following conditions are 
-   met: 
- 
-       * Redistributions of source code must retain the above copyright 
-   notice, this list of conditions and the following disclaimer. 
-       * Redistributions in binary form must reproduce the above 
-   copyright notice, this list of conditions and the following disclaimer 
-   in the documentation and/or other materials provided with the 
-   distribution. 
- 
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-   You can contact the author at : 
+   BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are
+   met:
+
+       * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+       * Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the
+   distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+   You can contact the author at :
    - LZ4 source repository : https://github.com/lz4/lz4
    - LZ4 public forum : https://groups.google.com/forum/#!forum/lz4c
-*/ 
+*/
 #ifndef LZ4_HC_H_19834876238432
 #define LZ4_HC_H_19834876238432
- 
-#if defined (__cplusplus) 
-extern "C" { 
-#endif 
- 
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
+
 /* --- Dependency --- */
 /* note : lz4hc requires lz4.h/lz4.c for compilation */
 #include "lz4.h"   /* stddef, LZ4LIB_API, LZ4_DEPRECATED */
- 
- 
+
+
 /* --- Useful constants --- */
 #define LZ4HC_CLEVEL_MIN         3
 #define LZ4HC_CLEVEL_DEFAULT     9
@@ -109,7 +109,7 @@ LZ4LIB_API int LZ4_compress_HC_destSize(void* stateHC,
 LZ4LIB_API LZ4_streamHC_t* LZ4_createStreamHC(void);
 LZ4LIB_API int             LZ4_freeStreamHC (LZ4_streamHC_t* streamHCPtr);
 
-/* 
+/*
   These functions compress data in successive blocks of any size,
   using previous blocks as dictionary, to improve compression ratio.
   One key assumption is that previous blocks (up to 64 KB) remain read-accessible while compressing next blocks.
@@ -150,11 +150,11 @@ LZ4LIB_API int             LZ4_freeStreamHC (LZ4_streamHC_t* streamHCPtr);
   After completing a streaming compression,
   it's possible to start a new stream of blocks, using the same LZ4_streamHC_t state,
   just by resetting it, using LZ4_resetStreamHC_fast().
-*/ 
- 
+*/
+
 LZ4LIB_API void LZ4_resetStreamHC_fast(LZ4_streamHC_t* streamHCPtr, int compressionLevel);   /* v1.9.0+ */
 LZ4LIB_API int  LZ4_loadDictHC (LZ4_streamHC_t* streamHCPtr, const char* dictionary, int dictSize);
- 
+
 LZ4LIB_API int LZ4_compress_HC_continue (LZ4_streamHC_t* streamHCPtr,
                                    const char* src, char* dst,
                                          int srcSize, int maxDstSize);
@@ -239,13 +239,13 @@ union LZ4_streamHC_u {
  *
  * Static allocation shall only be used in combination with static linking.
  */
- 
+
 /* LZ4_initStreamHC() : v1.9.0+
  * Required before first use of a statically allocated LZ4_streamHC_t.
  * Before v1.9.0 : use LZ4_resetStreamHC() instead
  */
 LZ4LIB_API LZ4_streamHC_t* LZ4_initStreamHC (void* buffer, size_t size);
- 
+
 
 /*-************************************
 *  Deprecated Functions
@@ -292,10 +292,10 @@ LZ4_DEPRECATED("use LZ4_initStreamHC() instead") LZ4LIB_API  int   LZ4_resetStre
 LZ4LIB_API void LZ4_resetStreamHC (LZ4_streamHC_t* streamHCPtr, int compressionLevel);
 
 
-#if defined (__cplusplus) 
-} 
-#endif 
- 
+#if defined (__cplusplus)
+}
+#endif
+
 #endif /* LZ4_HC_H_19834876238432 */
 
 

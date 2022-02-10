@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/generic/array_ref.h>
 #include <util/generic/strbuf.h>

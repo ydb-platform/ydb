@@ -1,38 +1,38 @@
-// Protocol Buffers - Google's data interchange format 
-// Copyright 2008 Google Inc.  All rights reserved. 
-// https://developers.google.com/protocol-buffers/ 
-// 
-// Redistribution and use in source and binary forms, with or without 
-// modification, are permitted provided that the following conditions are 
-// met: 
-// 
-//     * Redistributions of source code must retain the above copyright 
-// notice, this list of conditions and the following disclaimer. 
-//     * Redistributions in binary form must reproduce the above 
-// copyright notice, this list of conditions and the following disclaimer 
-// in the documentation and/or other materials provided with the 
-// distribution. 
-//     * Neither the name of Google Inc. nor the names of its 
-// contributors may be used to endorse or promote products derived from 
-// this software without specific prior written permission. 
-// 
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
- 
-// Authors: wink@google.com (Wink Saville), 
-//          kenton@google.com (Kenton Varda) 
-//  Based on original Protocol Buffers design by 
-//  Sanjay Ghemawat, Jeff Dean, and others. 
- 
+// Protocol Buffers - Google's data interchange format
+// Copyright 2008 Google Inc.  All rights reserved.
+// https://developers.google.com/protocol-buffers/
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//     * Neither the name of Google Inc. nor the names of its
+// contributors may be used to endorse or promote products derived from
+// this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Authors: wink@google.com (Wink Saville),
+//          kenton@google.com (Kenton Varda)
+//  Based on original Protocol Buffers design by
+//  Sanjay Ghemawat, Jeff Dean, and others.
+
 #include <google/protobuf/message_lite.h>
 
 #include <climits>
@@ -54,89 +54,89 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/stl_util.h>
 #include <google/protobuf/stubs/mutex.h>
- 
+
 #include <google/protobuf/port_def.inc>
 
-namespace google { 
-namespace protobuf { 
- 
+namespace google {
+namespace protobuf {
+
 TProtoStringType MessageLite::InitializationErrorString() const {
-  return "(cannot determine missing fields for lite message)"; 
-} 
- 
+  return "(cannot determine missing fields for lite message)";
+}
+
 TProtoStringType MessageLite::DebugString() const {
   std::uintptr_t address = reinterpret_cast<std::uintptr_t>(this);
   return StrCat("MessageLite at 0x", strings::Hex(address));
 }
 
-namespace { 
- 
-// When serializing, we first compute the byte size, then serialize the message. 
-// If serialization produces a different number of bytes than expected, we 
-// call this function, which crashes.  The problem could be due to a bug in the 
-// protobuf implementation but is more likely caused by concurrent modification 
-// of the message.  This function attempts to distinguish between the two and 
-// provide a useful error message. 
+namespace {
+
+// When serializing, we first compute the byte size, then serialize the message.
+// If serialization produces a different number of bytes than expected, we
+// call this function, which crashes.  The problem could be due to a bug in the
+// protobuf implementation but is more likely caused by concurrent modification
+// of the message.  This function attempts to distinguish between the two and
+// provide a useful error message.
 void ByteSizeConsistencyError(size_t byte_size_before_serialization,
                               size_t byte_size_after_serialization,
                               size_t bytes_produced_by_serialization,
-                              const MessageLite& message) { 
-  GOOGLE_CHECK_EQ(byte_size_before_serialization, byte_size_after_serialization) 
-      << message.GetTypeName() 
-      << " was modified concurrently during serialization."; 
-  GOOGLE_CHECK_EQ(bytes_produced_by_serialization, byte_size_before_serialization) 
-      << "Byte size calculation and serialization were inconsistent.  This " 
-         "may indicate a bug in protocol buffers or it may be caused by " 
+                              const MessageLite& message) {
+  GOOGLE_CHECK_EQ(byte_size_before_serialization, byte_size_after_serialization)
+      << message.GetTypeName()
+      << " was modified concurrently during serialization.";
+  GOOGLE_CHECK_EQ(bytes_produced_by_serialization, byte_size_before_serialization)
+      << "Byte size calculation and serialization were inconsistent.  This "
+         "may indicate a bug in protocol buffers or it may be caused by "
          "concurrent modification of "
       << message.GetTypeName() << ".";
-  GOOGLE_LOG(FATAL) << "This shouldn't be called if all the sizes are equal."; 
-} 
- 
+  GOOGLE_LOG(FATAL) << "This shouldn't be called if all the sizes are equal.";
+}
+
 } // anonymous namespace
 
 TProtoStringType InitializationErrorMessage(const char* action,
                                        const MessageLite& message) {
-  // Note:  We want to avoid depending on strutil in the lite library, otherwise 
-  //   we'd use: 
-  // 
-  // return strings::Substitute( 
-  //   "Can't $0 message of type \"$1\" because it is missing required " 
-  //   "fields: $2", 
-  //   action, message.GetTypeName(), 
-  //   message.InitializationErrorString()); 
- 
+  // Note:  We want to avoid depending on strutil in the lite library, otherwise
+  //   we'd use:
+  //
+  // return strings::Substitute(
+  //   "Can't $0 message of type \"$1\" because it is missing required "
+  //   "fields: $2",
+  //   action, message.GetTypeName(),
+  //   message.InitializationErrorString());
+
   TProtoStringType result;
-  result += "Can't "; 
-  result += action; 
-  result += " message of type \""; 
-  result += message.GetTypeName(); 
-  result += "\" because it is missing required fields: "; 
-  result += message.InitializationErrorString(); 
-  return result; 
-} 
- 
+  result += "Can't ";
+  result += action;
+  result += " message of type \"";
+  result += message.GetTypeName();
+  result += "\" because it is missing required fields: ";
+  result += message.InitializationErrorString();
+  return result;
+}
+
 namespace {
 
 inline StringPiece as_string_view(const void* data, int size) {
   return StringPiece(static_cast<const char*>(data), size);
 }
- 
+
 // Returns true of all required fields are present / have values.
 inline bool CheckFieldPresence(const internal::ParseContext& ctx,
                                const MessageLite& msg,
                                MessageLite::ParseFlags parse_flags) {
   if (PROTOBUF_PREDICT_FALSE((parse_flags & MessageLite::kMergePartial) != 0)) {
     return true;
-  } 
+  }
   return msg.IsInitializedWithErrors();
-} 
- 
+}
+
 }  // namespace
 
 void MessageLite::LogInitializationErrorMessage() const {
   GOOGLE_LOG(ERROR) << InitializationErrorMessage("parse", *this);
-} 
- 
+}
+
 namespace internal {
 
 template <bool aliasing>
@@ -151,8 +151,8 @@ bool MergeFromImpl(StringPiece input, MessageLite* msg,
     return CheckFieldPresence(ctx, *msg, parse_flags);
   }
   return false;
-} 
- 
+}
+
 template <bool aliasing>
 bool MergeFromImpl(io::ZeroCopyInputStream* input, MessageLite* msg,
                    MessageLite::ParseFlags parse_flags) {
@@ -165,8 +165,8 @@ bool MergeFromImpl(io::ZeroCopyInputStream* input, MessageLite* msg,
     return CheckFieldPresence(ctx, *msg, parse_flags);
   }
   return false;
-} 
- 
+}
+
 template <bool aliasing>
 bool MergeFromImpl(BoundedZCIS input, MessageLite* msg,
                    MessageLite::ParseFlags parse_flags) {
@@ -180,8 +180,8 @@ bool MergeFromImpl(BoundedZCIS input, MessageLite* msg,
     return CheckFieldPresence(ctx, *msg, parse_flags);
   }
   return false;
-} 
- 
+}
+
 template bool MergeFromImpl<false>(StringPiece input, MessageLite* msg,
                                    MessageLite::ParseFlags parse_flags);
 template bool MergeFromImpl<true>(StringPiece input, MessageLite* msg,
@@ -196,17 +196,17 @@ template bool MergeFromImpl<false>(BoundedZCIS input, MessageLite* msg,
                                    MessageLite::ParseFlags parse_flags);
 template bool MergeFromImpl<true>(BoundedZCIS input, MessageLite* msg,
                                   MessageLite::ParseFlags parse_flags);
- 
+
 }  // namespace internal
- 
+
 MessageLite* MessageLite::New(Arena* arena) const {
-  MessageLite* message = New(); 
-  if (arena != NULL) { 
-    arena->Own(message); 
-  } 
-  return message; 
-} 
- 
+  MessageLite* message = New();
+  if (arena != NULL) {
+    arena->Own(message);
+  }
+  return message;
+}
+
 class ZeroCopyCodedInputStream : public io::ZeroCopyInputStream {
  public:
   ZeroCopyCodedInputStream(io::CodedInputStream* cis) : cis_(cis) {}
@@ -254,29 +254,29 @@ bool MessageLite::MergePartialFromCodedStream(io::CodedInputStream* input) {
   return MergeFromImpl(input, kMergePartial);
 }
 
-bool MessageLite::MergeFromCodedStream(io::CodedInputStream* input) { 
+bool MessageLite::MergeFromCodedStream(io::CodedInputStream* input) {
   return MergeFromImpl(input, kMerge);
-} 
- 
-bool MessageLite::ParseFromCodedStream(io::CodedInputStream* input) { 
+}
+
+bool MessageLite::ParseFromCodedStream(io::CodedInputStream* input) {
   Clear();
   return MergeFromImpl(input, kParse);
-} 
- 
-bool MessageLite::ParsePartialFromCodedStream(io::CodedInputStream* input) { 
+}
+
+bool MessageLite::ParsePartialFromCodedStream(io::CodedInputStream* input) {
   Clear();
   return MergeFromImpl(input, kParsePartial);
-} 
- 
-bool MessageLite::ParseFromZeroCopyStream(io::ZeroCopyInputStream* input) { 
+}
+
+bool MessageLite::ParseFromZeroCopyStream(io::ZeroCopyInputStream* input) {
   return ParseFrom<kParse>(input);
-} 
- 
-bool MessageLite::ParsePartialFromZeroCopyStream( 
-    io::ZeroCopyInputStream* input) { 
+}
+
+bool MessageLite::ParsePartialFromZeroCopyStream(
+    io::ZeroCopyInputStream* input) {
   return ParseFrom<kParsePartial>(input);
-} 
- 
+}
+
 bool MessageLite::ParseFromFileDescriptor(int file_descriptor) {
   io::FileInputStream input(file_descriptor);
   return ParseFromZeroCopyStream(&input) && input.GetErrno() == 0;
@@ -298,10 +298,10 @@ bool MessageLite::ParsePartialFromIstream(std::istream* input) {
 }
 
 bool MessageLite::MergePartialFromBoundedZeroCopyStream(
-    io::ZeroCopyInputStream* input, int size) { 
+    io::ZeroCopyInputStream* input, int size) {
   return ParseFrom<kMergePartial>(internal::BoundedZCIS{input, size});
-} 
- 
+}
+
 bool MessageLite::MergeFromBoundedZeroCopyStream(io::ZeroCopyInputStream* input,
                                                  int size) {
   return ParseFrom<kMerge>(internal::BoundedZCIS{input, size});
@@ -312,34 +312,34 @@ bool MessageLite::ParseFromBoundedZeroCopyStream(io::ZeroCopyInputStream* input,
   return ParseFrom<kParse>(internal::BoundedZCIS{input, size});
 }
 
-bool MessageLite::ParsePartialFromBoundedZeroCopyStream( 
-    io::ZeroCopyInputStream* input, int size) { 
+bool MessageLite::ParsePartialFromBoundedZeroCopyStream(
+    io::ZeroCopyInputStream* input, int size) {
   return ParseFrom<kParsePartial>(internal::BoundedZCIS{input, size});
-} 
- 
+}
+
 bool MessageLite::ParseFromString(ConstStringParam data) {
   return ParseFrom<kParse>(data);
-} 
- 
+}
+
 bool MessageLite::ParsePartialFromString(ConstStringParam data) {
   return ParseFrom<kParsePartial>(data);
-} 
- 
-bool MessageLite::ParseFromArray(const void* data, int size) { 
+}
+
+bool MessageLite::ParseFromArray(const void* data, int size) {
   return ParseFrom<kParse>(as_string_view(data, size));
-} 
- 
-bool MessageLite::ParsePartialFromArray(const void* data, int size) { 
+}
+
+bool MessageLite::ParsePartialFromArray(const void* data, int size) {
   return ParseFrom<kParsePartial>(as_string_view(data, size));
-} 
- 
+}
+
 bool MessageLite::MergeFromString(ConstStringParam data) {
   return ParseFrom<kMerge>(data);
 }
- 
 
-// =================================================================== 
- 
+
+// ===================================================================
+
 inline uint8* SerializeToArrayImpl(const MessageLite& msg, uint8* target,
                                    int size) {
   constexpr bool debug = false;
@@ -372,43 +372,43 @@ uint8* MessageLite::SerializeWithCachedSizesToArray(uint8* target) const {
   return SerializeToArrayImpl(*this, target, GetCachedSize());
 }
 
-bool MessageLite::SerializeToCodedStream(io::CodedOutputStream* output) const { 
-  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this); 
-  return SerializePartialToCodedStream(output); 
-} 
- 
-bool MessageLite::SerializePartialToCodedStream( 
-    io::CodedOutputStream* output) const { 
+bool MessageLite::SerializeToCodedStream(io::CodedOutputStream* output) const {
+  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this);
+  return SerializePartialToCodedStream(output);
+}
+
+bool MessageLite::SerializePartialToCodedStream(
+    io::CodedOutputStream* output) const {
   const size_t size = ByteSizeLong();  // Force size to be cached.
   if (size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
                << " exceeded maximum protobuf size of 2GB: " << size;
-    return false; 
-  } 
- 
+    return false;
+  }
+
   int original_byte_count = output->ByteCount();
   SerializeWithCachedSizes(output);
   if (output->HadError()) {
     return false;
   }
   int final_byte_count = output->ByteCount();
- 
+
   if (final_byte_count - original_byte_count != static_cast<int64>(size)) {
     ByteSizeConsistencyError(size, ByteSizeLong(),
                              final_byte_count - original_byte_count, *this);
   }
- 
+
   return true;
-} 
- 
-bool MessageLite::SerializeToZeroCopyStream( 
-    io::ZeroCopyOutputStream* output) const { 
+}
+
+bool MessageLite::SerializeToZeroCopyStream(
+    io::ZeroCopyOutputStream* output) const {
   GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this);
   return SerializePartialToZeroCopyStream(output);
-} 
- 
-bool MessageLite::SerializePartialToZeroCopyStream( 
-    io::ZeroCopyOutputStream* output) const { 
+}
+
+bool MessageLite::SerializePartialToZeroCopyStream(
+    io::ZeroCopyOutputStream* output) const {
   const size_t size = ByteSizeLong();  // Force size to be cached.
   if (size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
@@ -424,8 +424,8 @@ bool MessageLite::SerializePartialToZeroCopyStream(
   stream.Trim(target);
   if (stream.HadError()) return false;
   return true;
-} 
- 
+}
+
 bool MessageLite::SerializeToFileDescriptor(int file_descriptor) const {
   io::FileOutputStream output(file_descriptor);
   return SerializeToZeroCopyStream(&output) && output.Flush();
@@ -450,42 +450,42 @@ bool MessageLite::SerializePartialToOstream(std::ostream* output) const {
 }
 
 bool MessageLite::AppendToString(TProtoStringType* output) const {
-  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this); 
-  return AppendPartialToString(output); 
-} 
- 
+  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this);
+  return AppendPartialToString(output);
+}
+
 bool MessageLite::AppendPartialToString(TProtoStringType* output) const {
   size_t old_size = output->size();
   size_t byte_size = ByteSizeLong();
   if (byte_size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
                << " exceeded maximum protobuf size of 2GB: " << byte_size;
-    return false; 
-  } 
- 
-  STLStringResizeUninitialized(output, old_size + byte_size); 
-  uint8* start = 
-      reinterpret_cast<uint8*>(io::mutable_string_data(output) + old_size); 
+    return false;
+  }
+
+  STLStringResizeUninitialized(output, old_size + byte_size);
+  uint8* start =
+      reinterpret_cast<uint8*>(io::mutable_string_data(output) + old_size);
   SerializeToArrayImpl(*this, start, byte_size);
-  return true; 
-} 
- 
+  return true;
+}
+
 bool MessageLite::SerializeToString(TProtoStringType* output) const {
-  output->clear(); 
-  return AppendToString(output); 
-} 
- 
+  output->clear();
+  return AppendToString(output);
+}
+
 bool MessageLite::SerializePartialToString(TProtoStringType* output) const {
-  output->clear(); 
-  return AppendPartialToString(output); 
-} 
- 
-bool MessageLite::SerializeToArray(void* data, int size) const { 
-  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this); 
-  return SerializePartialToArray(data, size); 
-} 
- 
-bool MessageLite::SerializePartialToArray(void* data, int size) const { 
+  output->clear();
+  return AppendPartialToString(output);
+}
+
+bool MessageLite::SerializeToArray(void* data, int size) const {
+  GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this);
+  return SerializePartialToArray(data, size);
+}
+
+bool MessageLite::SerializePartialToArray(void* data, int size) const {
   const size_t byte_size = ByteSizeLong();
   if (byte_size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
@@ -493,27 +493,27 @@ bool MessageLite::SerializePartialToArray(void* data, int size) const {
     return false;
   }
   if (size < static_cast<int64>(byte_size)) return false;
-  uint8* start = reinterpret_cast<uint8*>(data); 
+  uint8* start = reinterpret_cast<uint8*>(data);
   SerializeToArrayImpl(*this, start, byte_size);
-  return true; 
-} 
- 
+  return true;
+}
+
 TProtoStringType MessageLite::SerializeAsString() const {
-  // If the compiler implements the (Named) Return Value Optimization, 
-  // the local variable 'output' will not actually reside on the stack 
-  // of this function, but will be overlaid with the object that the 
-  // caller supplied for the return value to be constructed in. 
+  // If the compiler implements the (Named) Return Value Optimization,
+  // the local variable 'output' will not actually reside on the stack
+  // of this function, but will be overlaid with the object that the
+  // caller supplied for the return value to be constructed in.
   TProtoStringType output;
   if (!AppendToString(&output)) output.clear();
-  return output; 
-} 
- 
+  return output;
+}
+
 TProtoStringType MessageLite::SerializePartialAsString() const {
   TProtoStringType output;
   if (!AppendPartialToString(&output)) output.clear();
-  return output; 
-} 
- 
+  return output;
+}
+
 #if PROTOBUF_USE_EXCEPTIONS && defined(__cpp_lib_string_view)
 void MessageLite::ParseFromStringOrThrow(std::string_view s) {
   const bool isOk = ParseFromArray(s.data(), s.size());
@@ -545,20 +545,20 @@ TProtoStringType NProtoBuf::MessageLite::SerializeAsStringOrThrow() const {
 namespace internal {
 
 template <>
-MessageLite* GenericTypeHandler<MessageLite>::NewFromPrototype( 
+MessageLite* GenericTypeHandler<MessageLite>::NewFromPrototype(
     const MessageLite* prototype, Arena* arena) {
-  return prototype->New(arena); 
-} 
-template <> 
-void GenericTypeHandler<MessageLite>::Merge(const MessageLite& from, 
-                                            MessageLite* to) { 
-  to->CheckTypeAndMergeFrom(from); 
-} 
+  return prototype->New(arena);
+}
+template <>
+void GenericTypeHandler<MessageLite>::Merge(const MessageLite& from,
+                                            MessageLite* to) {
+  to->CheckTypeAndMergeFrom(from);
+}
 template <>
 void GenericTypeHandler<TProtoStringType>::Merge(const TProtoStringType& from,
                                             TProtoStringType* to) {
-  *to = from; 
-} 
+  *to = from;
+}
 
 // Non-inline variants of TProtoStringType specializations for
 // various InternalMetadata routines.
@@ -577,8 +577,8 @@ void InternalMetadata::DoSwap<TProtoStringType>(TProtoStringType* other) {
   mutable_unknown_fields<TProtoStringType>()->swap(*other);
 }
 
-}  // namespace internal 
- 
+}  // namespace internal
+
 
 // ===================================================================
 // Shutdown support.
@@ -627,7 +627,7 @@ void ShutdownProtobufLibrary() {
 }
 
 
-}  // namespace protobuf 
-}  // namespace google 
+}  // namespace protobuf
+}  // namespace google
 
 #include <google/protobuf/port_undef.inc>

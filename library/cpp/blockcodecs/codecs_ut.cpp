@@ -10,22 +10,22 @@
 Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
     using namespace NBlockCodecs;
 
-    TBuffer Buffer(TStringBuf b) { 
-        TBuffer bb; 
+    TBuffer Buffer(TStringBuf b) {
+        TBuffer bb;
         bb.Assign(b.data(), b.size());
-        return bb; 
-    } 
- 
+        return bb;
+    }
+
     void TestAllAtOnce(size_t n, size_t m) {
         TVector<TBuffer> datas;
 
         datas.emplace_back();
-        datas.push_back(Buffer("na gorshke sidel korol")); 
-        datas.push_back(Buffer(TStringBuf("", 1))); 
-        datas.push_back(Buffer(" ")); 
-        datas.push_back(Buffer("  ")); 
-        datas.push_back(Buffer("   ")); 
-        datas.push_back(Buffer("    ")); 
+        datas.push_back(Buffer("na gorshke sidel korol"));
+        datas.push_back(Buffer(TStringBuf("", 1)));
+        datas.push_back(Buffer(" "));
+        datas.push_back(Buffer("  "));
+        datas.push_back(Buffer("   "));
+        datas.push_back(Buffer("    "));
 
         {
             TStringStream data;
@@ -49,15 +49,15 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
             }
 
             for (size_t j = 0; j < datas.size(); ++j) {
-                const TBuffer& data = datas[j]; 
+                const TBuffer& data = datas[j];
                 TString res;
- 
+
                 try {
-                    TBuffer e, d; 
-                    c->Encode(data, e); 
-                    c->Decode(e, d); 
-                    d.AsString(res); 
-                    UNIT_ASSERT_EQUAL(NBlockCodecs::TData(res), NBlockCodecs::TData(data)); 
+                    TBuffer e, d;
+                    c->Encode(data, e);
+                    c->Decode(e, d);
+                    d.AsString(res);
+                    UNIT_ASSERT_EQUAL(NBlockCodecs::TData(res), NBlockCodecs::TData(data));
                 } catch (...) {
                     Cerr << c->Name() << "(" << res.Quote() << ")(" << TString{NBlockCodecs::TData(data)}.Quote() << ")" << Endl;
 

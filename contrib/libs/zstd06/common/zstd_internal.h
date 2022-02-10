@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /*
     zstd_internal - common functions to include
     Header File for include
@@ -200,15 +200,15 @@ typedef struct {
     U32 rep[ZSTD_REP_INIT];
 } ZSTD_optimal_t;
 
-//#if ZSTD_OPT_DEBUG == 3 
-//    #include ".debug/zstd_stats.h" 
-//#else 
+//#if ZSTD_OPT_DEBUG == 3
+//    #include ".debug/zstd_stats.h"
+//#else
     typedef struct { U32  unused; } ZSTD_stats_t;
-    MEM_STATIC void ZSTD_statsPrint(ZSTD_stats_t* stats, U32 searchLength) { (void)stats; (void)searchLength; } 
-    MEM_STATIC void ZSTD_statsInit(ZSTD_stats_t* stats) { (void)stats; } 
-    MEM_STATIC void ZSTD_statsResetFreqs(ZSTD_stats_t* stats) { (void)stats; } 
-    MEM_STATIC void ZSTD_statsUpdatePrices(ZSTD_stats_t* stats, size_t litLength, const BYTE* literals, size_t offset, size_t matchLength) { (void)stats; (void)litLength; (void)literals; (void)offset; (void)matchLength; } 
-//#endif 
+    MEM_STATIC void ZSTD_statsPrint(ZSTD_stats_t* stats, U32 searchLength) { (void)stats; (void)searchLength; }
+    MEM_STATIC void ZSTD_statsInit(ZSTD_stats_t* stats) { (void)stats; }
+    MEM_STATIC void ZSTD_statsResetFreqs(ZSTD_stats_t* stats) { (void)stats; }
+    MEM_STATIC void ZSTD_statsUpdatePrices(ZSTD_stats_t* stats, size_t litLength, const BYTE* literals, size_t offset, size_t matchLength) { (void)stats; (void)litLength; (void)literals; (void)offset; (void)matchLength; }
+//#endif
 
 typedef struct {
     void* buffer;
@@ -243,9 +243,9 @@ typedef struct {
     U32  log2litSum;
     U32  log2offCodeSum;
     U32  factor;
-    U32  cachedPrice; 
-    U32  cachedLitLength; 
-    const BYTE* cachedLiterals; 
+    U32  cachedPrice;
+    U32  cachedLitLength;
+    const BYTE* cachedLiterals;
     ZSTD_stats_t stats;
 } seqStore_t;
 

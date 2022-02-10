@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
             UNIT_ASSERT(value.Has("test"));
             UNIT_ASSERT(!value["test"].IsInteger());
             UNIT_ASSERT(value["test"].IsUInteger());
-            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), (i64)(Max<i64>() + 1ull)); 
+            UNIT_ASSERT_EQUAL(value["test"].GetIntegerRobust(), (i64)(Max<i64>() + 1ull));
         } // Max<i64>() + 1
     }
 

@@ -74,13 +74,13 @@ NUnitTest::TTestBase* ::NUnitTest::NPrivate::GetCurrentTest() {
 
 struct TDiffColorizer {
     NColorizer::TColors Colors;
-    bool Reverse = false; 
+    bool Reverse = false;
 
-    explicit TDiffColorizer(bool reverse = false) 
-        : Reverse(reverse) 
+    explicit TDiffColorizer(bool reverse = false)
+        : Reverse(reverse)
     {
     }
- 
+
     TString Special(TStringBuf str) const {
         return ToString(Colors.YellowColor()) + str;
     }
@@ -96,14 +96,14 @@ struct TDiffColorizer {
     TString Right(TArrayRef<const char> str) const {
         return ToString(GetRightColor()) + TString(str.begin(), str.end());
     }
- 
-    TStringBuf GetLeftColor() const { 
-        return Reverse ? Colors.RedColor() : Colors.GreenColor(); 
-    } 
- 
-    TStringBuf GetRightColor() const { 
-        return Reverse ? Colors.GreenColor() : Colors.RedColor(); 
-    } 
+
+    TStringBuf GetLeftColor() const {
+        return Reverse ? Colors.RedColor() : Colors.GreenColor();
+    }
+
+    TStringBuf GetRightColor() const {
+        return Reverse ? Colors.GreenColor() : Colors.RedColor();
+    }
 };
 
 struct TTraceDiffFormatter {

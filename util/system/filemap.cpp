@@ -1,5 +1,5 @@
 #include "info.h"
-#include "madvise.h" 
+#include "madvise.h"
 #include "defaults.h"
 #include "hi_lo.h"
 
@@ -288,14 +288,14 @@ public:
 
     void SetSequential() {
 #if defined(_unix_)
-        if (!(Mode_ & oNotGreedy) && Length_) { 
-            MadviseSequentialAccess(PtrStart_, Length_); 
-        } 
+        if (!(Mode_ & oNotGreedy) && Length_) {
+            MadviseSequentialAccess(PtrStart_, Length_);
+        }
 #endif
     }
 
     void Evict(void* ptr, size_t len) {
-        MadviseEvict(ptr, len); 
+        MadviseEvict(ptr, len);
     }
 
     void Evict() {

@@ -20,7 +20,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/random/random.h> 
+#include <util/random/random.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>

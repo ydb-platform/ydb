@@ -4,7 +4,7 @@ OWNER(
     pg
     velavokr
 )
- 
+
 SRCS(
     json_writer.cpp
     json_reader.cpp

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #define MJB_RBP 1
 #define MJB_RSP 6

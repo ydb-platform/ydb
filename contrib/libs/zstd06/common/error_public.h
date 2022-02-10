@@ -1,4 +1,4 @@
-#include <contrib/libs/zstd06/renames.h> 
+#include <contrib/libs/zstd06/renames.h>
 /* ******************************************************************
    Error codes list
    Copyright (C) 2016, Yann Collet

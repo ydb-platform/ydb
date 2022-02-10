@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "sandbox.h"
 #include "build_info_static.h"

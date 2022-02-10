@@ -1,7 +1,7 @@
 #include "json_writer.h"
 
 #include <util/charset/utf8.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 
@@ -85,7 +85,7 @@ namespace NJson {
     void TJsonWriter::WriteNull() {
         Buf.WriteNull();
     }
- 
+
     void TJsonWriter::Write(float value) {
         Buf.WriteFloat(value, FloatToStringMode, FloatNDigits);
     }
@@ -113,11 +113,11 @@ namespace NJson {
             }
         };
     }
- 
+
     void TJsonWriter::Write(const TJsonValue* v) {
         Buf.WriteJsonValue(v, SortKeys, FloatToStringMode, DoubleNDigits);
     }
- 
+
     void TJsonWriter::Write(const TJsonValue& v) {
         Buf.WriteJsonValue(&v, SortKeys, FloatToStringMode, DoubleNDigits);
     }
@@ -139,7 +139,7 @@ namespace NJson {
         w.Write(val);
         w.Flush();
     }
- 
+
     void WriteJson(IOutputStream* out, const TJsonValue* val, const TJsonWriterConfig& config) {
         TJsonWriter w(out, config, true);
         w.Write(val);

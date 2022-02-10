@@ -225,20 +225,20 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     Y_UNIT_TEST(TestGetOr) {
         UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse("xxx"), TString("xxx"));
         UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse("xxx"), TString("yyy"));
- 
-        { 
+
+        {
             TString xxx = "xxx";
             UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse(xxx).append('x'), TString("xxxx"));
-            UNIT_ASSERT_VALUES_EQUAL(xxx, "xxxx"); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(xxx, "xxxx");
+        }
+
+        {
             TString xxx = "xxx";
             UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse(xxx).append('x'), TString("yyyx"));
-            UNIT_ASSERT_VALUES_EQUAL(xxx, "xxx"); 
-        } 
-    } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(xxx, "xxx");
+        }
+    }
+
     /*
   ==
   !=

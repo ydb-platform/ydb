@@ -1,38 +1,38 @@
-#pragma once 
- 
-#include "accessors_impl.h" 
- 
-namespace NAccessors { 
+#pragma once
+
+#include "accessors_impl.h"
+
+namespace NAccessors {
     /*
- * Adds API compatibility between different types representing memory regions. 
- * 
- * i.e. this will work: 
- * 
+ * Adds API compatibility between different types representing memory regions.
+ *
+ * i.e. this will work:
+ *
  * TString t;
- * const char* beg = NAccessors::Begin(t); // t.begin() 
- * const char* end = NAccessors::End(t); // t.end() 
- * size_t sz = NAccessors::Size(t); // t.size() 
- * 
- * as well as this: 
- * 
- * ui64 t; 
- * const ui64* beg = NAccessors::Begin(t); // &t 
- * const ui64* end = NAccessors::End(t); // &t + 1 
- * size_t sz = NAccessors::Size(t); // 1 
- * 
- * Both will give you begin, end and size of the underlying memory region. 
- */ 
- 
+ * const char* beg = NAccessors::Begin(t); // t.begin()
+ * const char* end = NAccessors::End(t); // t.end()
+ * size_t sz = NAccessors::Size(t); // t.size()
+ *
+ * as well as this:
+ *
+ * ui64 t;
+ * const ui64* beg = NAccessors::Begin(t); // &t
+ * const ui64* end = NAccessors::End(t); // &t + 1
+ * size_t sz = NAccessors::Size(t); // 1
+ *
+ * Both will give you begin, end and size of the underlying memory region.
+ */
+
     template <typename T>
     inline const typename TMemoryTraits<T>::TElementType* Begin(const T& t) {
         return NPrivate::TBegin<T>::Get(t);
     }
- 
+
     template <typename T>
     inline const typename TMemoryTraits<T>::TElementType* End(const T& t) {
         return NPrivate::TEnd<T>::Get(t);
     }
- 
+
     template <typename T>
     inline size_t Size(const T& t) {
         return End(t) - Begin(t);
@@ -80,4 +80,4 @@ namespace NAccessors {
                        const typename TMemoryTraits<T>::TElementType* end) {
         NPrivate::TAssign<T>::Do(t, beg, end);
     }
-} 
+}

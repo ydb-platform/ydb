@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 /*
  * thread-safe random number generator.
@@ -13,9 +13,9 @@
 template <class T>
 T RandomNumber();
 
-/* 
- * returns value in range [0, max) 
- */ 
+/*
+ * returns value in range [0, max)
+ */
 template <class T>
 T RandomNumber(T max);
 

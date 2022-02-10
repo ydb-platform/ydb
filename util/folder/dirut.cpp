@@ -436,7 +436,7 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
         sysTmp = GetSystemTempDir();
         prefix = sysTmp.data();
     }
- 
+
     if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0)
         return ret;
     if (!TFileStat(path).IsDir())

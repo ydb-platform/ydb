@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #if defined(_x86_64_)
     #include "context_x86_64.h"

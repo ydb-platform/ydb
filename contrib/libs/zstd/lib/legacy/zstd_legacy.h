@@ -7,26 +7,26 @@
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
  */
- 
-#ifndef ZSTD_LEGACY_H 
-#define ZSTD_LEGACY_H 
- 
-#if defined (__cplusplus) 
-extern "C" { 
-#endif 
- 
-/* ************************************* 
-*  Includes 
-***************************************/ 
+
+#ifndef ZSTD_LEGACY_H
+#define ZSTD_LEGACY_H
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
+
+/* *************************************
+*  Includes
+***************************************/
 #include "../common/mem.h"            /* MEM_STATIC */
 #include "../common/error_private.h"  /* ERROR */
 #include "../common/zstd_internal.h"  /* ZSTD_inBuffer, ZSTD_outBuffer, ZSTD_frameSizeInfo */
- 
+
 #if !defined (ZSTD_LEGACY_SUPPORT) || (ZSTD_LEGACY_SUPPORT == 0)
 #  undef ZSTD_LEGACY_SUPPORT
 #  define ZSTD_LEGACY_SUPPORT 8
 #endif
- 
+
 #if (ZSTD_LEGACY_SUPPORT <= 1)
 #  include "zstd_v01.h"
 #endif
@@ -49,45 +49,45 @@ extern "C" {
 #  include "zstd_v07.h"
 #endif
 
-/** ZSTD_isLegacy() : 
-    @return : > 0 if supported by legacy decoder. 0 otherwise. 
-              return value is the version. 
-*/ 
-MEM_STATIC unsigned ZSTD_isLegacy(const void* src, size_t srcSize) 
-{ 
-    U32 magicNumberLE; 
-    if (srcSize<4) return 0; 
-    magicNumberLE = MEM_readLE32(src); 
-    switch(magicNumberLE) 
-    { 
+/** ZSTD_isLegacy() :
+    @return : > 0 if supported by legacy decoder. 0 otherwise.
+              return value is the version.
+*/
+MEM_STATIC unsigned ZSTD_isLegacy(const void* src, size_t srcSize)
+{
+    U32 magicNumberLE;
+    if (srcSize<4) return 0;
+    magicNumberLE = MEM_readLE32(src);
+    switch(magicNumberLE)
+    {
 #if (ZSTD_LEGACY_SUPPORT <= 1)
-        case ZSTDv01_magicNumberLE:return 1; 
+        case ZSTDv01_magicNumberLE:return 1;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 2)
-        case ZSTDv02_magicNumber : return 2; 
+        case ZSTDv02_magicNumber : return 2;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 3)
-        case ZSTDv03_magicNumber : return 3; 
+        case ZSTDv03_magicNumber : return 3;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 4)
-        case ZSTDv04_magicNumber : return 4; 
+        case ZSTDv04_magicNumber : return 4;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 5)
-        case ZSTDv05_MAGICNUMBER : return 5; 
+        case ZSTDv05_MAGICNUMBER : return 5;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 6)
-        case ZSTDv06_MAGICNUMBER : return 6; 
+        case ZSTDv06_MAGICNUMBER : return 6;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 7)
-        case ZSTDv07_MAGICNUMBER : return 7; 
+        case ZSTDv07_MAGICNUMBER : return 7;
 #endif
-        default : return 0; 
-    } 
-} 
- 
- 
-MEM_STATIC unsigned long long ZSTD_getDecompressedSize_legacy(const void* src, size_t srcSize) 
-{ 
+        default : return 0;
+    }
+}
+
+
+MEM_STATIC unsigned long long ZSTD_getDecompressedSize_legacy(const void* src, size_t srcSize)
+{
     U32 const version = ZSTD_isLegacy(src, srcSize);
     if (version < 5) return 0;  /* no decompressed size in frame header, or not a legacy format */
 #if (ZSTD_LEGACY_SUPPORT <= 5)
@@ -96,7 +96,7 @@ MEM_STATIC unsigned long long ZSTD_getDecompressedSize_legacy(const void* src, s
         size_t const frResult = ZSTDv05_getFrameParams(&fParams, src, srcSize);
         if (frResult != 0) return 0;
         return fParams.srcSize;
-    } 
+    }
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 6)
     if (version==6) {
@@ -115,69 +115,69 @@ MEM_STATIC unsigned long long ZSTD_getDecompressedSize_legacy(const void* src, s
     }
 #endif
     return 0;   /* should not be possible */
-} 
- 
+}
 
-MEM_STATIC size_t ZSTD_decompressLegacy( 
-                     void* dst, size_t dstCapacity, 
-               const void* src, size_t compressedSize, 
-               const void* dict,size_t dictSize) 
-{ 
-    U32 const version = ZSTD_isLegacy(src, compressedSize); 
+
+MEM_STATIC size_t ZSTD_decompressLegacy(
+                     void* dst, size_t dstCapacity,
+               const void* src, size_t compressedSize,
+               const void* dict,size_t dictSize)
+{
+    U32 const version = ZSTD_isLegacy(src, compressedSize);
     (void)dst; (void)dstCapacity; (void)dict; (void)dictSize;  /* unused when ZSTD_LEGACY_SUPPORT >= 8 */
-    switch(version) 
-    { 
+    switch(version)
+    {
 #if (ZSTD_LEGACY_SUPPORT <= 1)
-        case 1 : 
-            return ZSTDv01_decompress(dst, dstCapacity, src, compressedSize); 
+        case 1 :
+            return ZSTDv01_decompress(dst, dstCapacity, src, compressedSize);
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 2)
-        case 2 : 
-            return ZSTDv02_decompress(dst, dstCapacity, src, compressedSize); 
+        case 2 :
+            return ZSTDv02_decompress(dst, dstCapacity, src, compressedSize);
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 3)
-        case 3 : 
-            return ZSTDv03_decompress(dst, dstCapacity, src, compressedSize); 
+        case 3 :
+            return ZSTDv03_decompress(dst, dstCapacity, src, compressedSize);
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 4)
-        case 4 : 
-            return ZSTDv04_decompress(dst, dstCapacity, src, compressedSize); 
+        case 4 :
+            return ZSTDv04_decompress(dst, dstCapacity, src, compressedSize);
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 5)
-        case 5 : 
-            {   size_t result; 
-                ZSTDv05_DCtx* const zd = ZSTDv05_createDCtx(); 
-                if (zd==NULL) return ERROR(memory_allocation); 
-                result = ZSTDv05_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize); 
-                ZSTDv05_freeDCtx(zd); 
-                return result; 
-            } 
+        case 5 :
+            {   size_t result;
+                ZSTDv05_DCtx* const zd = ZSTDv05_createDCtx();
+                if (zd==NULL) return ERROR(memory_allocation);
+                result = ZSTDv05_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize);
+                ZSTDv05_freeDCtx(zd);
+                return result;
+            }
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 6)
-        case 6 : 
-            {   size_t result; 
-                ZSTDv06_DCtx* const zd = ZSTDv06_createDCtx(); 
-                if (zd==NULL) return ERROR(memory_allocation); 
-                result = ZSTDv06_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize); 
-                ZSTDv06_freeDCtx(zd); 
-                return result; 
-            } 
+        case 6 :
+            {   size_t result;
+                ZSTDv06_DCtx* const zd = ZSTDv06_createDCtx();
+                if (zd==NULL) return ERROR(memory_allocation);
+                result = ZSTDv06_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize);
+                ZSTDv06_freeDCtx(zd);
+                return result;
+            }
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 7)
-        case 7 : 
-            {   size_t result; 
-                ZSTDv07_DCtx* const zd = ZSTDv07_createDCtx(); 
-                if (zd==NULL) return ERROR(memory_allocation); 
-                result = ZSTDv07_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize); 
-                ZSTDv07_freeDCtx(zd); 
-                return result; 
-            } 
+        case 7 :
+            {   size_t result;
+                ZSTDv07_DCtx* const zd = ZSTDv07_createDCtx();
+                if (zd==NULL) return ERROR(memory_allocation);
+                result = ZSTDv07_decompress_usingDict(zd, dst, dstCapacity, src, compressedSize, dict, dictSize);
+                ZSTDv07_freeDCtx(zd);
+                return result;
+            }
 #endif
-        default : 
-            return ERROR(prefix_unknown); 
-    } 
-} 
- 
+        default :
+            return ERROR(prefix_unknown);
+    }
+}
+
 MEM_STATIC ZSTD_frameSizeInfo ZSTD_findFrameSizeInfoLegacy(const void *src, size_t srcSize)
 {
     ZSTD_frameSizeInfo frameSizeInfo;
@@ -244,7 +244,7 @@ MEM_STATIC ZSTD_frameSizeInfo ZSTD_findFrameSizeInfoLegacy(const void *src, size
     }
     return frameSizeInfo;
 }
- 
+
 MEM_STATIC size_t ZSTD_findFrameCompressedSizeLegacy(const void *src, size_t srcSize)
 {
     ZSTD_frameSizeInfo frameSizeInfo = ZSTD_findFrameSizeInfoLegacy(src, srcSize);
@@ -275,7 +275,7 @@ MEM_STATIC size_t ZSTD_freeLegacyStreamContext(void* legacyContext, U32 version)
 #endif
     }
 }
- 
+
 
 MEM_STATIC size_t ZSTD_initLegacyStream(void** legacyContext, U32 prevVersion, U32 newVersion,
                                         const void* dict, size_t dictSize)
@@ -408,8 +408,8 @@ MEM_STATIC size_t ZSTD_decompressLegacyStream(void* legacyContext, U32 version,
 }
 
 
-#if defined (__cplusplus) 
-} 
-#endif 
- 
-#endif   /* ZSTD_LEGACY_H */ 
+#if defined (__cplusplus)
+}
+#endif
+
+#endif   /* ZSTD_LEGACY_H */

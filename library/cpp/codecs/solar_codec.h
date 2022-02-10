@@ -1,16 +1,16 @@
-#pragma once 
- 
-#include "codecs.h" 
+#pragma once
+
+#include "codecs.h"
 #include <library/cpp/containers/comptrie/comptrie_trie.h>
 #include <library/cpp/codecs/greedy_dict/gd_builder.h>
- 
+
 #include <util/string/cast.h>
-#include <util/string/escape.h> 
- 
-namespace NCodecs { 
-    // TODO: Попробовать добавлять в словарь вместе с намайненными словами также их суффиксы. 
-    // TODO: Возможно удастся, не слишком потеряв в сжатии, выиграть в робастности к небольшим изменениям в корпусе. 
- 
+#include <util/string/escape.h>
+
+namespace NCodecs {
+    // TODO: Попробовать добавлять в словарь вместе с намайненными словами также их суффиксы.
+    // TODO: Возможно удастся, не слишком потеряв в сжатии, выиграть в робастности к небольшим изменениям в корпусе.
+
     struct TVarIntTraits {
         static const size_t MAX_VARINT32_BYTES = 5;
 
@@ -52,7 +52,7 @@ namespace NCodecs {
 
         Y_FORCE_INLINE static void Read(TStringBuf& r, ui32& value) {
             ui32 result = static_cast<ui8>(r[0]);
-            r.Skip(1); 
+            r.Skip(1);
             if (result >= 0x80) {
                 Y_ENSURE_EX(!r.empty(), TCodecException() << "Bad data");
                 result = ((result << 8) & 0x7FFF) | static_cast<ui8>(r[0]);
@@ -100,7 +100,7 @@ namespace NCodecs {
         static TStringBuf MyNameShortInt() {
             return TStringBuf("solar-si");
         }
- 
+
         explicit TSolarCodec(ui32 maxentries = 1 << 14, ui32 maxiter = 16, const NGreedyDict::TBuildSettings& s = NGreedyDict::TBuildSettings())
             : Settings(s)
             , MaxEntries(maxentries)
@@ -110,7 +110,7 @@ namespace NCodecs {
             MyTraits.SizeOnDecodeMultiplier = 2;
             MyTraits.RecommendedSampleSize = maxentries * s.GrowLimit * maxiter * 8;
         }
- 
+
         ui8 /*free bits in last byte*/ Encode(TStringBuf r, TBuffer& b) const override {
             EncodeImpl<TVarIntTraits>(r, b);
             return 0;
@@ -148,8 +148,8 @@ namespace NCodecs {
                 TTraits::Write(val + 1, b);
                 r.Skip(Max<size_t>(sz, 1));
             }
-        } 
- 
+        }
+
         template <class TTraits>
         Y_FORCE_INLINE void DecodeImpl(TStringBuf r, TBuffer& b) const {
             b.Clear();
@@ -160,25 +160,25 @@ namespace NCodecs {
                 TStringBuf s = DoDecode(v);
                 b.Append(s.data(), s.size());
             }
-        } 
- 
+        }
+
         inline bool CanUseShortInt() const {
             return Decoder.size() < TShortIntTraits::SHORTINT_SIZE_LIMIT;
         }
- 
+
     private:
         typedef TCompactTrie<char, ui32> TEncoder;
         typedef TVector<ui32> TDecoder;
- 
+
         TBuffer Pool;
         TEncoder Encoder;
         TDecoder Decoder;
- 
+
         NGreedyDict::TBuildSettings Settings;
         ui32 MaxEntries;
         ui32 MaxIterations;
     };
- 
+
     // Uses varints or shortints depending on the decoder size
     class TAdaptiveSolarCodec: public TSolarCodec {
     public:
@@ -186,7 +186,7 @@ namespace NCodecs {
             : TSolarCodec(maxentries, maxiter, s)
         {
         }
- 
+
         ui8 /*free bits in last byte*/ Encode(TStringBuf r, TBuffer& b) const override {
             if (CanUseShortInt()) {
                 EncodeImpl<TShortIntTraits>(r, b);
@@ -225,7 +225,7 @@ namespace NCodecs {
             EncodeImpl<TShortIntTraits>(r, b);
             return 0;
         }
- 
+
         void Decode(TStringBuf r, TBuffer& b) const override {
             DecodeImpl<TShortIntTraits>(r, b);
         }
@@ -241,4 +241,4 @@ namespace NCodecs {
         }
     };
 
-} 
+}

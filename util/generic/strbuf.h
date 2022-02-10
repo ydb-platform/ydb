@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "fwd.h"
 #include "strbase.h"
@@ -345,14 +345,14 @@ public:
     }
 
 public:
-    // returns tail, including pos 
+    // returns tail, including pos
     TdSelf SplitOffAt(size_t pos) {
         const TdSelf tok = SubStr(pos);
         Trunc(pos);
         return tok;
     }
 
-    // returns head, tail includes pos 
+    // returns head, tail includes pos
     TdSelf NextTokAt(size_t pos) {
         const TdSelf tok = Head(pos);
         Skip(pos);

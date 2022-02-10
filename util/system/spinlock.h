@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "atomic.h"
 #include "spin_wait.h"

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 // implementation of posix getopt using last getopt for demonstration purposes
 

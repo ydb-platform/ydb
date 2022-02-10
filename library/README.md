@@ -30,7 +30,7 @@ library
     * spam filter rules;
     * coefficients for ML;
     * etc.
- 
+
 11. All OSS (OpenSource Software) ready code **MUST** be accompanied by macro [LICENCE](https://docs.yandex-team.ru/ya-make/manual/common/macros#licence(license...)) in `ya.make`.
 
 12. All language specific aspects are defined by `<language>` committee: see `library/<language>/README.md`.

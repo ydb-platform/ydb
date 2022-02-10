@@ -17,12 +17,12 @@ namespace NCodecs {
 
         TString GetName() const override { return "VarLengthInt"; }
 
-        ui8 Encode(TStringBuf in, TBuffer& out) const override { 
+        ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TNumber) * sizeof(TNumber) != in.size())
                 throw TCodecException();
 
-            const TNumber *pos = (const TNumber *)(in.begin()); 
-            const TNumber *end = (const TNumber *)(in.end()); 
+            const TNumber *pos = (const TNumber *)(in.begin());
+            const TNumber *end = (const TNumber *)(in.end());
 
             out.Reserve(in.size() / CompressionRatio);
 
@@ -36,9 +36,9 @@ namespace NCodecs {
             return 0;
         }
 
-        void Decode(TStringBuf in, TBuffer& out) const override { 
-            const char *pos = in.begin(); 
-            const char *end = in.end(); 
+        void Decode(TStringBuf in, TBuffer& out) const override {
+            const char *pos = in.begin();
+            const char *end = in.end();
 
             out.Reserve(in.size() * CompressionRatio);
 
@@ -71,14 +71,14 @@ namespace NCodecs {
 
         TString GetName() const override { return "RunLength"; }
 
-        ui8 Encode(TStringBuf in, TBuffer& out) const override { 
+        ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TInputNumber) * sizeof(TInputNumber) != in.size())
                 throw TCodecException();
 
-            const TInputNumber *pos = (const TInputNumber *)(in.begin()); 
-            const TInputNumber *end = (const TInputNumber *)(in.end()); 
+            const TInputNumber *pos = (const TInputNumber *)(in.begin());
+            const TInputNumber *end = (const TInputNumber *)(in.end());
 
-            out.Reserve(in.size() / sizeof(TInputNumber) * sizeof(TOutputNumber) / CompressionRatio); 
+            out.Reserve(in.size() / sizeof(TInputNumber) * sizeof(TOutputNumber) / CompressionRatio);
 
             while (pos != end) {
                 TOutputNumber val = *pos;
@@ -94,15 +94,15 @@ namespace NCodecs {
             return 0;
         }
 
-        void Decode(TStringBuf in, TBuffer& out) const override { 
+        void Decode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TOutputNumber) * sizeof(TOutputNumber) != in.size())
                 throw TCodecException();
 
             if (in.size() / sizeof(TOutputNumber) % 2 != 0)
                 throw TCodecException();
 
-            const TOutputNumber *pos = (const TOutputNumber *)(in.begin()); 
-            const TOutputNumber *end = (const TOutputNumber *)(in.end()); 
+            const TOutputNumber *pos = (const TOutputNumber *)(in.begin());
+            const TOutputNumber *end = (const TOutputNumber *)(in.end());
 
             out.Reserve(in.size() / sizeof(TOutputNumber) * sizeof(TInputNumber) * CompressionRatio);
 
@@ -134,12 +134,12 @@ namespace NCodecs {
 
         TString GetName() const override { return "SemiSortedDelta"; }
 
-        ui8 Encode(TStringBuf in, TBuffer& out) const override { 
+        ui8 Encode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TInputNumber) * sizeof(TInputNumber) != in.size())
                 throw TCodecException();
 
-            const TInputNumber *pos = (const TInputNumber *)(in.begin()); 
-            const TInputNumber *end = (const TInputNumber *)(in.end()); 
+            const TInputNumber *pos = (const TInputNumber *)(in.begin());
+            const TInputNumber *end = (const TInputNumber *)(in.end());
 
             out.Reserve(in.size() / sizeof(TInputNumber) * sizeof(TOutputNumber) / CompressionRatio);
 
@@ -164,12 +164,12 @@ namespace NCodecs {
             return 0;
         }
 
-        void Decode(TStringBuf in, TBuffer& out) const override { 
+        void Decode(TStringBuf in, TBuffer& out) const override {
             if (in.size() / sizeof(TOutputNumber) * sizeof(TOutputNumber) != in.size())
                 throw TCodecException();
 
-            const TOutputNumber *pos = (const TOutputNumber *)(in.begin()); 
-            const TOutputNumber *end = (const TOutputNumber *)(in.end()); 
+            const TOutputNumber *pos = (const TOutputNumber *)(in.begin());
+            const TOutputNumber *end = (const TOutputNumber *)(in.end());
 
             out.Reserve(in.size() / sizeof(TOutputNumber) * sizeof(TInputNumber) * CompressionRatio);
 

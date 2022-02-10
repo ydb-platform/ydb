@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
             TUtf16String actual2(UnescapeC(expected));
 
             UNIT_ASSERT_VALUES_EQUAL(expected, actual);
-            UNIT_ASSERT_VALUES_EQUAL(source, actual2); 
+            UNIT_ASSERT_VALUES_EQUAL(source, actual2);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(u"http://ya.ru/\\x17\\n\\u1234", EscapeC(u"http://ya.ru/\x17\n\u1234"));

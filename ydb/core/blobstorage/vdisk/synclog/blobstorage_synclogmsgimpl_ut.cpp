@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     void PFor(const TVector<ui32> &v1) {
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
-        TStringBuf in(begin, end); 
+        TStringBuf in(begin, end);
         TBuffer buf;
         TPForCodec<ui32, delta> codec;
         codec.Encode(in, buf);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     void Delta(const TVector<ui32> &v1) {
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
-        TStringBuf in(begin, end); 
+        TStringBuf in(begin, end);
         TBuffer buf;
         TDeltaCodec<ui32> codec;
         codec.Encode(in, buf);
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
     void RunLength(const TVector<ui32> &v1) {
         const char *begin = (const char *)(&v1[0]);
         const char *end = begin + sizeof(v1[0]) * v1.size();
-        TStringBuf in(begin, end); 
+        TStringBuf in(begin, end);
         TBuffer buf;
         TRunLengthCodec<ui32> codec;
         codec.Encode(in, buf);

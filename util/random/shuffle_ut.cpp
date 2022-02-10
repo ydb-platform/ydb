@@ -3,23 +3,23 @@
 #include "mersenne.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/generic/ylimits.h> 
- 
+
+#include <util/generic/ylimits.h>
+
 Y_UNIT_TEST_SUITE(TRandUtilsTest) {
     template <typename... A>
     static void TestRange(A&&... args) {
         TString s0, s1;
         ShuffleRange(s1, args...);
-        s1 = "0"; 
+        s1 = "0";
         ShuffleRange(s1, args...);
-        s1 = "01"; 
+        s1 = "01";
         ShuffleRange(s1, args...);
-        s1 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"; 
-        s0 = s1.copy(); 
+        s1 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        s0 = s1.copy();
         ShuffleRange(s1, args...);
-        UNIT_ASSERT(s0 != s1); // if shuffle does work, chances it will fail are 1 to 64!. 
-    } 
+        UNIT_ASSERT(s0 != s1); // if shuffle does work, chances it will fail are 1 to 64!.
+    }
 
     template <typename... A>
     static void TestIter(A&&... args) {
@@ -72,4 +72,4 @@ Y_UNIT_TEST_SUITE(TRandUtilsTest) {
 
         TestIter(prng);
     }
-} 
+}

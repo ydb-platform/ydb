@@ -5,7 +5,7 @@
 TBlob GetBlock(const TBlob& blob, size_t index) {
     TChunkedDataReader reader(blob);
     if (index >= reader.GetBlocksCount())
-        ythrow yexception() << "index " << index << " is >= than block count " << reader.GetBlocksCount(); 
+        ythrow yexception() << "index " << index << " is >= than block count " << reader.GetBlocksCount();
     size_t begin = (const char*)reader.GetBlock(index) - (const char*)blob.Data();
     return blob.SubBlob(begin, begin + reader.GetBlockLen(index));
 }

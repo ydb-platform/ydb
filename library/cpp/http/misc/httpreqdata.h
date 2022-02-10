@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <library/cpp/digest/lower_case/hash_ops.h>
 

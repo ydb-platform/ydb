@@ -1,11 +1,11 @@
-#pragma once 
+#pragma once
 
 #include <util/stream/output.h>
 
-#ifndef COMPTRIE_DATA_CHECK 
-#define COMPTRIE_DATA_CHECK 1 
-#endif 
- 
+#ifndef COMPTRIE_DATA_CHECK
+#define COMPTRIE_DATA_CHECK 1
+#endif
+
 // NCompactTrie
 
 namespace NCompactTrie {

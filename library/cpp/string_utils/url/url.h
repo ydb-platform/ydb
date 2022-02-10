@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
@@ -49,7 +49,7 @@ TStringBuf GetSchemePrefix(const TStringBuf url) noexcept;
 //! @return a new URL without protocol prefix
 Y_PURE_FUNCTION
 TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps = false) noexcept;
- 
+
 Y_PURE_FUNCTION
 TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps = false) noexcept;
 

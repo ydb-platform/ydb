@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "guard.h"
 #include "defaults.h"

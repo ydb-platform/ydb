@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 enum ECharset {
     CODES_UNSUPPORTED = -2, // valid but unsupported encoding

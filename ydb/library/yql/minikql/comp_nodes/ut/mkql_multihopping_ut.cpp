@@ -76,12 +76,12 @@ namespace {
 
     struct TSetup {
         TSetup(TScopedAlloc& alloc)
-            : Alloc(alloc)
+            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+            , RandomProvider(CreateRandomProvider())
+            , TimeProvider(CreateTimeProvider())
+            , StatsResgistry(CreateDefaultStatsRegistry())
+            , Alloc(alloc)
         {
-            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-            RandomProvider = CreateRandomProvider();
-            TimeProvider = CreateTimeProvider();
-
             Env.Reset(new TTypeEnvironment(Alloc));
             PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
         }
@@ -90,7 +90,8 @@ namespace {
             Explorer.Walk(pgm.GetNode(), *Env);
             TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(),
                 FunctionRegistry.Get(),
-                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
+                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi,
+                StatsResgistry.Get());
             Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
             TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
             return Pattern->Clone(compOpts);
@@ -99,6 +100,7 @@ namespace {
         TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
+        IStatsRegistryPtr StatsResgistry;
 
         TScopedAlloc& Alloc;
         THolder<TTypeEnvironment> Env;
@@ -230,7 +232,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         bool dataWatermarks,
         ui64 hop = 10,
         ui64 interval = 30,
-        ui64 delay = 20)
+        ui64 delay = 20,
+        std::function<void(ui32, TSetup&)> customCheck = [](ui32, TSetup&){})
     {
         TScopedAlloc alloc;
         TSetup setup1(alloc);
@@ -238,10 +241,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         ui32 curGroupId = 0;
         std::vector<TOutputItem> curResult;
 
-        auto check = [&curResult, &curGroupId, &expected]() {
+        auto check = [&curResult, &curGroupId, &expected, customCheck, &setup1]() {
             auto expectedItems = Ordered(expected.at(curGroupId).Items);
             curResult = Ordered(curResult);
             UNIT_ASSERT_EQUAL_C(curResult, expectedItems, "curGroup: " << curGroupId << " actual: " << curResult << " expected: " << expectedItems);
+            customCheck(curGroupId, setup1);
             curGroupId++;
             curResult.clear();
         };
@@ -283,6 +287,32 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             TOutputGroup({{2, 5, 150}, {2, 5, 160}, {2, 6, 170}, {2, 1, 180}, {2, 1, 190}}),
         };
         TestImpl(input, expected, true);
+    }
+
+    Y_UNIT_TEST(TestDataWatermarksNoGarbage) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 100, 2},
+            {2, 150, 1}
+        };
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 2, 110}, {1, 2, 120}, {1, 2, 130}}),
+            TOutputGroup({{2, 1, 160}, {2, 1, 170}, {2, 1, 180}}),
+        };
+        TestImpl(input, expected, true, 10, 30, 20,
+            [](ui32 curGroup, TSetup& setup) {
+                if (curGroup != 2) {
+                    return;
+                }
+
+                setup.StatsResgistry->ForEachStat([](const TStatKey& key, i64 value) {
+                    if (key.GetName() == "MultiHop_KeysCount") {
+                        UNIT_ASSERT_EQUAL_C(value, 1, "actual: " << value << " expected: " << 1);
+                    }
+                });
+            });
     }
 
     Y_UNIT_TEST(TestValidness1) {

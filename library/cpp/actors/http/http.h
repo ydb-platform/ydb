@@ -176,7 +176,7 @@ public:
     static constexpr size_t MaxVersionSize = 4;
     static constexpr size_t MaxStatusSize = 3;
     static constexpr size_t MaxMessageSize = 1024;
-    static constexpr size_t MaxHeaderSize = 8192;
+    static constexpr size_t MaxHeaderSize = 8192; 
     static constexpr size_t MaxChunkLengthSize = 8;
     static constexpr size_t MaxChunkSize = 256 * 1024 * 1024;
     static constexpr size_t MaxChunkContentSize = 1 * 1024 * 1024 * 1024;

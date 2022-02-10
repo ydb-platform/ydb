@@ -51,8 +51,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_LOG_CUTTER_NOTIFY;
-        } 
- 
+        }
+
         THullLogCutterNotifier(
                 const TVDiskContextPtr &vctx,
                 const TActorId &logCutterId,
@@ -61,7 +61,7 @@ namespace NKikimr {
             , VCtx(vctx)
             , LogCutterId(logCutterId)
             , HullDs(std::move(hullDs))
-        {} 
+        {}
     };
 
 

@@ -33,8 +33,8 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::NODE_WHITEBOARD_SERVICE;
-    } 
- 
+    }
+
     void Bootstrap(const TActorContext &ctx) {
         TIntrusivePtr<NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
         TIntrusivePtr<NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");

@@ -258,13 +258,13 @@ namespace {
 
         SetupLocals(runtime, isLocalEnabled);
 
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) { 
-            SetupStateStorage(runtime, nodeIndex); 
-            SetupBSNodeWarden(runtime, nodeIndex, NodeWardenConfigs[nodeIndex]); 
-            SetupTabletResolver(runtime, nodeIndex); 
-            SetupNodeWhiteboard(runtime, nodeIndex); 
-        } 
- 
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            SetupStateStorage(runtime, nodeIndex);
+            SetupBSNodeWarden(runtime, nodeIndex, NodeWardenConfigs[nodeIndex]);
+            SetupTabletResolver(runtime, nodeIndex);
+            SetupNodeWhiteboard(runtime, nodeIndex);
+        }
+
         runtime.Initialize(app.Unwrap());
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {

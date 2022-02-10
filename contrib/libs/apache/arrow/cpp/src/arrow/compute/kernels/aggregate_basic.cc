@@ -1,44 +1,44 @@
-// Licensed to the Apache Software Foundation (ASF) under one 
-// or more contributor license agreements.  See the NOTICE file 
-// distributed with this work for additional information 
-// regarding copyright ownership.  The ASF licenses this file 
-// to you under the Apache License, Version 2.0 (the 
-// "License"); you may not use this file except in compliance 
-// with the License.  You may obtain a copy of the License at 
-// 
-//   http://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, 
-// software distributed under the License is distributed on an 
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY 
-// KIND, either express or implied.  See the License for the 
-// specific language governing permissions and limitations 
-// under the License. 
- 
-#include "arrow/compute/api_aggregate.h" 
-#include "arrow/compute/kernels/aggregate_basic_internal.h" 
-#include "arrow/compute/kernels/aggregate_internal.h" 
-#include "arrow/compute/kernels/common.h" 
-#include "arrow/util/cpu_info.h" 
-#include "arrow/util/make_unique.h" 
- 
-namespace arrow { 
-namespace compute { 
- 
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "arrow/compute/api_aggregate.h"
+#include "arrow/compute/kernels/aggregate_basic_internal.h"
+#include "arrow/compute/kernels/aggregate_internal.h"
+#include "arrow/compute/kernels/common.h"
+#include "arrow/util/cpu_info.h"
+#include "arrow/util/make_unique.h"
+
+namespace arrow {
+namespace compute {
+
 namespace {
 
 Status AggregateConsume(KernelContext* ctx, const ExecBatch& batch) {
   return checked_cast<ScalarAggregator*>(ctx->state())->Consume(ctx, batch);
-} 
- 
+}
+
 Status AggregateMerge(KernelContext* ctx, KernelState&& src, KernelState* dst) {
   return checked_cast<ScalarAggregator*>(dst)->MergeFrom(ctx, std::move(src));
-} 
- 
+}
+
 Status AggregateFinalize(KernelContext* ctx, Datum* out) {
   return checked_cast<ScalarAggregator*>(ctx->state())->Finalize(ctx, out);
-} 
- 
+}
+
 }  // namespace
 
 void AddAggKernel(std::shared_ptr<KernelSignature> sig, KernelInit init,
@@ -52,12 +52,12 @@ void AddAggKernel(std::shared_ptr<KernelSignature> sig, KernelInit init,
 
 namespace aggregate {
 
-// ---------------------------------------------------------------------- 
-// Count implementation 
- 
-struct CountImpl : public ScalarAggregator { 
+// ----------------------------------------------------------------------
+// Count implementation
+
+struct CountImpl : public ScalarAggregator {
   explicit CountImpl(ScalarAggregateOptions options) : options(std::move(options)) {}
- 
+
   Status Consume(KernelContext*, const ExecBatch& batch) override {
     if (batch[0].is_array()) {
       const ArrayData& input = *batch[0].array();
@@ -70,80 +70,80 @@ struct CountImpl : public ScalarAggregator {
       this->non_nulls += input.is_valid * batch.length;
     }
     return Status::OK();
-  } 
- 
+  }
+
   Status MergeFrom(KernelContext*, KernelState&& src) override {
-    const auto& other_state = checked_cast<const CountImpl&>(src); 
-    this->non_nulls += other_state.non_nulls; 
-    this->nulls += other_state.nulls; 
+    const auto& other_state = checked_cast<const CountImpl&>(src);
+    this->non_nulls += other_state.non_nulls;
+    this->nulls += other_state.nulls;
     return Status::OK();
-  } 
- 
+  }
+
   Status Finalize(KernelContext* ctx, Datum* out) override {
-    const auto& state = checked_cast<const CountImpl&>(*ctx->state()); 
+    const auto& state = checked_cast<const CountImpl&>(*ctx->state());
     if (state.options.skip_nulls) {
       *out = Datum(state.non_nulls);
     } else {
       *out = Datum(state.nulls);
-    } 
+    }
     return Status::OK();
-  } 
- 
+  }
+
   ScalarAggregateOptions options;
-  int64_t non_nulls = 0; 
-  int64_t nulls = 0; 
-}; 
- 
+  int64_t non_nulls = 0;
+  int64_t nulls = 0;
+};
+
 Result<std::unique_ptr<KernelState>> CountInit(KernelContext*,
                                                const KernelInitArgs& args) {
-  return ::arrow::internal::make_unique<CountImpl>( 
+  return ::arrow::internal::make_unique<CountImpl>(
       static_cast<const ScalarAggregateOptions&>(*args.options));
-} 
- 
-// ---------------------------------------------------------------------- 
-// Sum implementation 
- 
+}
+
+// ----------------------------------------------------------------------
+// Sum implementation
+
 template <typename ArrowType>
 struct SumImplDefault : public SumImpl<ArrowType, SimdLevel::NONE> {
   explicit SumImplDefault(const ScalarAggregateOptions& options_) {
     this->options = options_;
   }
-}; 
- 
+};
+
 template <typename ArrowType>
 struct MeanImplDefault : public MeanImpl<ArrowType, SimdLevel::NONE> {
   explicit MeanImplDefault(const ScalarAggregateOptions& options_) {
     this->options = options_;
   }
-}; 
- 
+};
+
 Result<std::unique_ptr<KernelState>> SumInit(KernelContext* ctx,
                                              const KernelInitArgs& args) {
   SumLikeInit<SumImplDefault> visitor(
       ctx, *args.inputs[0].type,
       static_cast<const ScalarAggregateOptions&>(*args.options));
-  return visitor.Create(); 
-} 
- 
+  return visitor.Create();
+}
+
 Result<std::unique_ptr<KernelState>> MeanInit(KernelContext* ctx,
                                               const KernelInitArgs& args) {
   SumLikeInit<MeanImplDefault> visitor(
       ctx, *args.inputs[0].type,
       static_cast<const ScalarAggregateOptions&>(*args.options));
-  return visitor.Create(); 
-} 
- 
-// ---------------------------------------------------------------------- 
-// MinMax implementation 
- 
+  return visitor.Create();
+}
+
+// ----------------------------------------------------------------------
+// MinMax implementation
+
 Result<std::unique_ptr<KernelState>> MinMaxInit(KernelContext* ctx,
                                                 const KernelInitArgs& args) {
-  MinMaxInitState<SimdLevel::NONE> visitor( 
-      ctx, *args.inputs[0].type, args.kernel->signature->out_type().type(), 
+  MinMaxInitState<SimdLevel::NONE> visitor(
+      ctx, *args.inputs[0].type, args.kernel->signature->out_type().type(),
       static_cast<const ScalarAggregateOptions&>(*args.options));
-  return visitor.Create(); 
-} 
- 
+  return visitor.Create();
+}
+
 // ----------------------------------------------------------------------
 // Any implementation
 
@@ -203,8 +203,8 @@ Result<std::unique_ptr<KernelState>> AnyInit(KernelContext*, const KernelInitArg
       static_cast<const ScalarAggregateOptions&>(*args.options);
   return ::arrow::internal::make_unique<BooleanAnyImpl>(
       static_cast<const ScalarAggregateOptions&>(*args.options));
-} 
- 
+}
+
 // ----------------------------------------------------------------------
 // All implementation
 
@@ -394,17 +394,17 @@ struct IndexInit {
   }
 };
 
-void AddBasicAggKernels(KernelInit init, 
-                        const std::vector<std::shared_ptr<DataType>>& types, 
-                        std::shared_ptr<DataType> out_ty, ScalarAggregateFunction* func, 
-                        SimdLevel::type simd_level) { 
-  for (const auto& ty : types) { 
-    // array[InT] -> scalar[OutT] 
-    auto sig = KernelSignature::Make({InputType::Array(ty)}, ValueDescr::Scalar(out_ty)); 
-    AddAggKernel(std::move(sig), init, func, simd_level); 
-  } 
-} 
- 
+void AddBasicAggKernels(KernelInit init,
+                        const std::vector<std::shared_ptr<DataType>>& types,
+                        std::shared_ptr<DataType> out_ty, ScalarAggregateFunction* func,
+                        SimdLevel::type simd_level) {
+  for (const auto& ty : types) {
+    // array[InT] -> scalar[OutT]
+    auto sig = KernelSignature::Make({InputType::Array(ty)}, ValueDescr::Scalar(out_ty));
+    AddAggKernel(std::move(sig), init, func, simd_level);
+  }
+}
+
 void AddScalarAggKernels(KernelInit init,
                          const std::vector<std::shared_ptr<DataType>>& types,
                          std::shared_ptr<DataType> out_ty,
@@ -425,20 +425,20 @@ void AddArrayScalarAggKernels(KernelInit init,
   AddScalarAggKernels(init, types, out_ty, func);
 }
 
-void AddMinMaxKernels(KernelInit init, 
-                      const std::vector<std::shared_ptr<DataType>>& types, 
-                      ScalarAggregateFunction* func, SimdLevel::type simd_level) { 
-  for (const auto& ty : types) { 
+void AddMinMaxKernels(KernelInit init,
+                      const std::vector<std::shared_ptr<DataType>>& types,
+                      ScalarAggregateFunction* func, SimdLevel::type simd_level) {
+  for (const auto& ty : types) {
     // any[T] -> scalar[struct<min: T, max: T>]
-    auto out_ty = struct_({field("min", ty), field("max", ty)}); 
+    auto out_ty = struct_({field("min", ty), field("max", ty)});
     auto sig = KernelSignature::Make({InputType(ty)}, ValueDescr::Scalar(out_ty));
-    AddAggKernel(std::move(sig), init, func, simd_level); 
-  } 
-} 
- 
-}  // namespace aggregate 
- 
-namespace internal { 
+    AddAggKernel(std::move(sig), init, func, simd_level);
+  }
+}
+
+}  // namespace aggregate
+
+namespace internal {
 namespace {
 
 const FunctionDoc count_doc{"Count the number of null / non-null values",
@@ -496,21 +496,21 @@ const FunctionDoc index_doc{"Find the index of the first occurrence of a given v
 
 }  // namespace
 
-void RegisterScalarAggregateBasic(FunctionRegistry* registry) { 
+void RegisterScalarAggregateBasic(FunctionRegistry* registry) {
   static auto default_scalar_aggregate_options = ScalarAggregateOptions::Defaults();
- 
+
   auto func = std::make_shared<ScalarAggregateFunction>(
       "count", Arity::Unary(), &count_doc, &default_scalar_aggregate_options);
 
-  // Takes any array input, outputs int64 scalar 
-  InputType any_array(ValueDescr::ARRAY); 
+  // Takes any array input, outputs int64 scalar
+  InputType any_array(ValueDescr::ARRAY);
   AddAggKernel(KernelSignature::Make({any_array}, ValueDescr::Scalar(int64())),
                aggregate::CountInit, func.get());
   AddAggKernel(
       KernelSignature::Make({InputType(ValueDescr::SCALAR)}, ValueDescr::Scalar(int64())),
       aggregate::CountInit, func.get());
-  DCHECK_OK(registry->AddFunction(std::move(func))); 
- 
+  DCHECK_OK(registry->AddFunction(std::move(func)));
+
   func = std::make_shared<ScalarAggregateFunction>("sum", Arity::Unary(), &sum_doc,
                                                    &default_scalar_aggregate_options);
   aggregate::AddArrayScalarAggKernels(aggregate::SumInit, {boolean()}, int64(),
@@ -521,59 +521,59 @@ void RegisterScalarAggregateBasic(FunctionRegistry* registry) {
                                       func.get());
   aggregate::AddArrayScalarAggKernels(aggregate::SumInit, FloatingPointTypes(), float64(),
                                       func.get());
-  // Add the SIMD variants for sum 
+  // Add the SIMD variants for sum
 #if defined(ARROW_HAVE_RUNTIME_AVX2) || defined(ARROW_HAVE_RUNTIME_AVX512)
-  auto cpu_info = arrow::internal::CpuInfo::GetInstance(); 
+  auto cpu_info = arrow::internal::CpuInfo::GetInstance();
 #endif
-#if defined(ARROW_HAVE_RUNTIME_AVX2) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) { 
-    aggregate::AddSumAvx2AggKernels(func.get()); 
-  } 
-#endif 
-#if defined(ARROW_HAVE_RUNTIME_AVX512) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) { 
-    aggregate::AddSumAvx512AggKernels(func.get()); 
-  } 
-#endif 
-  DCHECK_OK(registry->AddFunction(std::move(func))); 
- 
+#if defined(ARROW_HAVE_RUNTIME_AVX2)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) {
+    aggregate::AddSumAvx2AggKernels(func.get());
+  }
+#endif
+#if defined(ARROW_HAVE_RUNTIME_AVX512)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) {
+    aggregate::AddSumAvx512AggKernels(func.get());
+  }
+#endif
+  DCHECK_OK(registry->AddFunction(std::move(func)));
+
   func = std::make_shared<ScalarAggregateFunction>("mean", Arity::Unary(), &mean_doc,
                                                    &default_scalar_aggregate_options);
   aggregate::AddArrayScalarAggKernels(aggregate::MeanInit, {boolean()}, float64(),
                                       func.get());
   aggregate::AddArrayScalarAggKernels(aggregate::MeanInit, NumericTypes(), float64(),
                                       func.get());
-  // Add the SIMD variants for mean 
-#if defined(ARROW_HAVE_RUNTIME_AVX2) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) { 
-    aggregate::AddMeanAvx2AggKernels(func.get()); 
-  } 
-#endif 
-#if defined(ARROW_HAVE_RUNTIME_AVX512) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) { 
-    aggregate::AddMeanAvx512AggKernels(func.get()); 
-  } 
-#endif 
-  DCHECK_OK(registry->AddFunction(std::move(func))); 
- 
+  // Add the SIMD variants for mean
+#if defined(ARROW_HAVE_RUNTIME_AVX2)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) {
+    aggregate::AddMeanAvx2AggKernels(func.get());
+  }
+#endif
+#if defined(ARROW_HAVE_RUNTIME_AVX512)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) {
+    aggregate::AddMeanAvx512AggKernels(func.get());
+  }
+#endif
+  DCHECK_OK(registry->AddFunction(std::move(func)));
+
   func = std::make_shared<ScalarAggregateFunction>(
       "min_max", Arity::Unary(), &min_max_doc, &default_scalar_aggregate_options);
-  aggregate::AddMinMaxKernels(aggregate::MinMaxInit, {boolean()}, func.get()); 
-  aggregate::AddMinMaxKernels(aggregate::MinMaxInit, NumericTypes(), func.get()); 
-  // Add the SIMD variants for min max 
-#if defined(ARROW_HAVE_RUNTIME_AVX2) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) { 
-    aggregate::AddMinMaxAvx2AggKernels(func.get()); 
-  } 
-#endif 
-#if defined(ARROW_HAVE_RUNTIME_AVX512) 
-  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) { 
-    aggregate::AddMinMaxAvx512AggKernels(func.get()); 
-  } 
-#endif 
- 
-  DCHECK_OK(registry->AddFunction(std::move(func))); 
- 
+  aggregate::AddMinMaxKernels(aggregate::MinMaxInit, {boolean()}, func.get());
+  aggregate::AddMinMaxKernels(aggregate::MinMaxInit, NumericTypes(), func.get());
+  // Add the SIMD variants for min max
+#if defined(ARROW_HAVE_RUNTIME_AVX2)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX2)) {
+    aggregate::AddMinMaxAvx2AggKernels(func.get());
+  }
+#endif
+#if defined(ARROW_HAVE_RUNTIME_AVX512)
+  if (cpu_info->IsSupported(arrow::internal::CpuInfo::AVX512)) {
+    aggregate::AddMinMaxAvx512AggKernels(func.get());
+  }
+#endif
+
+  DCHECK_OK(registry->AddFunction(std::move(func)));
+
   // any
   func = std::make_shared<ScalarAggregateFunction>("any", Arity::Unary(), &any_doc,
                                                    &default_scalar_aggregate_options);
@@ -597,8 +597,8 @@ void RegisterScalarAggregateBasic(FunctionRegistry* registry) {
   aggregate::AddBasicAggKernels(aggregate::IndexInit::Init, TemporalTypes(), int64(),
                                 func.get());
   DCHECK_OK(registry->AddFunction(std::move(func)));
-} 
- 
-}  // namespace internal 
-}  // namespace compute 
-}  // namespace arrow 
+}
+
+}  // namespace internal
+}  // namespace compute
+}  // namespace arrow

@@ -1,32 +1,32 @@
-#pragma once 
- 
-#include "datashard.h" 
+#pragma once
+
+#include "datashard.h"
 #include "datashard_locks.h"
-#include "datashard__engine_host.h" 
+#include "datashard__engine_host.h"
 #include "operation.h"
- 
+
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
- 
+
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-namespace NKikimr { 
- 
-class TBalanceCoverageBuilder; 
- 
+namespace NKikimr {
+
+class TBalanceCoverageBuilder;
+
 namespace NDataShard {
- 
+
 static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx";
 static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody";
 
-using NTabletFlatExecutor::TTransactionContext; 
+using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TTableSnapshotContext;
- 
+
 class TDataShard;
-class TSysLocks; 
-struct TReadSetKey; 
-class TActiveTransaction; 
- 
+class TSysLocks;
+struct TReadSetKey;
+class TActiveTransaction;
+
 struct TScanState {
     TString LastKey;
     ui64 Bytes = 0;
@@ -110,51 +110,51 @@ struct TSchemaOperation {
     bool IsReadOnly() const { return ReadOnly; }
 };
 
-/// @note This class incapsulates Engine stuff for minor needs. Do not return TEngine out of it. 
-class TValidatedDataTx : TNonCopyable { 
-public: 
-    using TPtr = std::shared_ptr<TValidatedDataTx>; 
- 
+/// @note This class incapsulates Engine stuff for minor needs. Do not return TEngine out of it.
+class TValidatedDataTx : TNonCopyable {
+public:
+    using TPtr = std::shared_ptr<TValidatedDataTx>;
+
     TValidatedDataTx(TDataShard *self,
                      TTransactionContext &txc,
                      const TActorContext &ctx,
                      const TStepOrder &stepTxId,
                      TInstant receivedAt,
                      const TString &txBody);
- 
+
     ~TValidatedDataTx();
 
-    static constexpr ui64 MaxReorderTxKeys() { return 100; } 
- 
-    NKikimrTxDataShard::TError::EKind Code() const { return ErrCode; } 
-    const TString GetErrors() const { return ErrStr; } 
- 
-    TStepOrder StepTxId() const { return StepTxId_; } 
-    ui64 TxId() const { return StepTxId_.TxId; } 
-    ui64 TabletId() const { return TabletId_; } 
-    const TString& Body() const { return TxBody; } 
- 
-    ui64 LockTxId() const { return Tx.GetLockTxId(); } 
-    ui64 ProgramSize() const { return Tx.GetMiniKQL().size(); } 
-    bool Immediate() const { return Tx.GetImmediate(); } 
+    static constexpr ui64 MaxReorderTxKeys() { return 100; }
+
+    NKikimrTxDataShard::TError::EKind Code() const { return ErrCode; }
+    const TString GetErrors() const { return ErrStr; }
+
+    TStepOrder StepTxId() const { return StepTxId_; }
+    ui64 TxId() const { return StepTxId_.TxId; }
+    ui64 TabletId() const { return TabletId_; }
+    const TString& Body() const { return TxBody; }
+
+    ui64 LockTxId() const { return Tx.GetLockTxId(); }
+    ui64 ProgramSize() const { return Tx.GetMiniKQL().size(); }
+    bool Immediate() const { return Tx.GetImmediate(); }
     bool ReadOnly() const { return Tx.GetReadOnly(); }
-    bool NeedDiagnostics() const { return Tx.GetNeedDiagnostics(); } 
+    bool NeedDiagnostics() const { return Tx.GetNeedDiagnostics(); }
     bool CollectStats() const { return Tx.GetCollectStats(); }
     TInstant ReceivedAt() const { return ReceivedAt_; }
     TInstant Deadline() const { return Deadline_; }
     TMaybe<ui64> PerShardKeysSizeLimitBytes() const { return PerShardKeysSizeLimitBytes_; }
- 
-    bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; } 
-    bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; } 
-    bool RequireWrites() const { return TxInfo().HasWrites() || !Immediate(); } 
-    bool HasWrites() const { return TxInfo().HasWrites(); } 
-    bool HasLockedWrites() const { return HasWrites() && LockTxId(); } 
-    bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; } 
- 
-    // TODO: It's an expensive operation (Precharge() inside). We need avoid it. 
+
+    bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
+    bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; }
+    bool RequireWrites() const { return TxInfo().HasWrites() || !Immediate(); }
+    bool HasWrites() const { return TxInfo().HasWrites(); }
+    bool HasLockedWrites() const { return HasWrites() && LockTxId(); }
+    bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; }
+
+    // TODO: It's an expensive operation (Precharge() inside). We need avoid it.
     TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); }
- 
-    ui64 GetMemoryAllocated() const { 
+
+    ui64 GetMemoryAllocated() const {
         if (!IsKqpDataTx()) {
             const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine();
             if (engine) {
@@ -162,17 +162,17 @@ public:
             }
         }
 
-        return 0; 
-    } 
- 
+        return 0;
+    }
+
     NMiniKQL::IEngineFlat *GetEngine() { return EngineBay.GetEngine(); }
-    void DestroyEngine() { EngineBay.DestroyEngine(); } 
+    void DestroyEngine() { EngineBay.DestroyEngine(); }
     const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
-    void ResetCounters() { EngineBay.ResetCounters(); } 
+    void ResetCounters() { EngineBay.ResetCounters(); }
 
     bool CanCancel();
     bool CheckCancelled();
- 
+
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
 
@@ -180,9 +180,9 @@ public:
 
     TActorId Source() const { return Source_; }
     void SetSource(const TActorId& actorId) { Source_ = actorId; }
-    void SetStep(ui64 step) { StepTxId_.Step = step; } 
+    void SetStep(ui64 step) { StepTxId_.Step = step; }
     bool IsProposed() const { return Source_ != TActorId(); }
- 
+
     bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
 
     bool IsKqpTx() const { return Tx.HasKqpTransaction(); }
@@ -206,10 +206,10 @@ public:
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
-    ETxOrder CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const; 
- 
+    ETxOrder CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const;
+
     ui64 GetTxSize() const { return TxSize; }
-    ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; } 
+    ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }
 
     void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; }
     ui64 GetTxCacheUsage() const { return TxCacheUsage; }
@@ -226,15 +226,15 @@ public:
 
     const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const { return EngineBay.TxInfo(); }
 
-private: 
-    TStepOrder StepTxId_; 
-    ui64 TabletId_; 
-    TString TxBody; 
+private:
+    TStepOrder StepTxId_;
+    ui64 TabletId_;
+    TString TxBody;
     TActorId Source_;
-    TEngineBay EngineBay; 
-    NKikimrTxDataShard::TDataTransaction Tx; 
-    NKikimrTxDataShard::TError::EKind ErrCode; 
-    TString ErrStr; 
+    TEngineBay EngineBay;
+    NKikimrTxDataShard::TDataTransaction Tx;
+    NKikimrTxDataShard::TError::EKind ErrCode;
+    TString ErrStr;
     ui64 TxSize;
     ui64 TxCacheUsage;
     bool IsReleased;
@@ -244,18 +244,18 @@ private:
     bool Cancelled;
     const TInstant ReceivedAt_; // For local timeout tracking
     TInstant Deadline_;
- 
+
     void ComputeTxSize();
     void ComputeDeadline();
-}; 
- 
+};
+
 enum class ERestoreDataStatus {
     Ok,
     Restart,
     Error,
 };
 
-/// 
+///
 class TDistributedEraseTx {
 public:
     using TPtr = THolder<TDistributedEraseTx>;
@@ -310,7 +310,7 @@ public:
     };
 
     using TPtr = TIntrusivePtr<TActiveTransaction>;
- 
+
     explicit TActiveTransaction(const TBasicOpInfo &op)
         : TOperation(op)
         , ArtifactFlags(0)
@@ -324,7 +324,7 @@ public:
     {
         TrackMemory();
     }
- 
+
     TActiveTransaction(const TBasicOpInfo &op,
                        TValidatedDataTx::TPtr savedTx);
     TActiveTransaction(TDataShard *self,
@@ -335,7 +335,7 @@ public:
                        const TString &txBody,
                        const TVector<TSysTables::TLocksTable::TLock> &locks,
                        ui64 artifactFlags);
- 
+
     ~TActiveTransaction();
 
     void FillTxData(TValidatedDataTx::TPtr dataTx);
@@ -378,8 +378,8 @@ public:
         ClearTxBody();
 
         TOperation::Deactivate();
-    } 
- 
+    }
+
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
@@ -416,14 +416,14 @@ public:
     bool BuildCommitWritesTx();
     void ClearCommitWritesTx() { CommitWritesTx = nullptr; }
 
-    // out-of-order stuff 
- 
-    ui32 ExtractKeys() { 
+    // out-of-order stuff
+
+    ui32 ExtractKeys() {
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
             return DataTx->ExtractKeys(false);
-        return 0; 
-    } 
- 
+        return 0;
+    }
+
     bool ReValidateKeys() {
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
             return DataTx->ReValidateKeys();
@@ -438,7 +438,7 @@ public:
     ui64 GetTxCacheUsage() const { return TxCacheUsage; }
 
     ui64 GetReleasedTxDataSize() const { return ReleasedTxDataSize; }
-    bool IsTxDataReleased() const { return ReleasedTxDataSize > 0; } 
+    bool IsTxDataReleased() const { return ReleasedTxDataSize > 0; }
 
     void MarkOutRSStored()
     {
@@ -469,14 +469,14 @@ public:
 
     ui64 GetMemoryConsumption() const;
 
-    ui64 GetRequiredMemory() const { 
-        Y_VERIFY(!GetTxCacheUsage() || !IsTxDataReleased()); 
-        ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize(); 
-        if (!requiredMem) 
-            requiredMem = GetMemoryConsumption(); 
-        return requiredMem; 
-    } 
- 
+    ui64 GetRequiredMemory() const {
+        Y_VERIFY(!GetTxCacheUsage() || !IsTxDataReleased());
+        ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize();
+        if (!requiredMem)
+            requiredMem = GetMemoryConsumption();
+        return requiredMem;
+    }
+
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
     ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx);
     void FinalizeDataTxPlan();
@@ -533,18 +533,18 @@ public:
         return ++PageFaultCount;
     }
 
-private: 
+private:
     void TrackMemory() const;
     void UntrackMemory() const;
 
 private:
-    TValidatedDataTx::TPtr DataTx; 
+    TValidatedDataTx::TPtr DataTx;
     THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
     THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
     TDistributedEraseTx::TPtr DistributedEraseTx;
     TCommitWritesTx::TPtr CommitWritesTx;
     TString TxBody;
- 
+
     // TODO: move to persistent part of operation's flags
     ui64 ArtifactFlags;
     ui64 TxCacheUsage;
@@ -559,11 +559,11 @@ private:
     TActorId StreamSink;
     TActorId ScanActor;
     ui64 PageFaultCount = 0;
-}; 
- 
-inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) { 
+};
+
+inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {
     out << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']';
-    return out; 
-} 
- 
-}} 
+    return out;
+}
+
+}}

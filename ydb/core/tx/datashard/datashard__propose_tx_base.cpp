@@ -1,4 +1,4 @@
-#include "datashard_txs.h" 
+#include "datashard_txs.h"
 #include "datashard_failpoints.h"
 #include "operation.h"
 
@@ -134,13 +134,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             // Release operation as it's no longer needed
             Op->DecrementInProgress();
             Op = nullptr;
-        } 
+        }
 
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException &) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
-            "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID()); 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
@@ -163,7 +163,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
             Op->SetCommitTime(CompleteList.front(), commitTime);
- 
+
             if (!Op->IsExecutionPlanFinished()
                 && (Op->GetCurrentUnit() != CompleteList.front()))
                 Op->SetDelayedCommitTime(commitTime);

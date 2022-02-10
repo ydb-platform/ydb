@@ -1,43 +1,43 @@
-// Licensed to the Apache Software Foundation (ASF) under one 
-// or more contributor license agreements.  See the NOTICE file 
-// distributed with this work for additional information 
-// regarding copyright ownership.  The ASF licenses this file 
-// to you under the Apache License, Version 2.0 (the 
-// "License"); you may not use this file except in compliance 
-// with the License.  You may obtain a copy of the License at 
-// 
-//   http://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, 
-// software distributed under the License is distributed on an 
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY 
-// KIND, either express or implied.  See the License for the 
-// specific language governing permissions and limitations 
-// under the License. 
- 
-#include "arrow/compute/api_vector.h" 
- 
-#include <memory> 
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "arrow/compute/api_vector.h"
+
+#include <memory>
 #include <sstream>
-#include <utility> 
-#include <vector> 
- 
-#include "arrow/array/array_nested.h" 
-#include "arrow/array/builder_primitive.h" 
-#include "arrow/compute/exec.h" 
+#include <utility>
+#include <vector>
+
+#include "arrow/array/array_nested.h"
+#include "arrow/array/builder_primitive.h"
+#include "arrow/compute/exec.h"
 #include "arrow/compute/function_internal.h"
 #include "arrow/compute/registry.h"
-#include "arrow/datum.h" 
-#include "arrow/record_batch.h" 
-#include "arrow/result.h" 
-#include "arrow/util/checked_cast.h" 
+#include "arrow/datum.h"
+#include "arrow/record_batch.h"
+#include "arrow/result.h"
+#include "arrow/util/checked_cast.h"
 #include "arrow/util/logging.h"
- 
-namespace arrow { 
- 
+
+namespace arrow {
+
 using internal::checked_cast;
-using internal::checked_pointer_cast; 
- 
+using internal::checked_pointer_cast;
+
 namespace internal {
 using compute::DictionaryEncodeOptions;
 using compute::FilterOptions;
@@ -73,9 +73,9 @@ struct EnumTraits<DictionaryEncodeOptions::NullEncodingBehavior>
 };
 }  // namespace internal
 
-namespace compute { 
- 
-// ---------------------------------------------------------------------- 
+namespace compute {
+
+// ----------------------------------------------------------------------
 // Function options
 
 bool SortKey::Equals(const SortKey& other) const {
@@ -152,16 +152,16 @@ void RegisterVectorOptions(FunctionRegistry* registry) {
 }  // namespace internal
 
 // ----------------------------------------------------------------------
-// Direct exec interface to kernels 
- 
-Result<std::shared_ptr<Array>> NthToIndices(const Array& values, int64_t n, 
-                                            ExecContext* ctx) { 
-  PartitionNthOptions options(/*pivot=*/n); 
-  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("partition_nth_indices", 
-                                                   {Datum(values)}, &options, ctx)); 
-  return result.make_array(); 
-} 
- 
+// Direct exec interface to kernels
+
+Result<std::shared_ptr<Array>> NthToIndices(const Array& values, int64_t n,
+                                            ExecContext* ctx) {
+  PartitionNthOptions options(/*pivot=*/n);
+  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("partition_nth_indices",
+                                                   {Datum(values)}, &options, ctx));
+  return result.make_array();
+}
+
 Result<Datum> ReplaceWithMask(const Datum& values, const Datum& mask,
                               const Datum& replacements, ExecContext* ctx) {
   return CallFunction("replace_with_mask", {values, mask, replacements}, ctx);
@@ -172,9 +172,9 @@ Result<std::shared_ptr<Array>> SortIndices(const Array& values, SortOrder order,
   ArraySortOptions options(order);
   ARROW_ASSIGN_OR_RAISE(
       Datum result, CallFunction("array_sort_indices", {Datum(values)}, &options, ctx));
-  return result.make_array(); 
-} 
- 
+  return result.make_array();
+}
+
 Result<std::shared_ptr<Array>> SortIndices(const ChunkedArray& chunked_array,
                                            SortOrder order, ExecContext* ctx) {
   SortOptions options({SortKey("not-used", order)});
@@ -190,94 +190,94 @@ Result<std::shared_ptr<Array>> SortIndices(const Datum& datum, const SortOptions
   return result.make_array();
 }
 
-Result<std::shared_ptr<Array>> Unique(const Datum& value, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("unique", {value}, ctx)); 
-  return result.make_array(); 
-} 
- 
+Result<std::shared_ptr<Array>> Unique(const Datum& value, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("unique", {value}, ctx));
+  return result.make_array();
+}
+
 Result<Datum> DictionaryEncode(const Datum& value, const DictionaryEncodeOptions& options,
                                ExecContext* ctx) {
   return CallFunction("dictionary_encode", {value}, &options, ctx);
-} 
- 
-const char kValuesFieldName[] = "values"; 
-const char kCountsFieldName[] = "counts"; 
-const int32_t kValuesFieldIndex = 0; 
-const int32_t kCountsFieldIndex = 1; 
- 
-Result<std::shared_ptr<StructArray>> ValueCounts(const Datum& value, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("value_counts", {value}, ctx)); 
-  return checked_pointer_cast<StructArray>(result.make_array()); 
-} 
- 
-// ---------------------------------------------------------------------- 
-// Filter- and take-related selection functions 
- 
-Result<Datum> Filter(const Datum& values, const Datum& filter, 
-                     const FilterOptions& options, ExecContext* ctx) { 
-  // Invoke metafunction which deals with Datum kinds other than just Array, 
-  // ChunkedArray. 
-  return CallFunction("filter", {values, filter}, &options, ctx); 
-} 
- 
-Result<Datum> Take(const Datum& values, const Datum& filter, const TakeOptions& options, 
-                   ExecContext* ctx) { 
-  // Invoke metafunction which deals with Datum kinds other than just Array, 
-  // ChunkedArray. 
-  return CallFunction("take", {values, filter}, &options, ctx); 
-} 
- 
-Result<std::shared_ptr<Array>> Take(const Array& values, const Array& indices, 
-                                    const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum out, Take(Datum(values), Datum(indices), options, ctx)); 
-  return out.make_array(); 
-} 
- 
-// ---------------------------------------------------------------------- 
-// Deprecated functions 
- 
-Result<std::shared_ptr<ChunkedArray>> Take(const ChunkedArray& values, 
-                                           const Array& indices, 
-                                           const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx)); 
-  return result.chunked_array(); 
-} 
- 
-Result<std::shared_ptr<ChunkedArray>> Take(const ChunkedArray& values, 
-                                           const ChunkedArray& indices, 
-                                           const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx)); 
-  return result.chunked_array(); 
-} 
- 
-Result<std::shared_ptr<ChunkedArray>> Take(const Array& values, 
-                                           const ChunkedArray& indices, 
-                                           const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx)); 
-  return result.chunked_array(); 
-} 
- 
-Result<std::shared_ptr<RecordBatch>> Take(const RecordBatch& batch, const Array& indices, 
-                                          const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(batch), Datum(indices), options, ctx)); 
-  return result.record_batch(); 
-} 
- 
-Result<std::shared_ptr<Table>> Take(const Table& table, const Array& indices, 
-                                    const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(table), Datum(indices), options, ctx)); 
-  return result.table(); 
-} 
- 
-Result<std::shared_ptr<Table>> Take(const Table& table, const ChunkedArray& indices, 
-                                    const TakeOptions& options, ExecContext* ctx) { 
-  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(table), Datum(indices), options, ctx)); 
-  return result.table(); 
-} 
- 
+}
+
+const char kValuesFieldName[] = "values";
+const char kCountsFieldName[] = "counts";
+const int32_t kValuesFieldIndex = 0;
+const int32_t kCountsFieldIndex = 1;
+
+Result<std::shared_ptr<StructArray>> ValueCounts(const Datum& value, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, CallFunction("value_counts", {value}, ctx));
+  return checked_pointer_cast<StructArray>(result.make_array());
+}
+
+// ----------------------------------------------------------------------
+// Filter- and take-related selection functions
+
+Result<Datum> Filter(const Datum& values, const Datum& filter,
+                     const FilterOptions& options, ExecContext* ctx) {
+  // Invoke metafunction which deals with Datum kinds other than just Array,
+  // ChunkedArray.
+  return CallFunction("filter", {values, filter}, &options, ctx);
+}
+
+Result<Datum> Take(const Datum& values, const Datum& filter, const TakeOptions& options,
+                   ExecContext* ctx) {
+  // Invoke metafunction which deals with Datum kinds other than just Array,
+  // ChunkedArray.
+  return CallFunction("take", {values, filter}, &options, ctx);
+}
+
+Result<std::shared_ptr<Array>> Take(const Array& values, const Array& indices,
+                                    const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum out, Take(Datum(values), Datum(indices), options, ctx));
+  return out.make_array();
+}
+
+// ----------------------------------------------------------------------
+// Deprecated functions
+
+Result<std::shared_ptr<ChunkedArray>> Take(const ChunkedArray& values,
+                                           const Array& indices,
+                                           const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx));
+  return result.chunked_array();
+}
+
+Result<std::shared_ptr<ChunkedArray>> Take(const ChunkedArray& values,
+                                           const ChunkedArray& indices,
+                                           const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx));
+  return result.chunked_array();
+}
+
+Result<std::shared_ptr<ChunkedArray>> Take(const Array& values,
+                                           const ChunkedArray& indices,
+                                           const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(values), Datum(indices), options, ctx));
+  return result.chunked_array();
+}
+
+Result<std::shared_ptr<RecordBatch>> Take(const RecordBatch& batch, const Array& indices,
+                                          const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(batch), Datum(indices), options, ctx));
+  return result.record_batch();
+}
+
+Result<std::shared_ptr<Table>> Take(const Table& table, const Array& indices,
+                                    const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(table), Datum(indices), options, ctx));
+  return result.table();
+}
+
+Result<std::shared_ptr<Table>> Take(const Table& table, const ChunkedArray& indices,
+                                    const TakeOptions& options, ExecContext* ctx) {
+  ARROW_ASSIGN_OR_RAISE(Datum result, Take(Datum(table), Datum(indices), options, ctx));
+  return result.table();
+}
+
 Result<std::shared_ptr<Array>> SortToIndices(const Array& values, ExecContext* ctx) {
   return SortIndices(values, SortOrder::Ascending, ctx);
 }
 
-}  // namespace compute 
-}  // namespace arrow 
+}  // namespace compute
+}  // namespace arrow

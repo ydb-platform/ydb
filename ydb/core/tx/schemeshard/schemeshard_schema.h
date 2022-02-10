@@ -1461,8 +1461,8 @@ struct Schema : NIceDb::Schema {
     struct OlapStores : Table<88> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnStoreDescription 
-        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnStoreSharding 
+        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnStoreDescription
+        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding>;
@@ -1472,7 +1472,7 @@ struct Schema : NIceDb::Schema {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TOlapStoreDescription
-        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnStoreSharding 
+        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
         struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterOlapStore
 
         using TKey = TableKey<PathId>;
@@ -1482,8 +1482,8 @@ struct Schema : NIceDb::Schema {
     struct OlapTables : Table<90> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription 
-        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding 
+        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
+        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding>;
@@ -1492,8 +1492,8 @@ struct Schema : NIceDb::Schema {
     struct OlapTablesAlters : Table<91> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription 
-        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding 
+        struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
+        struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterOlapTable
 
         using TKey = TableKey<PathId>;

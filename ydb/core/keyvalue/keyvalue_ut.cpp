@@ -80,7 +80,7 @@ struct TTestContext {
         Runtime->SetScheduledLimit(100);
         Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
         SetupLogging(*Runtime);
-        SetupTabletServices(*Runtime); 
+        SetupTabletServices(*Runtime);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),

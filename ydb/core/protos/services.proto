@@ -65,9 +65,9 @@ enum EServiceKikimr {
     FLAT_TX_SCHEMESHARD = 296;
     SHEME_SHARD = 700; // stillborn tag
 
-    // OLAP section 
-    TX_OLAPSHARD = 331; 
-    TX_COLUMNSHARD = 332; 
+    // OLAP section
+    TX_OLAPSHARD = 331;
+    TX_COLUMNSHARD = 332;
     BLOB_CACHE = 333;
     TX_COLUMNSHARD_SCAN = 334;
 

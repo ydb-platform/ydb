@@ -118,7 +118,7 @@ struct TEvKqpCompute {
                         Y_VERIFY_DEBUG(ArrowBatch != nullptr);
                         auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                         protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
-                        protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch)); 
+                        protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
                         break;
                     }
                 }

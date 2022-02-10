@@ -112,25 +112,25 @@ namespace NSchemeShardUT_Private {
             if (result == exp) {
                 return;
             }
-        } 
+        }
         Cdbg << "Unexpected status: " << NKikimrScheme::EStatus_Name(result) << ": " << reason << Endl;
         UNIT_FAIL("Unexpected status: " << NKikimrScheme::EStatus_Name(result) << ": " << reason);
-    } 
- 
+    }
+
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num) {
-        TAutoPtr<IEventHandle> handle; 
-        for (ui32 i = 0; i < num; ++i) 
+        TAutoPtr<IEventHandle> handle;
+        for (ui32 i = 0; i < num; ++i)
             runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-    } 
- 
-    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, 
+    }
+
+    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId,
                                 TEvSchemeShard::EStatus expectedResult) {
         TestModificationResults(runtime, txId, {expectedResult});
-    } 
- 
+    }
+
     ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId,
                                         const TVector<TEvSchemeShard::EStatus>& expectedResults) {
-        TAutoPtr<IEventHandle> handle; 
+        TAutoPtr<IEventHandle> handle;
         TEvSchemeShard::TEvModifySchemeTransactionResult* event;
         do {
             Cerr << "TestModificationResults wait txId: " <<  txId << "\n";
@@ -138,12 +138,12 @@ namespace NSchemeShardUT_Private {
             UNIT_ASSERT(event);
             Cerr << "TestModificationResult got TxId: " << event->Record.GetTxId() << ", wait until txId: " << txId << "\n";
         } while(event->Record.GetTxId() < txId);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
+
         CheckExpected(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
-        return event->Record.GetStatus(); 
-    } 
- 
+        return event->Record.GetStatus();
+    }
+
     void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
         for (auto& pathVersion: applyIf) {
             auto condition = transaction.AddApplyIf();
@@ -192,8 +192,8 @@ namespace NSchemeShardUT_Private {
     }
 
 
-    // 
- 
+    //
+
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLs = new TEvSchemeShard::TEvDescribeScheme(path);
@@ -202,7 +202,7 @@ namespace NSchemeShardUT_Private {
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
         UNIT_ASSERT(event);
- 
+
         return event->GetRecord();
     }
 
@@ -484,13 +484,13 @@ namespace NSchemeShardUT_Private {
     template <>
     auto CreateTransaction(const TString& parentPath, const TString& tableName, const TApplyIf& applyIf,
             NKikimrSchemeOp::EOperationType type, TModifySchemeFunc<NKikimrSchemeOp::TBackupTask> func)
-    { 
+    {
         NKikimrSchemeOp::TModifyScheme tx;
- 
+
         tx.SetOperationType(type);
         tx.SetWorkingDir(parentPath);
         SetApplyIf(tx, applyIf);
- 
+
         auto task = std::apply(func, std::tie(tx));
 
         task->SetTableName(tableName);
@@ -724,29 +724,29 @@ namespace NSchemeShardUT_Private {
     // backup & restore
     GENERIC_HELPERS(BackupTable, NKikimrSchemeOp::EOperationType::ESchemeOpBackup, &NKikimrSchemeOp::TModifyScheme::MutableBackup)
     GENERIC_HELPERS(Restore, NKikimrSchemeOp::EOperationType::ESchemeOpRestore, &NKikimrSchemeOp::TModifyScheme::MutableRestore)
- 
+
     // cdc stream
     GENERIC_HELPERS(CreateCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableCreateCdcStream)
     GENERIC_HELPERS(AlterCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableAlterCdcStream)
     GENERIC_HELPERS(DropCdcStream, NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream, &NKikimrSchemeOp::TModifyScheme::MutableDropCdcStream)
- 
+
     // olap store
-    GENERIC_HELPERS(CreateOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnStore) 
-    GENERIC_HELPERS(AlterOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnStore) 
-    GENERIC_HELPERS(DropOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableDrop) 
-    DROP_BY_PATH_ID_HELPERS(DropOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore) 
- 
+    GENERIC_HELPERS(CreateOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnStore)
+    GENERIC_HELPERS(AlterOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnStore)
+    GENERIC_HELPERS(DropOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore)
+
     // olap table
-    GENERIC_HELPERS(CreateOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnTable) 
-    GENERIC_HELPERS(AlterOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnTable) 
-    GENERIC_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableDrop) 
-    DROP_BY_PATH_ID_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable) 
- 
+    GENERIC_HELPERS(CreateOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnTable)
+    GENERIC_HELPERS(AlterOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnTable)
+    GENERIC_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable)
+
     // sequence
     GENERIC_HELPERS(CreateSequence, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)
     GENERIC_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSequence, NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence)
- 
+
     // replication
     GENERIC_HELPERS(CreateReplication, NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication, &NKikimrSchemeOp::TModifyScheme::MutableReplication)
     GENERIC_HELPERS(DropReplication, NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
@@ -757,34 +757,34 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableAlterPersQueueGroup)
     GENERIC_HELPERS(DropPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropPQGroup, NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup)
- 
+
     // rtmr
     GENERIC_HELPERS(CreateRtmrVolume, NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateRtmrVolume)
- 
+
     // solomon
     GENERIC_HELPERS(CreateSolomon, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateSolomonVolume)
     GENERIC_HELPERS(AlterSolomon, NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume, &NKikimrSchemeOp::TModifyScheme::MutableAlterSolomonVolume)
     GENERIC_HELPERS(DropSolomon, NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSolomon, NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume)
- 
+
     // kesus
     GENERIC_HELPERS(CreateKesus, NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus, &NKikimrSchemeOp::TModifyScheme::MutableKesus)
     GENERIC_HELPERS(AlterKesus, NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus, &NKikimrSchemeOp::TModifyScheme::MutableKesus)
     GENERIC_HELPERS(DropKesus, NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropKesus, NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus)
- 
+
     // filestore
     GENERIC_HELPERS(CreateFileStore, NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore, &NKikimrSchemeOp::TModifyScheme::MutableCreateFileStore)
     GENERIC_HELPERS(AlterFileStore, NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore, &NKikimrSchemeOp::TModifyScheme::MutableAlterFileStore)
     GENERIC_HELPERS(DropFileStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropFileStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore)
- 
+
     // nbs
     GENERIC_HELPERS(CreateBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateBlockStoreVolume)
     GENERIC_HELPERS(AlterBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableAlterBlockStoreVolume)
     GENERIC_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume)
- 
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1152,8 +1152,8 @@ namespace NSchemeShardUT_Private {
         auto evTx = new TEvTablet::TEvLocalSchemeTx;
         evTx->Record.SetDryRun(dryRun);
         auto schemeChanges = evTx->Record.MutableSchemeChanges();
-        bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, schemeChanges); 
-        UNIT_ASSERT_C(parseResult, "protobuf parsing failed"); 
+        bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, schemeChanges);
+        UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
 
         ForwardToTablet(runtime, tabletId, sender, evTx);
 

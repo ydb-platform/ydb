@@ -19,17 +19,17 @@ ENDIF()
 
 SRCS(
     ydb_bulk_upsert_ut.cpp
-    ydb_bulk_upsert_olap_ut.cpp 
+    ydb_bulk_upsert_olap_ut.cpp
     ydb_coordination_ut.cpp
     ydb_index_table_ut.cpp
-    ydb_import_ut.cpp 
+    ydb_import_ut.cpp
     ydb_ut.cpp
     ydb_s3_internal_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
     ydb_table_split_ut.cpp
     ydb_stats_ut.cpp
-    ydb_long_tx_ut.cpp 
+    ydb_long_tx_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
     json_udf.cpp

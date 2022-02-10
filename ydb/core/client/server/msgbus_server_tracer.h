@@ -84,8 +84,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_TRACER_ACTOR;
-    } 
- 
+    }
+
     TMessageBusTracerService();
     void StateFunc(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
 

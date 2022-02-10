@@ -35,13 +35,13 @@ enum ECumulativeCounters {
     COUNTER_PLAN_STEP_ACCEPTED = 9                        [(CounterOpts) = {Name: "PlanStepAccepted"}];
     COUNTER_TX_PROGRESS_SHARD_INACTIVE = 10               [(CounterOpts) = {Name: "TxProgressShardInactive"}];
     COUNTER_TX_PROGRESS_QUEUE_EMPTY = 11                  [(CounterOpts) = {Name: "TxProgressQueueEmpty"}];
-    COUNTER_TX_PROGRESS_CLEANUP = 12                      [(CounterOpts) = {Name: "TxProgressCleanup"}]; 
+    COUNTER_TX_PROGRESS_CLEANUP = 12                      [(CounterOpts) = {Name: "TxProgressCleanup"}];
     COUNTER_TX_PROGRESS_OUTDATED = 13                     [(CounterOpts) = {Name: "TxProgressOutdated"}];
     COUNTER_TX_PROGRESS_DUPLICATE = 14                    [(CounterOpts) = {Name: "TxProgressDuplicate"}];
     COUNTER_TX_PROGRESS_DIRTY = 15                        [(CounterOpts) = {Name: "TxProgressDirty"}];
     COUNTER_TX_PROGRESS_EV = 16                           [(CounterOpts) = {Name: "TxProgressEvents"}];
     COUNTER_TX_CLEANUP_SCHEDULED = 17                     [(CounterOpts) = {Name: "TxCleanupScheduled"}];
-    COUNTER_TX_PROGRESS_IDLE = 18                         [(CounterOpts) = {Name: "TxProgressIdle"}]; 
+    COUNTER_TX_PROGRESS_IDLE = 18                         [(CounterOpts) = {Name: "TxProgressIdle"}];
     COUNTER_ACK_SENT = 19                                 [(CounterOpts) = {Name: "AckSent"}];
     COUNTER_ACK_SENT_DELAYED = 20                         [(CounterOpts) = {Name: "AckSentDelayed"}];
     COUNTER_CANCEL_TX_NOTFOUND = 21                       [(CounterOpts) = {Name: "CancelTxNotFound"}];
@@ -62,17 +62,17 @@ enum ECumulativeCounters {
     COUNTER_LOCKS_BROKEN = 36                             [(CounterOpts) = {Name: "LocksBroken"}];
     COUNTER_LOCKS_ERASED = 37                             [(CounterOpts) = {Name: "LocksErased"}];
     COUNTER_LOCKS_REMOVED = 38                            [(CounterOpts) = {Name: "LocksRemoved"}];
-    COUNTER_LOCKS_REJECT_BROKEN = 39                      [(CounterOpts) = {Name: "LocksRejectBroken"}]; 
-    COUNTER_LOCKS_LOST = 40                               [(CounterOpts) = {Name: "LocksLost"}]; 
+    COUNTER_LOCKS_REJECT_BROKEN = 39                      [(CounterOpts) = {Name: "LocksRejectBroken"}];
+    COUNTER_LOCKS_LOST = 40                               [(CounterOpts) = {Name: "LocksLost"}];
     COUNTER_INACTIVE_TX_DATA_RELEASES = 41                [(CounterOpts) = {Name: "InactiveTxDataReleases"}];
-    COUNTER_PIPELINE_OVERLOADED = 42                      [(CounterOpts) = {Name: "PipelineOverloaded"}]; 
-    COUNTER_TX_PROGRESS_DELAYED = 43                      [(CounterOpts) = {Name: "TxProgressDelayed"}]; 
-    COUNTER_TX_REORDERED = 44                             [(CounterOpts) = {Name: "TxReordered"}]; 
-    COUNTER_TX_WAIT_ORDER = 45                            [(CounterOpts) = {Name: "TxCannotReorder"}]; 
-    COUNTER_TX_WAIT_DATA = 46                             [(CounterOpts) = {Name: "TxWaitData"}]; 
-    COUNTER_TX_WAIT_READ_SETS = 47                        [(CounterOpts) = {Name: "TxWaitReadSets"}]; 
-    COUNTER_TX_WAIT_RESOURCE = 48                         [(CounterOpts) = {Name: "TxWaitResource"}]; 
-    COUNTER_LOCKS_WHOLE_SHARD = 49                        [(CounterOpts) = {Name: "LocksWholeShard"}]; 
+    COUNTER_PIPELINE_OVERLOADED = 42                      [(CounterOpts) = {Name: "PipelineOverloaded"}];
+    COUNTER_TX_PROGRESS_DELAYED = 43                      [(CounterOpts) = {Name: "TxProgressDelayed"}];
+    COUNTER_TX_REORDERED = 44                             [(CounterOpts) = {Name: "TxReordered"}];
+    COUNTER_TX_WAIT_ORDER = 45                            [(CounterOpts) = {Name: "TxCannotReorder"}];
+    COUNTER_TX_WAIT_DATA = 46                             [(CounterOpts) = {Name: "TxWaitData"}];
+    COUNTER_TX_WAIT_READ_SETS = 47                        [(CounterOpts) = {Name: "TxWaitReadSets"}];
+    COUNTER_TX_WAIT_RESOURCE = 48                         [(CounterOpts) = {Name: "TxWaitResource"}];
+    COUNTER_LOCKS_WHOLE_SHARD = 49                        [(CounterOpts) = {Name: "LocksWholeShard"}];
     COUNTER_ENGINE_HOST_SELECT_ROW_BYTES = 50             [(CounterOpts) = {Name: "EngineHostRowReadBytes"}];
     COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS = 51            [(CounterOpts) = {Name: "EngineHostRangeReadRows"}];
     COUNTER_ENGINE_HOST_SELECT_RANGE_BYTES = 52           [(CounterOpts) = {Name: "EngineHostRangeReadBytes"}];
@@ -112,24 +112,24 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "(1) < 500 us"        } 
-        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        } 
-        Ranges { Value: 1000        Name: "(3) 1-2 ms"          } 
-        Ranges { Value: 2000        Name: "(4) 2-4 ms"          } 
-        Ranges { Value: 4000        Name: "(5) 4-8 ms"          } 
-        Ranges { Value: 8000        Name: "(6) 8-16 ms"         } 
-        Ranges { Value: 16000       Name: "(7) 16-32 ms"        } 
-        Ranges { Value: 32000       Name: "(8) 32-64 ms"        } 
-        Ranges { Value: 64000       Name: "(9) 64-128 ms"       } 
-        Ranges { Value: 128000      Name: "(10) 128-256 ms"     } 
-        Ranges { Value: 256000      Name: "(11) 256-512 ms"     } 
-        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    } 
-        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   } 
-        Ranges { Value: 2000000     Name: "(14) 2-4 s"          } 
-        Ranges { Value: 4000000     Name: "(15) 4-8 s"          } 
-        Ranges { Value: 8000000     Name: "(16) 8-16 s"         } 
-        Ranges { Value: 16000000    Name: "(17) 16-32 s"        } 
-        Ranges { Value: 32000000    Name: "(18) 32 < s"         } 
+        Ranges { Value: 0           Name: "(1) < 500 us"        }
+        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
+        Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
+        Ranges { Value: 2000        Name: "(4) 2-4 ms"          }
+        Ranges { Value: 4000        Name: "(5) 4-8 ms"          }
+        Ranges { Value: 8000        Name: "(6) 8-16 ms"         }
+        Ranges { Value: 16000       Name: "(7) 16-32 ms"        }
+        Ranges { Value: 32000       Name: "(8) 32-64 ms"        }
+        Ranges { Value: 64000       Name: "(9) 64-128 ms"       }
+        Ranges { Value: 128000      Name: "(10) 128-256 ms"     }
+        Ranges { Value: 256000      Name: "(11) 256-512 ms"     }
+        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    }
+        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   }
+        Ranges { Value: 2000000     Name: "(14) 2-4 s"          }
+        Ranges { Value: 4000000     Name: "(15) 4-8 s"          }
+        Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
+        Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
+        Ranges { Value: 32000000    Name: "(18) 32 < s"         }
     };
 
     COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY = 0          [(CounterOpts) = {Name: "PrepareSuccessCompleteLatency"}];
@@ -140,8 +140,8 @@ enum EPercentileCounters {
     COUNTER_TX_PROGRESS_EXEC_LATENCY = 5                  [(CounterOpts) = {Name: "TxProgressExecLatency"}];
 
     COUNTER_LOCKS_ACTIVE_PER_SHARD = 6                    [(CounterOpts) = {Name: "LocksActivePerShard",
-                                                              Ranges: { Value: 0     Name: "0"}, 
-                                                              Ranges: { Value: 1     Name: "1-10"}, 
+                                                              Ranges: { Value: 0     Name: "0"},
+                                                              Ranges: { Value: 1     Name: "1-10"},
                                                               Ranges: { Value: 10    Name: "10-100"}
                                                               Ranges: { Value: 100   Name: "100-500"}
                                                               Ranges: { Value: 500   Name: "500-1000"}
@@ -153,8 +153,8 @@ enum EPercentileCounters {
                                                           }];
 
     COUNTER_LOCKS_BROKEN_PER_SHARD = 7                    [(CounterOpts) = {Name: "LocksBrokenPerShard",
-                                                              Ranges: { Value: 0     Name: "0"}, 
-                                                              Ranges: { Value: 1     Name: "1-10"}, 
+                                                              Ranges: { Value: 0     Name: "0"},
+                                                              Ranges: { Value: 1     Name: "1-10"},
                                                               Ranges: { Value: 10    Name: "10-100"}
                                                               Ranges: { Value: 100   Name: "100-500"}
                                                               Ranges: { Value: 500   Name: "500-1000"}

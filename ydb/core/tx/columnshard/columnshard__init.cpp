@@ -1,17 +1,17 @@
-#include "columnshard_impl.h" 
-#include "columnshard_ttl.h" 
-#include "columnshard_txs.h" 
-#include "columnshard_schema.h" 
+#include "columnshard_impl.h"
+#include "columnshard_ttl.h"
+#include "columnshard_txs.h"
+#include "columnshard_schema.h"
 #include "blob_manager_db.h"
- 
+
 #include <ydb/core/tablet/tablet_exception.h>
- 
-namespace NKikimr::NColumnShard { 
- 
-using namespace NTabletFlatExecutor; 
- 
-// TTxInit => SwitchToWork 
- 
+
+namespace NKikimr::NColumnShard {
+
+using namespace NTabletFlatExecutor;
+
+// TTxInit => SwitchToWork
+
 void TTxInit::SetDefaults() {
     Self->CurrentSchemeShardId = 0;
     Self->LastSchemaSeqNo = { };
@@ -25,24 +25,24 @@ void TTxInit::SetDefaults() {
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
     Self->SchemaPresets.clear();
-    //Self->TtlSettingsPresets.clear(); 
+    //Self->TtlSettingsPresets.clear();
     Self->Tables.clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }
 
-bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) 
-{ 
-    // Load InsertTable 
+bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
+{
+    // Load InsertTable
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    if (!Self->InsertTable->Load(dbTable, AppData(ctx)->TimeProvider->Now())) { 
-        return false; 
-    } 
-    Self->UpdateInsertTableCounters(); 
- 
-    NIceDb::TNiceDb db(txc.DB); 
- 
+    if (!Self->InsertTable->Load(dbTable, AppData(ctx)->TimeProvider->Now())) {
+        return false;
+    }
+    Self->UpdateInsertTableCounters();
+
+    NIceDb::TNiceDb db(txc.DB);
+
     bool ready = true;
     ready = ready & Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::TxInfo>(db, txc.DB.GetScheme());
@@ -55,7 +55,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
- 
+
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoRound, Self->LastSchemaSeqNo.Round);
@@ -69,10 +69,10 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     { // Load transactions
         auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
-        if (!rowset.IsReady()) 
-            return false; 
- 
-        while (!rowset.EndOfSet()) { 
+        if (!rowset.IsReady())
+            return false;
+
+        while (!rowset.EndOfSet()) {
             ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
             auto& txInfo = Self->BasicTxInfo[txId];
             txInfo.TxId = txId;
@@ -81,7 +81,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
             txInfo.Cookie = rowset.GetValue<Schema::TxInfo::Cookie>();
             txInfo.TxKind = rowset.GetValue<Schema::TxInfo::TxKind>();
- 
+
             if (txInfo.PlanStep != 0) {
                 Self->PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
             } else if (txInfo.MaxStep != Max<ui64>()) {
@@ -119,10 +119,10 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    // Primary index defaut schema and TTL (both are versioned) 
-    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset; 
-    THashMap<ui64, TMap<TRowVersion, TTtl::TDescription>> ttls; 
- 
+    // Primary index defaut schema and TTL (both are versioned)
+    TMap<NOlap::TSnapshot, NOlap::TIndexInfo> schemaPreset;
+    THashMap<ui64, TMap<TRowVersion, TTtl::TDescription>> ttls;
+
     { // Load schema presets
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady())
@@ -163,15 +163,15 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
 
             if (preset.Name == "default") {
-                schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId}, 
-                                     Self->ConvertSchema(info.GetSchema())); 
+                schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId},
+                                     Self->ConvertSchema(info.GetSchema()));
             }
 
             if (!rowset.Next())
                 return false;
         }
     }
-#if 0 // TTL presets haven't been used 
+#if 0 // TTL presets haven't been used
     { // Load ttl settings presets
         auto rowset = db.Table<Schema::TtlSettingsPresetInfo>().Select();
         if (!rowset.IsReady())
@@ -213,7 +213,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
                 return false;
         }
     }
-#endif 
+#endif
     { // Load tables
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady())
@@ -228,14 +228,14 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             {
                 table.DropVersion.Step = rowset.GetValue<Schema::TableInfo::DropStep>();
                 table.DropVersion.TxId = rowset.GetValue<Schema::TableInfo::DropTxId>();
-                Self->PathsToDrop.insert(pathId); 
+                Self->PathsToDrop.insert(pathId);
             }
- 
-            if (!rowset.Next()) 
-                return false; 
-        } 
-    } 
- 
+
+            if (!rowset.Next())
+                return false;
+        }
+    }
+
     { // Load table versions
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady())
@@ -251,29 +251,29 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             auto& info = table.Versions[version];
             Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
 
-            if (!Self->PathsToDrop.count(pathId)) { 
-                ttls[pathId].emplace(version, TTtl::TDescription(info.GetTtlSettings())); 
-            } 
- 
+            if (!Self->PathsToDrop.count(pathId)) {
+                ttls[pathId].emplace(version, TTtl::TDescription(info.GetTtlSettings()));
+            }
+
             if (!rowset.Next())
                 return false;
         }
     }
 
-    for (auto& [pathId, map] : ttls) { 
-        auto& description = map.rbegin()->second; // last version if many 
-        Self->Ttl.SetPathTtl(pathId, std::move(description)); 
-    } 
- 
-    Self->SetCounter(COUNTER_TABLES, Self->Tables.size()); 
-    Self->SetCounter(COUNTER_TABLE_PRESETS, Self->SchemaPresets.size()); 
-    //Self->SetCounter(COUNTER_TTL_PRESETS, Self->TtlSettingsPresets.size()); 
-    Self->SetCounter(COUNTER_TABLE_TTLS, ttls.size()); 
- 
-    if (!schemaPreset.empty()) { 
-        Self->SetPrimaryIndex(std::move(schemaPreset), Self->Ttl.TtlColumns()); 
-    } 
- 
+    for (auto& [pathId, map] : ttls) {
+        auto& description = map.rbegin()->second; // last version if many
+        Self->Ttl.SetPathTtl(pathId, std::move(description));
+    }
+
+    Self->SetCounter(COUNTER_TABLES, Self->Tables.size());
+    Self->SetCounter(COUNTER_TABLE_PRESETS, Self->SchemaPresets.size());
+    //Self->SetCounter(COUNTER_TTL_PRESETS, Self->TtlSettingsPresets.size());
+    Self->SetCounter(COUNTER_TABLE_TTLS, ttls.size());
+
+    if (!schemaPreset.empty()) {
+        Self->SetPrimaryIndex(std::move(schemaPreset), Self->Ttl.TtlColumns());
+    }
+
     { // Load long tx writes
         auto rowset = db.Table<Schema::LongTxWrites>().Select();
         if (!rowset.IsReady())
@@ -285,7 +285,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Y_VERIFY(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
 
-            Self->LoadLongTxWrite(writeId, longTxId); 
+            Self->LoadLongTxWrite(writeId, longTxId);
 
             if (!rowset.Next())
                 return false;
@@ -299,20 +299,20 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
                 Y_VERIFY(Self->LongTxWrites.contains(writeId),
                     "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
                     Self->TabletID(), txId, writeId);
-                Self->AddLongTxWrite(writeId, txId); 
+                Self->AddLongTxWrite(writeId, txId);
             }
         }
     }
 
-    // Load primary index 
-    if (Self->PrimaryIndex) { 
+    // Load primary index
+    if (Self->PrimaryIndex) {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper idxDB(txc.DB, &dsGroupSelector);
-        if (!Self->PrimaryIndex->Load(idxDB, Self->PathsToDrop)) { 
-            return false; 
-        } 
-    } 
- 
+        if (!Self->PrimaryIndex->Load(idxDB, Self->PathsToDrop)) {
+            return false;
+        }
+    }
+
     // Initialize the BlobManager
     {
         TBlobManagerDb blobManagerDb(txc.DB);
@@ -321,64 +321,64 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    Self->UpdateInsertTableCounters(); 
-    Self->UpdateIndexCounters(); 
-    Self->UpdateResourceMetrics({}); 
-    return true; 
-} 
- 
-bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
-    Y_UNUSED(txc); 
-    LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID()); 
- 
-    try { 
+    Self->UpdateInsertTableCounters();
+    Self->UpdateIndexCounters();
+    Self->UpdateResourceMetrics({});
+    return true;
+}
+
+bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    Y_UNUSED(txc);
+    LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
+
+    try {
         SetDefaults();
-        return ReadEverything(txc, ctx); 
-    } catch (const TNotReadyTabletException&) { 
-        return false; 
-    } catch (const TSchemeErrorTabletException& ex) { 
-        Y_UNUSED(ex); 
-        Y_FAIL(); 
-    } catch (...) { 
-        Y_FAIL("there must be no leaked exceptions"); 
-    } 
- 
-    return true; 
-} 
- 
-void TTxInit::Complete(const TActorContext& ctx) { 
-    LOG_S_DEBUG("TTxInit.Complete at tablet " << Self->TabletID()); 
-    Self->SwitchToWork(ctx); 
+        return ReadEverything(txc, ctx);
+    } catch (const TNotReadyTabletException&) {
+        return false;
+    } catch (const TSchemeErrorTabletException& ex) {
+        Y_UNUSED(ex);
+        Y_FAIL();
+    } catch (...) {
+        Y_FAIL("there must be no leaked exceptions");
+    }
+
+    return true;
+}
+
+void TTxInit::Complete(const TActorContext& ctx) {
+    LOG_S_DEBUG("TTxInit.Complete at tablet " << Self->TabletID());
+    Self->SwitchToWork(ctx);
     Self->TryRegisterMediatorTimeCast();
 
-    // Trigger progress: planned or outdated tx 
-    Self->EnqueueProgressTx(); 
-    Self->EnqueueBackgroundActivities(); 
- 
-    // Start periodic wakeups 
-    ctx.Schedule(Self->ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup()); 
-} 
- 
-// TTxUpdateSchema => TTxInit 
- 
-bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) { 
-    Y_UNUSED(txc); 
-    LOG_S_DEBUG("TTxUpdateSchema.Execute at tablet " << Self->TabletID()); 
-    return true; 
-} 
- 
-void TTxUpdateSchema::Complete(const TActorContext& ctx) { 
-    LOG_S_DEBUG("TTxUpdateSchema.Complete at tablet " << Self->TabletID()); 
-    Self->Execute(new TTxInit(Self), ctx); 
-} 
- 
-// TTxInitSchema => TTxUpdateSchema 
- 
-bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) { 
-    LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID()); 
- 
+    // Trigger progress: planned or outdated tx
+    Self->EnqueueProgressTx();
+    Self->EnqueueBackgroundActivities();
+
+    // Start periodic wakeups
+    ctx.Schedule(Self->ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+}
+
+// TTxUpdateSchema => TTxInit
+
+bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
+    Y_UNUSED(txc);
+    LOG_S_DEBUG("TTxUpdateSchema.Execute at tablet " << Self->TabletID());
+    return true;
+}
+
+void TTxUpdateSchema::Complete(const TActorContext& ctx) {
+    LOG_S_DEBUG("TTxUpdateSchema.Complete at tablet " << Self->TabletID());
+    Self->Execute(new TTxInit(Self), ctx);
+}
+
+// TTxInitSchema => TTxUpdateSchema
+
+bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
+    LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
+
     bool isCreate = txc.DB.GetScheme().IsEmpty();
-    NIceDb::TNiceDb(txc.DB).Materialize<Schema>(); 
+    NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
     if (isCreate) {
         txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
@@ -406,16 +406,16 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         txc.DB.Alter().SetCompactionPolicy(Schema::SmallBlobs::TableId, *bigTableCompactionPolicy);
     }
 
-    return true; 
-} 
- 
-void TTxInitSchema::Complete(const TActorContext& ctx) { 
-    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID()); 
-    Self->Execute(new TTxUpdateSchema(Self), ctx); 
-} 
- 
-ITransaction* TColumnShard::CreateTxInitSchema() { 
-    return new TTxInitSchema(this); 
-} 
- 
-} 
+    return true;
+}
+
+void TTxInitSchema::Complete(const TActorContext& ctx) {
+    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID());
+    Self->Execute(new TTxUpdateSchema(Self), ctx);
+}
+
+ITransaction* TColumnShard::CreateTxInitSchema() {
+    return new TTxInitSchema(this);
+}
+
+}

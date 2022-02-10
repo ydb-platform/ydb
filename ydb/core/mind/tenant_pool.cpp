@@ -344,14 +344,14 @@ public:
     THolder<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false)
     {
         THolder<TEvTenantPool::TEvTenantPoolStatus> ev = MakeHolder<TEvTenantPool::TEvTenantPoolStatus>();
-        if (listStatic) { 
-            for (auto& pr : Config->StaticSlots) { 
-                NKikimrTenantPool::TSlotConfig& slotConfig = pr.second; 
-                NKikimrTenantPool::TSlotStatus& slotStatus = *ev->Record.AddSlots(); 
-                slotStatus.SetId(slotConfig.GetId()); 
-                slotStatus.SetType(slotConfig.GetType()); 
-                slotStatus.SetAssignedTenant(slotConfig.GetTenantName()); 
-                slotStatus.MutableResourceLimit()->CopyFrom(slotConfig.GetResourceLimit()); 
+        if (listStatic) {
+            for (auto& pr : Config->StaticSlots) {
+                NKikimrTenantPool::TSlotConfig& slotConfig = pr.second;
+                NKikimrTenantPool::TSlotStatus& slotStatus = *ev->Record.AddSlots();
+                slotStatus.SetId(slotConfig.GetId());
+                slotStatus.SetType(slotConfig.GetType());
+                slotStatus.SetAssignedTenant(slotConfig.GetTenantName());
+                slotStatus.MutableResourceLimit()->CopyFrom(slotConfig.GetResourceLimit());
                 slotStatus.SetLabel(Config->StaticSlotLabel);
 
                 auto it = Tenants.find(slotConfig.GetTenantName());
@@ -364,8 +364,8 @@ public:
                     slotStatus.SetState(it->second->State);
                     *slotStatus.MutableDomainKey() = NKikimrSubDomains::TDomainKey(it->second->DomainKey);
                 }
-            } 
-        } 
+            }
+        }
         for (auto &pr : DynamicSlots)
             FillSlotStatus(pr.second, *ev->Record.AddSlots());
         ev->Record.SetNodeType(Config->NodeType);
@@ -621,8 +621,8 @@ public:
 
     void Handle(TEvTenantPool::TEvGetStatus::TPtr &ev, const TActorContext &ctx)
     {
-        auto& rec = ev->Get()->Record; 
-        auto event = BuildStatusEvent(rec.GetListStaticSlots()); 
+        auto& rec = ev->Get()->Record;
+        auto event = BuildStatusEvent(rec.GetListStaticSlots());
         ctx.Send(ev->Sender, std::move(event), 0, ev->Cookie);
     }
 

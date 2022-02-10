@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     defs.h
-    msgbus_status.h 
+    msgbus_status.h
     msgbus.h
     msgbus.cpp
 )

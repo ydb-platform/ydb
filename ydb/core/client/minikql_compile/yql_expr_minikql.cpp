@@ -751,15 +751,15 @@ private:
         return TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DiagnosticsWrapper(TExprNode& node, TExprContext& ctx) { 
-        if (!EnsureArgsCount(node, 0, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+    IGraphTransformer::TStatus DiagnosticsWrapper(TExprNode& node, TExprContext& ctx) {
+        if (!EnsureArgsCount(node, 0, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
-        return TStatus::Ok; 
-    } 
- 
+        return TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus DataConstructorWrapper(TExprNode& node, TExprContext& ctx) {
         Y_UNUSED(ctx);
 
@@ -1055,7 +1055,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
 
             auto readTargetNode = GetReadTargetNode(node, 4, ctx, mkqlContext);
 
-            TRuntimeNode result = mkqlContext->PgmBuilder->SelectRange(*lookup->TableId, keyTypes, columnsToRead, 
+            TRuntimeNode result = mkqlContext->PgmBuilder->SelectRange(*lookup->TableId, keyTypes, columnsToRead,
                 options, readTargetNode);
             return result;
         });
@@ -1226,11 +1226,11 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
         return mkqlContext->PgmBuilder->AcquireLocks(lockTxId);
     });
 
-    compiler->AddCallable("Diagnostics", 
+    compiler->AddCallable("Diagnostics",
         [mkqlContext](const TExprNode&, TMkqlBuildContext&) {
         return mkqlContext->PgmBuilder->Diagnostics();
-    }); 
- 
+    });
+
     compiler->AddCallable("PartialSort",
         [mkqlContext](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto list = MkqlBuildExpr(*node.Child(0), ctx);
@@ -1424,8 +1424,8 @@ class TMiniKQLCompileActor : public TActorBootstrapped<TMiniKQLCompileActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MINIKQL_COMPILE_ACTOR;
-    } 
- 
+    }
+
     TMiniKQLCompileActor(const TString& program,
                          const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                          IDbSchemeResolver* dbSchemeResolver,

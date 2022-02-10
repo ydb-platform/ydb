@@ -7,7 +7,7 @@
 #include <ydb/core/util/console.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
- 
+
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -23,310 +23,310 @@
 
 namespace NKikimr {
 
-using NClient::TValue; 
- 
+using NClient::TValue;
+
 namespace Tests {
     using namespace NMiniKQL;
 //    const ui32 TestDomain = 1;
 
 static const TString TablePlacement = "/dc-1/Berkanavt/tables";
 
-namespace { 
- 
-void SetupLogging(TServer& server) { 
-    server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
-#if 0 
+namespace {
+
+void SetupLogging(TServer& server) {
+    server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+#if 0
     server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
     server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG); 
+    server.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
     server.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
-    server.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
-#endif 
-} 
+    server.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+#endif
+}
 
-// Creates test tables on ctor and deletes on dtor 
-struct TTestTables { 
-    enum EVariant { 
-        OneShard_NoOpts, 
-        OneShard_OutOfOrder, 
-        OneShard_SoftUpdates, 
-        OneShard_OutOfOrder_SoftUpdates, 
-        Sharded_NoOpts, 
-        Sharded_OutOfOrder, 
-        Sharded_SoftUpdates, 
-        Sharded_OutOfOrder_SoftUpdates, 
-    }; 
+// Creates test tables on ctor and deletes on dtor
+struct TTestTables {
+    enum EVariant {
+        OneShard_NoOpts,
+        OneShard_OutOfOrder,
+        OneShard_SoftUpdates,
+        OneShard_OutOfOrder_SoftUpdates,
+        Sharded_NoOpts,
+        Sharded_OutOfOrder,
+        Sharded_SoftUpdates,
+        Sharded_OutOfOrder_SoftUpdates,
+    };
 
-    struct TOpts { 
-        bool Sharded = false; 
-        bool OutOfOrder = false; 
-        bool SoftUpdates = false; 
+    struct TOpts {
+        bool Sharded = false;
+        bool OutOfOrder = false;
+        bool SoftUpdates = false;
         ui32 FollowerCount = 0;
 
         TOpts(EVariant var = OneShard_NoOpts, ui32 numFollowers = 0)
-            : Sharded(false) 
-            , OutOfOrder(false) 
-            , SoftUpdates(false) 
+            : Sharded(false)
+            , OutOfOrder(false)
+            , SoftUpdates(false)
             , FollowerCount(numFollowers)
-        { 
-            switch (var) { 
-            case OneShard_NoOpts: 
-                break; 
-            case OneShard_OutOfOrder: 
-                OutOfOrder = true; 
-                break; 
-            case OneShard_SoftUpdates: 
-                SoftUpdates = true; 
-                break; 
-            case OneShard_OutOfOrder_SoftUpdates: 
-                OutOfOrder = true; 
-                SoftUpdates = true; 
-                break; 
-            default: 
-                break; 
-            } 
+        {
+            switch (var) {
+            case OneShard_NoOpts:
+                break;
+            case OneShard_OutOfOrder:
+                OutOfOrder = true;
+                break;
+            case OneShard_SoftUpdates:
+                SoftUpdates = true;
+                break;
+            case OneShard_OutOfOrder_SoftUpdates:
+                OutOfOrder = true;
+                SoftUpdates = true;
+                break;
+            default:
+                break;
+            }
 
-            switch (var) { 
-            case Sharded_NoOpts: 
-            case Sharded_OutOfOrder: 
-            case Sharded_SoftUpdates: 
-            case Sharded_OutOfOrder_SoftUpdates: 
-                Sharded = true; 
-                break; 
-            default: 
-                break; 
-            } 
-        } 
-    }; 
- 
+            switch (var) {
+            case Sharded_NoOpts:
+            case Sharded_OutOfOrder:
+            case Sharded_SoftUpdates:
+            case Sharded_OutOfOrder_SoftUpdates:
+                Sharded = true;
+                break;
+            default:
+                break;
+            }
+        }
+    };
+
     TTestTables(TClient& client, EVariant var, ui32 numFollowers = 0)
-        : Client(client) 
+        : Client(client)
     {
         TOpts opts(var, numFollowers);
         NKikimrSchemeOp::TTableDescription tableSimple;
-        { 
-            tableSimple.SetName("Simple"); 
-            auto *c1 = tableSimple.AddColumns(); 
-            c1->SetName("key"); 
-            c1->SetType("Uint64"); 
-            auto *c2 = tableSimple.AddColumns(); 
-            c2->SetName("uint"); 
-            c2->SetType("Uint64"); 
-            auto *c3 = tableSimple.AddColumns(); 
-            c3->SetName("bytes"); 
-            c3->SetType("String"); 
+        {
+            tableSimple.SetName("Simple");
+            auto *c1 = tableSimple.AddColumns();
+            c1->SetName("key");
+            c1->SetType("Uint64");
+            auto *c2 = tableSimple.AddColumns();
+            c2->SetName("uint");
+            c2->SetType("Uint64");
+            auto *c3 = tableSimple.AddColumns();
+            c3->SetName("bytes");
+            c3->SetType("String");
 
-            if (opts.Sharded) 
-                tableSimple.SetUniformPartitionsCount(10); 
+            if (opts.Sharded)
+                tableSimple.SetUniformPartitionsCount(10);
 
             if (opts.FollowerCount)
                 tableSimple.MutablePartitionConfig()->SetFollowerCount(opts.FollowerCount);
 
-            if (opts.OutOfOrder) { 
-                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetNumActiveTx(8); 
-                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(true); 
-            } 
+            if (opts.OutOfOrder) {
+                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetNumActiveTx(8);
+                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(true);
+            }
 
-            if (opts.SoftUpdates) 
-                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableSoftUpdates(true); 
+            if (opts.SoftUpdates)
+                tableSimple.MutablePartitionConfig()->MutablePipelineConfig()->SetEnableSoftUpdates(true);
 
-            *tableSimple.AddKeyColumnNames() = "key"; 
-        } 
+            *tableSimple.AddKeyColumnNames() = "key";
+        }
 
         NKikimrSchemeOp::TTableDescription tableByBytes;
-        { 
-            tableByBytes.SetName("ByBytes"); 
-            auto *c1 = tableByBytes.AddColumns(); 
-            c1->SetName("key"); 
-            c1->SetType("String"); 
-            auto *c2 = tableByBytes.AddColumns(); 
-            c2->SetName("uint"); 
-            c2->SetType("Uint64"); 
-            auto *c3 = tableByBytes.AddColumns(); 
-            c3->SetName("bytes"); 
-            c3->SetType("String"); 
- 
-            *tableByBytes.AddKeyColumnNames() = "key"; 
-        } 
- 
+        {
+            tableByBytes.SetName("ByBytes");
+            auto *c1 = tableByBytes.AddColumns();
+            c1->SetName("key");
+            c1->SetType("String");
+            auto *c2 = tableByBytes.AddColumns();
+            c2->SetName("uint");
+            c2->SetType("Uint64");
+            auto *c3 = tableByBytes.AddColumns();
+            c3->SetName("bytes");
+            c3->SetType("String");
+
+            *tableByBytes.AddKeyColumnNames() = "key";
+        }
+
         NKikimrSchemeOp::TTableDescription tableComp;
-        { 
-            tableComp.SetName("Comp"); 
-            auto *c1 = tableComp.AddColumns(); 
-            c1->SetName("key"); 
-            c1->SetType("Uint64"); 
- 
-            auto *c1a = tableComp.AddColumns(); 
-            c1a->SetName("secondary"); 
-            c1a->SetType("String"); 
- 
-            auto *c2 = tableComp.AddColumns(); 
-            c2->SetName("uint"); 
-            c2->SetType("Uint64"); 
-            auto *c3 = tableComp.AddColumns(); 
-            c3->SetName("bytes"); 
-            c3->SetType("String"); 
- 
-            if (opts.Sharded) 
-                tableComp.SetUniformPartitionsCount(10); 
- 
-            *tableComp.AddKeyColumnNames() = "key"; 
-            *tableComp.AddKeyColumnNames() = "secondary"; 
-        } 
- 
-        client.MkDir("/dc-1", "Berkanavt"); 
-        client.MkDir("/dc-1/Berkanavt", "tables"); 
-        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableSimple), NMsgBusProxy::MSTATUS_OK); 
-        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableByBytes), NMsgBusProxy::MSTATUS_OK); 
-        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableComp), NMsgBusProxy::MSTATUS_OK); 
+        {
+            tableComp.SetName("Comp");
+            auto *c1 = tableComp.AddColumns();
+            c1->SetName("key");
+            c1->SetType("Uint64");
+
+            auto *c1a = tableComp.AddColumns();
+            c1a->SetName("secondary");
+            c1a->SetType("String");
+
+            auto *c2 = tableComp.AddColumns();
+            c2->SetName("uint");
+            c2->SetType("Uint64");
+            auto *c3 = tableComp.AddColumns();
+            c3->SetName("bytes");
+            c3->SetType("String");
+
+            if (opts.Sharded)
+                tableComp.SetUniformPartitionsCount(10);
+
+            *tableComp.AddKeyColumnNames() = "key";
+            *tableComp.AddKeyColumnNames() = "secondary";
+        }
+
+        client.MkDir("/dc-1", "Berkanavt");
+        client.MkDir("/dc-1/Berkanavt", "tables");
+        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableSimple), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableByBytes), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_EQUAL(client.CreateTable(TablePlacement, tableComp), NMsgBusProxy::MSTATUS_OK);
     }
 
-    ~TTestTables() { 
-        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Simple"), NMsgBusProxy::MSTATUS_OK); 
-        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "ByBytes"), NMsgBusProxy::MSTATUS_OK); 
-        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Comp"), NMsgBusProxy::MSTATUS_OK); 
-    } 
+    ~TTestTables() {
+        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Simple"), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "ByBytes"), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_EQUAL(Client.DeleteTable(TablePlacement, "Comp"), NMsgBusProxy::MSTATUS_OK);
+    }
 
-private: 
-    TClient& Client; 
-}; 
- 
-void CreateOldTypesTables(TClient &client) { 
+private:
+    TClient& Client;
+};
+
+void CreateOldTypesTables(TClient &client) {
     NKikimrSchemeOp::TTableDescription tableOld;
-    { 
-        tableOld.SetName("Old"); 
-        auto * c1 = tableOld.AddColumns(); 
-        c1->SetName("key"); 
-        c1->SetType("Uint32"); 
-        auto * c2 = tableOld.AddColumns(); 
-        c2->SetName("strKey"); 
-        c2->SetType("ByteString"); 
-        auto * c3 = tableOld.AddColumns(); 
-        c3->SetName("utf8Key"); 
-        c3->SetType("Utf8String"); 
-        auto * c4 = tableOld.AddColumns(); 
-        c4->SetName("strData"); 
-        c4->SetType("ByteString"); 
-        auto * c5 = tableOld.AddColumns(); 
-        c5->SetName("utf8Data"); 
-        c5->SetType("Utf8String"); 
- 
-        *tableOld.AddKeyColumnNames() = "key"; 
-        *tableOld.AddKeyColumnNames() = "strKey"; 
-        *tableOld.AddKeyColumnNames() = "utf8Key"; 
- 
-        tableOld.SetUniformPartitionsCount(4); 
-    } 
- 
+    {
+        tableOld.SetName("Old");
+        auto * c1 = tableOld.AddColumns();
+        c1->SetName("key");
+        c1->SetType("Uint32");
+        auto * c2 = tableOld.AddColumns();
+        c2->SetName("strKey");
+        c2->SetType("ByteString");
+        auto * c3 = tableOld.AddColumns();
+        c3->SetName("utf8Key");
+        c3->SetType("Utf8String");
+        auto * c4 = tableOld.AddColumns();
+        c4->SetName("strData");
+        c4->SetType("ByteString");
+        auto * c5 = tableOld.AddColumns();
+        c5->SetName("utf8Data");
+        c5->SetType("Utf8String");
+
+        *tableOld.AddKeyColumnNames() = "key";
+        *tableOld.AddKeyColumnNames() = "strKey";
+        *tableOld.AddKeyColumnNames() = "utf8Key";
+
+        tableOld.SetUniformPartitionsCount(4);
+    }
+
     NKikimrSchemeOp::TTableDescription tableNew;
-    { 
-        tableNew.SetName("New"); 
-        auto * c1 = tableNew.AddColumns(); 
-        c1->SetName("key"); 
-        c1->SetType("Uint32"); 
-        auto * c2 = tableNew.AddColumns(); 
-        c2->SetName("strKey"); 
-        c2->SetType("String"); 
-        auto * c3 = tableNew.AddColumns(); 
-        c3->SetName("utf8Key"); 
-        c3->SetType("Utf8"); 
-        auto * c4 = tableNew.AddColumns(); 
-        c4->SetName("strData"); 
-        c4->SetType("String"); 
-        auto * c5 = tableNew.AddColumns(); 
-        c5->SetName("utf8Data"); 
-        c5->SetType("Utf8"); 
- 
-        *tableNew.AddKeyColumnNames() = "key"; 
-        *tableNew.AddKeyColumnNames() = "strKey"; 
-        *tableNew.AddKeyColumnNames() = "utf8Key"; 
- 
-        tableNew.SetUniformPartitionsCount(4); 
-    } 
- 
-    client.MkDir("/dc-1", "Berkanavt"); 
-    client.MkDir("/dc-1/Berkanavt", "tables"); 
-    UNIT_ASSERT(client.CreateTable(TablePlacement, tableOld)); 
-    UNIT_ASSERT(client.CreateTable(TablePlacement, tableNew)); 
-} 
- 
-void AlterTestTables(TClient& client) { 
+    {
+        tableNew.SetName("New");
+        auto * c1 = tableNew.AddColumns();
+        c1->SetName("key");
+        c1->SetType("Uint32");
+        auto * c2 = tableNew.AddColumns();
+        c2->SetName("strKey");
+        c2->SetType("String");
+        auto * c3 = tableNew.AddColumns();
+        c3->SetName("utf8Key");
+        c3->SetType("Utf8");
+        auto * c4 = tableNew.AddColumns();
+        c4->SetName("strData");
+        c4->SetType("String");
+        auto * c5 = tableNew.AddColumns();
+        c5->SetName("utf8Data");
+        c5->SetType("Utf8");
+
+        *tableNew.AddKeyColumnNames() = "key";
+        *tableNew.AddKeyColumnNames() = "strKey";
+        *tableNew.AddKeyColumnNames() = "utf8Key";
+
+        tableNew.SetUniformPartitionsCount(4);
+    }
+
+    client.MkDir("/dc-1", "Berkanavt");
+    client.MkDir("/dc-1/Berkanavt", "tables");
+    UNIT_ASSERT(client.CreateTable(TablePlacement, tableOld));
+    UNIT_ASSERT(client.CreateTable(TablePlacement, tableNew));
+}
+
+void AlterTestTables(TClient& client) {
     NKikimrSchemeOp::TTableDescription alterSimple;
-    { 
-        alterSimple.SetName("Simple"); 
-        auto* dc1 = alterSimple.AddDropColumns(); 
-        dc1->SetName("uint"); 
-    } 
- 
-    client.AlterTable(TablePlacement, alterSimple); 
- 
+    {
+        alterSimple.SetName("Simple");
+        auto* dc1 = alterSimple.AddDropColumns();
+        dc1->SetName("uint");
+    }
+
+    client.AlterTable(TablePlacement, alterSimple);
+
     NKikimrSchemeOp::TTableDescription alterSimple1;
-    { 
-        alterSimple1.SetName("Simple"); 
-        auto *c2 = alterSimple1.AddColumns(); 
-        c2->SetName("uint"); 
-        c2->SetType("Uint64"); 
-    } 
- 
-    usleep(100*1000); // FIXME 
-    client.AlterTable(TablePlacement, alterSimple1); 
-} 
- 
-struct TTxInfo { 
-    ui64 TabletId; 
+    {
+        alterSimple1.SetName("Simple");
+        auto *c2 = alterSimple1.AddColumns();
+        c2->SetName("uint");
+        c2->SetType("Uint64");
+    }
+
+    usleep(100*1000); // FIXME
+    client.AlterTable(TablePlacement, alterSimple1);
+}
+
+struct TTxInfo {
+    ui64 TabletId;
     TActorId ActorId;
-    std::pair<ui32, ui64> GenStep; 
+    std::pair<ui32, ui64> GenStep;
     bool IsFollower;
-    ui64 TxId; 
-    ui64 TxStep; 
-    ui32 Status; 
-    ui64 PrepareArriveTime; 
-    ui64 ProposeLatency; 
-    ui64 ExecLatency; 
- 
-    void PrintTabletInfo() const { 
-        Cerr << "TabletId: " << TabletId 
-            << " Generation:Step: " << GenStep.first << ":" << GenStep.second 
-            << " ActorId: " << ActorId 
+    ui64 TxId;
+    ui64 TxStep;
+    ui32 Status;
+    ui64 PrepareArriveTime;
+    ui64 ProposeLatency;
+    ui64 ExecLatency;
+
+    void PrintTabletInfo() const {
+        Cerr << "TabletId: " << TabletId
+            << " Generation:Step: " << GenStep.first << ":" << GenStep.second
+            << " ActorId: " << ActorId
             << " IsFollower: " << (ui32)IsFollower << Endl;
-    } 
- 
-    void PrintTxInfo() const { 
-        Cerr << "Step:TxId: " << TxStep << ":" << TxId 
-            << " Status: " << Status 
-            << " PrepareArriveTime: " << PrepareArriveTime 
-            << " ProposeLatency: " << ProposeLatency 
-            << " ExecLatency: " << ExecLatency << Endl; 
-    } 
-}; 
- 
+    }
+
+    void PrintTxInfo() const {
+        Cerr << "Step:TxId: " << TxStep << ":" << TxId
+            << " Status: " << Status
+            << " PrepareArriveTime: " << PrepareArriveTime
+            << " ProposeLatency: " << ProposeLatency
+            << " ExecLatency: " << ExecLatency << Endl;
+    }
+};
+
 void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& out) {
-    TValue value = TValue::Create(result.GetValue(), result.GetType()); 
- 
-    TValue list = value["__tx_info"]; 
-    UNIT_ASSERT(list.HaveValue()); 
-    for (ui32 i = 0; i < list.Size(); ++i) { 
-        TValue row = list[i]; 
-        UNIT_ASSERT_VALUES_EQUAL(row.Size(), 12); 
- 
-        TTxInfo info; 
-        info.TabletId = row["TabletId"]; 
+    TValue value = TValue::Create(result.GetValue(), result.GetType());
+
+    TValue list = value["__tx_info"];
+    UNIT_ASSERT(list.HaveValue());
+    for (ui32 i = 0; i < list.Size(); ++i) {
+        TValue row = list[i];
+        UNIT_ASSERT_VALUES_EQUAL(row.Size(), 12);
+
+        TTxInfo info;
+        info.TabletId = row["TabletId"];
         info.ActorId = TActorId(row["ActorIdRawX1"], row["ActorIdRawX2"]);
-        info.GenStep = std::make_pair(row["Generation"], row["GenStep"]); 
+        info.GenStep = std::make_pair(row["Generation"], row["GenStep"]);
         info.IsFollower = row["IsFollower"];
-        info.TxId = row["TxId"]; 
-        info.TxStep = row["TxStep"]; 
-        info.Status = row["Status"]; 
-        info.PrepareArriveTime = row["PrepareArriveTime"]; 
-        info.ProposeLatency = row["ProposeLatency"]; 
-        info.ExecLatency = row["ExecLatency"]; 
- 
-        out.push_back(info); 
-    } 
-} 
- 
-} // namelesspace 
- 
+        info.TxId = row["TxId"];
+        info.TxStep = row["TxStep"];
+        info.Status = row["Status"];
+        info.PrepareArriveTime = row["PrepareArriveTime"];
+        info.ProposeLatency = row["ProposeLatency"];
+        info.ExecLatency = row["ExecLatency"];
+
+        out.push_back(info);
+    }
+}
+
+} // namelesspace
+
 Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(TestInspectProxy) {
         TPortManager tp;
@@ -341,13 +341,13 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.LocalQuery(TxAllocator, "("
             "(let row '('('dummyKey (Bool 'true))))"
             "(let select '('reservedIds))"
-            "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))" 
+            "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
         ")", res));
 
-        { 
-            TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-            UNIT_ASSERT(value["reservedIds"].Size() <= 1); 
-        } 
+        {
+            TValue value = TValue::Create(res.GetValue(), res.GetType());
+            UNIT_ASSERT(value["reservedIds"].Size() <= 1);
+        }
     }
 
     Y_UNIT_TEST(NoAffectedProgram) {
@@ -364,53 +364,53 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             "(return (AsList (SetResult 'res1 (Int32 '42))))"
         ")", res));
 
-        { 
-            TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-            TValue resOpt = value["res1"]; 
-            UNIT_ASSERT(resOpt.HaveValue()); 
-            UNIT_ASSERT_EQUAL(i32(resOpt), 42); 
-        } 
+        {
+            TValue value = TValue::Create(res.GetValue(), res.GetType());
+            TValue resOpt = value["res1"];
+            UNIT_ASSERT(resOpt.HaveValue());
+            UNIT_ASSERT_EQUAL(i32(resOpt), 42);
+        }
     }
 
     Y_UNIT_TEST(ReadWriteMiniKQL) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-        TTestTables tables(client, TTestTables::OneShard_NoOpts); 
- 
-        NKikimrMiniKQL::TResult writeRes; 
-        const TString writeQuery = R"(( 
-            (let row_ '('('key (Uint64 '42)))) 
-            (let update_ '('('uint (Uint64 '0)))) 
-            (let result_ (UpdateRow '/dc-1/Berkanavt/tables/Simple row_ update_)) 
-            (return (AsList result_)) 
-        ))"; 
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
- 
-        NKikimrMiniKQL::TResult readRes; 
-        const TString readQuery = R"(( 
-            (let row_ '('('key (Uint64 '42)))) 
-            (let select_ '('uint)) 
-            (let result_ (SelectRow '/dc-1/Berkanavt/tables/Simple row_ select_)) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
- 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue resOpt = value["res"]; 
-            UNIT_ASSERT(resOpt.HaveValue()); 
-            ui64 xval = resOpt[0]; 
-            UNIT_ASSERT_VALUES_EQUAL(xval, 0); 
-        } 
-    } 
- 
+        TTestTables tables(client, TTestTables::OneShard_NoOpts);
+
+        NKikimrMiniKQL::TResult writeRes;
+        const TString writeQuery = R"((
+            (let row_ '('('key (Uint64 '42))))
+            (let update_ '('('uint (Uint64 '0))))
+            (let result_ (UpdateRow '/dc-1/Berkanavt/tables/Simple row_ update_))
+            (return (AsList result_))
+        ))";
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
+
+        NKikimrMiniKQL::TResult readRes;
+        const TString readQuery = R"((
+            (let row_ '('('key (Uint64 '42))))
+            (let select_ '('uint))
+            (let result_ (SelectRow '/dc-1/Berkanavt/tables/Simple row_ select_))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
+
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue resOpt = value["res"];
+            UNIT_ASSERT(resOpt.HaveValue());
+            ui64 xval = resOpt[0];
+            UNIT_ASSERT_VALUES_EQUAL(xval, 0);
+        }
+    }
+
     void ReadWriteViaMiniKQLBody(TClient &client, bool useHead, bool useFollower) {
         NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
@@ -449,17 +449,17 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue resOpt1 = value["uint1"]; 
-            TValue resOpt2 = value["uint2"]; 
-            UNIT_ASSERT(resOpt1.HaveValue() && ui64(resOpt1) == 10); 
-            UNIT_ASSERT(resOpt2.HaveValue() && ui64(resOpt2) == 10); 
-            TValue resEmpty1 = value["empty1"]; 
-            TValue resEmpty2 = value["empty2"]; 
-            UNIT_ASSERT(resEmpty1.HaveValue() && bool(resEmpty1) == false); 
-            UNIT_ASSERT(resEmpty2.HaveValue() && bool(resEmpty2) == false); 
-        } 
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue resOpt1 = value["uint1"];
+            TValue resOpt2 = value["uint2"];
+            UNIT_ASSERT(resOpt1.HaveValue() && ui64(resOpt1) == 10);
+            UNIT_ASSERT(resOpt2.HaveValue() && ui64(resOpt2) == 10);
+            TValue resEmpty1 = value["empty1"];
+            TValue resEmpty2 = value["empty2"];
+            UNIT_ASSERT(resEmpty1.HaveValue() && bool(resEmpty1) == false);
+            UNIT_ASSERT(resEmpty2.HaveValue() && bool(resEmpty2) == false);
+        }
 
         const TString rangeQueryTemplate = R"___(
             (
@@ -475,15 +475,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         SubstGlobal(rangeQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         NKikimrMiniKQL::TResult rangeRes;
         UNIT_ASSERT(client.FlatQuery(rangeQuery, rangeRes));
- 
-        { 
-            //Cerr << rangeRes << Endl; 
-            TValue value = TValue::Create(rangeRes.GetValue(), rangeRes.GetType()); 
-            TValue rangeOpt = value["result"]; 
-            UNIT_ASSERT(rangeOpt.HaveValue()); 
-            TValue list = rangeOpt["List"]; 
-            UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2); 
-        } 
+
+        {
+            //Cerr << rangeRes << Endl;
+            TValue value = TValue::Create(rangeRes.GetValue(), rangeRes.GetType());
+            TValue rangeOpt = value["result"];
+            UNIT_ASSERT(rangeOpt.HaveValue());
+            TValue list = rangeOpt["List"];
+            UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
+        }
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQL) {
@@ -496,116 +496,116 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
     }
 
     Y_UNIT_TEST(ReadWrite_MiniKQL_AfterAlter) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_SoftUpdates); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
-    } 
- 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+    }
+
     Y_UNIT_TEST(ReadWrite_MiniKQL_BeforeAndAfterAlter) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-            AlterTestTables(client); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
-    } 
- 
+
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+            AlterTestTables(client);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
+    }
+
     Y_UNIT_TEST(ReadWriteViaMiniKQLRecreateDifferentTable) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -616,10 +616,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
 
         {
             NKikimrSchemeOp::TTableDescription tableSimple;
@@ -664,15 +664,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            ReadWriteViaMiniKQLBody(client, false, false); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            ReadWriteViaMiniKQLBody(client, false, false);
+        }
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) {
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         client.InitRootScheme();
-        TTestTables tables(client, TTestTables::Sharded_NoOpts); 
+        TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         ReadWriteViaMiniKQLBody(client, true, false);
@@ -706,20 +706,20 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1); 
-            ReadWriteViaMiniKQLBody(client, false, true); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 3); 
-            ReadWriteViaMiniKQLBody(client, false, true); 
-        } 
- 
-        { 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
+            ReadWriteViaMiniKQLBody(client, false, true);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 3);
+            ReadWriteViaMiniKQLBody(client, false, true);
+        }
+
+        {
             TTestTables tables(client, TTestTables::Sharded_NoOpts, 2); //max followers is 3
-            ReadWriteViaMiniKQLBody(client, false, true); 
-        } 
+            ReadWriteViaMiniKQLBody(client, false, true);
+        }
     }
 
     void GetStepTxIdBody(TClient &client, bool useHead) {
@@ -757,21 +757,21 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         SubstGlobal(readQuery, "__HEAD__", !useHead ? "'online" : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue resOpt1 = value["uint1"]; 
-            TValue resOpt2 = value["uint2"]; 
-            UNIT_ASSERT(resOpt1.HaveValue() && ui64(resOpt1) == 10); 
-            UNIT_ASSERT(resOpt2.HaveValue() && ui64(resOpt2) == 10); 
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue resOpt1 = value["uint1"];
+            TValue resOpt2 = value["uint2"];
+            UNIT_ASSERT(resOpt1.HaveValue() && ui64(resOpt1) == 10);
+            UNIT_ASSERT(resOpt2.HaveValue() && ui64(resOpt2) == 10);
 
-            TValue resStep = value["step"]; 
-            UNIT_ASSERT(resStep.HaveValue()); 
-            ui64 stepValue = resStep; 
-            TValue resTxId = value["txid"]; 
-            UNIT_ASSERT(resTxId.HaveValue()); 
-            ui64 txIdValue = resTxId; 
-            UNIT_ASSERT((useHead ? (stepValue == 0) : (stepValue > 0)) && (txIdValue > 0)); 
-        } 
+            TValue resStep = value["step"];
+            UNIT_ASSERT(resStep.HaveValue());
+            ui64 stepValue = resStep;
+            TValue resTxId = value["txid"];
+            UNIT_ASSERT(resTxId.HaveValue());
+            ui64 txIdValue = resTxId;
+            UNIT_ASSERT((useHead ? (stepValue == 0) : (stepValue > 0)) && (txIdValue > 0));
+        }
     }
 
     Y_UNIT_TEST(GetStepTxId) {
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         client.InitRootScheme();
-        TTestTables tables(client, TTestTables::Sharded_NoOpts); 
+        TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         GetStepTxIdBody(client, false);
     }
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TClient client(settings);
 
         client.InitRootScheme();
-        TTestTables tables(client, TTestTables::Sharded_NoOpts); 
+        TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         GetStepTxIdBody(client, true);
     }
@@ -839,14 +839,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
 
-        { 
-            TValue value = TValue::Create(updateRes.GetValue(), updateRes.GetType()); 
-            TValue cmp1Opt = value["cmp1"]; 
-            TValue cmp2Opt = value["cmp2"]; 
+        {
+            TValue value = TValue::Create(updateRes.GetValue(), updateRes.GetType());
+            TValue cmp1Opt = value["cmp1"];
+            TValue cmp2Opt = value["cmp2"];
 
-            UNIT_ASSERT(cmp1Opt.HaveValue() && bool(cmp1Opt) == true); 
-            UNIT_ASSERT(cmp2Opt.HaveValue() && bool(cmp2Opt) == false); 
-        } 
+            UNIT_ASSERT(cmp1Opt.HaveValue() && bool(cmp1Opt) == true);
+            UNIT_ASSERT(cmp2Opt.HaveValue() && bool(cmp2Opt) == false);
+        }
 
         NKikimrMiniKQL::TResult readRes;
         const TString readQuery = R"___(
@@ -867,14 +867,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue row1Opt = value["row1"]; 
-            TValue row2Opt = value["row2"]; 
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue row1Opt = value["row1"];
+            TValue row2Opt = value["row2"];
 
-            UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10); 
-            UNIT_ASSERT(row2Opt.HaveValue() && ui64(row2Opt) == 50); 
-        } 
+            UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10);
+            UNIT_ASSERT(row2Opt.HaveValue() && ui64(row2Opt) == 50);
+        }
     }
 
     Y_UNIT_TEST(CASViaMiniKQL) {
@@ -887,45 +887,45 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            CASViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            CASViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            CASViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            CASViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            CASViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            CASViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            CASViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            CASViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            CASViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder); 
-            CASViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_SoftUpdates); 
-            CASViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates); 
-            CASViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            CASViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
+            CASViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
+            CASViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
+            CASViaMiniKQLBody(client);
+        }
     }
 
     void RowEraseViaMiniKQLBody(TClient &client) {
@@ -975,14 +975,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue row1Opt = value["row1"]; 
-            TValue row2Opt = value["row2"]; 
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue row1Opt = value["row1"];
+            TValue row2Opt = value["row2"];
 
-            UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10); 
-            UNIT_ASSERT(!row2Opt.HaveValue()); 
-        } 
+            UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10);
+            UNIT_ASSERT(!row2Opt.HaveValue());
+        }
     }
 
     Y_UNIT_TEST(RowEraseViaMiniKQL) {
@@ -995,45 +995,45 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            RowEraseViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            RowEraseViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            RowEraseViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            RowEraseViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_SoftUpdates); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates); 
-            RowEraseViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            RowEraseViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
+            RowEraseViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
+            RowEraseViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
+            RowEraseViaMiniKQLBody(client);
+        }
     }
 
     void ReadRangeViaMiniKQLBody(TClient &client) {
@@ -1069,16 +1069,16 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue list = value["list"]; 
+        {
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue list = value["list"];
 
-            UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2); 
-            UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10); 
-            UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2); 
-            UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 20); 
-            UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 2305843009213693951); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
+            UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 20);
+            UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 2305843009213693951);
+        }
     }
 
     Y_UNIT_TEST(ReadRangeViaMiniKQL) {
@@ -1091,45 +1091,45 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            ReadRangeViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            ReadRangeViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            ReadRangeViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            ReadRangeViaMiniKQLBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_SoftUpdates); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates); 
-            ReadRangeViaMiniKQLBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            ReadRangeViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
+            ReadRangeViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
+            ReadRangeViaMiniKQLBody(client);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
+            ReadRangeViaMiniKQLBody(client);
+        }
     }
 
     void SelectRangeOptionsBody(TClient &client) {
@@ -1181,20 +1181,20 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
 
-            { 
-                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-                TValue list = value["list"]; 
+            {
+                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+                TValue list = value["list"];
 
-                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 4); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 20); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 3); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["uint"]), 30); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693951); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["uint"]), 40); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["key"]), 2305843009213693952); 
-            } 
+                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 20);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 3);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["uint"]), 30);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693951);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["uint"]), 40);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["key"]), 2305843009213693952);
+            }
         }
 
         {
@@ -1230,18 +1230,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.FlatQueryParams(binQuery, readParams, true, readRes));
 
-            { 
-                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-                TValue list = value["list"]; 
+            {
+                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+                TValue list = value["list"];
 
-                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 3); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 20); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 3); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 30); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 2305843009213693951); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["uint"]), 40); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693952); 
-            } 
+                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 20);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 3);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["uint"]), 30);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[1]["key"]), 2305843009213693951);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["uint"]), 40);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693952);
+            }
         }
 
         {
@@ -1262,14 +1262,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-            { 
-                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-                TValue list = value["list"]; 
+            {
+                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+                TValue list = value["list"];
 
-                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 30); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2305843009213693951); 
-            } 
+                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 30);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2305843009213693951);
+            }
         }
 
         {
@@ -1290,11 +1290,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-            { 
-                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-                TValue list = value["list"]; 
-                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0); 
-            } 
+            {
+                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+                TValue list = value["list"];
+                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
+            }
         }
     }
 
@@ -1307,18 +1307,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            SelectRangeOptionsBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            SelectRangeOptionsBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            SelectRangeOptionsBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            SelectRangeOptionsBody(client);
+        }
     }
 
-    void MultiSelectBody(TClient &client, bool useFlatMap = false) { 
+    void MultiSelectBody(TClient &client, bool useFlatMap = false) {
         NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
             (
@@ -1378,14 +1378,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
             UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
 
-            { 
-                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-                TValue list = value["list"]; 
+            {
+                TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+                TValue list = value["list"];
 
-                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10); 
-                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2); 
-            } 
+                UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
+                UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
+            }
         }
     }
 
@@ -1399,45 +1399,45 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_SoftUpdates); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_SoftUpdates); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
+            MultiSelectBody(client);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates); 
-            MultiSelectBody(client); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
+            MultiSelectBody(client);
+        }
     }
 
     Y_UNIT_TEST(TestMultiSelectFlat) {
@@ -1450,15 +1450,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         client.InitRootScheme();
 
-        { 
-            TTestTables tables(client, TTestTables::OneShard_NoOpts); 
-            MultiSelectBody(client, true); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::OneShard_NoOpts);
+            MultiSelectBody(client, true);
+        }
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            MultiSelectBody(client, true); 
-        } 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            MultiSelectBody(client, true);
+        }
     }
 
     void PrepareTestData(TClient& client, bool allowFollowerPromotion) {
@@ -1502,14 +1502,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         NKikimrMiniKQL::TResult readRes;
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
 
-        { 
-            //Cerr << readRes << Endl; 
-            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
-            TValue row = value["row"]; 
-            UNIT_ASSERT_VALUES_EQUAL(2, row.Size()); 
-            UNIT_ASSERT_VALUES_EQUAL(10, ui64(row["uint"])); 
-            UNIT_ASSERT_VALUES_EQUAL(2, ui64(row["key"])); 
-        } 
+        {
+            //Cerr << readRes << Endl;
+            TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
+            TValue row = value["row"];
+            UNIT_ASSERT_VALUES_EQUAL(2, row.Size());
+            UNIT_ASSERT_VALUES_EQUAL(10, ui64(row["uint"]));
+            UNIT_ASSERT_VALUES_EQUAL(2, ui64(row["key"]));
+        }
     }
 
     void WaitForLeaderStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) {
@@ -1674,90 +1674,90 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     void DiagnosticsBody(TClient &client, bool testWrite, bool allowFollower = false) {
-        TString query; 
-        if (testWrite) { 
-            query = R"(( 
-                (let key_ '('('key (Uint64 '0)))) 
-                (let value_ '('('uint (Uint64 '10)))) 
-                (return (AsList 
-                    (UpdateRow '/dc-1/Berkanavt/tables/Simple key_ value_) 
-                    (Diagnostics) 
-                )) 
-            ))"; 
-        } else { 
-            query = Sprintf(R"(( 
-                (let key_ '('('key (Uint64 '0)))) 
-                (let select_ '('uint)) 
-                (let result_ (SelectRow '/dc-1/Berkanavt/tables/Simple key_ select_ %s)) 
-                (return (AsList 
-                    (SetResult 'res result_) 
-                    (Diagnostics) 
-                )) 
+        TString query;
+        if (testWrite) {
+            query = R"((
+                (let key_ '('('key (Uint64 '0))))
+                (let value_ '('('uint (Uint64 '10))))
+                (return (AsList
+                    (UpdateRow '/dc-1/Berkanavt/tables/Simple key_ value_)
+                    (Diagnostics)
+                ))
+            ))";
+        } else {
+            query = Sprintf(R"((
+                (let key_ '('('key (Uint64 '0))))
+                (let select_ '('uint))
+                (let result_ (SelectRow '/dc-1/Berkanavt/tables/Simple key_ select_ %s))
+                (return (AsList
+                    (SetResult 'res result_)
+                    (Diagnostics)
+                ))
             ))", allowFollower ? "'follower" : "");
-        } 
+        }
 
-        NKikimrMiniKQL::TResult result; 
-        UNIT_ASSERT(client.FlatQuery(query, result)); 
- 
-        { 
-            //Cerr << result.DebugString() << Endl; 
- 
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT(client.FlatQuery(query, result));
+
+        {
+            //Cerr << result.DebugString() << Endl;
+
             TVector<TTxInfo> infos;
-            ExtractResultInfo(result, infos); 
- 
-            for (const auto& txInfo : infos) { 
-                txInfo.PrintTabletInfo(); 
-                txInfo.PrintTxInfo(); 
-            } 
- 
-            UNIT_ASSERT_EQUAL(infos.size(), 1); 
+            ExtractResultInfo(result, infos);
+
+            for (const auto& txInfo : infos) {
+                txInfo.PrintTabletInfo();
+                txInfo.PrintTxInfo();
+            }
+
+            UNIT_ASSERT_EQUAL(infos.size(), 1);
             UNIT_ASSERT(allowFollower || (infos[0].IsFollower == false));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(Diagnostics) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            DiagnosticsBody(client, true); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1); 
-            DiagnosticsBody(client, true); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            DiagnosticsBody(client, false); 
-        } 
 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1); 
-            DiagnosticsBody(client, false); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts); 
-            DiagnosticsBody(client, false, true); 
-        } 
- 
-        { 
-            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1); 
-            DiagnosticsBody(client, false, true); 
-        } 
-    } 
- 
-    // local 
- 
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            DiagnosticsBody(client, true);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
+            DiagnosticsBody(client, true);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            DiagnosticsBody(client, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
+            DiagnosticsBody(client, false);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts);
+            DiagnosticsBody(client, false, true);
+        }
+
+        {
+            TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
+            DiagnosticsBody(client, false, true);
+        }
+    }
+
+    // local
+
     TString DiffStrings(const TString& newStr, const TString& oldStr) {
         TVector<NDiff::TChunk<char>> chunks;
         NDiff::InlineDiff(chunks, newStr, oldStr, "\n");
@@ -1888,131 +1888,131 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TString schemaDiff = DiffStrings(oldScheme, newScheme);
         UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
     }
- 
+
     Y_UNIT_TEST(TestOldTypes) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-        CreateOldTypesTables(client); 
- 
-        const char * writeOldTypes = R"(( 
-            (let row_ '('('key (Uint32 '42)) '('strKey (ByteString 'old)) '('utf8Key (Utf8String 'old)))) 
-            (let update_ '('('strData (ByteString 'old)) '('utf8Data (Utf8String 'old)))) 
-            (let result_ (UpdateRow '%s/%s row_ update_)) 
-            (return (AsList result_)) 
-        ))"; 
- 
-        const char * writeNewTypes = R"(( 
-            (let row_ '('('key (Uint32 '42)) '('strKey (String 'new)) '('utf8Key (Utf8 'new)))) 
-            (let update_ '('('strData (String 'new)) '('utf8Data (Utf8 'new)))) 
-            (let result_ (UpdateRow '%s/%s row_ update_)) 
-            (return (AsList result_)) 
-        ))"; 
- 
-        NKikimrMiniKQL::TResult res; 
+        CreateOldTypesTables(client);
+
+        const char * writeOldTypes = R"((
+            (let row_ '('('key (Uint32 '42)) '('strKey (ByteString 'old)) '('utf8Key (Utf8String 'old))))
+            (let update_ '('('strData (ByteString 'old)) '('utf8Data (Utf8String 'old))))
+            (let result_ (UpdateRow '%s/%s row_ update_))
+            (return (AsList result_))
+        ))";
+
+        const char * writeNewTypes = R"((
+            (let row_ '('('key (Uint32 '42)) '('strKey (String 'new)) '('utf8Key (Utf8 'new))))
+            (let update_ '('('strData (String 'new)) '('utf8Data (Utf8 'new))))
+            (let result_ (UpdateRow '%s/%s row_ update_))
+            (return (AsList result_))
+        ))";
+
+        NKikimrMiniKQL::TResult res;
         UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(writeOldTypes, TablePlacement.data(), "New"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(writeNewTypes, TablePlacement.data(), "New"), res));
- 
-        const char * readOldTypes = R"(( 
-            (let row_ '('('key (Uint32 '42)) '('strKey (ByteString 'old)) '('utf8Key (Utf8String 'old)))) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRow '%s/%s row_ select_)) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
-        const char * readNewTypes = R"(( 
-            (let row_ '('('key (Uint32 '42)) '('strKey (String 'old)) '('utf8Key (Utf8 'old)))) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRow '%s/%s row_ select_)) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
+
+        const char * readOldTypes = R"((
+            (let row_ '('('key (Uint32 '42)) '('strKey (ByteString 'old)) '('utf8Key (Utf8String 'old))))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRow '%s/%s row_ select_))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
+        const char * readNewTypes = R"((
+            (let row_ '('('key (Uint32 '42)) '('strKey (String 'old)) '('utf8Key (Utf8 'old))))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRow '%s/%s row_ select_))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
         UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(readOldTypes, TablePlacement.data(), "New"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(readNewTypes, TablePlacement.data(), "New"), res));
- 
-        // TODO: check resluts 
- 
-        const char * rangeOldTypes = R"(( 
-            (let $1 '('key (Uint32 '42) (Uint32 '42))) 
-            (let $2 '('strKey (ByteString 'old) (ByteString 'old))) 
-            (let $3 '('utf8Key (Utf8String 'old) (Utf8String 'old))) 
-            (let range_ '('IncFrom 'IncTo $1 $2 $3)) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRange '%s/%s range_ select_ '())) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
-        const char * rangeNewTypes = R"(( 
-            (let $1 '('key (Uint32 '42) (Uint32 '42))) 
-            (let $2 '('strKey (String 'old) (String 'old))) 
-            (let $3 '('utf8Key (Utf8 'old) (Utf8 'old))) 
-            (let range_ '('IncFrom 'IncTo $1 $2 $3)) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRange '%s/%s range_ select_ '())) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
+
+        // TODO: check resluts
+
+        const char * rangeOldTypes = R"((
+            (let $1 '('key (Uint32 '42) (Uint32 '42)))
+            (let $2 '('strKey (ByteString 'old) (ByteString 'old)))
+            (let $3 '('utf8Key (Utf8String 'old) (Utf8String 'old)))
+            (let range_ '('IncFrom 'IncTo $1 $2 $3))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRange '%s/%s range_ select_ '()))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
+        const char * rangeNewTypes = R"((
+            (let $1 '('key (Uint32 '42) (Uint32 '42)))
+            (let $2 '('strKey (String 'old) (String 'old)))
+            (let $3 '('utf8Key (Utf8 'old) (Utf8 'old)))
+            (let range_ '('IncFrom 'IncTo $1 $2 $3))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRange '%s/%s range_ select_ '()))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
         UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(rangeOldTypes, TablePlacement.data(), "New"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "Old"), res));
         UNIT_ASSERT(client.FlatQuery(Sprintf(rangeNewTypes, TablePlacement.data(), "New"), res));
- 
-        // TODO: check resluts 
-    } 
- 
+
+        // TODO: check resluts
+    }
+
     Y_UNIT_TEST(TestOldTypeParams) {
-        TPortManager tp; 
-        ui16 port = tp.GetPort(2134); 
- 
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-        CreateOldTypesTables(client); 
- 
-        const char * paramsOld = R"(( 
-            (let params (Parameters)) 
-            (let params (AddParameter params 'STR_KEY (ByteString 'old))) 
-            (let params (AddParameter params 'UTF8_KEY (Utf8String 'old))) 
-            (return params) 
-        ))"; 
- 
-        const char * paramsNew = R"(( 
-            (let params (Parameters)) 
-            (let params (AddParameter params 'STR_KEY (String 'old))) 
-            (let params (AddParameter params 'UTF8_KEY (Utf8 'old))) 
-            (return params) 
-        ))"; 
- 
-        const char * writeOldTypes = R"(( 
-            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString))) 
-            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String))) 
-            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_))) 
-            (let update_ '('('strData (ByteString 'old)) '('utf8Data (Utf8String 'old)))) 
-            (let result_ (UpdateRow '%s/%s row_ update_)) 
-            (return (AsList result_)) 
-        ))"; 
- 
-        const char * writeNewTypes = R"(( 
-            (let strKey_ (Parameter 'STR_KEY (DataType 'String))) 
-            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8))) 
-            (let row_ '('('key (Uint32 '42)) '('strKey (String 'new)) '('utf8Key (Utf8 'new)))) 
-            (let update_ '('('strData (String 'new)) '('utf8Data (Utf8 'new)))) 
-            (let result_ (UpdateRow '%s/%s row_ update_)) 
-            (return (AsList result_)) 
-        ))"; 
- 
-        NKikimrMiniKQL::TResult res; 
+        CreateOldTypesTables(client);
+
+        const char * paramsOld = R"((
+            (let params (Parameters))
+            (let params (AddParameter params 'STR_KEY (ByteString 'old)))
+            (let params (AddParameter params 'UTF8_KEY (Utf8String 'old)))
+            (return params)
+        ))";
+
+        const char * paramsNew = R"((
+            (let params (Parameters))
+            (let params (AddParameter params 'STR_KEY (String 'old)))
+            (let params (AddParameter params 'UTF8_KEY (Utf8 'old)))
+            (return params)
+        ))";
+
+        const char * writeOldTypes = R"((
+            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString)))
+            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String)))
+            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_)))
+            (let update_ '('('strData (ByteString 'old)) '('utf8Data (Utf8String 'old))))
+            (let result_ (UpdateRow '%s/%s row_ update_))
+            (return (AsList result_))
+        ))";
+
+        const char * writeNewTypes = R"((
+            (let strKey_ (Parameter 'STR_KEY (DataType 'String)))
+            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8)))
+            (let row_ '('('key (Uint32 '42)) '('strKey (String 'new)) '('utf8Key (Utf8 'new))))
+            (let update_ '('('strData (String 'new)) '('utf8Data (Utf8 'new))))
+            (let result_ (UpdateRow '%s/%s row_ update_))
+            (return (AsList result_))
+        ))";
+
+        NKikimrMiniKQL::TResult res;
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsOld, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
@@ -2021,25 +2021,25 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeOldTypes, TablePlacement.data(), "New"), paramsNew, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(writeNewTypes, TablePlacement.data(), "New"), paramsNew, false, res));
- 
-        const char * readOldTypes = R"(( 
-            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString))) 
-            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String))) 
-            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_))) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRow '%s/%s row_ select_)) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
-        const char * readNewTypes = R"(( 
-            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString))) 
-            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String))) 
-            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_))) 
-            (let select_ '('strData 'utf8Data)) 
-            (let result_ (SelectRow '%s/%s row_ select_)) 
-            (return (AsList (SetResult 'res result_))) 
-        ))"; 
- 
+
+        const char * readOldTypes = R"((
+            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString)))
+            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String)))
+            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_)))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRow '%s/%s row_ select_))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
+        const char * readNewTypes = R"((
+            (let strKey_ (Parameter 'STR_KEY (DataType 'ByteString)))
+            (let utf8Key_ (Parameter 'UTF8_KEY (DataType 'Utf8String)))
+            (let row_ '('('key (Uint32 '42)) '('strKey strKey_) '('utf8Key utf8Key_)))
+            (let select_ '('strData 'utf8Data))
+            (let result_ (SelectRow '%s/%s row_ select_))
+            (return (AsList (SetResult 'res result_)))
+        ))";
+
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsOld, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsOld, false, res));
@@ -2048,9 +2048,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readOldTypes, TablePlacement.data(), "New"), paramsNew, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "Old"), paramsNew, false, res));
         UNIT_ASSERT(client.FlatQueryParams(Sprintf(readNewTypes, TablePlacement.data(), "New"), paramsNew, false, res));
- 
-        // TODO: check resluts 
-    } 
+
+        // TODO: check resluts
+    }
 
     void OfflineFollowerContinueWork() {
         TPortManager tp;

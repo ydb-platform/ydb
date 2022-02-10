@@ -116,11 +116,11 @@ protected:
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx);

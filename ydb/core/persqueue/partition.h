@@ -216,8 +216,8 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
-    } 
- 
+    }
+
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
@@ -242,27 +242,27 @@ public:
     //got kwWriteResult - check it, become StateIdle of StateWrite(and write inflight)
 
 private:
-    template <typename TEv> 
+    template <typename TEv>
     TString EventStr(const char * func, const TEv& ev) {
-        TStringStream ss; 
+        TStringStream ss;
         ss << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetBase()->ToStringHeader() << "), Tablet " << Tablet << ", Partition " << Partition
            << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString() << ", Cookie: " << ev->Cookie;
-        return ss.Str(); 
-    } 
- 
+        return ss.Str();
+    }
+
     STFUNC(StateInit)
     {
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
- 
-        TRACE_EVENT(NKikimrServices::PERSQUEUE); 
+
+        TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            HFuncTraced(TEvKeyValue::TEvResponse, HandleOnInit); //result of reads 
+            HFuncTraced(TEvKeyValue::TEvResponse, HandleOnInit); //result of reads
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
-            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring); 
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle); 
+            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
+            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, HandleOnInit);
             HFuncTraced(TEvPQ::TEvPartitionStatus, HandleOnInit);
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
@@ -281,24 +281,24 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
- 
-        TRACE_EVENT(NKikimrServices::PERSQUEUE); 
+
+        TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvKeyValue::TEvResponse, Handle);
-            HFuncTraced(TEvPQ::TEvBlobResponse, Handle); 
-            HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle); 
-            HFuncTraced(TEvPQ::TEvRead, Handle); 
+            HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
+            HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
+            HFuncTraced(TEvPQ::TEvRead, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
-            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring); 
-            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle); 
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle); 
+            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
+            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
+            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
             HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle); 
+            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
@@ -328,28 +328,28 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
- 
-        TRACE_EVENT(NKikimrServices::PERSQUEUE); 
+
+        TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvKeyValue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvHandleWriteResponse, Handle);
-            HFuncTraced(TEvPQ::TEvBlobResponse, Handle); 
-            HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite); 
-            HFuncTraced(TEvPQ::TEvRead, Handle); 
+            HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
+            HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
+            HFuncTraced(TEvPQ::TEvRead, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
-            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring); 
-            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle); 
+            HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
+            HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
             HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
             HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
-            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle); 
+            HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle); 
+            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
@@ -406,12 +406,12 @@ private:
     };
 
 
-    struct TUserCookie { 
+    struct TUserCookie {
         TString User;
-        ui64 Cookie; 
-    }; 
- 
- 
+        ui64 Cookie;
+    };
+
+
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;

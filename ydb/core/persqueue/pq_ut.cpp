@@ -1862,47 +1862,47 @@ Y_UNIT_TEST(TestReadSubscription) {
     });
 }
 
-// 
+//
 
- 
+
 Y_UNIT_TEST(TestPQCacheSizeManagement) {
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
- 
-        tc.Runtime->SetScheduledLimit(200); 
- 
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(200);
+
         activeZone = false;
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
- 
+
         TVector<std::pair<ui64, TString>> data;
- 
+
         ui32 pp =  4 + 8 + 2 + 9 + 100;
         TString tmp{1024*1024 - pp - 2, '-'};
-        char k = 0; 
-        for (ui32 i = 0; i < 26 * 1024 * 1024;) { 
+        char k = 0;
+        for (ui32 i = 0; i < 26 * 1024 * 1024;) {
             TString ss = "";
-            ss += k; 
-            ss += tmp; 
-            ss += char((i + 1) % 256); 
-            ++k; 
-            data.push_back({i + 1, ss}); 
-            i += ss.size() + pp; 
-        } 
-        CmdWrite(0, "sourceid0", data, tc, false, {}, true); 
-        PQGetPartInfo(0, 26, tc); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        for (ui32 i = 0; i < 10; ++i) { 
-            CmdRead(0, 0, 1, 1024*102400, 1, false, tc); 
-            RestartTablet(tc); 
-        } 
-    }); 
-} 
- 
+            ss += k;
+            ss += tmp;
+            ss += char((i + 1) % 256);
+            ++k;
+            data.push_back({i + 1, ss});
+            i += ss.size() + pp;
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+        PQGetPartInfo(0, 26, tc);
+
+        TAutoPtr<IEventHandle> handle;
+        for (ui32 i = 0; i < 10; ++i) {
+            CmdRead(0, 0, 1, 1024*102400, 1, false, tc);
+            RestartTablet(tc);
+        }
+    });
+}
+
 Y_UNIT_TEST(TestOffsetEstimation) {
     std::deque<NPQ::TDataKey> container = {
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 1, 0, 0, 0), 0, TInstant::Seconds(1), 10},

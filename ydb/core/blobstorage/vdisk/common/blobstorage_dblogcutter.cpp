@@ -199,8 +199,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_RECOVERY_LOG_CUTTER;
-        } 
- 
+        }
+
         TRecoveryLogCutter(TLogCutterCtx &&logCutterCtx)
             : TActorBootstrapped<TRecoveryLogCutter>()
             , LogCutterCtx(std::move(logCutterCtx))

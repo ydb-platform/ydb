@@ -260,7 +260,7 @@ struct TDomainsInfo : public TThrRefBase {
         Y_VERIFY(domain->DomainUid <= MaxDomainId);
         Domains[domain->DomainUid] = domain;
         DomainByName[domain->Name] = domain;
-        Y_VERIFY(Domains.size() == DomainByName.size()); 
+        Y_VERIFY(Domains.size() == DomainByName.size());
         for (auto group: domain->StateStorageGroups) {
             DomainByStateStorageGroup[group] = domain;
         }
@@ -276,7 +276,7 @@ struct TDomainsInfo : public TThrRefBase {
 
     void ClearDomainsAndHive() {
         Domains.clear();
-        DomainByName.clear(); 
+        DomainByName.clear();
         DomainByStateStorageGroup.clear();
         DomainByHiveUid.clear();
         HivesByHiveUid.clear();
@@ -315,9 +315,9 @@ struct TDomainsInfo : public TThrRefBase {
     }
 
     const TDomain* GetDomainByName(TStringBuf name) const {
-        auto it = DomainByName.find(name); 
-        if (it != DomainByName.end()) 
-            return it->second.Get(); 
+        auto it = DomainByName.find(name);
+        if (it != DomainByName.end())
+            return it->second.Get();
         return nullptr;
     }
 

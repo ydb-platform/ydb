@@ -90,9 +90,9 @@ struct TTxState {
         item(TxAlterFileStore, 45) \
         item(TxDropFileStore, 46) \
         item(TxRestore, 47) \
-        item(TxCreateOlapStore, 48) \ 
-        item(TxAlterOlapStore, 49) \ 
-        item(TxDropOlapStore, 50) \ 
+        item(TxCreateOlapStore, 48) \
+        item(TxAlterOlapStore, 49) \
+        item(TxDropOlapStore, 50) \
         item(TxCreateOlapTable, 51) \
         item(TxAlterOlapTable, 52) \
         item(TxDropOlapTable, 53) \
@@ -293,7 +293,7 @@ struct TTxState {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
-        case TxCreateOlapStore: 
+        case TxCreateOlapStore:
         case TxCreateOlapTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
@@ -316,7 +316,7 @@ struct TTxState {
         case TxDropLock: //this is more like alter
             return false;
         case TxDropTable:
-        case TxDropOlapStore: 
+        case TxDropOlapStore:
         case TxDropOlapTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
@@ -337,7 +337,7 @@ struct TTxState {
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
-        case TxAlterOlapStore: 
+        case TxAlterOlapStore:
         case TxAlterOlapTable:
         case TxModifyACL:
         case TxSplitTablePartition:
@@ -372,7 +372,7 @@ struct TTxState {
     bool IsDrop() const {
         switch (TxType) {
         case TxDropTable:
-        case TxDropOlapStore: 
+        case TxDropOlapStore:
         case TxDropOlapTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
@@ -391,7 +391,7 @@ struct TTxState {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
-        case TxCreateOlapStore: 
+        case TxCreateOlapStore:
         case TxCreateOlapTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
@@ -416,7 +416,7 @@ struct TTxState {
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
-        case TxAlterOlapStore: 
+        case TxAlterOlapStore:
         case TxAlterOlapTable:
         case TxModifyACL:
         case TxSplitTablePartition:
@@ -451,7 +451,7 @@ struct TTxState {
     bool CanDeleteParts() const {
         switch (TxType) {
         case TxDropTable:
-        case TxDropOlapStore: 
+        case TxDropOlapStore:
         case TxDropOlapTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
@@ -473,7 +473,7 @@ struct TTxState {
             return false;
         case TxMkDir:
         case TxCreateTable:
-        case TxCreateOlapStore: 
+        case TxCreateOlapStore:
         case TxCreateOlapTable:
         case TxCopyTable:
         case TxCreatePQGroup:
@@ -497,7 +497,7 @@ struct TTxState {
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
-        case TxAlterOlapStore: 
+        case TxAlterOlapStore:
         case TxAlterOlapTable:
         case TxModifyACL:
         case TxBackup:

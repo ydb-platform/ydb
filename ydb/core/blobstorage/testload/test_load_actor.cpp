@@ -51,12 +51,12 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
-    } 
- 
+    }
+
     TLoadActor(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
         : NextRequestId(1)
         , Counters(counters)
-    {} 
+    {}
 
     void Bootstrap(const TActorContext& /*ctx*/) {
         Become(&TLoadActor::StateFunc);

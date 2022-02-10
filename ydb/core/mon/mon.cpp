@@ -30,8 +30,8 @@ namespace NActors {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::ACTORLIB_COMMON;
-        } 
- 
+        }
+
         TMonRequest(const TActorId &targetActorId, IMonHttpRequest& request,
                     NThreading::TPromise<THttpResponsePtr> result, const TVector<TString> &sids, TMon::TRequestAuthorizer authorizer)
             : TActor(&TMonRequest::StateFunc)

@@ -4,7 +4,7 @@
 #include "executor_thread.h"
 
 #include <util/system/defaults.h>
- 
+
 #define HFunc(TEvType, HandleFunc)                                                  \
     case TEvType::EventType: {                                                      \
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
@@ -25,8 +25,8 @@
         TEvType::TPtr* x = reinterpret_cast<TEvType::TPtr*>(&ev); \
         HandleFunc(*x, ctx);                                      \
         break;                                                    \
-    } 
- 
+    }
+
 #define hFuncTraced(TEvType, HandleFunc)                                            \
     case TEvType::EventType: {                                                      \
         TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                                        \

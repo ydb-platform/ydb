@@ -180,12 +180,12 @@ class TDescribeReq : public TActor<TDescribeReq> {
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx);
- 
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_PROXY_NAVIGATE;
-    } 
- 
+    }
+
     TDescribeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
@@ -395,8 +395,8 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
         bool needSysFolder = false;
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore || 
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable) 
+            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore ||
+            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable)
         {
             needSysFolder = true;
         } else if (self.GetPathId() == NSchemeShard::RootPathId) {

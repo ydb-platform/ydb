@@ -1560,8 +1560,8 @@ class TTabletCountersAggregatorActor : public TActorBootstrapped<TTabletCounters
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_COUNTERS_AGGREGATOR;
-    } 
- 
+    }
+
     //
     TTabletCountersAggregatorActor(bool follower);
     virtual ~TTabletCountersAggregatorActor();
@@ -1597,7 +1597,7 @@ private:
 ////////////////////////////////////////////
 TTabletCountersAggregatorActor::TTabletCountersAggregatorActor(bool follower)
     : Follower(follower)
-{} 
+{}
 
 ////////////////////////////////////////////
 TTabletCountersAggregatorActor::~TTabletCountersAggregatorActor()

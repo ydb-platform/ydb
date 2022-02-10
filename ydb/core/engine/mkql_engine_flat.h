@@ -98,93 +98,93 @@ public:
     };
 
     struct TTxLock {
-        TTxLock(ui64 lockId, ui64 dataShard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId) 
+        TTxLock(ui64 lockId, ui64 dataShard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId)
             : LockId(lockId)
             , DataShard(dataShard)
             , Generation(generation)
-            , Counter(counter) 
-            , SchemeShard(ssId) 
-            , PathId(pathId) 
-        {} 
+            , Counter(counter)
+            , SchemeShard(ssId)
+            , PathId(pathId)
+        {}
 
-        ui64 LockId; 
-        ui64 DataShard; 
-        ui32 Generation; 
-        ui64 Counter; 
-        ui64 SchemeShard; 
-        ui64 PathId; 
+        ui64 LockId;
+        ui64 DataShard;
+        ui32 Generation;
+        ui64 Counter;
+        ui64 SchemeShard;
+        ui64 PathId;
     };
 
-    struct TTabletInfo { 
-        struct TTxInfo { 
-            std::pair<ui64, ui64> StepTxId = {0,0}; 
-            ui32 Status = 0; 
-            TInstant PrepareArriveTime; 
-            TDuration ProposeLatency; 
-            TDuration ExecLatency; 
-        }; 
- 
+    struct TTabletInfo {
+        struct TTxInfo {
+            std::pair<ui64, ui64> StepTxId = {0,0};
+            ui32 Status = 0;
+            TInstant PrepareArriveTime;
+            TDuration ProposeLatency;
+            TDuration ExecLatency;
+        };
+
         TTabletInfo(ui64 tabletId, const std::pair<ui64, ui64>& actorId, ui32 gen, ui64 step, bool isFollower, TTxInfo&& txInfo)
-            : TabletId(tabletId) 
-            , ActorId(actorId) 
-            , TabletGenStep(gen, step) 
+            : TabletId(tabletId)
+            , ActorId(actorId)
+            , TabletGenStep(gen, step)
             , IsFollower(isFollower)
-            , TxInfo(txInfo) 
-        {} 
- 
-        ui64 TabletId; 
-        std::pair<ui64, ui64> ActorId; 
-        std::pair<ui32, ui64> TabletGenStep; 
+            , TxInfo(txInfo)
+        {}
+
+        ui64 TabletId;
+        std::pair<ui64, ui64> ActorId;
+        std::pair<ui32, ui64> TabletGenStep;
         bool IsFollower;
-        TTxInfo TxInfo; 
-    }; 
- 
-    struct TValidatedKey { 
-        std::unique_ptr<TKeyDesc> Key; 
-        bool IsWrite; 
-        bool IsResultPart; 
+        TTxInfo TxInfo;
+    };
+
+    struct TValidatedKey {
+        std::unique_ptr<TKeyDesc> Key;
+        bool IsWrite;
+        bool IsResultPart;
         THashSet<ui64> TargetShards;
- 
-        TValidatedKey(THolder<TKeyDesc>&& key, bool isWrite) 
-            : Key(key.Release()) 
-            , IsWrite(isWrite) 
-            , IsResultPart(false) 
-        {} 
- 
-        TValidatedKey(TValidatedKey&&) = default; 
-        TValidatedKey(const TValidatedKey&) = delete; 
- 
-        bool NeedSizeCalculation() const { return !IsWrite && (IsResultPart || TargetShards); } 
-    }; 
- 
+
+        TValidatedKey(THolder<TKeyDesc>&& key, bool isWrite)
+            : Key(key.Release())
+            , IsWrite(isWrite)
+            , IsResultPart(false)
+        {}
+
+        TValidatedKey(TValidatedKey&&) = default;
+        TValidatedKey(const TValidatedKey&) = delete;
+
+        bool NeedSizeCalculation() const { return !IsWrite && (IsResultPart || TargetShards); }
+    };
+
     struct TValidationInfo {
         TVector<TValidatedKey> Keys;
-        ui32 ReadsCount; 
-        ui32 WritesCount; 
-        ui32 DynKeysCount; 
+        ui32 ReadsCount;
+        ui32 WritesCount;
+        ui32 DynKeysCount;
         bool HasOutReadsets;
         bool HasInReadsets;
         bool Loaded;
- 
+
         TValidationInfo() {
             Clear();
         }
- 
-        TValidationInfo(TValidationInfo&&) = default; 
-        TValidationInfo(const TValidationInfo&) = delete; 
- 
-        bool HasWrites() const { return WritesCount > 0; } 
+
+        TValidationInfo(TValidationInfo&&) = default;
+        TValidationInfo(const TValidationInfo&) = delete;
+
+        bool HasWrites() const { return WritesCount > 0; }
         bool HasReads() const { return ReadsCount > 0; }
- 
-        void Clear() { 
-            Keys.clear(); 
-            ReadsCount = 0; 
-            WritesCount = 0; 
-            DynKeysCount = 0; 
+
+        void Clear() {
+            Keys.clear();
+            ReadsCount = 0;
+            WritesCount = 0;
+            DynKeysCount = 0;
             HasOutReadsets = false;
             HasInReadsets = false;
             Loaded = false;
-        } 
+        }
     };
 
     //-- error reporting
@@ -192,10 +192,10 @@ public:
 
     //-- proxy/shard interface
     virtual void SetStepTxId(const std::pair<ui64, ui64>& stepTxId) noexcept = 0;
-    virtual void AddTabletInfo(IEngineFlat::TTabletInfo&& info) noexcept = 0; 
-    virtual void AddTxLock(IEngineFlat::TTxLock&& txLock) noexcept = 0; 
+    virtual void AddTabletInfo(IEngineFlat::TTabletInfo&& info) noexcept = 0;
+    virtual void AddTxLock(IEngineFlat::TTxLock&& txLock) noexcept = 0;
     virtual TMaybe<ui64> GetLockTxId() noexcept = 0;
-    virtual bool HasDiagnosticsRequest() noexcept = 0; 
+    virtual bool HasDiagnosticsRequest() noexcept = 0;
 
     //-- proxy interface
     virtual EResult SetProgram(TStringBuf program, TStringBuf params = TStringBuf()) noexcept = 0;

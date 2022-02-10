@@ -28,8 +28,8 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
-    } 
- 
+    }
+
     TKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
             const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter,
             bool isSpringCleanup)

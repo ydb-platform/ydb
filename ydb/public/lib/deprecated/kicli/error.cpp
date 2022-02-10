@@ -37,9 +37,9 @@ bool TError::Success() const {
         break;
     case EFacility::FacilityTxProxy:
         switch (Code) {
-        case NTxProxy::TResultStatus::EStatus::ExecComplete: 
-        case NTxProxy::TResultStatus::EStatus::ExecAlready: 
-        case NTxProxy::TResultStatus::EStatus::ExecInProgress: 
+        case NTxProxy::TResultStatus::EStatus::ExecComplete:
+        case NTxProxy::TResultStatus::EStatus::ExecAlready:
+        case NTxProxy::TResultStatus::EStatus::ExecInProgress:
         case NTxProxy::TResultStatus::EStatus::ExecResponseData:
             return true;
         default:
@@ -82,10 +82,10 @@ bool TError::Permanent() const {
         break;
     case EFacility::FacilityTxProxy:
         switch (Code) {
-        case NTxProxy::TResultStatus::EStatus::ExecTimeout: 
-        case NTxProxy::TResultStatus::EStatus::ExecInProgress: 
-        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater: 
-        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded: 
+        case NTxProxy::TResultStatus::EStatus::ExecTimeout:
+        case NTxProxy::TResultStatus::EStatus::ExecInProgress:
+        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater:
+        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded:
         case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable:
             return false;
         default:
@@ -118,7 +118,7 @@ bool TError::Timeout() const {
         break;
     case EFacility::FacilityTxProxy:
         switch (Code) {
-        case NTxProxy::TResultStatus::EStatus::ExecTimeout: 
+        case NTxProxy::TResultStatus::EStatus::ExecTimeout:
             return true;
         default:
             break;
@@ -151,12 +151,12 @@ bool TError::Rejected() const {
         break;
     case EFacility::FacilityTxProxy:
         switch (Code) {
-        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater: 
-        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded: 
-        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable: 
-        case NTxProxy::TResultStatus::EStatus::CoordinatorDeclined: 
-        case NTxProxy::TResultStatus::EStatus::CoordinatorAborted: 
-        case NTxProxy::TResultStatus::EStatus::CoordinatorOutdated: 
+        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater:
+        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded:
+        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable:
+        case NTxProxy::TResultStatus::EStatus::CoordinatorDeclined:
+        case NTxProxy::TResultStatus::EStatus::CoordinatorAborted:
+        case NTxProxy::TResultStatus::EStatus::CoordinatorOutdated:
             return true;
         default:
             break;
@@ -214,53 +214,53 @@ TString TError::GetMessage() const {
         break;
     case EFacility::FacilityTxProxy:
         switch (Code) {
-        case NTxProxy::TResultStatus::EStatus::Unknown: 
+        case NTxProxy::TResultStatus::EStatus::Unknown:
             return "Status unknown, must not be seen";
-        case NTxProxy::TResultStatus::EStatus::WrongRequest: 
+        case NTxProxy::TResultStatus::EStatus::WrongRequest:
             return "Not recognized or erroneous request, see error description fields for possible details";
-        case NTxProxy::TResultStatus::EStatus::EmptyAffectedSet: 
+        case NTxProxy::TResultStatus::EStatus::EmptyAffectedSet:
             return "Program must touch at least one shard but touches none";
-        case NTxProxy::TResultStatus::EStatus::NotImplemented: 
+        case NTxProxy::TResultStatus::EStatus::NotImplemented:
             return "Not yet implemented feature requested";
-        case NTxProxy::TResultStatus::EStatus::ResolveError: 
+        case NTxProxy::TResultStatus::EStatus::ResolveError:
             return "Some keys not resolved, see UnresolvedKeys for details";
-        case NTxProxy::TResultStatus::EStatus::AccessDenied: 
+        case NTxProxy::TResultStatus::EStatus::AccessDenied:
             return "Access denied";
-        case NTxProxy::TResultStatus::EStatus::ProxyNotReady: 
+        case NTxProxy::TResultStatus::EStatus::ProxyNotReady:
             return "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s";
-        case NTxProxy::TResultStatus::EStatus::ProxyAccepted: 
+        case NTxProxy::TResultStatus::EStatus::ProxyAccepted:
             return "Request accepted by proxy. Transitional status";
-        case NTxProxy::TResultStatus::EStatus::ProxyResolved: 
+        case NTxProxy::TResultStatus::EStatus::ProxyResolved:
             return "Request keys resolved to datashards. Transitional status";
-        case NTxProxy::TResultStatus::EStatus::ProxyPrepared: 
+        case NTxProxy::TResultStatus::EStatus::ProxyPrepared:
             return "Request fragmets prepared on datashards. Transitional status";
-        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable: 
+        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable:
             return "One or more of affected datashards not available, request execution cancelled";
-        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater: 
+        case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater:
             return "One or more of affected datashards are starting, try again";
-        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded: 
+        case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded:
             return "One or more of affected datashards are overloaded, try again";
-        case NTxProxy::TResultStatus::EStatus::CoordinatorDeclined: 
+        case NTxProxy::TResultStatus::EStatus::CoordinatorDeclined:
             return "Coordinator declines to plan transaction, try again";
-        case NTxProxy::TResultStatus::EStatus::CoordinatorOutdated: 
+        case NTxProxy::TResultStatus::EStatus::CoordinatorOutdated:
             return "Coordinator was not able to plan transaction due to timing restrictions, try again";
-        case NTxProxy::TResultStatus::EStatus::CoordinatorAborted: 
+        case NTxProxy::TResultStatus::EStatus::CoordinatorAborted:
             return "Transaction aborted by coordinator";
-        case NTxProxy::TResultStatus::EStatus::CoordinatorPlanned: 
+        case NTxProxy::TResultStatus::EStatus::CoordinatorPlanned:
             return "Transaction planned for execution by coordinator. Transitional status";
-        case NTxProxy::TResultStatus::EStatus::CoordinatorUnknown: 
+        case NTxProxy::TResultStatus::EStatus::CoordinatorUnknown:
             return "Could not reach coordinator or coordinator pipe dropped before confirmation. Transaction status unknown";
-        case NTxProxy::TResultStatus::EStatus::ExecComplete: 
+        case NTxProxy::TResultStatus::EStatus::ExecComplete:
             return "Success";
-        case NTxProxy::TResultStatus::EStatus::ExecAlready: 
+        case NTxProxy::TResultStatus::EStatus::ExecAlready:
             return "Requested operation already applied";
-        case NTxProxy::TResultStatus::EStatus::ExecAborted: 
+        case NTxProxy::TResultStatus::EStatus::ExecAborted:
             return "Request aborted, particular meaning depends on context";
-        case NTxProxy::TResultStatus::EStatus::ExecTimeout: 
+        case NTxProxy::TResultStatus::EStatus::ExecTimeout:
             return "Proxy got no execution reply in timeout period";
-        case NTxProxy::TResultStatus::EStatus::ExecError: 
+        case NTxProxy::TResultStatus::EStatus::ExecError:
             return "Execution failed";
-        case NTxProxy::TResultStatus::EStatus::ExecInProgress: 
+        case NTxProxy::TResultStatus::EStatus::ExecInProgress:
             return "Request accepted and now runs";
         case NTxProxy::TResultStatus::EStatus::ExecResultUnavailable:
             return "Execution result unavailable.";
@@ -296,8 +296,8 @@ TError::TError(const TResult& result)
                 Code = response.GetExecutionEngineStatus();
             } else
             if (response.HasProxyErrorCode()
-                    && (NTxProxy::TResultStatus::EStatus)response.GetProxyErrorCode() != NTxProxy::TResultStatus::EStatus::ExecComplete 
-                    && (NTxProxy::TResultStatus::EStatus)response.GetProxyErrorCode() != NTxProxy::TResultStatus::EStatus::Unknown) { 
+                    && (NTxProxy::TResultStatus::EStatus)response.GetProxyErrorCode() != NTxProxy::TResultStatus::EStatus::ExecComplete
+                    && (NTxProxy::TResultStatus::EStatus)response.GetProxyErrorCode() != NTxProxy::TResultStatus::EStatus::Unknown) {
                 Facility = EFacility::FacilityTxProxy;
                 Code = response.GetProxyErrorCode();
             } else

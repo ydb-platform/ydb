@@ -96,10 +96,10 @@ enum ESimpleCounters {
     COUNTER_TTL_ENABLED_TABLE_COUNT = 80                  [(CounterOpts) = {Name: "TTLEnabledTables"}];
 
     COUNTER_IN_FLIGHT_OPS_TxRestore = 81                  [(CounterOpts) = {Name: "InFlightOps/Restore"}];
- 
-    COUNTER_IN_FLIGHT_OPS_TxCreateOlapStore = 82          [(CounterOpts) = {Name: "InFlightOps/CreateOlapStore"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterOlapStore = 83           [(CounterOpts) = {Name: "InFlightOps/AlterOlapStore"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropOlapStore = 84            [(CounterOpts) = {Name: "InFlightOps/DropOlapStore"}]; 
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateOlapStore = 82          [(CounterOpts) = {Name: "InFlightOps/CreateOlapStore"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterOlapStore = 83           [(CounterOpts) = {Name: "InFlightOps/AlterOlapStore"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropOlapStore = 84            [(CounterOpts) = {Name: "InFlightOps/DropOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateOlapTable = 85          [(CounterOpts) = {Name: "InFlightOps/CreateOlapTable"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterOlapTable = 86           [(CounterOpts) = {Name: "InFlightOps/AlterOlapTable"}];
     COUNTER_IN_FLIGHT_OPS_TxDropOlapTable = 87            [(CounterOpts) = {Name: "InFlightOps/DropOlapTable"}];
@@ -205,10 +205,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropFileStore = 48             [(CounterOpts) = {Name: "FinishedOps/DropFileStore"}];
 
     COUNTER_FINISHED_OPS_TxRestore = 49                   [(CounterOpts) = {Name: "FinishedOps/Restore"}];
- 
-    COUNTER_FINISHED_OPS_TxCreateOlapStore = 50           [(CounterOpts) = {Name: "FinishedOps/CreateOlapStore"}]; 
-    COUNTER_FINISHED_OPS_TxAlterOlapStore = 51            [(CounterOpts) = {Name: "FinishedOps/AlterOlapStore"}]; 
-    COUNTER_FINISHED_OPS_TxDropOlapStore = 52             [(CounterOpts) = {Name: "FinishedOps/DropOlapStore"}]; 
+
+    COUNTER_FINISHED_OPS_TxCreateOlapStore = 50           [(CounterOpts) = {Name: "FinishedOps/CreateOlapStore"}];
+    COUNTER_FINISHED_OPS_TxAlterOlapStore = 51            [(CounterOpts) = {Name: "FinishedOps/AlterOlapStore"}];
+    COUNTER_FINISHED_OPS_TxDropOlapStore = 52             [(CounterOpts) = {Name: "FinishedOps/DropOlapStore"}];
     COUNTER_FINISHED_OPS_TxCreateOlapTable = 53           [(CounterOpts) = {Name: "FinishedOps/CreateOlapTable"}];
     COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}];
     COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}];
@@ -341,8 +341,8 @@ enum ETxTypes {
     TXTYPE_LIST_IMPORTS = 53                              [(TxTypeOpts) = {Name: "TxListImports"}];
     TXTYPE_IMPORT_PROGRESS = 54                           [(TxTypeOpts) = {Name: "TxImportProgress"}];
     TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}];
-    TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}]; 
-    TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}]; 
+    TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}];
+    TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}];
     TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT = 58     [(TxTypeOpts) = {Name: "TxOlapShardNotifyTxCompletionResult"}];
     TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT = 59   [(TxTypeOpts) = {Name: "TxColumnShardNotifyTxCompletionResult"}];
 

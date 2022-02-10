@@ -66,8 +66,8 @@ public:
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
     };
 
-    void PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx); 
- 
+    void PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx);
+
 private:
     using TActorBase = TActor<TCms>;
     using EStatusCode = NKikimrCms::TStatus::ECode;
@@ -88,18 +88,18 @@ private:
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
 
-    struct TActionOptions { 
-        TDuration PermissionDuration; 
-        NKikimrCms::ETenantPolicy TenantPolicy; 
+    struct TActionOptions {
+        TDuration PermissionDuration;
+        NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
- 
-        TActionOptions(TDuration dur) 
-            : PermissionDuration(dur) 
+
+        TActionOptions(TDuration dur)
+            : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
-        {} 
-    }; 
- 
+        {}
+    };
+
     struct TNodeCounter {
         ui32 Total = 0;
         ui32 Down = 0;
@@ -378,9 +378,9 @@ private:
     void ProcessQueue(const TActorContext &ctx);
     void ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
 
-    void AddPermissionExtensions(const NKikimrCms::TAction& action, NKikimrCms::TPermission& perm) const; 
-    void AddHostExtensions(const TString& host, NKikimrCms::TPermission& perm) const; 
- 
+    void AddPermissionExtensions(const NKikimrCms::TAction& action, NKikimrCms::TPermission& perm) const;
+    void AddHostExtensions(const TString& host, NKikimrCms::TPermission& perm) const;
+
     void OnBSCPipeDestroyed(const TActorContext &ctx);
 
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);

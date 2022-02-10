@@ -697,17 +697,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestDiagnostics) {
-        TScopedAlloc alloc; 
+        TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("diag", pgmBuilder.Diagnostics())); 
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
- 
-        VerifyProgram(pgm, env); 
-    } 
- 
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("diag", pgmBuilder.Diagnostics()));
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
+
+        VerifyProgram(pgm, env);
+    }
+
     Y_UNIT_TEST(TestInvalidParameterName) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);

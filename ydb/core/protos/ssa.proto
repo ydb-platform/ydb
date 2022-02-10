@@ -1,130 +1,130 @@
-package NKikimrSSA; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-// Program to pushdown to ColumnShard 
-// 
-// > 'SELECT y, z WHERE x > 10' 
-// PROJECTION x, y, z 
-// ASSIGN tmp = x > 10 
-// FILTER BY tmp 
-// PROJECTION y, z 
-// 
-// > 'SELECT min(x), sum(y) GROUP BY z' 
-// PROJECTION x, y, z 
-// ASSIGN agg1 = min(x) 
-// ASSIGN agg2 = sum(y) 
-// GROUP BY z 
-// PROJECTION agg1, agg2 
-// 
-message TProgram { 
-    message TColumn { 
-        optional uint64 Id = 1; 
-    } 
- 
-    message TConstant { 
-        oneof value { 
-            bool Bool = 1; 
-            int32 Int32 = 2; 
-            uint32 Uint32 = 3; 
-            int64 Int64 = 4; 
-            uint64 Uint64 = 5; 
-            float Float = 6; 
-            double Double = 7; 
-            bytes Bytes = 8; 
-            string Text = 9; 
-        } 
-    } 
- 
+package NKikimrSSA;
+option java_package = "ru.yandex.kikimr.proto";
+
+// Program to pushdown to ColumnShard
+//
+// > 'SELECT y, z WHERE x > 10'
+// PROJECTION x, y, z
+// ASSIGN tmp = x > 10
+// FILTER BY tmp
+// PROJECTION y, z
+//
+// > 'SELECT min(x), sum(y) GROUP BY z'
+// PROJECTION x, y, z
+// ASSIGN agg1 = min(x)
+// ASSIGN agg2 = sum(y)
+// GROUP BY z
+// PROJECTION agg1, agg2
+//
+message TProgram {
+    message TColumn {
+        optional uint64 Id = 1;
+    }
+
+    message TConstant {
+        oneof value {
+            bool Bool = 1;
+            int32 Int32 = 2;
+            uint32 Uint32 = 3;
+            int64 Int64 = 4;
+            uint64 Uint64 = 5;
+            float Float = 6;
+            double Double = 7;
+            bytes Bytes = 8;
+            string Text = 9;
+        }
+    }
+
     message TParameter {
         optional string Name = 1;
     }
 
-    message TAssignment { 
-        enum EFunction { 
-            FUNC_UNSPECIFIED = 0; 
-            FUNC_CMP_EQUAL = 1; 
-            FUNC_CMP_NOT_EQUAL = 2; 
-            FUNC_CMP_LESS = 3; 
-            FUNC_CMP_LESS_EQUAL = 4; 
-            FUNC_CMP_GREATER = 5; 
-            FUNC_CMP_GREATER_EQUAL = 6; 
-            FUNC_IS_NULL = 7; 
-            FUNC_STR_LENGTH = 8; 
-            FUNC_STR_MATCH = 9; 
-            FUNC_BINARY_NOT = 10; 
-            FUNC_BINARY_AND = 11; 
-            FUNC_BINARY_OR = 12; 
-            FUNC_BINARY_XOR = 13; 
-            FUNC_MATH_ADD = 14; 
-            FUNC_MATH_SUBTRACT = 15; 
-            FUNC_MATH_MULTIPLY = 16; 
-            FUNC_MATH_DIVIDE = 17; 
-        } 
- 
-        message TFunction { 
-            optional uint32 Id = 1; // EFunction 
-            repeated TColumn Arguments = 2; 
-        } 
- 
-        message TExternalFunction { 
-            optional string Name = 1; 
-            repeated TColumn Arguments = 2; 
-        } 
- 
-        optional TColumn Column = 1; 
-        oneof expression { 
-            TFunction Function = 2; 
-            TExternalFunction ExternalFunction = 3; 
-            TConstant Constant = 4; 
-            bool Null = 5; 
+    message TAssignment {
+        enum EFunction {
+            FUNC_UNSPECIFIED = 0;
+            FUNC_CMP_EQUAL = 1;
+            FUNC_CMP_NOT_EQUAL = 2;
+            FUNC_CMP_LESS = 3;
+            FUNC_CMP_LESS_EQUAL = 4;
+            FUNC_CMP_GREATER = 5;
+            FUNC_CMP_GREATER_EQUAL = 6;
+            FUNC_IS_NULL = 7;
+            FUNC_STR_LENGTH = 8;
+            FUNC_STR_MATCH = 9;
+            FUNC_BINARY_NOT = 10;
+            FUNC_BINARY_AND = 11;
+            FUNC_BINARY_OR = 12;
+            FUNC_BINARY_XOR = 13;
+            FUNC_MATH_ADD = 14;
+            FUNC_MATH_SUBTRACT = 15;
+            FUNC_MATH_MULTIPLY = 16;
+            FUNC_MATH_DIVIDE = 17;
+        }
+
+        message TFunction {
+            optional uint32 Id = 1; // EFunction
+            repeated TColumn Arguments = 2;
+        }
+
+        message TExternalFunction {
+            optional string Name = 1;
+            repeated TColumn Arguments = 2;
+        }
+
+        optional TColumn Column = 1;
+        oneof expression {
+            TFunction Function = 2;
+            TExternalFunction ExternalFunction = 3;
+            TConstant Constant = 4;
+            bool Null = 5;
             TParameter Parameter = 6;
-        } 
-    } 
- 
-    message TAggregateAssignment { 
-        enum EAggregateFunction { 
-            AGG_UNSPECIFIED = 0; 
-            // TODO 
-        } 
- 
-        message TAggregateFunction { 
-            optional uint32 Id = 1; // EAggregateFunction 
-            repeated TColumn Arguments = 2; 
-        } 
- 
-        optional TColumn Column = 1; 
-        optional TAggregateFunction Function = 2; 
-    } 
- 
-    message TProjection { 
-        repeated TColumn Columns = 1; 
-    } 
- 
-    message TFilter { 
-        // Predicate should be a bool column: 
-        // true - keep the row 
-        // false - remove the row 
-        optional TColumn Predicate = 1; 
-    } 
- 
-    message TGroupBy { 
-        repeated TAggregateAssignment Aggregates = 1; 
-        repeated TColumn KeyColumns = 2; 
-    } 
- 
-    message TCommand { 
-        oneof line { 
-            TAssignment Assign = 1; 
-            TProjection Projection = 2; 
-            TFilter Filter = 3; 
-            TGroupBy GroupBy = 4; 
-            // TODO: ORDER BY, LIMIT 
-        } 
-    } 
- 
-    repeated TCommand Command = 1; 
-    optional uint32 Version = 2; 
-} 
+        }
+    }
+
+    message TAggregateAssignment {
+        enum EAggregateFunction {
+            AGG_UNSPECIFIED = 0;
+            // TODO
+        }
+
+        message TAggregateFunction {
+            optional uint32 Id = 1; // EAggregateFunction
+            repeated TColumn Arguments = 2;
+        }
+
+        optional TColumn Column = 1;
+        optional TAggregateFunction Function = 2;
+    }
+
+    message TProjection {
+        repeated TColumn Columns = 1;
+    }
+
+    message TFilter {
+        // Predicate should be a bool column:
+        // true - keep the row
+        // false - remove the row
+        optional TColumn Predicate = 1;
+    }
+
+    message TGroupBy {
+        repeated TAggregateAssignment Aggregates = 1;
+        repeated TColumn KeyColumns = 2;
+    }
+
+    message TCommand {
+        oneof line {
+            TAssignment Assign = 1;
+            TProjection Projection = 2;
+            TFilter Filter = 3;
+            TGroupBy GroupBy = 4;
+            // TODO: ORDER BY, LIMIT
+        }
+    }
+
+    repeated TCommand Command = 1;
+    optional uint32 Version = 2;
+}
 
 message TOlapProgram {
     // Store OLAP program in serialized format in case we do not need to deserialize it in TScanTaskMeta

@@ -346,8 +346,8 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
             case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
             case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
-            case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: 
-            case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: 
+            case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+            case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
             case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:

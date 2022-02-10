@@ -1,67 +1,67 @@
-#include "cms_impl.h" 
-#include "info_collector.h" 
-#include "ut_helpers.h" 
-#include "cms_ut_common.h" 
- 
+#include "cms_impl.h"
+#include "info_collector.h"
+#include "ut_helpers.h"
+#include "cms_ut_common.h"
+
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tablet_helpers.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/system/hostname.h> 
- 
-namespace NKikimr { 
+
+#include <util/system/hostname.h>
+
+namespace NKikimr {
 namespace NCmsTest {
- 
-using namespace NCms; 
-using namespace NKikimrCms; 
- 
-Y_UNIT_TEST_SUITE(TCmsTenatsTest) { 
-    Y_UNIT_TEST(CollectInfo) 
-    { 
+
+using namespace NCms;
+using namespace NKikimrCms;
+
+Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
+    Y_UNIT_TEST(CollectInfo)
+    {
         TCmsTestEnv env(8, 1);
- 
+
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
- 
-        TAutoPtr<IEventHandle> handle; 
+
+        TAutoPtr<IEventHandle> handle;
         auto reply = env.GrabEdgeEventRethrow<TCms::TEvPrivate::TEvClusterInfo>(handle);
-        UNIT_ASSERT(reply); 
-        const auto &info = *reply->Info; 
- 
+        UNIT_ASSERT(reply);
+        const auto &info = *reply->Info;
+
         UNIT_ASSERT_VALUES_EQUAL(info.NodesCount(), env.GetNodeCount());
         UNIT_ASSERT_VALUES_EQUAL(info.PDisksCount(), env.GetNodeCount());
         UNIT_ASSERT_VALUES_EQUAL(info.VDisksCount(), env.GetNodeCount() * 4);
-        UNIT_ASSERT_VALUES_EQUAL(info.BSGroupsCount(), 4); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(info.BSGroupsCount(), 4);
+
         for (ui32 nodeIndex = 0; nodeIndex < env.GetNodeCount(); ++nodeIndex) {
             ui32 nodeId = env.GetNodeId(nodeIndex);
-            UNIT_ASSERT(info.HasNode(nodeId)); 
-            const auto &node = info.Node(nodeId); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(node.NodeId, nodeId); 
+            UNIT_ASSERT(info.HasNode(nodeId));
+            const auto &node = info.Node(nodeId);
+
+            UNIT_ASSERT_VALUES_EQUAL(node.NodeId, nodeId);
             UNIT_ASSERT_VALUES_EQUAL(node.Host, "::1");
-            UNIT_ASSERT_VALUES_EQUAL(node.State, NKikimrCms::UP); 
-            UNIT_ASSERT_VALUES_EQUAL(node.PDisks.size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(node.State, NKikimrCms::UP);
+            UNIT_ASSERT_VALUES_EQUAL(node.PDisks.size(), 1);
             UNIT_ASSERT(node.PDisks.contains(NCms::TPDiskID(nodeId, nodeId)));
-            UNIT_ASSERT_VALUES_EQUAL(node.VDisks.size(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(node.VDisks.size(), 4);
             UNIT_ASSERT(node.VDisks.contains(TVDiskID(0, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(node.VDisks.contains(TVDiskID(1, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(node.VDisks.contains(TVDiskID(2, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(node.VDisks.contains(TVDiskID(3, 1, 0, nodeIndex, 0)));
- 
-            UNIT_ASSERT(info.HasPDisk(NCms::TPDiskID(nodeId, nodeId))); 
- 
-            UNIT_ASSERT(info.HasVDisk(TVDiskID(0, 1, 0, nodeIndex, 0))); 
+
+            UNIT_ASSERT(info.HasPDisk(NCms::TPDiskID(nodeId, nodeId)));
+
+            UNIT_ASSERT(info.HasVDisk(TVDiskID(0, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(info.HasVDisk(TVDiskID(1, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(info.HasVDisk(TVDiskID(2, 1, 0, nodeIndex, 0)));
             UNIT_ASSERT(info.HasVDisk(TVDiskID(3, 1, 0, nodeIndex, 0)));
-        } 
- 
-        for (ui32 groupId = 0; groupId < 4; ++groupId) { 
-            UNIT_ASSERT(info.HasBSGroup(groupId)); 
-            const auto &group = info.BSGroup(groupId); 
-            UNIT_ASSERT_VALUES_EQUAL(group.VDisks.size(), 8); 
+        }
+
+        for (ui32 groupId = 0; groupId < 4; ++groupId) {
+            UNIT_ASSERT(info.HasBSGroup(groupId));
+            const auto &group = info.BSGroup(groupId);
+            UNIT_ASSERT_VALUES_EQUAL(group.VDisks.size(), 8);
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 0, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 1, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 2, 0)));
@@ -70,11 +70,11 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 5, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 6, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 7, 0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(TestNoneTenantPolicy)
-    { 
+    {
         TNodeTenantsMap staticTenants;
         for (ui32 i = 0; i < 8; ++i)
             staticTenants[i].push_back("user0");
@@ -124,26 +124,26 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
     Y_UNIT_TEST(TestDefaultTenantPolicyWithSingleTenantHost)
     {
         TNodeTenantsMap staticTenants;
-        staticTenants[0] = {"user0"}; 
- 
+        staticTenants[0] = {"user0"};
+
         TCmsTestEnv env(8, staticTenants);
- 
+
         env.SetLimits(0, 10, 0, 0);
- 
+
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
     }
- 
+
     Y_UNIT_TEST(TestTenantRatioLimit)
     {
         TNodeTenantsMap staticTenants;
         for (ui32 i = 0; i < 8; ++i)
             staticTenants[i].push_back("user0");
- 
+
         TCmsTestEnv env(8, staticTenants);
- 
+
         env.SetLimits(0, 10, 0, 0);
- 
+
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         true, TStatus::ALLOW,
@@ -182,18 +182,18 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         env.CheckPermissionRequest("user", false, false, false,
                                    true, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestClusterLimit)
-    { 
+    {
         TNodeTenantsMap staticTenants;
         for (ui32 i = 0; i < 8; ++i)
             staticTenants[i].push_back("user0");
- 
+
         TCmsTestEnv env(8, staticTenants);
- 
+
         env.SetLimits(0, 0, 2, 0);
- 
+
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         false, TStatus::ALLOW,
@@ -204,41 +204,41 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
- 
+
         env.SetLimits(0, 0, 3, 0);
- 
+
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
- 
+
         env.CheckDonePermission("user", res1.second[0]);
- 
+
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
- 
+
         env.SetLimits(0, 0, 0, 0);
- 
+
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
     }
- 
+
     Y_UNIT_TEST(TestClusterRatioLimit)
     {
         TNodeTenantsMap staticTenants;
         for (ui32 i = 0; i < 8; ++i)
             staticTenants[i].push_back("user0");
- 
+
         TCmsTestEnv env(8, staticTenants);
         env.SetLimits(0, 0, 0, 10);
- 
+
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", false, false, false,
                                         false, TStatus::ALLOW,
@@ -246,9 +246,9 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
- 
+
         env.SetLimits(0, 0, 0, 20);
- 
+
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
@@ -277,8 +277,8 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
         env.CheckPermissionRequest("user", false, false, false,
                                    false, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestLimitsWithDownNode)
     {
         TNodeTenantsMap staticTenants;
@@ -374,11 +374,11 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
 
     Y_UNIT_TEST(RequestShutdownHost) {
         TestShutdownHost(false);
-    } 
- 
+    }
+
     Y_UNIT_TEST(RequestShutdownHostWithTenantPolicy) {
         TestShutdownHost(true);
-    } 
+    }
 
     Y_UNIT_TEST(RequestRestartServices) {
         TCmsTestEnv env(16, 1, TNodeTenantsMap{
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(TCmsTenatsTest) {
     Y_UNIT_TEST(TestClusterRatioLimitForceRestartModeScheduled) {
         TestLimitForceRestartModeScheduled(false, true);
     }
-} 
- 
+}
+
 } // NCmsTest
-} // NKikimr 
+} // NKikimr

@@ -32,7 +32,7 @@ using TEvDropLogTableRequest =
 using TEvAlterLogTableRequest =
     TGrpcRequestOperationCall<Ydb::LogStore::AlterLogTableRequest, Ydb::LogStore::AlterLogTableResponse>;
 
-bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to, 
+bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
     to.MutableKeyColumnNames()->CopyFrom(from.primary_key());
@@ -46,16 +46,16 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         auto typeName = NScheme::TypeName(typeId);
         col->SetType(typeName);
     }
-    to.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES); 
+    to.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     return true;
 }
 
-bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema& from, Ydb::LogStore::Schema& to, 
+bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema& from, Ydb::LogStore::Schema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    if (from.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) { 
+    if (from.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
         status = Ydb::StatusIds::INTERNAL_ERROR;
-        error = TStringBuilder() << "Unexpected table engine: " << NKikimrSchemeOp::EColumnTableEngine_Name(from.GetEngine()); 
+        error = TStringBuilder() << "Unexpected table engine: " << NKikimrSchemeOp::EColumnTableEngine_Name(from.GetEngine());
         return false;
     }
     to.mutable_primary_key()->CopyFrom(from.GetKeyColumnNames());
@@ -122,8 +122,8 @@ private:
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore); 
-        auto create = modifyScheme->MutableCreateColumnStore(); 
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
+        auto create = modifyScheme->MutableCreateColumnStore();
         create->SetName(name);
         create->SetColumnShardCount(req->column_shard_count());
         for (const auto& schemaPreset : req->schema_presets()) {
@@ -174,11 +174,11 @@ private:
                 Ydb::Scheme::Entry* selfEntry = describeLogStoreResult.mutable_self();
                 selfEntry->set_name(pathDescription.GetSelf().GetName());
                 selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(pathDescription.GetSelf().GetPathType()));
-                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeColumnStore) { 
+                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeColumnStore) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, "Path is not LogStore", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 }
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
-                const auto& storeDescription = pathDescription.GetColumnStoreDescription(); 
+                const auto& storeDescription = pathDescription.GetColumnStoreDescription();
                 describeLogStoreResult.set_column_shard_count(storeDescription.GetColumnShardCount());
                 for (const auto& schemaPreset : storeDescription.GetSchemaPresets()) {
                     auto* toSchemaPreset = describeLogStoreResult.add_schema_presets();
@@ -311,8 +311,8 @@ private:
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable); 
-        auto create = modifyScheme->MutableCreateColumnTable(); 
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        auto create = modifyScheme->MutableCreateColumnTable();
         create->SetName(name);
         if (!req->schema_preset_name().empty()) {
             create->SetSchemaPresetName(req->schema_preset_name());
@@ -332,7 +332,7 @@ private:
 
         create->SetColumnShardCount(req->column_shard_count());
         auto* sharding = create->MutableSharding()->MutableHashSharding();
-        sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS); 
+        sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
         sharding->MutableColumns()->CopyFrom(req->sharding_columns());
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -374,11 +374,11 @@ private:
                 Ydb::Scheme::Entry* selfEntry = describeLogTableResult.mutable_self();
                 selfEntry->set_name(pathDescription.GetSelf().GetName());
                 selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(pathDescription.GetSelf().GetPathType()));
-                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeColumnTable) { 
+                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeColumnTable) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, "Path is not LogTable", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 }
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
-                const auto& tableDescription = pathDescription.GetColumnTableDescription(); 
+                const auto& tableDescription = pathDescription.GetColumnTableDescription();
                 describeLogTableResult.set_column_shard_count(tableDescription.GetColumnShardCount());
                 Ydb::StatusIds::StatusCode status;
                 TString error;
@@ -489,8 +489,8 @@ private:
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable); 
-        auto alter = modifyScheme->MutableAlterColumnTable(); 
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        auto alter = modifyScheme->MutableAlterColumnTable();
         alter->SetName(name);
 
         Ydb::StatusIds::StatusCode status;
@@ -508,8 +508,8 @@ private:
 };
 
 
-using TDropLogStoreRPC = TDropLogRPC<TEvDropLogStoreRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore>; 
-using TDropLogTableRPC = TDropLogRPC<TEvDropLogTableRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable>; 
+using TDropLogStoreRPC = TDropLogRPC<TEvDropLogStoreRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore>;
+using TDropLogTableRPC = TDropLogRPC<TEvDropLogTableRequest, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable>;
 
 void DoCreateLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TCreateLogStoreRPC(p.release()));

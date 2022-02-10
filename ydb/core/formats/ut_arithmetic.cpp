@@ -14,7 +14,7 @@
 #include "custom_registry.h"
 #include "arrow_helpers.h"
 
-namespace NKikimr::NArrow { 
+namespace NKikimr::NArrow {
 
 namespace cp = ::arrow::compute;
 using cp::internal::applicator::ScalarBinary;
@@ -369,4 +369,4 @@ Y_UNIT_TEST_SUITE(ModuloOrZeroTest) {
 
 }
 
-} 
+}

@@ -17,12 +17,12 @@ class TMessageBusGetTypes : public TActorBootstrapped<TMessageBusGetTypes>, publ
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    } 
- 
+    }
+
     TMessageBusGetTypes(TBusMessageContext &msg, TMaybe<ui64> etag)
         : TMessageBusSessionIdentHolder(msg)
         , Etag(etag)
-    {} 
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
         const auto* typeRegistry = AppData(ctx)->TypeRegistry;

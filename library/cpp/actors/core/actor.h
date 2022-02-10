@@ -247,7 +247,7 @@ namespace NActors {
             DNS_RESOLVER = 481,
             INTERCONNECT_PROXY_WRAPPER = 546,
         };
- 
+
         using EActivityType = EActorActivity;
         ui32 ActivityType;
 
@@ -291,7 +291,7 @@ namespace NActors {
         void SetActivityType(ui32 activityType) {
             ActivityType = activityType;
         }
- 
+
     public:
         TReceiveFunc CurrentStateFunc() const {
             return StateFunc;
@@ -422,7 +422,7 @@ namespace NActors {
         static constexpr IActor::EActivityType ActorActivityType() {
             return EActorActivity::OTHER;
         } //*/
- 
+
         // static constexpr char ActorName[] = "UNNAMED";
 
         TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex())

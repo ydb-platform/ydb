@@ -1,6 +1,6 @@
 #pragma once
 
-#include "datashard.h" 
+#include "datashard.h"
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -17,7 +17,7 @@ class TTransactionContext;
 
 namespace NDataShard {
 
-// 
+//
 struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
@@ -27,38 +27,38 @@ struct TUserTable : public TThrRefBase {
         using ECache = NTable::NPage::ECache;
 
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
-            : ColumnCodec(family.GetColumnCodec()) 
-            , ColumnCache(family.GetColumnCache()) 
+            : ColumnCodec(family.GetColumnCodec())
+            , ColumnCache(family.GetColumnCache())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
-            , Storage(family.GetStorage()) 
-            , Codec(ExtractDbCodec(family)) 
-            , Cache(ExtractDbCache(family)) 
+            , Storage(family.GetStorage())
+            , Codec(ExtractDbCodec(family))
+            , Cache(ExtractDbCache(family))
             , Room(new TStorageRoom(family.GetRoom()))
-            , Name(family.GetName()) 
+            , Name(family.GetName())
         {
         }
 
         void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
-            if (family.HasColumnCodec()) { 
-                ColumnCodec = family.GetColumnCodec(); 
-                Codec = ToDbCodec(ColumnCodec); 
-            } 
-            if (family.HasColumnCache()) { 
-                ColumnCache = family.GetColumnCache(); 
-                Cache = ToDbCache(ColumnCache); 
-            } 
+            if (family.HasColumnCodec()) {
+                ColumnCodec = family.GetColumnCodec();
+                Codec = ToDbCodec(ColumnCodec);
+            }
+            if (family.HasColumnCache()) {
+                ColumnCache = family.GetColumnCache();
+                Cache = ToDbCache(ColumnCache);
+            }
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
             }
             if (family.GetStorageConfig().GetExternalThreshold()) {
                 ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold());
             }
-            if (family.HasStorage()) { 
-                Storage = family.GetStorage(); 
-            } 
+            if (family.HasStorage()) {
+                Storage = family.GetStorage();
+            }
             Room.Reset(new TStorageRoom(family.GetRoom()));
-        } 
+        }
 
         static ui32 SaveGetThreshold(ui32 value) {
             return 0 == value ? Max<ui32>() : value;
@@ -77,13 +77,13 @@ struct TUserTable : public TThrRefBase {
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
- 
 
-        ECodec Codec; 
-        ECache Cache; 
+
+        ECodec Codec;
+        ECache Cache;
         TStorageRoom::TPtr Room;
- 
-        ui32 MainChannel() const { 
+
+        ui32 MainChannel() const {
             if (!*Room) {
                 return MainChannelByStorageEnum();
             }
@@ -92,18 +92,18 @@ struct TUserTable : public TThrRefBase {
         }
 
         ui32 MainChannelByStorageEnum() const {
-            switch (Storage) { 
+            switch (Storage) {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext1:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
-                    return 2; 
-                default: 
-                    break; 
-            } 
-            return 1; 
-        } 
- 
+                    return 2;
+                default:
+                    break;
+            }
+            return 1;
+        }
+
         ui32 OuterChannel() const {
             if (!*Room) {
                 return OuterChannelByStorageEnum();
@@ -123,7 +123,7 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        ui32 ExternalChannel() const { 
+        ui32 ExternalChannel() const {
             if (!*Room) {
                 return ExternalChannelByStorageEnum();
             }
@@ -132,20 +132,20 @@ struct TUserTable : public TThrRefBase {
         }
 
         ui32 ExternalChannelByStorageEnum() const {
-            switch (Storage) { 
+            switch (Storage) {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
-                    return 2; 
-                default: 
-                    break; 
-            } 
-            return 1; 
-        } 
- 
+                    return 2;
+                default:
+                    break;
+            }
+            return 1;
+        }
+
         ui32 GetOuterThreshold() const {
             switch (Storage) {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
@@ -160,7 +160,7 @@ struct TUserTable : public TThrRefBase {
         }
 
         ui32 GetExternalThreshold() const {
-            switch (Storage) { 
+            switch (Storage) {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext1:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2:
@@ -171,83 +171,83 @@ struct TUserTable : public TThrRefBase {
                     return 512*1024;
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
                     return 1024;
-                default: 
-                    break; 
-            } 
+                default:
+                    break;
+            }
             return ExternalThreshold;
-        } 
- 
-        TString GetName() const { 
-            if (Name) 
-                return Name; 
-            return "default"; 
+        }
+
+        TString GetName() const {
+            if (Name)
+                return Name;
+            return "default";
         }
 
         ui32 GetRoomId() const {
             return Room->GetId();
         }
 
-    private: 
-        TString Name; 
- 
+    private:
+        TString Name;
+
         static ECodec ExtractDbCodec(const NKikimrSchemeOp::TFamilyDescription& family) {
-            if (family.HasColumnCodec()) 
-                return ToDbCodec(family.GetColumnCodec()); 
-            if (family.GetCodec() == 1) // legacy 
+            if (family.HasColumnCodec())
+                return ToDbCodec(family.GetColumnCodec());
+            if (family.GetCodec() == 1) // legacy
                 return ECodec::LZ4;
-            return ECodec::Plain; 
-        } 
- 
+            return ECodec::Plain;
+        }
+
         static ECodec ToDbCodec(NKikimrSchemeOp::EColumnCodec codec) {
-            switch (codec) { 
+            switch (codec) {
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                    return ECodec::Plain; 
+                    return ECodec::Plain;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
                     return ECodec::LZ4;
-                // keep no default 
-            } 
-            Y_FAIL("unexpected"); 
-        } 
- 
+                // keep no default
+            }
+            Y_FAIL("unexpected");
+        }
+
         static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) {
-            if (family.HasInMemory() && family.GetInMemory()) // legacy 
-                return ECache::Ever; 
-            return ECache::None; 
-        } 
- 
+            if (family.HasInMemory() && family.GetInMemory()) // legacy
+                return ECache::Ever;
+            return ECache::None;
+        }
+
         static ECache ToDbCache(NKikimrSchemeOp::EColumnCache cache) {
-            switch (cache) { 
+            switch (cache) {
                 case NKikimrSchemeOp::EColumnCache::ColumnCacheNone:
-                    return ECache::None; 
+                    return ECache::None;
                 case NKikimrSchemeOp::EColumnCache::ColumnCacheOnce:
-                    return ECache::Once; 
+                    return ECache::Once;
                 case NKikimrSchemeOp::EColumnCache::ColumnCacheEver:
-                    return ECache::Ever; 
-                // keep no default 
-            } 
-            Y_FAIL("unexpected"); 
-        } 
+                    return ECache::Ever;
+                // keep no default
+            }
+            Y_FAIL("unexpected");
+        }
     };
 
-    struct TUserColumn { 
-        NScheme::TTypeId Type; 
+    struct TUserColumn {
+        NScheme::TTypeId Type;
         TString Name;
-        bool IsKey; 
+        bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
- 
+
         TUserColumn(NScheme::TTypeId type, TString name, bool isKey = false)
-            : Type(type) 
-            , Name(name) 
-            , IsKey(isKey) 
-        {} 
- 
-        TUserColumn() 
-            : IsKey(false) 
-        {} 
-    }; 
- 
+            : Type(type)
+            , Name(name)
+            , IsKey(isKey)
+        {}
+
+        TUserColumn()
+            : IsKey(false)
+        {}
+    };
+
     struct TTableIndex {
         using EIndexType = NKikimrSchemeOp::EIndexType;
 
@@ -371,7 +371,7 @@ struct TUserTable : public TThrRefBase {
 
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
     TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
- 
+
     void ApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
                      const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
     void ApplyCreateShadow(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
@@ -379,20 +379,20 @@ struct TUserTable : public TThrRefBase {
     void ApplyAlter(NTabletFlatExecutor::TTransactionContext& txc, const TUserTable& oldTable,
                     const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
     void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
- 
+
     TTableRange GetTableRange() const { return Range.ToTableRange(); }
-    const TString& GetSchema() const { return Schema; } 
- 
+    const TString& GetSchema() const { return Schema; }
+
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
-        Y_VERIFY(ok); 
-    } 
- 
+        Y_VERIFY(ok);
+    }
+
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {
-        Schema.clear(); 
+        Schema.clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
-    } 
- 
+    }
+
     void SetPath(const TString &path);
 
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
@@ -408,16 +408,16 @@ struct TUserTable : public TThrRefBase {
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
 
-private: 
+private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
             const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
 
 private:
-    TString Schema; 
+    TString Schema;
     ui64 TableSchemaVersion = 0;
- 
+
     void CheckSpecialColumns();
-    void AlterSchema(); 
+    void AlterSchema();
     void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);
 };
 

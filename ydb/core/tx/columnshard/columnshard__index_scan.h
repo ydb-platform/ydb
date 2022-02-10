@@ -4,26 +4,26 @@
 #include "columnshard_common.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
-namespace NKikimr::NColumnShard { 
+namespace NKikimr::NColumnShard {
 
 class TIndexColumnResolver : public IColumnResolver {
     const NOlap::TIndexInfo& IndexInfo;
- 
-public: 
+
+public:
     explicit TIndexColumnResolver(const NOlap::TIndexInfo& indexInfo)
         : IndexInfo(indexInfo)
     {}
- 
+
     TString GetColumnName(ui32 id, bool required) const override {
         return IndexInfo.GetColumnName(id, required);
-    } 
+    }
 };
- 
- 
+
+
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
- 
-class TColumnShardScanIterator : public TScanIteratorBase { 
+
+class TColumnShardScanIterator : public TScanIteratorBase {
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
     THashMap<TBlobRange, ui64> IndexedBlobs; // blobId -> granule
@@ -47,11 +47,11 @@ public:
             const TUnifiedBlobId& blobId = ReadMetadata->CommittedBlobs[i];
             WaitCommitted.emplace(blobId, batchNo);
         }
-        IndexedBlobs = IndexedData.InitRead(batchNo, true); 
-        for (auto& [blobId, granule] : IndexedBlobs) { 
-            WaitIndexed.insert(blobId); 
-            GranuleBlobs[granule].insert(blobId); 
-        } 
+        IndexedBlobs = IndexedData.InitRead(batchNo, true);
+        for (auto& [blobId, granule] : IndexedBlobs) {
+            WaitIndexed.insert(blobId);
+            GranuleBlobs[granule].insert(blobId);
+        }
 
         // Read all committed blobs
         for (const auto& blobId : ReadMetadata->CommittedBlobs) {
@@ -59,18 +59,18 @@ public:
         }
 
         Y_VERIFY(ReadMetadata->IsSorted());
- 
-        // Read all indexed blobs (in correct order) 
+
+        // Read all indexed blobs (in correct order)
         auto granulesOrder = ReadMetadata->SelectInfo->GranulesOrder(ReadMetadata->IsDescSorted());
-        for (ui64 granule : granulesOrder) { 
-            auto& blobs = GranuleBlobs[granule]; 
+        for (ui64 granule : granulesOrder) {
+            auto& blobs = GranuleBlobs[granule];
             BlobsToRead.insert(BlobsToRead.end(), blobs.begin(), blobs.end());
         }
 
         IsReadFinished = ReadMetadata->Empty();
     }
 
-    void AddData(const TBlobRange& blobRange, TString data) override { 
+    void AddData(const TBlobRange& blobRange, TString data) override {
         const auto& blobId = blobRange.BlobId;
         if (IndexedBlobs.count(blobRange)) {
             if (!WaitIndexed.count(blobRange)) {
@@ -86,11 +86,11 @@ public:
         }
     }
 
-    bool Finished() const  override { 
+    bool Finished() const  override {
         return IsReadFinished && ReadyResults.empty();
     }
 
-    NOlap::TPartialReadResult GetBatch() override { 
+    NOlap::TPartialReadResult GetBatch() override {
         FillReadyResults();
 
         if (ReadyResults.empty()) {
@@ -103,7 +103,7 @@ public:
         return result;
     }
 
-    TBlobRange GetNextBlobToRead() override { 
+    TBlobRange GetNextBlobToRead() override {
         if (IsReadFinished || NextBlobIdxToRead == BlobsToRead.size()) {
             return TBlobRange();
         }
@@ -112,7 +112,7 @@ public:
         return blob;
     }
 
-    size_t ReadyResultsCount() const override { 
+    size_t ReadyResultsCount() const override {
         return ReadyResults.size();
     }
 

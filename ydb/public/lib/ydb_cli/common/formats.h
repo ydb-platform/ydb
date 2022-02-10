@@ -12,8 +12,8 @@ enum class EOutputFormat {
     JsonBase64 /* "json-base64" */,
     JsonBase64Array /* "json-base64-array" */,
     ProtoJsonBase64 /* "proto-json-base64" */,
-    Csv /* "csv" */, 
-    Tsv /* "tsv" */, 
+    Csv /* "csv" */,
+    Tsv /* "tsv" */,
 };
 
 }

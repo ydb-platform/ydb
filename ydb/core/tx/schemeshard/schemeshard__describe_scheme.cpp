@@ -1,6 +1,6 @@
-#include "schemeshard_impl.h" 
+#include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
- 
+
 #include <util/stream/format.h>
 
 namespace NKikimr {
@@ -22,8 +22,8 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
         , PathDescriber(self, std::move(ev->Get()->Record))
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_DESCRIBE_SCHEME; } 
- 
+    TTxType GetTxType() const override { return TXTYPE_DESCRIBE_SCHEME; }
+
     void DoExecute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
                     "TTxDescribeScheme DoExecute"
@@ -31,9 +31,9 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
                         << ", at schemeshard: " << Self->TabletID());
 
         Result = PathDescriber.Describe(ctx);
-    } 
- 
-    void DoComplete(const TActorContext &ctx) override { 
+    }
+
+    void DoComplete(const TActorContext &ctx) override {
         const auto& params = PathDescriber.GetParams();
 
         if (params.HasPathId()) {
@@ -56,8 +56,8 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
                         << ", at schemeshard: " << Self->TabletID());
 
         ctx.Send(Sender, std::move(Result), 0, Cookie);
-    } 
- 
+    }
+
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr &ev) {

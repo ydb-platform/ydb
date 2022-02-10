@@ -173,15 +173,15 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
-    } 
- 
+    }
+
     TReplicaGuardian(TGuardedInfo *info, TActorId replica, TActorId guard)
         : Info(info)
         , Replica(replica)
         , Guard(guard)
         , Signature(0)
         , DowntimeFrom(TInstant::Max())
-    {} 
+    {}
 
     void Bootstrap() {
         RequestInfo();
@@ -297,14 +297,14 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
-    } 
- 
+    }
+
     TFollowerGuardian(TFollowerInfo *info, const TActorId replica, const TActorId guard)
         : Info(info)
         , Replica(replica)
         , Guard(guard)
         , DowntimeFrom(TInstant::Max())
-    {} 
+    {}
 
     void Bootstrap() {
         UpdateInfo();
@@ -528,17 +528,17 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_TABLET_GUARDIAN;
-    } 
- 
+    }
+
     TTabletGuardian(TGuardedInfo *info)
         : Info(info)
         , ReplicasOnlineThreshold(0)
-    {} 
+    {}
 
     TTabletGuardian(TFollowerInfo *info)
         : FollowerInfo(info)
         , ReplicasOnlineThreshold(0)
-    {} 
+    {}
 
     void Bootstrap() {
         SendResolveRequest(TDuration::Zero());

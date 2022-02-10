@@ -68,8 +68,8 @@ public:
                     Types.emplace_back(column.Type);
                     schema.emplace_back(column.Name, column.Type);
                 }
-                BatchBuilder->Reserve(INIT_BATCH_ROWS); 
-                bool started = BatchBuilder->Start(schema); 
+                BatchBuilder->Reserve(INIT_BATCH_ROWS);
+                bool started = BatchBuilder->Start(schema);
                 YQL_ENSURE(started, "Failed to start BatchBuilder");
             }
         }

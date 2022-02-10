@@ -1,5 +1,5 @@
-#include "datashard_ut_common.h" 
- 
+#include "datashard_ut_common.h"
+
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -13,7 +13,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
 
@@ -26,7 +26,7 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 const bool ENABLE_DATASHARD_LOG = true;
-const bool DUMP_RESULT = false; 
+const bool DUMP_RESULT = false;
 
 void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
     if (ENABLE_DATASHARD_LOG) {
@@ -55,13 +55,13 @@ void TTester::Setup(TTestActorRuntime& runtime, const TOptions& opts) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    SetupTabletServices(runtime, &app); 
+    SetupTabletServices(runtime, &app);
 }
 
-TTester::TTester(ESchema schema, const TOptions& opts) 
-    : Schema(schema) 
-    , LastTxId(0) 
-    , LastStep(opts.FirstStep) 
+TTester::TTester(ESchema schema, const TOptions& opts)
+    : Schema(schema)
+    , LastTxId(0)
+    , LastStep(opts.FirstStep)
 {
     Setup(Runtime, opts);
     Sender = Runtime.AllocateEdgeActor();
@@ -69,14 +69,14 @@ TTester::TTester(ESchema schema, const TOptions& opts)
     // Schemeshard is only used to receive notifications
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
-    CreateSchema(schema, opts); 
+    CreateSchema(schema, opts);
 }
 
-TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, 
-                 bool& activeZone, const TOptions& opts) 
-    : Schema(schema) 
-    , LastTxId(0) 
-    , LastStep(1) 
+TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup,
+                 bool& activeZone, const TOptions& opts)
+    : Schema(schema)
+    , LastTxId(0)
+    , LastStep(1)
 {
     Setup(Runtime, opts);
     setup(Runtime);
@@ -88,66 +88,66 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
     // Schemeshard is only used to receive notifications
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
-    CreateSchema(schema, opts); 
+    CreateSchema(schema, opts);
 }
 
-void TTester::EmptyShardKeyResolver(TKeyDesc& key) { 
-    Y_UNUSED(key); 
-    Y_FAIL(); 
+void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
+    Y_UNUSED(key);
+    Y_FAIL();
 }
 
-void TTester::SingleShardKeyResolver(TKeyDesc& key) { 
-    key.Status = TKeyDesc::EStatus::Ok; 
+void TTester::SingleShardKeyResolver(TKeyDesc& key) {
+    key.Status = TKeyDesc::EStatus::Ok;
     key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-} 
- 
-void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) { 
-    const ui32 ShardBorder1 = 1000; 
-    const ui32 ShardBorder2 = 2000; 
- 
-    key.Status = TKeyDesc::EStatus::Ok; 
-    if (key.Range.Point) { 
-        ui32 key0 = *(ui32*)key.Range.From[0].Data(); 
-        if (key0 < ShardBorder1) { 
+}
+
+void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
+    const ui32 ShardBorder1 = 1000;
+    const ui32 ShardBorder2 = 2000;
+
+    key.Status = TKeyDesc::EStatus::Ok;
+    if (key.Range.Point) {
+        ui32 key0 = *(ui32*)key.Range.From[0].Data();
+        if (key0 < ShardBorder1) {
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-        } else if (key0 < ShardBorder2) { 
+        } else if (key0 < ShardBorder2) {
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
-        } else { 
+        } else {
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
-        } 
-    } else { 
+        }
+    } else {
         UNIT_ASSERT(key.Range.From.size() > 0);
         UNIT_ASSERT(key.Range.To.size() > 0);
-        UNIT_ASSERT(key.Range.InclusiveFrom); 
-        UNIT_ASSERT(key.Range.InclusiveTo); 
- 
-        ui32 from = *(ui32*)key.Range.From[0].Data(); 
-        ui32 to = *(ui32*)key.Range.To[0].Data(); 
-        UNIT_ASSERT(from <= to); 
- 
-        if (from < ShardBorder1) 
+        UNIT_ASSERT(key.Range.InclusiveFrom);
+        UNIT_ASSERT(key.Range.InclusiveTo);
+
+        ui32 from = *(ui32*)key.Range.From[0].Data();
+        ui32 to = *(ui32*)key.Range.To[0].Data();
+        UNIT_ASSERT(from <= to);
+
+        if (from < ShardBorder1)
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-        if (from < ShardBorder2 && to >= ShardBorder1) 
+        if (from < ShardBorder2 && to >= ShardBorder1)
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
-        if (to >= ShardBorder2) 
+        if (to >= ShardBorder2)
             key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
-    } 
-} 
- 
-TTester::TKeyResolver TTester::GetKeyResolver() const { 
-    switch (Schema) { 
-        case ESchema_KV: 
-        case ESchema_SpecialKV: 
-        case ESchema_DoubleKV: 
+    }
+}
+
+TTester::TKeyResolver TTester::GetKeyResolver() const {
+    switch (Schema) {
+        case ESchema_KV:
+        case ESchema_SpecialKV:
+        case ESchema_DoubleKV:
         case ESchema_DoubleKVExternal:
-            return SingleShardKeyResolver; 
-        case ESchema_MultiShardKV: 
-            return ThreeShardPointKeyResolver; 
-    } 
-    return EmptyShardKeyResolver; 
-} 
- 
-void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) { 
+            return SingleShardKeyResolver;
+        case ESchema_MultiShardKV:
+            return ThreeShardPointKeyResolver;
+    }
+    return EmptyShardKeyResolver;
+}
+
+void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) {
     TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD),
         &::NKikimr::CreateDataShard);
     Y_UNUSED(actorId);
@@ -162,54 +162,54 @@ void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TSt
 
     //Runtime.EnableScheduleForActor(actorId, true);
 
-    if (withRegister) { 
-        RegisterTableInResolver(schemeText); 
-    } 
-} 
- 
-// needed for MiniKQL compiling 
-void TTester::RegisterTableInResolver(const TString& schemeText) 
-{ 
+    if (withRegister) {
+        RegisterTableInResolver(schemeText);
+    }
+}
+
+// needed for MiniKQL compiling
+void TTester::RegisterTableInResolver(const TString& schemeText)
+{
     NKikimrSchemeOp::TTableDescription tdesc;
-    bool parsed = NProtoBuf::TextFormat::ParseFromString(schemeText, &tdesc); 
-    UNIT_ASSERT(parsed); 
- 
-    using namespace NYql; 
-    using TColumn = IDbSchemeResolver::TTableResult::TColumn; 
-    IDbSchemeResolver::TTableResult table(IDbSchemeResolver::TTableResult::Ok); 
-    table.Table.TableName = tdesc.GetName(); 
+    bool parsed = NProtoBuf::TextFormat::ParseFromString(schemeText, &tdesc);
+    UNIT_ASSERT(parsed);
+
+    using namespace NYql;
+    using TColumn = IDbSchemeResolver::TTableResult::TColumn;
+    IDbSchemeResolver::TTableResult table(IDbSchemeResolver::TTableResult::Ok);
+    table.Table.TableName = tdesc.GetName();
     table.TableId.Reset(new TTableId(FAKE_SCHEMESHARD_TABLET_ID, tdesc.GetId_Deprecated()));
     if (tdesc.HasPathId()) {
         table.TableId.Reset(new TTableId( tdesc.GetPathId().GetOwnerId(), tdesc.GetPathId().GetLocalId()));
     }
-    table.KeyColumnCount = tdesc.KeyColumnIdsSize(); 
-    for (size_t i = 0; i < tdesc.ColumnsSize(); i++) { 
-        auto& c = tdesc.GetColumns(i); 
-        table.Table.ColumnNames.insert(c.GetName()); 
-        i32 keyIdx = -1; 
-        for (size_t ki = 0; ki < tdesc.KeyColumnIdsSize(); ki++) { 
-            if (tdesc.GetKeyColumnIds(ki) == c.GetId()) { 
-                keyIdx = ki; 
+    table.KeyColumnCount = tdesc.KeyColumnIdsSize();
+    for (size_t i = 0; i < tdesc.ColumnsSize(); i++) {
+        auto& c = tdesc.GetColumns(i);
+        table.Table.ColumnNames.insert(c.GetName());
+        i32 keyIdx = -1;
+        for (size_t ki = 0; ki < tdesc.KeyColumnIdsSize(); ki++) {
+            if (tdesc.GetKeyColumnIds(ki) == c.GetId()) {
+                keyIdx = ki;
             }
         }
-        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0})); 
+        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0}));
     }
-    DbSchemeResolver.AddTable(table); 
+    DbSchemeResolver.AddTable(table);
 }
 
- 
-void TTester::CreateSchema(ESchema schema, const TOptions& opts) { 
-    TString keyValueSchemeText = 
+
+void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
+    TString keyValueSchemeText =
         "Name: \"table1\"\n"
         "Id_Deprecated: 13\n"
         "Path: \"/Root/table1\"\n"
         "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
-        "Columns { Id: 57 Name: \"uint\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n" 
+        "Columns { Id: 57 Name: \"uint\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "KeyColumnIds: [ 34 ]\n"
         ;
 
-    TString doubleKeyValueSchemeText = 
+    TString doubleKeyValueSchemeText =
         "Name: \"table2\"\n"
         "PathId { OwnerId: " + ToString(FAKE_SCHEMESHARD_TABLET_ID) + " LocalId: 14 }\n"
 
@@ -232,193 +232,193 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
         "PartitionConfig { ColumnFamilies { Id: 0 Storage: ColumnStorageTest_1_2_1k } }\n"
         ;
 
-    TString specialKeyValueSchemeText = 
-        "Name: \"table1\"\n" 
+    TString specialKeyValueSchemeText =
+        "Name: \"table1\"\n"
         "Id_Deprecated: 13\n"
         "PathId { OwnerId: " + ToString(FAKE_SCHEMESHARD_TABLET_ID) + " LocalId: 13 }\n"
         "Path: \"/Root/table1\"\n"
-        "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n" 
-        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
-        "Columns { Id: 57 Name: \"__tablet\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n" 
-        "Columns { Id: 58 Name: \"__updateEpoch\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n" 
-        "Columns { Id: 59 Name: \"__updateNo\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n" 
-        "KeyColumnIds: [ 34 ]\n" 
-        ; 
- 
-    TString partConfig = opts.PartConfig(); 
-    if (partConfig) { 
-        keyValueSchemeText += partConfig; 
-        doubleKeyValueSchemeText += partConfig; 
-    } 
- 
-    TFakeMiniKQLProxy proxy(*this); 
-    switch (schema) { 
-    case ESchema_KV: 
+        "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
+        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
+        "Columns { Id: 57 Name: \"__tablet\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n"
+        "Columns { Id: 58 Name: \"__updateEpoch\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n"
+        "Columns { Id: 59 Name: \"__updateNo\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint64) + " }\n"
+        "KeyColumnIds: [ 34 ]\n"
+        ;
+
+    TString partConfig = opts.PartConfig();
+    if (partConfig) {
+        keyValueSchemeText += partConfig;
+        doubleKeyValueSchemeText += partConfig;
+    }
+
+    TFakeMiniKQLProxy proxy(*this);
+    switch (schema) {
+    case ESchema_KV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true);
-        break; 
-    case ESchema_DoubleKV: 
+        break;
+    case ESchema_DoubleKV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueSchemeText, true);
-        break; 
+        break;
     case ESchema_DoubleKVExternal:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueExternalSchemeText, true);
         break;
-    case ESchema_SpecialKV: 
+    case ESchema_SpecialKV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, specialKeyValueSchemeText, true);
-        break; 
-    case ESchema_MultiShardKV: 
+        break;
+    case ESchema_MultiShardKV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, keyValueSchemeText, true);
         CreateDataShard(proxy, TTestTxConfig::TxTablet1, keyValueSchemeText);
         CreateDataShard(proxy, TTestTxConfig::TxTablet2, keyValueSchemeText);
-        break; 
-    } 
+        break;
+    }
 }
 
-// 
+//
 
-TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& programText) { 
-    auto expr = NYql::ParseText(programText); 
- 
-    auto resFuture = NYql::ConvertToMiniKQL( 
+TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& programText) {
+    auto expr = NYql::ParseText(programText);
+
+    auto resFuture = NYql::ConvertToMiniKQL(
         expr, tester.Runtime.GetAppData().FunctionRegistry,
-        &Env, &tester.DbSchemeResolver 
-    ); 
- 
+        &Env, &tester.DbSchemeResolver
+    );
+
     const TDuration TIME_LIMIT = TDuration::Seconds(NValgrind::PlainOrUnderValgrind(60, 300));
     Y_VERIFY(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
     NYql::TConvertResult res = resFuture.GetValue();
-    res.Errors.PrintTo(Cerr); 
-    UNIT_ASSERT(res.Node.GetNode()); 
-    return res.Node; 
-} 
- 
-TBalanceCoverageBuilder * TFakeProxyTx::GetCoverageBuilder(ui64 shard) { 
-    auto it = CoverageBuilders.find(shard); 
-    if (it == CoverageBuilders.end()) { 
-        it = CoverageBuilders.insert(std::make_pair(shard, std::make_shared<TBalanceCoverageBuilder>())).first; 
-    } 
-    return it->second.get(); 
-} 
- 
-// 
- 
+    res.Errors.PrintTo(Cerr);
+    UNIT_ASSERT(res.Node.GetNode());
+    return res.Node;
+}
+
+TBalanceCoverageBuilder * TFakeProxyTx::GetCoverageBuilder(ui64 shard) {
+    auto it = CoverageBuilders.find(shard);
+    if (it == CoverageBuilders.end()) {
+        it = CoverageBuilders.insert(std::make_pair(shard, std::make_shared<TBalanceCoverageBuilder>())).first;
+    }
+    return it->second.get();
+}
+
+//
+
 ui32 TFakeProxyTx::SetProgram(TTester& tester) {
     return SetProgram(tester, TxBody());
 }
 
-ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) { 
-    TEngineFlatSettings settings(IEngineFlat::EProtocol::V1, 
+ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
+    TEngineFlatSettings settings(IEngineFlat::EProtocol::V1,
                                  tester.Runtime.GetAppData().FunctionRegistry,
-                                 *TAppData::RandomProvider, *TAppData::TimeProvider); 
- 
-    NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText); 
- 
-    settings.BacktraceWriter = [](const char* operation, ui32 line, const TBackTrace* backtrace) { 
-        Cerr << "\nEngine backtrace, operation: " << operation << " (" << line << ")\n"; 
-        if (backtrace) { 
-            backtrace->PrintTo(Cerr); 
-        } 
-    }; 
+                                 *TAppData::RandomProvider, *TAppData::TimeProvider);
+
+    NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText);
+
+    settings.BacktraceWriter = [](const char* operation, ui32 line, const TBackTrace* backtrace) {
+        Cerr << "\nEngine backtrace, operation: " << operation << " (" << line << ")\n";
+        if (backtrace) {
+            backtrace->PrintTo(Cerr);
+        }
+    };
     settings.ForceOnline = (TxFlags_ & NDataShard::TTxFlags::ForceOnline);
- 
-    Engine = CreateEngineFlat(settings); 
- 
-    auto result = Engine->SetProgram(SerializeRuntimeNode(pgm, Env)); 
-    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors()); 
-    auto& dbKeys = Engine->GetDbKeys(); 
- 
+
+    Engine = CreateEngineFlat(settings);
+
+    auto result = Engine->SetProgram(SerializeRuntimeNode(pgm, Env));
+    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors());
+    auto& dbKeys = Engine->GetDbKeys();
+
     TSet<ui64> resolvedShards;
-    TTester::TKeyResolver keyResolver = tester.GetKeyResolver(); 
-    for (auto& dbKey : dbKeys) { 
-        keyResolver(*dbKey); 
-        UNIT_ASSERT(dbKey->Status == TKeyDesc::EStatus::Ok); 
+    TTester::TKeyResolver keyResolver = tester.GetKeyResolver();
+    for (auto& dbKey : dbKeys) {
+        keyResolver(*dbKey);
+        UNIT_ASSERT(dbKey->Status == TKeyDesc::EStatus::Ok);
 
         for (auto& partition : dbKey->Partitions) {
             resolvedShards.insert(partition.ShardId);
         }
-    } 
- 
-    result = Engine->PrepareShardPrograms(); 
-    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors()); 
- 
-    ShardsCount_ = Engine->GetAffectedShardCount(); 
-    UNIT_ASSERT_VALUES_EQUAL(ShardsCount_, resolvedShards.size()); 
-    return ShardsCount_; 
+    }
+
+    result = Engine->PrepareShardPrograms();
+    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors());
+
+    ShardsCount_ = Engine->GetAffectedShardCount();
+    UNIT_ASSERT_VALUES_EQUAL(ShardsCount_, resolvedShards.size());
+    return ShardsCount_;
 }
 
-ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) { 
-    IEngineFlat::TShardData shardData; 
-    auto result = Engine->GetAffectedShard(idx, shardData); 
-    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors()); 
- 
-    NKikimrTxDataShard::TDataTransaction tx; 
-    tx.SetMiniKQL(shardData.Program); 
-    tx.SetImmediate(shardData.Immediate); 
+ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
+    IEngineFlat::TShardData shardData;
+    auto result = Engine->GetAffectedShard(idx, shardData);
+    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors());
+
+    NKikimrTxDataShard::TDataTransaction tx;
+    tx.SetMiniKQL(shardData.Program);
+    tx.SetImmediate(shardData.Immediate);
     tx.SetReadOnly(Engine->IsReadOnlyProgram());
-    outTxBody = tx.SerializeAsString(); 
-    return shardData.ShardId; 
+    outTxBody = tx.SerializeAsString();
+    return shardData.ShardId;
 }
 
-void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event) { 
+void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event) {
     if (event->IsExecError() || event->IsError()) {
-        for (auto err : event->Record.GetError()) { 
-            Cerr << "DataShard error: " << shardId << ", kind: " << 
-                NKikimrTxDataShard::TError::EKind_Name(err.GetKind()) << ", reason: " << err.GetReason() << Endl; 
-            Errors[shardId].push_back(err); 
-        } 
-    } 
- 
-    if (event->IsComplete()) { 
-        Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult()); 
-        Engine->FinalizeOriginReplies(shardId); 
+        for (auto err : event->Record.GetError()) {
+            Cerr << "DataShard error: " << shardId << ", kind: " <<
+                NKikimrTxDataShard::TError::EKind_Name(err.GetKind()) << ", reason: " << err.GetReason() << Endl;
+            Errors[shardId].push_back(err);
+        }
+    }
+
+    if (event->IsComplete()) {
+        Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult());
+        Engine->FinalizeOriginReplies(shardId);
     } else if (event->IsPrepared()) {
         Shards.push_back(shardId);
         MinStep = Max(MinStep, event->Record.GetMinStep());
         MaxStep = Min(MaxStep, event->Record.GetMaxStep());
-    } else { 
+    } else {
         UNIT_ASSERT(event->IsExecError() || event->IsError() || event->IsBadRequest());
-    } 
-} 
- 
-void TFakeProxyTx::AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, 
-                                                           bool complete) { 
-    Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult()); 
-    if (complete) 
-        Engine->FinalizeOriginReplies(shardId); 
-} 
- 
-IEngineFlat::EStatus TFakeProxyTx::GetStatus(bool atPropose) { 
-    if (atPropose) { 
-        Engine->AfterShardProgramsExtracted(); 
- 
-        if (HasErrors()) 
-            return IEngineFlat::EStatus::Error; 
-        if (!Shards.empty()) 
-            return IEngineFlat::EStatus::Unknown; 
-    } 
- 
-    Engine->BuildResult(); 
-    if (Engine->GetStatus() == IEngineFlat::EStatus::Error) { 
-        Cerr << Engine->GetErrors() << Endl; 
-    } 
- 
-    return Engine->GetStatus(); 
-} 
- 
-NKikimrMiniKQL::TResult TFakeProxyTx::GetResult() const { 
-    NKikimrMiniKQL::TResult result; 
-    UNIT_ASSERT(Engine); 
-    auto fillResult = Engine->FillResultValue(result); 
-    UNIT_ASSERT_EQUAL(fillResult, NMiniKQL::IEngineFlat::EResult::Ok); 
-    if (DUMP_RESULT) { 
-        TString strRes; 
-        ::google::protobuf::TextFormat::PrintToString(result, &strRes); 
-        Cout << strRes << Endl; 
-    } 
-    return result; 
-} 
- 
-// 
- 
+    }
+}
+
+void TFakeProxyTx::AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event,
+                                                           bool complete) {
+    Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult());
+    if (complete)
+        Engine->FinalizeOriginReplies(shardId);
+}
+
+IEngineFlat::EStatus TFakeProxyTx::GetStatus(bool atPropose) {
+    if (atPropose) {
+        Engine->AfterShardProgramsExtracted();
+
+        if (HasErrors())
+            return IEngineFlat::EStatus::Error;
+        if (!Shards.empty())
+            return IEngineFlat::EStatus::Unknown;
+    }
+
+    Engine->BuildResult();
+    if (Engine->GetStatus() == IEngineFlat::EStatus::Error) {
+        Cerr << Engine->GetErrors() << Endl;
+    }
+
+    return Engine->GetStatus();
+}
+
+NKikimrMiniKQL::TResult TFakeProxyTx::GetResult() const {
+    NKikimrMiniKQL::TResult result;
+    UNIT_ASSERT(Engine);
+    auto fillResult = Engine->FillResultValue(result);
+    UNIT_ASSERT_EQUAL(fillResult, NMiniKQL::IEngineFlat::EResult::Ok);
+    if (DUMP_RESULT) {
+        TString strRes;
+        ::google::protobuf::TextFormat::PrintToString(result, &strRes);
+        Cout << strRes << Endl;
+    }
+    return result;
+}
+
+//
+
 ui32 TFakeScanTx::SetProgram(TTester& tester) {
     NKikimrTxDataShard::TDataTransaction dataTransaction;
     Y_PROTOBUF_SUPPRESS_NODISCARD dataTransaction.ParseFromArray(TxBody_.data(), TxBody_.size());
@@ -479,52 +479,52 @@ IEngineFlat::EStatus TFakeScanTx::GetStatus(bool /*atPropose*/) {
 
 //
 
-void TFakeMiniKQLProxy::Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check, ui32 flags) { 
-    TxQueue.push_back(std::make_shared<TFakeProxyTx>(++LastTxId_, programText, flags)); 
-    TxQueue.back()->SetCheck(check); 
-} 
- 
+void TFakeMiniKQLProxy::Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check, ui32 flags) {
+    TxQueue.push_back(std::make_shared<TFakeProxyTx>(++LastTxId_, programText, flags));
+    TxQueue.back()->SetCheck(check);
+}
+
 void TFakeMiniKQLProxy::EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check, ui32 flags) {
     TxQueue.push_back(std::make_shared<TFakeScanTx>(++LastTxId_, programText, flags));
     TxQueue.back()->SetCheck(check);
 }
 
-void TFakeMiniKQLProxy::ExecQueue() { 
+void TFakeMiniKQLProxy::ExecQueue() {
     TMap<ui64, TFakeProxyTx::TPtr> needPlan;
-    for (auto& tx : TxQueue) { 
-        Propose(*tx, true); 
-        UNIT_ASSERT(tx->Immediate() || tx->GetStatus(true) == IEngineFlat::EStatus::Unknown); 
-        needPlan[tx->TxId()] = tx; 
-    } 
- 
-    if (needPlan) { 
-        ui64 stepId = ++LastStep_; 
-        LastStep_ = Plan(stepId, needPlan); 
-        for (auto& pair : needPlan) { 
-            TFakeProxyTx::TPtr tx = pair.second; 
-            auto status = tx->GetStatus(tx->Immediate()); 
-            UNIT_ASSERT_EQUAL(status, IEngineFlat::EStatus::Complete); 
-            UNIT_ASSERT(tx->CheckResult()); 
-        } 
-    } 
- 
-    TxQueue.clear(); 
-} 
- 
+    for (auto& tx : TxQueue) {
+        Propose(*tx, true);
+        UNIT_ASSERT(tx->Immediate() || tx->GetStatus(true) == IEngineFlat::EStatus::Unknown);
+        needPlan[tx->TxId()] = tx;
+    }
+
+    if (needPlan) {
+        ui64 stepId = ++LastStep_;
+        LastStep_ = Plan(stepId, needPlan);
+        for (auto& pair : needPlan) {
+            TFakeProxyTx::TPtr tx = pair.second;
+            auto status = tx->GetStatus(tx->Immediate());
+            UNIT_ASSERT_EQUAL(status, IEngineFlat::EStatus::Complete);
+            UNIT_ASSERT(tx->CheckResult());
+        }
+    }
+
+    TxQueue.clear();
+}
+
 IEngineFlat::EStatus TFakeMiniKQLProxy::Execute(const TString& programText,
                                                 NKikimrMiniKQL::TResult& out,
                                                 bool waitForResult) {
-    ui32 txId = ++LastTxId_; 
+    ui32 txId = ++LastTxId_;
     TMap<ui64, TFakeProxyTx::TPtr> txs;
-    txs[txId] = std::make_shared<TFakeProxyTx>(txId, programText); 
-    TFakeProxyTx& tx = *(txs.begin()->second); 
- 
-    Propose(tx); 
-    auto status = tx.GetStatus(true); 
-    if (status == IEngineFlat::EStatus::Unknown) { 
-        ui64 stepId = ++LastStep_; 
+    txs[txId] = std::make_shared<TFakeProxyTx>(txId, programText);
+    TFakeProxyTx& tx = *(txs.begin()->second);
+
+    Propose(tx);
+    auto status = tx.GetStatus(true);
+    if (status == IEngineFlat::EStatus::Unknown) {
+        ui64 stepId = ++LastStep_;
         Plan(stepId, txs, waitForResult);
-        status = tx.GetStatus(false); 
+        status = tx.GetStatus(false);
     }
     if (waitForResult)
         out = tx.GetResult();
@@ -532,39 +532,39 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::Execute(const TString& programText,
 }
 
 IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tableDesc, const TVector<ui64>& shards) {
-    ui64 txId = ++LastTxId_; 
-    ui64 stepId = ++LastStep_; 
+    ui64 txId = ++LastTxId_;
+    ui64 stepId = ++LastStep_;
     TMap<ui64, TFakeProxyTx::TPtr> txs;
-    txs[txId] = std::make_shared<TFakeProxyTx>(txId, tableDesc); 
-    TFakeProxyTx& tx = *(txs.begin()->second); 
-    tx.SetKindSchema(); 
- 
+    txs[txId] = std::make_shared<TFakeProxyTx>(txId, tableDesc);
+    TFakeProxyTx& tx = *(txs.begin()->second);
+    tx.SetKindSchema();
+
     ProposeSchemeCreateTable(tx, shards);
     if (stepId < tx.MinStep) {
         stepId = LastStep_ = tx.MinStep;
     }
     UNIT_ASSERT(tx.MaxStep == Max<ui64>());
-    LastStep_ = Plan(stepId, txs); 
-    return IEngineFlat::EStatus::Complete; 
+    LastStep_ = Plan(stepId, txs);
+    return IEngineFlat::EStatus::Complete;
 }
 
-#if 0 
+#if 0
 void TFakeMiniKQLProxy::Cancel(ui64 txId) {
-    for (auto shard : proxyTx.Shards) { 
+    for (auto shard : proxyTx.Shards) {
         auto cancel = new TEvDataShard::TEvCancelTransactionProposal(txId);
         Tester.Runtime.SendToPipe(shard, Tester.Sender, cancel);
     }
 
     Tester.Runtime.DispatchEvents();
 }
-#endif 
+#endif
 
 void TFakeMiniKQLProxy::ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector<ui64>& shards) {
-    const TString& schemaText = tx.TxBody(); 
+    const TString& schemaText = tx.TxBody();
     NKikimrSchemeOp::TTableDescription tableDesc;
-    bool parsed = NProtoBuf::TextFormat::ParseFromString(schemaText, &tableDesc); 
-    UNIT_ASSERT(parsed); 
- 
+    bool parsed = NProtoBuf::TextFormat::ParseFromString(schemaText, &tableDesc);
+    UNIT_ASSERT(parsed);
+
     auto txBodyForShard = [&](ui64 shard) {
         Y_UNUSED(shard);
 
@@ -579,18 +579,18 @@ void TFakeMiniKQLProxy::ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector
 void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards,
         const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard)
 {
-    NKikimrTxDataShard::ETransactionKind kind = NKikimrTxDataShard::TX_KIND_SCHEME; 
- 
-    ui64 txId = tx.TxId(); 
+    NKikimrTxDataShard::ETransactionKind kind = NKikimrTxDataShard::TX_KIND_SCHEME;
+
+    ui64 txId = tx.TxId();
     bool hasErrors = false;
-    for (ui32 i = 0; i < shards.size(); ++i) { 
+    for (ui32 i = 0; i < shards.size(); ++i) {
         ui64 shardId = shards[i];
         auto txBody = txBodyForShard(shards[i]).SerializeAsString();
         ui32 txFlags = NDataShard::TTxFlags::Default;
 
         for (;;) {
             auto proposal = new TEvDataShard::TEvProposeTransaction(kind, FAKE_SCHEMESHARD_TABLET_ID,
-                Tester.Sender, txId, txBody, NKikimrSubDomains::TProcessingParams(), txFlags); 
+                Tester.Sender, txId, txBody, NKikimrSubDomains::TProcessingParams(), txFlags);
             Tester.Runtime.SendToPipe(shardId, Tester.Sender, proposal);
             TAutoPtr<IEventHandle> handle;
             auto event = Tester.Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
@@ -599,11 +599,11 @@ void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& sha
             });
 
             UNIT_ASSERT(event);
-            UNIT_ASSERT_EQUAL(event->GetTxKind(), kind); 
-            if (event->IsTryLater()) 
+            UNIT_ASSERT_EQUAL(event->GetTxKind(), kind);
+            if (event->IsTryLater())
                 continue;
 
-            if (event->IsError()) { 
+            if (event->IsError()) {
                 hasErrors = true;
                 for (auto err : event->Record.GetError()) {
                     Cerr << "DataShard error: " << shardId << ", kind: " <<
@@ -613,79 +613,79 @@ void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& sha
                 break;
             }
 
-            if (event->IsComplete()) 
+            if (event->IsComplete())
                 break;
 
-            UNIT_ASSERT(event->IsPrepared()); 
-            tx.Shards.push_back(shardId); 
+            UNIT_ASSERT(event->IsPrepared());
+            tx.Shards.push_back(shardId);
             tx.MinStep = Max(tx.MinStep, event->Record.GetMinStep());
             tx.MaxStep = Min(tx.MaxStep, event->Record.GetMaxStep());
             break;
         }
     }
 
-    UNIT_ASSERT(!hasErrors); 
-    UNIT_ASSERT(!tx.Shards.empty()); 
+    UNIT_ASSERT(!hasErrors);
+    UNIT_ASSERT(!tx.Shards.empty());
 }
 
-void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) { 
-    ui64 txId = tx.TxId(); 
+void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
+    ui64 txId = tx.TxId();
 
     ui32 shardsCount = tx.SetProgram(Tester);
-    if (holdImmediate && tx.Immediate()) 
-        return; 
+    if (holdImmediate && tx.Immediate())
+        return;
 
     TSet<ui64> shards;
     for (ui32 i = 0; i < shardsCount; ++i) {
-        TString txBody; 
-        ui32 shard = tx.GetShardProgram(i, txBody); 
-        shards.insert(shard); 
+        TString txBody;
+        ui32 shard = tx.GetShardProgram(i, txBody);
+        shards.insert(shard);
 
-        auto proposal = new TEvDataShard::TEvProposeTransaction( 
+        auto proposal = new TEvDataShard::TEvProposeTransaction(
             tx.TxKind(), Tester.Sender, txId, txBody, tx.TxFlags());
-        Tester.Runtime.SendToPipe(shard, Tester.Sender, proposal); 
-    } 
+        Tester.Runtime.SendToPipe(shard, Tester.Sender, proposal);
+    }
 
-    ResolveShards(shards); 
- 
-    while (shards) { 
-        TAutoPtr<IEventHandle> handle; 
-        auto event = Tester.Runtime.GrabEdgeEvent<TEvDataShard::TEvProposeTransactionResult>(handle); 
-        UNIT_ASSERT(event); 
+    ResolveShards(shards);
+
+    while (shards) {
+        TAutoPtr<IEventHandle> handle;
+        auto event = Tester.Runtime.GrabEdgeEvent<TEvDataShard::TEvProposeTransactionResult>(handle);
+        UNIT_ASSERT(event);
         if (event->GetTxId() != txId)
             continue;
 
-        UNIT_ASSERT(!event->IsTryLater()); // need resend otherwise 
+        UNIT_ASSERT(!event->IsTryLater()); // need resend otherwise
         UNIT_ASSERT_EQUAL(event->GetTxKind(), tx.TxKind());
 
-        ui64 shard = event->GetOrigin(); 
- 
-        tx.AddProposeShardResult(shard, event); 
-        shards.erase(shard); 
+        ui64 shard = event->GetOrigin();
+
+        tx.AddProposeShardResult(shard, event);
+        shards.erase(shard);
     }
 }
 
 void TFakeMiniKQLProxy::ResolveShards(const TSet<ui64>& shards) {
-    for (ui64 shard : shards) { 
-        auto event = new TEvDataShard::TEvGetShardState(Tester.Sender); 
+    for (ui64 shard : shards) {
+        auto event = new TEvDataShard::TEvGetShardState(Tester.Sender);
         ForwardToTablet(Tester.Runtime, shard, Tester.Sender, event);
-    } 
- 
-    for (ui32 results = 0; results < shards.size(); ++results) { 
-        TAutoPtr<IEventHandle> handle; 
-        auto resolve = Tester.Runtime.GrabEdgeEvent<TEvTabletResolver::TEvForwardResult>(handle); 
-        UNIT_ASSERT(resolve && resolve->Tablet); 
-        ShardActors[resolve->TabletID] = resolve->TabletActor; 
-    } 
-} 
- 
+    }
+
+    for (ui32 results = 0; results < shards.size(); ++results) {
+        TAutoPtr<IEventHandle> handle;
+        auto resolve = Tester.Runtime.GrabEdgeEvent<TEvTabletResolver::TEvForwardResult>(handle);
+        UNIT_ASSERT(resolve && resolve->Tablet);
+        ShardActors[resolve->TabletID] = resolve->TabletActor;
+    }
+}
+
 ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& txs,
                              bool waitForResult) {
-    using TEvPlanStepAck = TEvTxProcessing::TEvPlanStepAck; 
-    using TEvPlanStepAccepted = TEvTxProcessing::TEvPlanStepAccepted; 
-    using TEvReadSet = TEvTxProcessing::TEvReadSet; 
-    //using TEvReadSetAck = TEvTxProcessing::TEvReadSetAck; 
-    using TEvProposeTransactionResult = TEvDataShard::TEvProposeTransactionResult; 
+    using TEvPlanStepAck = TEvTxProcessing::TEvPlanStepAck;
+    using TEvPlanStepAccepted = TEvTxProcessing::TEvPlanStepAccepted;
+    using TEvReadSet = TEvTxProcessing::TEvReadSet;
+    //using TEvReadSetAck = TEvTxProcessing::TEvReadSetAck;
+    using TEvProposeTransactionResult = TEvDataShard::TEvProposeTransactionResult;
     using TEvStreamClearanceRequest = TEvTxProcessing::TEvStreamClearanceRequest;
     using TEvStreamClearancePending = TEvTxProcessing::TEvStreamClearancePending;
     using TEvStreamClearanceResponse = TEvTxProcessing::TEvStreamClearanceResponse;
@@ -700,204 +700,204 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     TSet<std::pair<ui64, ui64>> results;
     TSet<std::pair<ui64, ui64>> streams;
     TSet<std::pair<ui64, ui64>> scans;
-    for (auto& pair : txs) { 
-        TFakeProxyTx::TPtr tx = pair.second; 
-        ui64 txId = tx->TxId(); 
-        if (tx->Immediate()) { 
-            immediateTxs.insert(txId); 
-        } else { 
-            for (ui64 shard : tx->Shards) { 
-                plans[shard].push_back(txId); 
-                acks.insert(std::make_pair(shard, txId)); 
+    for (auto& pair : txs) {
+        TFakeProxyTx::TPtr tx = pair.second;
+        ui64 txId = tx->TxId();
+        if (tx->Immediate()) {
+            immediateTxs.insert(txId);
+        } else {
+            for (ui64 shard : tx->Shards) {
+                plans[shard].push_back(txId);
+                acks.insert(std::make_pair(shard, txId));
                 if (tx->IsReadTable()) {
                     streams.insert(std::make_pair(shard, txId));
                     scans.insert(std::make_pair(shard, txId));
                 } else {
                     results.insert(std::make_pair(shard, txId));
                 }
-            } 
-        } 
-    } 
-
-    // send plan step 
-    for (const auto& pair : plans) { 
-        ui64 shard = pair.first; 
-        auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, 0, shard); 
-        for (ui64 txId : pair.second) { 
-            TFakeProxyTx::TPtr tx = txs.find(txId)->second; 
-            if (!tx->Immediate()) { 
-                auto plannedTx = planStep->Record.MutableTransactions()->Add(); 
-                plannedTx->SetTxId(txId); 
-                ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo());
-            } 
+            }
         }
-        Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep); 
     }
 
-    // prepare immediate 
+    // send plan step
+    for (const auto& pair : plans) {
+        ui64 shard = pair.first;
+        auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, 0, shard);
+        for (ui64 txId : pair.second) {
+            TFakeProxyTx::TPtr tx = txs.find(txId)->second;
+            if (!tx->Immediate()) {
+                auto plannedTx = planStep->Record.MutableTransactions()->Add();
+                plannedTx->SetTxId(txId);
+                ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo());
+            }
+        }
+        Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep);
+    }
+
+    // prepare immediate
     TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents;
-    for (ui64 txId : immediateTxs) { 
-        TFakeProxyTx::TPtr tx = txs.find(txId)->second; 
+    for (ui64 txId : immediateTxs) {
+        TFakeProxyTx::TPtr tx = txs.find(txId)->second;
         UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
-        TString txBody; 
-        ui32 shard = tx->GetShardProgram(0, txBody); 
+        TString txBody;
+        ui32 shard = tx->GetShardProgram(0, txBody);
         THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
             NKikimrTxDataShard::TX_KIND_DATA, Tester.Sender, txId, txBody, tx->TxFlags());
-        immEvents.emplace_back(std::make_pair(shard, std::move(event))); 
-        results.insert(std::make_pair(shard, txId)); 
-    } 
-    immediateTxs.clear(); 
- 
-    THolder<IEventHandle> delayedEvent; 
-    UNIT_ASSERT(DelayedReadSets.size() <= 1); 
-    UNIT_ASSERT(DelayedData.size() <= 1); 
- 
+        immEvents.emplace_back(std::make_pair(shard, std::move(event)));
+        results.insert(std::make_pair(shard, txId));
+    }
+    immediateTxs.clear();
+
+    THolder<IEventHandle> delayedEvent;
+    UNIT_ASSERT(DelayedReadSets.size() <= 1);
+    UNIT_ASSERT(DelayedData.size() <= 1);
+
     auto observer = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
-        // send immediate in the right moment 
-        if (ev->Type == TEvProposeTransactionResult::EventType) { 
-            auto event = ev->Get<TEvProposeTransactionResult>(); 
-            if (event->GetTxKind() != NKikimrTxDataShard::TX_KIND_DATA || 
-                event->GetStepOrderId().first == 0) { 
-                return TTestActorRuntime::EEventAction::PROCESS; 
-            } 
- 
-            ui64 prevTxId = event->GetTxId(); 
-            while (immEvents) { 
-                ui64 shard = immEvents.front().first; 
-                auto& immEvent = immEvents.front().second; 
-                if ((prevTxId+1) != immEvent->GetTxId()) 
-                    break; 
-                //Cerr << ">>> imm to " << shard << Endl; 
+        // send immediate in the right moment
+        if (ev->Type == TEvProposeTransactionResult::EventType) {
+            auto event = ev->Get<TEvProposeTransactionResult>();
+            if (event->GetTxKind() != NKikimrTxDataShard::TX_KIND_DATA ||
+                event->GetStepOrderId().first == 0) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            ui64 prevTxId = event->GetTxId();
+            while (immEvents) {
+                ui64 shard = immEvents.front().first;
+                auto& immEvent = immEvents.front().second;
+                if ((prevTxId+1) != immEvent->GetTxId())
+                    break;
+                //Cerr << ">>> imm to " << shard << Endl;
                 UNIT_ASSERT(ShardActors.contains(shard));
-                THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release())); 
-                runtime.Send(handle.Release()); 
-                immEvents.pop_front(); 
-                ++prevTxId; 
-            } 
-        } 
- 
-        // delayed ReadSet 
-        bool needDelay = false; 
-        if (ev->Type == TEvReadSet::EventType && DelayedReadSets) { 
-            TExpectedReadSet& rs = DelayedReadSets.front(); 
-            auto event = ev->Get<TEvReadSet>(); 
- 
-            needDelay = (rs.SrcTablet == event->Record.GetTabletSource()) && 
-                (rs.DstTablet == event->Record.GetTabletDest()) && 
-                (rs.TxId == event->Record.GetTxId()); 
-            if (needDelay) 
-                Cerr << event->ToString() << Endl; 
-        } 
- 
-        // delayed data 
+                THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
+                runtime.Send(handle.Release());
+                immEvents.pop_front();
+                ++prevTxId;
+            }
+        }
+
+        // delayed ReadSet
+        bool needDelay = false;
+        if (ev->Type == TEvReadSet::EventType && DelayedReadSets) {
+            TExpectedReadSet& rs = DelayedReadSets.front();
+            auto event = ev->Get<TEvReadSet>();
+
+            needDelay = (rs.SrcTablet == event->Record.GetTabletSource()) &&
+                (rs.DstTablet == event->Record.GetTabletDest()) &&
+                (rs.TxId == event->Record.GetTxId());
+            if (needDelay)
+                Cerr << event->ToString() << Endl;
+        }
+
+        // delayed data
         if (ev->Type == NTabletFlatExecutor::NBlockIO::TEvData::EventType) {
             // WARNING: NShared::TEvResult and NBlockIO::TEvData currently share an event id
             auto event = ev->Get<NTabletFlatExecutor::NBlockIO::TEvData>();
-            needDelay = DelayedData && !delayedEvent; 
- 
-            event->Describe(Cerr); 
-            Cerr << (needDelay ? " delayed" : "") << Endl; 
-        } 
- 
-        if (needDelay) { 
-            delayedEvent.Reset(ev.Release()); 
-            return TTestActorRuntime::EEventAction::DROP; 
-        } 
-        return TTestActorRuntime::EEventAction::PROCESS; 
-    }; 
- 
-    if (immEvents || DelayedReadSets || DelayedData) { 
-        Tester.Runtime.SetObserverFunc(observer); 
-    } 
- 
+            needDelay = DelayedData && !delayedEvent;
+
+            event->Describe(Cerr);
+            Cerr << (needDelay ? " delayed" : "") << Endl;
+        }
+
+        if (needDelay) {
+            delayedEvent.Reset(ev.Release());
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+
+    if (immEvents || DelayedReadSets || DelayedData) {
+        Tester.Runtime.SetObserverFunc(observer);
+    }
+
     while (acks || plans || (results && waitForResult) || streams) {
-#if 0 
-        Cerr << "acks: " << acks.size() << " plans: " << plans.size() << " results: " << results.size() << Endl; 
-#endif 
+#if 0
+        Cerr << "acks: " << acks.size() << " plans: " << plans.size() << " results: " << results.size() << Endl;
+#endif
         TAutoPtr<IEventHandle> handle;
         auto eventTuple = Tester.Runtime.GrabEdgeEvents<TEvPlanStepAck, TEvPlanStepAccepted, TEvProposeTransactionResult,
                                                         TEvStreamClearanceRequest>(handle);
 
-        switch (handle->Type) { 
-            case TEvPlanStepAck::EventType: { 
-                auto event = std::get<TEvPlanStepAck*>(eventTuple); 
-                for (ui32 i = 0; i < event->Record.TxIdSize(); ++i) { 
-                    ui64 txId = event->Record.GetTxId().Get(i); 
-                    ui64 shardId = event->Record.GetTabletId(); 
-                    acks.erase(std::make_pair(shardId, txId)); 
-                } 
-                break; 
-            } 
-            case TEvPlanStepAccepted::EventType: { 
-                auto event = std::get<TEvPlanStepAccepted*>(eventTuple); 
-                UNIT_ASSERT_EQUAL(stepId, event->Record.GetStep()); 
-                ui64 shard = event->Record.GetTabletId(); 
-                plans.erase(shard); 
-                break; 
-            } 
-            case TEvProposeTransactionResult::EventType: { 
-                auto event = std::get<TEvProposeTransactionResult*>(eventTuple); 
-                ui64 txId = event->GetTxId(); 
-                ui64 shard = event->GetOrigin(); 
+        switch (handle->Type) {
+            case TEvPlanStepAck::EventType: {
+                auto event = std::get<TEvPlanStepAck*>(eventTuple);
+                for (ui32 i = 0; i < event->Record.TxIdSize(); ++i) {
+                    ui64 txId = event->Record.GetTxId().Get(i);
+                    ui64 shardId = event->Record.GetTabletId();
+                    acks.erase(std::make_pair(shardId, txId));
+                }
+                break;
+            }
+            case TEvPlanStepAccepted::EventType: {
+                auto event = std::get<TEvPlanStepAccepted*>(eventTuple);
+                UNIT_ASSERT_EQUAL(stepId, event->Record.GetStep());
+                ui64 shard = event->Record.GetTabletId();
+                plans.erase(shard);
+                break;
+            }
+            case TEvProposeTransactionResult::EventType: {
+                auto event = std::get<TEvProposeTransactionResult*>(eventTuple);
+                ui64 txId = event->GetTxId();
+                ui64 shard = event->GetOrigin();
 
-                if (event->IsPrepared()) { 
-                    Cerr << "immediate -> online tx " << txId << Endl; 
-                    results.erase(std::make_pair(shard, txId)); 
-                    imm2onlineTxs[shard].push_back(txId); 
-                    break; 
-                } 
- 
-                UNIT_ASSERT(event->IsComplete()); 
-                if (event->GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) { 
-                    results.erase(std::make_pair(shard, txId)); 
-                    break; 
-                } 
+                if (event->IsPrepared()) {
+                    Cerr << "immediate -> online tx " << txId << Endl;
+                    results.erase(std::make_pair(shard, txId));
+                    imm2onlineTxs[shard].push_back(txId);
+                    break;
+                }
 
-                auto it = txs.find(txId); 
+                UNIT_ASSERT(event->IsComplete());
+                if (event->GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    results.erase(std::make_pair(shard, txId));
+                    break;
+                }
+
+                auto it = txs.find(txId);
                 if (it == txs.end())
                     continue;
-                TFakeProxyTx::TPtr tx = it->second; 
+                TFakeProxyTx::TPtr tx = it->second;
                 UNIT_ASSERT_EQUAL(event->GetTxKind(), tx->TxKind());
- 
-                if (tx->Immediate()) { 
+
+                if (tx->Immediate()) {
                     UNIT_ASSERT_VALUES_EQUAL(event->GetStepOrderId().first, 0);
-                    tx->AddProposeShardResult(shard, event); 
-                    results.erase(std::make_pair(shard, txId)); 
-                    break; 
-                } 
- 
-                if (DelayedReadSets) { 
-                    TExpectedReadSet::TWaitFor waitFor = DelayedReadSets.front().Freedom; 
-                    if (shard == waitFor.Shard && tx->TxId() == waitFor.TxId) { 
-                        if (RebootOnDelay) { 
-                            RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender);
-                        } 
- 
-                        Y_VERIFY(delayedEvent); 
-                        DelayedReadSets.clear(); 
-                        Tester.Runtime.Send(delayedEvent.Release()); 
-                        Cerr << "resending delayed RS" << Endl; 
-                    } 
-                } else if (DelayedData) { 
-                    TExpectedReadSet::TWaitFor waitFor = DelayedData.front(); 
-                    if (shard == waitFor.Shard && tx->TxId() == waitFor.TxId) { 
-                        DelayedData.clear(); 
-                        if (delayedEvent) { 
-                            Tester.Runtime.Send(delayedEvent.Release()); 
-                            Cerr << "resending delayed data" << Endl; 
-                        } 
-                    } 
-                } 
- 
-                UNIT_ASSERT_EQUAL(event->GetStepOrderId().first, stepId); 
-                TBalanceCoverageBuilder * builder = tx->GetCoverageBuilder(shard); 
-                if (builder->AddResult(event->Record.GetBalanceTrackList())) { 
-                    tx->AddPlanStepShardResult(shard, event, builder->IsComplete()); 
-                    if (builder->IsComplete()) { 
-                        results.erase(std::make_pair(shard, txId)); 
-                    } 
+                    tx->AddProposeShardResult(shard, event);
+                    results.erase(std::make_pair(shard, txId));
+                    break;
                 }
-                break; 
+
+                if (DelayedReadSets) {
+                    TExpectedReadSet::TWaitFor waitFor = DelayedReadSets.front().Freedom;
+                    if (shard == waitFor.Shard && tx->TxId() == waitFor.TxId) {
+                        if (RebootOnDelay) {
+                            RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender);
+                        }
+
+                        Y_VERIFY(delayedEvent);
+                        DelayedReadSets.clear();
+                        Tester.Runtime.Send(delayedEvent.Release());
+                        Cerr << "resending delayed RS" << Endl;
+                    }
+                } else if (DelayedData) {
+                    TExpectedReadSet::TWaitFor waitFor = DelayedData.front();
+                    if (shard == waitFor.Shard && tx->TxId() == waitFor.TxId) {
+                        DelayedData.clear();
+                        if (delayedEvent) {
+                            Tester.Runtime.Send(delayedEvent.Release());
+                            Cerr << "resending delayed data" << Endl;
+                        }
+                    }
+                }
+
+                UNIT_ASSERT_EQUAL(event->GetStepOrderId().first, stepId);
+                TBalanceCoverageBuilder * builder = tx->GetCoverageBuilder(shard);
+                if (builder->AddResult(event->Record.GetBalanceTrackList())) {
+                    tx->AddPlanStepShardResult(shard, event, builder->IsComplete());
+                    if (builder->IsComplete()) {
+                        results.erase(std::make_pair(shard, txId));
+                    }
+                }
+                break;
             }
             case TEvStreamClearanceRequest::EventType: {
                 auto event = std::get<TEvStreamClearanceRequest*>(eventTuple);
@@ -908,27 +908,27 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
             }
         }
     }
- 
-    // exec imm2online 
- 
-    if (imm2onlineTxs) 
-        ++stepId; 
- 
-    for (const auto& pair : imm2onlineTxs) { 
-        ui64 shard = pair.first; 
-        auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, 0, shard); 
-        for (ui64 txId : pair.second) { 
-            TFakeProxyTx::TPtr tx = txs.find(txId)->second; 
-            UNIT_ASSERT(tx->Immediate()); 
- 
-            results.insert(std::make_pair(shard, txId)); 
-            auto plannedTx = planStep->Record.MutableTransactions()->Add(); 
-            plannedTx->SetTxId(txId); 
+
+    // exec imm2online
+
+    if (imm2onlineTxs)
+        ++stepId;
+
+    for (const auto& pair : imm2onlineTxs) {
+        ui64 shard = pair.first;
+        auto planStep = new TEvTxProcessing::TEvPlanStep(stepId, 0, shard);
+        for (ui64 txId : pair.second) {
+            TFakeProxyTx::TPtr tx = txs.find(txId)->second;
+            UNIT_ASSERT(tx->Immediate());
+
+            results.insert(std::make_pair(shard, txId));
+            auto plannedTx = planStep->Record.MutableTransactions()->Add();
+            plannedTx->SetTxId(txId);
             ActorIdToProto(Tester.Sender, plannedTx->MutableAckTo());
-        } 
-        Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep); 
-    } 
- 
+        }
+        Tester.Runtime.SendToPipe(shard, Tester.Sender, planStep);
+    }
+
     // finish scans
 
     results.clear();
@@ -942,22 +942,22 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
         Tester.Runtime.SendToPipe(shard, Tester.Sender, ev.Release());
     }
 
-    while (results) { 
-        TAutoPtr<IEventHandle> handle; 
+    while (results) {
+        TAutoPtr<IEventHandle> handle;
         auto eventTuple = Tester.Runtime.GrabEdgeEvents<TEvProposeTransactionResult, TEvStreamQuotaRequest, TEvStreamDataAck>(handle);
- 
-        switch (handle->Type) { 
-            case TEvProposeTransactionResult::EventType: { 
-                auto event = std::get<TEvProposeTransactionResult*>(eventTuple); 
-                ui64 txId = event->GetTxId(); 
-                ui64 shard = event->GetOrigin(); 
- 
-                auto it = txs.find(txId); 
-                UNIT_ASSERT(it != txs.end()); 
-                TFakeProxyTx::TPtr tx = it->second; 
+
+        switch (handle->Type) {
+            case TEvProposeTransactionResult::EventType: {
+                auto event = std::get<TEvProposeTransactionResult*>(eventTuple);
+                ui64 txId = event->GetTxId();
+                ui64 shard = event->GetOrigin();
+
+                auto it = txs.find(txId);
+                UNIT_ASSERT(it != txs.end());
+                TFakeProxyTx::TPtr tx = it->second;
                 UNIT_ASSERT_EQUAL(event->GetTxKind(), tx->TxKind());
- 
-                //tx->AddProposeShardResult(shard, event); 
+
+                //tx->AddProposeShardResult(shard, event);
                 if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) {
                     Tester.Runtime.Send(new IEventHandle(handle->Sender, Tester.Sender, new TEvStreamDataAck));
                     tx->AddPlanStepShardResult(shard, event, false);
@@ -966,8 +966,8 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                     tx->AddPlanStepShardResult(shard, event, true);
                     results.erase(std::make_pair(shard, txId));
                 }
-                break; 
-            } 
+                break;
+            }
             case TEvStreamQuotaRequest::EventType: {
                 auto event = std::get<TEvStreamQuotaRequest*>(eventTuple);
                 ui64 txId = event->Record.GetTxId();
@@ -979,30 +979,30 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 Tester.Runtime.Send(new IEventHandle(handle->Sender, Tester.Sender, ev.Release()));
                 break;
             }
-        } 
-    } 
- 
-    return stepId; 
+        }
+    }
+
+    return stepId;
 }
 
-// 
- 
-TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) { 
+//
+
+TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
     Engine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, tester.Runtime.GetAppData().FunctionRegistry,
-                                *TAppData::RandomProvider, *TAppData::TimeProvider)); 
- 
-    NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText); 
-    auto result = Engine->SetProgram(SerializeRuntimeNode(pgm, Env)); 
-    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors()); 
- 
-    for (auto& key : Engine->GetDbKeys()) { 
-        key->Status = TKeyDesc::EStatus::Ok; 
+                                *TAppData::RandomProvider, *TAppData::TimeProvider));
+
+    NMiniKQL::TRuntimeNode pgm = ProgramText2Bin(tester, programText);
+    auto result = Engine->SetProgram(SerializeRuntimeNode(pgm, Env));
+    UNIT_ASSERT_EQUAL_C(result, IEngineFlat::EResult::Ok, Engine->GetErrors());
+
+    for (auto& key : Engine->GetDbKeys()) {
+        key->Status = TKeyDesc::EStatus::Ok;
         key->Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-    } 
-} 
- 
-// 
- 
+    }
+}
+
+//
+
 TDatashardInitialEventsFilter::TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds)
     : TabletIds(tabletIds)
 {

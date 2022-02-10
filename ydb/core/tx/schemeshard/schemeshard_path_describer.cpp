@@ -347,21 +347,21 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     }
 }
 
-void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) { 
+void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
     Y_VERIFY(storeInfo, "OlapStore not found");
-    Y_UNUSED(pathEl); 
- 
-    auto description = Result->Record.MutablePathDescription()->MutableColumnStoreDescription(); 
+    Y_UNUSED(pathEl);
+
+    auto description = Result->Record.MutablePathDescription()->MutableColumnStoreDescription();
     description->CopyFrom(storeInfo->Description);
- 
+
     description->ClearColumnShards();
     description->MutableColumnShards()->Reserve(storeInfo->ColumnShards.size());
     for (auto& shard : storeInfo->ColumnShards) {
-        auto shardInfo = Self->ShardInfos.FindPtr(shard); 
+        auto shardInfo = Self->ShardInfos.FindPtr(shard);
         Y_VERIFY(shardInfo, "ColumnShard not found");
         description->AddColumnShards(shardInfo->TabletID.GetValue());
-    } 
+    }
 }
 
 void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -371,7 +371,7 @@ void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl
     Y_VERIFY(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
-    auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription(); 
+    auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
     description->MutableSharding()->CopyFrom(tableInfo->Sharding);
 
@@ -383,19 +383,19 @@ void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
     }
-#if 0 
+#if 0
     if (!description->HasTtlSettings() && description->HasTtlSettingsPresetId()) {
         auto& preset = storeInfo->TtlSettingsPresets.at(description->GetTtlSettingsPresetId());
         auto& presetProto = storeInfo->Description.GetTtlSettingsPresets(preset.ProtoIndex);
         *description->MutableTtlSettings() = presetProto.GetTtlSettings();
         if (description->HasTtlSettingsPresetVersionAdj()) {
-            description->MutableTtlSettings()->SetVersion( 
-                description->GetTtlSettings().GetVersion() + description->GetTtlSettingsPresetVersionAdj()); 
+            description->MutableTtlSettings()->SetVersion(
+                description->GetTtlSettings().GetVersion() + description->GetTtlSettingsPresetVersionAdj());
         }
     }
-#endif 
-} 
- 
+#endif
+}
+
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {
     auto it = Self->PersQueueGroups.FindPtr(pathId);
     Y_VERIFY(it, "PersQueueGroup is not found");
@@ -819,11 +819,11 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeTable:
             DescribeTable(ctx, base->PathId, base);
             break;
-        case NKikimrSchemeOp::EPathTypeColumnStore: 
+        case NKikimrSchemeOp::EPathTypeColumnStore:
             DescribeDir(path);
             DescribeOlapStore(base->PathId, base);
             break;
-        case NKikimrSchemeOp::EPathTypeColumnTable: 
+        case NKikimrSchemeOp::EPathTypeColumnTable:
             DescribeOlapTable(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:

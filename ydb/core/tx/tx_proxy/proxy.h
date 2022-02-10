@@ -142,7 +142,7 @@ struct TEvTxUserProxy {
         {}
     };
 
-    using TResultStatus = NTxProxy::TResultStatus; 
+    using TResultStatus = NTxProxy::TResultStatus;
 
     struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvProposeTransactionStatus> {
         using EStatus = TResultStatus::EStatus;

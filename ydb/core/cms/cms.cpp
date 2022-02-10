@@ -1,6 +1,6 @@
 #include "cms_impl.h"
 #include "info_collector.h"
-#include "scheme.h" 
+#include "scheme.h"
 #include "sentinel.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -258,13 +258,13 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        if (CheckAction(action, opts, error)) { 
+        if (CheckAction(action, opts, error)) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: ALLOW");
 
             auto *permission = response.AddPermissions();
             permission->MutableAction()->CopyFrom(action);
             permission->SetDeadline(error.Deadline.GetValue());
-            AddPermissionExtensions(action, *permission); 
+            AddPermissionExtensions(action, *permission);
 
             ClusterInfo->AddTempLocks(action, &ctx);
         } else {
@@ -331,14 +331,14 @@ bool TCms::IsActionHostValid(const TAction &action, TErrorInfo &error) const
         error.Reason = Sprintf("Host '%s' already exists", action.GetHost().data());
         return false;
     }
-#if 0 
+#if 0
     if (ActionRequiresHost(action)
         && ClusterInfo->NodesCount(action.GetHost()) > 1) {
         error.Code = TStatus::WRONG_REQUEST;
         error.Reason = Sprintf("Multiple nodes on host '%s'", ~action.GetHost());
         return false;
     }
-#endif 
+#endif
     return true;
 }
 
@@ -359,31 +359,31 @@ bool TCms::ParseServices(const TAction &action, TServices &services, TErrorInfo 
 }
 
 void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) const
-{ 
-    switch (action.GetType()) { 
-        case TAction::RESTART_SERVICES: 
-        case TAction::SHUTDOWN_HOST: 
-            AddHostExtensions(action.GetHost(), perm); 
+{
+    switch (action.GetType()) {
+        case TAction::RESTART_SERVICES:
+        case TAction::SHUTDOWN_HOST:
+            AddHostExtensions(action.GetHost(), perm);
             break;
-        default: 
-            break; 
-    } 
-} 
- 
+        default:
+            break;
+    }
+}
+
 void TCms::AddHostExtensions(const TString& host, TPermission& perm) const
-{ 
-    auto * ext = perm.AddExtentions(); 
+{
+    auto * ext = perm.AddExtentions();
     ext->SetType(HostInfo);
- 
-    for (const TNodeInfo * node : ClusterInfo->HostNodes(host)) { 
-        auto * host = ext->AddHosts(); 
-        host->SetName(node->Host); 
-        host->SetState(node->State); 
-        host->SetNodeId(node->NodeId); 
-        host->SetInterconnectPort(node->IcPort); 
-    } 
-} 
- 
+
+    for (const TNodeInfo * node : ClusterInfo->HostNodes(host)) {
+        auto * host = ext->AddHosts();
+        host->SetName(node->Host);
+        host->SetState(node->State);
+        host->SetNodeId(node->NodeId);
+        host->SetInterconnectPort(node->IcPort);
+    }
+}
+
 bool TCms::CheckAccess(const TString &token,
                        TStatus::ECode &code,
                        TString &error,
@@ -409,7 +409,7 @@ bool TCms::CheckAccess(const TString &token,
 }
 
 bool TCms::CheckAction(const TAction &action,
-                       const TActionOptions &opts, 
+                       const TActionOptions &opts,
                        TErrorInfo &error) const
 {
     if (!IsActionHostValid(action, error))
@@ -417,11 +417,11 @@ bool TCms::CheckAction(const TAction &action,
 
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
-            return CheckActionRestartServices(action, opts, error); 
+            return CheckActionRestartServices(action, opts, error);
         case TAction::SHUTDOWN_HOST:
-            return CheckActionShutdownHost(action, opts, error); 
+            return CheckActionShutdownHost(action, opts, error);
         case TAction::REPLACE_DEVICES:
-            return CheckActionReplaceDevices(action, opts.PermissionDuration, error); 
+            return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -456,7 +456,7 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
 }
 
 bool TCms::CheckActionRestartServices(const TAction &action,
-                                      const TActionOptions &opts, 
+                                      const TActionOptions &opts,
                                       TErrorInfo &error) const
 {
     TServices services;
@@ -491,15 +491,15 @@ bool TCms::CheckActionRestartServices(const TAction &action,
 }
 
 bool TCms::CheckActionShutdownHost(const TAction &action,
-                                   const TActionOptions &opts, 
+                                   const TActionOptions &opts,
                                    TErrorInfo &error) const
 {
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!CheckActionShutdownNode(action, opts, *node, error)) {
-            return false; 
+            return false;
         }
-    } 
- 
+    }
+
     error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
     return true;
 }
@@ -508,30 +508,30 @@ bool TCms::TryToLockNode(const TAction& action,
                          const TActionOptions& opts,
                          const TNodeInfo& node,
                          TErrorInfo& error) const
-{ 
+{
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
- 
+
     if (node.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
- 
+
     ui32 tenantLimit = State->Config.TenantLimits.GetDisabledNodesLimit();
     ui32 tenantRatioLimit = State->Config.TenantLimits.GetDisabledNodesRatioLimit();
     ui32 clusterLimit = State->Config.ClusterLimits.GetDisabledNodesLimit();
     ui32 clusterRatioLimit = State->Config.ClusterLimits.GetDisabledNodesRatioLimit();
- 
+
     // Check if limits should be checked.
     if ((opts.TenantPolicy == NONE
          || !node.Tenant
          || (!tenantLimit && !tenantRatioLimit))
         && !clusterLimit
         && !clusterRatioLimit)
-        return true; 
- 
+        return true;
+
     TNodeCounter tenantNodes;
     TNodeCounter clusterNodes;
-    for (const auto& pr : ClusterInfo->AllNodes()) { 
-        const auto& otherNode = pr.second; 
+    for (const auto& pr : ClusterInfo->AllNodes()) {
+        const auto& otherNode = pr.second;
         bool ignoreDown = node.NodeId == otherNode->NodeId;
         clusterNodes.CountNode(*otherNode, ignoreDown);
         if (node.Tenant == otherNode->Tenant)
@@ -549,7 +549,7 @@ bool TCms::TryToLockNode(const TAction& action,
                                             << " limit: " << tenantLimit;
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
-        } 
+        }
         if (!tenantNodes.CheckRatio(tenantRatioLimit, opts.AvailabilityMode)) {
             error.Code = tenantNodes.Code;
             error.Reason = TStringBuilder() << "Too many locked nodes for " << node.Tenant
@@ -560,8 +560,8 @@ bool TCms::TryToLockNode(const TAction& action,
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
         }
-    } 
- 
+    }
+
     if (!clusterNodes.CheckLimit(clusterLimit, opts.AvailabilityMode)) {
         error.Code = clusterNodes.Code;
         error.Reason = TStringBuilder() << "Too many locked nodes"
@@ -570,8 +570,8 @@ bool TCms::TryToLockNode(const TAction& action,
                                         << " total: " << clusterNodes.Total
                                         << " limit: " << clusterLimit;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-        return false; 
-    } 
+        return false;
+    }
     if (!clusterNodes.CheckRatio(clusterRatioLimit, opts.AvailabilityMode)) {
         error.Code = clusterNodes.Code;
         error.Reason = TStringBuilder() << "Too many locked nodes"
@@ -582,10 +582,10 @@ bool TCms::TryToLockNode(const TAction& action,
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }
- 
-    return true; 
-} 
- 
+
+    return true;
+}
+
 bool TCms::TryToLockPDisk(const TAction &action,
                           const TActionOptions& opts,
                           const TPDiskInfo &pdisk,
@@ -1275,23 +1275,23 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvNotification::TPtr &ev, const TActo
     EnqueueRequest(ev.Release(), ctx);
 }
 
-void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx) 
-{ 
-    NIceDb::TNiceDb db(txc.DB); 
- 
-    for (const auto& pr : ClusterInfo->AllNodes()) { 
-        ui32 nodeId = pr.second->NodeId; 
-        TString tenant = pr.second->Tenant; 
- 
-        auto row = db.Table<Schema::NodeTenant>().Key(nodeId); 
-        row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant)); 
- 
+void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx)
+{
+    NIceDb::TNiceDb db(txc.DB);
+
+    for (const auto& pr : ClusterInfo->AllNodes()) {
+        ui32 nodeId = pr.second->NodeId;
+        TString tenant = pr.second->Tenant;
+
+        auto row = db.Table<Schema::NodeTenant>().Key(nodeId);
+        row.Update(NIceDb::TUpdate<Schema::NodeTenant::Tenant>(tenant));
+
         LOG_NOTICE(ctx, NKikimrServices::CMS,
-                  "Persist node %" PRIu32 " tenant '%s'", 
+                  "Persist node %" PRIu32 " tenant '%s'",
                   nodeId, tenant.data());
-    } 
-} 
- 
+    }
+}
+
 void TCms::ProcessQueue(const TActorContext &ctx)
 {
     while (!Queue.empty()) {
@@ -1363,11 +1363,11 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     ClusterInfo->UpdateDowntimes(State->Downtimes, ctx);
     Execute(CreateTxUpdateDowntimes(), ctx);
 
-    if (State->InitialNodeTenants) { 
-        ClusterInfo->ApplyInitialNodeTenants(ctx, State->InitialNodeTenants); 
-        State->InitialNodeTenants.clear(); 
-    } 
- 
+    if (State->InitialNodeTenants) {
+        ClusterInfo->ApplyInitialNodeTenants(ctx, State->InitialNodeTenants);
+        State->InitialNodeTenants.clear();
+    }
+
     if (State->Config.SentinelConfig.Enable && !State->Sentinel)
         State->Sentinel = RegisterWithSameMailbox(CreateSentinel(State));
 
@@ -1457,10 +1457,10 @@ void TCms::Handle(TEvCms::TEvClusterStateRequest::TPtr &ev,
     auto &rec = ev->Get()->Record;
     if (rec.HostsSize() > 0) {
         for (const auto &host : rec.GetHosts()) {
-            if (ClusterInfo->NodesCount(host) >= 1) { 
+            if (ClusterInfo->NodesCount(host) >= 1) {
                 for (const TNodeInfo *node : ClusterInfo->HostNodes(host)) {
-                    AddHostState(*node, resp->Record, ClusterInfo->GetTimestamp()); 
-                } 
+                    AddHostState(*node, resp->Record, ClusterInfo->GetTimestamp());
+                }
             } else {
                 return ReplyWithError<TEvCms::TEvClusterStateResponse>(
                     ev, TStatus::NO_SUCH_HOST, "Unknown host " + host, ctx);

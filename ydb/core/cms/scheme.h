@@ -61,14 +61,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Owner, NotificationProto>;
     };
 
-    struct NodeTenant : Table<6> { 
-        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {}; 
-        struct Tenant : Column<2, NScheme::NTypeIds::Utf8> {}; 
- 
-        using TKey = TableKey<NodeId>; 
-        using TColumns = TableColumns<NodeId, Tenant>; 
-    }; 
- 
+    struct NodeTenant : Table<6> {
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct Tenant : Column<2, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<NodeId>;
+        using TColumns = TableColumns<NodeId, Tenant>;
+    };
+
     struct HostMarkers : Table<7> {
         struct Host : Column<1, NScheme::NTypeIds::Utf8> {};
         struct Markers : Column<2, NScheme::NTypeIds::String> { using Type = TVector<NKikimrCms::EMarker>; };

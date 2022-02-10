@@ -60,10 +60,10 @@ namespace NActors {
         TDeque<TAutoPtr<IEventHandle>> EventsToBeSent;
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() { 
+        static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::ACTOR_SYSTEM_SCHEDULER_ACTOR;
-        } 
- 
+        }
+
         TSchedulerActor(const TSchedulerConfig& cfg)
             : TActor(&TSchedulerActor::StateFunc)
             , Cfg(cfg)

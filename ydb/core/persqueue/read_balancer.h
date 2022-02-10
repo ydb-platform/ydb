@@ -281,7 +281,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void AnswerWaitingRequests(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx); 
+    void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
@@ -470,7 +470,7 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle); 
+            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
             HFunc(TEvPersQueue::TEvWakeupClient, Handle);
             HFunc(TEvPersQueue::TEvDescribe, Handle);

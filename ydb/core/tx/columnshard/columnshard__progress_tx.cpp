@@ -1,7 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 
-namespace NKikimr::NColumnShard { 
+namespace NKikimr::NColumnShard {
 
 class TColumnShard::TTxProgressTx : public TTransactionBase<TColumnShard> {
 private:
@@ -25,7 +25,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROGRESS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProgressTx.Execute at tablet " << Self->TabletID()); 
+        LOG_S_DEBUG("TTxProgressTx.Execute at tablet " << Self->TabletID());
         Y_VERIFY(Self->ProgressTxInFlight);
 
         NIceDb::TNiceDb db(txc.DB);
@@ -44,7 +44,7 @@ public:
                 LOG_S_DEBUG("Removing outdated txId " << txId << " max step " << it->MaxStep << " outdated step "
                     << outdatedStep << " at tablet " << Self->TabletID());
                 Self->DeadlineQueue.erase(it);
-                Self->RemoveTx(txc.DB, txId); 
+                Self->RemoveTx(txc.DB, txId);
                 ++removedCount;
             }
             if (removedCount > 0) {
@@ -80,22 +80,22 @@ public:
                 }
                 case NKikimrTxColumnShard::TX_KIND_COMMIT: {
                     const auto& meta = Self->CommitsInFlight.at(txId);
- 
+
                     TBlobGroupSelector dsGroupSelector(Self->Info());
                     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds); 
-                    Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows); 
-                    Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes); 
-                    Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes); 
- 
+                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds);
+                    Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+                    Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+                    Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+
                     if (meta.MetaShard == 0) {
                         for (TWriteId writeId : meta.WriteIds) {
-                            Self->RemoveLongTxWrite(db, writeId); 
+                            Self->RemoveLongTxWrite(db, writeId);
                         }
                     }
                     Self->CommitsInFlight.erase(txId);
-                    Self->UpdateInsertTableCounters(); 
-                    StartBackgroundActivities = true; 
+                    Self->UpdateInsertTableCounters();
+                    StartBackgroundActivities = true;
                     break;
                 }
                 default: {
@@ -118,13 +118,13 @@ public:
 
         Self->ProgressTxInFlight = false;
         if (Self->PlanQueue) {
-            Self->EnqueueProgressTx(); 
+            Self->EnqueueProgressTx();
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProgressTx.Complete at tablet " << Self->TabletID()); 
+        LOG_S_DEBUG("TTxProgressTx.Complete at tablet " << Self->TabletID());
 
         for (auto& rec : TxEvents) {
             ctx.Send(rec.Target, rec.Event.Release(), 0, rec.Cookie);
@@ -134,22 +134,22 @@ public:
         if (Self->BlobManager->TryMoveGCBarrier()) {
             Self->Execute(Self->CreateTxRunGc(), ctx);
         }
- 
-        if (StartBackgroundActivities) { 
-            Self->EnqueueBackgroundActivities(false, true); 
-        } 
+
+        if (StartBackgroundActivities) {
+            Self->EnqueueBackgroundActivities(false, true);
+        }
     }
 
 private:
     TVector<TEvent> TxEvents;
-    bool StartBackgroundActivities{false}; 
+    bool StartBackgroundActivities{false};
 };
 
-void TColumnShard::EnqueueProgressTx() { 
+void TColumnShard::EnqueueProgressTx() {
     if (!ProgressTxInFlight) {
         ProgressTxInFlight = true;
-        Execute(new TTxProgressTx(this), TlsActivationContext->AsActorContext()); 
+        Execute(new TTxProgressTx(this), TlsActivationContext->AsActorContext());
     }
 }
 
-} 
+}

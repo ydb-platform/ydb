@@ -17,8 +17,8 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
         , CompleteTransactions(0)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_MEDIATOR_CONFIRMATIONS; } 
- 
+    TTxType GetTxType() const override { return TXTYPE_MEDIATOR_CONFIRMATIONS; }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         const TTabletId mediatorId = Confirmations->MediatorId;
         Y_UNUSED(ctx);

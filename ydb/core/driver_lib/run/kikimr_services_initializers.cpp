@@ -1009,8 +1009,8 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
     static const constexpr ui64 DEFAULT_CACHE_SIZE_BYTES = 1000ull << 20;
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(), 
-        TActorSetupCmd(NBlobCache::CreateBlobCache(DEFAULT_CACHE_SIZE_BYTES, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId))); 
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
+        TActorSetupCmd(NBlobCache::CreateBlobCache(DEFAULT_CACHE_SIZE_BYTES, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer
@@ -1488,11 +1488,11 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nullptr,
             Factories ? Factories->PQReadSessionsInfoWorkerFactory : nullptr
         );
-        Y_VERIFY(proxy); 
-        setup->LocalServices.emplace_back( 
-            NMsgBusProxy::CreateMsgBusProxyId(), 
-            TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId)); 
- 
+        Y_VERIFY(proxy);
+        setup->LocalServices.emplace_back(
+            NMsgBusProxy::CreateMsgBusProxyId(),
+            TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
+
         if (appData->PQConfig.GetEnabled()) {
 
             TDuration pqMetaRefresh = TDuration::Seconds(NMsgBusProxy::PQ_METACACHE_REFRESH_INTERVAL_SECONDS);
@@ -1779,7 +1779,7 @@ void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, con
 }
 
 // TFailureInjectionInitializer
- 
+
 TFailureInjectionInitializer::TFailureInjectionInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}
@@ -1791,31 +1791,31 @@ void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup
     // FIXME: correct service id
 }
 
-// TPersQueueL2CacheInitializer 
- 
-TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
-void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
-    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB = 8 * 1024; 
+// TPersQueueL2CacheInitializer
+
+TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB = 8 * 1024;
     static const TDuration DEFAULT_PQ_L2_KEEP_TIMEOUT = TDuration::Seconds(10);
- 
-    NPQ::TCacheL2Parameters params; 
-    params.MaxSizeMB = DEFAULT_PQ_L2_MAX_SIZE_MB; 
+
+    NPQ::TCacheL2Parameters params;
+    params.MaxSizeMB = DEFAULT_PQ_L2_MAX_SIZE_MB;
     params.KeepTime = DEFAULT_PQ_L2_KEEP_TIMEOUT;
- 
-    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasNodeLimits()) { 
-        auto nodeLimits = Config.GetBootstrapConfig().GetNodeLimits(); 
-        if (nodeLimits.HasPersQueueNodeConfig()) { 
-            auto cfg = nodeLimits.GetPersQueueNodeConfig(); 
-            if (cfg.HasSharedCacheSizeMb()) 
-                params.MaxSizeMB = cfg.GetSharedCacheSizeMb(); 
-            if (cfg.HasCacheKeepTimeSec()) 
+
+    if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasNodeLimits()) {
+        auto nodeLimits = Config.GetBootstrapConfig().GetNodeLimits();
+        if (nodeLimits.HasPersQueueNodeConfig()) {
+            auto cfg = nodeLimits.GetPersQueueNodeConfig();
+            if (cfg.HasSharedCacheSizeMb())
+                params.MaxSizeMB = cfg.GetSharedCacheSizeMb();
+            if (cfg.HasCacheKeepTimeSec())
                 params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec());
-        } 
-    } 
- 
+        }
+    }
+
     if (Config.HasPQConfig() && Config.GetPQConfig().HasPersQueueNodeConfig()) {
         auto cfg = Config.GetPQConfig().GetPersQueueNodeConfig();
         if (cfg.HasSharedCacheSizeMb())
@@ -1825,14 +1825,14 @@ void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup
     }
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<NMonitoring::TDynamicCounters> pqCacheGroup = tabletGroup->GetSubgroup("type", "PQ_CACHE"); 
- 
-    IActor* actor = NPQ::CreateNodePersQueueL2Cache(params, pqCacheGroup); 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> pqCacheGroup = tabletGroup->GetSubgroup("type", "PQ_CACHE");
+
+    IActor* actor = NPQ::CreateNodePersQueueL2Cache(params, pqCacheGroup);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        NPQ::MakePersQueueL2CacheID(), 
+        NPQ::MakePersQueueL2CacheID(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
-} 
- 
+}
+
 // TNetClassifierInitializer
 
 TNetClassifierInitializer::TNetClassifierInitializer(const TKikimrRunConfig& runConfig)
@@ -1897,7 +1897,7 @@ void TMemProfMonitorInitializer::InitializeServices(
             TMailboxType::HTSwap,
             appData->UserPoolId));
 }
- 
+
 // TMemoryTrackerInitializer
 
 TMemoryTrackerInitializer::TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig)

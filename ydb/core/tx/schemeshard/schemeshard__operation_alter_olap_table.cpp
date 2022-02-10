@@ -9,12 +9,12 @@ using namespace NSchemeShard;
 
 TOlapTableInfo::TPtr ParseParams(
         const TPath& path, const TOlapTableInfo::TPtr& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
-        const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain, 
+        const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
         NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
     Y_UNUSED(path);
     Y_UNUSED(context);
-    Y_UNUSED(subDomain); 
+    Y_UNUSED(subDomain);
 
     if (alter.HasAlterSchema() || alter.HasAlterSchemaPresetName()) {
         status = NKikimrScheme::StatusInvalidParameter;
@@ -22,9 +22,9 @@ TOlapTableInfo::TPtr ParseParams(
         return nullptr;
     }
 
-    if (alter.HasRESERVED_AlterTtlSettingsPresetName()) { 
+    if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
         status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported"; 
+        errStr = "TTL presets are not supported";
         return nullptr;
     }
 
@@ -35,18 +35,18 @@ TOlapTableInfo::TPtr ParseParams(
     ui64 currentTtlVersion = 0;
     if (alterData->Description.HasTtlSettings()) {
         currentTtlVersion = alterData->Description.GetTtlSettings().GetVersion();
-    } 
-#if 0 
-    else if (alterData->Description.HasTtlSettingsPresetId()) { 
+    }
+#if 0
+    else if (alterData->Description.HasTtlSettingsPresetId()) {
         auto& preset = storeInfo->TtlSettingsPresets.at(alterData->Description.GetTtlSettingsPresetId());
         currentTtlVersion = preset.Version + alterData->Description.GetTtlSettingsPresetVersionAdj();
     } else {
         currentTtlVersion = alterData->Description.GetTtlSettingsPresetVersionAdj();
     }
-#endif 
+#endif
 
     if (alter.HasAlterTtlSettings()) {
-        const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr; 
+        const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
         if (tableInfo->Description.HasSchema()) {
             tableSchema = &tableInfo->Description.GetSchema();
         } else {
@@ -55,11 +55,11 @@ TOlapTableInfo::TPtr ParseParams(
             tableSchema = &presetProto.GetSchema();
         }
 
-        THashSet<TString> knownTiers; 
-        for (const auto& tier : tableSchema->GetStorageTiers()) { 
-            knownTiers.insert(tier.GetName()); 
-        } 
- 
+        THashSet<TString> knownTiers;
+        for (const auto& tier : tableSchema->GetStorageTiers()) {
+            knownTiers.insert(tier.GetName());
+        }
+
         THashMap<ui32, TOlapSchema::TColumn> columns;
         THashMap<TString, ui32> columnsByName;
         for (const auto& col : tableSchema->GetColumns()) {
@@ -69,30 +69,30 @@ TOlapTableInfo::TPtr ParseParams(
             columnsByName[name] = id;
         }
 
-        if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, knownTiers, errStr)) { 
+        if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, knownTiers, errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
-        if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) { 
+        if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         *alterData->Description.MutableTtlSettings() = alter.GetAlterTtlSettings();
         alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
-#if 0 
+#if 0
         alterData->Description.ClearTtlSettingsPresetId();
         alterData->Description.ClearTtlSettingsPresetName();
         alterData->Description.ClearTtlSettingsPresetVersionAdj();
-#endif 
+#endif
     }
-    if (alter.HasRESERVED_AlterTtlSettingsPresetName()) { 
-#if 1 
-        status = NKikimrScheme::StatusInvalidParameter; 
-        errStr = "TTL presets are not supported"; 
-        return nullptr; 
-#else 
+    if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
+#if 1
+        status = NKikimrScheme::StatusInvalidParameter;
+        errStr = "TTL presets are not supported";
+        return nullptr;
+#else
         auto it = storeInfo->TtlSettingsPresetByName.find(alter.GetAlterTtlSettingsPresetName());
         if (it == storeInfo->TtlSettingsPresetByName.end()) {
             status = NKikimrScheme::StatusInvalidParameter;
@@ -110,7 +110,7 @@ TOlapTableInfo::TPtr ParseParams(
             // New version must be currentTtlVersion + 1 == preset.Version + adj
             alterData->Description.SetTtlSettingsPresetVersionAdj(currentTtlVersion - preset.Version + 1);
         }
-#endif 
+#endif
     }
 
     tableInfo->AlterData = alterData;
@@ -188,7 +188,7 @@ public:
             if (alterInfo->Description.HasTtlSettings()) {
                 *alter->MutableTtlSettings() = alterInfo->Description.GetTtlSettings();
             }
-#if 0 
+#if 0
             if (alterInfo->Description.HasTtlSettingsPresetId()) {
                 const ui32 presetId = alterInfo->Description.GetTtlSettingsPresetId();
                 Y_VERIFY(storeInfo->TtlSettingsPresets.contains(presetId),
@@ -197,15 +197,15 @@ public:
                 size_t presetIndex = preset.ProtoIndex;
                 *alter->MutableTtlSettingsPreset() = storeInfo->Description.GetTtlSettingsPresets(presetIndex);
             }
-#endif 
+#endif
             if (alterInfo->Description.HasSchemaPresetVersionAdj()) {
                 alter->SetSchemaPresetVersionAdj(alterInfo->Description.GetSchemaPresetVersionAdj());
             }
-#if 0 
+#if 0
             if (alterInfo->Description.HasTtlSettingsPresetVersionAdj()) {
                 alter->SetTtlSettingsPresetVersionAdj(alterInfo->Description.GetTtlSettingsPresetVersionAdj());
             }
-#endif 
+#endif
 
             Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
         }
@@ -213,7 +213,7 @@ public:
         for (auto& shard : txState->Shards) {
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            if (shard.TabletType == ETabletType::ColumnShard) { 
+            if (shard.TabletType == ETabletType::ColumnShard) {
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
@@ -223,8 +223,8 @@ public:
                     context.SS->SelectProcessingPrarams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
-            } else { 
-                Y_FAIL("unexpected tablet type"); 
+            } else {
+                Y_FAIL("unexpected tablet type");
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -254,7 +254,7 @@ public:
     {
         IgnoreMessages(DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType}); 
+             TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -460,7 +460,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterColumnTable(); 
+        const auto& alter = Transaction.GetAlterColumnTable();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();

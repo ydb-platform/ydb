@@ -18,8 +18,8 @@ struct TEvPersQueue {
         EvUpdateConfigResponse,
         EvOffsets, //get offsets from all partitions in order 0..n-1 - it's for scheemeshard to change (TabletId,PartId) to Partition
         EvOffsetsResponse,
-        EvDropTablet, 
-        EvDropTabletResult, 
+        EvDropTablet,
+        EvDropTabletResult,
         EvStatus,
         EvStatusResponse,
         EvHasDataInfo, //how much data is available to fetch from partition
@@ -145,15 +145,15 @@ struct TEvPersQueue {
     };
 
 
-    struct TEvDropTablet : public TEventPB<TEvDropTablet, NKikimrPQ::TDropTablet, EvDropTablet> { 
-        TEvDropTablet() 
-        {} 
-    }; 
- 
-    struct TEvDropTabletReply : public TEventPB<TEvDropTabletReply, NKikimrPQ::TDropTabletResult,  EvDropTabletResult> { 
-        TEvDropTabletReply() 
-        {} 
-    }; 
+    struct TEvDropTablet : public TEventPB<TEvDropTablet, NKikimrPQ::TDropTablet, EvDropTablet> {
+        TEvDropTablet()
+        {}
+    };
+
+    struct TEvDropTabletReply : public TEventPB<TEvDropTabletReply, NKikimrPQ::TDropTabletResult,  EvDropTabletResult> {
+        TEvDropTabletReply()
+        {}
+    };
 
     struct TEvPartitionClientInfo : TEventPB<TEvPartitionClientInfo, NKikimrPQ::TPartitionClientInfo, EvPartitionClientInfo> {
         TEvPartitionClientInfo() = default;

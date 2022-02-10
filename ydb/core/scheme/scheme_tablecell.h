@@ -206,7 +206,7 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
     return 0;
 }
 
-/// @warning Do not use this func to compare key with a range border. Partial key means it ends with Nulls here. 
+/// @warning Do not use this func to compare key with a range border. Partial key means it ends with Nulls here.
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
@@ -225,9 +225,9 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 }
 
 // TODO: use NYql ops when TCell and TUnboxedValuePod had merged
-inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) { 
-    if (cell.IsNull()) 
-        return 0; 
+inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
+    if (cell.IsNull())
+        return 0;
 
     const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(type);
     switch (yqlType) {
@@ -236,7 +236,7 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     case NYql::NProto::TypeIds::Int8:
         return THash<i8>()(*(const i8*)cell.Data());
     case NYql::NProto::TypeIds::Uint8:
-        return THash<ui8>()(*(const ui8*)cell.Data()); 
+        return THash<ui8>()(*(const ui8*)cell.Data());
     case NYql::NProto::TypeIds::Int16:
         return THash<i16>()(*(const i16*)cell.Data());
     case NYql::NProto::TypeIds::Uint16:
@@ -253,7 +253,7 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
         return THash<float>()(ReadUnaligned<float>((const float*)cell.Data()));
     case NYql::NProto::TypeIds::Double:
         return THash<double>()(ReadUnaligned<double>((const double*)cell.Data()));
- 
+
     case NYql::NProto::TypeIds::Date:
         return THash<ui16>()(ReadUnaligned<ui16>((const ui16*)cell.Data()));
     case NYql::NProto::TypeIds::Datetime:
@@ -271,15 +271,15 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     case NYql::NProto::TypeIds::JsonDocument:
     case NYql::NProto::TypeIds::DyNumber:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
- 
+
     default:
         Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", type);
         break;
-    } 
- 
-    return 0; 
-} 
- 
+    }
+
+    return 0;
+}
+
 // Only references a vector of cells and corresponding types
 // Doesn't own the memory
 struct TDbTupleRef {

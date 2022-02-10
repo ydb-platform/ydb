@@ -437,8 +437,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_VDISK_REPL_PROXY;
-            } 
- 
+            }
+
             TVDiskProxyActor(
                     std::shared_ptr<TReplCtx> replCtx,
                     TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
@@ -461,7 +461,7 @@ namespace NKikimr {
                 , Finished(false)
                 , NextSendCookie(1)
                 , NextReceiveCookie(1)
-            {} 
+            {}
 
             ~TVDiskProxyActor() {}
         };

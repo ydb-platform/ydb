@@ -220,8 +220,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_HUGE_BLOB_WRITER;
-        } 
- 
+        }
+
         THullHugeBlobWriter(
                 std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx,
                 const TActorId &notifyID,
@@ -235,7 +235,7 @@ namespace NKikimr {
             , Item(std::move(item))
             , WriteId(wId)
             , DiskAddr()
-        {} 
+        {}
     };
 
     void *THullHugeBlobWriter::Cookie = (void *)"HugeBlobWriter";
@@ -321,14 +321,14 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_HUGE_BLOB_CHUNKALLOC;
-        } 
- 
+        }
+
         THullHugeBlobChunkAllocator(std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx, const TActorId &notifyID,
                 std::shared_ptr<THullHugeKeeperPersState> pers)
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , NotifyID(notifyID)
             , Pers(std::move(pers))
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -394,15 +394,15 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_HUGE_BLOB_CHUNKDESTROY;
-        } 
- 
+        }
+
         THullHugeBlobChunkDestroyer(std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx, const TActorId &notifyID,
                 TVector<ui32> &&chunksToFree, ui64 lsn)
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , NotifyID(notifyID)
             , ChunksToFree(std::move(chunksToFree))
             , Lsn(lsn)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -457,15 +457,15 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_HUGE_BLOB_ENTRYPOINTSAVER;
-        } 
- 
+        }
+
         THullHugeBlobEntryPointSaver(std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx, const TActorId &notifyID,
                 ui64 entryPointLsn, const TString &serialized)
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , NotifyID(notifyID)
             , EntryPointLsn(entryPointLsn)
             , Serialized(serialized)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -938,8 +938,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_HUGE_KEEPER;
-        } 
- 
+        }
+
         THullHugeKeeper(
                 std::shared_ptr<THugeKeeperCtx> &&hugeKeeperCtx,
                 std::shared_ptr<THullHugeKeeperPersState> &&persState)

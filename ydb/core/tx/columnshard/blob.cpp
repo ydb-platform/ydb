@@ -5,7 +5,7 @@
 
 #include <charconv>
 
-namespace NKikimr::NOlap { 
+namespace NKikimr::NOlap {
 
 #define PARSE_INT_COMPONENT(fieldType, fieldName, endChar) \
     if (pos >= endPos) { \
@@ -119,4 +119,4 @@ TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
     return TUnifiedBlobId();
 }
 
-} 
+}

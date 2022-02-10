@@ -197,34 +197,34 @@ void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TS
 }
 
 void ExtractAcquireLocksType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) {
-    { 
-        auto lockStructType = GetTxLockType(env, false); 
-        auto lockListType = TListType::Create(lockStructType, env); 
+    {
+        auto lockStructType = GetTxLockType(env, false);
+        auto lockListType = TListType::Create(lockStructType, env);
 
-        auto& type = resTypes[TString(TxLocksResultLabel)]; 
-        MKQL_ENSURE(!type, TStringBuilder() << "Duplicate result label: " << TxLocksResultLabel); 
-        type = lockListType; 
-    } 
- 
-    { 
-        auto lockStructType = GetTxLockType(env, true); 
-        auto lockListType = TListType::Create(lockStructType, env); 
- 
-        auto& type = resTypes[TString(TxLocksResultLabel2)]; 
-        MKQL_ENSURE(!type, TStringBuilder() << "Duplicate result label: " << TxLocksResultLabel2); 
-        type = lockListType; 
-    } 
+        auto& type = resTypes[TString(TxLocksResultLabel)];
+        MKQL_ENSURE(!type, TStringBuilder() << "Duplicate result label: " << TxLocksResultLabel);
+        type = lockListType;
+    }
+
+    {
+        auto lockStructType = GetTxLockType(env, true);
+        auto lockListType = TListType::Create(lockStructType, env);
+
+        auto& type = resTypes[TString(TxLocksResultLabel2)];
+        MKQL_ENSURE(!type, TStringBuilder() << "Duplicate result label: " << TxLocksResultLabel2);
+        type = lockListType;
+    }
 }
 
 void ExtractDiagnosticsType(const TTypeEnvironment& env, TMap<TString, TType*>& resTypes) {
-    auto structType = GetDiagnosticsType(env); 
-    auto listType = TListType::Create(structType, env); 
- 
-    auto& type = resTypes[TString(TxInfoResultLabel)]; 
+    auto structType = GetDiagnosticsType(env);
+    auto listType = TListType::Create(structType, env);
+
+    auto& type = resTypes[TString(TxInfoResultLabel)];
     MKQL_ENSURE(!type, TStringBuilder() << "Duplicate result label: " << TxInfoResultLabel);
     type = listType;
-} 
- 
+}
+
 ui64 ExtractAcquireLocksTxId(TCallable& callable) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
 
@@ -243,7 +243,7 @@ public:
         , Alloc(Settings.AllocCounters, settings.FunctionRegistry->SupportsSizedAllocators())
         , Env(Alloc)
         , Strings(Env)
-        , NeedDiagnostics(false) 
+        , NeedDiagnostics(false)
         , Status(EStatus::Unknown)
         , AreAffectedShardsPrepared(false)
         , AreShardProgramsExtracted(false)
@@ -274,22 +274,22 @@ public:
         StepTxId = stepTxId;
     }
 
-    void AddTabletInfo(IEngineFlat::TTabletInfo&& info) noexcept override { 
-        TabletInfos.emplace_back(info); 
+    void AddTabletInfo(IEngineFlat::TTabletInfo&& info) noexcept override {
+        TabletInfos.emplace_back(info);
     }
 
-    void AddTxLock(IEngineFlat::TTxLock&& txLock) noexcept override { 
-        TxLocks.emplace_back(txLock); 
-    } 
- 
+    void AddTxLock(IEngineFlat::TTxLock&& txLock) noexcept override {
+        TxLocks.emplace_back(txLock);
+    }
+
     TMaybe<ui64> GetLockTxId() noexcept override {
         return LockTxId;
     }
 
-    bool HasDiagnosticsRequest() noexcept override { 
-        return NeedDiagnostics; 
-    } 
- 
+    bool HasDiagnosticsRequest() noexcept override {
+        return NeedDiagnostics;
+    }
+
     EResult SetProgram(TStringBuf program, TStringBuf params) noexcept override {
         Y_VERIFY(!Program.GetNode(), "Program is already set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
@@ -331,8 +331,8 @@ public:
                     auto it = ProxyCallables.insert(std::make_pair(uniqueId, ctx)).first;
                     callable.SetUniqueId(uniqueId);
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(callable, Strings, Env); 
-                    if (desc) { 
+                    THolder<TKeyDesc> desc = ExtractTableKey(callable, Strings, Env);
+                    if (desc) {
                         it->second.Key = desc.Get();
                         dbKeys.push_back(std::move(desc));
                     } else if (callable.GetType()->GetNameStr() == Strings.SetResult) {
@@ -347,9 +347,9 @@ public:
                         }
 
                         LockTxId = lockTxId;
-                    } else if (callable.GetType()->GetNameStr() == Strings.Diagnostics) { 
-                        NeedDiagnostics = true; 
-                        ExtractDiagnosticsType(Env, resTypes); 
+                    } else if (callable.GetType()->GetNameStr() == Strings.Diagnostics) {
+                        NeedDiagnostics = true;
+                        ExtractDiagnosticsType(Env, resTypes);
                     }
                 }
 
@@ -601,8 +601,8 @@ public:
 
         if (Settings.EvaluateResultValue) {
             try {
-                TProxyExecData execData(Settings, Strings, StepTxId, TabletInfos, TxLocks); 
- 
+                TProxyExecData execData(Settings, Strings, StepTxId, TabletInfos, TxLocks);
+
                 {
                     TMemoryUsageInfo memInfo("Memory");
                     THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
@@ -622,7 +622,7 @@ public:
                                 return;
                             }
 
-                            execData.Results[id].emplace_back(pair.second.AsStringRef()); 
+                            execData.Results[id].emplace_back(pair.second.AsStringRef());
                         }
                     }
                 }
@@ -630,7 +630,7 @@ public:
                 NUdf::TUnboxedValue value;
                 {
                     TComputationPatternOpts opts(Alloc.Ref(), Env,
-                        GetFlatProxyExecutionFactory(execData), 
+                        GetFlatProxyExecutionFactory(execData),
                         Settings.FunctionRegistry,
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
@@ -800,7 +800,7 @@ public:
         Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
         Y_VERIFY(Settings.Host, "Host is not set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
- 
+
         if (ProgramPerOrigin.begin()->first != Settings.Host->GetShardId())
             return EResult::SchemeChanged;
 
@@ -917,19 +917,19 @@ public:
             }
         }
 
-        validationInfo.Clear(); 
+        validationInfo.Clear();
         EResult result;
         {
-            auto myReadsStruct = static_cast<TStructLiteral*>(myReads.GetNode()); 
-            validationInfo.ReadsCount = myReadsStruct->GetValuesCount(); 
- 
-            auto myWritesStruct = static_cast<TStructLiteral*>(myWrites.GetNode()); 
-            validationInfo.WritesCount = myWritesStruct->GetValuesCount(); 
- 
-            validationInfo.Keys.reserve(validationInfo.ReadsCount + validationInfo.WritesCount); 
- 
+            auto myReadsStruct = static_cast<TStructLiteral*>(myReads.GetNode());
+            validationInfo.ReadsCount = myReadsStruct->GetValuesCount();
+
+            auto myWritesStruct = static_cast<TStructLiteral*>(myWrites.GetNode());
+            validationInfo.WritesCount = myWritesStruct->GetValuesCount();
+
+            validationInfo.Keys.reserve(validationInfo.ReadsCount + validationInfo.WritesCount);
+
             {
-                for (ui32 i = 0; i < validationInfo.ReadsCount; ++i) { 
+                for (ui32 i = 0; i < validationInfo.ReadsCount; ++i) {
                     TStringBuf uniqId(myReadsStruct->GetType()->GetMemberName(i));
                     TRuntimeNode item = myReadsStruct->GetValue(i);
                     if (!item.GetNode()->GetType()->IsCallable()) {
@@ -937,56 +937,56 @@ public:
                         return EResult::ProgramError;
                     }
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env); 
+                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_VERIFY(desc);
-                    Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Read); 
-                    TValidatedKey validKey(std::move(desc), false); 
+                    Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Read);
+                    TValidatedKey validKey(std::move(desc), false);
 
                     auto targetIt = readTargets.find(uniqId);
                     if (replyIds.contains(uniqId) || targetIt != readTargets.end()) {
                         // Is this read result included in the reply?
                         if (replyIds.contains(uniqId)) {
-                            validKey.IsResultPart = true; 
+                            validKey.IsResultPart = true;
                         }
                         // Is this read result included into outgoing read sets?
                         if (targetIt != readTargets.end()) {
-                            // TODO: can't we move them? 
-                            for (ui64 shard : targetIt->second) { 
-                                validKey.TargetShards.insert(shard); 
+                            // TODO: can't we move them?
+                            for (ui64 shard : targetIt->second) {
+                                validKey.TargetShards.insert(shard);
                                 validationInfo.HasOutReadsets = true;
                             }
                         }
                     }
 
-                    validationInfo.Keys.emplace_back(std::move(validKey)); 
+                    validationInfo.Keys.emplace_back(std::move(validKey));
                 }
             }
 
             {
-                for (ui32 i = 0; i < validationInfo.WritesCount; ++i) { 
+                for (ui32 i = 0; i < validationInfo.WritesCount; ++i) {
                     TRuntimeNode item = myWritesStruct->GetValue(i);
                     if (!item.GetNode()->GetType()->IsCallable()) {
                         AddError("Validate", __LINE__, "Bad shard program");
                         return EResult::ProgramError;
                     }
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env); 
+                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_VERIFY(desc);
-                    Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Update || 
-                             desc->RowOperation == TKeyDesc::ERowOperation::Erase); 
+                    Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Update ||
+                             desc->RowOperation == TKeyDesc::ERowOperation::Erase);
                     if (!desc->Range.Point) {
-                        ++validationInfo.DynKeysCount; 
+                        ++validationInfo.DynKeysCount;
                     }
                     if (!CheckValidUint8InKey(*desc)) {
                         return EResult::ProgramError;
                     }
 
-                    validationInfo.Keys.emplace_back(TValidatedKey(std::move(desc), true)); 
+                    validationInfo.Keys.emplace_back(TValidatedKey(std::move(desc), true));
                 }
             }
 
-            if (validationInfo.HasWrites() && Settings.Host->IsReadonly()) 
-                return EResult::IsReadonly; 
+            if (validationInfo.HasWrites() && Settings.Host->IsReadonly())
+                return EResult::IsReadonly;
 
             result = ValidateKeys(validationInfo);
             switch (result) {
@@ -1016,11 +1016,11 @@ public:
         }
 
         try {
-            TShardExecData execData(Settings, Strings, StepTxId); 
+            TShardExecData execData(Settings, Strings, StepTxId);
             TExploringNodeVisitor explorer;
             explorer.Walk(runPgm.GetNode(), Env);
             TComputationPatternOpts opts(Alloc.Ref(), Env,
-                GetFlatShardExecutionFactory(execData, true), 
+                GetFlatShardExecutionFactory(execData, true),
                 Settings.FunctionRegistry,
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                 Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
@@ -1307,11 +1307,11 @@ public:
             THolderFactory holderFactory(Alloc.Ref(), memInfo, Settings.FunctionRegistry);
 
             for (auto pgm : ProgramPerOrigin) {
-                TShardExecData execData(Settings, Strings, StepTxId); 
+                TShardExecData execData(Settings, Strings, StepTxId);
                 for (auto& rs: IncomingReadsets) {
                     TCallableResults results = TCallableResults::FromString(rs, holderFactory, Env);
                     for (const auto& result : results.GetMap()) {
-                        execData.Results[result.first].emplace_back(result.second.AsStringRef()); 
+                        execData.Results[result.first].emplace_back(result.second.AsStringRef());
                     }
                 }
 
@@ -1326,7 +1326,7 @@ public:
                         TRuntimeNode member = myReadsStruct.GetValue(i);
                         MKQL_ENSURE(member.GetNode()->GetType()->IsCallable(), "Expected callable");
                         auto callable = static_cast<TCallable*>(member.GetNode());
-                        execData.LocalReadCallables.insert(callable->GetUniqueId()); 
+                        execData.LocalReadCallables.insert(callable->GetUniqueId());
                     }
 
                     auto expectedSizeIt = ProgramSizes.find(pgm.first);
@@ -1349,7 +1349,7 @@ public:
                     }
 
                     TComputationPatternOpts opts(Alloc.Ref(), Env,
-                        GetFlatShardExecutionFactory(execData, false), 
+                        GetFlatShardExecutionFactory(execData, false),
                         Settings.FunctionRegistry,
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
@@ -2090,7 +2090,7 @@ private:
     std::pair<ui64, ui64> StepTxId;
     TVector<IEngineFlat::TTxLock> TxLocks;
     TMaybe<ui64> LockTxId;
-    bool NeedDiagnostics; 
+    bool NeedDiagnostics;
     TVector<IEngineFlat::TTabletInfo> TabletInfos;
 
     mutable TString Errors;

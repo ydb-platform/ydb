@@ -13,8 +13,8 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
         , UpgradeFail(false)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; } 
- 
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
 

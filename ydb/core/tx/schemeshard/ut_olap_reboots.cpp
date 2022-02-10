@@ -19,15 +19,15 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             TString olapSchema = R"(
                 Name: "OlapStore"
                 ColumnShardCount: 1
-                SchemaPresets { 
-                    Name: "default" 
-                    Schema { 
-                        Columns { Name: "timestamp" Type: "Timestamp" } 
-                        Columns { Name: "data" Type: "Utf8" } 
-                        KeyColumnNames: "timestamp" 
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
-                    } 
-                } 
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
             )";
 
             TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", olapSchema);
@@ -55,15 +55,15 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             TestCreateOlapStore(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "OlapStore"
                 ColumnShardCount: 1
-                SchemaPresets { 
-                    Name: "default" 
-                    Schema { 
-                        Columns { Name: "timestamp" Type: "Timestamp" } 
-                        Columns { Name: "data" Type: "Utf8" } 
-                        KeyColumnNames: "timestamp" 
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
-                    } 
-                } 
+                SchemaPresets {
+                    Name: "default"
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    }
+                }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                             Columns { Name: "timestamp" Type: "Timestamp" }
                             Columns { Name: "data" Type: "Utf8" }
                             KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                         }
                     }
                 )");
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                             Columns { Name: "timestamp" Type: "Timestamp" }
                             Columns { Name: "data" Type: "Utf8" }
                             KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                         }
                     }
                 )");
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                             Columns { Name: "timestamp" Type: "Timestamp" }
                             Columns { Name: "data" Type: "Utf8" }
                             KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                         }
                     }
                 )");
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                         Columns { Name: "timestamp" Type: "Timestamp" }
                         Columns { Name: "data" Type: "Utf8" }
                         KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                     }
                 }
             )";
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                             Columns { Name: "timestamp" Type: "Timestamp" }
                             Columns { Name: "data" Type: "Utf8" }
                             KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                         }
                     }
                 )");
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterTtlSettings) { 
+    Y_UNIT_TEST(AlterTtlSettings) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                             Columns { Name: "timestamp" Type: "Timestamp" }
                             Columns { Name: "data" Type: "Utf8" }
                             KeyColumnNames: "timestamp"
-                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
+                            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                         }
                     }
                 )");
@@ -333,30 +333,30 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "OlapTable"
-                    SchemaPresetName: "default" 
-                    TtlSettings { 
-                        Enabled { 
-                            ColumnName: "timestamp" 
-                            ExpireAfterSeconds: 600 
+                    SchemaPresetName: "default"
+                    TtlSettings {
+                        Enabled {
+                            ColumnName: "timestamp"
+                            ExpireAfterSeconds: 600
                         }
                     }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(1), 
-                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600)))); 
+                    NLs::HasOlapTableTtlSettingsVersion(1),
+                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
             }
 
             t.TestEnv->ReliablePropose(runtime,
                 AlterOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "OlapTable"
-                    AlterTtlSettings { 
-                        Enabled { 
-                            ColumnName: "timestamp" 
-                            ExpireAfterSeconds: 300 
-                        } 
-                    } 
+                    AlterTtlSettings {
+                        Enabled {
+                            ColumnName: "timestamp"
+                            ExpireAfterSeconds: 300
+                        }
+                    }
                 )"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 TInactiveZone inactive(activeZone);
 
                 TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(2), 
+                    NLs::HasOlapTableTtlSettingsVersion(2),
                     NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
             }
 
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 AlterOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "OlapTable"
                     AlterTtlSettings {
-                        Disabled {} 
+                        Disabled {}
                     }
                 )"),
                 {NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusMultipleModifications});
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 TInactiveZone inactive(activeZone);
 
                 TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(2), 
+                    NLs::HasOlapTableTtlSettingsVersion(2),
                     NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
             }
         });

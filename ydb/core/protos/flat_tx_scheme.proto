@@ -26,8 +26,8 @@ enum EStatus  {
     StatusAlreadyExists = 4;
     StatusSchemeError = 5;
     StatusNameConflict = 6;
-    StatusInvalidParameter = 7; 
-    StatusMultipleModifications = 8; 
+    StatusInvalidParameter = 7;
+    StatusMultipleModifications = 8;
     StatusReadOnly = 9;
     StatusTxIdNotExists = 10;
     StatusTxIsNotCancellable = 11;
@@ -58,8 +58,8 @@ message TEvModifySchemeTransactionResult {
     optional string Reason = 2;
     optional uint64 TxId = 3;
     optional uint64 SchemeshardId = 4;
-    optional uint64 PathId = 5; 
-    optional uint64 PathCreateTxId = 6; 
+    optional uint64 PathId = 5;
+    optional uint64 PathCreateTxId = 6;
     optional uint64 PathDropTxId = 7;
 }
 

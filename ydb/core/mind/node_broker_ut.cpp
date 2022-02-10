@@ -71,7 +71,7 @@ void SetupServices(TTestActorRuntime &runtime,
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-        SetupStateStorage(runtime, nodeIndex); 
+        SetupStateStorage(runtime, nodeIndex);
 
         TString staticConfig("AvailabilityDomains: 0 "
                              "PDisks { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 Path: \"pdisk0.dat\" }"
@@ -136,9 +136,9 @@ void SetupServices(TTestActorRuntime &runtime,
 
         NodeWardenConfigs[nodeIndex] = nodeWardenConfig;
 
-        SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig); 
-        SetupNodeWhiteboard(runtime, nodeIndex); 
-        SetupTabletResolver(runtime, nodeIndex); 
+        SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
+        SetupNodeWhiteboard(runtime, nodeIndex);
+        SetupTabletResolver(runtime, nodeIndex);
     }
 
     runtime.Initialize(app.Unwrap());

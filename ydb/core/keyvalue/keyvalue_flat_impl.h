@@ -48,8 +48,8 @@ protected:
             , Self(keyValueFlat)
         {}
 
-        TTxType GetTxType() const override { return TXTYPE_INIT; } 
- 
+        TTxType GetTxType() const override { return TXTYPE_INIT; }
+
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat Execute");
             TSimpleDbFlat db(txc.DB);
@@ -125,8 +125,8 @@ protected:
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
         }
 
-        TTxType GetTxType() const override { return TXTYPE_REQUEST; } 
- 
+        TTxType GetTxType() const override { return TXTYPE_REQUEST; }
+
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxRequest Execute");
             if (!CheckConsistency(txc)) {
@@ -411,15 +411,15 @@ protected:
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
 
-    void RestoreActorActivity() { 
+    void RestoreActorActivity() {
         SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
-    } 
- 
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
-    } 
- 
+    }
+
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -457,7 +457,7 @@ public:
     }
 
     STFUNC(StateInit) {
-        RestoreActorActivity(); 
+        RestoreActorActivity();
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
@@ -497,7 +497,7 @@ public:
     }
 
     STFUNC(StateBroken) {
-        RestoreActorActivity(); 
+        RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
 

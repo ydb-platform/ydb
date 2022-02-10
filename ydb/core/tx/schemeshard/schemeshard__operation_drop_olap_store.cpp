@@ -64,7 +64,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType}); 
+            {TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -146,7 +146,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType, 
+            {TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
@@ -227,7 +227,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType, 
+            {TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }

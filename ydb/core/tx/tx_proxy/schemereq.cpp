@@ -53,7 +53,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     TVector<TPathToResolve> ResolveForACL;
 
     std::optional<NACLib::TUserToken> UserToken;
- 
+
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
         , TxId(txid)
@@ -139,8 +139,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain:
         case NKikimrSchemeOp::ESchemeOpDropFileStore:
-        case NKikimrSchemeOp::ESchemeOpDropColumnStore: 
-        case NKikimrSchemeOp::ESchemeOpDropColumnTable: 
+        case NKikimrSchemeOp::ESchemeOpDropColumnStore:
+        case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
             return *modifyScheme.MutableDrop()->MutableName();
@@ -252,17 +252,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpRestore:
             return *modifyScheme.MutableRestore()->MutableTableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateColumnStore: 
-            return *modifyScheme.MutableCreateColumnStore()->MutableName(); 
+        case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
+            return *modifyScheme.MutableCreateColumnStore()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpAlterColumnStore: 
-            return *modifyScheme.MutableAlterColumnStore()->MutableName(); 
+        case NKikimrSchemeOp::ESchemeOpAlterColumnStore:
+            return *modifyScheme.MutableAlterColumnStore()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateColumnTable: 
-            return *modifyScheme.MutableCreateColumnTable()->MutableName(); 
+        case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
+            return *modifyScheme.MutableCreateColumnTable()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpAlterColumnTable: 
-            return *modifyScheme.MutableAlterColumnTable()->MutableName(); 
+        case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
+            return *modifyScheme.MutableAlterColumnTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterLogin:
             Y_FAIL("no implementation for ESchemeOpAlterLogin");
@@ -324,8 +324,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateFileStore:
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
-        case NKikimrSchemeOp::ESchemeOpCreateColumnStore: 
-        case NKikimrSchemeOp::ESchemeOpCreateColumnTable: 
+        case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
+        case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
             return true;
         default:
             return false;
@@ -542,8 +542,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterKesus:
         case NKikimrSchemeOp::ESchemeOpBackup:
         case NKikimrSchemeOp::ESchemeOpAlterSolomonVolume:
-        case NKikimrSchemeOp::ESchemeOpAlterColumnStore: 
-        case NKikimrSchemeOp::ESchemeOpAlterColumnTable: 
+        case NKikimrSchemeOp::ESchemeOpAlterColumnStore:
+        case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
         {
@@ -560,8 +560,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpDropTable:
         case NKikimrSchemeOp::ESchemeOpDropSolomonVolume:
-        case NKikimrSchemeOp::ESchemeOpDropColumnStore: 
-        case NKikimrSchemeOp::ESchemeOpDropColumnTable: 
+        case NKikimrSchemeOp::ESchemeOpDropColumnStore:
+        case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
@@ -611,8 +611,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
-        case NKikimrSchemeOp::ESchemeOpCreateColumnStore: 
-        case NKikimrSchemeOp::ESchemeOpCreateColumnTable: 
+        case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
+        case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
         case NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpCreateFileStore:
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:

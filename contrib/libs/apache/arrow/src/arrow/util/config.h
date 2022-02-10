@@ -35,7 +35,7 @@
 #define ARROW_PACKAGE_KIND ""
 
 #define ARROW_COMPUTE
-#define ARROW_CSV 
+#define ARROW_CSV
 /* #undef ARROW_DATASET */
 /* #undef ARROW_FILESYSTEM */
 /* #undef ARROW_FLIGHT */

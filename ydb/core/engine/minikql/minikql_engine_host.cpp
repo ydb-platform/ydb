@@ -57,7 +57,7 @@ bool TEngineHost::IsReadonly() const {
 
 bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const {
     Y_UNUSED(maxSnapshotTime);
- 
+
     auto* tableInfo = Scheme.GetTableInfo(LocalTableId(key.TableId));
 
 #define EH_VALIDATE(cond, err_status) \
@@ -122,7 +122,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
 ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
     NTable::TSizeEnv env;
 
-    for (const TKeyDesc* ki : keys) { 
+    for (const TKeyDesc* ki : keys) {
         DoCalculateReadSize(*ki, env);
     }
 
@@ -203,8 +203,8 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
     bool ret = true;
     for (const auto& ki : keys) {
         const TKeyDesc& key = *ki;
-        if (TSysTables::IsSystemTable(key.TableId)) 
-            continue; 
+        if (TSysTables::IsSystemTable(key.TableId))
+            continue;
 
         TSet<TKeyDesc::EColumnOperation> columnOpFilter;
         switch (key.RowOperation) {

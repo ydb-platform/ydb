@@ -10,7 +10,7 @@
 #include "program.h"
 #include "arrow_helpers.h"
 
-namespace NKikimr::NArrow { 
+namespace NKikimr::NArrow {
 
 size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation frst, EOperation scnd) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{

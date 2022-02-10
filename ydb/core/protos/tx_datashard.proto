@@ -49,7 +49,7 @@ message TEvGetShardState {
 message TEvGetShardStateResult {
     optional uint64 Origin = 1;
     optional uint32 State = 2;
-    optional uint64 DropTxId = 3; 
+    optional uint64 DropTxId = 3;
 }
 
 message TShardOpResult {
@@ -59,22 +59,22 @@ message TShardOpResult {
     optional uint64 RowsProcessed = 4;
 }
 
-message TEvSchemaChanged { 
+message TEvSchemaChanged {
     optional NActorsProto.TActorId Source = 1;
-    optional uint64 Origin = 2; 
+    optional uint64 Origin = 2;
     optional uint32 State = 3;  // EDatashardState
-    optional uint64 TxId = 4; 
-    optional uint64 Step = 5; 
-    optional uint32 Generation = 6; 
+    optional uint64 TxId = 4;
+    optional uint64 Step = 5;
+    optional uint32 Generation = 6;
 
     optional TShardOpResult OpResult = 7;
-} 
- 
-message TEvSchemaChangedResult { 
-    optional uint64 TxId = 1; 
+}
+
+message TEvSchemaChangedResult {
+    optional uint64 TxId = 1;
     // DEPRECATED: optional bool Retry = 2;
-} 
- 
+}
+
 message TEvStateChanged {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 TabletId = 2;
@@ -245,8 +245,8 @@ message TDataTransaction {
     optional TROTransaction ROTransaction = 2;  // DEPRECATED
     optional bytes MiniKQL = 3;
     optional bool Immediate = 4;
-    optional fixed64 LockTxId = 5; 
-    optional bool NeedDiagnostics = 6; 
+    optional fixed64 LockTxId = 5;
+    optional bool NeedDiagnostics = 6;
     optional bool ReadOnly = 7;
     optional TReadTableTransaction ReadTableTransaction = 8;
     optional bool StreamResponse = 9;
@@ -450,7 +450,7 @@ message TCommitWritesTransaction {
 }
 
 enum ETransactionKind {
-    TX_KIND_NONE = 0; 
+    TX_KIND_NONE = 0;
     TX_KIND_DATA = 1;
     TX_KIND_SCHEME = 2;
     DEPRECATED_3 = 3; //TX_KIND_BALANCE
@@ -476,7 +476,7 @@ message TEvProposeTransaction {
     optional uint64 TxId = 4;
     optional uint32 ExecLevel = 5;
     optional uint32 Flags = 6;
-    optional uint64 SchemeShardId = 7; 
+    optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional TMvccSnapshot MvccSnapshot = 10;
@@ -488,7 +488,7 @@ message TEvCancelTransactionProposal {
 
 message TError {
     enum EKind {
-        OK = 0; 
+        OK = 0;
         BAD_TX_KIND = 1;
         BAD_ARGUMENT = 2;
         SCHEME_ERROR = 3;
@@ -504,7 +504,7 @@ message TError {
         PROGRAM_ERROR = 13;
         OUT_OF_SPACE = 14;
         READ_SIZE_EXECEEDED = 15;
-        SHARD_IS_BLOCKED = 16; 
+        SHARD_IS_BLOCKED = 16;
         UNKNOWN = 17;
         REPLY_SIZE_EXECEEDED = 18;
         EXECUTION_CANCELLED = 19;
@@ -515,23 +515,23 @@ message TError {
     optional bytes Reason = 3;
 }
 
-message TLock { 
-    optional fixed64 LockId = 1; 
-    optional fixed64 DataShard = 2; 
-    optional uint32 Generation = 3; 
-    optional uint64 Counter = 4; 
-    optional fixed64 SchemeShard = 5; 
-    optional uint64 PathId = 6; 
-} 
- 
-message TTabletInfo { 
-    optional fixed64 TabletId = 1; 
-    optional uint32 Generation = 2; 
-    optional uint64 Step = 3; 
+message TLock {
+    optional fixed64 LockId = 1;
+    optional fixed64 DataShard = 2;
+    optional uint32 Generation = 3;
+    optional uint64 Counter = 4;
+    optional fixed64 SchemeShard = 5;
+    optional uint64 PathId = 6;
+}
+
+message TTabletInfo {
+    optional fixed64 TabletId = 1;
+    optional uint32 Generation = 2;
+    optional uint64 Step = 3;
     optional NActorsProto.TActorId ActorId = 4;
     optional bool IsFollower = 5;
-} 
- 
+}
+
 message TEvProposeTransactionResult {
     enum EStatus {
         PREPARED = 1;
@@ -567,11 +567,11 @@ message TEvProposeTransactionResult {
     optional uint64 PrepareArriveTime = 12;
     optional uint64 ExecLatency = 13;
     optional uint64 ProposeLatency = 14;
-    repeated TLock TxLocks = 15; 
+    repeated TLock TxLocks = 15;
     optional uint64 ReadSize = 16;
     optional uint64 ReplySize = 17;
     repeated TReadSetInfo OutgoingReadSetInfo = 18;
-    optional TTabletInfo TabletInfo = 19; 
+    optional TTabletInfo TabletInfo = 19;
     // For read table tx result holds offsets in TxResult to cut response
     repeated uint32 RowOffsets = 20;
     repeated fixed64 DomainCoordinators = 21;

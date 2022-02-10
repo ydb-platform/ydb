@@ -1,5 +1,5 @@
-#include "datashard_txs.h" 
- 
+#include "datashard_txs.h"
+
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/util/pb.h>
@@ -172,17 +172,17 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     // Reads from Sys table
-    LOAD_SYS_UI64(db, Schema::Sys_State, Self->State); 
-    LOAD_SYS_UI64(db, Schema::Sys_LastLocalTid, Self->LastLocalTid); 
-    LOAD_SYS_UI64(db, Schema::Sys_LastSeqno, Self->LastSeqno); 
+    LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
+    LOAD_SYS_UI64(db, Schema::Sys_LastLocalTid, Self->LastLocalTid);
+    LOAD_SYS_UI64(db, Schema::Sys_LastSeqno, Self->LastSeqno);
     LOAD_SYS_UI64(db, Schema::Sys_NextChangeRecordOrder, Self->NextChangeRecordOrder);
     LOAD_SYS_UI64(db, Schema::Sys_LastChangeRecordGroup, Self->LastChangeRecordGroup);
-    LOAD_SYS_UI64(db, Schema::Sys_TxReadSizeLimit, Self->TxReadSizeLimit); 
+    LOAD_SYS_UI64(db, Schema::Sys_TxReadSizeLimit, Self->TxReadSizeLimit);
     LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, Self->PathOwnerId);
     LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
     LOAD_SYS_UI64(db, Schema::Sys_LastSchemeShardGeneration, Self->LastSchemeOpSeqNo.Generation);
     LOAD_SYS_UI64(db, Schema::Sys_LastSchemeShardRound, Self->LastSchemeOpSeqNo.Round);
-    LOAD_SYS_UI64(db, Schema::Sys_StatisticsDisabled, Self->StatisticsDisabled); 
+    LOAD_SYS_UI64(db, Schema::Sys_StatisticsDisabled, Self->StatisticsDisabled);
 
     ui64 subDomainOwnerId = 0;
     ui64 subDomainLocalPathId = 0;
@@ -200,13 +200,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         TString rawProcessingParams;
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {
-            Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams()); 
+            Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
             Y_VERIFY(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
     }
 
-    if (!Self->Pipeline.Load(db)) 
-        return false; 
+    if (!Self->Pipeline.Load(db))
+        return false;
 
     { // Reads user tables metadata
         Self->TableInfos.clear(); // For idempotency
@@ -363,8 +363,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
              "Unexpected state %s while having non-received split snapshots at datashard %" PRIu64,
              DatashardStateName(Self->State).data(), Self->TabletID());
 
-    // Load unsent ReadSets 
-    if (!Self->OutReadSets.LoadReadSets(db)) 
+    // Load unsent ReadSets
+    if (!Self->OutReadSets.LoadReadSets(db))
         return false;
 
     // TODO: properly check shard state
@@ -482,29 +482,29 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     return true;
 }
 
-/// Creates and updates schema at tablet boot time 
+/// Creates and updates schema at tablet boot time
 class TDataShard::TTxInitSchema : public TTransactionBase<TDataShard> {
-public: 
+public:
     TTxInitSchema(TDataShard* self)
-        : TBase(self) 
-    {} 
- 
+        : TBase(self)
+    {}
+
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override { 
-        Y_UNUSED(txc); 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute"); 
- 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+        Y_UNUSED(txc);
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute");
+
         NIceDb::TNiceDb db(txc.DB);
 
         bool isCreate = txc.DB.GetScheme().IsEmpty();
- 
+
         if (isCreate) {
             Self->State = TShardState::WaitScheme;
         } else {
             LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
         }
- 
+
         // Skip full schema migration (and dropped system table recreation)
         // if the datashard is in the process of drop.
         if (Self->State == TShardState::PreOffline || Self->State == TShardState::Offline) {
@@ -515,11 +515,11 @@ public:
             db.Materialize<Schema>();
         }
 
-        if (isCreate) { 
+        if (isCreate) {
             txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
             txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
 
-            Self->PersistSys(db, Schema::Sys_State, Self->State); 
+            Self->PersistSys(db, Schema::Sys_State, Self->State);
 
             if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) {
                 auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled;
@@ -530,8 +530,8 @@ public:
             }
 
             Self->MvccSwitchState = TSwitchState::DONE;
-        } 
- 
+        }
+
         //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys
         if (Self->State == TShardState::Ready ||
             Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
@@ -564,15 +564,15 @@ public:
             }
         }
 
-        return true; 
-    } 
- 
-    void Complete(const TActorContext &ctx) override { 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Complete"); 
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxInit(), ctx);
-    } 
-}; 
- 
+    }
+};
+
 /// Initializes schema defaults changes
 class TDataShard::TTxInitSchemaDefaults : public TTransactionBase<TDataShard> {
 public:
@@ -604,9 +604,9 @@ ITransaction* TDataShard::CreateTxInit() {
 }
 
 ITransaction* TDataShard::CreateTxInitSchema() {
-    return new TTxInitSchema(this); 
-} 
- 
+    return new TTxInitSchema(this);
+}
+
 ITransaction* TDataShard::CreateTxInitSchemaDefaults() {
     return new TTxInitSchemaDefaults(this);
 }

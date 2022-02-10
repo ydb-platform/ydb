@@ -122,8 +122,8 @@ struct TKikimrEvents : TEvents {
         ES_FILESTORE_PRIVATE,
         ES_YDB_METERING,
         ES_IMPORT_SERVICE, // 4200
-        ES_TX_OLAPSHARD, 
-        ES_TX_COLUMNSHARD, 
+        ES_TX_OLAPSHARD,
+        ES_TX_COLUMNSHARD,
         ES_CROSSREF,
         ES_SCHEME_BOARD_MON,
         ES_YQL_ANALYTICS_PROXY = NYq::TEventIds::ES_YQL_ANALYTICS_PROXY,

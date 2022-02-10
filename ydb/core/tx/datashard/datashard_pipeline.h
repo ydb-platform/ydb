@@ -1,25 +1,25 @@
-#pragma once 
- 
-#include "datashard.h" 
-#include "datashard_trans_queue.h" 
-#include "datashard_active_transaction.h" 
+#pragma once
+
+#include "datashard.h"
+#include "datashard_trans_queue.h"
+#include "datashard_active_transaction.h"
 #include "datashard_dep_tracker.h"
 #include "datashard_user_table.h"
 #include "execution_unit.h"
- 
+
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
-using NTabletFlatExecutor::TTransactionContext; 
- 
+
+using NTabletFlatExecutor::TTransactionContext;
+
 class TDataShard;
 class TOperation;
- 
-/// 
-class TPipeline : TNonCopyable { 
-public: 
+
+///
+class TPipeline : TNonCopyable {
+public:
     struct TConfig {
         enum EFlags : ui64 {
             EFlagsOutOfOrder = 0x01,
@@ -89,57 +89,57 @@ public:
     TPipeline(TDataShard * self);
     ~TPipeline();
 
-    bool Load(NIceDb::TNiceDb& db); 
+    bool Load(NIceDb::TNiceDb& db);
     void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg);
- 
+
     bool OutOfOrderLimits() const;
     bool CanRunAnotherOp();
- 
+
     bool CanRunOp(const TOperation &op) const;
 
     ui64 ImmediateInFly() const { return ImmediateOps.size(); }
     const THashMap<ui64, TOperation::TPtr> &GetImmediateOps() const { return ImmediateOps; }
- 
+
     TDependencyTracker &GetDepTracker() { return DepTracker; }
 
     const TConfig &GetConfig() const { return Config; }
 
-    // tx propose 
- 
+    // tx propose
+
     void SaveForPropose(TValidatedDataTx::TPtr tx);
     void SetProposed(ui64 txId, const TActorId& actorId);
- 
+
     void ForgetUnproposedTx(ui64 txId);
     void ForgetTx(ui64 txId);
- 
-    // tx activity 
- 
+
+    // tx activity
+
     TOperation::TPtr GetNextPlannedOp(ui64 step, ui64 txId) const;
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
- 
+
     bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
-    void RemoveTx(TStepOrder stepTxId); 
+    void RemoveTx(TStepOrder stepTxId);
     const TSchemaOperation* FindSchemaTx(ui64 txId) const;
-    void CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId); 
+    void CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId);
     void MarkOpAsUsingSnapshot(TOperation::TPtr op);
- 
+
     bool PlanTxs(ui64 step, TVector<ui64> &txIds, TTransactionContext &txc, const TActorContext &ctx);
-    void PreserveSchema(NIceDb::TNiceDb& db, ui64 step); 
+    void PreserveSchema(NIceDb::TNiceDb& db, ui64 step);
     TDuration CleanupTimeout() const;
     ECleanupStatus Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
- 
-    // times 
- 
+
+    // times
+
     bool AssignPlanInterval(TOperation::TPtr op);
     ui64 OutdatedReadSetStep() const;
     ui64 OutdatedCleanupStep() const;
     ui64 AllowedDataStep() const { return Max(LastPlannedTx.Step + 1, TAppData::TimeProvider->Now().MilliSeconds()); }
     ui64 AllowedSchemaStep() const { return LastPlannedTx.Step + 1; }
     ui64 VacantSchemaStep() const { return KeepSchemaStep + 1; }
- 
+
     TStepOrder GetLastPlannedTx() const { return LastPlannedTx; }
     TStepOrder GetLastCompleteTx() const { return LastCompleteTx; }
     TStepOrder GetUtmostCompleteTx() const { return UtmostCompleteTx; }
@@ -148,12 +148,12 @@ public:
     ui64 GetDataTxCompleteLag(ui64 timecastStep) const;
     ui64 GetScanTxCompleteLag(ui64 timecastStep) const;
 
-    // schema ops 
- 
-    bool HasSchemaOperation() const { return CurrentSchemaTxId(); } 
-    bool HasCreate() const { return SchemaTx && SchemaTx->IsCreate(); } 
-    bool HasAlter() const { return SchemaTx && SchemaTx->IsAlter(); } 
-    bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); } 
+    // schema ops
+
+    bool HasSchemaOperation() const { return CurrentSchemaTxId(); }
+    bool HasCreate() const { return SchemaTx && SchemaTx->IsCreate(); }
+    bool HasAlter() const { return SchemaTx && SchemaTx->IsAlter(); }
+    bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); }
     bool HasBackup() const { return SchemaTx && SchemaTx->IsBackup(); }
     bool HasRestore() const { return SchemaTx && SchemaTx->IsRestore(); }
     bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); }
@@ -166,24 +166,24 @@ public:
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
- 
-    ui64 CurrentSchemaTxId() const { 
-        if (SchemaTx) 
-            return SchemaTx->TxId; 
-        return 0; 
-    } 
- 
+
+    ui64 CurrentSchemaTxId() const {
+        if (SchemaTx)
+            return SchemaTx->TxId;
+        return 0;
+    }
+
     const TSchemaOperation* GetSchemaOp() const {
         return SchemaTx;
     }
 
     void SetSchemaOp(TSchemaOperation * op) {
-        Y_VERIFY(!SchemaTx || SchemaTx->TxId == op->TxId); 
-        SchemaTx = op; 
-    } 
- 
-    // TTransQueue wrappers 
- 
+        Y_VERIFY(!SchemaTx || SchemaTx->TxId == op->TxId);
+        SchemaTx = op;
+    }
+
+    // TTransQueue wrappers
+
     void ProposeTx(TOperation::TPtr op, const TStringBuf &txBody, TTransactionContext &txc, const TActorContext &ctx);
     void ProposeComplete(const TOperation::TPtr &op, const TActorContext &ctx);
     void PersistTxFlags(TOperation::TPtr op, TTransactionContext &txc);
@@ -195,7 +195,7 @@ public:
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;
     bool RemoveProposeDelayer(ui64 txId);
- 
+
     void ProcessDisconnected(ui32 nodeId);
 
     ui64 GetInactiveTxSize() const;
@@ -353,7 +353,7 @@ public:
      */
     bool MarkPlannedLogicallyIncompleteUpTo(const TRowVersion& version, TTransactionContext& txc);
 
-private: 
+private:
     struct TStoredExecutionProfile {
         TBasicOpInfo OpInfo;
         TVector<std::pair<EExecutionUnitKind, TExecutionProfile::TUnitProfile>> UnitProfiles;
@@ -421,10 +421,10 @@ private:
 
     using TSortedOps = TMap<TStepOrder, TOperation::TPtr>;
 
-    /// 
+    ///
     TDataShard * const Self;
     TDependencyTracker DepTracker;
-    TConfig Config; 
+    TConfig Config;
     THashMap<ui64, TOperation::TPtr> ImmediateOps;
     TSortedOps ActiveOps;
     TSortedOps ActivePlannedOps;
@@ -432,11 +432,11 @@ private:
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
     THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache;
     TMap<TStepOrder, THolder<IEventHandle>> DelayedAcks;
-    TStepOrder LastPlannedTx; 
-    TStepOrder LastCompleteTx; 
-    TStepOrder UtmostCompleteTx; 
-    ui64 KeepSchemaStep; 
-    ui64 LastCleanupTime; 
+    TStepOrder LastPlannedTx;
+    TStepOrder LastCompleteTx;
+    TStepOrder UtmostCompleteTx;
+    ui64 KeepSchemaStep;
+    ui64 LastCleanupTime;
     TSchemaOperation * SchemaTx;
     std::array<THolder<TExecutionUnit>, (ui32)EExecutionUnitKind::Count> ExecutionUnits;
     THashSet<TOperation::TPtr> ExecuteBlockers;
@@ -450,7 +450,7 @@ private:
     // Slow operation profiles.
     TList<TStoredExecutionProfile> SlowOpProfiles;
     TMap<ui64, ui32> ActiveStreamingTxs;
- 
+
     typedef TList<TOperation::TPtr> TWaitingSchemeOpsOrder;
     typedef THashMap<TOperation::TPtr, TWaitingSchemeOpsOrder::iterator> TWaitingSchemeOps;
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
@@ -461,18 +461,18 @@ private:
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
-    bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId); 
-    void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId); 
+    bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
+    void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);
     void CompleteTx(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx);
-    void PersistConfig(NIceDb::TNiceDb& db); 
- 
+    void PersistConfig(NIceDb::TNiceDb& db);
+
     void MoveToNextUnit(TOperation::TPtr op);
- 
+
     bool AddImmediateOp(TOperation::TPtr op);
     void RemoveImmediateOp(TOperation::TPtr op);
 
     void SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
                        TTransactionContext &txc);
-}; 
- 
-}} 
+};
+
+}}

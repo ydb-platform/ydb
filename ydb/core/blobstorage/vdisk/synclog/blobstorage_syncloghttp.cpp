@@ -102,8 +102,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_SYNCLOG_HTTPINFO;
-            } 
- 
+            }
+
             TSyncLogGetHttpInfoActor(const TIntrusivePtr<TVDiskContext> &vctx,
                                      const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                                      NMon::TEvHttpInfo::TPtr &ev,

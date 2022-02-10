@@ -38,13 +38,13 @@ namespace NPDisk {
     extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
 }
 
-    void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig) 
+    void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig)
     {
-        runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), 
-            TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0), 
-            nodeIndex); 
-    } 
- 
+        runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0),
+            nodeIndex);
+    }
+
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root)
     {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
@@ -55,16 +55,16 @@ namespace NPDisk {
             TActorSetupCmd(CreateSchemeBoardSchemeCache(cacheConfig.Get()), TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        TIntrusivePtr<TTabletResolverConfig> tabletResolverConfig(new TTabletResolverConfig()); 
-        //tabletResolverConfig->TabletCacheLimit = 1; 
- 
-        IActor* tabletResolver = CreateTabletResolver(tabletResolverConfig); 
-        runtime.AddLocalService(MakeTabletResolverID(), 
-            TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex); 
-    } 
- 
+    void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        TIntrusivePtr<TTabletResolverConfig> tabletResolverConfig(new TTabletResolverConfig());
+        //tabletResolverConfig->TabletCacheLimit = 1;
+
+        IActor* tabletResolver = CreateTabletResolver(tabletResolverConfig);
+        runtime.AddLocalService(MakeTabletResolverID(),
+            TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
+    }
+
     void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
@@ -82,69 +82,69 @@ namespace NPDisk {
             TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(), 
-            TActorSetupCmd( 
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(),
+            TActorSetupCmd(
                 NResourceBroker::CreateResourceBrokerActor(NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)),
-                TMailboxType::Revolving, 0), 
-            nodeIndex); 
-    } 
- 
-    void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        runtime.AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(nodeIndex)), 
-            TActorSetupCmd(NNodeWhiteboard::CreateNodeWhiteboardService(), TMailboxType::Simple, 0), nodeIndex); 
-    } 
- 
-    void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        runtime.AddLocalService( 
-            NNodeTabletMonitor::MakeNodeTabletMonitorID(runtime.GetNodeId(nodeIndex)), 
-            TActorSetupCmd( 
-                NNodeTabletMonitor::CreateNodeTabletMonitor( 
-                    new NNodeTabletMonitor::TTabletStateClassifier(), 
-                    new NNodeTabletMonitor::TTabletListRenderer()), 
-                TMailboxType::Simple, 0), 
-            nodeIndex); 
-    } 
- 
-    void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        NTabletMonitoringProxy::TTabletMonitoringProxyConfig tabletMonitoringProxyConfig; 
-        tabletMonitoringProxyConfig.SetRetryLimitCount(1u); 
- 
-        runtime.AddLocalService(NTabletMonitoringProxy::MakeTabletMonitoringProxyID(), 
-            TActorSetupCmd(NTabletMonitoringProxy::CreateTabletMonitoringProxy(std::move(tabletMonitoringProxyConfig)), 
-                           TMailboxType::Revolving, 0), nodeIndex); 
-    } 
- 
-    void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        runtime.AddLocalService(MakeGRpcProxyStatusID(runtime.GetNodeId(nodeIndex)), 
-            TActorSetupCmd(CreateGRpcProxyStatus(), TMailboxType::Revolving, 0), nodeIndex); 
-    } 
- 
+                TMailboxType::Revolving, 0),
+            nodeIndex);
+    }
+
+    void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(NNodeWhiteboard::CreateNodeWhiteboardService(), TMailboxType::Simple, 0), nodeIndex);
+    }
+
+    void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(
+            NNodeTabletMonitor::MakeNodeTabletMonitorID(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(
+                NNodeTabletMonitor::CreateNodeTabletMonitor(
+                    new NNodeTabletMonitor::TTabletStateClassifier(),
+                    new NNodeTabletMonitor::TTabletListRenderer()),
+                TMailboxType::Simple, 0),
+            nodeIndex);
+    }
+
+    void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        NTabletMonitoringProxy::TTabletMonitoringProxyConfig tabletMonitoringProxyConfig;
+        tabletMonitoringProxyConfig.SetRetryLimitCount(1u);
+
+        runtime.AddLocalService(NTabletMonitoringProxy::MakeTabletMonitoringProxyID(),
+            TActorSetupCmd(NTabletMonitoringProxy::CreateTabletMonitoringProxy(std::move(tabletMonitoringProxyConfig)),
+                           TMailboxType::Revolving, 0), nodeIndex);
+    }
+
+    void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(MakeGRpcProxyStatusID(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(CreateGRpcProxyStatus(), TMailboxType::Revolving, 0), nodeIndex);
+    }
+
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches)
-    { 
+    {
         auto pageCollectionCacheConfig = MakeIntrusive<TSharedPageCacheConfig>();
         pageCollectionCacheConfig->CacheConfig = new TCacheCacheConfig(caches.Shared, nullptr, nullptr, nullptr);
         pageCollectionCacheConfig->TotalAsyncQueueInFlyLimit = caches.AsyncQueue;
         pageCollectionCacheConfig->TotalScanQueueInFlyLimit = caches.ScanQueue;
- 
+
         runtime.AddLocalService(MakeSharedPageCacheId(0),
-            TActorSetupCmd( 
+            TActorSetupCmd(
                 CreateSharedPageCache(pageCollectionCacheConfig.Get()),
-                TMailboxType::ReadAsFilled, 
-                0), 
-            nodeIndex); 
-    } 
- 
+                TMailboxType::ReadAsFilled,
+                0),
+            nodeIndex);
+    }
+
     void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
-        runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(), 
+        runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
             TActorSetupCmd(
-                NBlobCache::CreateBlobCache(20<<20, runtime.GetDynamicCounters(nodeIndex)), 
+                NBlobCache::CreateBlobCache(20<<20, runtime.GetDynamicCounters(nodeIndex)),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);
@@ -175,14 +175,14 @@ namespace NPDisk {
         return TActorId(node, TStringBuf(x, 12));
     }
 
-    void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, ui64 stateStorageGroup, bool firstNode) 
-    { 
+    void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, ui64 stateStorageGroup, bool firstNode)
+    {
         const TActorId ssreplicas[3] = {
-            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0), 
-            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1), 
-            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2), 
-        }; 
- 
+            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
+            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
+            MakeStateStorageReplicaID(runtime.GetNodeId(0), stateStorageGroup, 2),
+        };
+
         const TActorId breplicas[3] = {
             MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 0),
             MakeBoardReplicaID(runtime.GetNodeId(0), stateStorageGroup, 1),
@@ -196,39 +196,39 @@ namespace NPDisk {
         };
 
         const TActorId ssproxy = MakeStateStorageProxyID(stateStorageGroup);
- 
+
         auto ssInfo = GenerateStateStorageInfo(ssreplicas, stateStorageGroup);
         auto sbInfo = GenerateStateStorageInfo(sbreplicas, stateStorageGroup);
         auto bInfo = GenerateStateStorageInfo(breplicas, stateStorageGroup);
- 
-        if (!firstNode || nodeIndex == 0) { 
-            for (ui32 i = 0; i < 3; ++i) { 
-                runtime.AddLocalService(ssreplicas[i], 
-                    TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex); 
+
+        if (!firstNode || nodeIndex == 0) {
+            for (ui32 i = 0; i < 3; ++i) {
+                runtime.AddLocalService(ssreplicas[i],
+                    TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
                 runtime.AddLocalService(sbreplicas[i],
                     TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
                 runtime.AddLocalService(breplicas[i],
                     TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), i), TMailboxType::Revolving, 0), nodeIndex);
-            } 
-        } 
- 
-        runtime.AddLocalService(ssproxy, 
+            }
+        }
+
+        runtime.AddLocalService(ssproxy,
             TActorSetupCmd(CreateStateStorageProxy(ssInfo.Get(), bInfo.Get(), sbInfo.Get()), TMailboxType::Revolving, 0), nodeIndex);
-    } 
- 
-    static void SetupStateStorageGroups(TTestActorRuntime& runtime, ui32 nodeIndex, TAppPrepare& app) 
-    { 
-        TSet<ui32> stateStorageGroups; 
-        for (auto it = app.Domains->Domains.begin(); it != app.Domains->Domains.end(); ++it) { 
-            ui32 stateStorageGroup = it->second->DefaultStateStorageGroup; 
-            if (stateStorageGroups.find(stateStorageGroup) == stateStorageGroups.end()) { 
-                stateStorageGroups.insert(stateStorageGroup); 
- 
-                SetupStateStorage(runtime, nodeIndex, stateStorageGroup, true); 
-            } 
-        } 
-    } 
- 
+    }
+
+    static void SetupStateStorageGroups(TTestActorRuntime& runtime, ui32 nodeIndex, TAppPrepare& app)
+    {
+        TSet<ui32> stateStorageGroups;
+        for (auto it = app.Domains->Domains.begin(); it != app.Domains->Domains.end(); ++it) {
+            ui32 stateStorageGroup = it->second->DefaultStateStorageGroup;
+            if (stateStorageGroups.find(stateStorageGroup) == stateStorageGroups.end()) {
+                stateStorageGroups.insert(stateStorageGroup);
+
+                SetupStateStorage(runtime, nodeIndex, stateStorageGroup, true);
+            }
+        }
+    }
+
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         runtime.AddLocalService(MakeQuoterServiceID(),
@@ -236,9 +236,9 @@ namespace NPDisk {
                 nodeIndex);
     }
 
-    void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock, 
-                            NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches) 
-    { 
+    void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
+                            NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches)
+    {
         runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
 
         TTestStorageFactory disk(runtime, storage, mock);
@@ -255,20 +255,20 @@ namespace NPDisk {
         }
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            SetupStateStorageGroups(runtime, nodeIndex, app); 
+            SetupStateStorageGroups(runtime, nodeIndex, app);
             NKikimrProto::TKeyConfig keyConfig;
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
- 
-            SetupTabletResolver(runtime, nodeIndex); 
+
+            SetupTabletResolver(runtime, nodeIndex);
             SetupTabletPipePeNodeCaches(runtime, nodeIndex);
-            SetupResourceBroker(runtime, nodeIndex); 
+            SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
- 
+
             if (factory)
                 factory->Birth(nodeIndex);
         }
@@ -285,10 +285,10 @@ namespace NPDisk {
         }
 
         if (!mock && !runtime.IsRealThreads()) {
-            ui32 evNum = disk.DomainsNum * disk.DisksInDomain; 
+            ui32 evNum = disk.DomainsNum * disk.DisksInDomain;
             TDispatchOptions options;
-            options.FinalEvents.push_back( 
-                TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone, evNum)); 
+            options.FinalEvents.push_back(
+                TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone, evNum));
             runtime.DispatchEvents(options);
         }
     }

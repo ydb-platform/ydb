@@ -3,7 +3,7 @@
 
 namespace cp = ::arrow::compute;
 
-namespace NKikimr::NArrow { 
+namespace NKikimr::NArrow {
     cp::FunctionRegistry* GetCustomFunctionRegistry();
     cp::ExecContext* GetCustomExecContext();
 }

@@ -1,8 +1,8 @@
 #pragma once
- 
-#include "datashard.h" 
-#include "datashard_impl.h" 
- 
+
+#include "datashard.h"
+#include "datashard_impl.h"
+
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/kqp/kqp_compute.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
@@ -11,224 +11,224 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
- 
+
+
 namespace NKikimr {
 
-class TBalanceCoverageBuilder; 
-class TEngineHolder; 
-class TFakeMiniKQLProxy; 
-class TFakeProxyTx; 
+class TBalanceCoverageBuilder;
+class TEngineHolder;
+class TFakeMiniKQLProxy;
+class TFakeProxyTx;
 
 constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201;
 
-/// 
-class TTester : public TNonCopyable { 
-public: 
-    friend class TEngineHolder; 
-    friend class TFakeMiniKQLProxy; 
-    friend class TFakeProxyTx; 
+///
+class TTester : public TNonCopyable {
+public:
+    friend class TEngineHolder;
+    friend class TFakeMiniKQLProxy;
+    friend class TFakeProxyTx;
     friend class TFakeScanTx;
 
-    using TKeyResolver = std::function<void(TKeyDesc&)>; 
- 
-    enum ESchema { 
-        ESchema_KV, 
-        ESchema_DoubleKV, 
-        ESchema_MultiShardKV, 
-        ESchema_SpecialKV, 
+    using TKeyResolver = std::function<void(TKeyDesc&)>;
+
+    enum ESchema {
+        ESchema_KV,
+        ESchema_DoubleKV,
+        ESchema_MultiShardKV,
+        ESchema_SpecialKV,
         ESchema_DoubleKVExternal,
-    }; 
- 
-    /// 
-    struct TOptions { 
-        static constexpr const ui64 DEFAULT_FIRST_STEP = 1000000; 
- 
-        ui64 FirstStep; 
-        ui32 NumActiveTx; 
-        bool SoftUpdates; 
-        bool DelayReadSet; 
-        bool DelayData; 
-        bool RebootOnDelay; 
+    };
+
+    ///
+    struct TOptions {
+        static constexpr const ui64 DEFAULT_FIRST_STEP = 1000000;
+
+        ui64 FirstStep;
+        ui32 NumActiveTx;
+        bool SoftUpdates;
+        bool DelayReadSet;
+        bool DelayData;
+        bool RebootOnDelay;
         std::optional<bool> Mvcc;
-        ui64 ExecutorCacheSize; 
- 
-        TOptions(ui64 firstStep = 0) 
-            : FirstStep(firstStep ? firstStep : DEFAULT_FIRST_STEP) 
-            , NumActiveTx(0) 
-            , SoftUpdates(false) 
-            , DelayReadSet(false) 
-            , DelayData(false) 
-            , RebootOnDelay(false) 
-            , ExecutorCacheSize(Max<ui64>()) 
-        {} 
- 
-        void EnableOutOfOrder(ui32 num = 8) { NumActiveTx = num; } 
-        void EnableSoftUpdates() { SoftUpdates = true; } 
+        ui64 ExecutorCacheSize;
+
+        TOptions(ui64 firstStep = 0)
+            : FirstStep(firstStep ? firstStep : DEFAULT_FIRST_STEP)
+            , NumActiveTx(0)
+            , SoftUpdates(false)
+            , DelayReadSet(false)
+            , DelayData(false)
+            , RebootOnDelay(false)
+            , ExecutorCacheSize(Max<ui64>())
+        {}
+
+        void EnableOutOfOrder(ui32 num = 8) { NumActiveTx = num; }
+        void EnableSoftUpdates() { SoftUpdates = true; }
         void EnableMvcc(std::optional<bool> enabled = {true}) { Mvcc = enabled; }
- 
-        TString PartConfig() const { 
-            TString pipelineConfig = Sprintf(R"(PipelineConfig { 
-                    NumActiveTx: %u 
-                    EnableOutOfOrder: %u 
-                    EnableSoftUpdates: %u 
-                })", NumActiveTx, (NumActiveTx != 0), SoftUpdates); 
- 
-            TString cacheSize; 
-            if (ExecutorCacheSize != Max<ui64>()) 
-                cacheSize = Sprintf("ExecutorCacheSize: %lu", ExecutorCacheSize); 
- 
-            return Sprintf(R"(PartitionConfig { 
-                %s 
-                %s 
+
+        TString PartConfig() const {
+            TString pipelineConfig = Sprintf(R"(PipelineConfig {
+                    NumActiveTx: %u
+                    EnableOutOfOrder: %u
+                    EnableSoftUpdates: %u
+                })", NumActiveTx, (NumActiveTx != 0), SoftUpdates);
+
+            TString cacheSize;
+            if (ExecutorCacheSize != Max<ui64>())
+                cacheSize = Sprintf("ExecutorCacheSize: %lu", ExecutorCacheSize);
+
+            return Sprintf(R"(PartitionConfig {
+                %s
+                %s
             })", cacheSize.data(), pipelineConfig.data());
-        } 
-    }; 
- 
-    struct TActiveZone { 
-        TTester& Tester; 
-        TActiveZone(TTester& t): Tester(t) { if (Tester.ActiveZone) *Tester.ActiveZone = true; } 
-        ~TActiveZone() { if (Tester.ActiveZone) *Tester.ActiveZone = false; } 
-    }; 
- 
+        }
+    };
+
+    struct TActiveZone {
+        TTester& Tester;
+        TActiveZone(TTester& t): Tester(t) { if (Tester.ActiveZone) *Tester.ActiveZone = true; }
+        ~TActiveZone() { if (Tester.ActiveZone) *Tester.ActiveZone = false; }
+    };
+
     TTestBasicRuntime Runtime;
- 
-    TTester(ESchema schema, const TOptions& opts = TOptions()); 
-    TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup, 
-            bool& activeZone, const TOptions& opts = TOptions()); 
- 
+
+    TTester(ESchema schema, const TOptions& opts = TOptions());
+    TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup,
+            bool& activeZone, const TOptions& opts = TOptions());
+
     static void Setup(TTestActorRuntime& runtime, const TOptions& opts = TOptions());
- 
-private: 
-    ESchema Schema; 
+
+private:
+    ESchema Schema;
     TActorId Sender;
-    ui64 LastTxId; 
-    ui64 LastStep; 
+    ui64 LastTxId;
+    ui64 LastStep;
     TMockDbSchemeResolver DbSchemeResolver;
     TString DispatchName = "NONE";
     bool AllowIncompleteResult = false;
     bool* ActiveZone = nullptr;
     TDuration Timeout = TDuration::Minutes(10);
 
-    TKeyResolver GetKeyResolver() const; 
-    void CreateSchema(ESchema schema, const TOptions& opts); 
-    void CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister = false); 
-    void RegisterTableInResolver(const TString& schemeText); 
+    TKeyResolver GetKeyResolver() const;
+    void CreateSchema(ESchema schema, const TOptions& opts);
+    void CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister = false);
+    void RegisterTableInResolver(const TString& schemeText);
 
-    static void EmptyShardKeyResolver(TKeyDesc& key); 
+    static void EmptyShardKeyResolver(TKeyDesc& key);
     static void SingleShardKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0
     static void ThreeShardPointKeyResolver(TKeyDesc& key); // uses TTestTxConfig::TxTablet0,1,2
 };
 
-/// 
-struct TExpectedReadSet { 
-    struct TWaitFor { 
-        ui64 Shard; 
-        ui64 TxId; 
-    }; 
- 
-    ui64 SrcTablet; 
-    ui64 DstTablet; 
-    ui64 TxId; 
-    TWaitFor Freedom; 
- 
-    TExpectedReadSet(ui64 txId, TWaitFor freedom) 
+///
+struct TExpectedReadSet {
+    struct TWaitFor {
+        ui64 Shard;
+        ui64 TxId;
+    };
+
+    ui64 SrcTablet;
+    ui64 DstTablet;
+    ui64 TxId;
+    TWaitFor Freedom;
+
+    TExpectedReadSet(ui64 txId, TWaitFor freedom)
         : SrcTablet(TTestTxConfig::TxTablet1)
         , DstTablet(TTestTxConfig::TxTablet0)
-        , TxId(txId) 
-        , Freedom(freedom) 
-    {} 
-}; 
- 
-/// 
-class TEngineHolder { 
-public: 
-    TEngineHolder() 
-        : Env(Alloc) 
-    { 
-        Alloc.Release(); 
-    } 
- 
+        , TxId(txId)
+        , Freedom(freedom)
+    {}
+};
+
+///
+class TEngineHolder {
+public:
+    TEngineHolder()
+        : Env(Alloc)
+    {
+        Alloc.Release();
+    }
+
     virtual ~TEngineHolder() {
-        Engine.Reset(); 
-        Alloc.Acquire(); 
-    } 
- 
-    NMiniKQL::TRuntimeNode ProgramText2Bin(TTester& tester, const TString& programText); 
- 
-protected: 
-    NMiniKQL::TScopedAlloc Alloc; 
-    NMiniKQL::TTypeEnvironment Env; 
-    THolder<NMiniKQL::IEngineFlat> Engine; 
-}; 
- 
-/// 
-class TFakeProxyTx : public TEngineHolder { 
-public: 
-    using IEngineFlat = NMiniKQL::IEngineFlat; 
-    using TPtr = std::shared_ptr<TFakeProxyTx>; 
- 
+        Engine.Reset();
+        Alloc.Acquire();
+    }
+
+    NMiniKQL::TRuntimeNode ProgramText2Bin(TTester& tester, const TString& programText);
+
+protected:
+    NMiniKQL::TScopedAlloc Alloc;
+    NMiniKQL::TTypeEnvironment Env;
+    THolder<NMiniKQL::IEngineFlat> Engine;
+};
+
+///
+class TFakeProxyTx : public TEngineHolder {
+public:
+    using IEngineFlat = NMiniKQL::IEngineFlat;
+    using TPtr = std::shared_ptr<TFakeProxyTx>;
+
     TVector<ui64> Shards;
     TMap<ui64, TVector<NKikimrTxDataShard::TError>> Errors;
     ui64 MinStep = 0;
     ui64 MaxStep = Max<ui64>();
- 
+
     TFakeProxyTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default)
-        : TxId_(txId) 
-        , TxKind_(NKikimrTxDataShard::TX_KIND_DATA) 
-        , TxBody_(txBody) 
-        , TxFlags_(flags) 
-        , ShardsCount_(0) 
-    {} 
- 
-    /// @return shards count 
-    ui32 SetProgram(TTester& tester, const TString& programText); 
+        : TxId_(txId)
+        , TxKind_(NKikimrTxDataShard::TX_KIND_DATA)
+        , TxBody_(txBody)
+        , TxFlags_(flags)
+        , ShardsCount_(0)
+    {}
+
+    /// @return shards count
+    ui32 SetProgram(TTester& tester, const TString& programText);
     virtual ui32 SetProgram(TTester& tester);
-    /// @return shardId 
+    /// @return shardId
     virtual ui32 GetShardProgram(ui32 idx, TString& outTxBody);
-    void AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event); 
+    void AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event);
     virtual void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete);
- 
+
     virtual IEngineFlat::EStatus GetStatus(bool atPropose);
     virtual NKikimrMiniKQL::TResult GetResult() const;
- 
-    ui64 TxId() const { return TxId_; } 
-    ui32 TxFlags() const { return TxFlags_; } 
-    TString TxBody() const { return TxBody_; } 
+
+    ui64 TxId() const { return TxId_; }
+    ui32 TxFlags() const { return TxFlags_; }
+    TString TxBody() const { return TxBody_; }
     NKikimrTxDataShard::ETransactionKind TxKind() { return TxKind_; }
-    bool IsDataTx() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_DATA; } 
+    bool IsDataTx() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_DATA; }
     bool IsReadTable() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_SCAN; }
-    bool HasErrors() const { return !Errors.empty(); } 
+    bool HasErrors() const { return !Errors.empty(); }
     bool Immediate() const { return IsDataTx() && (ShardsCount_ < 2) && !(TxFlags_ & NDataShard::TTxFlags::ForceOnline); }
-    ui32 ShardsCount() const { return ShardsCount_; } 
- 
-    void SetKindSchema() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCHEME; } 
+    ui32 ShardsCount() const { return ShardsCount_; }
+
+    void SetKindSchema() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCHEME; }
     void SetKindScan() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCAN; }
- 
-    TBalanceCoverageBuilder * GetCoverageBuilder(ui64 shard); 
- 
-    void SetCheck(std::function<bool(TFakeProxyTx&)> check) { 
-        Check = check; 
-    } 
- 
-    bool CheckResult() { 
-        if (Check) 
-            return Check(*this); 
-        return true; 
-    } 
- 
+
+    TBalanceCoverageBuilder * GetCoverageBuilder(ui64 shard);
+
+    void SetCheck(std::function<bool(TFakeProxyTx&)> check) {
+        Check = check;
+    }
+
+    bool CheckResult() {
+        if (Check)
+            return Check(*this);
+        return true;
+    }
+
 protected:
-    ui64 TxId_; 
+    ui64 TxId_;
     NKikimrTxDataShard::ETransactionKind TxKind_;
-    TString TxBody_; 
-    ui32 TxFlags_; 
-    ui32 ShardsCount_; 
+    TString TxBody_;
+    ui32 TxFlags_;
+    ui32 ShardsCount_;
     THashMap<ui64, std::shared_ptr<TBalanceCoverageBuilder>> CoverageBuilders; // key - shard
-    std::function<bool(TFakeProxyTx&)> Check; 
-}; 
- 
-/// 
+    std::function<bool(TFakeProxyTx&)> Check;
+};
+
+///
 class TFakeScanTx : public TFakeProxyTx {
 public:
     TFakeScanTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default)
@@ -252,68 +252,68 @@ private:
 ///
 class TFakeMiniKQLProxy {
 public:
-    using IEngineFlat = NMiniKQL::IEngineFlat; 
+    using IEngineFlat = NMiniKQL::IEngineFlat;
     //using TEvProgressTransaction = NDataShard::TDataShard::TEvPrivate::TEvProgressTransaction;
- 
-    TFakeMiniKQLProxy(TTester& tester) 
-        : Tester(tester) 
-        , LastTxId_(tester.LastTxId) 
-        , LastStep_(tester.LastStep) 
-        , RebootOnDelay(false) 
-    {} 
 
-    // Propose + Plan (if needed) in own step 
+    TFakeMiniKQLProxy(TTester& tester)
+        : Tester(tester)
+        , LastTxId_(tester.LastTxId)
+        , LastStep_(tester.LastStep)
+        , RebootOnDelay(false)
+    {}
+
+    // Propose + Plan (if needed) in own step
     IEngineFlat::EStatus ExecSchemeCreateTable(const TString& schemaText, const TVector<ui64>& shards);
     IEngineFlat::EStatus Execute(const TString& programText, NKikimrMiniKQL::TResult& out,
                                  bool waitForResult = true);
     IEngineFlat::EStatus Execute(const TString& programText, bool waitForResult = true) {
-        NKikimrMiniKQL::TResult result; 
+        NKikimrMiniKQL::TResult result;
         return Execute(programText, result, waitForResult);
-    } 
- 
-    void CheckedExecute(const TString& programText) { 
-        try { 
-            UNIT_ASSERT_EQUAL(Execute(programText), IEngineFlat::EStatus::Complete); 
-        } catch (TEmptyEventQueueException&) { 
-            Cout << "Event queue is empty at dispatch " << Tester.DispatchName << "\n"; 
-            if (!Tester.AllowIncompleteResult) 
-                throw; 
-        } 
-    } 
- 
-    void Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing, 
+    }
+
+    void CheckedExecute(const TString& programText) {
+        try {
+            UNIT_ASSERT_EQUAL(Execute(programText), IEngineFlat::EStatus::Complete);
+        } catch (TEmptyEventQueueException&) {
+            Cout << "Event queue is empty at dispatch " << Tester.DispatchName << "\n";
+            if (!Tester.AllowIncompleteResult)
+                throw;
+        }
+    }
+
+    void Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
                  ui32 flags = NDataShard::TTxFlags::ForceOnline);
     void EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
                  ui32 flags = NDataShard::TTxFlags::ForceOnline);
-    void ExecQueue(); 
+    void ExecQueue();
 
-    static bool DoNothing(TFakeProxyTx&) { 
-        return true; 
-    } 
- 
-    ui64 LastTxId() const { return LastTxId_; } 
- 
-    void DelayReadSet(const TExpectedReadSet& rs, bool withReboot = false) { 
-        DelayedReadSets.emplace_back(rs); 
-        RebootOnDelay = withReboot; 
-    } 
- 
-    void DelayData(const TExpectedReadSet::TWaitFor& shardTx) { 
-        DelayedData.emplace_back(shardTx); 
-    } 
- 
+    static bool DoNothing(TFakeProxyTx&) {
+        return true;
+    }
+
+    ui64 LastTxId() const { return LastTxId_; }
+
+    void DelayReadSet(const TExpectedReadSet& rs, bool withReboot = false) {
+        DelayedReadSets.emplace_back(rs);
+        RebootOnDelay = withReboot;
+    }
+
+    void DelayData(const TExpectedReadSet::TWaitFor& shardTx) {
+        DelayedData.emplace_back(shardTx);
+    }
+
 private:
     TTester& Tester;
-    ui64& LastTxId_; 
-    ui64& LastStep_; 
+    ui64& LastTxId_;
+    ui64& LastStep_;
     TVector<TFakeProxyTx::TPtr> TxQueue;
     TMap<ui64, TActorId> ShardActors;
-    // 
+    //
     TVector<TExpectedReadSet> DelayedReadSets;
     TVector<TExpectedReadSet::TWaitFor> DelayedData;
-    bool RebootOnDelay; 
- 
-    void Propose(TFakeProxyTx& tx, bool holdImmediate = false); 
+    bool RebootOnDelay;
+
+    void Propose(TFakeProxyTx& tx, bool holdImmediate = false);
     void ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector<ui64>& shards);
     void ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards,
         const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard);
@@ -321,41 +321,41 @@ private:
     void ResolveShards(const TSet<ui64>& shards);
 };
 
-/// 
-class TDatashardInitialEventsFilter { 
+///
+class TDatashardInitialEventsFilter {
 public:
     TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds);
     TTestActorRuntime::TEventFilter Prepare();
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 
-    TDatashardInitialEventsFilter(const TDatashardInitialEventsFilter&) = delete; 
-    TDatashardInitialEventsFilter(TDatashardInitialEventsFilter&&) = default; 
- 
-    static TDatashardInitialEventsFilter CreateDefault() { 
+    TDatashardInitialEventsFilter(const TDatashardInitialEventsFilter&) = delete;
+    TDatashardInitialEventsFilter(TDatashardInitialEventsFilter&&) = default;
+
+    static TDatashardInitialEventsFilter CreateDefault() {
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
-        return TDatashardInitialEventsFilter(tabletIds); 
-    } 
- 
+        return TDatashardInitialEventsFilter(tabletIds);
+    }
+
     const TVector<ui64> Tablets() const { return TabletIds; }
- 
+
 private:
     const TVector<ui64> TabletIds;
     TVector<ui64> RemainTablets;
 };
 
-/// 
-class TKeyExtractor : public TEngineHolder { 
-public: 
+///
+class TKeyExtractor : public TEngineHolder {
+public:
     using TPKey = THolder<TKeyDesc>;
- 
-    TKeyExtractor(TTester& tester, TString programText); 
- 
+
+    TKeyExtractor(TTester& tester, TString programText);
+
     const TVector<TPKey>& GetKeys() const { return Engine->GetDbKeys(); }
-}; 
- 
+};
+
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true);
 

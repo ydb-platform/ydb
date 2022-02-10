@@ -7,7 +7,7 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimrSSA; 
+using namespace NKikimrSSA;
 
 constexpr ui32 OLAP_PROGRAM_VERSION = 1;
 

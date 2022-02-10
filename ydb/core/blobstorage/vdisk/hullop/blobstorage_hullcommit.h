@@ -268,8 +268,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return DerivedActivityType;
-        } 
- 
+        }
+
         TBaseHullDbCommitter(
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 THullDbCommitterCtxPtr ctx,
@@ -314,7 +314,7 @@ namespace NKikimr {
                     TActorId(),
                     typename TBase::THullCommitMeta(TVector<ui32>(), TVector<ui32>(), TDiskPartVec()),
                     callerInfo)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -350,7 +350,7 @@ namespace NKikimr {
                                                     std::move(chunksDeleted),
                                                     std::move(removedHugeBlobs)),
                     callerInfo)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -416,7 +416,7 @@ namespace NKikimr {
                     TString())
             , PrevSnapshotReleased(!waitForHullFreeSlice)
             , LogCommitted(false)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -453,7 +453,7 @@ namespace NKikimr {
                     typename TBase::THullCommitMeta(std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst),
                         numRecoveredBlobs),
                     TString())
-        {} 
+        {}
     };
 
 } // NKikimr

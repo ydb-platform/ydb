@@ -205,8 +205,8 @@ public:
 
     TRuntimeNode CombineByKeyMerge(TRuntimeNode list);
 
-    TRuntimeNode Diagnostics(); 
- 
+    TRuntimeNode Diagnostics();
+
     TRuntimeNode PartialSort(TRuntimeNode list, TRuntimeNode ascending,
         std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor);
 

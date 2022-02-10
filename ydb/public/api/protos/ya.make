@@ -17,7 +17,7 @@ SRCS(
     draft/datastreams.proto
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
-    draft/ydb_long_tx.proto 
+    draft/ydb_long_tx.proto
     draft/ydb_logstore.proto
     draft/yq_private.proto
     persqueue_error_codes_v1.proto
@@ -31,7 +31,7 @@ SRCS(
     ydb_discovery.proto
     ydb_experimental.proto
     ydb_export.proto
-    ydb_formats.proto 
+    ydb_formats.proto
     ydb_import.proto
     ydb_issue_message.proto
     ydb_monitoring.proto

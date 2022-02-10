@@ -17,17 +17,17 @@
 
 #pragma once
 
-#include <optional> 
+#include <optional>
 
 namespace arrow {
 namespace util {
 
 template <typename T>
-using optional = std::optional<T>; 
+using optional = std::optional<T>;
 
-using std::bad_optional_access; 
-using std::make_optional; 
-using std::nullopt; 
+using std::bad_optional_access;
+using std::make_optional;
+using std::nullopt;
 
 }  // namespace util
 }  // namespace arrow

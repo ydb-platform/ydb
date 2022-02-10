@@ -38,7 +38,7 @@
 \
     action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
     action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
-\ 
+\
     action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
     action(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
     action(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
@@ -266,13 +266,13 @@ ISubOperationBase::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxStat
 
 TVector<ISubOperationBase::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
-ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx); 
-ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state); 
+ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state);
- 
+
 ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx);

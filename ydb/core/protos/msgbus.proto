@@ -61,7 +61,7 @@ message TRequest {
 message TFlatTxId {
     optional fixed64 TxId = 1;
     optional fixed64 SchemeShardTabletId = 2;
-    optional uint64 PathId = 3; 
+    optional uint64 PathId = 3;
 };
 
 message TResolveNodeResponse {

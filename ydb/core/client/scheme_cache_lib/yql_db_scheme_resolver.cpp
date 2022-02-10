@@ -99,8 +99,8 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLE_SCHEME_RESOLVER;
-    } 
- 
+    }
+
     TTableProxyActor(TActorId schemeCache, TActorId responseTo, const TVector<TTable> &tables)
         : SchemeCache(schemeCache)
         , ResponseTo(responseTo)

@@ -10,7 +10,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
     Y_UNIT_TEST(Test) {
     }
- 
+
     Y_UNIT_TEST(Split10Shards) {
         TTestBasicRuntime runtime;
 

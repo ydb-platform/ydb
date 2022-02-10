@@ -78,7 +78,7 @@ public:
         Self->PersistSys(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
 
         if (!Self->ProcessingParams && Ev->Get()->Record.HasProcessingParams()) {
-            Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams()); 
+            Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
             Self->ProcessingParams->CopyFrom(Ev->Get()->Record.GetProcessingParams());
             Self->PersistSys(db, Schema::Sys_SubDomainInfo, Self->ProcessingParams->SerializeAsString());
         }

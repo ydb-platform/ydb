@@ -256,8 +256,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_SYNCLOG_KEEPER;
-            } 
- 
+            }
+
             TSyncLogKeeperActor(
                     TIntrusivePtr<TSyncLogCtx> slCtx,
                     std::unique_ptr<TSyncLogRepaired> repaired)

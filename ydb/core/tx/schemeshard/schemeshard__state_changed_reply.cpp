@@ -1,14 +1,14 @@
-#include "schemeshard_impl.h" 
- 
+#include "schemeshard_impl.h"
+
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/base/appdata.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NSchemeShard {
- 
-using namespace NTabletFlatExecutor; 
- 
+
+using namespace NTabletFlatExecutor;
+
 struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
     TEvDataShard::TEvStateChanged::TPtr Ev;
     TSideEffects SideEffects;
@@ -18,8 +18,8 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         , Ev(ev)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_DATASHARD_STATE_RESULT; } 
- 
+    TTxType GetTxType() const override { return TXTYPE_DATASHARD_STATE_RESULT; }
+
     void DeleteShard(TTabletId tabletId, const TActorContext &ctx) {
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
@@ -107,4 +107,4 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxShardStateChanged(
     return new TTxShardStateChanged(this, ev);
 }
 
-}} 
+}}

@@ -1,141 +1,141 @@
-import "library/cpp/actors/protos/actors.proto"; 
+import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/ssa.proto";
- 
-package NKikimrTxColumnShard; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-enum EResultStatus { 
-    UNSPECIFIED = 0; 
-    PREPARED = 1; 
-    SUCCESS = 2; 
-    ABORTED = 3; 
-    ERROR = 4; 
-    TIMEOUT = 5; 
+
+package NKikimrTxColumnShard;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EResultStatus {
+    UNSPECIFIED = 0;
+    PREPARED = 1;
+    SUCCESS = 2;
+    ABORTED = 3;
+    ERROR = 4;
+    TIMEOUT = 5;
     OUTDATED = 6;
     SCHEMA_ERROR = 7;
     SCHEMA_CHANGED = 8;
-    OVERLOADED = 9; 
- 
-    UNKNOWN = 0xFFFF; 
-} 
- 
-enum EResultFormat { 
-    FORMAT_ARROW = 1; 
-} 
- 
-message TReadStats { 
-    optional uint64 BeginTimestamp = 1; 
-    optional uint64 DurationUsec = 2; 
-    optional uint32 SelectedIndex = 3; 
-    optional uint64 IndexGranules = 4; 
-    optional uint64 IndexPortions = 5; 
-    optional uint64 IndexBatches = 6; 
-    optional uint64 NotIndexedBatches = 7; 
-    optional uint32 UsedColumns = 8; 
-    optional uint64 DataBytes = 9; 
-} 
- 
-message TLogicalMetadata { 
-    optional uint32 NumRows = 1; 
-    repeated NKikimrSSA.TProgram.TConstant FirstPkValue = 2; // It's min PK if batch is sorted 
-    repeated NKikimrSSA.TProgram.TConstant LastPkValue = 3; // It's max PK if batch is sorted 
-    optional uint64 RawBytes = 4; 
-    optional uint64 DirtyWriteTimeSeconds = 5; 
-} 
- 
-message TMetadata { 
-    optional uint32 Format = 1; // EResultFormat 
-    optional bytes Schema = 2; 
-    optional TReadStats ReadStats = 3; 
-    optional bytes LogicalMeta = 4; // TLogicalMetadata 
-} 
- 
-message TEvWrite { 
-    optional NActorsProto.TActorId Source = 1; 
-    optional uint64 TxInitiator = 2; 
-    optional uint64 WriteId = 3; 
-    optional uint64 TableId = 4; 
-    optional string DedupId = 5; 
-    optional bytes Data = 6; 
-    optional TMetadata Meta = 7; 
+    OVERLOADED = 9;
+
+    UNKNOWN = 0xFFFF;
+}
+
+enum EResultFormat {
+    FORMAT_ARROW = 1;
+}
+
+message TReadStats {
+    optional uint64 BeginTimestamp = 1;
+    optional uint64 DurationUsec = 2;
+    optional uint32 SelectedIndex = 3;
+    optional uint64 IndexGranules = 4;
+    optional uint64 IndexPortions = 5;
+    optional uint64 IndexBatches = 6;
+    optional uint64 NotIndexedBatches = 7;
+    optional uint32 UsedColumns = 8;
+    optional uint64 DataBytes = 9;
+}
+
+message TLogicalMetadata {
+    optional uint32 NumRows = 1;
+    repeated NKikimrSSA.TProgram.TConstant FirstPkValue = 2; // It's min PK if batch is sorted
+    repeated NKikimrSSA.TProgram.TConstant LastPkValue = 3; // It's max PK if batch is sorted
+    optional uint64 RawBytes = 4;
+    optional uint64 DirtyWriteTimeSeconds = 5;
+}
+
+message TMetadata {
+    optional uint32 Format = 1; // EResultFormat
+    optional bytes Schema = 2;
+    optional TReadStats ReadStats = 3;
+    optional bytes LogicalMeta = 4; // TLogicalMetadata
+}
+
+message TEvWrite {
+    optional NActorsProto.TActorId Source = 1;
+    optional uint64 TxInitiator = 2;
+    optional uint64 WriteId = 3;
+    optional uint64 TableId = 4;
+    optional string DedupId = 5;
+    optional bytes Data = 6;
+    optional TMetadata Meta = 7;
     optional NKikimrLongTxService.TLongTxId LongTxId = 8;
-} 
- 
-message TEvWriteResult { 
-    optional uint32 Status = 1; // EResultStatus 
-    optional uint64 Origin = 2; 
-    optional uint64 TxInitiator = 3; 
-    optional uint64 WriteId = 4; 
-    optional uint64 TableId = 5; 
-    optional string DedupId = 6; 
-} 
- 
-message TEvRead { 
-    message TPredicate { 
-        repeated string ColumnNames = 1; 
-        optional bytes Row = 2; // One row in arrow::RecordBatch 
-        optional bool Inclusive = 3; 
-    } 
- 
-    optional NActorsProto.TActorId Source = 1; 
-    optional uint64 TxInitiator = 2; 
-    optional uint64 PlanStep = 3; 
-    optional uint64 TxId = 4; 
-    optional uint64 TableId = 5; 
-    repeated uint32 ColumnIds = 6; 
-    repeated string ColumnNames = 7; 
-    optional TPredicate GreaterPredicate = 8;   // Greater[OrEqual] (or From for range) 
-    optional TPredicate LessPredicate = 9;      // Less[OrEqual] (or To for range) 
+}
+
+message TEvWriteResult {
+    optional uint32 Status = 1; // EResultStatus
+    optional uint64 Origin = 2;
+    optional uint64 TxInitiator = 3;
+    optional uint64 WriteId = 4;
+    optional uint64 TableId = 5;
+    optional string DedupId = 6;
+}
+
+message TEvRead {
+    message TPredicate {
+        repeated string ColumnNames = 1;
+        optional bytes Row = 2; // One row in arrow::RecordBatch
+        optional bool Inclusive = 3;
+    }
+
+    optional NActorsProto.TActorId Source = 1;
+    optional uint64 TxInitiator = 2;
+    optional uint64 PlanStep = 3;
+    optional uint64 TxId = 4;
+    optional uint64 TableId = 5;
+    repeated uint32 ColumnIds = 6;
+    repeated string ColumnNames = 7;
+    optional TPredicate GreaterPredicate = 8;   // Greater[OrEqual] (or From for range)
+    optional TPredicate LessPredicate = 9;      // Less[OrEqual] (or To for range)
     // Serialized Olap program
     optional bytes OlapProgram = 10;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11;
-} 
- 
-message TEvReadResult { 
-    optional uint32 Status = 1; // EResultStatus 
-    optional uint64 Origin = 2; 
-    optional uint64 TxInitiator = 3; 
-    optional uint64 PlanStep = 4; 
-    optional uint64 TxId = 5; 
-    optional uint64 TableId = 6; 
-    optional uint32 Batch = 7; 
-    optional bool Finished = 8; 
-    optional bytes Data = 9; 
-    optional TMetadata Meta = 10; 
-} 
- 
-enum ETransactionKind { 
-    TX_KIND_NONE = 0; 
-    TX_KIND_SCHEMA = 1; 
-    TX_KIND_COMMIT = 2; 
-    TX_KIND_TTL = 3; // Immediate (not planned) 
-} 
- 
-message TEvProposeTransaction { 
-    optional NActorsProto.TActorId Source = 1; 
-    optional ETransactionKind TxKind = 2; 
+}
+
+message TEvReadResult {
+    optional uint32 Status = 1; // EResultStatus
+    optional uint64 Origin = 2;
+    optional uint64 TxInitiator = 3;
+    optional uint64 PlanStep = 4;
+    optional uint64 TxId = 5;
+    optional uint64 TableId = 6;
+    optional uint32 Batch = 7;
+    optional bool Finished = 8;
+    optional bytes Data = 9;
+    optional TMetadata Meta = 10;
+}
+
+enum ETransactionKind {
+    TX_KIND_NONE = 0;
+    TX_KIND_SCHEMA = 1;
+    TX_KIND_COMMIT = 2;
+    TX_KIND_TTL = 3; // Immediate (not planned)
+}
+
+message TEvProposeTransaction {
+    optional NActorsProto.TActorId Source = 1;
+    optional ETransactionKind TxKind = 2;
     optional uint64 TxId = 3;
     optional bytes TxBody = 4; // TCommitTxBody for TX_KIND_COMMIT
 
     optional uint64 SchemeShardId = 5;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
-} 
- 
-message TEvProposeTransactionResult { 
-    optional EResultStatus Status = 1; 
-    optional ETransactionKind TxKind = 2; 
-    optional uint64 Origin = 3; 
-    optional uint64 TxId = 4; 
-    optional uint64 MinStep = 5; 
+}
+
+message TEvProposeTransactionResult {
+    optional EResultStatus Status = 1;
+    optional ETransactionKind TxKind = 2;
+    optional uint64 Origin = 3;
+    optional uint64 TxId = 4;
+    optional uint64 MinStep = 5;
     optional uint64 MaxStep = 6;
     optional string StatusMessage = 7;
     repeated fixed64 DomainCoordinators = 8;
     optional uint64 Step = 9;
-} 
- 
+}
+
 message TEvCancelTransactionProposal {
     optional uint64 TxId = 1;
 }
@@ -149,36 +149,36 @@ message TEvNotifyTxCompletionResult {
     optional uint64 TxId = 2;
 }
 
-message TCommitTxBody { 
-    optional uint64 TxInitiator = 1; 
-    repeated uint64 WriteIds = 2; 
-} 
- 
+message TCommitTxBody {
+    optional uint64 TxInitiator = 1;
+    repeated uint64 WriteIds = 2;
+}
+
 message TInitShard {
     optional uint32 DataChannelCount = 1;
-} 
- 
+}
+
 message TSchemaPresetVersionInfo {
     optional uint64 Id = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4; 
+    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
 }
 
 message TTtlSettingsPresetVersionInfo {
     optional uint64 Id = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4; 
+    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
 }
 
 message TTableVersionInfo {
     optional uint64 PathId = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4; 
+    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
     optional uint32 SchemaPresetId = 5;
-    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6; 
+    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6;
     optional uint32 TtlSettingsPresetId = 7;
     optional uint64 SchemaPresetVersionAdj = 8;
     optional uint64 TtlSettingsPresetVersionAdj = 9;
@@ -186,21 +186,21 @@ message TTableVersionInfo {
 
 message TCreateTable {
     optional uint64 PathId = 1;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 2; 
-    optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3; 
-    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4; 
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 5; 
+    optional NKikimrSchemeOp.TColumnTableSchema Schema = 2;
+    optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
+    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
+    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 5;
     optional uint64 SchemaPresetVersionAdj = 6;
     optional uint64 TtlSettingsPresetVersionAdj = 7;
-} 
- 
+}
+
 message TAlterTable {
     optional uint64 PathId = 1;
-    optional NKikimrSchemeOp.TAlterColumnTable AlterBody = 2; 
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 3; 
-    optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4; 
-    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5; 
-    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 6; 
+    optional NKikimrSchemeOp.TAlterColumnTable AlterBody = 2;
+    optional NKikimrSchemeOp.TColumnTableSchema Schema = 3;
+    optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
+    optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
+    optional NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPreset = 6;
     optional uint64 SchemaPresetVersionAdj = 7;
     optional uint64 TtlSettingsPresetVersionAdj = 8;
 }
@@ -214,11 +214,11 @@ message TEnsureTables {
 }
 
 message TAlterStore {
-    optional NKikimrSchemeOp.TAlterColumnStore AlterBody = 1; 
+    optional NKikimrSchemeOp.TAlterColumnStore AlterBody = 1;
     repeated uint32 DroppedSchemaPresets = 2;
-    repeated NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPresets = 3; 
+    repeated NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPresets = 3;
     repeated uint32 DroppedTtlSettingsPresets = 4;
-    repeated NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPresets = 5; 
+    repeated NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPresets = 5;
 }
 
 message TSchemaSeqNo {
@@ -226,23 +226,23 @@ message TSchemaSeqNo {
     optional uint64 Round = 2;
 }
 
-message TIndexPortionMeta { 
-    oneof Produced { 
-        bool IsInserted = 1; 
-        bool IsCompacted = 2; 
-        bool IsSplitCompacted = 3; 
-    } 
-} 
- 
-message TIndexColumnMeta { 
-    optional uint32 NumRows = 1; 
-    optional uint32 RawBytes = 2; 
-    optional NKikimrSSA.TProgram.TConstant MinValue = 3; 
-    optional NKikimrSSA.TProgram.TConstant MaxValue = 4; 
-    optional TIndexPortionMeta PortionMeta = 5; // First PK column could contain portion info 
-} 
- 
-message TSchemaTxBody { 
+message TIndexPortionMeta {
+    oneof Produced {
+        bool IsInserted = 1;
+        bool IsCompacted = 2;
+        bool IsSplitCompacted = 3;
+    }
+}
+
+message TIndexColumnMeta {
+    optional uint32 NumRows = 1;
+    optional uint32 RawBytes = 2;
+    optional NKikimrSSA.TProgram.TConstant MinValue = 3;
+    optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
+    optional TIndexPortionMeta PortionMeta = 5; // First PK column could contain portion info
+}
+
+message TSchemaTxBody {
     optional TSchemaSeqNo SeqNo = 1;
     oneof TxBody {
         TInitShard InitShard = 2;
@@ -251,15 +251,15 @@ message TSchemaTxBody {
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
     }
-} 
- 
-message TTtlTxBody { 
-    optional string TtlColumnName = 1; 
-    optional uint64 UnixTimeSeconds = 2; 
-    optional uint32 TtlPresetId = 3; 
-    optional string TtlPresetName = 4; 
-    repeated uint64 PathIds = 5; 
-} 
+}
+
+message TTtlTxBody {
+    optional string TtlColumnName = 1;
+    optional uint64 UnixTimeSeconds = 2;
+    optional uint32 TtlPresetId = 3;
+    optional string TtlPresetName = 4;
+    repeated uint64 PathIds = 5;
+}
 
 message TBlobRange {
     optional bytes BlobId = 1;

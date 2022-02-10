@@ -70,8 +70,8 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_REQ_FIND_LATEST;
-    } 
- 
+    }
+
     TTabletReqFindLatestLogEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration)
         : Owner(owner)
         , ReadBody(readBody)

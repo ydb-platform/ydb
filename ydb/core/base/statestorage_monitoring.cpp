@@ -200,15 +200,15 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_MON;
-    } 
- 
+    }
+
     TStateStorageMonitoringActor(ui64 tabletId, const TActorId &sender, const TString &query)
         : TabletID(tabletId)
         , Sender(sender)
         , Query(query)
         , ProxyReplyTime(TDuration::MicroSeconds(Max<ui64>()))
         , WaitingForReplicas(0)
-    {} 
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         // try to send monitoring request to proxy

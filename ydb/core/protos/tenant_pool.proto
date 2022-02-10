@@ -43,7 +43,7 @@ message TSlotStatus {
 }
 
 message TGetStatus {
-    optional bool ListStaticSlots = 1; 
+    optional bool ListStaticSlots = 1;
 }
 
 message TTenantPoolStatus {

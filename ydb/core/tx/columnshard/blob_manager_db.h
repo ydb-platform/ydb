@@ -3,11 +3,11 @@
 
 #include "blob_manager.h"
 
-namespace NKikimr::NTable { 
+namespace NKikimr::NTable {
 class TDatabase;
 }
 
-namespace NKikimr::NColumnShard { 
+namespace NKikimr::NColumnShard {
 
 class IBlobManagerDb {
 public:
@@ -49,4 +49,4 @@ private:
     NTable::TDatabase& Database;
 };
 
-} 
+}

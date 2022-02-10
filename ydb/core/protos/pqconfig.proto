@@ -6,7 +6,7 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/services.proto";
- 
+
 import "library/cpp/actors/protos/actors.proto";
 
 
@@ -178,7 +178,7 @@ message TMirrorPartitionConfig {
 }
 
 message TPartitionConfig {
-    optional int32 MaxCountInPartition = 1 [default = 10000000]; 
+    optional int32 MaxCountInPartition = 1 [default = 10000000];
     optional int64 MaxSizeInPartition = 2 [default = 1099511627776];
     optional int32 LifetimeSeconds = 3; //mandatory, must be set
     // List of ClientIds, for which we don't delete data until they are read by these clients
@@ -479,27 +479,27 @@ message TPartitionReleased {
     optional string ClientId = 5;
 }
 
-enum ETabletState { 
-    ENormal = 0; 
-    EDropped = 1; 
-} 
- 
-message TDropTablet { 
-    optional uint64 TxId = 1; 
-    optional ETabletState RequestedState = 2; 
-} 
- 
-message TDropTabletResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional uint64 TxId = 2; 
-    optional uint64 TabletId = 3; 
-    optional ETabletState ActualState = 4; 
-} 
- 
-message TTabletState { 
-    optional ETabletState State = 1; 
-} 
- 
+enum ETabletState {
+    ENormal = 0;
+    EDropped = 1;
+}
+
+message TDropTablet {
+    optional uint64 TxId = 1;
+    optional ETabletState RequestedState = 2;
+}
+
+message TDropTabletResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint64 TxId = 2;
+    optional uint64 TabletId = 3;
+    optional ETabletState ActualState = 4;
+}
+
+message TTabletState {
+    optional ETabletState State = 1;
+}
+
 enum EStatus{
     OK = 0;
     ERROR = 1;

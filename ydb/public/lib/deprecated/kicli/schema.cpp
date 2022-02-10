@@ -64,12 +64,12 @@ ui16 TType::GetId() const {
     return TypeId;
 }
 
-TSchemaObject::TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId, EPathType pathType) 
+TSchemaObject::TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId, EPathType pathType)
     : Kikimr(kikimr)
     , Path(path.EndsWith('/') ? path + name : path + "/" + name)
     , Name(name)
-    , PathId(pathId) 
-    , PathType(pathType) 
+    , PathId(pathId)
+    , PathType(pathType)
 {
     static_assert((ui32)NKikimrSchemeOp::EPathTypeDir == (ui32)EPathType::Directory, "EPathType::Directory");
     static_assert((ui32)NKikimrSchemeOp::EPathTypeTable == (ui32)EPathType::Table, "EPathType::Table");
@@ -77,24 +77,24 @@ TSchemaObject::TSchemaObject(TKikimr& kikimr, const TString& path, const TString
     static_assert((ui32)NKikimrSchemeOp::EPathTypeSubDomain == (ui32)EPathType::SubDomain, "EPathType::SubDomain");
 }
 
-void TSchemaObject::ModifySchema(const TModifyScheme& schema) { 
-    NThreading::TFuture<TResult> future = Kikimr.ModifySchema(schema); 
-    TResult result = future.GetValue(TDuration::Max()); 
-    result.GetError().Throw(); 
-} 
- 
-void TSchemaObject::Drop() { 
-    TModifyScheme drop; 
-    switch (PathType) { 
-    case EPathType::Directory: 
+void TSchemaObject::ModifySchema(const TModifyScheme& schema) {
+    NThreading::TFuture<TResult> future = Kikimr.ModifySchema(schema);
+    TResult result = future.GetValue(TDuration::Max());
+    result.GetError().Throw();
+}
+
+void TSchemaObject::Drop() {
+    TModifyScheme drop;
+    switch (PathType) {
+    case EPathType::Directory:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRmDir);
-        break; 
-    case EPathType::Table: 
+        break;
+    case EPathType::Table:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-        break; 
-    case EPathType::PersQueueGroup: 
+        break;
+    case EPathType::PersQueueGroup:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-        break; 
+        break;
     case EPathType::BlockStoreVolume:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
         break;
@@ -108,10 +108,10 @@ void TSchemaObject::Drop() {
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume);
         break;
     case EPathType::OlapStore:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore);
         break;
     case EPathType::OlapTable:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable);
         break;
     case EPathType::Sequence:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
@@ -119,27 +119,27 @@ void TSchemaObject::Drop() {
     case EPathType::Replication:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
         break;
-    case EPathType::Unknown: 
-    case EPathType::SubDomain: 
+    case EPathType::Unknown:
+    case EPathType::SubDomain:
     case EPathType::RtmrVolume:
-        throw yexception() << "Wrong drop"; 
-        break; 
-    } 
- 
-    drop.SetWorkingDir(Path); 
-    drop.MutableDrop()->SetId(PathId); 
-    ModifySchema(drop); 
-} 
- 
+        throw yexception() << "Wrong drop";
+        break;
+    }
+
+    drop.SetWorkingDir(Path);
+    drop.MutableDrop()->SetId(PathId);
+    ModifySchema(drop);
+}
+
 TSchemaObject TSchemaObject::MakeDirectory(const TString& name) {
     NThreading::TFuture<TResult> future = Kikimr.MakeDirectory(*this, name);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
- 
-    const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>(); 
-    ui64 pathId = response.GetFlatTxId().GetPathId(); 
-    Y_VERIFY(pathId); 
-    return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Directory); 
+
+    const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
+    ui64 pathId = response.GetFlatTxId().GetPathId();
+    Y_VERIFY(pathId);
+    return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Directory);
 }
 
 TSchemaObject TSchemaObject::CreateTable(const TString& name, const TVector<TColumn>& columns) {
@@ -158,11 +158,11 @@ TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TC
     NThreading::TFuture<TResult> future = Kikimr.CreateTable(*this, name, columns, partitionConfig);
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
- 
-    const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>(); 
-    ui64 pathId = response.GetFlatTxId().GetPathId(); 
-    Y_VERIFY(pathId); 
-    return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Table); 
+
+    const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
+    ui64 pathId = response.GetFlatTxId().GetPathId();
+    Y_VERIFY(pathId);
+    return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Table);
 }
 
 TSchemaObject TSchemaObject::GetChild(const TString& name) const {
@@ -175,15 +175,15 @@ TSchemaObject TSchemaObject::GetChild(const TString& name) const {
 }
 
 static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry) {
-    switch (entry.GetPathType()) { 
+    switch (entry.GetPathType()) {
     case NKikimrSchemeOp::EPathTypeDir:
-        return TSchemaObject::EPathType::Directory; 
+        return TSchemaObject::EPathType::Directory;
     case NKikimrSchemeOp::EPathTypeTable:
-        return TSchemaObject::EPathType::Table; 
+        return TSchemaObject::EPathType::Table;
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
-        return TSchemaObject::EPathType::PersQueueGroup; 
+        return TSchemaObject::EPathType::PersQueueGroup;
     case NKikimrSchemeOp::EPathTypeSubDomain:
-        return TSchemaObject::EPathType::SubDomain; 
+        return TSchemaObject::EPathType::SubDomain;
     case NKikimrSchemeOp::EPathTypeRtmrVolume:
         return TSchemaObject::EPathType::RtmrVolume;
     case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
@@ -194,9 +194,9 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::Kesus;
     case NKikimrSchemeOp::EPathTypeSolomonVolume:
         return TSchemaObject::EPathType::SolomonVolume;
-    case NKikimrSchemeOp::EPathTypeColumnStore: 
+    case NKikimrSchemeOp::EPathTypeColumnStore:
         return TSchemaObject::EPathType::OlapStore;
-    case NKikimrSchemeOp::EPathTypeColumnTable: 
+    case NKikimrSchemeOp::EPathTypeColumnTable:
         return TSchemaObject::EPathType::OlapTable;
     case NKikimrSchemeOp::EPathTypeSequence:
         return TSchemaObject::EPathType::Sequence;
@@ -207,10 +207,10 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeCdcStream:
     case NKikimrSchemeOp::EPathTypeInvalid:
         return TSchemaObject::EPathType::Unknown;
-    } 
-    return TSchemaObject::EPathType::Unknown; 
-} 
- 
+    }
+    return TSchemaObject::EPathType::Unknown;
+}
+
 TVector<TSchemaObject> TSchemaObject::GetChildren() const {
     NThreading::TFuture<TResult> future = Kikimr.DescribeObject(*this);
     TResult result = future.GetValue(TDuration::Max());
@@ -219,7 +219,7 @@ TVector<TSchemaObject> TSchemaObject::GetChildren() const {
     TVector<TSchemaObject> children;
     children.reserve(objects.GetPathDescription().ChildrenSize());
     for (const auto& child : objects.GetPathDescription().GetChildren()) {
-        children.push_back(TSchemaObject(Kikimr, Path, child.GetName(), child.GetPathId(), GetType(child))); 
+        children.push_back(TSchemaObject(Kikimr, Path, child.GetName(), child.GetPathId(), GetType(child)));
     }
     return children;
 }

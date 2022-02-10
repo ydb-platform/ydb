@@ -139,8 +139,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULLQUERY_RANGE_INDEX_ONLY;
-        } 
- 
+        }
+
         TLevelIndexRangeQueryViaBatcherIndexOnly(
                 std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,

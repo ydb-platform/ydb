@@ -42,22 +42,22 @@ RECURSE_FOR_TESTS(
     ut_user_attributes_reboots
 )
 
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     g:kikimr
 )
- 
+
 IF (KIKIMR_ALLOW_SHARDED_COMPACTION)
     CFLAGS(
         -DKIKIMR_ALLOW_SHARDED_COMPACTION=1
     )
 ENDIF()
 
-SRCS( 
-    defs.h 
-    schemeshard.h 
+SRCS(
+    defs.h
+    schemeshard.h
     schemeshard.cpp
     schemeshard__compaction.cpp
     schemeshard__clean_pathes.cpp
@@ -66,7 +66,7 @@ SRCS(
     schemeshard__delete_tablet_reply.cpp
     schemeshard__find_subdomain_path_id.cpp
     schemeshard__fix_bad_paths.cpp
-    schemeshard__init.cpp 
+    schemeshard__init.cpp
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
@@ -108,7 +108,7 @@ SRCS(
     schemeshard__operation_create_indexed_table.cpp
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
-    schemeshard__operation_create_olap_store.cpp 
+    schemeshard__operation_create_olap_store.cpp
     schemeshard__operation_create_olap_table.cpp
     schemeshard__operation_create_pq.cpp
     schemeshard__operation_create_replication.cpp
@@ -203,15 +203,15 @@ SRCS(
     schemeshard_build_index__create.cpp
     schemeshard_build_index__get.cpp
     schemeshard_build_index__progress.cpp
-    schemeshard_validate_ttl.cpp 
+    schemeshard_validate_ttl.cpp
     operation_queue_timer.h
-) 
- 
+)
+
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
@@ -243,8 +243,8 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/yql/minikql
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
@@ -257,4 +257,4 @@ ELSE()
     )
 ENDIF()
 
-END() 
+END()

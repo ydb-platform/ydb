@@ -32,7 +32,7 @@ public:
         auto requestRowset = db.Table<Schema::Request>().Range().Select<Schema::Request::TColumns>();
         auto walleTaskRowset = db.Table<Schema::WalleTask>().Range().Select<Schema::WalleTask::TColumns>();
         auto notificationRowset = db.Table<Schema::Notification>().Range().Select<Schema::Notification::TColumns>();
-        auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>(); 
+        auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>();
         auto logRowset = db.Table<Schema::LogRecords>().Range().Select<Schema::LogRecords::Timestamp>();
 
         if (!paramRow.IsReady() || !permissionRowset.IsReady()
@@ -157,19 +157,19 @@ public:
                 return false;
         }
 
-        while (!nodeTenantRowset.EndOfSet()) { 
-            ui32 nodeId = nodeTenantRowset.GetValue<Schema::NodeTenant::NodeId>(); 
-            TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>(); 
- 
-            LOG_DEBUG(ctx, NKikimrServices::CMS, 
-                      "Loaded node tenant '%s' for node %" PRIu32, 
+        while (!nodeTenantRowset.EndOfSet()) {
+            ui32 nodeId = nodeTenantRowset.GetValue<Schema::NodeTenant::NodeId>();
+            TString tenant = nodeTenantRowset.GetValue<Schema::NodeTenant::Tenant>();
+
+            LOG_DEBUG(ctx, NKikimrServices::CMS,
+                      "Loaded node tenant '%s' for node %" PRIu32,
                       tenant.data(), nodeId);
-            state->InitialNodeTenants[nodeId] = tenant; 
- 
-            if (!nodeTenantRowset.Next()) 
-                return false; 
-        } 
- 
+            state->InitialNodeTenants[nodeId] = tenant;
+
+            if (!nodeTenantRowset.Next())
+                return false;
+        }
+
         if (!state->Downtimes.DbLoadState(txc, ctx))
             return false;
 

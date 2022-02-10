@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
- 
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
@@ -155,14 +155,14 @@ struct TEvSchemeShard {
         }
 
         void SetError(EStatus status, const TString& errStr) {
-            Record.SetStatus(status); 
-            Record.SetReason(errStr); 
-        } 
- 
-        void SetPathCreateTxId(ui64 txId) { Record.SetPathCreateTxId(txId); } 
+            Record.SetStatus(status);
+            Record.SetReason(errStr);
+        }
+
+        void SetPathCreateTxId(ui64 txId) { Record.SetPathCreateTxId(txId); }
         void SetPathDropTxId(ui64 txId) { Record.SetPathDropTxId(txId); }
-        void SetPathId(ui64 pathId) { Record.SetPathId(pathId); } 
- 
+        void SetPathId(ui64 pathId) { Record.SetPathId(pathId); }
+
         TString ToString() const {
             TStringStream str;
             str << "{TEvModifySchemeTransactionResult";

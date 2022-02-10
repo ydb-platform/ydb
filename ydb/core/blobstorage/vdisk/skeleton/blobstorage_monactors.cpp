@@ -29,8 +29,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_ERROR;
-        } 
- 
+        }
+
         TMonErrorActor(const TActorId &notifyId,
                        NMon::TEvHttpInfo::TPtr &ev,
                        const TString &explanation)
@@ -38,7 +38,7 @@ namespace NKikimr {
             , NotifyId(notifyId)
             , Ev(ev)
             , Explanation(explanation)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -220,8 +220,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_MAIN_PAGE;
-        } 
- 
+        }
+
         TSkeletonMonMainPageActor(TIntrusivePtr<TDb> &db,
                                   NMon::TEvHttpInfo::TPtr &ev,
                                   const TActorId notifyId,
@@ -232,7 +232,7 @@ namespace NKikimr {
             , NotifyId(notifyId)
             , LocalRecovActorID(localRecovActorID)
             , Counter(0)
-        {} 
+        {}
     };
 
     IActor* CreateSkeletonMonRequestHandler(TIntrusivePtr<TDb> &db,
@@ -476,8 +476,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_SF_LOGOBLOBS;
-        } 
- 
+        }
+
         TSkeletonFrontMonLogoBlobsQueryActor(const TVDiskID &selfVDiskId,
                                              const TActorId &notifyId,
                                              TIntrusivePtr<TVDiskConfig> cfg,
@@ -496,7 +496,7 @@ namespace NKikimr {
             , IsRangeQuery(false)
             , IndexOnly(false)
             , ShowInternals(false)
-        {} 
+        {}
     };
 
 
@@ -665,8 +665,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_SF_BARRIERS;
-        } 
- 
+        }
+
         TSkeletonFrontMonBarriersQueryActor(const TVDiskID &selfVDiskId,
                                             const TActorId &notifyId,
                                             TIntrusivePtr<TVDiskConfig> cfg,
@@ -871,8 +871,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_SF_LBSTAT;
-        } 
- 
+        }
+
         TSkeletonFrontMonDbStatActor(const TVDiskID &selfVDiskId,
                                      const TActorId &notifyId,
                                      TIntrusivePtr<TVDiskConfig> cfg,
@@ -888,7 +888,7 @@ namespace NKikimr {
             , Ev(ev)
             , Action(action)
             , Dbname(dbname)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -958,8 +958,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_MON_SF_MAIN_PAGE;
-        } 
- 
+        }
+
         TSkeletonFrontMonMainPageActor(const TActorId &notifyId,
                                        const TActorId &skeletonID,
                                        NMon::TEvHttpInfo::TPtr &ev,
@@ -969,7 +969,7 @@ namespace NKikimr {
             , SkeletonID(skeletonID)
             , Ev(ev)
             , SkeletonFrontAnswer(frontHtml)
-        {} 
+        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////

@@ -1,8 +1,8 @@
-#include "rpc_calls.h" 
-#include "rpc_common.h" 
-#include "rpc_deferrable.h" 
-#include "grpc_request_proxy.h" 
- 
+#include "rpc_calls.h"
+#include "rpc_common.h"
+#include "rpc_deferrable.h"
+#include "grpc_request_proxy.h"
+
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -11,70 +11,70 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
- 
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
- 
-namespace NKikimr { 
- 
-namespace { 
- 
-std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) { 
-    TVector<std::pair<TString,  NScheme::TTypeId>> columns; 
-    for (auto& col : schema.GetColumns()) { 
-        Y_VERIFY(col.HasTypeId()); 
-        columns.emplace_back(col.GetName(), (NScheme::TTypeId)col.GetTypeId()); 
-    } 
- 
-    return NArrow::MakeArrowSchema(columns); 
-} 
- 
+
+namespace NKikimr {
+
+namespace {
+
+std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    TVector<std::pair<TString,  NScheme::TTypeId>> columns;
+    for (auto& col : schema.GetColumns()) {
+        Y_VERIFY(col.HasTypeId());
+        columns.emplace_back(col.GetName(), (NScheme::TTypeId)col.GetTypeId());
+    }
+
+    return NArrow::MakeArrowSchema(columns);
+}
+
 THashMap<ui64, TString> SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
     const NKikimrSchemeOp::TColumnTableDescription& description)
 {
     Y_VERIFY(batch);
-    Y_VERIFY(description.HasSharding() && description.GetSharding().HasHashSharding()); 
- 
-    auto& descSharding = description.GetSharding(); 
-    auto& hashSharding = descSharding.GetHashSharding(); 
- 
-    TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end()); 
-    TVector<TString> shardingColumns(hashSharding.GetColumns().begin(), hashSharding.GetColumns().end()); 
-    ui32 numShards = tabletIds.size(); 
-    Y_VERIFY(numShards); 
- 
-    if (numShards == 1) { 
-        THashMap<ui64, TString> out; 
-        out.emplace(tabletIds[0], NArrow::SerializeBatchNoCompression(batch)); 
-        return out; 
-    } 
- 
-    std::vector<ui32> rowSharding; 
-    if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_DEFAULT) { 
-        NArrow::THashSharding sharding(numShards); 
-        rowSharding = sharding.MakeSharding(batch, shardingColumns); 
-    } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS) { 
-        NArrow::TLogsSharding sharding(numShards); 
-        rowSharding = sharding.MakeSharding(batch, shardingColumns); 
-    } 
- 
-    if (rowSharding.empty()) { 
-        return {}; 
-    } 
- 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards); 
-    Y_VERIFY(sharded.size() == numShards); 
- 
-    THashMap<ui64, TString> out; 
-    for (size_t i = 0; i < sharded.size(); ++i) { 
-        if (sharded[i]) { 
-            out.emplace(tabletIds[i], NArrow::SerializeBatchNoCompression(sharded[i])); 
-        } 
-    } 
- 
-    Y_VERIFY(!out.empty()); 
-    return out; 
-} 
- 
+    Y_VERIFY(description.HasSharding() && description.GetSharding().HasHashSharding());
+
+    auto& descSharding = description.GetSharding();
+    auto& hashSharding = descSharding.GetHashSharding();
+
+    TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
+    TVector<TString> shardingColumns(hashSharding.GetColumns().begin(), hashSharding.GetColumns().end());
+    ui32 numShards = tabletIds.size();
+    Y_VERIFY(numShards);
+
+    if (numShards == 1) {
+        THashMap<ui64, TString> out;
+        out.emplace(tabletIds[0], NArrow::SerializeBatchNoCompression(batch));
+        return out;
+    }
+
+    std::vector<ui32> rowSharding;
+    if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_DEFAULT) {
+        NArrow::THashSharding sharding(numShards);
+        rowSharding = sharding.MakeSharding(batch, shardingColumns);
+    } else if (hashSharding.GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS) {
+        NArrow::TLogsSharding sharding(numShards);
+        rowSharding = sharding.MakeSharding(batch, shardingColumns);
+    }
+
+    if (rowSharding.empty()) {
+        return {};
+    }
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards);
+    Y_VERIFY(sharded.size() == numShards);
+
+    THashMap<ui64, TString> out;
+    for (size_t i = 0; i < sharded.size(); ++i) {
+        if (sharded[i]) {
+            out.emplace(tabletIds[i], NArrow::SerializeBatchNoCompression(sharded[i]));
+        }
+    }
+
+    Y_VERIFY(!out.empty());
+    return out;
+}
+
 // Deserailizes arrow batch and splits it
 THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TColumnTableDescription& description) {
     Y_VERIFY(description.HasSchema());
@@ -88,31 +88,31 @@ THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TC
     }
 
     return SplitData(batch, description);
-} 
- 
 }
 
-namespace NGRpcService { 
- 
-using namespace NLongTxService;
- 
-class TLongTxBeginRPC : public TActorBootstrapped<TLongTxBeginRPC> { 
-    using TBase = TActorBootstrapped<TLongTxBeginRPC>; 
+}
 
-public: 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
- 
-    explicit TLongTxBeginRPC(TAutoPtr<TEvLongTxBeginRequest> request) 
-        : TBase() 
-        , Request(request.Release()) 
+namespace NGRpcService {
+
+using namespace NLongTxService;
+
+class TLongTxBeginRPC : public TActorBootstrapped<TLongTxBeginRPC> {
+    using TBase = TActorBootstrapped<TLongTxBeginRPC>;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TLongTxBeginRPC(TAutoPtr<TEvLongTxBeginRequest> request)
+        : TBase()
+        , Request(request.Release())
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
-    {} 
- 
+    {}
+
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest(); 
- 
+        const auto* req = Request->GetProtoRequest();
+
         NKikimrLongTxService::TEvBeginTx::EMode mode = {};
         switch (req->tx_type()) {
             case Ydb::LongTx::BeginTransactionRequest::READ:
@@ -124,23 +124,23 @@ public:
             default:
                 // TODO: report error
                 break;
-        } 
+        }
 
         Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvBeginTx(DatabaseName, mode));
         Become(&TThis::StateWork);
-    } 
- 
+    }
+
 private:
     STFUNC(StateWork) {
         Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvBeginTxResult, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvLongTxService::TEvBeginTxResult::TPtr& ev) {
         const auto* msg = ev->Get();
- 
+
         if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
@@ -150,60 +150,60 @@ private:
             Request->ReplyWithYdbStatus(msg->Record.GetStatus());
             return PassAway();
         }
- 
+
         Ydb::LongTx::BeginTransactionResult result;
         result.set_tx_id(msg->GetLongTxId().ToString());
         ReplySuccess(result);
     }
- 
+
     void ReplySuccess(const Ydb::LongTx::BeginTransactionResult& result) {
-        Request->SendResult(result, Ydb::StatusIds::SUCCESS); 
+        Request->SendResult(result, Ydb::StatusIds::SUCCESS);
         PassAway();
-    } 
- 
+    }
+
 private:
     std::unique_ptr<TEvLongTxBeginRequest> Request;
     TString DatabaseName;
-}; 
- 
-// 
- 
-class TLongTxCommitRPC : public TActorBootstrapped<TLongTxCommitRPC> { 
-    using TBase = TActorBootstrapped<TLongTxCommitRPC>; 
-public: 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
- 
-    explicit TLongTxCommitRPC(TAutoPtr<TEvLongTxCommitRequest> request) 
-        : TBase() 
-        , Request(request.Release()) 
-    { 
+};
+
+//
+
+class TLongTxCommitRPC : public TActorBootstrapped<TLongTxCommitRPC> {
+    using TBase = TActorBootstrapped<TLongTxCommitRPC>;
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TLongTxCommitRPC(TAutoPtr<TEvLongTxCommitRequest> request)
+        : TBase()
+        , Request(request.Release())
+    {
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest(); 
- 
+        const auto* req = Request->GetProtoRequest();
+
         TString errMsg;
         if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
         }
- 
+
         Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvCommitTx(LongTxId));
         Become(&TThis::StateWork);
-    } 
- 
-private: 
-    STFUNC(StateWork) { 
+    }
+
+private:
+    STFUNC(StateWork) {
         Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvCommitTxResult, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvLongTxService::TEvCommitTxResult::TPtr& ev) {
         const auto* msg = ev->Get();
- 
+
         if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
@@ -212,70 +212,70 @@ private:
             }
             Request->ReplyWithYdbStatus(msg->Record.GetStatus());
             return PassAway();
-        } 
- 
+        }
+
         Ydb::LongTx::CommitTransactionResult result;
         const auto* req = Request->GetProtoRequest();
         result.set_tx_id(req->tx_id());
         ReplySuccess(result);
-    } 
- 
+    }
+
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
-        if (!message.empty()) { 
-            Request->RaiseIssue(NYql::TIssue(message)); 
-        } 
+        if (!message.empty()) {
+            Request->RaiseIssue(NYql::TIssue(message));
+        }
         Request->ReplyWithYdbStatus(status);
         PassAway();
-    } 
- 
+    }
+
     void ReplySuccess(const Ydb::LongTx::CommitTransactionResult& result) {
         Request->SendResult(result, Ydb::StatusIds::SUCCESS);
         PassAway();
-    } 
- 
+    }
+
 private:
     std::unique_ptr<TEvLongTxCommitRequest> Request;
     TLongTxId LongTxId;
-}; 
- 
-// 
- 
-class TLongTxRollbackRPC : public TActorBootstrapped<TLongTxRollbackRPC> { 
-    using TBase = TActorBootstrapped<TLongTxRollbackRPC>; 
-public: 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
- 
-    explicit TLongTxRollbackRPC(TAutoPtr<TEvLongTxRollbackRequest> request) 
-        : TBase() 
-        , Request(request.Release()) 
-    { 
+};
+
+//
+
+class TLongTxRollbackRPC : public TActorBootstrapped<TLongTxRollbackRPC> {
+    using TBase = TActorBootstrapped<TLongTxRollbackRPC>;
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TLongTxRollbackRPC(TAutoPtr<TEvLongTxRollbackRequest> request)
+        : TBase()
+        , Request(request.Release())
+    {
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest(); 
- 
+        const auto* req = Request->GetProtoRequest();
+
         TString errMsg;
         if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
         }
- 
+
         Send(MakeLongTxServiceID(SelfId().NodeId()), new TEvLongTxService::TEvRollbackTx(LongTxId));
         Become(&TThis::StateWork);
-    } 
- 
-private: 
-    STFUNC(StateWork) { 
+    }
+
+private:
+    STFUNC(StateWork) {
         Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvRollbackTxResult, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev) {
         const auto* msg = ev->Get();
- 
+
         if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
@@ -284,32 +284,32 @@ private:
             }
             Request->ReplyWithYdbStatus(msg->Record.GetStatus());
             return PassAway();
-        } 
- 
+        }
+
         Ydb::LongTx::RollbackTransactionResult result;
         const auto* req = Request->GetProtoRequest();
         result.set_tx_id(req->tx_id());
         ReplySuccess(result);
-    } 
- 
+    }
+
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
-        if (!message.empty()) { 
-            Request->RaiseIssue(NYql::TIssue(message)); 
-        } 
+        if (!message.empty()) {
+            Request->RaiseIssue(NYql::TIssue(message));
+        }
         Request->ReplyWithYdbStatus(status);
         PassAway();
-    } 
- 
+    }
+
     void ReplySuccess(const Ydb::LongTx::RollbackTransactionResult& result) {
         Request->SendResult(result, Ydb::StatusIds::SUCCESS);
         PassAway();
-    } 
- 
+    }
+
 private:
     std::unique_ptr<TEvLongTxRollbackRequest> Request;
     TLongTxId LongTxId;
-}; 
- 
+};
+
 // Common logic of LongTx Write that takes care of splitting the data according to the sharding scheme,
 // sending it to shards and collecting their responses
 template <class TLongTxWriteImpl>
@@ -317,35 +317,35 @@ class TLongTxWriteBase : public TActorBootstrapped<TLongTxWriteImpl> {
     using TBase = TActorBootstrapped<TLongTxWriteImpl>;
 protected:
     using TThis = typename TBase::TThis;
-public: 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
- 
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
     TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token,
         const TLongTxId& longTxId, const TString& dedupId)
-        : TBase() 
+        : TBase()
         , DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
-    { 
+    {
         if (token) {
             UserToken.emplace(token);
         }
     }
- 
+
     void PassAway() override {
         this->Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
- 
+
 protected:
     void SetLongTxId(const TLongTxId& longTxId) {
         LongTxId = longTxId;
-    } 
- 
+    }
+
     void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate* resp) {
         if (resp->ErrorCount > 0) {
             // TODO: map to a correct error
@@ -369,61 +369,61 @@ protected:
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table");
         }
 
-        if (!entry.OlapTableInfo || !entry.OlapTableInfo->Description.HasSharding() 
-            || !entry.OlapTableInfo->Description.HasSchema()) { 
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Olap table expected"); 
-        } 
+        if (!entry.OlapTableInfo || !entry.OlapTableInfo->Description.HasSharding()
+            || !entry.OlapTableInfo->Description.HasSchema()) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Olap table expected");
+        }
 
-        const auto& description = entry.OlapTableInfo->Description; 
-        const auto& schema = description.GetSchema(); 
-        const auto& sharding = description.GetSharding(); 
+        const auto& description = entry.OlapTableInfo->Description;
+        const auto& schema = description.GetSchema();
+        const auto& sharding = description.GetSharding();
 
-        if (sharding.ColumnShardsSize() == 0) { 
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to"); 
-        } 
- 
-        if (!schema.HasEngine() || schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE || 
-            (schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES && !sharding.HasHashSharding())) { 
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Wrong olap table configuration"); 
-        } 
- 
-        ui64 tableId = entry.TableId.PathId.LocalPathId; 
- 
-        if (sharding.HasRandomSharding()) { 
-            ui64 shard = sharding.GetColumnShards(0); 
+        if (sharding.ColumnShardsSize() == 0) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
+        }
+
+        if (!schema.HasEngine() || schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE ||
+            (schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES && !sharding.HasHashSharding())) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Wrong olap table configuration");
+        }
+
+        ui64 tableId = entry.TableId.PathId.LocalPathId;
+
+        if (sharding.HasRandomSharding()) {
+            ui64 shard = sharding.GetColumnShards(0);
             SendWriteRequest(shard, tableId, DedupId, GetSerializedData());
-        } else if (sharding.HasHashSharding()) { 
+        } else if (sharding.HasHashSharding()) {
 
             auto batches = HasDeserializedBatch() ?
                 SplitData(GetDeserializedBatch(), description) :
                 SplitData(GetSerializedData(), description);
-            if (batches.empty()) { 
-                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Cannot deserialize or split input data"); 
-            } 
-            for (auto& [shard, batch] : batches) { 
+            if (batches.empty()) {
+                return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Cannot deserialize or split input data");
+            }
+            for (auto& [shard, batch] : batches) {
                 SendWriteRequest(shard, tableId, DedupId, batch);
-            } 
-        } else { 
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Sharding method is not supported"); 
-        } 
- 
+            }
+        } else {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Sharding method is not supported");
+        }
+
         this->Become(&TThis::StateWrite);
     }
 
-private: 
-    void SendWriteRequest(ui64 shardId, ui64 tableId, const TString& dedupId, const TString& data) { 
-        WaitShards.insert(shardId); 
+private:
+    void SendWriteRequest(ui64 shardId, ui64 tableId, const TString& dedupId, const TString& data) {
+        WaitShards.insert(shardId);
         SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId, tableId, dedupId, data));
-    } 
- 
+    }
+
     STFUNC(StateWrite) {
         Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     // Expects NKikimrTxColumnShard::EResultStatus
     static Ydb::StatusIds::StatusCode ConvertToYdbStatus(ui32 columnShardStatus) {
         switch (columnShardStatus) {
@@ -447,9 +447,9 @@ private:
         case NKikimrTxColumnShard::SCHEMA_CHANGED:
             return Ydb::StatusIds::SCHEME_ERROR;
 
-        case NKikimrTxColumnShard::OVERLOADED: 
-            return Ydb::StatusIds::OVERLOADED; 
- 
+        case NKikimrTxColumnShard::OVERLOADED:
+            return Ydb::StatusIds::OVERLOADED;
+
         default:
             return Ydb::StatusIds::GENERIC_ERROR;
         }
@@ -457,8 +457,8 @@ private:
 
     void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
         const auto* msg = ev->Get();
-        ui64 shardId = msg->Record.GetOrigin(); 
-        Y_VERIFY(WaitShards.count(shardId) || ShardsWrites.count(shardId)); 
+        ui64 shardId = msg->Record.GetOrigin();
+        Y_VERIFY(WaitShards.count(shardId) || ShardsWrites.count(shardId));
 
         auto status = msg->Record.GetStatus();
         if (status != NKikimrTxColumnShard::SUCCESS) {
@@ -466,38 +466,38 @@ private:
             return ReplyError(ydbStatus, "Write error");
         }
 
-        if (!WaitShards.count(shardId)) { 
-            return; 
-        } 
- 
-        ShardsWrites[shardId] = msg->Record.GetWriteId(); 
-        WaitShards.erase(shardId); 
-        if (WaitShards.empty()) { 
-            SendAttachWrite(); 
-        } 
+        if (!WaitShards.count(shardId)) {
+            return;
+        }
+
+        ShardsWrites[shardId] = msg->Record.GetWriteId();
+        WaitShards.erase(shardId);
+        if (WaitShards.empty()) {
+            SendAttachWrite();
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         const auto* msg = ev->Get();
- 
+
         if (msg->NotDelivered) {
             return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Shard unavailable");
         } else {
             return ReplyError(Ydb::StatusIds::UNDETERMINED, "Shard unavailable");
-        } 
+        }
     }
- 
+
 private:
     void SendAttachWrite() {
         auto req = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
-        for (auto& [shardId, writeId] : ShardsWrites) { 
-            req->AddWrite(shardId, writeId); 
-        } 
+        for (auto& [shardId, writeId] : ShardsWrites) {
+            req->AddWrite(shardId, writeId);
+        }
         this->Send(MakeLongTxServiceID(this->SelfId().NodeId()), req.Release());
         this->Become(&TThis::StateAttachWrite);
-    } 
- 
- 
+    }
+
+
     STFUNC(StateAttachWrite) {
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
@@ -620,20 +620,20 @@ private:
 protected:
     TString GetSerializedData() override {
         return GetProtoRequest()->data().data();
-    } 
- 
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) override {
         Request->RaiseIssue(issue);
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override {
-        if (!message.empty()) { 
-            Request->RaiseIssue(NYql::TIssue(message)); 
-        } 
+        if (!message.empty()) {
+            Request->RaiseIssue(NYql::TIssue(message));
+        }
         Request->ReplyWithYdbStatus(status);
         PassAway();
-    } 
- 
+    }
+
     void ReplySuccess() override {
         Ydb::LongTx::WriteResult result;
         result.set_tx_id(GetProtoRequest()->tx_id());
@@ -642,13 +642,13 @@ protected:
 
         Request->SendResult(result, Ydb::StatusIds::SUCCESS);
         PassAway();
-    } 
- 
+    }
+
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     TActorId SchemeCache;
-}; 
- 
+};
+
 
 template<>
 IActor* TEvLongTxWriteRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
@@ -663,7 +663,7 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
- 
+
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId,
             const TString& databaseName, const TString& path,
             const NSchemeCache::TSchemeCacheNavigate& navigateResult,
@@ -728,31 +728,31 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
 }
 
 
-class TLongTxReadRPC : public TActorBootstrapped<TLongTxReadRPC> { 
-    using TBase = TActorBootstrapped<TLongTxReadRPC>; 
+class TLongTxReadRPC : public TActorBootstrapped<TLongTxReadRPC> {
+    using TBase = TActorBootstrapped<TLongTxReadRPC>;
 
 private:
     static const constexpr ui64 MaxRetriesPerShard = 10;
 
-public: 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::GRPC_REQ; 
-    } 
- 
-    explicit TLongTxReadRPC(TAutoPtr<TEvLongTxReadRequest> request) 
-        : TBase() 
-        , Request(request.Release()) 
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TLongTxReadRPC(TAutoPtr<TEvLongTxReadRequest> request)
+        : TBase()
+        , Request(request.Release())
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
-        , TableId(0) 
-        , OutChunkNumber(0) 
-    { 
+        , TableId(0)
+        , OutChunkNumber(0)
+    {
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest(); 
- 
+        const auto* req = Request->GetProtoRequest();
+
         if (const TString& internalToken = Request->GetInternalToken()) {
             UserToken.emplace(internalToken);
         }
@@ -761,16 +761,16 @@ public:
         if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
         }
- 
+
         Path = req->path();
         SendNavigateRequest();
     }
- 
+
     void PassAway() override {
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
- 
+
 private:
     void SendNavigateRequest() {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -786,9 +786,9 @@ private:
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -822,120 +822,120 @@ private:
         for (ui64 shardId : sharding.GetColumnShards()) {
             ShardChunks[shardId] = {};
         }
-        for (ui64 shardId : sharding.GetAdditionalColumnShards()) { 
-            ShardChunks[shardId] = {}; 
-        } 
+        for (ui64 shardId : sharding.GetAdditionalColumnShards()) {
+            ShardChunks[shardId] = {};
+        }
 
-        if (ShardChunks.empty()) { 
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to read"); 
-        } 
- 
+        if (ShardChunks.empty()) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "No shards to read");
+        }
+
         SendReadRequests();
     }
 
 private:
     void SendReadRequests() {
-        for (auto& [shard, chunk] : ShardChunks) { 
-            Y_UNUSED(chunk); 
+        for (auto& [shard, chunk] : ShardChunks) {
+            Y_UNUSED(chunk);
             SendRequest(shard);
-        } 
+        }
         Become(&TThis::StateWork);
-    } 
- 
+    }
+
     void SendRequest(ui64 shard) {
         Y_VERIFY(shard != 0);
         Waits.insert(shard);
         SendToTablet(shard, MakeRequest());
-    } 
- 
-    STFUNC(StateWork) { 
+    }
+
+    STFUNC(StateWork) {
         Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) { 
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvColumnShard::TEvReadResult, Handle);
-        } 
-    } 
- 
+        }
+    }
+
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         ReplyError(Ydb::StatusIds::INTERNAL_ERROR,
-                   "Internal error: node pipe cache is not available, check cluster configuration"); 
-    } 
- 
+                   "Internal error: node pipe cache is not available, check cluster configuration");
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        ui64 shard = ev->Get()->TabletId; 
+        ui64 shard = ev->Get()->TabletId;
         if (!Waits.contains(shard)) {
-            return; 
-        } 
- 
-        if (!ShardRetries.contains(shard)) { 
-            ShardRetries[shard] = 0; 
-        } 
- 
-        ui64 retries = ++ShardRetries[shard]; 
-        if (retries > MaxRetriesPerShard) { 
+            return;
+        }
+
+        if (!ShardRetries.contains(shard)) {
+            ShardRetries[shard] = 0;
+        }
+
+        ui64 retries = ++ShardRetries[shard];
+        if (retries > MaxRetriesPerShard) {
             return ReplyError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %lu", shard));
-        } 
- 
+        }
+
         SendRequest(shard);
-    } 
- 
+    }
+
     void Handle(TEvColumnShard::TEvReadResult::TPtr& ev) {
-        const auto& record = Proto(ev->Get()); 
-        ui64 shard = record.GetOrigin(); 
-        ui64 chunk = record.GetBatch(); 
-        bool finished = record.GetFinished(); 
- 
-        { // Filter duplicates and allow messages reorder 
+        const auto& record = Proto(ev->Get());
+        ui64 shard = record.GetOrigin();
+        ui64 chunk = record.GetBatch();
+        bool finished = record.GetFinished();
+
+        { // Filter duplicates and allow messages reorder
             if (!ShardChunks.contains(shard)) {
                 return ReplyError(Ydb::StatusIds::GENERIC_ERROR, "Response from unexpected shard");
-            } 
- 
+            }
+
             if (!Waits.contains(shard) || ShardChunks[shard].contains(chunk)) {
-                return; 
-            } 
- 
-            if (finished) { 
-                ShardChunkCounts[shard] = chunk + 1; // potential int overflow but pofig 
-            } 
- 
-            ShardChunks[shard].insert(chunk); 
-            if (ShardChunkCounts.count(shard) && ShardChunkCounts[shard] == ShardChunks[shard].size()) { 
-                Waits.erase(shard); 
-                ShardChunks[shard].clear(); 
+                return;
+            }
+
+            if (finished) {
+                ShardChunkCounts[shard] = chunk + 1; // potential int overflow but pofig
+            }
+
+            ShardChunks[shard].insert(chunk);
+            if (ShardChunkCounts.count(shard) && ShardChunkCounts[shard] == ShardChunks[shard].size()) {
+                Waits.erase(shard);
+                ShardChunks[shard].clear();
                 Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shard));
-            } 
-        } 
- 
-        ui32 status = record.GetStatus(); 
-        if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) { 
-            auto result = MakeResult(OutChunkNumber, Waits.empty()); 
+            }
+        }
+
+        ui32 status = record.GetStatus();
+        if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
+            auto result = MakeResult(OutChunkNumber, Waits.empty());
             if (record.HasData()) {
                 result->mutable_data()->set_data(record.GetData());
             }
-            ++OutChunkNumber; 
+            ++OutChunkNumber;
             return ReplySuccess(*result);
-        } 
- 
+        }
+
         return ReplyError(Ydb::StatusIds::GENERIC_ERROR, "");
-    } 
- 
+    }
+
     THolder<TEvColumnShard::TEvRead> MakeRequest() const {
         return MakeHolder<TEvColumnShard::TEvRead>(
             SelfId(), 0, LongTxId.Snapshot.Step, LongTxId.Snapshot.TxId, TableId);
-    } 
- 
-    Ydb::LongTx::ReadResult* MakeResult(ui64 outChunk, bool finished) const { 
+    }
+
+    Ydb::LongTx::ReadResult* MakeResult(ui64 outChunk, bool finished) const {
         auto result = TEvLongTxReadRequest::AllocateResult<Ydb::LongTx::ReadResult>(Request);
- 
-        const auto* req = Request->GetProtoRequest(); 
+
+        const auto* req = Request->GetProtoRequest();
         result->set_tx_id(req->tx_id());
-        result->set_path(req->path()); 
-        result->set_chunk(outChunk); 
-        result->set_finished(finished); 
-        return result; 
-    } 
+        result->set_path(req->path());
+        result->set_chunk(outChunk);
+        result->set_finished(finished);
+        return result;
+    }
 
 private:
     void SendToTablet(ui64 tabletId, THolder<IEventBase> event) {
@@ -967,32 +967,32 @@ private:
     ui64 TableId;
     THashMap<ui64, THashSet<ui32>> ShardChunks;
     THashMap<ui64, ui32> ShardChunkCounts;
-    THashMap<ui64, ui32> ShardRetries; 
+    THashMap<ui64, ui32> ShardRetries;
     THashSet<ui64> Waits;
     ui64 OutChunkNumber;
-}; 
- 
-// 
- 
-void TGRpcRequestProxy::Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TLongTxBeginRPC(ev->Release().Release())); 
-} 
- 
-void TGRpcRequestProxy::Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TLongTxCommitRPC(ev->Release().Release())); 
-} 
- 
-void TGRpcRequestProxy::Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TLongTxRollbackRPC(ev->Release().Release())); 
-} 
- 
-void TGRpcRequestProxy::Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TLongTxWriteRPC(ev->Release().Release())); 
-} 
- 
-void TGRpcRequestProxy::Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Register(new TLongTxReadRPC(ev->Release().Release())); 
-} 
- 
-} 
-} 
+};
+
+//
+
+void TGRpcRequestProxy::Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TLongTxBeginRPC(ev->Release().Release()));
+}
+
+void TGRpcRequestProxy::Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TLongTxCommitRPC(ev->Release().Release()));
+}
+
+void TGRpcRequestProxy::Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TLongTxRollbackRPC(ev->Release().Release()));
+}
+
+void TGRpcRequestProxy::Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TLongTxWriteRPC(ev->Release().Release()));
+}
+
+void TGRpcRequestProxy::Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TLongTxReadRPC(ev->Release().Release()));
+}
+
+}
+}

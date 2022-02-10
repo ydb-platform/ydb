@@ -1,24 +1,24 @@
-#pragma once 
- 
+#pragma once
+
 #include "blob.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
-namespace NKikimr::NColumnShard { 
- 
+namespace NKikimr::NColumnShard {
+
 class IBlobInUseTracker {
 protected:
     ~IBlobInUseTracker() = default;
- 
+
 public:
     // Marks the blob as "in use (or no longer in use) by an in-flight request", increments (or decrements)
     // it's ref count. This will prevent the blob from beeing physically deleted when DeleteBlob() is called
     // until all the references are released.
     // NOTE: this ref counts are in-memory only, so the blobs can be deleted if tablet restarts
     virtual void SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
-}; 
- 
+};
+
 using NOlap::TReadMetadata;
- 
+
 class TInFlightReadsTracker {
 public:
     // Returns a unique cookie associated with this request
@@ -78,8 +78,8 @@ public:
         auto delta = SelectStatsDelta;
         SelectStatsDelta = NOlap::TSelectInfo::TStats();
         return delta;
-    } 
- 
+    }
+
 private:
     void AddToInFlightRequest(const ui64 cookie, NOlap::TReadMetadataBase::TConstPtr readMetaBase, IBlobInUseTracker& blobTracker) {
         RequestsMeta[cookie].push_back(readMetaBase);
@@ -111,4 +111,4 @@ private:
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 };
 
-} 
+}

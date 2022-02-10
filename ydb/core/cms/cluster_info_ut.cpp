@@ -269,14 +269,14 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster.HasNode(2));
         UNIT_ASSERT(cluster.HasNode("test1"));
         UNIT_ASSERT(!cluster.HasNode("test2"));
-        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test1").size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test1").size(), 1);
         CheckNode(cluster.Node(1), 1, "test1", "::1", EState::UNKNOWN);
 
         cluster.AddNode(node2, nullptr);
         UNIT_ASSERT(cluster.HasNode(1));
         UNIT_ASSERT(!cluster.HasNode("test1"));
         UNIT_ASSERT(cluster.HasNode("test2"));
-        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2").size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2").size(), 1);
         CheckNode(cluster.Node(1), 1, "test2", "::1", EState::UNKNOWN);
 
         cluster.AddNode(node3, nullptr);
@@ -368,9 +368,9 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
 
         permission.Deadline = now + TDuration::Seconds(60);
         UNIT_ASSERT_VALUES_EQUAL(cluster.AddLocks(permission, nullptr), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2").size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2")[0]->Lock->Action.GetType(), TAction::SHUTDOWN_HOST); 
-        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2")[0]->Lock->ActionDeadline, now + TDuration::Minutes(2)); 
+        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2").size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2")[0]->Lock->Action.GetType(), TAction::SHUTDOWN_HOST);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.HostNodes("test2")[0]->Lock->ActionDeadline, now + TDuration::Minutes(2));
 
         permission.Action.SetHost("2");
         permission.Deadline = now - TDuration::Seconds(30);

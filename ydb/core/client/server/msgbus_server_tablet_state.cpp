@@ -31,14 +31,14 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    } 
- 
+    }
+
     TMessageBusTabletStateRequest(TBusMessageContext &msg)
         : TMessageBusSessionIdentHolder(msg)
         , NodesRequested(0)
         , NodesReceived(0)
         , Record(static_cast<TBusTabletStateRequest*>(msg.GetMessage())->Record)
-    {} 
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         const TActorId nameserviceId = GetNameserviceActorId();

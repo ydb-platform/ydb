@@ -4,7 +4,7 @@
 #include "func_gcd.h"
 #include "clickhouse_type_traits.h"
 
-namespace NKikimr::NArrow { 
+namespace NKikimr::NArrow {
 
 struct TLeastCommonMultiple {
 
@@ -24,4 +24,4 @@ struct TLeastCommonMultiple {
     }
 };
 
-} 
+}

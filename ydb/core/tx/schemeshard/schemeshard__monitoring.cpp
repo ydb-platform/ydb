@@ -13,8 +13,8 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
         return IntFromString<ui64, 16>(tabletIdParam.substr(2));
     else
         return FromStringWithDefault<ui64>(tabletIdParam, ui64(NKikimr::NSchemeShard::InvalidTabletId));
-} 
- 
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -241,8 +241,8 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
 
-        const TCgiParameters& cgi = Ev->Get()->Cgi(); 
- 
+        const TCgiParameters& cgi = Ev->Get()->Cgi();
+
         const TString page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
 
         if (page ==  TCgi::TPages::AdminRequest) {
@@ -892,7 +892,7 @@ private:
     }
 
     void OutputShardInfo(TShardIdx shardIdx, TStringStream& str) const {
-        HTML(str) { 
+        HTML(str) {
             if (!Self->ShardInfos.contains(shardIdx)) {
                 H4() {
                     str << "No shard item for shard " << shardIdx << "</a>";
@@ -1283,31 +1283,31 @@ private:
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
         HTML(str) {
             if (!Self->ShardInfos.contains(shardIdx)) {
-                H4() { 
+                H4() {
                     str << "No shard info for shard idx " << shardIdx;
-                } 
-                return; 
-            } 
- 
+                }
+                return;
+            }
+
             OutputShardInfo(shardIdx, str);
 
-            const TShardInfo& shard = Self->ShardInfos[shardIdx]; 
+            const TShardInfo& shard = Self->ShardInfos[shardIdx];
 
             if (!Self->PathsById.contains(shard.PathId)) {
-                H4() { 
+                H4() {
                     str << "No path item path id " << shard.PathId;
-                } 
-                return; 
-            } 
- 
+                }
+                return;
+            }
+
             OutputPathInfo(shard.PathId, str);
- 
+
             if (Self->Operations.contains(shard.CurrentTxId)) {
                 OutputOperationInfo(shard.CurrentTxId, str);
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     void OutputShardInfoPageByShardID(TTabletId tabletId, TStringStream& str) const {
         HTML(str) {
             if (!Self->TabletIdToShardIdx.contains(tabletId)) {

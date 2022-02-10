@@ -485,8 +485,8 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_PROXY_GET_ACTOR;
-    } 
- 
+    }
+
     static constexpr ERequestType RequestType() {
         return ERequestType::Get;
     }

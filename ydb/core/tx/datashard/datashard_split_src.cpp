@@ -251,7 +251,7 @@ public:
             // Fill user table scheme
             Y_VERIFY(Self->TableInfos.size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
             const TUserTable& tableInfo = *Self->TableInfos.begin()->second;
-            tableInfo.GetSchema(*snapshot->MutableUserTableScheme()); 
+            tableInfo.GetSchema(*snapshot->MutableUserTableScheme());
 
             for (ui32 localTableId : SnapContext->TablesToSnapshot()) {
                 TString snapBody;

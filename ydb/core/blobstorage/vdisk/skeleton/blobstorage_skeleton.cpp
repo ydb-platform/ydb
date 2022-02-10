@@ -2410,8 +2410,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::VDISK_SKELETON;
-        } 
- 
+        }
+
         TSkeleton(TIntrusivePtr<TVDiskConfig> cfg,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
                 const TActorId &skeletonFrontID,

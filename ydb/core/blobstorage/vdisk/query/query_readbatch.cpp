@@ -140,9 +140,9 @@ namespace NKikimr {
             }
         } else {
             PutNoData(TLogoBlobID(CurID, QueryPartId), ingress, Cookie);
-        } 
+        }
     }
- 
+
     void TReadBatcher::AbortTraverse() {
         Y_VERIFY_DEBUG(Traversing);
         Traversing = false;

@@ -36,7 +36,7 @@ namespace {
         void ExtractKeys(TRuntimeNode pgm) {
             TExploringNodeVisitor explorer;
             explorer.Walk(pgm.GetNode(), TypeEnv);
-            DescList = ExtractTableKeys(explorer, TypeEnv); 
+            DescList = ExtractTableKeys(explorer, TypeEnv);
         }
     };
 

@@ -35,7 +35,7 @@ public:
         , GroupId(groupId)
         , Info(std::move(info))
         , Ev(ev)
-    {} 
+    {}
 
     void Bootstrap() {
         if (Info) {

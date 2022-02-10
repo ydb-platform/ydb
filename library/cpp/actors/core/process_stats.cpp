@@ -149,7 +149,7 @@ namespace {
             : Interval(interval)
         {
         }
- 
+
         void Bootstrap(const TActorContext& ctx) {
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
             Self()->Become(&TDerived::StateWork);

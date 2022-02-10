@@ -1,32 +1,32 @@
 #include "msgbus_tabletreq.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
- 
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TMessageBusTxStatusRequestActor : public TMessageBusSimpleTabletRequest<TMessageBusTxStatusRequestActor, NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, NKikimrServices::TActivity::FRONT_SCHEME_TXSTATUS> {
     const ui64 TxId;
-    const ui64 PathId; 
+    const ui64 PathId;
     bool InProgress;
 public:
-    TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg, const TBusSchemeOperationStatus* casted) 
-        : TMessageBusSimpleTabletRequest(msg, casted->Record.GetFlatTxId().GetSchemeShardTabletId(), false, 
-            TDuration::MilliSeconds(casted->Record.GetPollOptions().GetTimeout()), false) 
-        , TxId(casted->Record.GetFlatTxId().GetTxId()) 
-        , PathId(casted->Record.GetFlatTxId().GetPathId()) 
+    TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg, const TBusSchemeOperationStatus* casted)
+        : TMessageBusSimpleTabletRequest(msg, casted->Record.GetFlatTxId().GetSchemeShardTabletId(), false,
+            TDuration::MilliSeconds(casted->Record.GetPollOptions().GetTimeout()), false)
+        , TxId(casted->Record.GetFlatTxId().GetTxId())
+        , PathId(casted->Record.GetFlatTxId().GetPathId())
         , InProgress(false)
     {}
 
-    TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg) 
-        : TMessageBusTxStatusRequestActor(msg, static_cast<TBusSchemeOperationStatus*>(msg.GetMessage())) 
-    {} 
- 
+    TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg)
+        : TMessageBusTxStatusRequestActor(msg, static_cast<TBusSchemeOperationStatus*>(msg.GetMessage()))
+    {}
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&, const TActorContext& ctx) {
         TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponse());
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.MutableFlatTxId()->SetTxId(TxId);
-        response->Record.MutableFlatTxId()->SetPathId(PathId); 
+        response->Record.MutableFlatTxId()->SetPathId(PathId);
         response->Record.MutableFlatTxId()->SetSchemeShardTabletId(TabletID);
         SendReplyAndDie(response.Release(), ctx);
     }
@@ -39,7 +39,7 @@ public:
         TAutoPtr<NMsgBusProxy::TBusResponse> response = new NMsgBusProxy::TBusResponse();
         response->Record.SetStatus(InProgress ? NMsgBusProxy::MSTATUS_INPROGRESS : NMsgBusProxy::MSTATUS_TIMEOUT);
         response->Record.MutableFlatTxId()->SetTxId(TxId);
-        response->Record.MutableFlatTxId()->SetPathId(PathId); 
+        response->Record.MutableFlatTxId()->SetPathId(PathId);
         response->Record.MutableFlatTxId()->SetSchemeShardTabletId(TabletID);
         SendReplyAndDie(response.Release(), ctx);
     }

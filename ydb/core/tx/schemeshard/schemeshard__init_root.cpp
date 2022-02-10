@@ -1,6 +1,6 @@
-#include "schemeshard_impl.h" 
+#include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
- 
+
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/aclib/aclib.h>
@@ -15,8 +15,8 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         : TRwTxBase(self)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT_ROOT; } 
- 
+    TTxType GetTxType() const override { return TXTYPE_INIT_ROOT; }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         NIceDb::TNiceDb db(txc.DB);
 
@@ -42,8 +42,8 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         TPathElement::TPtr newPath = new TPathElement(Self->RootPathId(), Self->RootPathId(), Self->RootPathId(), joinedRootPath, owner);
         newPath->CreateTxId = TTxId(1);
-        newPath->PathState = TPathElement::EPathState::EPathStateNoChanges; 
-        newPath->PathType = TPathElement::EPathType::EPathTypeDir; 
+        newPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
+        newPath->PathType = TPathElement::EPathType::EPathTypeDir;
         newPath->DirAlterVersion = 1;
         newPath->UserAttrs->AlterVersion = 1;
         newPath->CachedEffectiveACL.Init(newPath->ACL);
@@ -60,8 +60,8 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         Self->PersistUserAttributes(db, Self->RootPathId(), nullptr, newPath->UserAttrs);
         Self->PersistPath(db, newPath->PathId);
-        Self->PersistUpdateNextPathId(db); 
-        Self->PersistUpdateNextShardIdx(db); 
+        Self->PersistUpdateNextPathId(db);
+        Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
 
         Self->InitState = TTenantInitState::Done;

@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
- 
+
 #include <util/generic/ymath.h>
 
 namespace NKikimr {
@@ -19,7 +19,7 @@ TResult::TResult(NBus::EMessageStatus transportStatus, const TString& message)
 
 TResult::TResult(TAutoPtr<NBus::TBusMessage> reply)
     : TransportStatus(NBus::MESSAGE_OK)
-    , Reply(reply.Release()) 
+    , Reply(reply.Release())
 {}
 
 ui16 TResult::GetType() const {
@@ -27,7 +27,7 @@ ui16 TResult::GetType() const {
 }
 
 template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const {
-    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType()); 
+    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
 }
 
@@ -64,7 +64,7 @@ NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
             return NMsgBusProxy::MSTATUS_INTERNALERROR;
         };
     } else
-    if (GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) { 
+    if (GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
         return static_cast<NMsgBusProxy::EResponseStatus>(GetResult<NKikimrClient::TResponse>().GetStatus());
     } else
     return NMsgBusProxy::MSTATUS_INTERNALERROR;
@@ -278,9 +278,9 @@ template <> TString TReadTableResult::GetValueText<TFormatCSV>(const TFormatCSV 
     return res;
 }
 
-/// @warning It's mistake to store Query as a row pointer here. TQuery could be a tmp object. 
-///          TPrepareResult result = kikimr.Query(some).SyncPrepare(); 
-///          TPreparedQuery query = result.GetQuery(); //< error here. Query is obsolete. 
+/// @warning It's mistake to store Query as a row pointer here. TQuery could be a tmp object.
+///          TPrepareResult result = kikimr.Query(some).SyncPrepare();
+///          TPreparedQuery query = result.GetQuery(); //< error here. Query is obsolete.
 TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query)
     : TResult(result)
     , Query(&query)
@@ -288,15 +288,15 @@ TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query)
 
 TPreparedQuery TPrepareResult::GetQuery() const {
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(response.HasMiniKQLCompileResults()); 
-    const auto& compileResult = response.GetMiniKQLCompileResults(); 
-    Y_VERIFY(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s", 
-        compileResult.ProgramCompileErrorsSize(), 
+    Y_VERIFY(response.HasMiniKQLCompileResults());
+    const auto& compileResult = response.GetMiniKQLCompileResults();
+    Y_VERIFY(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s",
+        compileResult.ProgramCompileErrorsSize(),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().row() : 0u),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().column() : 0u),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).message().data() : "")
-    ); 
-    return TPreparedQuery(*Query, compileResult.GetCompiledProgram()); 
+    );
+    return TPreparedQuery(*Query, compileResult.GetCompiledProgram());
 }
 
 }

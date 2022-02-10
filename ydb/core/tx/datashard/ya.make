@@ -1,11 +1,11 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     g:kikimr
 )
- 
-SRCS( 
+
+SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
     backup_unit.cpp
@@ -45,20 +45,20 @@ SRCS(
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
     datashard__conditional_erase_rows.cpp
-    datashard__engine_host.cpp 
-    datashard__engine_host.h 
-    datashard__get_state_tx.cpp 
-    datashard__schema_changed.cpp 
+    datashard__engine_host.cpp
+    datashard__engine_host.h
+    datashard__get_state_tx.cpp
+    datashard__schema_changed.cpp
     datashard__migrate_schemeshard.cpp
-    datashard__init.cpp 
+    datashard__init.cpp
     datashard__monitoring.cpp
     datashard__mon_reset_schema_version.cpp
     datashard__op_rows.cpp
-    datashard__plan_step.cpp 
-    datashard__progress_resend_rs.cpp 
-    datashard__progress_tx.cpp 
-    datashard__propose_tx_base.cpp 
-    datashard__readset.cpp 
+    datashard__plan_step.cpp
+    datashard__progress_resend_rs.cpp
+    datashard__progress_tx.cpp
+    datashard__propose_tx_base.cpp
+    datashard__readset.cpp
     datashard__read_iterator.cpp
     datashard__read_columns.cpp
     datashard__s3.cpp
@@ -74,17 +74,17 @@ SRCS(
     datashard_change_sending.cpp
     datashard_counters.cpp
     datashard_loans.cpp
-    datashard_locks.h 
-    datashard_locks.cpp 
+    datashard_locks.h
+    datashard_locks.cpp
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_switch_mvcc_state.cpp
-    datashard_trans_queue.cpp 
-    datashard_trans_queue.h 
-    datashard_outreadset.cpp 
-    datashard_outreadset.h 
-    datashard_active_transaction.cpp 
-    datashard_active_transaction.h 
+    datashard_trans_queue.cpp
+    datashard_trans_queue.h
+    datashard_outreadset.cpp
+    datashard_outreadset.h
+    datashard_active_transaction.cpp
+    datashard_active_transaction.h
     datashard_common_upload.cpp
     datashard_direct_transaction.cpp
     datashard_direct_transaction.h
@@ -95,16 +95,16 @@ SRCS(
     datashard_failpoints.h
     datashard_dep_tracker.cpp
     datashard_dep_tracker.h
-    datashard_pipeline.cpp 
-    datashard_pipeline.h 
+    datashard_pipeline.cpp
+    datashard_pipeline.h
     datashard_s3_downloads.cpp
     datashard_s3_uploads.cpp
     datashard_schema_snapshots.cpp
     datashard_snapshots.cpp
     datashard_unsafe_upload.cpp
-    datashard_user_table.cpp 
-    datashard_user_table.h 
-    datashard_impl.h 
+    datashard_user_table.cpp
+    datashard_user_table.h
+    datashard_impl.h
     datashard_kqp_compute.cpp
     datashard_kqp_compute.h
     datashard_kqp_effects.cpp
@@ -119,9 +119,9 @@ SRCS(
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
     datashard_subdomain_path_id.cpp
-    datashard_txs.h 
-    datashard.cpp 
-    datashard.h 
+    datashard_txs.h
+    datashard.cpp
+    datashard.h
     defs.h
     direct_tx_unit.cpp
     drop_cdc_stream_unit.cpp
@@ -181,8 +181,8 @@ SRCS(
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
     upload_stats.cpp
-) 
- 
+)
+
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
 
 GENERATE_ENUM_SERIALIZATION(change_record.h)
@@ -203,7 +203,7 @@ RESOURCE(
     index.html datashard/index.html
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/flat_hash
     library/cpp/html/pcdata
@@ -229,8 +229,8 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
@@ -245,7 +245,7 @@ ELSE()
     )
 ENDIF()
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     ut_background_compaction

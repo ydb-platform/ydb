@@ -885,11 +885,11 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
 };
 
-struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> { 
-    // Format setting proto serialized into string. If not set format defaults are used. 
-    // I.e. it's Ydb.Table.CsvSettings for CSV. 
-    FLUENT_SETTING_DEFAULT(TString, FormatSettings, ""); 
-}; 
+struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
+    // Format setting proto serialized into string. If not set format defaults are used.
+    // I.e. it's Ydb.Table.CsvSettings for CSV.
+    FLUENT_SETTING_DEFAULT(TString, FormatSettings, "");
+};
 
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
     // Return query plan without actual query execution
@@ -902,11 +902,11 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 class TSession;
 struct TRetryState;
 
-enum class EDataFormat { 
-    ApacheArrow = 1, 
-    CSV = 2, 
-}; 
- 
+enum class EDataFormat {
+    ApacheArrow = 1,
+    CSV = 2,
+};
+
 class TTableClient {
     friend class TSession;
     friend class TTransaction;
@@ -985,8 +985,8 @@ public:
     //! Similar to UPSERT statement only values of specified columns will be updated.
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows,
         const TBulkUpsertSettings& settings = TBulkUpsertSettings());
-    TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format, 
-        const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings()); 
+    TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
+        const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
 
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
         const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());

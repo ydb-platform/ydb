@@ -859,8 +859,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::LOCAL_ACTOR;
-    } 
- 
+    }
+
     TLocalNodeRegistrar(const TActorId &owner, ui64 hiveId, TVector<TSubDomainKey> servicedDomains,
                         const NKikimrTabletBase::TMetrics &resourceLimit, TIntrusivePtr<TLocalConfig> config,
                         NMonitoring::TDynamicCounterPtr counters)
@@ -943,7 +943,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         TRegistrationInfo Info;
         TVector<TActorId> Senders;
     };
- 
+
     struct TTenantInfo {
         TTenantInfo(const TRegistrationInfo &info, const TSubDomainKey &domainKey)
             : Info(info)
@@ -1024,8 +1024,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         TAutoPtr<TEvLocal::TEvTenantStatus> ev = new TEvLocal::TEvTenantStatus(tenant, status, msg);
         ctx.Send(recipient, ev.Release());
-    } 
- 
+    }
+
     void SendStatus(const TString &tenant,
                     const TVector<TActorId> &recipients,
                     const TActorContext &ctx)

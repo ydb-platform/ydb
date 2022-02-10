@@ -65,12 +65,12 @@ public:
     static NKikimrViewer::EObjectType GetPathTypeFromSchemeShardType(NKikimrSchemeOp::EPathType type) {
         switch (type) {
         case NKikimrSchemeOp::EPathType::EPathTypeDir:
-        case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO 
+        case NKikimrSchemeOp::EPathType::EPathTypeColumnStore: // TODO
             return NKikimrViewer::EObjectType::Directory;
         case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
             return NKikimrViewer::EObjectType::RtmrVolume;
         case NKikimrSchemeOp::EPathType::EPathTypeTable:
-        case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: // TODO 
+        case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: // TODO
             return NKikimrViewer::EObjectType::Table;
         case NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup:
             return NKikimrViewer::EObjectType::Topic;

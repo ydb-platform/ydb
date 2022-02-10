@@ -23,81 +23,81 @@ struct TEvTabletResolver {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER)");
 
     struct TEvForward : public TEventLocal<TEvForward, EvForward> {
-        /// 
-        enum class EResolvePrio : ui8 { 
-            ResPrioDisallow, 
-            ResPrioAllow, 
-            ResPrioPrefer, 
-            ResPrioForce, 
+        ///
+        enum class EResolvePrio : ui8 {
+            ResPrioDisallow,
+            ResPrioAllow,
+            ResPrioPrefer,
+            ResPrioForce,
         };
 
-        /// 
-        struct TResolveFlags { 
-            EResolvePrio LocalNodePrio; 
-            EResolvePrio LocalDcPrio; 
+        ///
+        struct TResolveFlags {
+            EResolvePrio LocalNodePrio;
+            EResolvePrio LocalDcPrio;
             EResolvePrio FollowerPrio;
- 
-            TResolveFlags() 
-                : LocalNodePrio(EResolvePrio::ResPrioAllow) 
-                , LocalDcPrio(EResolvePrio::ResPrioPrefer) 
+
+            TResolveFlags()
+                : LocalNodePrio(EResolvePrio::ResPrioAllow)
+                , LocalDcPrio(EResolvePrio::ResPrioPrefer)
                 , FollowerPrio(EResolvePrio::ResPrioDisallow)
-            {} 
- 
-            static constexpr ui32 MaxTabletPriority() { return 4; } 
- 
+            {}
+
+            static constexpr ui32 MaxTabletPriority() { return 4; }
+
             ui32 GetTabletPriority(bool isLocalNode, bool isLocalDc, bool isFollower) const {
-                if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioDisallow) || 
-                    isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioDisallow) || 
+                if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioDisallow) ||
+                    isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioDisallow) ||
                     isFollower && (FollowerPrio == EResolvePrio::ResPrioDisallow) ||
-                    !isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioForce) || 
-                    !isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioForce) || 
+                    !isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioForce) ||
+                    !isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioForce) ||
                     !isFollower && (FollowerPrio == EResolvePrio::ResPrioForce))
-                { 
-                    return 0; 
-                } 
- 
-                ui32 prio = 1; 
-                if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioPrefer)) 
+                {
+                    return 0;
+                }
+
+                ui32 prio = 1;
+                if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioPrefer))
                     prio |= 2;
-                if (isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioPrefer)) 
+                if (isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioPrefer))
                     prio |= 8;
                 if (isFollower && (FollowerPrio == EResolvePrio::ResPrioPrefer))
                     prio |= 4;
-                return prio; 
-            } 
- 
+                return prio;
+            }
+
             bool AllowFollower() const { return FollowerPrio != EResolvePrio::ResPrioDisallow; }
- 
+
             void SetAllowFollower(bool flag, bool allowMeansPrefer = true) {
                 FollowerPrio = EResolvePrio::ResPrioDisallow;
-                if (flag) 
+                if (flag)
                     FollowerPrio = (allowMeansPrefer ? EResolvePrio::ResPrioPrefer : EResolvePrio::ResPrioAllow);
-            } 
- 
+            }
+
             void SetForceFollower(bool flag) {
-                if (flag) 
+                if (flag)
                     FollowerPrio = EResolvePrio::ResPrioForce;
-            } 
- 
-            void SetPreferLocal(bool flag) { 
-                if (flag && LocalNodePrio < EResolvePrio::ResPrioPrefer) 
-                    LocalNodePrio = EResolvePrio::ResPrioPrefer; 
-            } 
- 
-            void SetForceLocal(bool flag) { 
-                if (flag) 
-                    LocalNodePrio = EResolvePrio::ResPrioForce; 
-            } 
- 
-            TString ToString() const { 
-                TStringStream str; 
-                str << (ui32) LocalNodePrio << ':' 
-                    << (ui32) LocalDcPrio << ':' 
+            }
+
+            void SetPreferLocal(bool flag) {
+                if (flag && LocalNodePrio < EResolvePrio::ResPrioPrefer)
+                    LocalNodePrio = EResolvePrio::ResPrioPrefer;
+            }
+
+            void SetForceLocal(bool flag) {
+                if (flag)
+                    LocalNodePrio = EResolvePrio::ResPrioForce;
+            }
+
+            TString ToString() const {
+                TStringStream str;
+                str << (ui32) LocalNodePrio << ':'
+                    << (ui32) LocalDcPrio << ':'
                     << (ui32) FollowerPrio;
-                return str.Str(); 
-            } 
-        }; 
- 
+                return str.Str();
+            }
+        };
+
         ///
         enum class EActor : ui8 {
             Tablet,
@@ -106,13 +106,13 @@ struct TEvTabletResolver {
 
         const ui64 TabletID;
         THolder<IEventHandle> Ev;
-        TResolveFlags ResolveFlags; 
+        TResolveFlags ResolveFlags;
         EActor Actor;
 
         TEvForward(ui64 tabletId, IEventHandle *ev, TResolveFlags flags = TResolveFlags(), EActor actor = EActor::Tablet)
             : TabletID(tabletId)
             , Ev(ev)
-            , ResolveFlags(flags) 
+            , ResolveFlags(flags)
             , Actor(actor)
         {}
 
@@ -120,7 +120,7 @@ struct TEvTabletResolver {
             TStringStream str;
             str << "{EvForward TabletID: " << TabletID;
             str << " Ev: " << (Ev ? Ev->GetBase()->ToString().data() : "nullptr");
-            str << " Flags: " << ResolveFlags.ToString(); 
+            str << " Flags: " << ResolveFlags.ToString();
             str << "}";
             return str.Str();
         }

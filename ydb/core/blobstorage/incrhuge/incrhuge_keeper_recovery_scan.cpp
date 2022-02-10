@@ -15,8 +15,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_INCR_HUGE_KEEPER_RECOVERY_SCAN;
-            } 
- 
+            }
+
             TScanActor(TChunkIdx chunkIdx, bool indexOnly, TChunkSerNum chunkSerNum, ui64 cookie,
                     const TKeeperCommonState& state)
                 : TActor<TScanActor>(&TScanActor::StateFunc)
@@ -25,7 +25,7 @@ namespace NKikimr {
                 , ChunkSerNum(chunkSerNum)
                 , Cookie(cookie)
                 , State(state)
-            {} 
+            {}
 
         private:
             TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {

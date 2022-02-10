@@ -1,58 +1,58 @@
-// Licensed to the Apache Software Foundation (ASF) under one 
-// or more contributor license agreements.  See the NOTICE file 
-// distributed with this work for additional information 
-// regarding copyright ownership.  The ASF licenses this file 
-// to you under the Apache License, Version 2.0 (the 
-// "License"); you may not use this file except in compliance 
-// with the License.  You may obtain a copy of the License at 
-// 
-//   http://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, 
-// software distributed under the License is distributed on an 
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY 
-// KIND, either express or implied.  See the License for the 
-// specific language governing permissions and limitations 
-// under the License. 
- 
-// Eager evaluation convenience APIs for invoking common functions, including 
-// necessary memory allocations 
- 
-#pragma once 
- 
-#include "arrow/compute/function.h" 
-#include "arrow/datum.h" 
-#include "arrow/result.h" 
-#include "arrow/util/macros.h" 
-#include "arrow/util/visibility.h" 
- 
-namespace arrow { 
- 
-class Array; 
- 
-namespace compute { 
- 
-class ExecContext; 
- 
-// ---------------------------------------------------------------------- 
-// Aggregate functions 
- 
-/// \addtogroup compute-concrete-options 
-/// @{ 
- 
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+// Eager evaluation convenience APIs for invoking common functions, including
+// necessary memory allocations
+
+#pragma once
+
+#include "arrow/compute/function.h"
+#include "arrow/datum.h"
+#include "arrow/result.h"
+#include "arrow/util/macros.h"
+#include "arrow/util/visibility.h"
+
+namespace arrow {
+
+class Array;
+
+namespace compute {
+
+class ExecContext;
+
+// ----------------------------------------------------------------------
+// Aggregate functions
+
+/// \addtogroup compute-concrete-options
+/// @{
+
 /// \brief Control general scalar aggregate kernel behavior
-/// 
+///
 /// By default, null values are ignored
 class ARROW_EXPORT ScalarAggregateOptions : public FunctionOptions {
  public:
   explicit ScalarAggregateOptions(bool skip_nulls = true, uint32_t min_count = 1);
   constexpr static char const kTypeName[] = "ScalarAggregateOptions";
   static ScalarAggregateOptions Defaults() { return ScalarAggregateOptions{}; }
- 
+
   bool skip_nulls;
   uint32_t min_count;
 };
- 
+
 /// \brief Control Mode kernel behavior
 ///
 /// Returns top-n common values and counts.
@@ -62,12 +62,12 @@ class ARROW_EXPORT ModeOptions : public FunctionOptions {
   explicit ModeOptions(int64_t n = 1);
   constexpr static char const kTypeName[] = "ModeOptions";
   static ModeOptions Defaults() { return ModeOptions{}; }
- 
+
   int64_t n = 1;
-}; 
- 
+};
+
 /// \brief Control Delta Degrees of Freedom (ddof) of Variance and Stddev kernel
-/// 
+///
 /// The divisor used in calculations is N - ddof, where N is the number of elements.
 /// By default, ddof is zero, and population variance or stddev is returned.
 class ARROW_EXPORT VarianceOptions : public FunctionOptions {
@@ -91,23 +91,23 @@ class ARROW_EXPORT QuantileOptions : public FunctionOptions {
     HIGHER,
     NEAREST,
     MIDPOINT,
-  }; 
- 
+  };
+
   explicit QuantileOptions(double q = 0.5, enum Interpolation interpolation = LINEAR);
- 
+
   explicit QuantileOptions(std::vector<double> q,
                            enum Interpolation interpolation = LINEAR);
- 
+
   constexpr static char const kTypeName[] = "QuantileOptions";
   static QuantileOptions Defaults() { return QuantileOptions{}; }
 
   /// quantile must be between 0 and 1 inclusive
   std::vector<double> q;
   enum Interpolation interpolation;
-}; 
- 
+};
+
 /// \brief Control TDigest approximate quantile kernel behavior
-/// 
+///
 /// By default, returns the median value.
 class ARROW_EXPORT TDigestOptions : public FunctionOptions {
  public:
@@ -117,7 +117,7 @@ class ARROW_EXPORT TDigestOptions : public FunctionOptions {
                           uint32_t buffer_size = 500);
   constexpr static char const kTypeName[] = "TDigestOptions";
   static TDigestOptions Defaults() { return TDigestOptions{}; }
- 
+
   /// quantile must be between 0 and 1 inclusive
   std::vector<double> q;
   /// compression parameter, default 100
@@ -125,7 +125,7 @@ class ARROW_EXPORT TDigestOptions : public FunctionOptions {
   /// input buffer size, default 500
   uint32_t buffer_size;
 };
- 
+
 /// \brief Control Index kernel behavior
 class ARROW_EXPORT IndexOptions : public FunctionOptions {
  public:
@@ -135,73 +135,73 @@ class ARROW_EXPORT IndexOptions : public FunctionOptions {
   constexpr static char const kTypeName[] = "IndexOptions";
 
   std::shared_ptr<Scalar> value;
-}; 
- 
-/// @} 
- 
-/// \brief Count non-null (or null) values in an array. 
-/// 
+};
+
+/// @}
+
+/// \brief Count non-null (or null) values in an array.
+///
 /// \param[in] options counting options, see ScalarAggregateOptions for more information
-/// \param[in] datum to count 
-/// \param[in] ctx the function execution context, optional 
-/// \return out resulting datum 
-/// 
-/// \since 1.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
+/// \param[in] datum to count
+/// \param[in] ctx the function execution context, optional
+/// \return out resulting datum
+///
+/// \since 1.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
 Result<Datum> Count(
     const Datum& datum,
     const ScalarAggregateOptions& options = ScalarAggregateOptions::Defaults(),
     ExecContext* ctx = NULLPTR);
- 
-/// \brief Compute the mean of a numeric array. 
-/// 
-/// \param[in] value datum to compute the mean, expecting Array 
+
+/// \brief Compute the mean of a numeric array.
+///
+/// \param[in] value datum to compute the mean, expecting Array
 /// \param[in] options see ScalarAggregateOptions for more information
-/// \param[in] ctx the function execution context, optional 
-/// \return datum of the computed mean as a DoubleScalar 
-/// 
-/// \since 1.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
+/// \param[in] ctx the function execution context, optional
+/// \return datum of the computed mean as a DoubleScalar
+///
+/// \since 1.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
 Result<Datum> Mean(
     const Datum& value,
     const ScalarAggregateOptions& options = ScalarAggregateOptions::Defaults(),
     ExecContext* ctx = NULLPTR);
- 
-/// \brief Sum values of a numeric array. 
-/// 
-/// \param[in] value datum to sum, expecting Array or ChunkedArray 
+
+/// \brief Sum values of a numeric array.
+///
+/// \param[in] value datum to sum, expecting Array or ChunkedArray
 /// \param[in] options see ScalarAggregateOptions for more information
-/// \param[in] ctx the function execution context, optional 
-/// \return datum of the computed sum as a Scalar 
-/// 
-/// \since 1.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
+/// \param[in] ctx the function execution context, optional
+/// \return datum of the computed sum as a Scalar
+///
+/// \since 1.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
 Result<Datum> Sum(
     const Datum& value,
     const ScalarAggregateOptions& options = ScalarAggregateOptions::Defaults(),
     ExecContext* ctx = NULLPTR);
- 
-/// \brief Calculate the min / max of a numeric array 
-/// 
-/// This function returns both the min and max as a struct scalar, with type 
-/// struct<min: T, max: T>, where T is the input type 
-/// 
-/// \param[in] value input datum, expecting Array or ChunkedArray 
+
+/// \brief Calculate the min / max of a numeric array
+///
+/// This function returns both the min and max as a struct scalar, with type
+/// struct<min: T, max: T>, where T is the input type
+///
+/// \param[in] value input datum, expecting Array or ChunkedArray
 /// \param[in] options see ScalarAggregateOptions for more information
-/// \param[in] ctx the function execution context, optional 
-/// \return resulting datum as a struct<min: T, max: T> scalar 
-/// 
-/// \since 1.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
+/// \param[in] ctx the function execution context, optional
+/// \return resulting datum as a struct<min: T, max: T> scalar
+///
+/// \since 1.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
 Result<Datum> MinMax(
     const Datum& value,
     const ScalarAggregateOptions& options = ScalarAggregateOptions::Defaults(),
     ExecContext* ctx = NULLPTR);
- 
+
 /// \brief Test whether any element in a boolean array evaluates to true.
 ///
 /// This function returns true if any of the elements in the array evaluates
@@ -244,53 +244,53 @@ Result<Datum> All(
     const ScalarAggregateOptions& options = ScalarAggregateOptions::Defaults(),
     ExecContext* ctx = NULLPTR);
 
-/// \brief Calculate the modal (most common) value of a numeric array 
-/// 
+/// \brief Calculate the modal (most common) value of a numeric array
+///
 /// This function returns top-n most common values and number of times they occur as
 /// an array of `struct<mode: T, count: int64>`, where T is the input type.
 /// Values with larger counts are returned before smaller ones.
 /// If there are more than one values with same count, smaller value is returned first.
-/// 
-/// \param[in] value input datum, expecting Array or ChunkedArray 
+///
+/// \param[in] value input datum, expecting Array or ChunkedArray
 /// \param[in] options see ModeOptions for more information
-/// \param[in] ctx the function execution context, optional 
+/// \param[in] ctx the function execution context, optional
 /// \return resulting datum as an array of struct<mode: T, count: int64>
-/// 
-/// \since 2.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
+///
+/// \since 2.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
 Result<Datum> Mode(const Datum& value,
                    const ModeOptions& options = ModeOptions::Defaults(),
                    ExecContext* ctx = NULLPTR);
- 
-/// \brief Calculate the standard deviation of a numeric array 
-/// 
-/// \param[in] value input datum, expecting Array or ChunkedArray 
-/// \param[in] options see VarianceOptions for more information 
-/// \param[in] ctx the function execution context, optional 
-/// \return datum of the computed standard deviation as a DoubleScalar 
-/// 
-/// \since 2.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
-Result<Datum> Stddev(const Datum& value, 
-                     const VarianceOptions& options = VarianceOptions::Defaults(), 
-                     ExecContext* ctx = NULLPTR); 
- 
-/// \brief Calculate the variance of a numeric array 
-/// 
-/// \param[in] value input datum, expecting Array or ChunkedArray 
-/// \param[in] options see VarianceOptions for more information 
-/// \param[in] ctx the function execution context, optional 
-/// \return datum of the computed variance as a DoubleScalar 
-/// 
-/// \since 2.0.0 
-/// \note API not yet finalized 
-ARROW_EXPORT 
-Result<Datum> Variance(const Datum& value, 
-                       const VarianceOptions& options = VarianceOptions::Defaults(), 
-                       ExecContext* ctx = NULLPTR); 
- 
+
+/// \brief Calculate the standard deviation of a numeric array
+///
+/// \param[in] value input datum, expecting Array or ChunkedArray
+/// \param[in] options see VarianceOptions for more information
+/// \param[in] ctx the function execution context, optional
+/// \return datum of the computed standard deviation as a DoubleScalar
+///
+/// \since 2.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
+Result<Datum> Stddev(const Datum& value,
+                     const VarianceOptions& options = VarianceOptions::Defaults(),
+                     ExecContext* ctx = NULLPTR);
+
+/// \brief Calculate the variance of a numeric array
+///
+/// \param[in] value input datum, expecting Array or ChunkedArray
+/// \param[in] options see VarianceOptions for more information
+/// \param[in] ctx the function execution context, optional
+/// \return datum of the computed variance as a DoubleScalar
+///
+/// \since 2.0.0
+/// \note API not yet finalized
+ARROW_EXPORT
+Result<Datum> Variance(const Datum& value,
+                       const VarianceOptions& options = VarianceOptions::Defaults(),
+                       ExecContext* ctx = NULLPTR);
+
 /// \brief Calculate the quantiles of a numeric array
 ///
 /// \param[in] value input datum, expecting Array or ChunkedArray
@@ -429,5 +429,5 @@ Result<Datum> GroupBy(const std::vector<Datum>& arguments, const std::vector<Dat
                       ExecContext* ctx = default_exec_context());
 
 }  // namespace internal
-}  // namespace compute 
-}  // namespace arrow 
+}  // namespace compute
+}  // namespace arrow

@@ -82,8 +82,8 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    } 
- 
+    }
+
     void Bootstrap(const TActorContext &ctx) {
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {

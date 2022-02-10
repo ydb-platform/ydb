@@ -62,8 +62,8 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS;
-    } 
- 
+    }
+
     void Bootstrap() {
         SendRequest();
         Become(&TThis::StateWait);
@@ -75,7 +75,7 @@ public:
         , GroupId(groupId)
         , Generation(gen)
         , ErrorCount(0)
-    {} 
+    {}
 };
 
 class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlobStorage> {

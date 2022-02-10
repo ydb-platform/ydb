@@ -48,8 +48,8 @@ namespace {
 
 struct TFlatMKQLRequest : public TThrRefBase {
     TAutoPtr<NMiniKQL::IEngineFlat> Engine;
-    ui64 LockTxId; 
-    bool NeedDiagnostics; 
+    ui64 LockTxId;
+    bool NeedDiagnostics;
     bool LlvmRuntime;
     bool CollectStats;
     bool ReadOnlyProgram;
@@ -66,23 +66,23 @@ struct TFlatMKQLRequest : public TThrRefBase {
 
     TFlatMKQLRequest()
         : LockTxId(0)
-        , NeedDiagnostics(false) 
+        , NeedDiagnostics(false)
         , LlvmRuntime(false)
         , CollectStats(false)
         , ReadOnlyProgram(false)
         , EngineResultStatusCode(NMiniKQL::IEngineFlat::EResult::Unknown)
         , EngineResponseStatus(NMiniKQL::IEngineFlat::EStatus::Unknown)
     {}
- 
-    void RequestAdditionResults(ui64 txId) { 
-        auto lockTxId = Engine->GetLockTxId(); 
-        if (lockTxId) { 
-            LockTxId = *lockTxId ? *lockTxId : txId; 
-            Y_VERIFY(LockTxId); 
-        } 
- 
-        NeedDiagnostics = Engine->HasDiagnosticsRequest(); 
-    } 
+
+    void RequestAdditionResults(ui64 txId) {
+        auto lockTxId = Engine->GetLockTxId();
+        if (lockTxId) {
+            LockTxId = *lockTxId ? *lockTxId : txId;
+            Y_VERIFY(LockTxId);
+        }
+
+        NeedDiagnostics = Engine->HasDiagnosticsRequest();
+    }
 };
 
 // Class used to merge key ranges and arrange shards for ordered scans.
@@ -450,8 +450,8 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_REQ_PROXY;
-    } 
- 
+    }
+
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls)
         : TActor(&TThis::StateWaitInit)
@@ -480,18 +480,18 @@ public:
     }
 
     STFUNC(StateWaitInit) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvTxProxyReq::TEvMakeRequest, Handle); 
+            HFuncTraced(TEvTxProxyReq::TEvMakeRequest, Handle);
         }
     }
 
     STFUNC(StateWaitResolve) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, HandleResolve);
             HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            HFuncTraced(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle); 
+            HFuncTraced(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             HFuncTraced(TEvents::TEvUndelivered, HandleUndeliveredResolve); // we must wait for resolve completion
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeoutResolve); // we must wait for resolve completion to keep key description
             CFunc(TEvPrivate::EvProxyDataReqOngoingTransactionsWatchdog, HandleWatchdog);
@@ -508,11 +508,11 @@ public:
     }
 
     STFUNC(StateWaitPrepare) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare); 
+            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepare);
             HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
@@ -529,9 +529,9 @@ public:
     }
 
     STFUNC(StatePrepareErrors) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors); 
+            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
@@ -540,12 +540,12 @@ public:
     }
 
     STFUNC(StateWaitPlan) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, Handle); 
-            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan); 
+            HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, Handle);
+            HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
             HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePlan);
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
@@ -986,10 +986,10 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
         dataTransaction.SetCancelAfterMs(shardCancelAfter.MilliSeconds());
         dataTransaction.SetCancelDeadlineMs(shardCancelDeadline.MilliSeconds());
         dataTransaction.SetCollectStats(FlatMKQLRequest->CollectStats);
-        if (FlatMKQLRequest->LockTxId) 
-            dataTransaction.SetLockTxId(FlatMKQLRequest->LockTxId); 
-        if (FlatMKQLRequest->NeedDiagnostics) 
-            dataTransaction.SetNeedDiagnostics(true); 
+        if (FlatMKQLRequest->LockTxId)
+            dataTransaction.SetLockTxId(FlatMKQLRequest->LockTxId);
+        if (FlatMKQLRequest->NeedDiagnostics)
+            dataTransaction.SetNeedDiagnostics(true);
         if (FlatMKQLRequest->LlvmRuntime)
             dataTransaction.SetLlvmRuntime(true);
         if (FlatMKQLRequest->PerShardKeysSizeLimitBytes)
@@ -1041,9 +1041,9 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 
         LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " SEND TEvProposeTransaction to datashard " << shardData.ShardId 
-            << " with " << shardData.Program.size() << " bytes program" 
-            << " affected shards " << engine.GetAffectedShardCount() 
+            << " SEND TEvProposeTransaction to datashard " << shardData.ShardId
+            << " with " << shardData.Program.size() << " bytes program"
+            << " affected shards " << engine.GetAffectedShardCount()
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4");
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
@@ -1159,10 +1159,10 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
     for (auto &keyd : keyDescriptions) {
         if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
             CanUseFollower = false;
-            LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-                "Actor " << ctx.SelfID.ToString() << " txid " << TxId 
+            LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+                "Actor " << ctx.SelfID.ToString() << " txid " << TxId
                 << " disallow followers cause of operation " << (ui32)keyd->RowOperation
-                << " read target mode " << (ui32)keyd->ReadTarget.GetMode()); 
+                << " read target mode " << (ui32)keyd->ReadTarget.GetMode());
         }
         request->ResultSet.emplace_back(std::move(keyd));
     }
@@ -1326,7 +1326,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
             TString params = mkqlTxBody.GetParams().GetBin();
             resolveReq = PrepareFlatMKQLRequest(program, params, ctx);
 
-            FlatMKQLRequest->RequestAdditionResults(TxId); 
+            FlatMKQLRequest->RequestAdditionResults(TxId);
         }
     }
 
@@ -2525,36 +2525,36 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
     NCpuTime::TCpuTimer timer;
     NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
 
-    for (const auto& lock : record.GetTxLocks()) { 
+    for (const auto& lock : record.GetTxLocks()) {
         engine.AddTxLock(NMiniKQL::IEngineFlat::TTxLock(
             lock.GetLockId(),
             lock.GetDataShard(),
             lock.GetGeneration(),
-            lock.GetCounter(), 
-            lock.GetSchemeShard(), 
-            lock.GetPathId())); 
-    } 
- 
-    if (record.HasTabletInfo()) { 
-        const auto& info = record.GetTabletInfo(); 
- 
-        NMiniKQL::IEngineFlat::TTabletInfo::TTxInfo txInfo; 
-        txInfo.StepTxId = {record.GetStep(), record.GetTxId()}; 
-        txInfo.Status = record.GetStatus(); 
-        txInfo.PrepareArriveTime = TInstant::MicroSeconds(record.GetPrepareArriveTime()); 
-        txInfo.ProposeLatency = TDuration::MilliSeconds(record.GetProposeLatency()); 
-        txInfo.ExecLatency = TDuration::MilliSeconds(record.GetExecLatency()); 
- 
-        engine.AddTabletInfo(NMiniKQL::IEngineFlat::TTabletInfo( 
-            info.GetTabletId(), 
-            std::pair<ui64, ui64>(info.GetActorId().GetRawX1(), info.GetActorId().GetRawX2()), 
-            info.GetGeneration(), 
-            info.GetStep(), 
+            lock.GetCounter(),
+            lock.GetSchemeShard(),
+            lock.GetPathId()));
+    }
+
+    if (record.HasTabletInfo()) {
+        const auto& info = record.GetTabletInfo();
+
+        NMiniKQL::IEngineFlat::TTabletInfo::TTxInfo txInfo;
+        txInfo.StepTxId = {record.GetStep(), record.GetTxId()};
+        txInfo.Status = record.GetStatus();
+        txInfo.PrepareArriveTime = TInstant::MicroSeconds(record.GetPrepareArriveTime());
+        txInfo.ProposeLatency = TDuration::MilliSeconds(record.GetProposeLatency());
+        txInfo.ExecLatency = TDuration::MilliSeconds(record.GetExecLatency());
+
+        engine.AddTabletInfo(NMiniKQL::IEngineFlat::TTabletInfo(
+            info.GetTabletId(),
+            std::pair<ui64, ui64>(info.GetActorId().GetRawX1(), info.GetActorId().GetRawX2()),
+            info.GetGeneration(),
+            info.GetStep(),
             info.GetIsFollower(),
-            std::move(txInfo) 
-        )); 
-    } 
- 
+            std::move(txInfo)
+        ));
+    }
+
     const ui64 originShard = record.GetOrigin();
     auto builderIt = FlatMKQLRequest->BalanceCoverageBuilders.find(originShard);
     if (builderIt != FlatMKQLRequest->BalanceCoverageBuilders.end()) {

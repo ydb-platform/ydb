@@ -12,7 +12,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-namespace NKikimr::NColumnShard { 
+namespace NKikimr::NColumnShard {
 
 using namespace NKqp;
 using NBlobCache::TBlobRange;
@@ -31,18 +31,18 @@ public:
 public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
-                     const TString& table, TDuration timeout, TVector<TTxScan::TReadMetadataPtr>&& readMetadataList, 
+                     const TString& table, TDuration timeout, TVector<TTxScan::TReadMetadataPtr>&& readMetadataList,
                      NKikimrTxDataShard::EScanDataFormat dataFormat)
         : ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
-        , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId()) 
+        , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , ScanId(scanId)
         , TxId(txId)
         , ScanGen(scanGen)
         , RequestCookie(requestCookie)
         , DataFormat(dataFormat)
         , TablePath(table)
-        , ReadMetadataRanges(std::move(readMetadataList)) 
+        , ReadMetadataRanges(std::move(readMetadataList))
         , ReadMetadataIndex(0)
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
     {
@@ -55,9 +55,9 @@ public:
         TimeoutActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), Deadline - TInstant::Now(),
             new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
 
-        Y_VERIFY(!ScanIterator); 
+        Y_VERIFY(!ScanIterator);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan();
- 
+
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
 
@@ -68,7 +68,7 @@ private:
     STATEFN(StateScan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanDataAck, HandleScan);
-            hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, HandleScan); 
+            hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, HandleScan);
             hFunc(TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
@@ -91,7 +91,7 @@ private:
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got ScanDataAck"
             << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
             << ", freeSpace: " << ev->Get()->FreeSpace << ", prevFreeSpace: " << PeerFreeSpace);
 
         --InFlightScanDataMessages;
@@ -108,16 +108,16 @@ private:
         ContinueProcessing();
     }
 
-    void HandleScan(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) { 
+    void HandleScan(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
         --InFlightReads;
 
-        auto& event = *ev->Get(); 
+        auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
- 
+
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got TEvReadBlobRangeResult error"
                 << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
                 << ", blob: " << ev->Get()->BlobRange
                 << ", status: " <<  NKikimrProto::EReplyStatus_Name(event.Status));
             SendError(event.Status);
@@ -128,18 +128,18 @@ private:
             "Read %s, size %" PRISZT, event.BlobRange.ToString().c_str(), event.Data.size());
 
         InFlightReadBytes -= blobRange.Size;
- 
+
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got TEvReadBlobRangeResult"
             << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
-            << ", blob: " << ev->Get()->BlobRange 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
+            << ", blob: " << ev->Get()->BlobRange
             << ", prevFreeSpace: " << PeerFreeSpace);
 
         ScanIterator->AddData(blobRange, event.Data);
- 
+
         ContinueProcessing();
     }
- 
+
     // Returns true if it was able to produce new batch
     bool ProduceResults() {
         Y_VERIFY(!Finished);
@@ -150,19 +150,19 @@ private:
 
         auto result = ScanIterator->GetBatch();
         if (ResultYqlSchema.empty() && DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW) {
-            ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema(); 
+            ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
         }
         if (!result.ResultBatch) {
             // No data is ready yet
             return false;
         }
- 
+
         auto& batch = result.ResultBatch;
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got ready result"
             << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
             << ", blob (" << numColumns << " columns, " << numRows << " rows)");
 
         switch (DataFormat) {
@@ -170,9 +170,9 @@ private:
             case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
                 MakeResult(INIT_BATCH_ROWS);
                 NArrow::TArrowToYdbConverter batchConverter(ResultYqlSchema, *this);
-                TString errStr; 
-                bool ok = batchConverter.Process(*batch, errStr); 
-                Y_VERIFY(ok, "%s", errStr.c_str()); 
+                TString errStr;
+                bool ok = batchConverter.Process(*batch, errStr);
+                Y_VERIFY(ok, "%s", errStr.c_str());
                 break;
             }
             case NKikimrTxDataShard::EScanDataFormat::ARROW: {
@@ -188,7 +188,7 @@ private:
             Result->LastKey = ConvertLastKey(result.LastReadKey);
         } else {
             Y_VERIFY(numRows == 0, "Got non-empty result batch without last key");
-        } 
+        }
         SendResult(false, false);
         return true;
     }
@@ -258,7 +258,7 @@ private:
         auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got AbortExecution"
             << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
             << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", reason: " << msg.GetMessage());
 
@@ -280,7 +280,7 @@ private:
 
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Undelivered event: " << eventType
             << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
             << ", reason: " << ev->Get()->Reason
             << ", description: " << AbortReason);
 
@@ -289,7 +289,7 @@ private:
 
     void HandleScan(TEvents::TEvWakeup::TPtr&) {
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Guard execution timeout at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath); 
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
 
         TimeoutActorId = {};
 
@@ -297,24 +297,24 @@ private:
     }
 
 private:
-    void MakeResult(size_t reserveRows = 0) { 
+    void MakeResult(size_t reserveRows = 0) {
         if (!Finished && !Result) {
             Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
-            if (reserveRows) { 
-                Y_VERIFY(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW); 
-                Result->Rows.reserve(reserveRows); 
+            if (reserveRows) {
+                Y_VERIFY(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
+                Result->Rows.reserve(reserveRows);
             }
         }
     }
 
     void NextReadMetadata() {
         ScanIterator.reset();
- 
+
         ++ReadMetadataIndex;
 
-        if (ReadMetadataIndex == ReadMetadataRanges.size()) { 
+        if (ReadMetadataIndex == ReadMetadataRanges.size()) {
             // Send empty batch with "finished" flag
-            MakeResult(); 
+            MakeResult();
             SendResult(false, true);
             return Finish();
         }
@@ -346,9 +346,9 @@ private:
             }
         } singleRowWriter;
         NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter);
-        TString errStr; 
-        bool ok = converter.Process(*lastReadKey, errStr); 
-        Y_VERIFY(ok, "%s", errStr.c_str()); 
+        TString errStr;
+        bool ok = converter.Process(*lastReadKey, errStr);
+        Y_VERIFY(ok, "%s", errStr.c_str());
 
         Y_VERIFY(singleRowWriter.Done);
         return singleRowWriter.Row;
@@ -372,7 +372,7 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Send ScanData"
                     << ", from: " << ScanActorId
                     << ", to: " << ComputeActorId
-                    << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath 
+                    << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
                     << ", bytes: " << Bytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
                     << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
@@ -436,7 +436,7 @@ private:
 
     TVector<NOlap::TReadMetadataBase::TConstPtr> ReadMetadataRanges;
     ui32 ReadMetadataIndex;
-    std::unique_ptr<TScanIteratorBase> ScanIterator; 
+    std::unique_ptr<TScanIteratorBase> ScanIterator;
 
     TVector<std::pair<TString, NScheme::TTypeId>> ResultYqlSchema;
     TVector<std::pair<TString, NScheme::TTypeId>> KeyYqlSchema;
@@ -459,22 +459,22 @@ private:
     TDuration LastReportedElapsedTime;
 };
 
-static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange, 
-                                    const TVector<std::pair<TString, NScheme::TTypeId>>& ydbPk, ui64 tabletId) { 
+static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,
+                                    const TVector<std::pair<TString, NScheme::TTypeId>>& ydbPk, ui64 tabletId) {
     TSerializedTableRange range(keyRange);
 
     LOG_S_DEBUG("TTxScan.Execute range predicate. From key size: "
         << range.From.GetCells().size() << " To key size: " << range.To.GetCells().size()
-        << " at tablet " << tabletId); 
+        << " at tablet " << tabletId);
 
     read.GreaterPredicate = std::make_shared<NOlap::TPredicate>();
     read.LessPredicate = std::make_shared<NOlap::TPredicate>();
-    std::tie(*read.GreaterPredicate, *read.LessPredicate) = RangePredicates(range, ydbPk); 
+    std::tie(*read.GreaterPredicate, *read.LessPredicate) = RangePredicates(range, ydbPk);
 
     LOG_S_DEBUG("TTxScan.Execute greater predicate over columns: " << read.GreaterPredicate->ToString()
-        << " at tablet " << tabletId); 
+        << " at tablet " << tabletId);
     LOG_S_DEBUG("TTxScan.Execute less predicate over columns: " << read.LessPredicate->ToString()
-        << " at tablet " << tabletId); 
+        << " at tablet " << tabletId);
 
     if (read.GreaterPredicate && read.GreaterPredicate->Empty()) {
         read.GreaterPredicate.reset();
@@ -500,11 +500,11 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
     }
 
     auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId);
- 
+
     out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
     out->ResultColumnIds = read.ColumnIds;
     out->Program = std::move(read.Program);
- 
+
     if (!index) {
         return out;
     }
@@ -513,21 +513,21 @@ PrepareStatsReadMetadata(ui64 tabletId, const TReadDescription& read, const std:
     ui64 toPathId = Max<ui64>();
 
     if (read.GreaterPredicate && read.GreaterPredicate->Good()) {
-        auto from = read.GreaterPredicate->Batch->column(0); 
+        auto from = read.GreaterPredicate->Batch->column(0);
         if (from) {
             fromPathId = static_cast<arrow::UInt64Array&>(*from).Value(0);
-        } 
+        }
         out->GreaterPredicate = read.GreaterPredicate;
     }
- 
+
     if (read.LessPredicate && read.LessPredicate->Good()) {
         auto to = read.LessPredicate->Batch->column(0);
         if (to) {
             toPathId = static_cast<arrow::UInt64Array&>(*to).Value(0);
-        } 
+        }
         out->LessPredicate = read.LessPredicate;
-    } 
- 
+    }
+
     const auto& stats = index->GetStats();
     if (read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE)) {
         if (fromPathId <= read.PathId && toPathId >= read.PathId && stats.count(read.PathId)) {
@@ -570,9 +570,9 @@ NOlap::TReadMetadataBase::TConstPtr TTxScan::CreateReadMetadata(const TActorCont
 
 
 bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    Y_UNUSED(txc); 
+    Y_UNUSED(txc);
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxScan.Execute at tablet " << Self->TabletID()); 
+    LOG_S_DEBUG("TTxScan.Execute at tablet " << Self->TabletID());
 
     auto& record = Ev->Get()->Record;
     const auto& snapshot = record.GetSnapshot();
@@ -583,7 +583,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     read.PlanStep = snapshot.GetStep();
     read.TxId = snapshot.GetTxId();
     read.PathId = record.GetLocalPathId();
-    read.ReadNothing = Self->PathsToDrop.count(read.PathId); 
+    read.ReadNothing = Self->PathsToDrop.count(read.PathId);
     read.TableName = record.GetTablePath();
     bool isIndexStats = read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE) ||
         read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE);
@@ -601,7 +601,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
 
     bool parseResult;
- 
+
     if (!isIndexStats) {
         TIndexColumnResolver columnResolver(Self->PrimaryIndex->GetIndexInfo());
         parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
@@ -609,34 +609,34 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         TStatsColumnResolver columnResolver;
         parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
     }
- 
+
     if (!parseResult) {
         return true;
     }
 
     if (!record.RangesSize()) {
-        auto range = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit); 
+        auto range = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit);
         if (range) {
-            ReadMetadataRanges = {range}; 
+            ReadMetadataRanges = {range};
         }
         return true;
     }
- 
-    ReadMetadataRanges.reserve(record.RangesSize()); 
+
+    ReadMetadataRanges.reserve(record.RangesSize());
 
     auto ydbKey = isIndexStats ?
         NOlap::GetColumns(PrimaryIndexStatsSchema, PrimaryIndexStatsSchema.KeyColumns) :
         Self->PrimaryIndex->GetIndexInfo().GetPK();
 
     for (auto& range: record.GetRanges()) {
-        FillPredicatesFromRange(read, range, ydbKey, Self->TabletID()); 
-        auto newRange = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit); 
+        FillPredicatesFromRange(read, range, ydbKey, Self->TabletID());
+        auto newRange = CreateReadMetadata(ctx, read, isIndexStats, record.GetReverse(), itemsLimit);
         if (!newRange) {
-            ReadMetadataRanges.clear(); 
+            ReadMetadataRanges.clear();
             return true;
         }
-        ReadMetadataRanges.emplace_back(newRange); 
-    } 
+        ReadMetadataRanges.emplace_back(newRange);
+    }
 
     if (record.GetReverse()) {
         std::reverse(ReadMetadataRanges.begin(), ReadMetadataRanges.end());
@@ -679,28 +679,28 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TStringStream detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
         detailedInfo
-            << ", read metadata: " << TContainerPrinter(ReadMetadataRanges) 
+            << ", read metadata: " << TContainerPrinter(ReadMetadataRanges)
             << ", req: " << request;
     }
 
-    LOG_S_DEBUG("Starting scan" 
-                << ", txId: " << txId 
-                << ", scanId: " << scanId 
+    LOG_S_DEBUG("Starting scan"
+                << ", txId: " << txId
+                << ", scanId: " << scanId
                 << ", gen: " << scanGen
                 << ", table: " << table
-                << ", snapshot: " << snapshot 
-                << ", shard: " << Self->TabletID() 
+                << ", snapshot: " << snapshot
+                << ", shard: " << Self->TabletID()
                 << ", timeout: " << timeout
                 << detailedInfo.Str()
                 );
 
-    if (ReadMetadataRanges.empty()) { 
+    if (ReadMetadataRanges.empty()) {
         Y_VERIFY(ErrorDescription);
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(scanGen);
 
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-            << "Table " << table << " scan failed, reason: " << ErrorDescription); 
+            << "Table " << table << " scan failed, reason: " << ErrorDescription);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
         ctx.Send(scanComputeActor, ev.Release());
@@ -709,7 +709,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges, *Self->BlobManager);
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
- 
+
     Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
     Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
     Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
@@ -717,7 +717,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
     ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor,
-        scanId, txId, scanGen, requestCookie, table, timeout, std::move(ReadMetadataRanges), dataFormat)); 
+        scanId, txId, scanGen, requestCookie, table, timeout, std::move(ReadMetadataRanges), dataFormat));
 }
 
 }

@@ -219,7 +219,7 @@ RECURSE(
     django-advanced-filters
     django-ajax-selects
     django-alive
-    django-autoconfig 
+    django-autoconfig
     django-appconf
     django-bootstrap3
     django-braces
@@ -229,7 +229,7 @@ RECURSE(
     django-celery-beat
     django-celery-email
     django-celery-results
-    django-closuretree 
+    django-closuretree
     django-constance
     django-cors-headers
     django-cors-middleware

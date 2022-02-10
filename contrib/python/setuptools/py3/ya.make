@@ -163,6 +163,6 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
-) 
- 
+)
+
 END()

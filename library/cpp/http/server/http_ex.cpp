@@ -32,7 +32,7 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
         Get,
         Post,
         Put,
-        Patch, 
+        Patch,
         Delete,
     };
 
@@ -48,9 +48,9 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
     } else if (strnicmp(s, "PUT ", 4) == 0) {
         foundMethod = Put;
         urlStart = s + 4;
-    } else if (strnicmp(s, "PATCH ", 6) == 0) { 
-        foundMethod = Patch; 
-        urlStart = s + 6; 
+    } else if (strnicmp(s, "PATCH ", 6) == 0) {
+        foundMethod = Patch;
+        urlStart = s + 6;
     } else if (strnicmp(s, "DELETE ", 7) == 0) {
         foundMethod = Delete;
         urlStart = s + 7;
@@ -68,7 +68,7 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
 
         case Post:
         case Put:
-        case Patch: 
+        case Patch:
             try {
                 ui64 contentLength = 0;
                 if (Input().HasExpect100Continue()) {

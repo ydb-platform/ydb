@@ -83,18 +83,18 @@ namespace NMemIoInternals {
             , ShrinkOnRead(shrinkOnRead)
         {
             Y_ASSERT(!data->empty());
-        }
+        } 
 
         ~THugeMemoryStream() override {
         } // keep gcc happy
 
         bool IsValid() const override {
             return true;
-        }
+        } 
         bool IsFailed() const override {
             return false;
         }
-
+ 
     private:
         int WriteImpl(const void* userDataArg, int sizeArg) override {
             if (sizeArg == 0)

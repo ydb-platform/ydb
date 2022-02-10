@@ -94,8 +94,8 @@ public:
 
 //! Default tag type for memory blocks allocated via TSharedRef.
 /*!
- *  Each newly allocated TSharedRef blob is associated with a tag type
- *  that appears in ref-counted statistics.
+ *  Each newly allocated TSharedRef blob is associated with a tag type 
+ *  that appears in ref-counted statistics. 
  */
 struct TDefaultSharedBlobTag { };
 

@@ -22,7 +22,7 @@ SRCS(
     interconnect_channel.cpp
     interconnect_channel.h
     interconnect_common.h
-    interconnect_counters.cpp 
+    interconnect_counters.cpp
     interconnect.h
     interconnect_handshake.cpp
     interconnect_handshake.h
@@ -85,7 +85,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
-    library/cpp/monlib/metrics 
+    library/cpp/monlib/metrics
     library/cpp/monlib/service/pages/tablesorter
     library/cpp/openssl/init
     library/cpp/packedtypes

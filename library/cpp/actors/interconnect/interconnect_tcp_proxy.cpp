@@ -108,10 +108,10 @@ namespace NActors {
             auto& info = *ev->Get()->Node;
             TString name = PeerNameForHuman(PeerNodeId, info.Host, info.Port);
             TechnicalPeerHostName = info.Host;
-            if (!Metrics) { 
-                Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common); 
+            if (!Metrics) {
+                Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId()); 
+            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId());
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
 
@@ -416,8 +416,8 @@ namespace NActors {
             return;
         }
 
-        if (Metrics) { 
-            Metrics->IncHandshakeFails(); 
+        if (Metrics) {
+            Metrics->IncHandshakeFails();
         }
 
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
@@ -545,8 +545,8 @@ namespace NActors {
         SessionVirtualId = TActorId();
         RemoteSessionVirtualId = TActorId();
 
-        if (Metrics) { 
-            Metrics->IncSessionDeaths(); 
+        if (Metrics) {
+            Metrics->IncSessionDeaths();
         }
         LastSessionDieTime = TActivationContext::Now();
 

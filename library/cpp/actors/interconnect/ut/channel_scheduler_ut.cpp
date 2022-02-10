@@ -9,12 +9,12 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
     Y_UNIT_TEST(PriorityTraffic) {
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common); 
-        ctr->SetPeerInfo("peer", "1"); 
+        std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
+        ctr->SetPeerInfo("peer", "1");
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;
-        TChannelScheduler scheduler(1, {}, ctr, pool, 64 << 20, p); 
+        TChannelScheduler scheduler(1, {}, ctr, pool, 64 << 20, p);
 
         ui32 numEvents = 0;
 

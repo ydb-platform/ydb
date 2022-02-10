@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/monlib/metrics/metric_registry.h> 
+#include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
@@ -73,7 +73,7 @@ namespace NActors {
     struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
         TActorId NameserviceId;
         NMonitoring::TDynamicCounterPtr MonCounters;
-        std::shared_ptr<NMonitoring::IMetricRegistry> Metrics; 
+        std::shared_ptr<NMonitoring::IMetricRegistry> Metrics;
         TChannelsConfig ChannelsConfig;
         TInterconnectSettings Settings;
         TRegisterMonPageCallback RegisterMonPage;

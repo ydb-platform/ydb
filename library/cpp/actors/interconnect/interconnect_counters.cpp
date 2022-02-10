@@ -1,15 +1,15 @@
-#include "interconnect_counters.h" 
+#include "interconnect_counters.h"
 
-#include <library/cpp/monlib/metrics/metric_registry.h> 
-#include <library/cpp/monlib/metrics/metric_sub_registry.h> 
+#include <library/cpp/monlib/metrics/metric_registry.h>
+#include <library/cpp/monlib/metrics/metric_sub_registry.h>
 
-#include <unordered_map> 
+#include <unordered_map>
 
 namespace NActors {
 
-namespace { 
- 
-    class TInterconnectCounters: public IInterconnectMetrics { 
+namespace {
+
+    class TInterconnectCounters: public IInterconnectMetrics {
     public:
         struct TOutputChannel {
             NMonitoring::TDynamicCounters::TCounterPtr Traffic;
@@ -87,7 +87,7 @@ namespace {
         NMonitoring::TDynamicCounterPtr PerSessionCounters;
         NMonitoring::TDynamicCounterPtr PerDataCenterCounters;
         NMonitoring::TDynamicCounterPtr& AdaptiveCounters;
- 
+
         bool Initialized = false;
 
         NMonitoring::TDynamicCounters::TCounterPtr Traffic;
@@ -100,135 +100,135 @@ namespace {
             , MergePerDataCenterCounters(common->Settings.MergePerDataCenterCounters)
             , MergePerPeerCounters(common->Settings.MergePerPeerCounters)
             , Counters(common->MonCounters)
-            , AdaptiveCounters(MergePerDataCenterCounters 
-                    ? PerDataCenterCounters : 
-                    MergePerPeerCounters ? Counters : PerSessionCounters) 
+            , AdaptiveCounters(MergePerDataCenterCounters
+                    ? PerDataCenterCounters :
+                    MergePerPeerCounters ? Counters : PerSessionCounters)
         {}
 
         void AddInflightDataAmount(ui64 value) override {
-            *InflightDataAmount += value; 
-        } 
- 
+            *InflightDataAmount += value;
+        }
+
         void SubInflightDataAmount(ui64 value) override {
-            *InflightDataAmount -= value; 
-        } 
- 
+            *InflightDataAmount -= value;
+        }
+
         void AddTotalBytesWritten(ui64 value) override {
-            *TotalBytesWritten += value; 
-        } 
- 
+            *TotalBytesWritten += value;
+        }
+
         void SetClockSkewMicrosec(i64 value) override {
-            *ClockSkewMicrosec = value; 
-        } 
- 
-        void IncSessionDeaths() override { 
-            ++*SessionDeaths; 
-        } 
- 
-        void IncHandshakeFails() override { 
-            ++*HandshakeFails; 
-        } 
- 
-        void SetConnected(ui32 value) override { 
-            *Connected = value; 
-        } 
- 
-        void IncSubscribersCount() override { 
-            ++*SubscribersCount; 
-        } 
- 
-        void SubSubscribersCount(ui32 value) override { 
-            *SubscribersCount -= value; 
-        } 
- 
+            *ClockSkewMicrosec = value;
+        }
+
+        void IncSessionDeaths() override {
+            ++*SessionDeaths;
+        }
+
+        void IncHandshakeFails() override {
+            ++*HandshakeFails;
+        }
+
+        void SetConnected(ui32 value) override {
+            *Connected = value;
+        }
+
+        void IncSubscribersCount() override {
+            ++*SubscribersCount;
+        }
+
+        void SubSubscribersCount(ui32 value) override {
+            *SubscribersCount -= value;
+        }
+
         void SubOutputBuffersTotalSize(ui64 value) override {
-            *OutputBuffersTotalSize -= value; 
-        } 
- 
+            *OutputBuffersTotalSize -= value;
+        }
+
         void AddOutputBuffersTotalSize(ui64 value) override {
-            *OutputBuffersTotalSize += value; 
-        } 
- 
+            *OutputBuffersTotalSize += value;
+        }
+
         ui64 GetOutputBuffersTotalSize() const override {
-            return *OutputBuffersTotalSize; 
-        } 
- 
-        void IncDisconnections() override { 
-            ++*Disconnections; 
-        } 
- 
-        void IncUsefulWriteWakeups() override { 
-            ++*UsefulWriteWakeups; 
-        } 
- 
-        void IncSpuriousWriteWakeups() override { 
-            ++*SpuriousWriteWakeups; 
-        } 
- 
-        void IncSendSyscalls() override { 
-            ++*SendSyscalls; 
-        } 
- 
-        void IncInflyLimitReach() override { 
-            ++*InflyLimitReach; 
-        } 
- 
-        void IncUsefulReadWakeups() override { 
-            ++*UsefulReadWakeups; 
-        } 
- 
-        void IncSpuriousReadWakeups() override { 
-            ++*SpuriousReadWakeups; 
-        } 
- 
-        void IncDisconnectByReason(const TString& s) override { 
-            if (auto it = DisconnectByReason.find(s); it != DisconnectByReason.end()) { 
-                it->second->Inc(); 
-            } 
-        } 
- 
+            return *OutputBuffersTotalSize;
+        }
+
+        void IncDisconnections() override {
+            ++*Disconnections;
+        }
+
+        void IncUsefulWriteWakeups() override {
+            ++*UsefulWriteWakeups;
+        }
+
+        void IncSpuriousWriteWakeups() override {
+            ++*SpuriousWriteWakeups;
+        }
+
+        void IncSendSyscalls() override {
+            ++*SendSyscalls;
+        }
+
+        void IncInflyLimitReach() override {
+            ++*InflyLimitReach;
+        }
+
+        void IncUsefulReadWakeups() override {
+            ++*UsefulReadWakeups;
+        }
+
+        void IncSpuriousReadWakeups() override {
+            ++*SpuriousReadWakeups;
+        }
+
+        void IncDisconnectByReason(const TString& s) override {
+            if (auto it = DisconnectByReason.find(s); it != DisconnectByReason.end()) {
+                it->second->Inc();
+            }
+        }
+
         void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) override {
-            auto& ch = InputChannels.Get(channel); 
-            *ch.IncomingTraffic += incomingTraffic; 
-        } 
- 
-        void IncInputChannelsIncomingEvents(ui16 channel) override { 
-            auto& ch = InputChannels.Get(channel); 
-            ++*ch.IncomingEvents; 
-        } 
- 
-        void IncRecvSyscalls() override { 
-            ++*RecvSyscalls; 
-        } 
- 
+            auto& ch = InputChannels.Get(channel);
+            *ch.IncomingTraffic += incomingTraffic;
+        }
+
+        void IncInputChannelsIncomingEvents(ui16 channel) override {
+            auto& ch = InputChannels.Get(channel);
+            ++*ch.IncomingEvents;
+        }
+
+        void IncRecvSyscalls() override {
+            ++*RecvSyscalls;
+        }
+
         void AddTotalBytesRead(ui64 value) override {
-            *TotalBytesRead += value; 
-        } 
- 
-        void UpdateLegacyPingTimeHist(ui64 value) override { 
-            LegacyPingTimeHist.Add(value); 
-            PingTimeHistogram->Collect(value); 
-        } 
- 
+            *TotalBytesRead += value;
+        }
+
+        void UpdateLegacyPingTimeHist(ui64 value) override {
+            LegacyPingTimeHist.Add(value);
+            PingTimeHistogram->Collect(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
-            if (GetOutputChannel(channel).OutgoingTraffic) { 
-                *(GetOutputChannel(channel).OutgoingTraffic) += value; 
-            } 
-            if (GetOutputChannel(channel).Traffic) { 
-                *(GetOutputChannel(channel).Traffic) += value; 
-            } 
-        } 
- 
-        void UpdateOutputChannelEvents(ui16 channel) override { 
-            if (GetOutputChannel(channel).OutgoingEvents) { 
-                ++*(GetOutputChannel(channel).OutgoingEvents); 
-            } 
-            if (GetOutputChannel(channel).Events) { 
-                ++*(GetOutputChannel(channel).Events); 
-            } 
-        } 
- 
-        void SetPeerInfo(const TString& name, const TString& dataCenterId) override { 
+            if (GetOutputChannel(channel).OutgoingTraffic) {
+                *(GetOutputChannel(channel).OutgoingTraffic) += value;
+            }
+            if (GetOutputChannel(channel).Traffic) {
+                *(GetOutputChannel(channel).Traffic) += value;
+            }
+        }
+
+        void UpdateOutputChannelEvents(ui16 channel) override {
+            if (GetOutputChannel(channel).OutgoingEvents) {
+                ++*(GetOutputChannel(channel).OutgoingEvents);
+            }
+            if (GetOutputChannel(channel).Events) {
+                ++*(GetOutputChannel(channel).Events);
+            }
+        }
+
+        void SetPeerInfo(const TString& name, const TString& dataCenterId) override {
             if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
                 PerSessionCounters.Reset();
             }
@@ -312,7 +312,7 @@ namespace {
             return it != OutputChannels.end() ? it->second : OtherOutputChannel;
         }
 
-    private: 
+    private:
         NMonitoring::TDynamicCounters::TCounterPtr SessionDeaths;
         NMonitoring::TDynamicCounters::TCounterPtr HandshakeFails;
         NMonitoring::TDynamicCounters::TCounterPtr Connected;
@@ -340,353 +340,353 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr TotalBytesWritten, TotalBytesRead;
     };
 
-    class TInterconnectMetrics: public IInterconnectMetrics { 
-    public: 
-        struct TOutputChannel { 
-            NMonitoring::IRate* Traffic; 
-            NMonitoring::IRate* Events; 
-            NMonitoring::IRate* OutgoingTraffic; 
-            NMonitoring::IRate* OutgoingEvents; 
- 
-            TOutputChannel() = default; 
- 
-            TOutputChannel(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics, 
-                           NMonitoring::IRate* traffic, 
-                           NMonitoring::IRate* events) 
-                    : Traffic(traffic) 
-                    , Events(events) 
-                    , OutgoingTraffic(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.outgoing_traffic"}}))) 
-                    , OutgoingEvents(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.outgoing_events"}}))) 
-            {} 
- 
-            TOutputChannel(const TOutputChannel&) = default; 
-        }; 
- 
-        struct TInputChannel { 
-            NMonitoring::IRate* Traffic; 
-            NMonitoring::IRate* Events; 
-            NMonitoring::IRate* ScopeErrors; 
-            NMonitoring::IRate* IncomingTraffic; 
-            NMonitoring::IRate* IncomingEvents; 
- 
-            TInputChannel() = default; 
- 
-            TInputChannel(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics, 
-                          NMonitoring::IRate* traffic, NMonitoring::IRate* events, 
-                          NMonitoring::IRate* scopeErrors) 
-                    : Traffic(traffic) 
-                    , Events(events) 
-                    , ScopeErrors(scopeErrors) 
-                    , IncomingTraffic(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.incoming_traffic"}}))) 
-                    , IncomingEvents(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.incoming_events"}}))) 
-            {} 
- 
-            TInputChannel(const TInputChannel&) = default; 
-        }; 
- 
-        struct TInputChannels : std::unordered_map<ui16, TInputChannel> { 
-            TInputChannel OtherInputChannel; 
- 
-            TInputChannels() = default; 
- 
-            TInputChannels(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics, 
-                           const std::unordered_map<ui16, TString>& names, 
-                           NMonitoring::IRate* traffic, NMonitoring::IRate* events, 
-                           NMonitoring::IRate* scopeErrors) 
-                    : OtherInputChannel(std::make_shared<NMonitoring::TMetricSubRegistry>( 
-                            NMonitoring::TLabels{{"channel", "other"}}, metrics), traffic, events, scopeErrors) 
-            { 
-                for (const auto& [id, name] : names) { 
-                    try_emplace(id, std::make_shared<NMonitoring::TMetricSubRegistry>(NMonitoring::TLabels{{"channel", name}}, metrics), 
-                                traffic, events, scopeErrors); 
-                } 
-            } 
- 
-            TInputChannels(const TInputChannels&) = default; 
- 
-            const TInputChannel& Get(ui16 id) const { 
-                const auto it = find(id); 
-                return it != end() ? it->second : OtherInputChannel; 
-            } 
-        }; 
- 
-        TInterconnectMetrics(const TInterconnectProxyCommon::TPtr& common) 
-            : Common(common) 
-            , MergePerDataCenterMetrics_(common->Settings.MergePerDataCenterCounters) 
-            , MergePerPeerMetrics_(common->Settings.MergePerPeerCounters) 
-            , Metrics_(common->Metrics) 
-            , AdaptiveMetrics_(MergePerDataCenterMetrics_ 
-                               ? PerDataCenterMetrics_ : 
-                               MergePerPeerMetrics_ ? Metrics_ : PerSessionMetrics_) 
-        {} 
- 
+    class TInterconnectMetrics: public IInterconnectMetrics {
+    public:
+        struct TOutputChannel {
+            NMonitoring::IRate* Traffic;
+            NMonitoring::IRate* Events;
+            NMonitoring::IRate* OutgoingTraffic;
+            NMonitoring::IRate* OutgoingEvents;
+
+            TOutputChannel() = default;
+
+            TOutputChannel(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics,
+                           NMonitoring::IRate* traffic,
+                           NMonitoring::IRate* events)
+                    : Traffic(traffic)
+                    , Events(events)
+                    , OutgoingTraffic(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.outgoing_traffic"}})))
+                    , OutgoingEvents(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.outgoing_events"}})))
+            {}
+
+            TOutputChannel(const TOutputChannel&) = default;
+        };
+
+        struct TInputChannel {
+            NMonitoring::IRate* Traffic;
+            NMonitoring::IRate* Events;
+            NMonitoring::IRate* ScopeErrors;
+            NMonitoring::IRate* IncomingTraffic;
+            NMonitoring::IRate* IncomingEvents;
+
+            TInputChannel() = default;
+
+            TInputChannel(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics,
+                          NMonitoring::IRate* traffic, NMonitoring::IRate* events,
+                          NMonitoring::IRate* scopeErrors)
+                    : Traffic(traffic)
+                    , Events(events)
+                    , ScopeErrors(scopeErrors)
+                    , IncomingTraffic(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.incoming_traffic"}})))
+                    , IncomingEvents(metrics->Rate(NMonitoring::MakeLabels({{"sensor", "interconnect.incoming_events"}})))
+            {}
+
+            TInputChannel(const TInputChannel&) = default;
+        };
+
+        struct TInputChannels : std::unordered_map<ui16, TInputChannel> {
+            TInputChannel OtherInputChannel;
+
+            TInputChannels() = default;
+
+            TInputChannels(const std::shared_ptr<NMonitoring::IMetricRegistry>& metrics,
+                           const std::unordered_map<ui16, TString>& names,
+                           NMonitoring::IRate* traffic, NMonitoring::IRate* events,
+                           NMonitoring::IRate* scopeErrors)
+                    : OtherInputChannel(std::make_shared<NMonitoring::TMetricSubRegistry>(
+                            NMonitoring::TLabels{{"channel", "other"}}, metrics), traffic, events, scopeErrors)
+            {
+                for (const auto& [id, name] : names) {
+                    try_emplace(id, std::make_shared<NMonitoring::TMetricSubRegistry>(NMonitoring::TLabels{{"channel", name}}, metrics),
+                                traffic, events, scopeErrors);
+                }
+            }
+
+            TInputChannels(const TInputChannels&) = default;
+
+            const TInputChannel& Get(ui16 id) const {
+                const auto it = find(id);
+                return it != end() ? it->second : OtherInputChannel;
+            }
+        };
+
+        TInterconnectMetrics(const TInterconnectProxyCommon::TPtr& common)
+            : Common(common)
+            , MergePerDataCenterMetrics_(common->Settings.MergePerDataCenterCounters)
+            , MergePerPeerMetrics_(common->Settings.MergePerPeerCounters)
+            , Metrics_(common->Metrics)
+            , AdaptiveMetrics_(MergePerDataCenterMetrics_
+                               ? PerDataCenterMetrics_ :
+                               MergePerPeerMetrics_ ? Metrics_ : PerSessionMetrics_)
+        {}
+
         void AddInflightDataAmount(ui64 value) override {
-            InflightDataAmount_->Add(value); 
-        } 
- 
+            InflightDataAmount_->Add(value);
+        }
+
         void SubInflightDataAmount(ui64 value) override {
-            InflightDataAmount_->Add(-value); 
-        } 
- 
+            InflightDataAmount_->Add(-value);
+        }
+
         void AddTotalBytesWritten(ui64 value) override {
-            TotalBytesWritten_->Add(value); 
-        } 
- 
+            TotalBytesWritten_->Add(value);
+        }
+
         void SetClockSkewMicrosec(i64 value) override {
-            ClockSkewMicrosec_->Set(value); 
-        } 
- 
-        void IncSessionDeaths() override { 
-            SessionDeaths_->Inc(); 
-        } 
- 
-        void IncHandshakeFails() override { 
-            HandshakeFails_->Inc(); 
-        } 
- 
-        void SetConnected(ui32 value) override { 
-            Connected_->Set(value); 
-        } 
- 
-        void IncSubscribersCount() override { 
-            SubscribersCount_->Inc(); 
-        } 
- 
-        void SubSubscribersCount(ui32 value) override { 
-            SubscribersCount_->Add(-value); 
-        } 
- 
+            ClockSkewMicrosec_->Set(value);
+        }
+
+        void IncSessionDeaths() override {
+            SessionDeaths_->Inc();
+        }
+
+        void IncHandshakeFails() override {
+            HandshakeFails_->Inc();
+        }
+
+        void SetConnected(ui32 value) override {
+            Connected_->Set(value);
+        }
+
+        void IncSubscribersCount() override {
+            SubscribersCount_->Inc();
+        }
+
+        void SubSubscribersCount(ui32 value) override {
+            SubscribersCount_->Add(-value);
+        }
+
         void SubOutputBuffersTotalSize(ui64 value) override {
-            OutputBuffersTotalSize_->Add(-value); 
-        } 
- 
+            OutputBuffersTotalSize_->Add(-value);
+        }
+
         void AddOutputBuffersTotalSize(ui64 value) override {
-            OutputBuffersTotalSize_->Add(value); 
-        } 
- 
+            OutputBuffersTotalSize_->Add(value);
+        }
+
         ui64 GetOutputBuffersTotalSize() const override {
-            return OutputBuffersTotalSize_->Get(); 
-        } 
- 
-        void IncDisconnections() override { 
-            Disconnections_->Inc(); 
-        } 
- 
-        void IncUsefulWriteWakeups() override { 
-            UsefulWriteWakeups_->Inc(); 
-        } 
- 
-        void IncSpuriousWriteWakeups() override { 
-            SpuriousWriteWakeups_->Inc(); 
-        } 
- 
-        void IncSendSyscalls() override { 
-            SendSyscalls_->Inc(); 
-        } 
- 
-        void IncInflyLimitReach() override { 
-            InflyLimitReach_->Inc(); 
-        } 
- 
-        void IncUsefulReadWakeups() override { 
-            UsefulReadWakeups_->Inc(); 
-        } 
- 
-        void IncSpuriousReadWakeups() override { 
-            SpuriousReadWakeups_->Inc(); 
-        } 
- 
-        void IncDisconnectByReason(const TString& s) override { 
-            if (auto it = DisconnectByReason_.find(s); it != DisconnectByReason_.end()) { 
-                it->second->Inc(); 
-            } 
-        } 
- 
+            return OutputBuffersTotalSize_->Get();
+        }
+
+        void IncDisconnections() override {
+            Disconnections_->Inc();
+        }
+
+        void IncUsefulWriteWakeups() override {
+            UsefulWriteWakeups_->Inc();
+        }
+
+        void IncSpuriousWriteWakeups() override {
+            SpuriousWriteWakeups_->Inc();
+        }
+
+        void IncSendSyscalls() override {
+            SendSyscalls_->Inc();
+        }
+
+        void IncInflyLimitReach() override {
+            InflyLimitReach_->Inc();
+        }
+
+        void IncUsefulReadWakeups() override {
+            UsefulReadWakeups_->Inc();
+        }
+
+        void IncSpuriousReadWakeups() override {
+            SpuriousReadWakeups_->Inc();
+        }
+
+        void IncDisconnectByReason(const TString& s) override {
+            if (auto it = DisconnectByReason_.find(s); it != DisconnectByReason_.end()) {
+                it->second->Inc();
+            }
+        }
+
         void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) override {
-            auto& ch = InputChannels_.Get(channel); 
-            ch.IncomingTraffic->Add(incomingTraffic); 
-        } 
- 
-        void IncInputChannelsIncomingEvents(ui16 channel) override { 
-            auto& ch = InputChannels_.Get(channel); 
-            ch.IncomingEvents->Inc(); 
-        } 
- 
-        void IncRecvSyscalls() override { 
-            RecvSyscalls_->Inc(); 
-        } 
- 
+            auto& ch = InputChannels_.Get(channel);
+            ch.IncomingTraffic->Add(incomingTraffic);
+        }
+
+        void IncInputChannelsIncomingEvents(ui16 channel) override {
+            auto& ch = InputChannels_.Get(channel);
+            ch.IncomingEvents->Inc();
+        }
+
+        void IncRecvSyscalls() override {
+            RecvSyscalls_->Inc();
+        }
+
         void AddTotalBytesRead(ui64 value) override {
-            TotalBytesRead_->Add(value); 
-        } 
- 
-        void UpdateLegacyPingTimeHist(ui64 value) override { 
-            PingTimeHistogram_->Record(value); 
-        } 
- 
+            TotalBytesRead_->Add(value);
+        }
+
+        void UpdateLegacyPingTimeHist(ui64 value) override {
+            PingTimeHistogram_->Record(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
-            if (GetOutputChannel(channel).OutgoingTraffic) { 
-                GetOutputChannel(channel).OutgoingTraffic->Add(value); 
-            } 
-            if (GetOutputChannel(channel).Traffic) { 
-                GetOutputChannel(channel).Traffic->Add(value); 
-            } 
-        } 
- 
-        void UpdateOutputChannelEvents(ui16 channel) override { 
-            if (GetOutputChannel(channel).OutgoingEvents) { 
-                GetOutputChannel(channel).OutgoingEvents->Inc(); 
-            } 
-            if (GetOutputChannel(channel).Events) { 
-                GetOutputChannel(channel).Events->Inc(); 
-            } 
-        } 
- 
-        void SetPeerInfo(const TString& name, const TString& dataCenterId) override { 
-            if (name != std::exchange(HumanFriendlyPeerHostName, name)) { 
-                PerSessionMetrics_.reset(); 
-            } 
-            VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId)); 
-            if (dataCenterId != std::exchange(DataCenterId, dataCenterId)) { 
-                PerDataCenterMetrics_.reset(); 
-            } 
- 
-            const bool updatePerDataCenter = !PerDataCenterMetrics_ && MergePerDataCenterMetrics_; 
-            if (updatePerDataCenter) { 
-                PerDataCenterMetrics_ = std::make_shared<NMonitoring::TMetricSubRegistry>( 
-                        NMonitoring::TLabels{{"datacenter_id", *DataCenterId}}, Metrics_); 
-            } 
- 
-            const bool updatePerSession = !PerSessionMetrics_ || updatePerDataCenter; 
-            if (updatePerSession) { 
-                auto base = MergePerDataCenterMetrics_ ? PerDataCenterMetrics_ : Metrics_; 
-                PerSessionMetrics_ = std::make_shared<NMonitoring::TMetricSubRegistry>( 
-                        NMonitoring::TLabels{{"peer", *HumanFriendlyPeerHostName}}, base); 
-            } 
- 
-            const bool updateGlobal = !Initialized_; 
- 
-            const bool updateAdaptive = 
-                &AdaptiveMetrics_ == &Metrics_              ? updateGlobal        : 
-                &AdaptiveMetrics_ == &PerSessionMetrics_    ? updatePerSession    : 
-                &AdaptiveMetrics_ == &PerDataCenterMetrics_ ? updatePerDataCenter : 
-                false; 
- 
-            auto createRate = [](std::shared_ptr<NMonitoring::IMetricRegistry> metrics, TStringBuf name) mutable { 
-                return metrics->Rate(NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", name}})); 
-            }; 
-            auto createIntGauge = [](std::shared_ptr<NMonitoring::IMetricRegistry> metrics, TStringBuf name) mutable { 
-                return metrics->IntGauge(NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", name}})); 
-            }; 
- 
-            if (updatePerSession) { 
-                Connected_ = createIntGauge(PerSessionMetrics_, "interconnect.connected"); 
-                Disconnections_ = createRate(PerSessionMetrics_, "interconnect.disconnections"); 
-                ClockSkewMicrosec_ = createIntGauge(PerSessionMetrics_, "interconnect.clock_skew_microsec"); 
-                Traffic_ = createRate(PerSessionMetrics_, "interconnect.traffic"); 
-                Events_ = createRate(PerSessionMetrics_, "interconnect.events"); 
-                ScopeErrors_ = createRate(PerSessionMetrics_, "interconnect.scope_errors"); 
- 
-                for (const auto& [id, name] : Common->ChannelName) { 
-                    OutputChannels_.try_emplace(id, std::make_shared<NMonitoring::TMetricSubRegistry>( 
-                            NMonitoring::TLabels{{"channel", name}}, Metrics_), Traffic_, Events_); 
-                } 
-                OtherOutputChannel_ = TOutputChannel(std::make_shared<NMonitoring::TMetricSubRegistry>( 
-                        NMonitoring::TLabels{{"channel", "other"}}, Metrics_), Traffic_, Events_); 
- 
-                InputChannels_ = TInputChannels(Metrics_, Common->ChannelName, Traffic_, Events_, ScopeErrors_); 
-            } 
- 
-            if (updateAdaptive) { 
-                SessionDeaths_ = createRate(AdaptiveMetrics_, "interconnect.session_deaths"); 
-                HandshakeFails_ = createRate(AdaptiveMetrics_, "interconnect.handshake_fails"); 
-                InflyLimitReach_ = createRate(AdaptiveMetrics_, "interconnect.infly_limit_reach"); 
-                InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data"); 
-                PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate( 
-                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125)); 
-            } 
- 
-            if (updateGlobal) { 
-                OutputBuffersTotalSize_ = createRate(Metrics_, "interconnect.output_buffers_total_size"); 
-                SendSyscalls_ = createRate(Metrics_, "interconnect.send_syscalls"); 
-                RecvSyscalls_ = createRate(Metrics_, "interconnect.recv_syscalls"); 
-                SpuriousReadWakeups_ = createRate(Metrics_, "interconnect.spurious_read_wakeups"); 
-                UsefulReadWakeups_ = createRate(Metrics_, "interconnect.useful_read_wakeups"); 
-                SpuriousWriteWakeups_ = createRate(Metrics_, "interconnect.spurious_write_wakeups"); 
-                UsefulWriteWakeups_ = createRate(Metrics_, "interconnect.useful_write_wakeups"); 
-                SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count"); 
-                TotalBytesWritten_ = createRate(Metrics_, "interconnect.total_bytes_written"); 
-                TotalBytesRead_ = createRate(Metrics_, "interconnect.total_bytes_read"); 
- 
-                for (const char *reason : TDisconnectReason::Reasons) { 
+            if (GetOutputChannel(channel).OutgoingTraffic) {
+                GetOutputChannel(channel).OutgoingTraffic->Add(value);
+            }
+            if (GetOutputChannel(channel).Traffic) {
+                GetOutputChannel(channel).Traffic->Add(value);
+            }
+        }
+
+        void UpdateOutputChannelEvents(ui16 channel) override {
+            if (GetOutputChannel(channel).OutgoingEvents) {
+                GetOutputChannel(channel).OutgoingEvents->Inc();
+            }
+            if (GetOutputChannel(channel).Events) {
+                GetOutputChannel(channel).Events->Inc();
+            }
+        }
+
+        void SetPeerInfo(const TString& name, const TString& dataCenterId) override {
+            if (name != std::exchange(HumanFriendlyPeerHostName, name)) {
+                PerSessionMetrics_.reset();
+            }
+            VALGRIND_MAKE_READABLE(&DataCenterId, sizeof(DataCenterId));
+            if (dataCenterId != std::exchange(DataCenterId, dataCenterId)) {
+                PerDataCenterMetrics_.reset();
+            }
+
+            const bool updatePerDataCenter = !PerDataCenterMetrics_ && MergePerDataCenterMetrics_;
+            if (updatePerDataCenter) {
+                PerDataCenterMetrics_ = std::make_shared<NMonitoring::TMetricSubRegistry>(
+                        NMonitoring::TLabels{{"datacenter_id", *DataCenterId}}, Metrics_);
+            }
+
+            const bool updatePerSession = !PerSessionMetrics_ || updatePerDataCenter;
+            if (updatePerSession) {
+                auto base = MergePerDataCenterMetrics_ ? PerDataCenterMetrics_ : Metrics_;
+                PerSessionMetrics_ = std::make_shared<NMonitoring::TMetricSubRegistry>(
+                        NMonitoring::TLabels{{"peer", *HumanFriendlyPeerHostName}}, base);
+            }
+
+            const bool updateGlobal = !Initialized_;
+
+            const bool updateAdaptive =
+                &AdaptiveMetrics_ == &Metrics_              ? updateGlobal        :
+                &AdaptiveMetrics_ == &PerSessionMetrics_    ? updatePerSession    :
+                &AdaptiveMetrics_ == &PerDataCenterMetrics_ ? updatePerDataCenter :
+                false;
+
+            auto createRate = [](std::shared_ptr<NMonitoring::IMetricRegistry> metrics, TStringBuf name) mutable {
+                return metrics->Rate(NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", name}}));
+            };
+            auto createIntGauge = [](std::shared_ptr<NMonitoring::IMetricRegistry> metrics, TStringBuf name) mutable {
+                return metrics->IntGauge(NMonitoring::MakeLabels(NMonitoring::TLabels{{"sensor", name}}));
+            };
+
+            if (updatePerSession) {
+                Connected_ = createIntGauge(PerSessionMetrics_, "interconnect.connected");
+                Disconnections_ = createRate(PerSessionMetrics_, "interconnect.disconnections");
+                ClockSkewMicrosec_ = createIntGauge(PerSessionMetrics_, "interconnect.clock_skew_microsec");
+                Traffic_ = createRate(PerSessionMetrics_, "interconnect.traffic");
+                Events_ = createRate(PerSessionMetrics_, "interconnect.events");
+                ScopeErrors_ = createRate(PerSessionMetrics_, "interconnect.scope_errors");
+
+                for (const auto& [id, name] : Common->ChannelName) {
+                    OutputChannels_.try_emplace(id, std::make_shared<NMonitoring::TMetricSubRegistry>(
+                            NMonitoring::TLabels{{"channel", name}}, Metrics_), Traffic_, Events_);
+                }
+                OtherOutputChannel_ = TOutputChannel(std::make_shared<NMonitoring::TMetricSubRegistry>(
+                        NMonitoring::TLabels{{"channel", "other"}}, Metrics_), Traffic_, Events_);
+
+                InputChannels_ = TInputChannels(Metrics_, Common->ChannelName, Traffic_, Events_, ScopeErrors_);
+            }
+
+            if (updateAdaptive) {
+                SessionDeaths_ = createRate(AdaptiveMetrics_, "interconnect.session_deaths");
+                HandshakeFails_ = createRate(AdaptiveMetrics_, "interconnect.handshake_fails");
+                InflyLimitReach_ = createRate(AdaptiveMetrics_, "interconnect.infly_limit_reach");
+                InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
+                PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
+            }
+
+            if (updateGlobal) {
+                OutputBuffersTotalSize_ = createRate(Metrics_, "interconnect.output_buffers_total_size");
+                SendSyscalls_ = createRate(Metrics_, "interconnect.send_syscalls");
+                RecvSyscalls_ = createRate(Metrics_, "interconnect.recv_syscalls");
+                SpuriousReadWakeups_ = createRate(Metrics_, "interconnect.spurious_read_wakeups");
+                UsefulReadWakeups_ = createRate(Metrics_, "interconnect.useful_read_wakeups");
+                SpuriousWriteWakeups_ = createRate(Metrics_, "interconnect.spurious_write_wakeups");
+                UsefulWriteWakeups_ = createRate(Metrics_, "interconnect.useful_write_wakeups");
+                SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
+                TotalBytesWritten_ = createRate(Metrics_, "interconnect.total_bytes_written");
+                TotalBytesRead_ = createRate(Metrics_, "interconnect.total_bytes_read");
+
+                for (const char *reason : TDisconnectReason::Reasons) {
                     DisconnectByReason_[reason] = Metrics_->Rate(
                             NMonitoring::MakeLabels({
                                 {"sensor", "interconnect.disconnect_reason"},
                                 {"reason", reason},
                             }));
-                } 
-            } 
- 
-            Initialized_ = true; 
-        } 
- 
-        TOutputChannel GetOutputChannel(ui16 index) const { 
-            Y_VERIFY(Initialized_); 
-            const auto it = OutputChannels_.find(index); 
-            return it != OutputChannels_.end() ? it->second : OtherOutputChannel_; 
-        } 
- 
-    private: 
-        const TInterconnectProxyCommon::TPtr Common; 
-        const bool MergePerDataCenterMetrics_; 
-        const bool MergePerPeerMetrics_; 
-        std::shared_ptr<NMonitoring::IMetricRegistry> Metrics_; 
-        std::shared_ptr<NMonitoring::IMetricRegistry> PerSessionMetrics_; 
-        std::shared_ptr<NMonitoring::IMetricRegistry> PerDataCenterMetrics_; 
-        std::shared_ptr<NMonitoring::IMetricRegistry>& AdaptiveMetrics_; 
-        bool Initialized_ = false; 
- 
-        NMonitoring::IRate* Traffic_; 
- 
-        NMonitoring::IRate* Events_; 
-        NMonitoring::IRate* ScopeErrors_; 
-        NMonitoring::IRate* Disconnections_; 
-        NMonitoring::IIntGauge* Connected_; 
- 
-        NMonitoring::IRate* SessionDeaths_; 
-        NMonitoring::IRate* HandshakeFails_; 
-        NMonitoring::IRate* InflyLimitReach_; 
-        NMonitoring::IRate* InflightDataAmount_; 
-        NMonitoring::IRate* OutputBuffersTotalSize_; 
-        NMonitoring::IIntGauge* SubscribersCount_; 
-        NMonitoring::IRate* SendSyscalls_; 
-        NMonitoring::IRate* RecvSyscalls_; 
-        NMonitoring::IRate* SpuriousWriteWakeups_; 
-        NMonitoring::IRate* UsefulWriteWakeups_; 
-        NMonitoring::IRate* SpuriousReadWakeups_; 
-        NMonitoring::IRate* UsefulReadWakeups_; 
-        NMonitoring::IIntGauge* ClockSkewMicrosec_; 
- 
-        NMonitoring::IHistogram* PingTimeHistogram_; 
- 
-        std::unordered_map<ui16, TOutputChannel> OutputChannels_; 
-        TOutputChannel OtherOutputChannel_; 
-        TInputChannels InputChannels_; 
- 
-        THashMap<TString, NMonitoring::IRate*> DisconnectByReason_; 
- 
-        NMonitoring::IRate* TotalBytesWritten_; 
-        NMonitoring::IRate* TotalBytesRead_; 
-    }; 
- 
-} // namespace 
- 
-std::unique_ptr<IInterconnectMetrics> CreateInterconnectCounters(const TInterconnectProxyCommon::TPtr& common) { 
-    return std::make_unique<TInterconnectCounters>(common); 
-} 
- 
-std::unique_ptr<IInterconnectMetrics> CreateInterconnectMetrics(const TInterconnectProxyCommon::TPtr& common) { 
-    return std::make_unique<TInterconnectMetrics>(common); 
-} 
- 
+                }
+            }
+
+            Initialized_ = true;
+        }
+
+        TOutputChannel GetOutputChannel(ui16 index) const {
+            Y_VERIFY(Initialized_);
+            const auto it = OutputChannels_.find(index);
+            return it != OutputChannels_.end() ? it->second : OtherOutputChannel_;
+        }
+
+    private:
+        const TInterconnectProxyCommon::TPtr Common;
+        const bool MergePerDataCenterMetrics_;
+        const bool MergePerPeerMetrics_;
+        std::shared_ptr<NMonitoring::IMetricRegistry> Metrics_;
+        std::shared_ptr<NMonitoring::IMetricRegistry> PerSessionMetrics_;
+        std::shared_ptr<NMonitoring::IMetricRegistry> PerDataCenterMetrics_;
+        std::shared_ptr<NMonitoring::IMetricRegistry>& AdaptiveMetrics_;
+        bool Initialized_ = false;
+
+        NMonitoring::IRate* Traffic_;
+
+        NMonitoring::IRate* Events_;
+        NMonitoring::IRate* ScopeErrors_;
+        NMonitoring::IRate* Disconnections_;
+        NMonitoring::IIntGauge* Connected_;
+
+        NMonitoring::IRate* SessionDeaths_;
+        NMonitoring::IRate* HandshakeFails_;
+        NMonitoring::IRate* InflyLimitReach_;
+        NMonitoring::IRate* InflightDataAmount_;
+        NMonitoring::IRate* OutputBuffersTotalSize_;
+        NMonitoring::IIntGauge* SubscribersCount_;
+        NMonitoring::IRate* SendSyscalls_;
+        NMonitoring::IRate* RecvSyscalls_;
+        NMonitoring::IRate* SpuriousWriteWakeups_;
+        NMonitoring::IRate* UsefulWriteWakeups_;
+        NMonitoring::IRate* SpuriousReadWakeups_;
+        NMonitoring::IRate* UsefulReadWakeups_;
+        NMonitoring::IIntGauge* ClockSkewMicrosec_;
+
+        NMonitoring::IHistogram* PingTimeHistogram_;
+
+        std::unordered_map<ui16, TOutputChannel> OutputChannels_;
+        TOutputChannel OtherOutputChannel_;
+        TInputChannels InputChannels_;
+
+        THashMap<TString, NMonitoring::IRate*> DisconnectByReason_;
+
+        NMonitoring::IRate* TotalBytesWritten_;
+        NMonitoring::IRate* TotalBytesRead_;
+    };
+
+} // namespace
+
+std::unique_ptr<IInterconnectMetrics> CreateInterconnectCounters(const TInterconnectProxyCommon::TPtr& common) {
+    return std::make_unique<TInterconnectCounters>(common);
+}
+
+std::unique_ptr<IInterconnectMetrics> CreateInterconnectMetrics(const TInterconnectProxyCommon::TPtr& common) {
+    return std::make_unique<TInterconnectMetrics>(common);
+}
+
 } // NActors

@@ -43,12 +43,12 @@ namespace NActors {
     class TEventOutputChannel : public TInterconnectLoggingBase {
     public:
         TEventOutputChannel(TEventHolderPool& pool, ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
-                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params) 
+                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params)
             : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
             , Pool(pool)
             , PeerNodeId(peerNodeId)
             , ChannelId(id)
-            , Metrics(std::move(metrics)) 
+            , Metrics(std::move(metrics))
             , Params(std::move(params))
             , MaxSerializedEventSize(maxSerializedEventSize)
         {}
@@ -88,7 +88,7 @@ namespace NActors {
         TEventHolderPool& Pool;
         const ui32 PeerNodeId;
         const ui16 ChannelId;
-        std::shared_ptr<IInterconnectMetrics> Metrics; 
+        std::shared_ptr<IInterconnectMetrics> Metrics;
         const TSessionParams Params;
         const ui32 MaxSerializedEventSize;
         ui64 UnaccountedTraffic = 0;
@@ -118,7 +118,7 @@ namespace NActors {
 
         void AccountTraffic() {
             if (const ui64 amount = std::exchange(UnaccountedTraffic, 0)) {
-                Metrics->UpdateOutputChannelTraffic(ChannelId, amount); 
+                Metrics->UpdateOutputChannelTraffic(ChannelId, amount);
             }
         }
 

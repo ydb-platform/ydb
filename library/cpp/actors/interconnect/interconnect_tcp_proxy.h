@@ -372,7 +372,7 @@ namespace NActors {
 
         TString TechnicalPeerHostName;
 
-        std::shared_ptr<IInterconnectMetrics> Metrics; 
+        std::shared_ptr<IInterconnectMetrics> Metrics;
 
         void HandleClosePeerSocket();
         void HandleCloseInputSession();

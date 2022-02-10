@@ -183,7 +183,7 @@ namespace NActors {
                          TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                          TIntrusivePtr<TReceiveContext> context,
                          TInterconnectProxyCommon::TPtr common,
-                         std::shared_ptr<IInterconnectMetrics> metrics, 
+                         std::shared_ptr<IInterconnectMetrics> metrics,
                          ui32 nodeId,
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
@@ -237,7 +237,7 @@ namespace NActors {
 
         ui64 ConfirmedByInput;
 
-        std::shared_ptr<IInterconnectMetrics> Metrics; 
+        std::shared_ptr<IInterconnectMetrics> Metrics;
 
         bool CloseInputSessionRequested = false;
 

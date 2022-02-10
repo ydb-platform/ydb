@@ -8,7 +8,7 @@ namespace NActors {
 
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                                        TIntrusivePtr<TReceiveContext> context, TInterconnectProxyCommon::TPtr common,
-                                       std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed, 
+                                       std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
                                        TDuration deadPeerTimeout, TSessionParams params)
         : SessionId(sessionId)
         , Socket(std::move(socket))
@@ -17,7 +17,7 @@ namespace NActors {
         , NodeId(nodeId)
         , Params(std::move(params))
         , ConfirmedByInput(lastConfirmed)
-        , Metrics(std::move(metrics)) 
+        , Metrics(std::move(metrics))
         , DeadPeerTimeout(deadPeerTimeout)
     {
         Y_VERIFY(Context);
@@ -26,7 +26,7 @@ namespace NActors {
 
         AtomicSet(Context->PacketsReadFromSocket, 0);
 
-        Metrics->SetClockSkewMicrosec(0); 
+        Metrics->SetClockSkewMicrosec(0);
 
         Context->UpdateState = EUpdateState::NONE;
 
@@ -50,9 +50,9 @@ namespace NActors {
 
     void TInputSessionTCP::Handle(TEvPollerReady::TPtr ev) {
         if (Context->ReadPending) {
-            Metrics->IncUsefulReadWakeups(); 
+            Metrics->IncUsefulReadWakeups();
         } else if (!ev->Cookie) {
-            Metrics->IncSpuriousReadWakeups(); 
+            Metrics->IncSpuriousReadWakeups();
         }
         Context->ReadPending = false;
         ReceiveData();
@@ -197,7 +197,7 @@ namespace NActors {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
-                Metrics->UpdateLegacyPingTimeHist(durationUs); 
+                Metrics->UpdateLegacyPingTimeHist(durationUs);
                 PingQ.push_back(duration);
                 if (PingQ.size() > 16) {
                     PingQ.pop_front();
@@ -268,7 +268,7 @@ namespace NActors {
                 ? &Context->ChannelArray[channel]
                 : &Context->ChannelMap[channel];
 
-            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size); 
+            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
 
             TEventDescr descr;
             if (~part.Channel & TChannelPart::LastPartFlag) {
@@ -277,7 +277,7 @@ namespace NActors {
                 LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
                 return DestroySession(TDisconnectReason::FormatError());
             } else if (Payload.ExtractFrontPlain(&descr, sizeof(descr))) {
-                Metrics->IncInputChannelsIncomingEvents(channel); 
+                Metrics->IncInputChannelsIncomingEvents(channel);
                 ProcessEvent(*eventData, descr);
                 *eventData = TRope();
             } else {
@@ -359,7 +359,7 @@ namespace NActors {
 #else
                 recvres = Socket->Recv(iovec[0].iov_base, iovec[0].iov_len, &err);
 #endif
-                Metrics->IncRecvSyscalls(); 
+                Metrics->IncRecvSyscalls();
             } while (recvres == -EINTR);
         }
 
@@ -388,7 +388,7 @@ namespace NActors {
         }
 
         Y_VERIFY(recvres > 0);
-        Metrics->AddTotalBytesRead(recvres); 
+        Metrics->AddTotalBytesRead(recvres);
         TDeque<TIntrusivePtr<TRopeAlignedBuffer>>::iterator it;
         for (it = Buffers.begin(); recvres; ++it) {
             Y_VERIFY(it != Buffers.end());
@@ -451,7 +451,7 @@ namespace NActors {
         const auto pingUs = ping.MicroSeconds();
         Context->PingRTT_us = pingUs;
         NewPingProtocol = true;
-        Metrics->UpdateLegacyPingTimeHist(pingUs); 
+        Metrics->UpdateLegacyPingTimeHist(pingUs);
     }
 
     void TInputSessionTCP::HandleClock(TInstant clock) {
@@ -469,7 +469,7 @@ namespace NActors {
             }
         }
         Context->ClockSkew_us = clockSkew;
-        Metrics->SetClockSkewMicrosec(clockSkew); 
+        Metrics->SetClockSkewMicrosec(clockSkew);
     }
 
 

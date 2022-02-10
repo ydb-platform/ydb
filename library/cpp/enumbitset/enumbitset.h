@@ -497,19 +497,19 @@ public:
     {
     }
 
-    explicit TGeneratedEnumBitSet(const TParent& p)
+    explicit TGeneratedEnumBitSet(const TParent& p) 
         : TParent(p)
     {
     }
-
-    explicit TGeneratedEnumBitSet(TEnum c1)
-        : TParent(c1)
-    {
-    }
-
-    template <class... R>
-    TGeneratedEnumBitSet(TEnum c1, TEnum c2, R... r)
-        : TParent(c1, c2, r...)
-    {
-    }
+ 
+    explicit TGeneratedEnumBitSet(TEnum c1) 
+        : TParent(c1) 
+    { 
+    } 
+ 
+    template <class... R> 
+    TGeneratedEnumBitSet(TEnum c1, TEnum c2, R... r) 
+        : TParent(c1, c2, r...) 
+    { 
+    } 
 };

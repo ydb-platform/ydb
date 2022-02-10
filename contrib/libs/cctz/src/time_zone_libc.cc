@@ -1,73 +1,73 @@
-// Copyright 2016 Google Inc. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
+// Copyright 2016 Google Inc. All Rights Reserved. 
+// 
+// Licensed under the Apache License, Version 2.0 (the "License"); 
+// you may not use this file except in compliance with the License. 
+// You may obtain a copy of the License at 
+// 
 //   https://www.apache.org/licenses/LICENSE-2.0
-//
-//   Unless required by applicable law or agreed to in writing, software
-//   distributed under the License is distributed on an "AS IS" BASIS,
-//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//   See the License for the specific language governing permissions and
-//   limitations under the License.
-
-#if defined(_WIN32) || defined(_WIN64)
+// 
+//   Unless required by applicable law or agreed to in writing, software 
+//   distributed under the License is distributed on an "AS IS" BASIS, 
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+//   See the License for the specific language governing permissions and 
+//   limitations under the License. 
+ 
+#if defined(_WIN32) || defined(_WIN64) 
 #define _CRT_SECURE_NO_WARNINGS 1
-#endif
-
-#include "time_zone_libc.h"
-
-#include <chrono>
-#include <ctime>
+#endif 
+ 
+#include "time_zone_libc.h" 
+ 
+#include <chrono> 
+#include <ctime> 
 #include <limits>
-#include <utility>
-
+#include <utility> 
+ 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
-
+ 
 #if defined(_AIX)
 extern "C" {
   extern long altzone;
 }
 #endif
 
-namespace cctz {
-
-namespace {
-
-#if defined(_WIN32) || defined(_WIN64)
-// Uses the globals: '_timezone', '_dstbias' and '_tzname'.
+namespace cctz { 
+ 
+namespace { 
+ 
+#if defined(_WIN32) || defined(_WIN64) 
+// Uses the globals: '_timezone', '_dstbias' and '_tzname'. 
 auto tm_gmtoff(const std::tm& tm) -> decltype(_timezone + _dstbias) {
-  const bool is_dst = tm.tm_isdst > 0;
+  const bool is_dst = tm.tm_isdst > 0; 
   return _timezone + (is_dst ? _dstbias : 0);
-}
+} 
 auto tm_zone(const std::tm& tm) -> decltype(_tzname[0]) {
   const bool is_dst = tm.tm_isdst > 0;
   return _tzname[is_dst];
 }
 #elif defined(__sun) || defined(_AIX)
-// Uses the globals: 'timezone', 'altzone' and 'tzname'.
+// Uses the globals: 'timezone', 'altzone' and 'tzname'. 
 auto tm_gmtoff(const std::tm& tm) -> decltype(timezone) {
-  const bool is_dst = tm.tm_isdst > 0;
+  const bool is_dst = tm.tm_isdst > 0; 
   return is_dst ? altzone : timezone;
-}
+} 
 auto tm_zone(const std::tm& tm) -> decltype(tzname[0]) {
   const bool is_dst = tm.tm_isdst > 0;
   return tzname[is_dst];
 }
 #elif defined(__native_client__) || defined(__myriad2__) || \
     defined(__EMSCRIPTEN__)
-// Uses the globals: 'timezone' and 'tzname'.
+// Uses the globals: 'timezone' and 'tzname'. 
 auto tm_gmtoff(const std::tm& tm) -> decltype(_timezone + 0) {
-  const bool is_dst = tm.tm_isdst > 0;
+  const bool is_dst = tm.tm_isdst > 0; 
   return _timezone + (is_dst ? 60 * 60 : 0);
-}
+} 
 auto tm_zone(const std::tm& tm) -> decltype(tzname[0]) {
   const bool is_dst = tm.tm_isdst > 0;
   return tzname[is_dst];
 }
-#else
+#else 
 // Adapt to different spellings of the struct std::tm extension fields.
 #if defined(tm_gmtoff)
 auto tm_gmtoff(const std::tm& tm) -> decltype(tm.tm_gmtoff) {
@@ -78,14 +78,14 @@ auto tm_gmtoff(const std::tm& tm) -> decltype(tm.__tm_gmtoff) {
   return tm.__tm_gmtoff;
 }
 #else
-template <typename T>
+template <typename T> 
 auto tm_gmtoff(const T& tm) -> decltype(tm.tm_gmtoff) {
   return tm.tm_gmtoff;
-}
-template <typename T>
+} 
+template <typename T> 
 auto tm_gmtoff(const T& tm) -> decltype(tm.__tm_gmtoff) {
   return tm.__tm_gmtoff;
-}
+} 
 #endif  // tm_gmtoff
 #if defined(tm_zone)
 auto tm_zone(const std::tm& tm) -> decltype(tm.tm_zone) {
@@ -105,8 +105,8 @@ auto tm_zone(const T& tm) -> decltype(tm.__tm_zone) {
   return tm.__tm_zone;
 }
 #endif  // tm_zone
-#endif
-
+#endif 
+ 
 inline std::tm* gm_time(const std::time_t *timep, std::tm *result) {
 #if defined(_WIN32) || defined(_WIN64)
     return gmtime_s(result, timep) ? nullptr : result;
@@ -179,14 +179,14 @@ std::time_t find_trans(std::time_t lo, std::time_t hi, int offset) {
   return hi;
 }
 
-}  // namespace
-
-TimeZoneLibC::TimeZoneLibC(const std::string& name)
-    : local_(name == "localtime") {}
-
-time_zone::absolute_lookup TimeZoneLibC::BreakTime(
+}  // namespace 
+ 
+TimeZoneLibC::TimeZoneLibC(const std::string& name) 
+    : local_(name == "localtime") {} 
+ 
+time_zone::absolute_lookup TimeZoneLibC::BreakTime( 
     const time_point<seconds>& tp) const {
-  time_zone::absolute_lookup al;
+  time_zone::absolute_lookup al; 
   al.offset = 0;
   al.is_dst = false;
   al.abbr = "-00";
@@ -204,14 +204,14 @@ time_zone::absolute_lookup TimeZoneLibC::BreakTime(
   }
 
   const std::time_t t = static_cast<std::time_t>(s);
-  std::tm tm;
+  std::tm tm; 
   std::tm* tmp = local_ ? local_time(&t, &tm) : gm_time(&t, &tm);
 
   // If std::tm cannot hold the result we saturate the output.
   if (tmp == nullptr) {
     al.cs = (s < 0) ? civil_second::min() : civil_second::max();
     return al;
-  }
+  } 
 
   const year_t year = tmp->tm_year + year_t{1900};
   al.cs = civil_second(year, tmp->tm_mon + 1, tmp->tm_mday,
@@ -219,10 +219,10 @@ time_zone::absolute_lookup TimeZoneLibC::BreakTime(
   al.offset = static_cast<int>(tm_gmtoff(*tmp));
   al.abbr = local_ ? tm_zone(*tmp) : "UTC";  // as expected by cctz
   al.is_dst = tmp->tm_isdst > 0;
-  return al;
-}
-
-time_zone::civil_lookup TimeZoneLibC::MakeTime(const civil_second& cs) const {
+  return al; 
+} 
+ 
+time_zone::civil_lookup TimeZoneLibC::MakeTime(const civil_second& cs) const { 
   if (!local_) {
     // If time_point<seconds> cannot hold the result we saturate.
     static const civil_second min_tp_cs =
@@ -243,13 +243,13 @@ time_zone::civil_lookup TimeZoneLibC::MakeTime(const civil_second& cs) const {
       const time_point<seconds> tp = time_point<seconds>::min();
       return {time_zone::civil_lookup::UNIQUE, tp, tp, tp};
     }
-  } else {
+  } else { 
     if (cs.year() - year_t{1900} > std::numeric_limits<int>::max()) {
       const time_point<seconds> tp = time_point<seconds>::max();
       return {time_zone::civil_lookup::UNIQUE, tp, tp, tp};
     }
-  }
-
+  } 
+ 
   // We probe with "is_dst" values of 0 and 1 to try to distinguish unique
   // civil seconds from skipped or repeated ones.  This is not always possible
   // however, as the "dst" flag does not change over some offset transitions.
@@ -288,18 +288,18 @@ time_zone::civil_lookup TimeZoneLibC::MakeTime(const civil_second& cs) const {
                                      ? time_point<seconds>::min()
                                      : time_point<seconds>::max();
   return {time_zone::civil_lookup::UNIQUE, tp, tp, tp};
-}
-
+} 
+ 
 bool TimeZoneLibC::NextTransition(const time_point<seconds>&,
                                   time_zone::civil_transition*) const {
-  return false;
-}
-
+  return false; 
+} 
+ 
 bool TimeZoneLibC::PrevTransition(const time_point<seconds>&,
                                   time_zone::civil_transition*) const {
-  return false;
-}
-
+  return false; 
+} 
+ 
 std::string TimeZoneLibC::Version() const {
   return std::string();  // unknown
 }
@@ -308,4 +308,4 @@ std::string TimeZoneLibC::Description() const {
   return local_ ? "localtime" : "UTC";
 }
 
-}  // namespace cctz
+}  // namespace cctz 

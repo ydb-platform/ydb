@@ -1,4 +1,4 @@
-RESOURCE(
+RESOURCE( 
     generated/58543f30ac34b6510b552b9b3e82b772 /cctz/tzdata/posixrules
     generated/796a57137d718e4fa3db8ef611f18e61 /cctz/tzdata/Africa/Abidjan
     generated/33cffb9ac13285f945f3c4ef6ce13585 /cctz/tzdata/Africa/Accra
@@ -594,4 +594,4 @@ RESOURCE(
     generated/39b47bf37a27f7bcd5d3f7c51343c7fc /cctz/tzdata/W-SU
     generated/0124cd65b22dfd92129cb0a43719c717 /cctz/tzdata/WET
     generated/51d8a0e68892ebf0854a1b4250ffb26b /cctz/tzdata/Zulu
-)
+) 

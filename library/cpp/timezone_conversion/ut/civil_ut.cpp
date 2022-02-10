@@ -1,9 +1,9 @@
 #include <library/cpp/timezone_conversion/civil.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-
-#include <util/stream/str.h>
-
+ 
+#include <util/stream/str.h> 
+ 
 namespace NDatetime {
     inline bool operator==(const NDatetime::TCivilDiff& x, const NDatetime::TCivilDiff& y) {
         return x.Unit == y.Unit && x.Value == y.Value;
@@ -17,10 +17,10 @@ inline void Out<NDatetime::TCivilDiff>(IOutputStream& out, const NDatetime::TCiv
 
 Y_UNIT_TEST_SUITE(DateTime) {
     Y_UNIT_TEST(Calc) {
-        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, 2), NDatetime::TCivilDay(2017, 2, 3));
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, -2), NDatetime::TCivilDay(2017, 1, 30));
-    }
+        NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, 2), NDatetime::TCivilDay(2017, 2, 3)); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Calc<NDatetime::TCivilDay>(s, -2), NDatetime::TCivilDay(2017, 1, 30)); 
+    } 
     Y_UNIT_TEST(Adds) {
         NDatetime::TCivilSecond s(2017, 2, 1, 10, 12, 9);
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddDays(s, 2), NDatetime::TCivilSecond(2017, 2, 3, 10, 12, 9));
@@ -29,14 +29,14 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::AddHours(s, 40), NDatetime::TCivilSecond(2017, 2, 3, 2, 12, 9));
     }
     Y_UNIT_TEST(Convert) {
-        TInstant absTime = TInstant::Seconds(1500299239);
-        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
-        NDatetime::TCivilSecond dt1 = NDatetime::Convert(absTime, lax);
-        NDatetime::TCivilSecond dt2(2017, 7, 17, 6, 47, 19);
-        UNIT_ASSERT_VALUES_EQUAL(dt1, dt2);
-        UNIT_ASSERT_VALUES_EQUAL(absTime, NDatetime::Convert(dt2, lax));
-        UNIT_ASSERT_EXCEPTION(NDatetime::Convert(absTime, "Unknown time zone"), NDatetime::TInvalidTimezone);
-    }
+        TInstant absTime = TInstant::Seconds(1500299239); 
+        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles"); 
+        NDatetime::TCivilSecond dt1 = NDatetime::Convert(absTime, lax); 
+        NDatetime::TCivilSecond dt2(2017, 7, 17, 6, 47, 19); 
+        UNIT_ASSERT_VALUES_EQUAL(dt1, dt2); 
+        UNIT_ASSERT_VALUES_EQUAL(absTime, NDatetime::Convert(dt2, lax)); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::Convert(absTime, "Unknown time zone"), NDatetime::TInvalidTimezone); 
+    } 
     Y_UNIT_TEST(UTCOffsetTimezone) {
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("UTC+12");
         auto lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
@@ -67,21 +67,21 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:30:"), NDatetime::TInvalidTimezone);
     }
     Y_UNIT_TEST(Format) {
-        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
-        NDatetime::TCivilSecond tp(2013, 1, 2, 3, 4, 5);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%S", tp, lax), "03:04:05");
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%E3S", tp, lax), "03:04:05.000");
-    }
+        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles"); 
+        NDatetime::TCivilSecond tp(2013, 1, 2, 3, 4, 5); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%S", tp, lax), "03:04:05"); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::Format("%H:%M:%E3S", tp, lax), "03:04:05.000"); 
+    } 
     Y_UNIT_TEST(Weekday) {
-        NDatetime::TCivilDay d(2013, 1, 2);
-        NDatetime::TWeekday wd = NDatetime::GetWeekday(d);
-        UNIT_ASSERT_VALUES_EQUAL(wd, NDatetime::TWeekday::wednesday);
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::NextWeekday(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2013, 1, 7));
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::PrevWeekday(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2012, 12, 31));
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2012, 12, 31));
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::wednesday), NDatetime::TCivilDay(2013, 1, 2));
-        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::friday), NDatetime::TCivilDay(2013, 1, 4));
-    }
+        NDatetime::TCivilDay d(2013, 1, 2); 
+        NDatetime::TWeekday wd = NDatetime::GetWeekday(d); 
+        UNIT_ASSERT_VALUES_EQUAL(wd, NDatetime::TWeekday::wednesday); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::NextWeekday(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2013, 1, 7)); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::PrevWeekday(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2012, 12, 31)); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::monday), NDatetime::TCivilDay(2012, 12, 31)); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::wednesday), NDatetime::TCivilDay(2013, 1, 2)); 
+        UNIT_ASSERT_VALUES_EQUAL(NDatetime::WeekdayOnTheWeek(d, NDatetime::TWeekday::friday), NDatetime::TCivilDay(2013, 1, 4)); 
+    } 
     Y_UNIT_TEST(CivilUnit) {
         using namespace NDatetime;
 
@@ -154,4 +154,4 @@ Y_UNIT_TEST_SUITE(DateTime) {
         // Max possible delta - calcuate week # for 31 Dec 2021 from 1 Jan 2020
         UNIT_ASSERT_VALUES_EQUAL(NDatetime::GetYearWeek(NDatetime::TCivilDay{2021, 12, 31}, true), 105);
     }
-}
+} 

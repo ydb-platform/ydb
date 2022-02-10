@@ -87,13 +87,13 @@ TEST(TimeZoneConversion, TestRepeatedDate) {
         ToCivilTime(TInstant::Seconds(1288474200), ekb));
 
     CompareCivilTimes(
-        ZonedTm(+5, false, 2016, 5, 10, 9, 8, 7),
-        CreateCivilTime(ekb, 2016, 5, 10, 9, 8, 7));
-
+        ZonedTm(+5, false, 2016, 5, 10, 9, 8, 7), 
+        CreateCivilTime(ekb, 2016, 5, 10, 9, 8, 7)); 
+ 
     CompareCivilTimes(
-        ZonedTm(+6, true, 2010, 10, 31, 2, 30, 0),
-        CreateCivilTime(ekb, 2010, 10, 31, 2, 30, 0));
-
+        ZonedTm(+6, true, 2010, 10, 31, 2, 30, 0), 
+        CreateCivilTime(ekb, 2010, 10, 31, 2, 30, 0)); 
+ 
     // The earlier timestamp should be chosen.
     EXPECT_EQ(
         TInstant::Seconds(1288470600),
@@ -186,13 +186,13 @@ TEST(TimeZoneConversion, TestFutureDstChanges) {
         ZonedTm(+0, false, 2025, 11, 10, 19, 31, 0));
 }
 
-TEST(TimeZoneConversion, TWDay) {
-    TTimeZone nsk = GetTimeZone("Asia/Novosibirsk");
-
-    for (time_t e = 1301167800, to = 1301167800 + 86400 * 7, dow = 0; e < to; e += 86400, ++dow) {
-        EXPECT_EQ(dow, ToCivilTime(TInstant::Seconds(e), nsk).WDay);
-    }
-}
+TEST(TimeZoneConversion, TWDay) { 
+    TTimeZone nsk = GetTimeZone("Asia/Novosibirsk"); 
+ 
+    for (time_t e = 1301167800, to = 1301167800 + 86400 * 7, dow = 0; e < to; e += 86400, ++dow) { 
+        EXPECT_EQ(dow, ToCivilTime(TInstant::Seconds(e), nsk).WDay); 
+    } 
+} 
 
 TEST(TimeZoneConversion, TestBaikonur) {
     // Yes, the Baikonur spaceport is located in Kyzylorda Region.

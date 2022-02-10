@@ -78,14 +78,14 @@ namespace NKiwiAggr {
             return IHistogramPtr();
         }
 
-        double GetMaxHistoSum() const { 
-            double sum = 0.0; 
-            for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) { 
+        double GetMaxHistoSum() const {
+            double sum = 0.0;
+            for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
                 sum = std::max(sum, it->second->GetSum());
-            } 
-            return sum; 
-        } 
- 
+            }
+            return sum;
+        }
+
         bool Empty() {
             for (THistogramsMap::iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
                 if (!it->second->Empty()) {

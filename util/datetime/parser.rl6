@@ -6,7 +6,7 @@
 #include <numeric>
 
 #include <util/datetime/parser.h>
-#include <util/generic/ymath.h> 
+#include <util/generic/ymath.h>
 
 
 %%{
@@ -775,8 +775,8 @@ bool TDurationParser::ParsePart(const char* input, size_t len) {
 
 static inline ui64 DecPower(ui64 part, i32 power) {
     if (power >= 0)
-        return part * Power(10, power); 
-    return part / Power(10, -power); 
+        return part * Power(10, power);
+    return part / Power(10, -power);
 }
 
 TDuration TDurationParser::GetResult(TDuration defaultValue) const {

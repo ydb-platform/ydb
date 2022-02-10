@@ -22,9 +22,9 @@ OWNER(
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
 )
- 
-CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY) 
- 
+
+CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
+
 IF (OS_ANDROID)
     DEFAULT(CXX_RT "default")
     IF (ARCH_I686 OR ARCH_ARM7)
@@ -66,18 +66,18 @@ ELSEIF (CLANG OR MUSL OR OS_DARWIN OR USE_LTO)
     ELSE()
         DEFAULT(CXX_RT "libcxxrt")
     ENDIF()
-    IF (MUSL) 
+    IF (MUSL)
         PEERDIR(
             contrib/libs/musl/include
         )
-    ENDIF() 
+    ENDIF()
 ELSEIF (OS_WINDOWS)
     SRCS(
-        src/support/win32/locale_win32.cpp 
+        src/support/win32/locale_win32.cpp
         src/support/win32/support.cpp
-        src/support/win32/atomic_win32.cpp 
-        src/support/win32/new_win32.cpp 
-        src/support/win32/thread_win32.cpp 
+        src/support/win32/atomic_win32.cpp
+        src/support/win32/new_win32.cpp
+        src/support/win32/thread_win32.cpp
     )
     CFLAGS(
         GLOBAL -D_LIBCPP_VASPRINTF_DEFINED
@@ -92,7 +92,7 @@ ELSE()
     DEFAULT(CXX_RT "glibcxx_static")
     CXXFLAGS(
         -Wno-unknown-pragmas
-        -nostdinc++ 
+        -nostdinc++
     )
 ENDIF()
 
@@ -100,7 +100,7 @@ IF (OS_LINUX)
     EXTRALIBS(-lpthread)
 ENDIF()
 
-IF (CLANG) 
+IF (CLANG)
     CFLAGS(
         GLOBAL -nostdinc++
     )
@@ -189,51 +189,51 @@ IF (FUZZING)
 ENDIF()
 
 SRCS(
-    src/algorithm.cpp 
-    src/any.cpp 
-    src/atomic.cpp 
-    src/barrier.cpp 
-    src/bind.cpp 
+    src/algorithm.cpp
+    src/any.cpp
+    src/atomic.cpp
+    src/barrier.cpp
+    src/bind.cpp
     src/charconv.cpp
-    src/chrono.cpp 
-    src/condition_variable.cpp 
-    src/condition_variable_destructor.cpp 
+    src/chrono.cpp
+    src/condition_variable.cpp
+    src/condition_variable_destructor.cpp
     src/debug.cpp
-    src/exception.cpp 
+    src/exception.cpp
     src/filesystem/directory_iterator.cpp
     src/filesystem/operations.cpp
-    src/format.cpp 
-    src/functional.cpp 
-    src/future.cpp 
-    src/hash.cpp 
-    src/ios.cpp 
-    src/ios.instantiations.cpp 
-    src/iostream.cpp 
-    src/locale.cpp 
-    src/memory.cpp 
-    src/mutex.cpp 
-    src/mutex_destructor.cpp 
-    src/optional.cpp 
-    src/random.cpp 
-    src/random_shuffle.cpp 
+    src/format.cpp
+    src/functional.cpp
+    src/future.cpp
+    src/hash.cpp
+    src/ios.cpp
+    src/ios.instantiations.cpp
+    src/iostream.cpp
+    src/locale.cpp
+    src/memory.cpp
+    src/mutex.cpp
+    src/mutex_destructor.cpp
+    src/optional.cpp
+    src/random.cpp
+    src/random_shuffle.cpp
     src/regex.cpp
     src/shared_mutex.cpp
     src/stdexcept.cpp
     src/string.cpp
-    src/strstream.cpp 
+    src/strstream.cpp
     src/system_error.cpp
-    src/thread.cpp 
-    src/typeinfo.cpp 
+    src/thread.cpp
+    src/typeinfo.cpp
     src/utility.cpp
     src/valarray.cpp
-    src/variant.cpp 
-    src/vector.cpp 
+    src/variant.cpp
+    src/vector.cpp
 )
 
 IF (NOT OS_WINDOWS)
-    SRCS( 
-        src/new.cpp 
-    ) 
-ENDIF() 
- 
+    SRCS(
+        src/new.cpp
+    )
+ENDIF()
+
 END()

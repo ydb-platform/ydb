@@ -46,7 +46,7 @@ RECURSE(
     croaring
     ctemplate
     curl
-    cxxsupp/libcxx 
+    cxxsupp/libcxx
     cxxsupp/libcxxabi-parts
     djvulibre
     dlib

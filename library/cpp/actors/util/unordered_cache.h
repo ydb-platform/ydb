@@ -5,7 +5,7 @@
 
 template <typename T, ui32 Size = 512, ui32 ConcurrencyFactor = 1, typename TChunk = TQueueChunk<T, Size>>
 class TUnorderedCache : TNonCopyable {
-    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value"); 
+    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value");
 
 public:
     static constexpr ui32 Concurrency = ConcurrencyFactor * 4;

@@ -119,7 +119,7 @@ void TCgiParameters::ScanAdd(const TStringBuf query) {
 
 void TCgiParameters::ScanAddUnescaped(const TStringBuf query) {
     auto f = [this](const TStringBuf key, const TStringBuf val) {
-        this->InsertUnescaped(key, val); 
+        this->InsertUnescaped(key, val);
     };
 
     DoScan<false>(query, f);

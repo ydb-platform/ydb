@@ -7,7 +7,7 @@
 
 #include <util/system/event.h>
 
-#include <array> 
+#include <array>
 
 using namespace NRainCheck;
 using namespace NActor;
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
         {
         }
 
-        std::array<TSubtaskCompletion, 3> Subtasks; 
+        std::array<TSubtaskCompletion, 3> Subtasks;
 
         TContinueFunc Start() override {
             if (I == 1000) {

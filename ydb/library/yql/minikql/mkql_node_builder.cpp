@@ -237,8 +237,8 @@ void TCallableTypeBuilder::Reserve(ui32 size) {
 
 TCallableTypeBuilder& TCallableTypeBuilder::Add(TType *type) {
     Arguments.push_back(type);
-    ArgNames.emplace_back(); 
-    ArgFlags.emplace_back(); 
+    ArgNames.emplace_back();
+    ArgFlags.emplace_back();
     return *this;
 }
 
@@ -307,8 +307,8 @@ TCallableBuilder& TCallableBuilder::Add(TRuntimeNode input) {
     TType* inputType = input.GetStaticType();
     Arguments.push_back(inputType);
     Inputs.push_back(input);
-    ArgNames.emplace_back(); 
-    ArgFlags.emplace_back(); 
+    ArgNames.emplace_back();
+    ArgFlags.emplace_back();
     return *this;
 }
 

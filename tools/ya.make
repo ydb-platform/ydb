@@ -21,7 +21,7 @@ RECURSE(
     convert2html
     cproxy
     crc32
-    crx_creator 
+    crx_creator
     curl_to_ab
     diaprintkeys
     directindexer

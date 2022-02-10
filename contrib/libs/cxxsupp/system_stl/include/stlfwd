@@ -1,6 +1,6 @@
 #pragma once
 
-// STL "forwarding" for the poor 
+// STL "forwarding" for the poor
 
 #include <cstddef>
 #include <string>

@@ -6,7 +6,7 @@
 
 #include <util/generic/string.h>
 
-#include <array> 
+#include <array>
 
 namespace NBus {
     namespace NPrivate {
@@ -14,7 +14,7 @@ namespace NBus {
             static TMessageStatusRecord::EMessageStatus MessageStatusToProtobuf(EMessageStatus status) {
                 return (TMessageStatusRecord::EMessageStatus)status;
             }
- 
+
             std::array<unsigned, MESSAGE_STATUS_COUNT> Counts;
 
             unsigned& operator[](EMessageStatus index) {

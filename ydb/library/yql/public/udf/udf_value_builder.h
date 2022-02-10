@@ -6,8 +6,8 @@
 #include "udf_string.h"
 #include "udf_value.h"
 
-#include <array> 
- 
+#include <array>
+
 namespace NYql {
 namespace NUdf {
 

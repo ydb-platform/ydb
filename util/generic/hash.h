@@ -3,7 +3,7 @@
 #include "fwd.h"
 #include "mapfindptr.h"
 
-#include <util/memory/alloc.h> 
+#include <util/memory/alloc.h>
 #include <util/system/type_name.h>
 #include <util/system/yassert.h>
 #include <util/str_stl.h>
@@ -347,7 +347,7 @@ private:
  * Note that there are no specializations for the case when only one or two
  * of the functors are empty as this is a case that's just way too rare.
  */
-template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value&& std::is_empty<ExtractKey>::value&& std::is_empty<EqualKey>::value> 
+template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value&& std::is_empty<ExtractKey>::value&& std::is_empty<EqualKey>::value>
 class _yhashtable_base: public _allocator_base<Alloc> {
     using base_type = _allocator_base<Alloc>;
 
@@ -440,8 +440,8 @@ template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKe
 struct _yhashtable_traits {
     using node = __yhashtable_node<Value>;
 
-    using node_allocator_type = TReboundAllocator<Alloc, node>; 
-    using nodep_allocator_type = TReboundAllocator<Alloc, node*>; 
+    using node_allocator_type = TReboundAllocator<Alloc, node>;
+    using nodep_allocator_type = TReboundAllocator<Alloc, node*>;
 
     using base_type = _yhashtable_base<HashFcn, ExtractKey, EqualKey, node_allocator_type>;
 };

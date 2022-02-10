@@ -10,8 +10,8 @@
 #include <util/system/tls.h>
 #include <util/system/yassert.h>
 
-#include <array> 
- 
+#include <array>
+
 using namespace NActor;
 using namespace NActor::NPrivate;
 
@@ -35,7 +35,7 @@ namespace {
         ui64 Start;
         ui64 LastTime;
 
-        std::array<TRecord, 3600> Records; 
+        std::array<TRecord, 3600> Records;
 
         THistoryInternal() {
             Start = TInstant::Now().Seconds();

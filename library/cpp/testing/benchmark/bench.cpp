@@ -25,7 +25,7 @@
 #include <util/stream/format.h>
 #include <util/system/yield.h>
 
-using re2::RE2; 
+using re2::RE2;
 
 using namespace NBench;
 using namespace NColorizer;

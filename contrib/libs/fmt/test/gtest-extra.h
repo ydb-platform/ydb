@@ -103,7 +103,7 @@ class OutputRedirect {
     FMT_TEST_WRITE_(statement, expected_output, file, GTEST_NONFATAL_FAILURE_)
 
 #  ifdef _MSC_VER
-#include <crtdbg.h> 
+#include <crtdbg.h>
 
 // Suppresses Windows assertions on invalid file descriptors, making
 // POSIX functions return proper error codes instead of crashing on Windows.

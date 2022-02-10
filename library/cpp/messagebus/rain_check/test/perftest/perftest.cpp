@@ -4,7 +4,7 @@
 
 #include <util/datetime/base.h>
 
-#include <array> 
+#include <array>
 
 using namespace NRainCheck;
 
@@ -38,7 +38,7 @@ struct TCoroOuter: public ICoroTask {
 
             do {
                 for (unsigned i = 0; i < current; ++i) {
-                    std::array<TSubtaskCompletion, SUBTASKS> completion; 
+                    std::array<TSubtaskCompletion, SUBTASKS> completion;
 
                     for (unsigned j = 0; j < SUBTASKS; ++j) {
                         //SpawnSubtask<TNopSimpleTask>(Env, &completion[j]);
@@ -82,7 +82,7 @@ struct TSimpleOuter: public ISimpleTask {
         return &TSimpleOuter::Spawn;
     }
 
-    std::array<TSubtaskCompletion, SUBTASKS> Completion; 
+    std::array<TSubtaskCompletion, SUBTASKS> Completion;
 
     TContinueFunc Spawn() {
         for (unsigned j = 0; j < SUBTASKS; ++j) {
@@ -124,7 +124,7 @@ struct TReproduceCrashTask: public ISimpleTask {
     {
     }
 
-    std::array<TSubtaskCompletion, SUBTASKS> Completion; 
+    std::array<TSubtaskCompletion, SUBTASKS> Completion;
 
     TContinueFunc Start() override {
         for (unsigned j = 0; j < 2; ++j) {

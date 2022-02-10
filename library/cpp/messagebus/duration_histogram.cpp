@@ -32,7 +32,7 @@ namespace {
 
 namespace {
     struct TMarks {
-        std::array<TDuration, TDurationHistogram::Buckets> Marks; 
+        std::array<TDuration, TDurationHistogram::Buckets> Marks;
 
         TMarks() {
             Marks[0] = TDuration::Zero();

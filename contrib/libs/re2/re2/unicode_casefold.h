@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#ifndef RE2_UNICODE_CASEFOLD_H_ 
-#define RE2_UNICODE_CASEFOLD_H_ 
- 
+#ifndef RE2_UNICODE_CASEFOLD_H_
+#define RE2_UNICODE_CASEFOLD_H_
+
 // Unicode case folding tables.
 
 // The Unicode case folding tables encode the mapping from one Unicode point
@@ -19,7 +19,7 @@
 //     'K' -> 'K'
 //
 // Like everything Unicode, these tables are big.  If we represent the table
-// as a sorted list of uint32_t pairs, it has 2049 entries and is 16 kB. 
+// as a sorted list of uint32_t pairs, it has 2049 entries and is 16 kB.
 // Most table entries look like the ones around them:
 // 'A' maps to 'A'+32, 'B' maps to 'B'+32, etc.
 // Instead of listing all the pairs explicitly, we make a list of ranges
@@ -39,40 +39,40 @@
 // The grouped form also allows for efficient fold range calculations
 // rather than looping one character at a time.
 
-#include <stdint.h> 
+#include <stdint.h>
 
-#include "util/util.h" 
-#include "util/utf.h" 
+#include "util/util.h"
+#include "util/utf.h"
 
 namespace re2 {
 
 enum {
   EvenOdd = 1,
-  OddEven = -1, 
-  EvenOddSkip = 1<<30, 
-  OddEvenSkip, 
+  OddEven = -1,
+  EvenOddSkip = 1<<30,
+  OddEvenSkip,
 };
 
 struct CaseFold {
-  Rune lo; 
-  Rune hi; 
-  int32_t delta; 
+  Rune lo;
+  Rune hi;
+  int32_t delta;
 };
 
 extern const CaseFold unicode_casefold[];
 extern const int num_unicode_casefold;
 
-extern const CaseFold unicode_tolower[]; 
-extern const int num_unicode_tolower; 
- 
+extern const CaseFold unicode_tolower[];
+extern const int num_unicode_tolower;
+
 // Returns the CaseFold* in the tables that contains rune.
 // If rune is not in the tables, returns the first CaseFold* after rune.
 // If rune is larger than any value in the tables, returns NULL.
-extern const CaseFold* LookupCaseFold(const CaseFold*, int, Rune rune); 
+extern const CaseFold* LookupCaseFold(const CaseFold*, int, Rune rune);
 
-// Returns the result of applying the fold f to the rune r. 
-extern Rune ApplyFold(const CaseFold *f, Rune r); 
- 
+// Returns the result of applying the fold f to the rune r.
+extern Rune ApplyFold(const CaseFold *f, Rune r);
+
 }  // namespace re2
 
-#endif  // RE2_UNICODE_CASEFOLD_H_ 
+#endif  // RE2_UNICODE_CASEFOLD_H_

@@ -19,7 +19,7 @@
 
 #include "packers.h"
 
-#include <array> 
+#include <array>
 #include <iterator>
 
 class TPackersTest: public TTestBase {

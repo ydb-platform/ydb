@@ -16,8 +16,8 @@
 #include <util/system/sem.h>
 #include <util/system/spinlock.h>
 
-#include <array> 
- 
+#include <array>
+
 namespace NMonitoring {
 #define BEGIN_OUTPUT_COUNTERS             \
     void OutputImpl(IOutputStream& out) { \

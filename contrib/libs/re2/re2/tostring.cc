@@ -5,13 +5,13 @@
 // Format a regular expression structure as a string.
 // Tested by parse_test.cc
 
-#include <string.h> 
-#include <string> 
- 
-#include "util/util.h" 
-#include "util/logging.h" 
-#include "util/strutil.h" 
-#include "util/utf.h" 
+#include <string.h>
+#include <string>
+
+#include "util/util.h"
+#include "util/logging.h"
+#include "util/strutil.h"
+#include "util/utf.h"
 #include "re2/regexp.h"
 #include "re2/walker-inl.h"
 
@@ -48,8 +48,8 @@ class ToStringWalker : public Regexp::Walker<int> {
  private:
   std::string* t_;  // The string the walker appends to.
 
-  ToStringWalker(const ToStringWalker&) = delete; 
-  ToStringWalker& operator=(const ToStringWalker&) = delete; 
+  ToStringWalker(const ToStringWalker&) = delete;
+  ToStringWalker& operator=(const ToStringWalker&) = delete;
 };
 
 std::string Regexp::ToString() {
@@ -101,8 +101,8 @@ int ToStringWalker::PreVisit(Regexp* re, int parent_arg, bool* stop) {
 
     case kRegexpCapture:
       t_->append("(");
-      if (re->cap() == 0) 
-        LOG(DFATAL) << "kRegexpCapture cap() == 0"; 
+      if (re->cap() == 0)
+        LOG(DFATAL) << "kRegexpCapture cap() == 0";
       if (re->name()) {
         t_->append("?P<");
         t_->append(*re->name());
@@ -129,12 +129,12 @@ int ToStringWalker::PreVisit(Regexp* re, int parent_arg, bool* stop) {
 static void AppendLiteral(std::string *t, Rune r, bool foldcase) {
   if (r != 0 && r < 0x80 && strchr("(){}[]*+?|.^$\\", r)) {
     t->append(1, '\\');
-    t->append(1, static_cast<char>(r)); 
+    t->append(1, static_cast<char>(r));
   } else if (foldcase && 'a' <= r && r <= 'z') {
-    r -= 'a' - 'A'; 
+    r -= 'a' - 'A';
     t->append(1, '[');
-    t->append(1, static_cast<char>(r)); 
-    t->append(1, static_cast<char>(r) + 'a' - 'A'); 
+    t->append(1, static_cast<char>(r));
+    t->append(1, static_cast<char>(r) + 'a' - 'A');
     t->append(1, ']');
   } else {
     AppendCCRange(t, r, r);
@@ -162,14 +162,14 @@ int ToStringWalker::PostVisit(Regexp* re, int parent_arg, int pre_arg,
       break;
 
     case kRegexpLiteral:
-      AppendLiteral(t_, re->rune(), 
-                    (re->parse_flags() & Regexp::FoldCase) != 0); 
+      AppendLiteral(t_, re->rune(),
+                    (re->parse_flags() & Regexp::FoldCase) != 0);
       break;
 
     case kRegexpLiteralString:
       for (int i = 0; i < re->nrunes(); i++)
-        AppendLiteral(t_, re->runes()[i], 
-                      (re->parse_flags() & Regexp::FoldCase) != 0); 
+        AppendLiteral(t_, re->runes()[i],
+                      (re->parse_flags() & Regexp::FoldCase) != 0);
       if (prec < PrecConcat)
         t_->append(")");
       break;
@@ -307,7 +307,7 @@ static void AppendCCChar(std::string* t, Rune r) {
   if (0x20 <= r && r <= 0x7E) {
     if (strchr("[]^-\\", r))
       t->append("\\");
-    t->append(1, static_cast<char>(r)); 
+    t->append(1, static_cast<char>(r));
     return;
   }
   switch (r) {

@@ -626,7 +626,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
 
-            auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0); 
+            auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);

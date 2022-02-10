@@ -111,7 +111,7 @@ class TTypeTraits: public TTypeTraitsBase<T> {
                                              std::false_type,
                                              ::NPrivate::TIsSmall<T>>::value);
 
-public: 
+public:
     /*
      * can be used in function templates for effective parameters passing
      */

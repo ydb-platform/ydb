@@ -10,12 +10,12 @@
 
 class TDelimStringIter {
 public:
-    using value_type = TStringBuf; 
-    using difference_type = ptrdiff_t; 
-    using pointer = const TStringBuf*; 
-    using reference = const TStringBuf&; 
-    using iterator_category = std::forward_iterator_tag; 
- 
+    using value_type = TStringBuf;
+    using difference_type = ptrdiff_t;
+    using pointer = const TStringBuf*;
+    using reference = const TStringBuf&;
+    using iterator_category = std::forward_iterator_tag;
+
     inline TDelimStringIter(const char* begin, const char* strEnd, TStringBuf delim)
         : TDelimStringIter(TStringBuf(begin, strEnd), delim)
     {

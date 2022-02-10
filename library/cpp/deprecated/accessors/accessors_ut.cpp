@@ -5,8 +5,8 @@
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>
 
-#include <array> 
- 
+#include <array>
+
 class TAccessorsTest: public TTestBase {
     UNIT_TEST_SUITE(TAccessorsTest);
     UNIT_TEST(TestAccessors);
@@ -82,10 +82,10 @@ private:
         NAccessors::Init(sarr);
         NAccessors::Clear(sarr);
 
-        std::array<char, 10> carr; 
+        std::array<char, 10> carr;
         NAccessors::Init(carr);
         NAccessors::Clear(carr);
-        TestRead(carr, "std::array<char, 10>"); 
+        TestRead(carr, "std::array<char, 10>");
     }
 };
 

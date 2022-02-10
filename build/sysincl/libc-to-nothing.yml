@@ -146,7 +146,7 @@
   - sys/xattr.h
   - tar.h
   - termios.h
-  - threads.h 
+  - threads.h
   - time.h
   - uchar.h
   - ucontext.h

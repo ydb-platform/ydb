@@ -9,7 +9,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/mem.h>
 
-#include <array> 
+#include <array>
 
 namespace NBus {
     using TBusBufferRecord = ::google::protobuf::Message;

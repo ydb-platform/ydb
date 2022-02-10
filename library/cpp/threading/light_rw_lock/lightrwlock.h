@@ -29,7 +29,7 @@
 */
 
 #include <linux/futex.h>
-#include <unistd.h> 
+#include <unistd.h>
 #include <sys/syscall.h>
 #include <errno.h>
 

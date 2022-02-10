@@ -114,5 +114,5 @@ inline bool operator!=(const segpool_alloc<_Tp>& a1, const segpool_alloc<_Tp>& a
     return a1.pool != a2.pool;
 }
 
-// Any type since it is supposed to be rebound anyway. 
-using segpool_alloc_vt = segpool_alloc<int>; 
+// Any type since it is supposed to be rebound anyway.
+using segpool_alloc_vt = segpool_alloc<int>;

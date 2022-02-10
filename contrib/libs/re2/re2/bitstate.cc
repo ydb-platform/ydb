@@ -17,13 +17,13 @@
 // SearchBitState is a fast replacement for the NFA code on small
 // regexps and texts when SearchOnePass cannot be used.
 
-#include <stddef.h> 
-#include <stdint.h> 
-#include <string.h> 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 #include <limits>
 #include <utility>
- 
-#include "util/logging.h" 
+
+#include "util/logging.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
@@ -155,7 +155,7 @@ bool BitState::TrySearch(int id0, const char* p0) {
       cap_[prog_->inst(-id)->cap()] = p;
       continue;
     }
- 
+
     if (rle > 0) {
       p += rle;
       // Revivify job on stack.
@@ -171,10 +171,10 @@ bool BitState::TrySearch(int id0, const char* p0) {
         LOG(DFATAL) << "Unexpected opcode: " << ip->opcode();
         return false;
 
-      case kInstFail: 
+      case kInstFail:
         break;
- 
-      case kInstAltMatch: 
+
+      case kInstAltMatch:
         if (ip->greedy(prog_)) {
           // out1 is the Match instruction.
           id = ip->out1();
@@ -194,40 +194,40 @@ bool BitState::TrySearch(int id0, const char* p0) {
         int c = -1;
         if (p < end)
           c = *p & 0xFF;
-        if (!ip->Matches(c)) 
-          goto Next; 
- 
+        if (!ip->Matches(c))
+          goto Next;
+
         if (ip->hint() != 0)
           Push(id+ip->hint(), p);  // try the next when we're done
-        id = ip->out(); 
-        p++; 
-        goto CheckAndLoop; 
+        id = ip->out();
+        p++;
+        goto CheckAndLoop;
       }
 
       case kInstCapture:
         if (!ip->last())
           Push(id+1, p);  // try the next when we're done
- 
+
         if (0 <= ip->cap() && ip->cap() < cap_.size()) {
           // Capture p to register, but save old value first.
           Push(-id, cap_[ip->cap()]);  // undo when we're done
           cap_[ip->cap()] = p;
         }
- 
+
         id = ip->out();
         goto CheckAndLoop;
- 
+
       case kInstEmptyWidth:
         if (ip->empty() & ~Prog::EmptyFlags(context_, p))
-          goto Next; 
- 
-        if (!ip->last()) 
+          goto Next;
+
+        if (!ip->last())
           Push(id+1, p);  // try the next when we're done
         id = ip->out();
         goto CheckAndLoop;
 
       case kInstNop:
-        if (!ip->last()) 
+        if (!ip->last())
           Push(id+1, p);  // try the next when we're done
         id = ip->out();
 
@@ -241,7 +241,7 @@ bool BitState::TrySearch(int id0, const char* p0) {
 
       case kInstMatch: {
         if (endmatch_ && p != end)
-          goto Next; 
+          goto Next;
 
         // We found a match.  If the caller doesn't care
         // where the match is, no point going further.
@@ -256,9 +256,9 @@ bool BitState::TrySearch(int id0, const char* p0) {
         if (submatch_[0].data() == NULL ||
             (longest_ && p > submatch_[0].data() + submatch_[0].size())) {
           for (int i = 0; i < nsubmatch_; i++)
-            submatch_[i] = 
-                StringPiece(cap_[2 * i], 
-                            static_cast<size_t>(cap_[2 * i + 1] - cap_[2 * i])); 
+            submatch_[i] =
+                StringPiece(cap_[2 * i],
+                            static_cast<size_t>(cap_[2 * i + 1] - cap_[2 * i]));
         }
 
         // If going for first match, we're done.
@@ -303,7 +303,7 @@ bool BitState::Search(const StringPiece& text, const StringPiece& context,
   submatch_ = submatch;
   nsubmatch_ = nsubmatch;
   for (int i = 0; i < nsubmatch_; i++)
-    submatch_[i] = StringPiece(); 
+    submatch_[i] = StringPiece();
 
   // Allocate scratch space.
   int nvisited = prog_->list_count() * static_cast<int>(text.size()+1);
@@ -337,10 +337,10 @@ bool BitState::Search(const StringPiece& text, const StringPiece& context,
     // Try to use prefix accel (e.g. memchr) to skip ahead.
     if (p < etext && prog_->can_prefix_accel()) {
       p = reinterpret_cast<const char*>(prog_->PrefixAccel(p, etext - p));
-      if (p == NULL) 
+      if (p == NULL)
         p = etext;
-    } 
- 
+    }
+
     cap_[0] = p;
     if (TrySearch(prog_->start(), p))  // Match must be leftmost; done.
       return true;

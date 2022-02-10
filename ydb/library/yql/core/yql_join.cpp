@@ -541,7 +541,7 @@ TVector<TString> TJoinLabel::EnumerateAllMembers() const {
 
 TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType) {
     ui32 index = Inputs.size();
-    Inputs.emplace_back(); 
+    Inputs.emplace_back();
     TJoinLabel& label = Inputs.back();
     if (auto err = label.Parse(ctx, node, structType)) {
         return err;

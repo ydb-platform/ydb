@@ -673,7 +673,7 @@ public:                       \
         };
 
         template <class T, class U>
-        using TCompareValues = TCompareValuesImpl<T, U, std::is_integral<T>::value && std::is_integral<U>::value>; 
+        using TCompareValues = TCompareValuesImpl<T, U, std::is_integral<T>::value && std::is_integral<U>::value>;
 
         template <typename T, typename U>
         static inline bool CompareEqual(const T& a, const U& b) {
@@ -688,7 +688,7 @@ public:                       \
         template <typename T, typename U>
         static inline bool CompareAndMakeStrings(const T& a, const U& b, TString& as, TString& asInd, TString& bs, TString& bsInd, bool& usePlainDiff, bool want) {
             const bool have = CompareEqual(a, b);
-            usePlainDiff = std::is_integral<T>::value && std::is_integral<U>::value; 
+            usePlainDiff = std::is_integral<T>::value && std::is_integral<U>::value;
 
             if (want == have) {
                 return true;

@@ -30,14 +30,14 @@ namespace NPrivate {
         {
         }
 
-        class TIterator { 
+        class TIterator {
         public:
-            using value_type = T; 
-            using difference_type = TDiff; 
-            using pointer = const T*; 
-            using reference = const T&; 
-            using iterator_category = std::random_access_iterator_tag; 
- 
+            using value_type = T;
+            using difference_type = TDiff;
+            using pointer = const T*;
+            using reference = const T&;
+            using iterator_category = std::random_access_iterator_tag;
+
             constexpr TIterator(T value) noexcept
                 : Value(value)
             {
@@ -135,17 +135,17 @@ namespace NPrivate {
             , Step_(step)
             , Finish_(CalcRealFinish(Start_, finish, Step_))
         {
-            static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "T should be integral type or pointer"); 
+            static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "T should be integral type or pointer");
         }
 
-        class TIterator { 
+        class TIterator {
         public:
-            using value_type = T; 
-            using difference_type = TDiff; 
-            using pointer = const T*; 
-            using reference = const T&; 
-            using iterator_category = std::random_access_iterator_tag; 
- 
+            using value_type = T;
+            using difference_type = TDiff;
+            using pointer = const T*;
+            using reference = const T&;
+            using iterator_category = std::random_access_iterator_tag;
+
             constexpr TIterator(T value, const TSteppedXRange& parent) noexcept
                 : Value_(value)
                 , Parent_(&parent)

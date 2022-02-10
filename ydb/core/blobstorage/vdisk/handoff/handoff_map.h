@@ -349,12 +349,12 @@ namespace NKikimr {
             TIterator subsIt(i);
             subsIt.SeekToFirst();
             // for the whole level index
-            TLevelIt dbIt(HullCtx, std::addressof(levelSnap)); // addressof instead of "&" fixes ICE for MSVC (CROWDFUNDING-8) 
- 
+            TLevelIt dbIt(HullCtx, std::addressof(levelSnap)); // addressof instead of "&" fixes ICE for MSVC (CROWDFUNDING-8)
+
             MergeIteratorWithWholeDb<TIterator, TLevelIt, TIndexRecordMerger>(Top->GType, subsIt, dbIt,
                                                                               newItem, doMerge, crash);
             // run sync log proxy
-            ProxyID = ctx.Register(::NKikimr::CreateHandoffSyncLogProxy(SkeletonId,  notifyID)); // specifying NKikimr namespace fixes ICE for MSVC (CROWDFUNDING-8) 
+            ProxyID = ctx.Register(::NKikimr::CreateHandoffSyncLogProxy(SkeletonId,  notifyID)); // specifying NKikimr namespace fixes ICE for MSVC (CROWDFUNDING-8)
         }
 
         LOG_INFO(ctx, NKikimrServices::BS_HANDOFF,

@@ -74,7 +74,7 @@ namespace {
                 TValuePtr current = FindByName(p->GetNameInternal());
 
                 if (!current) {
-                    Entries.emplace_back(p->GetNameInternal(), p); 
+                    Entries.emplace_back(p->GetNameInternal(), p);
                     return;
                 }
             }
@@ -89,7 +89,7 @@ namespace {
                 TValuePtr current = FindByName(name);
 
                 if (!current) {
-                    Entries.emplace_back(name, p); 
+                    Entries.emplace_back(name, p);
                     return;
                 }
             }
@@ -901,7 +901,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
             cgiParams.Scan(url.Get(THttpURL::FieldQuery));
 
             TBusWww::TOptionalParams params;
-            //params.ParentLinks.emplace_back(); 
+            //params.ParentLinks.emplace_back();
             //params.ParentLinks.back().Title = "temp";
             //params.ParentLinks.back().Href = "http://wiki.yandex-team.ru/";
 

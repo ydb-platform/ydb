@@ -435,10 +435,10 @@
   - err.h: contrib/libs/libsrtp/crypto/include/err.h
   - stat.h: contrib/libs/libsrtp/crypto/include/stat.h
 
-- source_filter: "^contrib/restricted/openal-soft" 
-  includes: 
-    - threads.h: contrib/restricted/openal-soft/common/threads.h 
- 
+- source_filter: "^contrib/restricted/openal-soft"
+  includes:
+    - threads.h: contrib/restricted/openal-soft/common/threads.h
+
 - source_filter: "^contrib/python/pymqi"
   includes:
     # IBM MQ

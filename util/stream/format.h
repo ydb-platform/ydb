@@ -104,7 +104,7 @@ namespace NFormatPrivate {
     };
 
     template <typename T, size_t Base>
-    using TUnsignedBaseNumber = TBaseNumber<std::make_unsigned_t<std::remove_cv_t<T>>, Base>; 
+    using TUnsignedBaseNumber = TBaseNumber<std::make_unsigned_t<std::remove_cv_t<T>>, Base>;
 
     template <typename T, size_t Base>
     IOutputStream& operator<<(IOutputStream& stream, const TBaseNumber<T, Base>& value) {
@@ -155,8 +155,8 @@ namespace NFormatPrivate {
 
     template <typename T>
     struct TFloatPrecision {
-        using TdVal = std::remove_cv_t<T>; 
-        static_assert(std::is_floating_point<TdVal>::value, "expect std::is_floating_point<TdVal>::value"); 
+        using TdVal = std::remove_cv_t<T>;
+        static_assert(std::is_floating_point<TdVal>::value, "expect std::is_floating_point<TdVal>::value");
 
         TdVal Value;
         EFloatToStringMode Mode;

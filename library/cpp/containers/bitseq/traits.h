@@ -44,6 +44,6 @@ struct TBitSeqTraits {
         return res;
     }
 
-    static_assert(std::is_unsigned<TWord>::value, "Expected std::is_unsigned<T>::value."); 
+    static_assert(std::is_unsigned<TWord>::value, "Expected std::is_unsigned<T>::value.");
     static_assert((NumBits & (NumBits - 1)) == 0, "NumBits should be a power of 2.");
 };

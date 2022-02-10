@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TBlockCodecsTest) {
     void TestAllAtOnce(size_t n, size_t m) {
         TVector<TBuffer> datas;
 
-        datas.emplace_back(); 
+        datas.emplace_back();
         datas.push_back(Buffer("na gorshke sidel korol"));
         datas.push_back(Buffer(TStringBuf("", 1)));
         datas.push_back(Buffer(" "));

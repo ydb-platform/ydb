@@ -85,15 +85,15 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     Y_UNIT_TEST(TestRemoveReference) {
-        ASSERT_SAME_TYPE(std::remove_reference_t<int>, int); 
-        ASSERT_SAME_TYPE(std::remove_reference_t<const int>, const int); 
-        ASSERT_SAME_TYPE(std::remove_reference_t<int&>, int); 
-        ASSERT_SAME_TYPE(std::remove_reference_t<const int&>, const int); 
-        ASSERT_SAME_TYPE(std::remove_reference_t<int&&>, int); 
-        ASSERT_SAME_TYPE(std::remove_reference_t<const int&&>, const int); 
+        ASSERT_SAME_TYPE(std::remove_reference_t<int>, int);
+        ASSERT_SAME_TYPE(std::remove_reference_t<const int>, const int);
+        ASSERT_SAME_TYPE(std::remove_reference_t<int&>, int);
+        ASSERT_SAME_TYPE(std::remove_reference_t<const int&>, const int);
+        ASSERT_SAME_TYPE(std::remove_reference_t<int&&>, int);
+        ASSERT_SAME_TYPE(std::remove_reference_t<const int&&>, const int);
 
         class TIncompleteType;
-        ASSERT_SAME_TYPE(std::remove_reference_t<TIncompleteType&>, TIncompleteType); 
+        ASSERT_SAME_TYPE(std::remove_reference_t<TIncompleteType&>, TIncompleteType);
     }
 
     Y_UNIT_TEST(TestRemoveConst) {
@@ -114,22 +114,22 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
 
     Y_UNIT_TEST(TestClass) {
         UNIT_ASSERT(std::is_class<TString>::value);
-        UNIT_ASSERT(!std::is_class<ETestEnum>::value); 
-        UNIT_ASSERT(!std::is_class<int>::value); 
-        UNIT_ASSERT(!std::is_class<void*>::value); 
+        UNIT_ASSERT(!std::is_class<ETestEnum>::value);
+        UNIT_ASSERT(!std::is_class<int>::value);
+        UNIT_ASSERT(!std::is_class<void*>::value);
     }
 
     template <class T>
     inline void TestArithmeticType() {
-        UNIT_ASSERT(std::is_arithmetic<T>::value); 
-        UNIT_ASSERT(std::is_arithmetic<const T>::value); 
-        UNIT_ASSERT(std::is_arithmetic<volatile T>::value); 
-        UNIT_ASSERT(std::is_arithmetic<const volatile T>::value); 
+        UNIT_ASSERT(std::is_arithmetic<T>::value);
+        UNIT_ASSERT(std::is_arithmetic<const T>::value);
+        UNIT_ASSERT(std::is_arithmetic<volatile T>::value);
+        UNIT_ASSERT(std::is_arithmetic<const volatile T>::value);
 
-        UNIT_ASSERT(!std::is_arithmetic<T&>::value); 
-        UNIT_ASSERT(!std::is_arithmetic<T&&>::value); 
-        UNIT_ASSERT(!std::is_arithmetic<T*>::value); 
- 
+        UNIT_ASSERT(!std::is_arithmetic<T&>::value);
+        UNIT_ASSERT(!std::is_arithmetic<T&&>::value);
+        UNIT_ASSERT(!std::is_arithmetic<T*>::value);
+
         bool a;
 
         a = std::is_same<typename TTypeTraits<T>::TFuncParam, T>::value;
@@ -138,56 +138,56 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(a);
     }
 
-    template <class T> 
-    inline void TestUnsignedIntType() { 
-        UNIT_ASSERT(std::is_unsigned<T>::value); 
-        UNIT_ASSERT(std::is_unsigned<const T>::value); 
-        UNIT_ASSERT(std::is_unsigned<volatile T>::value); 
-        UNIT_ASSERT(std::is_unsigned<const volatile T>::value); 
- 
-        UNIT_ASSERT(!std::is_unsigned<T&>::value); 
-        UNIT_ASSERT(!std::is_unsigned<T&&>::value); 
-        UNIT_ASSERT(!std::is_unsigned<T*>::value); 
- 
+    template <class T>
+    inline void TestUnsignedIntType() {
+        UNIT_ASSERT(std::is_unsigned<T>::value);
+        UNIT_ASSERT(std::is_unsigned<const T>::value);
+        UNIT_ASSERT(std::is_unsigned<volatile T>::value);
+        UNIT_ASSERT(std::is_unsigned<const volatile T>::value);
+
+        UNIT_ASSERT(!std::is_unsigned<T&>::value);
+        UNIT_ASSERT(!std::is_unsigned<T&&>::value);
+        UNIT_ASSERT(!std::is_unsigned<T*>::value);
+
         enum ETypedEnum: T {};
-        UNIT_ASSERT(!std::is_unsigned<ETypedEnum>::value); 
-    } 
- 
-    template <class T> 
-    inline void TestSignedIntType() { 
-        UNIT_ASSERT(std::is_signed<T>::value); 
-        UNIT_ASSERT(std::is_signed<const T>::value); 
-        UNIT_ASSERT(std::is_signed<volatile T>::value); 
-        UNIT_ASSERT(std::is_signed<const volatile T>::value); 
- 
-        UNIT_ASSERT(!std::is_signed<T&>::value); 
-        UNIT_ASSERT(!std::is_signed<T&&>::value); 
-        UNIT_ASSERT(!std::is_signed<T*>::value); 
- 
+        UNIT_ASSERT(!std::is_unsigned<ETypedEnum>::value);
+    }
+
+    template <class T>
+    inline void TestSignedIntType() {
+        UNIT_ASSERT(std::is_signed<T>::value);
+        UNIT_ASSERT(std::is_signed<const T>::value);
+        UNIT_ASSERT(std::is_signed<volatile T>::value);
+        UNIT_ASSERT(std::is_signed<const volatile T>::value);
+
+        UNIT_ASSERT(!std::is_signed<T&>::value);
+        UNIT_ASSERT(!std::is_signed<T&&>::value);
+        UNIT_ASSERT(!std::is_signed<T*>::value);
+
         enum ETypedEnum: T {};
-        UNIT_ASSERT(!std::is_signed<ETypedEnum>::value); 
-    } 
- 
+        UNIT_ASSERT(!std::is_signed<ETypedEnum>::value);
+    }
+
     Y_UNIT_TEST(TestBool) {
-        TestArithmeticType<bool>(); 
-        TestUnsignedIntType<bool>(); 
-    } 
- 
+        TestArithmeticType<bool>();
+        TestUnsignedIntType<bool>();
+    }
+
     Y_UNIT_TEST(TestUnsignedChar) {
         TestArithmeticType<unsigned char>();
-        TestUnsignedIntType<unsigned char>(); 
+        TestUnsignedIntType<unsigned char>();
     }
 
     Y_UNIT_TEST(TestSizeT) {
         TestArithmeticType<size_t>();
-        TestUnsignedIntType<size_t>(); 
+        TestUnsignedIntType<size_t>();
     }
 
     Y_UNIT_TEST(TestInt) {
-        TestArithmeticType<int>(); 
-        TestSignedIntType<int>(); 
-    } 
- 
+        TestArithmeticType<int>();
+        TestSignedIntType<int>();
+    }
+
     Y_UNIT_TEST(TestDouble) {
         TestArithmeticType<double>();
     }
@@ -206,25 +206,25 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     Y_UNIT_TEST(TestIsEmpty) {
-        UNIT_ASSERT(std::is_empty<TEmptyClass>::value); 
-        UNIT_ASSERT(std::is_empty<TEmptyDerivedClass>::value); 
-        UNIT_ASSERT(std::is_empty<TAnotherEmptyClass>::value); 
+        UNIT_ASSERT(std::is_empty<TEmptyClass>::value);
+        UNIT_ASSERT(std::is_empty<TEmptyDerivedClass>::value);
+        UNIT_ASSERT(std::is_empty<TAnotherEmptyClass>::value);
 #ifdef _MSC_VER
         UNIT_ASSERT(!std::is_empty<TEmptyMultiDerivedClass>::value);
 #else
-        UNIT_ASSERT(std::is_empty<TEmptyMultiDerivedClass>::value); 
+        UNIT_ASSERT(std::is_empty<TEmptyMultiDerivedClass>::value);
 #endif
-        UNIT_ASSERT(!std::is_empty<TNonEmptyClass>::value); 
-        UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value); 
+        UNIT_ASSERT(!std::is_empty<TNonEmptyClass>::value);
+        UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value);
     }
 
     Y_UNIT_TEST(TestIsStandardLayout) {
-        UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass1>::value); 
-        UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass2>::value); 
-        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass1>::value); 
-        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass2>::value); 
-        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass3>::value); 
-        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass4>::value); 
+        UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass1>::value);
+        UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass2>::value);
+        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass1>::value);
+        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass2>::value);
+        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass3>::value);
+        UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass4>::value);
     }
 
     template <class T>
@@ -385,18 +385,18 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
     template <typename T>
     void TestImpl() {
         //UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPod, TTypeTraits<T>::IsPod);
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsVoid, std::is_void<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsEnum, std::is_enum<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsIntegral, std::is_integral<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsArithmetic, std::is_arithmetic<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsVolatile, std::is_volatile<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsConstant, std::is_const<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPointer, std::is_pointer<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsReference, std::is_reference<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsLvalueReference, std::is_lvalue_reference<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsRvalueReference, std::is_rvalue_reference<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsArray, std::is_array<T>::value); 
-        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsClassType, std::is_class<T>::value); 
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsVoid, std::is_void<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsEnum, std::is_enum<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsIntegral, std::is_integral<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsArithmetic, std::is_arithmetic<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsVolatile, std::is_volatile<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsConstant, std::is_const<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPointer, std::is_pointer<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsReference, std::is_reference<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsLvalueReference, std::is_lvalue_reference<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsRvalueReference, std::is_rvalue_reference<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsArray, std::is_array<T>::value);
+        UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsClassType, std::is_class<T>::value);
     }
 
 #define TYPE_TEST(name, type) \

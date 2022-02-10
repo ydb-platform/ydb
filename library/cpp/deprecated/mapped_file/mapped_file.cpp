@@ -20,11 +20,11 @@ TMappedFile::TMappedFile(const TFile& file, TFileMap::EOpenMode om, const char* 
     init(file, om, dbgName);
 }
 
-void TMappedFile::precharge(size_t off, size_t size) const { 
+void TMappedFile::precharge(size_t off, size_t size) const {
     if (!Map_)
-        return; 
+        return;
 
-    Map_->Precharge(off, size); 
+    Map_->Precharge(off, size);
 }
 
 void TMappedFile::init(const TString& name) {

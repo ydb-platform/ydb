@@ -9,14 +9,14 @@
 #include <util/generic/vector.h>
 #include <util/generic/typetraits.h>
 
-#include <array> 
+#include <array>
 #include <string>
-#include <utility> 
+#include <utility>
 
 template <typename T>
 struct TMemoryTraits {
     enum {
-        SimpleMemory = std::is_arithmetic<T>::value, 
+        SimpleMemory = std::is_arithmetic<T>::value,
         ContinuousMemory = SimpleMemory,
         OwnsMemory = SimpleMemory,
     };
@@ -36,7 +36,7 @@ struct TMemoryTraits<T[n]> {
 };
 
 template <typename T, size_t n>
-struct TMemoryTraits<std::array<T, n>> { 
+struct TMemoryTraits<std::array<T, n>> {
     enum {
         SimpleMemory = TMemoryTraits<T>::SimpleMemory,
         ContinuousMemory = SimpleMemory,

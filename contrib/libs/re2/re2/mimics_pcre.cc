@@ -22,8 +22,8 @@
 //
 // Regexp::MimicsPCRE checks for any of these conditions.
 
-#include "util/util.h" 
-#include "util/logging.h" 
+#include "util/util.h"
+#include "util/logging.h"
 #include "re2/regexp.h"
 #include "re2/walker-inl.h"
 
@@ -135,8 +135,8 @@ class EmptyStringWalker : public Regexp::Walker<bool> {
   }
 
  private:
-  EmptyStringWalker(const EmptyStringWalker&) = delete; 
-  EmptyStringWalker& operator=(const EmptyStringWalker&) = delete; 
+  EmptyStringWalker(const EmptyStringWalker&) = delete;
+  EmptyStringWalker& operator=(const EmptyStringWalker&) = delete;
 };
 
 // Called after visiting re's children.  child_args contains the return

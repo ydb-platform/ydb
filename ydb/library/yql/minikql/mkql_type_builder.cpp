@@ -562,14 +562,14 @@ public:
 
     NUdf::IFunctionArgTypesBuilder& Add(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Env_);
-        Args_.emplace_back(); 
+        Args_.emplace_back();
         Args_.back().Type_ = type;
         return *this;
     }
 
     NUdf::IFunctionArgTypesBuilder& Add(const NUdf::TType* type) override {
         auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
-        Args_.emplace_back(); 
+        Args_.emplace_back();
         Args_.back().Type_ = const_cast<NMiniKQL::TType*>(mkqlType);
         return *this;
     }
@@ -578,7 +578,7 @@ public:
             const NUdf::ITypeBuilder& typeBuilder) override
     {
         auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        Args_.emplace_back(); 
+        Args_.emplace_back();
         Args_.back().Type_ = type;
         return *this;
     }

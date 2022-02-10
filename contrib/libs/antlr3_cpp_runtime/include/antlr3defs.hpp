@@ -54,9 +54,9 @@
 #define	_CRT_SECURE_NO_DEPRECATE 
 #endif
 
-#ifndef NOMINMAX 
-#define NOMINMAX 
-#endif 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include    <winsock2.h>
 
 #define	ANTLR_INLINE	        __inline

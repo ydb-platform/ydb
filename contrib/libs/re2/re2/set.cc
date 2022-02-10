@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#include "re2/set.h" 
+#include "re2/set.h"
 
-#include <stddef.h> 
+#include <stddef.h>
 #include <algorithm>
 #include <memory>
 #include <utility>
- 
-#include "util/util.h" 
-#include "util/logging.h" 
+
+#include "util/util.h"
+#include "util/logging.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
-#include "re2/re2.h" 
+#include "re2/re2.h"
 #include "re2/regexp.h"
 #include "re2/stringpiece.h"
 
-namespace re2 { 
+namespace re2 {
 
 RE2::Set::Set(const RE2::Options& options, RE2::Anchor anchor)
     : options_(options),
@@ -61,7 +61,7 @@ int RE2::Set::Add(const StringPiece& pattern, std::string* error) {
   Regexp::ParseFlags pf = static_cast<Regexp::ParseFlags>(
     options_.ParseFlags());
   RegexpStatus status;
-  re2::Regexp* re = Regexp::Parse(pattern, pf, &status); 
+  re2::Regexp* re = Regexp::Parse(pattern, pf, &status);
   if (re == NULL) {
     if (error != NULL)
       *error = status.Text();
@@ -72,7 +72,7 @@ int RE2::Set::Add(const StringPiece& pattern, std::string* error) {
 
   // Concatenate with match index and push on vector.
   int n = static_cast<int>(elem_.size());
-  re2::Regexp* m = re2::Regexp::HaveMatch(n, pf); 
+  re2::Regexp* m = re2::Regexp::HaveMatch(n, pf);
   if (re->op() == kRegexpConcat) {
     int nsub = re->nsub();
     PODArray<re2::Regexp*> sub(nsub + 1);
@@ -82,10 +82,10 @@ int RE2::Set::Add(const StringPiece& pattern, std::string* error) {
     re->Decref();
     re = re2::Regexp::Concat(sub.data(), nsub + 1, pf);
   } else {
-    re2::Regexp* sub[2]; 
+    re2::Regexp* sub[2];
     sub[0] = re;
     sub[1] = m;
-    re = re2::Regexp::Concat(sub, 2, pf); 
+    re = re2::Regexp::Concat(sub, 2, pf);
   }
   elem_.emplace_back(std::string(pattern), re);
   return n;
@@ -140,20 +140,20 @@ bool RE2::Set::Match(const StringPiece& text, std::vector<int>* v,
   std::unique_ptr<SparseSet> matches;
   if (v != NULL) {
     matches.reset(new SparseSet(size_));
-    v->clear(); 
+    v->clear();
   }
   bool ret = prog_->SearchDFA(text, text, Prog::kAnchored, Prog::kManyMatch,
                               NULL, &dfa_failed, matches.get());
-  if (dfa_failed) { 
-    if (options_.log_errors()) 
+  if (dfa_failed) {
+    if (options_.log_errors())
       LOG(ERROR) << "DFA out of memory: "
                  << "program size " << prog_->size() << ", "
                  << "list count " << prog_->list_count() << ", "
                  << "bytemap range " << prog_->bytemap_range();
     if (error_info != NULL)
       error_info->kind = kOutOfMemory;
-    return false; 
-  } 
+    return false;
+  }
   if (ret == false) {
     if (error_info != NULL)
       error_info->kind = kNoError;
@@ -172,5 +172,5 @@ bool RE2::Set::Match(const StringPiece& text, std::vector<int>* v,
     error_info->kind = kNoError;
   return true;
 }
- 
-}  // namespace re2 
+
+}  // namespace re2

@@ -289,8 +289,8 @@ Y_UNIT_TEST_SUITE(YSetTest) {
         bool operator()(int lhs, TKey rhs) const {
             return lhs < rhs.m_data;
         }
- 
-        using is_transparent = void; 
+
+        using is_transparent = void;
     };
 
     struct TKeyCmpPtr {
@@ -305,8 +305,8 @@ Y_UNIT_TEST_SUITE(YSetTest) {
         bool operator()(int lhs, TKey const volatile* rhs) const {
             return lhs < (*rhs).m_data;
         }
- 
-        using is_transparent = void; 
+
+        using is_transparent = void;
     };
 
     Y_UNIT_TEST(TestTemplateMethods) {

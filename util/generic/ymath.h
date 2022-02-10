@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 #include <util/system/defaults.h>
 
 #include <cmath>
@@ -120,32 +120,32 @@ inline double LogGamma(double x) noexcept {
     return LogGammaImpl(x);
 #endif
 }
- 
-/** 
- * @returns                             x^n for integer n, n >= 0. 
- */ 
+
+/**
+ * @returns                             x^n for integer n, n >= 0.
+ */
 template <class T, class Int>
-T Power(T x, Int n) { 
-    static_assert(std::is_integral<Int>::value, "only integer powers are supported"); 
-    Y_ASSERT(n >= 0); 
-    if (n == 0) { 
-        return T(1); 
-    } 
-    while ((n & 1) == 0) { 
-        x = x * x; 
-        n >>= 1; 
-    } 
-    T result = x; 
-    n >>= 1; 
-    while (n > 0) { 
-        x = x * x; 
-        if (n & 1) { 
-            result = result * x; 
-        } 
-        n >>= 1; 
-    } 
-    return result; 
-}; 
+T Power(T x, Int n) {
+    static_assert(std::is_integral<Int>::value, "only integer powers are supported");
+    Y_ASSERT(n >= 0);
+    if (n == 0) {
+        return T(1);
+    }
+    while ((n & 1) == 0) {
+        x = x * x;
+        n >>= 1;
+    }
+    T result = x;
+    n >>= 1;
+    while (n > 0) {
+        x = x * x;
+        if (n & 1) {
+            result = result * x;
+        }
+        n >>= 1;
+    }
+    return result;
+};
 
 /**
  * Compares two floating point values and returns true if they are considered equal.

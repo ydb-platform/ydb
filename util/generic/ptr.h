@@ -1080,7 +1080,7 @@ public:
         return T_.Get();
     }
 
-    inline T* Mutable() { 
+    inline T* Mutable() {
         Unshare();
 
         return T_.Get();
@@ -1109,7 +1109,7 @@ public:
     }
 #endif
 private:
-    inline void Unshare() { 
+    inline void Unshare() {
         if (Shared()) {
             Reset(TCopy::Copy(T_.Get()));
         }

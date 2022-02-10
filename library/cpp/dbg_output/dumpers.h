@@ -103,7 +103,7 @@ struct TDumper<TArrayRef<T>>: public TSeqDumper {
 };
 
 template <class T, size_t N>
-struct TDumper<std::array<T, N>>: public TSeqDumper { 
+struct TDumper<std::array<T, N>>: public TSeqDumper {
 };
 
 template <class T, class A>

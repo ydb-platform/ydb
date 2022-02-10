@@ -12,12 +12,12 @@ namespace NActors {
         std::list<TEventHolder> FreeQueue;
         TStackVec<THolder<IEventBase>, MaxEvents> Events;
         TStackVec<THolder<TEventSerializedData>, MaxEvents> Buffers;
-        std::shared_ptr<std::atomic<TAtomicBase>> Counter; 
+        std::shared_ptr<std::atomic<TAtomicBase>> Counter;
         ui64 NumBytes = 0;
 
         ~TEvFreeItems() {
             if (Counter) {
-                TAtomicBase res = Counter->fetch_sub(NumBytes) - NumBytes; 
+                TAtomicBase res = Counter->fetch_sub(NumBytes) - NumBytes;
                 Y_VERIFY(res >= 0);
             }
         }
@@ -26,8 +26,8 @@ namespace NActors {
             Y_VERIFY(!Counter);
             const auto& counter = common->DestructorQueueSize;
             const auto& max = common->MaxDestructorQueueSize;
-            if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) { 
-                counter->fetch_sub(NumBytes); 
+            if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) {
+                counter->fetch_sub(NumBytes);
                 return false;
             }
             Counter = counter;

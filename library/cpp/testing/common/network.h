@@ -27,8 +27,8 @@ namespace NTesting {
         operator ui16() const&& = delete;
     };
 
-    IOutputStream& operator<<(IOutputStream& out, const TPortHolder& port);
-
+    IOutputStream& operator<<(IOutputStream& out, const TPortHolder& port); 
+ 
     //@brief Get first free port.
     [[nodiscard]] TPortHolder GetFreePort();
 

@@ -21,12 +21,12 @@ class IOutputStream;
 namespace NProtoBuf {
     /* Parse base64 URL encoded serialized message from string.
      */
-    void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
-    bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
+    void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false); 
+    bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false); 
     template <typename T>
-    static T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
+    static T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) { 
         T m;
-        ParseFromBase64String(dataBase64, m, allowUneven);
+        ParseFromBase64String(dataBase64, m, allowUneven); 
         return m;
     }
 

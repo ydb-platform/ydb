@@ -709,10 +709,10 @@ namespace NLWTrace {
                 TString val1 = (expectedArgumentCount <= 1) ? "" : statement.GetArgument(1).GetValue();
                 TString val2 = (expectedArgumentCount <= 2) ? "" : statement.GetArgument(2).GetValue();
 
-                const char* tName1 = (expectedArgumentCount <= 1 || arg1.ParamIdx == size_t(-1)) 
-                    ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx]; 
-                const char* tName2 = (expectedArgumentCount <= 2 || arg2.ParamIdx == size_t(-1)) 
-                    ? nullptr : probe->Event.Signature.ParamTypes[arg2.ParamIdx]; 
+                const char* tName1 = (expectedArgumentCount <= 1 || arg1.ParamIdx == size_t(-1))
+                    ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx];
+                const char* tName2 = (expectedArgumentCount <= 2 || arg2.ParamIdx == size_t(-1))
+                    ? nullptr : probe->Event.Signature.ParamTypes[arg2.ParamIdx];
 
                 if (arg0.Type == OT_VARIABLE) {
                     switch (statement.GetType()) {

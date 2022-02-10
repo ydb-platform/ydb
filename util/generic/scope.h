@@ -1,43 +1,43 @@
 #pragma once
 
-#include <util/system/compiler.h> 
+#include <util/system/compiler.h>
 #include <util/system/defaults.h>
- 
-#include <utility> 
 
-namespace NPrivate { 
-    template <typename F> 
-    class TScopeGuard { 
-    public: 
-        TScopeGuard(const F& function) 
+#include <utility>
+
+namespace NPrivate {
+    template <typename F>
+    class TScopeGuard {
+    public:
+        TScopeGuard(const F& function)
             : Function_{function}
         {
         }
 
-        TScopeGuard(F&& function) 
+        TScopeGuard(F&& function)
             : Function_{std::move(function)}
         {
         }
 
-        TScopeGuard(TScopeGuard&&) = default; 
-        TScopeGuard(const TScopeGuard&) = default; 
- 
-        ~TScopeGuard() { 
-            Function_(); 
-        } 
- 
+        TScopeGuard(TScopeGuard&&) = default;
+        TScopeGuard(const TScopeGuard&) = default;
+
+        ~TScopeGuard() {
+            Function_();
+        }
+
     private:
         F Function_;
     };
 
-    struct TMakeGuardHelper { 
-        template <class F> 
+    struct TMakeGuardHelper {
+        template <class F>
         TScopeGuard<F> operator|(F&& function) const {
-            return std::forward<F>(function); 
-        } 
+            return std::forward<F>(function);
+        }
     };
 }
- 
+
 // \brief `Y_SCOPE_EXIT(captures) { body };`
 //
 // General implementaion of RAII idiom (resource acquisition is initialization). Executes

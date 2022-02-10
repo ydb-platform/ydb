@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size());
     }
 
-    TString MakeHttpOutputBody(const char* body, bool encodingEnabled) { 
+    TString MakeHttpOutputBody(const char* body, bool encodingEnabled) {
         TString str;
         TStringOutput strOut(str);
         {
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
             httpOut.EnableKeepAlive(true);
             httpOut.EnableCompression(true);
-            httpOut.EnableBodyEncoding(encodingEnabled); 
+            httpOut.EnableBodyEncoding(encodingEnabled);
 
             httpOut << "POST / HTTP/1.1\r\n";
             httpOut << "Host: yandex.ru\r\n";
@@ -354,22 +354,22 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* bodyDelimiter = "\r\n\r\n";
         size_t bodyPos = str.find(bodyDelimiter);
         UNIT_ASSERT(bodyPos != TString::npos);
-        return str.substr(bodyPos + strlen(bodyDelimiter)); 
-    }; 
- 
-    TString SimulateBodyEncoding(const char* body) { 
-        TString bodyStr; 
-        TStringOutput bodyOut(bodyStr); 
-        TChunkedOutput chunkOut(&bodyOut); 
-        TZLibCompress comprOut(&chunkOut, ZLib::GZip); 
-        comprOut << body; 
-        return bodyStr; 
-    }; 
- 
-    Y_UNIT_TEST(TestRebuildStreamOnPost) { 
-        const char* body = "<html>Hello</html>"; 
-        UNIT_ASSERT(MakeHttpOutputBody(body, false) == body); 
-        UNIT_ASSERT(MakeHttpOutputBody(body, true) == SimulateBodyEncoding(body)); 
+        return str.substr(bodyPos + strlen(bodyDelimiter));
+    };
+
+    TString SimulateBodyEncoding(const char* body) {
+        TString bodyStr;
+        TStringOutput bodyOut(bodyStr);
+        TChunkedOutput chunkOut(&bodyOut);
+        TZLibCompress comprOut(&chunkOut, ZLib::GZip);
+        comprOut << body;
+        return bodyStr;
+    };
+
+    Y_UNIT_TEST(TestRebuildStreamOnPost) {
+        const char* body = "<html>Hello</html>";
+        UNIT_ASSERT(MakeHttpOutputBody(body, false) == body);
+        UNIT_ASSERT(MakeHttpOutputBody(body, true) == SimulateBodyEncoding(body));
     }
 
     Y_UNIT_TEST(TestOutputFinish) {

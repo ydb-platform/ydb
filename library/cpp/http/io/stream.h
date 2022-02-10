@@ -116,10 +116,10 @@ public:
     /// после окончания транзакции.
     void EnableKeepAlive(bool enable);
 
-    /// Устанавливает режим, при котором тело HTTP-запроса/ответа преобразуется в соответствии 
-    /// с заголовками Content-Encoding и Transfer-Encoding (включен по умолчанию) 
-    void EnableBodyEncoding(bool enable); 
- 
+    /// Устанавливает режим, при котором тело HTTP-запроса/ответа преобразуется в соответствии
+    /// с заголовками Content-Encoding и Transfer-Encoding (включен по умолчанию)
+    void EnableBodyEncoding(bool enable);
+
     /// Устанавливает режим, при котором тело HTTP-ответа сжимается кодеком
     /// указанным в Content-Encoding (включен по умолчанию)
     void EnableCompressionHeader(bool enable);
@@ -130,10 +130,10 @@ public:
     /// Проверяет, не завершается ли соединение с сервером после окончания транзакции.
     bool IsKeepAliveEnabled() const noexcept;
 
-    /// Проверяет, преобразуется ли тело HTTP-запроса/ответа в соответствии 
-    /// с заголовками Content-Encoding и Transfer-Encoding 
-    bool IsBodyEncodingEnabled() const noexcept; 
- 
+    /// Проверяет, преобразуется ли тело HTTP-запроса/ответа в соответствии
+    /// с заголовками Content-Encoding и Transfer-Encoding
+    bool IsBodyEncodingEnabled() const noexcept;
+
     /// Проверяет, сжимается ли тело HTTP-ответа кодеком
     /// указанным в Content-Encoding
     bool IsCompressionHeaderEnabled() const noexcept;

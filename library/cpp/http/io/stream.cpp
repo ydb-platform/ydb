@@ -503,7 +503,7 @@ public:
         , Request_(request)
         , Version_(1100)
         , KeepAliveEnabled_(false)
-        , BodyEncodingEnabled_(true) 
+        , BodyEncodingEnabled_(true)
         , CompressionHeaderEnabled_(true)
         , Finished_(false)
     {
@@ -591,10 +591,10 @@ public:
         KeepAliveEnabled_ = enable;
     }
 
-    inline void EnableBodyEncoding(bool enable) { 
-        BodyEncodingEnabled_ = enable; 
-    } 
- 
+    inline void EnableBodyEncoding(bool enable) {
+        BodyEncodingEnabled_ = enable;
+    }
+
     inline void EnableCompressionHeader(bool enable) {
         CompressionHeaderEnabled_ = enable;
     }
@@ -607,10 +607,10 @@ public:
         return KeepAliveEnabled_;
     }
 
-    inline bool IsBodyEncodingEnabled() const noexcept { 
-        return BodyEncodingEnabled_; 
-    } 
- 
+    inline bool IsBodyEncodingEnabled() const noexcept {
+        return BodyEncodingEnabled_;
+    }
+
     inline bool IsCompressionHeaderEnabled() const noexcept {
         return CompressionHeaderEnabled_;
     }
@@ -831,13 +831,13 @@ private:
             chunked = true;
         }
 
-        if (IsBodyEncodingEnabled() && chunked) { 
+        if (IsBodyEncodingEnabled() && chunked) {
             Output_ = Streams_.Add(new TChunkedOutput(Output_));
         }
 
         Output_ = Streams_.Add(new TTeeOutput(Output_, &SizeCalculator_));
 
-        if (IsBodyEncodingEnabled() && encoder) { 
+        if (IsBodyEncodingEnabled() && encoder) {
             Output_ = Streams_.Add((*encoder)(Output_).Release());
         }
     }
@@ -868,9 +868,9 @@ private:
     TArrayRef<const TStringBuf> ComprSchemas_;
 
     bool KeepAliveEnabled_;
-    bool BodyEncodingEnabled_; 
+    bool BodyEncodingEnabled_;
     bool CompressionHeaderEnabled_;
- 
+
     bool Finished_;
 
     TSizeCalculator SizeCalculator_;
@@ -926,10 +926,10 @@ void THttpOutput::EnableKeepAlive(bool enable) {
     Impl_->EnableKeepAlive(enable);
 }
 
-void THttpOutput::EnableBodyEncoding(bool enable) { 
-    Impl_->EnableBodyEncoding(enable); 
-} 
- 
+void THttpOutput::EnableBodyEncoding(bool enable) {
+    Impl_->EnableBodyEncoding(enable);
+}
+
 void THttpOutput::EnableCompressionHeader(bool enable) {
     Impl_->EnableCompressionHeader(enable);
 }
@@ -938,10 +938,10 @@ bool THttpOutput::IsKeepAliveEnabled() const noexcept {
     return Impl_->IsKeepAliveEnabled();
 }
 
-bool THttpOutput::IsBodyEncodingEnabled() const noexcept { 
-    return Impl_->IsBodyEncodingEnabled(); 
-} 
- 
+bool THttpOutput::IsBodyEncodingEnabled() const noexcept {
+    return Impl_->IsBodyEncodingEnabled();
+}
+
 bool THttpOutput::IsCompressionEnabled() const noexcept {
     return Impl_->IsCompressionEnabled();
 }

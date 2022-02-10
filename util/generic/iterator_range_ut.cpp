@@ -10,11 +10,11 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT(range.empty());
     }
 
-    Y_UNIT_TEST(DefaultConstructorSentinel) {
-        TIteratorRange<int*, void*> range;
-        UNIT_ASSERT(range.empty());
-    }
-
+    Y_UNIT_TEST(DefaultConstructorSentinel) { 
+        TIteratorRange<int*, void*> range; 
+        UNIT_ASSERT(range.empty()); 
+    } 
+ 
     Y_UNIT_TEST(RangeBasedForLoop) {
         // compileability test
         for (int i : TIteratorRange<int*>()) {
@@ -22,13 +22,13 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         }
     }
 
-    Y_UNIT_TEST(RangeBasedForLoopSentinel) {
-        // compileability test
-        for (int i : TIteratorRange<int*, void*>()) {
-            Y_UNUSED(i);
-        }
-    }
-
+    Y_UNIT_TEST(RangeBasedForLoopSentinel) { 
+        // compileability test 
+        for (int i : TIteratorRange<int*, void*>()) { 
+            Y_UNUSED(i); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(Works) {
         const int values[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         auto range = MakeIteratorRange(values, values + Y_ARRAY_SIZE(values));
@@ -37,37 +37,37 @@ Y_UNIT_TEST_SUITE(IteratorRange) {
         UNIT_ASSERT(!range.empty());
     }
 
-    Y_UNIT_TEST(WorksSentinel) {
-        struct TRangeSentinel {
-        };
-
-        struct TEnumerator {
-            ui32 operator*() const {
-                return Cur;
-            }
-
-            void operator++() {
-                ++Cur;
-            }
-
-            bool operator!=(const TRangeSentinel&) const {
-                return Cur < End;
-            }
-
-            ui32 Cur;
-            ui32 End;
-        };
-
-        auto range = MakeIteratorRange(TEnumerator{0, 10}, TRangeSentinel{});
-        UNIT_ASSERT(!range.empty());
-
-        ui32 i = 0;
-        for (auto j : range) {
-            UNIT_ASSERT_VALUES_EQUAL(j, i++);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(i, 10);
-    }
-
+    Y_UNIT_TEST(WorksSentinel) { 
+        struct TRangeSentinel { 
+        }; 
+ 
+        struct TEnumerator { 
+            ui32 operator*() const { 
+                return Cur; 
+            } 
+ 
+            void operator++() { 
+                ++Cur; 
+            } 
+ 
+            bool operator!=(const TRangeSentinel&) const { 
+                return Cur < End; 
+            } 
+ 
+            ui32 Cur; 
+            ui32 End; 
+        }; 
+ 
+        auto range = MakeIteratorRange(TEnumerator{0, 10}, TRangeSentinel{}); 
+        UNIT_ASSERT(!range.empty()); 
+ 
+        ui32 i = 0; 
+        for (auto j : range) { 
+            UNIT_ASSERT_VALUES_EQUAL(j, i++); 
+        } 
+        UNIT_ASSERT_VALUES_EQUAL(i, 10); 
+    } 
+ 
     Y_UNIT_TEST(OperatorsAndReferences) {
         TVector<size_t> values{1, 2, 3, 4, 5};
         auto range = MakeIteratorRange(values.begin(), values.end());

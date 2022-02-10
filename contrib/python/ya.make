@@ -1078,7 +1078,7 @@ RECURSE(
     tornado
     tornado-opentracing
     toro
-    tqdm
+    tqdm 
     trace_event
     traceback2
     traitlets

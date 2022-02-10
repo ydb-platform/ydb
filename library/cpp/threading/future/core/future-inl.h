@@ -127,21 +127,21 @@ namespace NThreading {
 
             template <typename TT>
             void SetValue(TT&& value) {
-                bool success = TrySetValue(std::forward<TT>(value));
-                if (Y_UNLIKELY(!success)) {
-                    ythrow TFutureException() << "value already set";
-                }
-            }
-
-            template <typename TT>
-            bool TrySetValue(TT&& value) {
+                bool success = TrySetValue(std::forward<TT>(value)); 
+                if (Y_UNLIKELY(!success)) { 
+                    ythrow TFutureException() << "value already set"; 
+                } 
+            } 
+ 
+            template <typename TT> 
+            bool TrySetValue(TT&& value) { 
                 TSystemEvent* readyEvent = nullptr;
                 TCallbackList<T> callbacks;
 
                 with_lock (StateLock) {
                     int state = AtomicGet(State);
                     if (Y_UNLIKELY(state != NotReady)) {
-                        return false;
+                        return false; 
                     }
 
                     new (&Value) T(std::forward<TT>(value));
@@ -162,8 +162,8 @@ namespace NThreading {
                         callback(temp);
                     }
                 }
-
-                return true;
+ 
+                return true; 
             }
 
             void SetException(std::exception_ptr e) {
@@ -316,20 +316,20 @@ namespace NThreading {
             }
 
             void SetValue() {
-                bool success = TrySetValue();
-                if (Y_UNLIKELY(!success)) {
-                    ythrow TFutureException() << "value already set";
-                }
-            }
-
-            bool TrySetValue() {
+                bool success = TrySetValue(); 
+                if (Y_UNLIKELY(!success)) { 
+                    ythrow TFutureException() << "value already set"; 
+                } 
+            } 
+ 
+            bool TrySetValue() { 
                 TSystemEvent* readyEvent = nullptr;
                 TCallbackList<void> callbacks;
 
                 with_lock (StateLock) {
                     int state = AtomicGet(State);
                     if (Y_UNLIKELY(state != NotReady)) {
-                        return false;
+                        return false; 
                     }
 
                     readyEvent = ReadyEvent.Get();
@@ -348,8 +348,8 @@ namespace NThreading {
                         callback(temp);
                     }
                 }
-
-                return true;
+ 
+                return true; 
             }
 
             void SetException(std::exception_ptr e) {
@@ -798,18 +798,18 @@ namespace NThreading {
     }
 
     template <typename T>
-    inline bool TPromise<T>::TrySetValue(const T& value) {
-        EnsureInitialized();
-        return State->TrySetValue(value);
-    }
-
-    template <typename T>
-    inline bool TPromise<T>::TrySetValue(T&& value) {
-        EnsureInitialized();
-        return State->TrySetValue(std::move(value));
-    }
-
-    template <typename T>
+    inline bool TPromise<T>::TrySetValue(const T& value) { 
+        EnsureInitialized(); 
+        return State->TrySetValue(value); 
+    } 
+ 
+    template <typename T> 
+    inline bool TPromise<T>::TrySetValue(T&& value) { 
+        EnsureInitialized(); 
+        return State->TrySetValue(std::move(value)); 
+    } 
+ 
+    template <typename T> 
     inline void TPromise<T>::TryRethrow() const {
         if (State) {
             State->TryRethrow();
@@ -887,11 +887,11 @@ namespace NThreading {
         State->SetValue();
     }
 
-    inline bool TPromise<void>::TrySetValue() {
-        EnsureInitialized();
-        return State->TrySetValue();
-    }
-
+    inline bool TPromise<void>::TrySetValue() { 
+        EnsureInitialized(); 
+        return State->TrySetValue(); 
+    } 
+ 
     inline void TPromise<void>::TryRethrow() const {
         if(State) {
             State->TryRethrow();

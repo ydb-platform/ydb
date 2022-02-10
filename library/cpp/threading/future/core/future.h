@@ -209,9 +209,9 @@ namespace NThreading {
         void SetValue(const T& value);
         void SetValue(T&& value);
 
-        bool TrySetValue(const T& value);
-        bool TrySetValue(T&& value);
-
+        bool TrySetValue(const T& value); 
+        bool TrySetValue(T&& value); 
+ 
         void TryRethrow() const;
         bool HasException() const;
         void SetException(const TString& e);
@@ -250,7 +250,7 @@ namespace NThreading {
         void GetValue() const;
 
         void SetValue();
-        bool TrySetValue();
+        bool TrySetValue(); 
 
         void TryRethrow() const;
         bool HasException() const;

@@ -44,18 +44,18 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(3 == CountIf(array, isOne));
     }
 
-    Y_UNIT_TEST(CountTest) {
-        UNIT_ASSERT(3 == Count("____1________1____1_______", '1'));
+    Y_UNIT_TEST(CountTest) { 
+        UNIT_ASSERT(3 == Count("____1________1____1_______", '1')); 
         UNIT_ASSERT(3 == Count(TStringBuf("____1________1____1_______"), '1'));
         UNIT_ASSERT(5 == Count(TStringBuf("1____1________1____1_______1"), '1'));
         UNIT_ASSERT(0 == Count(TStringBuf("___________"), '1'));
-        UNIT_ASSERT(0 == Count(TStringBuf(), '1'));
+        UNIT_ASSERT(0 == Count(TStringBuf(), '1')); 
         UNIT_ASSERT(1 == Count(TStringBuf("1"), '1'));
 
         const char array[] = "____1________1____1_______";
         UNIT_ASSERT(3 == Count(array, '1'));
-    }
-
+    } 
+ 
     struct TStrokaNoCopy: TString {
     public:
         TStrokaNoCopy(const char* p)

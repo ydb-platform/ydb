@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/generic/iterator_range.h>
-#include <util/generic/store_policy.h>
+#include <util/generic/iterator_range.h> 
+#include <util/generic/store_policy.h> 
 #include <iterator>
 
-
+ 
 template <class TIterator, class TCondition>
 class TFilteringIterator {
 public:
@@ -19,7 +19,7 @@ public:
     TFilteringIterator(TIterator it, TIterator last, const TCondition& condition)
         : Iter(it)
         , Last(last)
-        , Condition(condition)
+        , Condition(condition) 
     {
         Grep();
     }
@@ -56,47 +56,47 @@ private:
     TCondition Condition;
 };
 
-
-template <class TContainer, class TCondition>
-class TFilteringRange {
-    using TContainerStorage = TAutoEmbedOrPtrPolicy<TContainer>;
-    using TConditionStorage = TAutoEmbedOrPtrPolicy<TCondition>;
-    using TRawIterator = decltype(std::begin(std::declval<TContainer&>()));
-    using TConditionWrapper = std::reference_wrapper<std::remove_reference_t<TCondition>>;
-public:
+ 
+template <class TContainer, class TCondition> 
+class TFilteringRange { 
+    using TContainerStorage = TAutoEmbedOrPtrPolicy<TContainer>; 
+    using TConditionStorage = TAutoEmbedOrPtrPolicy<TCondition>; 
+    using TRawIterator = decltype(std::begin(std::declval<TContainer&>())); 
+    using TConditionWrapper = std::reference_wrapper<std::remove_reference_t<TCondition>>; 
+public: 
     //TODO: make TIterator typedef private
-    using TIterator = TFilteringIterator<TRawIterator, TConditionWrapper>;
+    using TIterator = TFilteringIterator<TRawIterator, TConditionWrapper>; 
 
-    using iterator = TIterator;
-    using const_iterator = TIterator;
+    using iterator = TIterator; 
+    using const_iterator = TIterator; 
     using value_type = typename TIterator::value_type;
     using reference = typename TIterator::reference;
-
-    TFilteringRange(TContainer&& container, TCondition&& predicate)
-        : Container(std::forward<TContainer>(container))
-        , Condition(std::forward<TCondition>(predicate))
-    {}
-
-    TIterator begin() const {
-        return {std::begin(*Container.Ptr()), std::end(*Container.Ptr()), {*Condition.Ptr()}};
-    }
-
-    TIterator end() const {
-        return {std::end(*Container.Ptr()), std::end(*Container.Ptr()), {*Condition.Ptr()}};
-    }
-
-private:
-    mutable TContainerStorage Container;
-    mutable TConditionStorage Condition;
-};
-
-
+ 
+    TFilteringRange(TContainer&& container, TCondition&& predicate) 
+        : Container(std::forward<TContainer>(container)) 
+        , Condition(std::forward<TCondition>(predicate)) 
+    {} 
+ 
+    TIterator begin() const { 
+        return {std::begin(*Container.Ptr()), std::end(*Container.Ptr()), {*Condition.Ptr()}}; 
+    } 
+ 
+    TIterator end() const { 
+        return {std::end(*Container.Ptr()), std::end(*Container.Ptr()), {*Condition.Ptr()}}; 
+    } 
+ 
+private: 
+    mutable TContainerStorage Container; 
+    mutable TConditionStorage Condition; 
+}; 
+ 
+ 
 template <class TIterator, class TCondition>
 auto MakeFilteringRange(TIterator begin, TIterator end, const TCondition& condition) {
     return MakeIteratorRange(TFilteringIterator<TIterator, TCondition>(begin, end, condition), TFilteringIterator<TIterator, TCondition>(end, end, condition));
 }
 
 template <class TContainer, class TCondition>
-auto MakeFilteringRange(TContainer&& container, TCondition&& condition) {
-    return TFilteringRange<TContainer, TCondition>(std::forward<TContainer>(container), std::forward<TCondition>(condition));
+auto MakeFilteringRange(TContainer&& container, TCondition&& condition) { 
+    return TFilteringRange<TContainer, TCondition>(std::forward<TContainer>(container), std::forward<TCondition>(condition)); 
 }

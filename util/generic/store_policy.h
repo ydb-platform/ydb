@@ -14,20 +14,20 @@ struct TWithRefCount: public TBase, public TRefCounted<TWithRefCount<TBase, TCou
 
 template <class T>
 struct TPtrPolicy {
-    inline TPtrPolicy(T* t)
+    inline TPtrPolicy(T* t) 
         : T_(t)
     {
     }
 
-    inline T* Ptr() noexcept {
-        return T_;
-    }
-
+    inline T* Ptr() noexcept { 
+        return T_; 
+    } 
+ 
     inline const T* Ptr() const noexcept {
         return T_;
     }
 
-    T* T_;
+    T* T_; 
 };
 
 template <class T>
@@ -70,49 +70,49 @@ struct TRefPolicy {
     TIntrusivePtr<THelper> T_;
 };
 
-/**
+/** 
  * Storage class that can be handy for implementing proxies / adaptors that can
  * accept both lvalues and rvalues. In the latter case it's often required to
  * extend the lifetime of the passed rvalue, and the only option is to store it
  * in your proxy / adaptor.
- *
- * Example usage:
- * \code
- * template<class T>
- * struct TProxy {
- *    TAutoEmbedOrPtrPolicy<T> Value_;
- *    // Your proxy code...
- * };
- *
- * template<class T>
- * TProxy<T> MakeProxy(T&& value) {
- *     // Rvalues are automagically moved-from, and stored inside the proxy.
+ * 
+ * Example usage: 
+ * \code 
+ * template<class T> 
+ * struct TProxy { 
+ *    TAutoEmbedOrPtrPolicy<T> Value_; 
+ *    // Your proxy code... 
+ * }; 
+ * 
+ * template<class T> 
+ * TProxy<T> MakeProxy(T&& value) { 
+ *     // Rvalues are automagically moved-from, and stored inside the proxy. 
  *     return {std::forward<T>(value)};
- * }
- * \endcode
- *
- * Look at `Reversed` in `adaptor.h` for real example.
- */
+ * } 
+ * \endcode 
+ * 
+ * Look at `Reversed` in `adaptor.h` for real example. 
+ */ 
 template <class T, bool IsReference = std::is_reference<T>::value>
 struct TAutoEmbedOrPtrPolicy: TPtrPolicy<std::remove_reference_t<T>> {
     using TBase = TPtrPolicy<std::remove_reference_t<T>>;
-
+ 
     TAutoEmbedOrPtrPolicy(T& reference)
         : TBase(&reference)
-    {
-    }
-};
-
+    { 
+    } 
+}; 
+ 
 template <class T>
 struct TAutoEmbedOrPtrPolicy<T, false>: TEmbedPolicy<T> {
     using TBase = TEmbedPolicy<T>;
-
+ 
     TAutoEmbedOrPtrPolicy(T&& object)
         : TBase(std::move(object))
-    {
-    }
-};
-
+    { 
+    } 
+}; 
+ 
 template <class T>
 using TAtomicRefPolicy = TRefPolicy<T, TAtomicCounter>;
 

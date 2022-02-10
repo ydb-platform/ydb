@@ -186,19 +186,19 @@ public:
     const TNode& At(size_t index) const;
     TNode& At(size_t index);
 
-    TNode& Add() &;
-    TNode Add() &&;
-    TNode& Add(const TNode& node) &;
-    TNode Add(const TNode& node) &&;
-    TNode& Add(TNode&& node) &;
-    TNode Add(TNode&& node) &&;
+    TNode& Add() &; 
+    TNode Add() &&; 
+    TNode& Add(const TNode& node) &; 
+    TNode Add(const TNode& node) &&; 
+    TNode& Add(TNode&& node) &; 
+    TNode Add(TNode&& node) &&; 
 
     bool HasKey(const TStringBuf key) const;
 
-    TNode& operator()(const TString& key, const TNode& value) &;
-    TNode operator()(const TString& key, const TNode& value) &&;
-    TNode& operator()(const TString& key, TNode&& value) &;
-    TNode operator()(const TString& key, TNode&& value) &&;
+    TNode& operator()(const TString& key, const TNode& value) &; 
+    TNode operator()(const TString& key, const TNode& value) &&; 
+    TNode& operator()(const TString& key, TNode&& value) &; 
+    TNode operator()(const TString& key, TNode&& value) &&; 
 
     const TNode& operator[](const TStringBuf key) const;
     TNode& operator[](const TStringBuf key);

@@ -474,80 +474,80 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
         UNIT_ASSERT_EQUAL(bitmap4.NextNonZeroBit(127), bitmap4.Size());
         UNIT_ASSERT_EQUAL(bitmap4.NextNonZeroBit(533), bitmap4.Size());
     }
- 
+
     Y_UNIT_TEST(TestHashFixed) {
-        TBitMap<32, ui8> bitmap32; 
-        TBitMap<32, ui8> bitmap322; 
-        TBitMap<64, ui8> bitmap64; 
- 
-        bitmap32.Clear(); 
-        bitmap322.Clear(); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash()); 
-        bitmap32.Set(0); 
-        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap322.Hash()); 
-        bitmap322.Set(0); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash()); 
-        bitmap32.Set(8).Set(31); 
-        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap322.Hash()); 
-        bitmap322.Set(8).Set(31); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash()); 
- 
-        bitmap32.Clear(); 
-        bitmap64.Clear(); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-        bitmap32.Set(0); 
-        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-        bitmap64.Set(0); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-        bitmap32.Set(8).Set(31); 
-        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-        bitmap64.Set(8).Set(31); 
-        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-        bitmap64.Set(32); 
-        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash()); 
-    } 
- 
+        TBitMap<32, ui8> bitmap32;
+        TBitMap<32, ui8> bitmap322;
+        TBitMap<64, ui8> bitmap64;
+
+        bitmap32.Clear();
+        bitmap322.Clear();
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash());
+        bitmap32.Set(0);
+        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap322.Hash());
+        bitmap322.Set(0);
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash());
+        bitmap32.Set(8).Set(31);
+        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap322.Hash());
+        bitmap322.Set(8).Set(31);
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap322.Hash());
+
+        bitmap32.Clear();
+        bitmap64.Clear();
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash());
+        bitmap32.Set(0);
+        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash());
+        bitmap64.Set(0);
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash());
+        bitmap32.Set(8).Set(31);
+        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash());
+        bitmap64.Set(8).Set(31);
+        UNIT_ASSERT_EQUAL(bitmap32.Hash(), bitmap64.Hash());
+        bitmap64.Set(32);
+        UNIT_ASSERT_UNEQUAL(bitmap32.Hash(), bitmap64.Hash());
+    }
+
     Y_UNIT_TEST(TestHashDynamic) {
-        TDynBitMap bitmap1; 
-        TDynBitMap bitmap2; 
- 
-        bitmap1.Clear(); 
-        bitmap2.Clear(); 
-        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap1.Set(0); 
-        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap2.Set(0); 
-        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap1.Set(8).Set(31); 
-        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap2.Set(8).Set(31); 
-        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap1.Set(64); 
-        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-        bitmap2.Set(64); 
-        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash()); 
-    } 
- 
+        TDynBitMap bitmap1;
+        TDynBitMap bitmap2;
+
+        bitmap1.Clear();
+        bitmap2.Clear();
+        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap1.Set(0);
+        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap2.Set(0);
+        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap1.Set(8).Set(31);
+        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap2.Set(8).Set(31);
+        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap1.Set(64);
+        UNIT_ASSERT_UNEQUAL(bitmap1.Hash(), bitmap2.Hash());
+        bitmap2.Set(64);
+        UNIT_ASSERT_EQUAL(bitmap1.Hash(), bitmap2.Hash());
+    }
+
     Y_UNIT_TEST(TestHashMixed) {
         static_assert((std::is_same<TDynBitMap::TChunk, ui64>::value), "expect (TSameType<TDynBitMap::TChunk, ui64>::Result)");
- 
-        TBitMap<sizeof(ui64) * 16, ui64> bitmapFixed; 
-        TDynBitMap bitmapDynamic; 
- 
-        bitmapFixed.Clear(); 
-        bitmapDynamic.Clear(); 
-        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-        bitmapFixed.Set(0); 
-        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-        bitmapDynamic.Set(0); 
-        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-        bitmapFixed.Set(8).Set(127); 
-        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-        bitmapDynamic.Set(8).Set(127); 
-        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-        bitmapDynamic.Set(128); 
-        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash()); 
-    } 
+
+        TBitMap<sizeof(ui64) * 16, ui64> bitmapFixed;
+        TDynBitMap bitmapDynamic;
+
+        bitmapFixed.Clear();
+        bitmapDynamic.Clear();
+        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+        bitmapFixed.Set(0);
+        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+        bitmapDynamic.Set(0);
+        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+        bitmapFixed.Set(8).Set(127);
+        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+        bitmapDynamic.Set(8).Set(127);
+        UNIT_ASSERT_EQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+        bitmapDynamic.Set(128);
+        UNIT_ASSERT_UNEQUAL(bitmapFixed.Hash(), bitmapDynamic.Hash());
+    }
 
     Y_UNIT_TEST(TestSetResetRange) {
         // Single chunk

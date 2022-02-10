@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/threading/queue)
 
-OWNER(agri) 
+OWNER(agri)
 
 ALLOCATOR(B)
 

@@ -14,6 +14,6 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TGetPidTest);
 
 void TGetPidTest::Test() {
-    const TProcessId pid = GetPID(); 
+    const TProcessId pid = GetPID();
     UNIT_ASSERT(pid != 0);
 }

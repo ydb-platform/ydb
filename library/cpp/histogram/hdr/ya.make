@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    g:util 
-    jamel 
-) 
+OWNER(
+    g:util
+    jamel
+)
 
 SRCS(
     histogram.cpp

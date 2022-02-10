@@ -1,7 +1,7 @@
-OWNER( 
+OWNER(
     g:yatest
-    exprmntr 
-) 
+    exprmntr
+)
 
 PY23_LIBRARY()
 

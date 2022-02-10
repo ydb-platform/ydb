@@ -82,9 +82,9 @@ fseeko (FILE *fp, off_t offset, int whence)
 #elif defined _IOERR                /* AIX, HP-UX, IRIX, OSF/1, Solaris, OpenServer, mingw, NonStop Kernel */
   if (fp_->_ptr == fp_->_base
       && (fp_->_ptr == NULL || fp_->_cnt == 0))
-#elif WIN_SDK10 
-  if (((TWinSdk10File*)fp)->_ptr == ((TWinSdk10File*)fp)->_base 
-      && (((TWinSdk10File*)fp)->_ptr == NULL || ((TWinSdk10File*)fp)->_cnt == 0)) 
+#elif WIN_SDK10
+  if (((TWinSdk10File*)fp)->_ptr == ((TWinSdk10File*)fp)->_base
+      && (((TWinSdk10File*)fp)->_ptr == NULL || ((TWinSdk10File*)fp)->_cnt == 0))
 #elif defined __UCLIBC__            /* uClibc */
   if (((fp->__modeflags & __FLAG_WRITING) == 0
        || fp->__bufpos == fp->__bufstart)

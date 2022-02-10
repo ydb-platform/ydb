@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    pg 
-    velavokr 
-) 
+OWNER(
+    pg
+    velavokr
+)
 
 PEERDIR(
     library/cpp/json/common

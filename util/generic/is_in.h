@@ -3,7 +3,7 @@
 #include "typetraits.h"
 
 #include <algorithm>
-#include <initializer_list> 
+#include <initializer_list>
 
 template <class I, class T>
 static inline bool IsIn(I f, I l, const T& v);
@@ -46,8 +46,8 @@ static inline bool IsIn(const C& c, const T& e) {
     using namespace NIsInHelper;
     return TIsInTraits<C, T, TIsAssocCont<C>::value>::IsIn(c, e);
 }
- 
+
 template <class T, class U>
 static inline bool IsIn(std::initializer_list<T> l, const U& e) {
     return ::IsIn(l.begin(), l.end(), e);
-} 
+}

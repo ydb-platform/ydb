@@ -11,8 +11,8 @@ To automatically restore stored variables at startup, add this to your
 """
 from __future__ import print_function
 
-# Copyright (c) IPython Development Team. 
-# Distributed under the terms of the Modified BSD License. 
+# Copyright (c) IPython Development Team.
+# Distributed under the terms of the Modified BSD License.
 
 import inspect, os, sys, textwrap
 
@@ -61,11 +61,11 @@ class StoreMagics(Magics):
 
     Provides the %store magic."""
     
-    autorestore = Bool(False, help= 
+    autorestore = Bool(False, help=
         """If True, any %store-d variables will be automatically restored
         when IPython starts.
         """
-    ).tag(config=True) 
+    ).tag(config=True)
     
     def __init__(self, shell):
         super(StoreMagics, self).__init__(shell=shell)

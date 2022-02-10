@@ -3,7 +3,7 @@ UNITTEST_FOR(library/cpp/uri)
 OWNER(leo)
 
 NO_OPTIMIZE()
- 
+
 NO_WSHADOW()
 
 PEERDIR(

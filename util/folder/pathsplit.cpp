@@ -1,7 +1,7 @@
 #include "pathsplit.h"
 
-#include "dirut.h" 
- 
+#include "dirut.h"
+
 #include <util/stream/output.h>
 #include <util/generic/yexception.h>
 
@@ -24,7 +24,7 @@ void TPathSplitTraitsUnix::DoParseFirstPart(const TStringBuf part) {
     }
 
     if (IsAbsolutePath(part)) {
-        IsAbsolute = true; 
+        IsAbsolute = true;
     }
 
     DoParsePart(part);

@@ -1,34 +1,34 @@
-#ifndef HEADER_CURL_CONTENT_ENCODING_H 
-#define HEADER_CURL_CONTENT_ENCODING_H 
-/*************************************************************************** 
- *                                  _   _ ____  _ 
- *  Project                     ___| | | |  _ \| | 
- *                             / __| | | | |_) | | 
- *                            | (__| |_| |  _ <| |___ 
- *                             \___|\___/|_| \_\_____| 
- * 
+#ifndef HEADER_CURL_CONTENT_ENCODING_H
+#define HEADER_CURL_CONTENT_ENCODING_H
+/***************************************************************************
+ *                                  _   _ ____  _
+ *  Project                     ___| | | |  _ \| |
+ *                             / __| | | | |_) | |
+ *                            | (__| |_| |  _ <| |___
+ *                             \___|\___/|_| \_\_____|
+ *
  * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * 
- * This software is licensed as described in the file COPYING, which 
- * you should have received as part of this distribution. The terms 
+ *
+ * This software is licensed as described in the file COPYING, which
+ * you should have received as part of this distribution. The terms
  * are also available at https://curl.se/docs/copyright.html.
- * 
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
- * copies of the Software, and permit persons to whom the Software is 
- * furnished to do so, under the terms of the COPYING file. 
- * 
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
- * KIND, either express or implied. 
- * 
- ***************************************************************************/ 
-#include "curl_setup.h" 
- 
+ *
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
+ * copies of the Software, and permit persons to whom the Software is
+ * furnished to do so, under the terms of the COPYING file.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ***************************************************************************/
+#include "curl_setup.h"
+
 struct contenc_writer {
   const struct content_encoding *handler;  /* Encoding handler. */
   struct contenc_writer *downstream;  /* Downstream writer. */
   void *params;  /* Encoding-specific storage (variable length). */
 };
- 
+
 /* Content encoding writer. */
 struct content_encoding {
   const char *name;        /* Encoding name. */
@@ -42,8 +42,8 @@ struct content_encoding {
                        struct contenc_writer *writer);
   size_t paramsize;
 };
- 
- 
+
+
 CURLcode Curl_build_unencoding_stack(struct connectdata *conn,
                                      const char *enclist, int maybechunked);
 CURLcode Curl_unencode_write(struct connectdata *conn,
@@ -52,4 +52,4 @@ CURLcode Curl_unencode_write(struct connectdata *conn,
 void Curl_unencode_cleanup(struct connectdata *conn);
 char *Curl_all_content_encodings(void);
 
-#endif /* HEADER_CURL_CONTENT_ENCODING_H */ 
+#endif /* HEADER_CURL_CONTENT_ENCODING_H */

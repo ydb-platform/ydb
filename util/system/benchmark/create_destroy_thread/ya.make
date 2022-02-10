@@ -1,4 +1,4 @@
-OWNER(yazevnul) 
+OWNER(yazevnul)
 
 Y_BENCHMARK()
 

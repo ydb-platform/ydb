@@ -16,7 +16,7 @@ import tokenize
 from traitlets.config.configurable import Configurable
 from IPython.utils.py3compat import builtin_mod, cast_unicode_py2
 from traitlets import Instance, Float
-from warnings import warn 
+from warnings import warn
 
 # TODO: Move the various attributes (cache_size, [others now moved]). Some
 # of these are also attributes of InteractiveShell. They should be on ONE object
@@ -94,7 +94,7 @@ class DisplayHook(Configurable):
         tokens = list(tokenize.generate_tokens(sio.readline))
 
         for token in reversed(tokens):
-            if token[0] in (tokenize.ENDMARKER, tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT): 
+            if token[0] in (tokenize.ENDMARKER, tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT):
                 continue
             if (token[0] == tokenize.OP) and (token[1] == ';'):
                 return True
@@ -109,13 +109,13 @@ class DisplayHook(Configurable):
         """Write the output prompt.
 
         The default implementation simply writes the prompt to
-        ``sys.stdout``. 
+        ``sys.stdout``.
         """
         # Use write, not print which adds an extra space.
-        sys.stdout.write(self.shell.separate_out) 
-        outprompt = 'Out[{}]: '.format(self.shell.execution_count) 
+        sys.stdout.write(self.shell.separate_out)
+        outprompt = 'Out[{}]: '.format(self.shell.execution_count)
         if self.do_full_cache:
-            sys.stdout.write(outprompt) 
+            sys.stdout.write(outprompt)
 
     def compute_format_data(self, result):
         """Compute format data of the object to be displayed.
@@ -149,14 +149,14 @@ class DisplayHook(Configurable):
         """
         return self.shell.display_formatter.format(result)
 
-    # This can be set to True by the write_output_prompt method in a subclass 
-    prompt_end_newline = False 
- 
+    # This can be set to True by the write_output_prompt method in a subclass
+    prompt_end_newline = False
+
     def write_format_data(self, format_dict, md_dict=None):
         """Write the format data dict to the frontend.
 
         This default version of this method simply writes the plain text
-        representation of the object to ``sys.stdout``. Subclasses should 
+        representation of the object to ``sys.stdout``. Subclasses should
         override this method to send the entire `format_dict` to the
         frontends.
 
@@ -182,11 +182,11 @@ class DisplayHook(Configurable):
             # because the expansion may add ANSI escapes that will interfere
             # with our ability to determine whether or not we should add
             # a newline.
-            if not self.prompt_end_newline: 
+            if not self.prompt_end_newline:
                 # But avoid extraneous empty lines.
                 result_repr = '\n' + result_repr
 
-        print(result_repr) 
+        print(result_repr)
 
     def update_user_ns(self, result):
         """Update user_ns with various things like _, __, _1, etc."""
@@ -230,8 +230,8 @@ class DisplayHook(Configurable):
 
     def finish_displayhook(self):
         """Finish up all displayhook activities."""
-        sys.stdout.write(self.shell.separate_out2) 
-        sys.stdout.flush() 
+        sys.stdout.write(self.shell.separate_out2)
+        sys.stdout.flush()
 
     def __call__(self, result=None):
         """Printing with history cache management.

@@ -14,8 +14,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
-DEPENDS(util/random/benchmark/prng) 
+DEPENDS(util/random/benchmark/prng)
 
 END()

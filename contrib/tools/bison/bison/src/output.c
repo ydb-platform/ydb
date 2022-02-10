@@ -44,8 +44,8 @@
 
 #include "uniqstr.h"
 
-#include <contrib/tools/bison/bison/arcadia_root.h> 
- 
+#include <contrib/tools/bison/bison/arcadia_root.h>
+
 #ifndef M4
 #define M4 (m4_path)
 #endif
@@ -59,7 +59,7 @@ default_pkgdatadir()
 {
     const char* arc_path  = getenv("ARCADIA_ROOT_DISTBUILD");
     if (arc_path == NULL)
-        arc_path = ArcadiaRoot(); 
+        arc_path = ArcadiaRoot();
     return uniqstr_vsprintf("%s/" STR(BISON_DATA_DIR), arc_path);
 }
 #define PKGDATADIR (default_pkgdatadir())

@@ -14,8 +14,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
-DEPENDS(util/generic/benchmark/rotate_bits) 
+DEPENDS(util/generic/benchmark/rotate_bits)
 
 END()

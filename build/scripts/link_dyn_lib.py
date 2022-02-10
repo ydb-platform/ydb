@@ -112,31 +112,31 @@ def fix_gnu_param(arch, ex):
         return ret
 
 
-def fix_windows_param(ex): 
-    with tempfile.NamedTemporaryFile(delete=False) as def_file: 
-        exports = [] 
-        for item in ex: 
-            if item.get('lang') == 'C': 
-                exports.append(item.get('sym')) 
-        def_file.write('EXPORTS\n') 
-        for export in exports: 
-            def_file.write('    {}\n'.format(export)) 
-        return ['/DEF:{}'.format(def_file.name)] 
- 
- 
+def fix_windows_param(ex):
+    with tempfile.NamedTemporaryFile(delete=False) as def_file:
+        exports = []
+        for item in ex:
+            if item.get('lang') == 'C':
+                exports.append(item.get('sym'))
+        def_file.write('EXPORTS\n')
+        for export in exports:
+            def_file.write('    {}\n'.format(export))
+        return ['/DEF:{}'.format(def_file.name)]
+
+
 musl_libs = '-lc', '-lcrypt', '-ldl', '-lm', '-lpthread', '-lrt', '-lutil'
 
 
 def fix_cmd(arch, musl, c):
-    if arch == 'WINDOWS': 
-        prefix = '/DEF:' 
-        f = fix_windows_param 
+    if arch == 'WINDOWS':
+        prefix = '/DEF:'
+        f = fix_windows_param
     else:
-        prefix = '-Wl,--version-script=' 
+        prefix = '-Wl,--version-script='
         if arch in ('DARWIN', 'IOS'):
-            f = fix_darwin_param 
-        else: 
-            f = lambda x: fix_gnu_param(arch, x) 
+            f = fix_darwin_param
+        else:
+            f = lambda x: fix_gnu_param(arch, x)
 
     def do_fix(p):
         if musl and p in musl_libs:

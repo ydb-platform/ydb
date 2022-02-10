@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    g:kikimr 
-    g:yql 
-) 
+OWNER(
+    g:kikimr
+    g:yql
+)
 
 SRCS(
     random_provider.cpp

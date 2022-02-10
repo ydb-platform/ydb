@@ -2,12 +2,12 @@ OWNER(e-sidorov)
 
 Y_BENCHMARK()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/digest/argonish
-) 
+)
 
-SRCS( 
-    mbench.cpp 
-) 
+SRCS(
+    mbench.cpp
+)
 
 END()

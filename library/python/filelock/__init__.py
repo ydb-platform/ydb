@@ -1,12 +1,12 @@
-import errno 
-import logging 
-import os 
+import errno
+import logging
+import os
 import sys
 
 import library.python.windows
 
 logger = logging.getLogger(__name__)
- 
+
 
 def set_close_on_exec(stream):
     if library.python.windows.on_win():
@@ -74,19 +74,19 @@ class _WinFileLock(AbstractFileLock):
     def __init__(self, path):
         super(_WinFileLock, self).__init__(path)
         self._lock = None
-        try: 
-            with file(path, 'w') as lock_file: 
-                lock_file.write(" " * self._LOCKED_BYTES_NUM) 
-        except IOError as e: 
-            if e.errno != errno.EACCES or not os.path.isfile(path): 
-                raise 
+        try:
+            with file(path, 'w') as lock_file:
+                lock_file.write(" " * self._LOCKED_BYTES_NUM)
+        except IOError as e:
+            if e.errno != errno.EACCES or not os.path.isfile(path):
+                raise
 
     def acquire(self, blocking=True):
         self._lock = open(self.path)
         set_close_on_exec(self._lock)
 
         import time
-        locked = False 
+        locked = False
         while not locked:
             locked = library.python.windows.lock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False)
             if locked:
@@ -97,7 +97,7 @@ class _WinFileLock(AbstractFileLock):
                 return False
 
     def release(self):
-        if self._lock: 
+        if self._lock:
             library.python.windows.unlock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False)
             self._lock.close()
             self._lock = None

@@ -5,8 +5,8 @@ RECURSE(
     normalization/ut
     punycode
     punycode/ut
-    set 
-    set/ut 
+    set
+    set/ut
     utf8_char
     utf8_char/ut
     utf8_iter

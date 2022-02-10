@@ -1,7 +1,7 @@
-OWNER( 
-    g:solomon 
-    jamel 
-) 
+OWNER(
+    g:solomon
+    jamel
+)
 
 RECURSE(
     consumers

@@ -44,10 +44,10 @@ pjoin = path.join
 
 
 # Enable printing all warnings raise by IPython's modules
-warnings.filterwarnings('ignore', message='.*Matplotlib is building the font cache.*', category=UserWarning, module='.*') 
-if sys.version_info > (3,0): 
-    warnings.filterwarnings('error', message='.*', category=ResourceWarning, module='.*') 
-warnings.filterwarnings('error', message=".*{'config': True}.*", category=DeprecationWarning, module='IPy.*') 
+warnings.filterwarnings('ignore', message='.*Matplotlib is building the font cache.*', category=UserWarning, module='.*')
+if sys.version_info > (3,0):
+    warnings.filterwarnings('error', message='.*', category=ResourceWarning, module='.*')
+warnings.filterwarnings('error', message=".*{'config': True}.*", category=DeprecationWarning, module='IPy.*')
 warnings.filterwarnings('default', message='.*', category=Warning, module='IPy.*')
 
 warnings.filterwarnings('error', message='.*apply_wrapper.*', category=DeprecationWarning, module='.*')
@@ -217,7 +217,7 @@ test_group_names.append('autoreload')
 
 def check_exclusions_exist():
     from IPython.paths import get_ipython_package_dir
-    from warnings import warn 
+    from warnings import warn
     parent = os.path.dirname(get_ipython_package_dir())
     for sec in test_sections:
         for pattern in sec.exclusions:

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    agri 
-    g:kikimr 
-) 
+OWNER(
+    agri
+    g:kikimr
+)
 
 SRCS(
     memlog.cpp

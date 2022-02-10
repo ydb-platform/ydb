@@ -1,7 +1,7 @@
 # coding: utf-8
 """
-Deprecated since IPython 5.0 
- 
+Deprecated since IPython 5.0
+
 Inputhook management for GUI event loop integration.
 """
 
@@ -19,13 +19,13 @@ import platform
 import sys
 from distutils.version import LooseVersion as V
 
-from warnings import warn 
+from warnings import warn
 
- 
-warn("`IPython.lib.inputhook` is deprecated since IPython 5.0 and will be removed in future versions.", 
-        DeprecationWarning, stacklevel=2) 
- 
- 
+
+warn("`IPython.lib.inputhook` is deprecated since IPython 5.0 and will be removed in future versions.",
+        DeprecationWarning, stacklevel=2)
+
+
 #-----------------------------------------------------------------------------
 # Constants
 #-----------------------------------------------------------------------------
@@ -105,10 +105,10 @@ else:
 
 
 class InputHookManager(object):
-    """DEPRECATED since IPython 5.0 
+    """DEPRECATED since IPython 5.0
 
-    Manage PyOS_InputHook for different GUI toolkits. 
- 
+    Manage PyOS_InputHook for different GUI toolkits.
+
     This class installs various hooks under ``PyOSInputHook`` to handle
     GUI event loop integration.
     """
@@ -130,25 +130,25 @@ class InputHookManager(object):
         self._current_gui = None
 
     def get_pyos_inputhook(self):
-        """DEPRECATED since IPython 5.0 
- 
-        Return the current PyOS_InputHook as a ctypes.c_void_p.""" 
-        warn("`get_pyos_inputhook` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        """DEPRECATED since IPython 5.0
+
+        Return the current PyOS_InputHook as a ctypes.c_void_p."""
+        warn("`get_pyos_inputhook` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         return ctypes.c_void_p.in_dll(ctypes.pythonapi,"PyOS_InputHook")
 
     def get_pyos_inputhook_as_func(self):
-        """DEPRECATED since IPython 5.0 
- 
-        Return the current PyOS_InputHook as a ctypes.PYFUNCYPE.""" 
-        warn("`get_pyos_inputhook_as_func` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        """DEPRECATED since IPython 5.0
+
+        Return the current PyOS_InputHook as a ctypes.PYFUNCYPE."""
+        warn("`get_pyos_inputhook_as_func` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         return self.PYFUNC.in_dll(ctypes.pythonapi,"PyOS_InputHook")
 
     def set_inputhook(self, callback):
-        """DEPRECATED since IPython 5.0 
- 
-        Set PyOS_InputHook to callback and return the previous one.""" 
+        """DEPRECATED since IPython 5.0
+
+        Set PyOS_InputHook to callback and return the previous one."""
         # On platforms with 'readline' support, it's all too likely to
         # have a KeyboardInterrupt signal delivered *even before* an
         # initial ``try:`` clause in the callback can be executed, so
@@ -164,10 +164,10 @@ class InputHookManager(object):
         return original
 
     def clear_inputhook(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Set PyOS_InputHook to NULL and return the previous one. 
- 
+        Set PyOS_InputHook to NULL and return the previous one.
+
         Parameters
         ----------
         app : optional, ignored
@@ -176,8 +176,8 @@ class InputHookManager(object):
           the actual value of the parameter is ignored.  This uniform interface
           makes it easier to have user-level entry points in the main IPython
           app like :meth:`enable_gui`."""
-        warn("`clear_inputhook` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("`clear_inputhook` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         pyos_inputhook_ptr = self.get_pyos_inputhook()
         original = self.get_pyos_inputhook_as_func()
         pyos_inputhook_ptr.value = ctypes.c_void_p(None).value
@@ -186,10 +186,10 @@ class InputHookManager(object):
         return original
 
     def clear_app_refs(self, gui=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Clear IPython's internal reference to an application instance. 
- 
+        Clear IPython's internal reference to an application instance.
+
         Whenever we create an app for a user on qt4 or wx, we hold a
         reference to the app.  This is needed because in some cases bad things
         can happen if a user doesn't hold a reference themselves.  This
@@ -202,17 +202,17 @@ class InputHookManager(object):
             the app for that toolkit.  References are not held for gtk or tk
             as those toolkits don't have the notion of an app.
         """
-        warn("`clear_app_refs` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("`clear_app_refs` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         if gui is None:
             self.apps = {}
         elif gui in self.apps:
             del self.apps[gui]
 
     def register(self, toolkitname, *aliases):
-        """DEPRECATED since IPython 5.0 
- 
-        Register a class to provide the event loop for a given GUI. 
+        """DEPRECATED since IPython 5.0
+
+        Register a class to provide the event loop for a given GUI.
         
         This is intended to be used as a class decorator. It should be passed
         the names with which to register this GUI integration. The classes
@@ -225,8 +225,8 @@ class InputHookManager(object):
                 def enable(self, app=None):
                     ...
         """
-        warn("`register` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("`register` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         def decorator(cls):
             if ctypes is not None:
                 inst = cls(self)
@@ -237,18 +237,18 @@ class InputHookManager(object):
         return decorator
 
     def current_gui(self):
-        """DEPRECATED since IPython 5.0 
- 
-        Return a string indicating the currently active GUI or None.""" 
-        warn("`current_gui` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        """DEPRECATED since IPython 5.0
+
+        Return a string indicating the currently active GUI or None."""
+        warn("`current_gui` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         return self._current_gui
 
     def enable_gui(self, gui=None, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Switch amongst GUI input hooks by name. 
- 
+        Switch amongst GUI input hooks by name.
+
         This is a higher level method than :meth:`set_inputhook` - it uses the
         GUI name to look up a registered object which enables the input hook
         for that GUI.
@@ -271,8 +271,8 @@ class InputHookManager(object):
         PyOS_InputHook wrapper object or the GUI toolkit app created, if there was
         one.
         """
-        warn("`enable_gui` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("`enable_gui` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         if gui in (None, GUI_NONE):
             return self.disable_gui()
         
@@ -289,28 +289,28 @@ class InputHookManager(object):
         app = gui_hook.enable(app)
         if app is not None:
             app._in_event_loop = True
-            self.apps[gui] = app 
+            self.apps[gui] = app
         return app
 
     def disable_gui(self):
-        """DEPRECATED since IPython 5.0 
- 
-        Disable GUI event loop integration. 
+        """DEPRECATED since IPython 5.0
+
+        Disable GUI event loop integration.
         
         If an application was registered, this sets its ``_in_event_loop``
         attribute to False. It then calls :meth:`clear_inputhook`.
         """
-        warn("`disable_gui` is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("`disable_gui` is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         gui = self._current_gui
         if gui in self.apps:
             self.apps[gui]._in_event_loop = False
         return self.clear_inputhook()
 
 class InputHookBase(object):
-    """DEPRECATED since IPython 5.0 
- 
-    Base class for input hooks for specific toolkits. 
+    """DEPRECATED since IPython 5.0
+
+    Base class for input hooks for specific toolkits.
     
     Subclasses should define an :meth:`enable` method with one argument, ``app``,
     which will either be an instance of the toolkit's application class, or None.
@@ -326,20 +326,20 @@ inputhook_manager = InputHookManager()
 
 @inputhook_manager.register('osx')
 class NullInputHook(InputHookBase):
-    """DEPRECATED since IPython 5.0 
- 
-    A null inputhook that doesn't need to do anything""" 
+    """DEPRECATED since IPython 5.0
+
+    A null inputhook that doesn't need to do anything"""
     def enable(self, app=None):
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
 
 @inputhook_manager.register('wx')
 class WxInputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with wxPython. 
- 
+        Enable event loop integration with wxPython.
+
         Parameters
         ----------
         app : WX Application, optional.
@@ -359,8 +359,8 @@ class WxInputHook(InputHookBase):
             import wx
             app = wx.App(redirect=False, clearSigInt=False)
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         import wx
         
         wx_version = V(wx.__version__).version
@@ -383,14 +383,14 @@ class WxInputHook(InputHookBase):
         return app
 
     def disable(self):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Disable event loop integration with wxPython. 
- 
+        Disable event loop integration with wxPython.
+
         This restores appnapp on OS X
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         if _use_appnope():
             from appnope import nap
             nap()
@@ -398,9 +398,9 @@ class WxInputHook(InputHookBase):
 @inputhook_manager.register('qt', 'qt4')
 class Qt4InputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
- 
-        Enable event loop integration with PyQt4. 
+        """DEPRECATED since IPython 5.0
+
+        Enable event loop integration with PyQt4.
         
         Parameters
         ----------
@@ -421,8 +421,8 @@ class Qt4InputHook(InputHookBase):
             from PyQt4 import QtCore
             app = QtGui.QApplication(sys.argv)
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         from IPython.lib.inputhookqt4 import create_inputhook_qt4
         app, inputhook_qt4 = create_inputhook_qt4(self.manager, app)
         self.manager.set_inputhook(inputhook_qt4)
@@ -433,14 +433,14 @@ class Qt4InputHook(InputHookBase):
         return app
 
     def disable_qt4(self):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Disable event loop integration with PyQt4. 
- 
+        Disable event loop integration with PyQt4.
+
         This restores appnapp on OS X
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         if _use_appnope():
             from appnope import nap
             nap()
@@ -449,8 +449,8 @@ class Qt4InputHook(InputHookBase):
 @inputhook_manager.register('qt5')
 class Qt5InputHook(Qt4InputHook):
     def enable(self, app=None):
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         os.environ['QT_API'] = 'pyqt5'
         return Qt4InputHook.enable(self, app)
 
@@ -458,10 +458,10 @@ class Qt5InputHook(Qt4InputHook):
 @inputhook_manager.register('gtk')
 class GtkInputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with PyGTK. 
- 
+        Enable event loop integration with PyGTK.
+
         Parameters
         ----------
         app : ignored
@@ -475,8 +475,8 @@ class GtkInputHook(InputHookBase):
         the PyGTK to integrate with terminal based applications like
         IPython.
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         import gtk
         try:
             gtk.set_interactive(True)
@@ -489,10 +489,10 @@ class GtkInputHook(InputHookBase):
 @inputhook_manager.register('tk')
 class TkInputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with Tk. 
- 
+        Enable event loop integration with Tk.
+
         Parameters
         ----------
         app : toplevel :class:`Tkinter.Tk` widget, optional.
@@ -506,8 +506,8 @@ class TkInputHook(InputHookBase):
         :class:`InputHookManager`, since creating that object automatically
         sets ``PyOS_InputHook``.
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         if app is None:
             try:
                 from tkinter import Tk  # Py 3
@@ -522,10 +522,10 @@ class TkInputHook(InputHookBase):
 @inputhook_manager.register('glut')
 class GlutInputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with GLUT. 
- 
+        Enable event loop integration with GLUT.
+
         Parameters
         ----------
 
@@ -547,8 +547,8 @@ class GlutInputHook(InputHookBase):
         The default screen mode is set to:
         glut.GLUT_DOUBLE | glut.GLUT_RGBA | glut.GLUT_DEPTH
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
 
         import OpenGL.GLUT as glut
         from IPython.lib.inputhookglut import glut_display_mode, \
@@ -576,16 +576,16 @@ class GlutInputHook(InputHookBase):
 
 
     def disable(self):
-        """DEPRECATED since IPython 5.0 
- 
-        Disable event loop integration with glut. 
+        """DEPRECATED since IPython 5.0
+
+        Disable event loop integration with glut.
         
         This sets PyOS_InputHook to NULL and set the display function to a
         dummy one and set the timer to a dummy timer that will be triggered
         very far in the future.
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         import OpenGL.GLUT as glut
         from glut_support import glutMainLoopEvent
 
@@ -596,10 +596,10 @@ class GlutInputHook(InputHookBase):
 @inputhook_manager.register('pyglet')
 class PygletInputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with pyglet. 
- 
+        Enable event loop integration with pyglet.
+
         Parameters
         ----------
         app : ignored
@@ -614,8 +614,8 @@ class PygletInputHook(InputHookBase):
         IPython.
 
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         from IPython.lib.inputhookpyglet import inputhook_pyglet
         self.manager.set_inputhook(inputhook_pyglet)
         return app
@@ -624,10 +624,10 @@ class PygletInputHook(InputHookBase):
 @inputhook_manager.register('gtk3')
 class Gtk3InputHook(InputHookBase):
     def enable(self, app=None):
-        """DEPRECATED since IPython 5.0 
+        """DEPRECATED since IPython 5.0
 
-        Enable event loop integration with Gtk3 (gir bindings). 
- 
+        Enable event loop integration with Gtk3 (gir bindings).
+
         Parameters
         ----------
         app : ignored
@@ -641,8 +641,8 @@ class Gtk3InputHook(InputHookBase):
         the Gtk3 to integrate with terminal based applications like
         IPython.
         """
-        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.", 
-                DeprecationWarning, stacklevel=2) 
+        warn("This function is deprecated since IPython 5.0 and will be removed in future versions.",
+                DeprecationWarning, stacklevel=2)
         from IPython.lib.inputhookgtk3 import inputhook_gtk3
         self.manager.set_inputhook(inputhook_gtk3)
 

@@ -15,8 +15,8 @@ Probably, to get started, you meight also want to have a look at
 """
 from .interface import CommandLineInterface
 from .application import AbortAction, Application
-from .shortcuts import prompt, prompt_async 
+from .shortcuts import prompt, prompt_async
 
 
-# Don't forget to update in `docs/conf.py`! 
+# Don't forget to update in `docs/conf.py`!
 __version__ = '1.0.18'

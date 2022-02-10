@@ -37,12 +37,12 @@ class KeyBindingManager(object):
     :param enable_extra_page_navigation: Filter for enabling extra page navigation.
         (Bindings for up/down scrolling through long pages, like in Emacs or Vi.)
     :param enable_auto_suggest_bindings: Filter to enable fish-style suggestions.
- 
-    :param enable_vi_mode: Deprecated! 
+
+    :param enable_vi_mode: Deprecated!
     """
     def __init__(self,
                  registry=None,  # XXX: not used anymore.
-                 enable_vi_mode=None,  # (`enable_vi_mode` is deprecated.) 
+                 enable_vi_mode=None,  # (`enable_vi_mode` is deprecated.)
                  enable_all=True,  #
                  get_search_state=None,
                  enable_abort_and_exit_bindings=False,
@@ -76,7 +76,7 @@ class KeyBindingManager(object):
     def for_prompt(cls, **kw):
         """
         Create a ``KeyBindingManager`` with the defaults for an input prompt.
-        This activates the key bindings for abort/exit (Ctrl-C/Ctrl-D), 
+        This activates the key bindings for abort/exit (Ctrl-C/Ctrl-D),
         incremental search and auto suggestions.
 
         (Not for full screen applications.)
@@ -88,9 +88,9 @@ class KeyBindingManager(object):
         return cls(**kw)
 
     def reset(self, cli):
-        # For backwards compatibility. 
-        pass 
- 
-    def get_vi_state(self, cli): 
-        # Deprecated! 
-        return cli.vi_state 
+        # For backwards compatibility.
+        pass
+
+    def get_vi_state(self, cli):
+        # Deprecated!
+        return cli.vi_state

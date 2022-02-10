@@ -24,15 +24,15 @@ from IPython.utils import py3compat
 from IPython.utils.contexts import preserve_keys
 from IPython.utils.path import filefind
 from traitlets import (
-    Unicode, Instance, List, Bool, CaselessStrEnum, observe, 
+    Unicode, Instance, List, Bool, CaselessStrEnum, observe,
 )
-from IPython.terminal import pt_inputhooks 
+from IPython.terminal import pt_inputhooks
 
 #-----------------------------------------------------------------------------
 # Aliases and Flags
 #-----------------------------------------------------------------------------
 
-gui_keys = tuple(sorted(pt_inputhooks.backends) + sorted(pt_inputhooks.aliases)) 
+gui_keys = tuple(sorted(pt_inputhooks.backends) + sorted(pt_inputhooks.aliases))
 
 backend_keys = sorted(pylabtools.backends.keys())
 backend_keys.insert(0, 'auto')
@@ -102,7 +102,7 @@ shell_aliases['cache-size'] = 'InteractiveShell.cache_size'
 
 class InteractiveShellApp(Configurable):
     """A Mixin for applications that start InteractiveShell instances.
- 
+
     Provides configurables for loading extensions and executing files
     as part of configuring a Shell environment.
 
@@ -115,73 +115,73 @@ class InteractiveShellApp(Configurable):
       - :meth:`init_extensions`
       - :meth:`init_code`
     """
-    extensions = List(Unicode(), 
+    extensions = List(Unicode(),
         help="A list of dotted module names of IPython extensions to load."
-    ).tag(config=True) 
-    extra_extension = Unicode('', 
+    ).tag(config=True)
+    extra_extension = Unicode('',
         help="dotted module name of an IPython extension to load."
-    ).tag(config=True) 
+    ).tag(config=True)
 
-    reraise_ipython_extension_failures = Bool(False, 
+    reraise_ipython_extension_failures = Bool(False,
         help="Reraise exceptions encountered loading IPython extensions?",
-    ).tag(config=True) 
+    ).tag(config=True)
 
     # Extensions that are always loaded (not configurable)
-    default_extensions = List(Unicode(), [u'storemagic']).tag(config=False) 
- 
-    hide_initial_ns = Bool(True, 
+    default_extensions = List(Unicode(), [u'storemagic']).tag(config=False)
+
+    hide_initial_ns = Bool(True,
         help="""Should variables loaded at startup (by startup files, exec_lines, etc.)
         be hidden from tools like %who?"""
-    ).tag(config=True) 
+    ).tag(config=True)
 
-    exec_files = List(Unicode(), 
+    exec_files = List(Unicode(),
         help="""List of files to run at IPython startup."""
-    ).tag(config=True) 
-    exec_PYTHONSTARTUP = Bool(True, 
+    ).tag(config=True)
+    exec_PYTHONSTARTUP = Bool(True,
         help="""Run the file referenced by the PYTHONSTARTUP environment
         variable at IPython startup."""
-    ).tag(config=True) 
-    file_to_run = Unicode('', 
-        help="""A file to be run""").tag(config=True) 
+    ).tag(config=True)
+    file_to_run = Unicode('',
+        help="""A file to be run""").tag(config=True)
 
-    exec_lines = List(Unicode(), 
+    exec_lines = List(Unicode(),
         help="""lines of code to run at IPython startup."""
-    ).tag(config=True) 
-    code_to_run = Unicode('', 
+    ).tag(config=True)
+    code_to_run = Unicode('',
         help="Execute the given command string."
-    ).tag(config=True) 
-    module_to_run = Unicode('', 
+    ).tag(config=True)
+    module_to_run = Unicode('',
         help="Run the module as a script."
-    ).tag(config=True) 
-    gui = CaselessStrEnum(gui_keys, allow_none=True, 
+    ).tag(config=True)
+    gui = CaselessStrEnum(gui_keys, allow_none=True,
         help="Enable GUI event loop integration with any of {0}.".format(gui_keys)
-    ).tag(config=True) 
+    ).tag(config=True)
     matplotlib = CaselessStrEnum(backend_keys, allow_none=True,
         help="""Configure matplotlib for interactive use with
         the default matplotlib backend."""
-    ).tag(config=True) 
+    ).tag(config=True)
     pylab = CaselessStrEnum(backend_keys, allow_none=True,
         help="""Pre-load matplotlib and numpy for interactive use,
         selecting a particular matplotlib backend and loop integration.
         """
-    ).tag(config=True) 
-    pylab_import_all = Bool(True, 
+    ).tag(config=True)
+    pylab_import_all = Bool(True,
         help="""If true, IPython will populate the user namespace with numpy, pylab, etc.
         and an ``import *`` is done from numpy and pylab, when using pylab mode.
- 
+
         When False, pylab mode should not import any names into the user namespace.
         """
-    ).tag(config=True) 
+    ).tag(config=True)
     shell = Instance('IPython.core.interactiveshell.InteractiveShellABC',
                      allow_none=True)
-    # whether interact-loop should start 
-    interact = Bool(True) 
- 
+    # whether interact-loop should start
+    interact = Bool(True)
+
     user_ns = Instance(dict, args=None, allow_none=True)
-    @observe('user_ns') 
-    def _user_ns_changed(self, change): 
+    @observe('user_ns')
+    def _user_ns_changed(self, change):
         if self.shell is not None:
-            self.shell.user_ns = change['new'] 
+            self.shell.user_ns = change['new']
             self.shell.init_user_ns()
 
     def init_path(self):
@@ -205,10 +205,10 @@ class InteractiveShellApp(Configurable):
         elif self.gui:
             enable = shell.enable_gui
             key = self.gui
- 
+
         if not enable:
             return
- 
+
         try:
             r = enable(key)
         except ImportError:
@@ -219,7 +219,7 @@ class InteractiveShellApp(Configurable):
             self.log.warning("GUI event loop or pylab initialization failed")
             self.shell.showtraceback()
             return
- 
+
         if isinstance(r, tuple):
             gui, backend = r[:2]
             self.log.info("Enabling GUI event loop integration, "
@@ -265,16 +265,16 @@ class InteractiveShellApp(Configurable):
         self._run_startup_files()
         self._run_exec_lines()
         self._run_exec_files()
- 
+
         # Hide variables defined here from %who etc.
         if self.hide_initial_ns:
             self.shell.user_ns_hidden.update(self.shell.user_ns)
- 
+
         # command-line execution (ipython -i script.py, ipython -m module)
         # should *not* be excluded from %whos
         self._run_cmd_line_code()
         self._run_module()
- 
+
         # flush output, so itwon't be attached to the first cell
         sys.stdout.flush()
         sys.stderr.flush()
@@ -301,7 +301,7 @@ class InteractiveShellApp(Configurable):
     def _exec_file(self, fname, shell_futures=False):
         try:
             full_filename = filefind(fname, [u'.', self.ipython_dir])
-        except IOError: 
+        except IOError:
             self.log.warning("File not found: %r"%fname)
             return
         # Make sure that the running script gets a proper sys.argv as if it
@@ -337,7 +337,7 @@ class InteractiveShellApp(Configurable):
             os.path.join(p, 'startup') for p in chain(ENV_CONFIG_DIRS, SYSTEM_CONFIG_DIRS)
         ]
         startup_files = []
- 
+
         if self.exec_PYTHONSTARTUP and os.environ.get('PYTHONSTARTUP', False) and \
                 not (self.file_to_run or self.code_to_run or self.module_to_run):
             python_startup = os.environ['PYTHONSTARTUP']
@@ -352,7 +352,7 @@ class InteractiveShellApp(Configurable):
             startup_files += glob.glob(os.path.join(startup_dir, '*.ipy'))
         if not startup_files:
             return
- 
+
         self.log.debug("Running startup files from %s...", startup_dir)
         try:
             for fname in sorted(startup_files):
@@ -386,20 +386,20 @@ class InteractiveShellApp(Configurable):
                 self.log.warning("Error in executing line in user namespace: %s" %
                               line)
                 self.shell.showtraceback()
-                if not self.interact: 
-                    self.exit(1) 
+                if not self.interact:
+                    self.exit(1)
 
         # Like Python itself, ignore the second if the first of these is present
         elif self.file_to_run:
             fname = self.file_to_run
-            if os.path.isdir(fname): 
-                fname = os.path.join(fname, "__main__.py") 
+            if os.path.isdir(fname):
+                fname = os.path.join(fname, "__main__.py")
             try:
                 self._exec_file(fname, shell_futures=True)
             except:
                 self.shell.showtraceback(tb_offset=4)
-                if not self.interact: 
-                    self.exit(1) 
+                if not self.interact:
+                    self.exit(1)
 
     def _run_module(self):
         """Run module specified at the command-line."""

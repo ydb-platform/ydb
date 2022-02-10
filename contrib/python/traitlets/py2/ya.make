@@ -14,7 +14,7 @@ PEERDIR(
     contrib/python/decorator
     contrib/python/enum34
     contrib/python/ipython-genutils
-    contrib/python/six 
+    contrib/python/six
 )
 
 NO_LINT()
@@ -31,7 +31,7 @@ PY_SRCS(
     traitlets/log.py
     traitlets/traitlets.py
     traitlets/utils/__init__.py
-    traitlets/utils/bunch.py 
+    traitlets/utils/bunch.py
     traitlets/utils/getargspec.py
     traitlets/utils/importstring.py
     traitlets/utils/sentinel.py

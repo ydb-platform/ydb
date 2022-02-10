@@ -2,9 +2,9 @@ from __future__ import unicode_literals
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
 
-from prompt_toolkit.utils import test_callable_args 
+from prompt_toolkit.utils import test_callable_args
 
- 
+
 __all__ = (
     'Filter',
     'Never',
@@ -29,19 +29,19 @@ class Filter(with_metaclass(ABCMeta, object)):
         """
         Chaining of filters using the & operator.
         """
-        return _and_cache[self, other] 
+        return _and_cache[self, other]
 
     def __or__(self, other):
         """
         Chaining of filters using the | operator.
         """
-        return _or_cache[self, other] 
+        return _or_cache[self, other]
 
     def __invert__(self):
         """
         Inverting of filters using the ~ operator.
         """
-        return _invert_cache[self] 
+        return _invert_cache[self]
 
     def __bool__(self):
         """
@@ -56,11 +56,11 @@ class Filter(with_metaclass(ABCMeta, object)):
 
     __nonzero__ = __bool__  # For Python 2.
 
-    def test_args(self, *args): 
+    def test_args(self, *args):
         """
-        Test whether this filter can be called with the following argument list. 
+        Test whether this filter can be called with the following argument list.
         """
-        return test_callable_args(self.__call__, args) 
+        return test_callable_args(self.__call__, args)
 
 
 class _AndCache(dict):
@@ -74,14 +74,14 @@ class _AndCache(dict):
           removed. In practise however, there is a finite amount of filters.
     """
     def __missing__(self, filters):
-        a, b = filters 
-        assert isinstance(b, Filter), 'Expecting filter, got %r' % b 
- 
-        if isinstance(b, Always) or isinstance(a, Never): 
-            return a 
-        elif isinstance(b, Never) or isinstance(a, Always): 
-            return b 
- 
+        a, b = filters
+        assert isinstance(b, Filter), 'Expecting filter, got %r' % b
+
+        if isinstance(b, Always) or isinstance(a, Never):
+            return a
+        elif isinstance(b, Never) or isinstance(a, Always):
+            return b
+
         result = _AndList(filters)
         self[filters] = result
         return result
@@ -90,30 +90,30 @@ class _AndCache(dict):
 class _OrCache(dict):
     """ Cache for Or operation between filters. """
     def __missing__(self, filters):
-        a, b = filters 
-        assert isinstance(b, Filter), 'Expecting filter, got %r' % b 
- 
-        if isinstance(b, Always) or isinstance(a, Never): 
-            return b 
-        elif isinstance(b, Never) or isinstance(a, Always): 
-            return a 
- 
+        a, b = filters
+        assert isinstance(b, Filter), 'Expecting filter, got %r' % b
+
+        if isinstance(b, Always) or isinstance(a, Never):
+            return b
+        elif isinstance(b, Never) or isinstance(a, Always):
+            return a
+
         result = _OrList(filters)
         self[filters] = result
         return result
 
 
-class _InvertCache(dict): 
-    """ Cache for inversion operator. """ 
-    def __missing__(self, filter): 
-        result = _Invert(filter) 
-        self[filter] = result 
-        return result 
- 
- 
+class _InvertCache(dict):
+    """ Cache for inversion operator. """
+    def __missing__(self, filter):
+        result = _Invert(filter)
+        self[filter] = result
+        return result
+
+
 _and_cache = _AndCache()
 _or_cache = _OrCache()
-_invert_cache = _InvertCache() 
+_invert_cache = _InvertCache()
 
 
 class _AndList(Filter):
@@ -131,8 +131,8 @@ class _AndList(Filter):
 
         self.filters = all_filters
 
-    def test_args(self, *args): 
-        return all(f.test_args(*args) for f in self.filters) 
+    def test_args(self, *args):
+        return all(f.test_args(*args) for f in self.filters)
 
     def __call__(self, *a, **kw):
         return all(f(*a, **kw) for f in self.filters)
@@ -156,8 +156,8 @@ class _OrList(Filter):
 
         self.filters = all_filters
 
-    def test_args(self, *args): 
-        return all(f.test_args(*args) for f in self.filters) 
+    def test_args(self, *args):
+        return all(f.test_args(*args) for f in self.filters)
 
     def __call__(self, *a, **kw):
         return any(f(*a, **kw) for f in self.filters)
@@ -179,8 +179,8 @@ class _Invert(Filter):
     def __repr__(self):
         return '~%r' % self.filter
 
-    def test_args(self, *args): 
-        return self.filter.test_args(*args) 
+    def test_args(self, *args):
+        return self.filter.test_args(*args)
 
 
 class Always(Filter):
@@ -230,5 +230,5 @@ class Condition(Filter):
     def __repr__(self):
         return 'Condition(%r)' % self.func
 
-    def test_args(self, *a): 
-        return test_callable_args(self.func, a) 
+    def test_args(self, *a):
+        return test_callable_args(self.func, a)

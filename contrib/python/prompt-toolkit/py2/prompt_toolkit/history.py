@@ -103,8 +103,8 @@ class FileHistory(History):
 
         # Save to file.
         with open(self.filename, 'ab') as f:
-            def write(t): 
-                f.write(t.encode('utf-8')) 
+            def write(t):
+                f.write(t.encode('utf-8'))
 
             write('\n# %s\n' % datetime.datetime.now())
             for line in string.split('\n'):

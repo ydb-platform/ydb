@@ -25,8 +25,8 @@ controls everything.
 from __future__ import unicode_literals
 import os
 import threading
-from prompt_toolkit.utils import is_windows 
-from .select import select_fds 
+from prompt_toolkit.utils import is_windows
+from .select import select_fds
 
 __all__ = (
     'InputHookContext',
@@ -75,19 +75,19 @@ class InputHookContext(object):
 
         # Flush the read end of the pipe.
         try:
-            # Before calling 'os.read', call select.select. This is required 
-            # when the gevent monkey patch has been applied. 'os.read' is never 
-            # monkey patched and won't be cooperative, so that would block all 
-            # other select() calls otherwise. 
-            # See: http://www.gevent.org/gevent.os.html 
- 
-            # Note: On Windows, this is apparently not an issue. 
-            #       However, if we would ever want to add a select call, it 
-            #       should use `windll.kernel32.WaitForMultipleObjects`, 
-            #       because `select.select` can't wait for a pipe on Windows. 
-            if not is_windows(): 
-                select_fds([self._r], timeout=None) 
- 
+            # Before calling 'os.read', call select.select. This is required
+            # when the gevent monkey patch has been applied. 'os.read' is never
+            # monkey patched and won't be cooperative, so that would block all
+            # other select() calls otherwise.
+            # See: http://www.gevent.org/gevent.os.html
+
+            # Note: On Windows, this is apparently not an issue.
+            #       However, if we would ever want to add a select call, it
+            #       should use `windll.kernel32.WaitForMultipleObjects`,
+            #       because `select.select` can't wait for a pipe on Windows.
+            if not is_windows():
+                select_fds([self._r], timeout=None)
+
             os.read(self._r, 1024)
         except OSError:
             # This happens when the window resizes and a SIGWINCH was received.

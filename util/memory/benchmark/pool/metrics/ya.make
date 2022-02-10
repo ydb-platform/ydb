@@ -1,4 +1,4 @@
-OWNER(g:util) 
+OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 PY2TEST()
@@ -11,8 +11,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
-DEPENDS(util/memory/benchmark/pool) 
+DEPENDS(util/memory/benchmark/pool)
 
 END()

@@ -1,7 +1,7 @@
 """Implementation of magic functions that control various automatic behaviors.
 """
 from __future__ import print_function
-from __future__ import absolute_import 
+from __future__ import absolute_import
 #-----------------------------------------------------------------------------
 #  Copyright (c) 2012 The IPython Development Team.
 #
@@ -17,7 +17,7 @@ from __future__ import absolute_import
 # Our own packages
 from IPython.core.magic import Bunch, Magics, magics_class, line_magic
 from IPython.testing.skipdoctest import skip_doctest
-from logging import error 
+from logging import error
 
 #-----------------------------------------------------------------------------
 # Magic implementation classes

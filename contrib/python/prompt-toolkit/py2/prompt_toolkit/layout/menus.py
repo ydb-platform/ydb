@@ -1,16 +1,16 @@
 from __future__ import unicode_literals
 
-from six.moves import zip_longest, range 
-from prompt_toolkit.filters import HasCompletions, IsDone, Condition, to_cli_filter 
-from prompt_toolkit.mouse_events import MouseEventType 
-from prompt_toolkit.token import Token 
+from six.moves import zip_longest, range
+from prompt_toolkit.filters import HasCompletions, IsDone, Condition, to_cli_filter
+from prompt_toolkit.mouse_events import MouseEventType
+from prompt_toolkit.token import Token
 from prompt_toolkit.utils import get_cwidth
 
-from .containers import Window, HSplit, ConditionalContainer, ScrollOffsets 
-from .controls import UIControl, UIContent 
+from .containers import Window, HSplit, ConditionalContainer, ScrollOffsets
+from .controls import UIControl, UIContent
 from .dimension import LayoutDimension
-from .margins import ScrollbarMargin 
-from .screen import Point, Char 
+from .margins import ScrollbarMargin
+from .screen import Point, Char
 
 import math
 
@@ -29,12 +29,12 @@ class CompletionsMenuControl(UIControl):
         is a very high number, the current completion will be shown in the
         middle most of the time.
     """
-    # Preferred minimum size of the menu control. 
-    # The CompletionsMenu class defines a width of 8, and there is a scrollbar 
-    # of 1.) 
-    MIN_WIDTH = 7 
+    # Preferred minimum size of the menu control.
+    # The CompletionsMenu class defines a width of 8, and there is a scrollbar
+    # of 1.)
+    MIN_WIDTH = 7
 
-    def __init__(self): 
+    def __init__(self):
         self.token = Token.Menu.Completions
 
     def has_focus(self, cli):
@@ -46,20 +46,20 @@ class CompletionsMenuControl(UIControl):
             menu_width = self._get_menu_width(500, complete_state)
             menu_meta_width = self._get_menu_meta_width(500, complete_state)
 
-            return menu_width + menu_meta_width 
+            return menu_width + menu_meta_width
         else:
             return 0
 
-    def preferred_height(self, cli, width, max_available_height, wrap_lines): 
+    def preferred_height(self, cli, width, max_available_height, wrap_lines):
         complete_state = cli.current_buffer.complete_state
         if complete_state:
             return len(complete_state.current_completions)
         else:
             return 0
 
-    def create_content(self, cli, width, height): 
+    def create_content(self, cli, width, height):
         """
-        Create a UIContent object for this control. 
+        Create a UIContent object for this control.
         """
         complete_state = cli.current_buffer.complete_state
         if complete_state:
@@ -67,25 +67,25 @@ class CompletionsMenuControl(UIControl):
             index = complete_state.complete_index  # Can be None!
 
             # Calculate width of completions menu.
-            menu_width = self._get_menu_width(width, complete_state) 
-            menu_meta_width = self._get_menu_meta_width(width - menu_width, complete_state) 
+            menu_width = self._get_menu_width(width, complete_state)
+            menu_meta_width = self._get_menu_meta_width(width - menu_width, complete_state)
             show_meta = self._show_meta(complete_state)
 
-            def get_line(i): 
-                c = completions[i] 
-                is_current_completion = (i == index) 
-                result = self._get_menu_item_tokens(c, is_current_completion, menu_width) 
+            def get_line(i):
+                c = completions[i]
+                is_current_completion = (i == index)
+                result = self._get_menu_item_tokens(c, is_current_completion, menu_width)
 
-                if show_meta: 
-                    result += self._get_menu_item_meta_tokens(c, is_current_completion, menu_meta_width) 
-                return result 
+                if show_meta:
+                    result += self._get_menu_item_meta_tokens(c, is_current_completion, menu_meta_width)
+                return result
 
-            return UIContent(get_line=get_line, 
-                             cursor_position=Point(x=0, y=index or 0), 
-                             line_count=len(completions), 
-                             default_char=Char(' ', self.token)) 
+            return UIContent(get_line=get_line,
+                             cursor_position=Point(x=0, y=index or 0),
+                             line_count=len(completions),
+                             default_char=Char(' ', self.token))
 
-        return UIContent() 
+        return UIContent()
 
     def _show_meta(self, complete_state):
         """
@@ -97,8 +97,8 @@ class CompletionsMenuControl(UIControl):
         """
         Return the width of the main column.
         """
-        return min(max_width, max(self.MIN_WIDTH, max(get_cwidth(c.display) 
-                   for c in complete_state.current_completions) + 2)) 
+        return min(max_width, max(self.MIN_WIDTH, max(get_cwidth(c.display)
+                   for c in complete_state.current_completions) + 2))
 
     def _get_menu_meta_width(self, max_width, complete_state):
         """
@@ -136,16 +136,16 @@ class CompletionsMenuControl(UIControl):
         """
         b = cli.current_buffer
 
-        if mouse_event.event_type == MouseEventType.MOUSE_UP: 
+        if mouse_event.event_type == MouseEventType.MOUSE_UP:
             # Select completion.
-            b.go_to_completion(mouse_event.position.y) 
+            b.go_to_completion(mouse_event.position.y)
             b.complete_state = None
 
-        elif mouse_event.event_type == MouseEventType.SCROLL_DOWN: 
+        elif mouse_event.event_type == MouseEventType.SCROLL_DOWN:
             # Scroll up.
             b.complete_next(count=3, disable_wrap_around=True)
 
-        elif mouse_event.event_type == MouseEventType.SCROLL_UP: 
+        elif mouse_event.event_type == MouseEventType.SCROLL_UP:
             # Scroll down.
             b.complete_previous(count=3, disable_wrap_around=True)
 
@@ -179,19 +179,19 @@ def _trim_text(text, max_width):
 
 
 class CompletionsMenu(ConditionalContainer):
-    def __init__(self, max_height=None, scroll_offset=0, extra_filter=True, display_arrows=False): 
-        extra_filter = to_cli_filter(extra_filter) 
-        display_arrows = to_cli_filter(display_arrows) 
- 
+    def __init__(self, max_height=None, scroll_offset=0, extra_filter=True, display_arrows=False):
+        extra_filter = to_cli_filter(extra_filter)
+        display_arrows = to_cli_filter(display_arrows)
+
         super(CompletionsMenu, self).__init__(
             content=Window(
-                content=CompletionsMenuControl(), 
+                content=CompletionsMenuControl(),
                 width=LayoutDimension(min=8),
-                height=LayoutDimension(min=1, max=max_height), 
-                scroll_offsets=ScrollOffsets(top=scroll_offset, bottom=scroll_offset), 
-                right_margins=[ScrollbarMargin(display_arrows=display_arrows)], 
-                dont_extend_width=True, 
-            ), 
+                height=LayoutDimension(min=1, max=max_height),
+                scroll_offsets=ScrollOffsets(top=scroll_offset, bottom=scroll_offset),
+                right_margins=[ScrollbarMargin(display_arrows=display_arrows)],
+                dont_extend_width=True,
+            ),
             # Show when there are completions but not at the point we are
             # returning the input.
             filter=HasCompletions() & ~IsDone() & extra_filter)
@@ -260,7 +260,7 @@ class MultiColumnCompletionMenuControl(UIControl):
             result -= column_width
         return result + self._required_margin
 
-    def preferred_height(self, cli, width, max_available_height, wrap_lines): 
+    def preferred_height(self, cli, width, max_available_height, wrap_lines):
         """
         Preferred height: as much as needed in order to display all the completions.
         """
@@ -270,9 +270,9 @@ class MultiColumnCompletionMenuControl(UIControl):
 
         return int(math.ceil(len(complete_state.current_completions) / float(column_count)))
 
-    def create_content(self, cli, width, height): 
+    def create_content(self, cli, width, height):
         """
-        Create a UIContent object for this menu. 
+        Create a UIContent object for this menu.
         """
         complete_state = cli.current_buffer.complete_state
         column_width = self._get_column_width(complete_state)
@@ -316,15 +316,15 @@ class MultiColumnCompletionMenuControl(UIControl):
             render_right_arrow = self.scroll < len(rows_[0]) - visible_columns
 
             # Write completions to screen.
-            tokens_for_line = [] 
+            tokens_for_line = []
 
             for row_index, row in enumerate(rows_):
-                tokens = [] 
+                tokens = []
                 middle_row = row_index == len(rows_) // 2
 
                 # Draw left arrow if we have hidden completions on the left.
                 if render_left_arrow:
-                    tokens += [(Token.Scrollbar, '<' if middle_row else ' ')] 
+                    tokens += [(Token.Scrollbar, '<' if middle_row else ' ')]
 
                 # Draw row content.
                 for column_index, c in enumerate(row[self.scroll:][:visible_columns]):
@@ -342,13 +342,13 @@ class MultiColumnCompletionMenuControl(UIControl):
 
                 # Draw right arrow if we have hidden completions on the right.
                 if render_right_arrow:
-                    tokens += [(Token.Scrollbar, '>' if middle_row else ' ')] 
+                    tokens += [(Token.Scrollbar, '>' if middle_row else ' ')]
 
                 # Newline.
-                tokens_for_line.append(tokens) 
+                tokens_for_line.append(tokens)
 
-        else: 
-            tokens = [] 
+        else:
+            tokens = []
 
         self._rendered_rows = height
         self._rendered_columns = visible_columns
@@ -357,11 +357,11 @@ class MultiColumnCompletionMenuControl(UIControl):
         self._render_right_arrow = render_right_arrow
         self._render_width = column_width * visible_columns + render_left_arrow + render_right_arrow + 1
 
-        def get_line(i): 
-            return tokens_for_line[i] 
+        def get_line(i):
+            return tokens_for_line[i]
 
-        return UIContent(get_line=get_line, line_count=len(rows_)) 
- 
+        return UIContent(get_line=get_line, line_count=len(rows_))
+
     def _get_column_width(self, complete_state):
         """
         Return the width of each column.
@@ -393,13 +393,13 @@ class MultiColumnCompletionMenuControl(UIControl):
             b.complete_next(count=self._rendered_rows, disable_wrap_around=True)
             self.scroll = min(self._total_columns - self._rendered_columns, self.scroll + 1)
 
-        if mouse_event.event_type == MouseEventType.SCROLL_DOWN: 
+        if mouse_event.event_type == MouseEventType.SCROLL_DOWN:
             scroll_right()
 
-        elif mouse_event.event_type == MouseEventType.SCROLL_UP: 
+        elif mouse_event.event_type == MouseEventType.SCROLL_UP:
             scroll_left()
 
-        elif mouse_event.event_type == MouseEventType.MOUSE_UP: 
+        elif mouse_event.event_type == MouseEventType.MOUSE_UP:
             x = mouse_event.position.x
             y = mouse_event.position.y
 
@@ -475,17 +475,17 @@ class _SelectedCompletionMetaControl(UIControl):
         else:
             return 0
 
-    def preferred_height(self, cli, width, max_available_height, wrap_lines): 
+    def preferred_height(self, cli, width, max_available_height, wrap_lines):
         return 1
 
-    def create_content(self, cli, width, height): 
-        tokens = self._get_tokens(cli) 
+    def create_content(self, cli, width, height):
+        tokens = self._get_tokens(cli)
 
-        def get_line(i): 
-            return tokens 
- 
-        return UIContent(get_line=get_line, line_count=1 if tokens else 0) 
- 
+        def get_line(i):
+            return tokens
+
+        return UIContent(get_line=get_line, line_count=1 if tokens else 0)
+
     def _get_tokens(self, cli):
         token = Token.Menu.Completions.MultiColumnMeta
         state = cli.current_buffer.complete_state

@@ -5,7 +5,7 @@
 # Distributed under the terms of the Modified BSD License.
 
 from __future__ import print_function
-from __future__ import absolute_import 
+from __future__ import absolute_import
 
 import ast
 import bdb
@@ -28,7 +28,7 @@ except ImportError:
     except ImportError:
         profile = pstats = None
 
-from IPython.core import oinspect 
+from IPython.core import oinspect
 from IPython.core import magic_arguments
 from IPython.core import page
 from IPython.core.error import UsageError
@@ -42,10 +42,10 @@ from IPython.utils.contexts import preserve_keys
 from IPython.utils.capture import capture_output
 from IPython.utils.ipstruct import Struct
 from IPython.utils.module_paths import find_mod
-from IPython.utils.path import get_py_filename, shellglob 
+from IPython.utils.path import get_py_filename, shellglob
 from IPython.utils.timing import clock, clock2
-from warnings import warn 
-from logging import error 
+from warnings import warn
+from logging import error
 
 if PY3:
     from io import StringIO
@@ -61,12 +61,12 @@ class TimeitResult(object):
     """
     Object returned by the timeit magic with info about the run.
 
-    Contains the following attributes : 
+    Contains the following attributes :
 
-    loops: (int) number of loops done per measurement 
-    repeat: (int) number of times the measurement has been repeated 
-    best: (float) best execution time / number 
-    all_runs: (list of float) execution time of each run (in s) 
+    loops: (int) number of loops done per measurement
+    repeat: (int) number of times the measurement has been repeated
+    best: (float) best execution time / number
+    all_runs: (list of float) execution time of each run (in s)
     compile_time: (float) time of statement compilation (s)
 
     """
@@ -705,54 +705,54 @@ python-profiler package from non-free.""")
 
         try:
             stats = None
-            if 'p' in opts: 
-                stats = self._run_with_profiler(code, opts, code_ns) 
-            else: 
-                if 'd' in opts: 
-                    bp_file, bp_line = parse_breakpoint( 
-                        opts.get('b', ['1'])[0], filename) 
-                    self._run_with_debugger( 
-                        code, code_ns, filename, bp_line, bp_file) 
+            if 'p' in opts:
+                stats = self._run_with_profiler(code, opts, code_ns)
+            else:
+                if 'd' in opts:
+                    bp_file, bp_line = parse_breakpoint(
+                        opts.get('b', ['1'])[0], filename)
+                    self._run_with_debugger(
+                        code, code_ns, filename, bp_line, bp_file)
                 else:
-                    if 'm' in opts: 
-                        def run(): 
-                            self.shell.safe_run_module(modulename, prog_ns) 
+                    if 'm' in opts:
+                        def run():
+                            self.shell.safe_run_module(modulename, prog_ns)
                     else:
-                        if runner is None: 
-                            runner = self.default_runner 
-                        if runner is None: 
-                            runner = self.shell.safe_execfile 
+                        if runner is None:
+                            runner = self.default_runner
+                        if runner is None:
+                            runner = self.shell.safe_execfile
 
-                        def run(): 
-                            runner(filename, prog_ns, prog_ns, 
-                                    exit_ignore=exit_ignore) 
+                        def run():
+                            runner(filename, prog_ns, prog_ns,
+                                    exit_ignore=exit_ignore)
 
-                    if 't' in opts: 
-                        # timed execution 
-                        try: 
-                            nruns = int(opts['N'][0]) 
-                            if nruns < 1: 
-                                error('Number of runs must be >=1') 
-                                return 
-                        except (KeyError): 
-                            nruns = 1 
-                        self._run_with_timing(run, nruns) 
-                    else: 
-                        # regular execution 
-                        run() 
+                    if 't' in opts:
+                        # timed execution
+                        try:
+                            nruns = int(opts['N'][0])
+                            if nruns < 1:
+                                error('Number of runs must be >=1')
+                                return
+                        except (KeyError):
+                            nruns = 1
+                        self._run_with_timing(run, nruns)
+                    else:
+                        # regular execution
+                        run()
 
-            if 'i' in opts: 
-                self.shell.user_ns['__name__'] = __name__save 
-            else: 
-                # update IPython interactive namespace 
+            if 'i' in opts:
+                self.shell.user_ns['__name__'] = __name__save
+            else:
+                # update IPython interactive namespace
 
-                # Some forms of read errors on the file may mean the 
-                # __name__ key was never set; using pop we don't have to 
-                # worry about a possible KeyError. 
-                prog_ns.pop('__name__', None) 
+                # Some forms of read errors on the file may mean the
+                # __name__ key was never set; using pop we don't have to
+                # worry about a possible KeyError.
+                prog_ns.pop('__name__', None)
 
-                with preserve_keys(self.shell.user_ns, '__file__'): 
-                    self.shell.user_ns.update(prog_ns) 
+                with preserve_keys(self.shell.user_ns, '__file__'):
+                    self.shell.user_ns.update(prog_ns)
         finally:
             # It's a bit of a mystery why, but __builtins__ can change from
             # being a module to becoming a dict missing some key data after
@@ -801,11 +801,11 @@ python-profiler package from non-free.""")
             If the break point given by `bp_line` is not valid.
 
         """
-        deb = self.shell.InteractiveTB.pdb 
-        if not deb: 
-            self.shell.InteractiveTB.pdb = self.shell.InteractiveTB.debugger_cls() 
-            deb = self.shell.InteractiveTB.pdb 
- 
+        deb = self.shell.InteractiveTB.pdb
+        if not deb:
+            self.shell.InteractiveTB.pdb = self.shell.InteractiveTB.debugger_cls()
+            deb = self.shell.InteractiveTB.pdb
+
         # deb.checkline() fails if deb.curframe exists but is None; it can
         # handle it not existing. https://github.com/ipython/ipython/issues/10028
         if hasattr(deb, 'curframe'):

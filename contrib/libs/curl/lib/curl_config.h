@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/platform.h>
 
 #if defined(__ANDROID__) && defined(MAPSMOBI_BUILD)

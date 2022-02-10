@@ -3,7 +3,7 @@ import fcntl
 import os
 import signal
 import threading
-import time 
+import time
 
 from prompt_toolkit.terminal.vt100_input import InputStream
 from prompt_toolkit.utils import DummyContext, in_main_thread
@@ -13,22 +13,22 @@ from .callbacks import EventLoopCallbacks
 from .inputhook import InputHookContext
 from .posix_utils import PosixStdinReader
 from .utils import TimeIt
-from .select import AutoSelector, Selector, fd_to_int 
+from .select import AutoSelector, Selector, fd_to_int
 
 __all__ = (
     'PosixEventLoop',
 )
 
-_now = time.time 
+_now = time.time
 
 
 class PosixEventLoop(EventLoop):
     """
     Event loop for posix systems (Linux, Mac os X).
     """
-    def __init__(self, inputhook=None, selector=AutoSelector): 
+    def __init__(self, inputhook=None, selector=AutoSelector):
         assert inputhook is None or callable(inputhook)
-        assert issubclass(selector, Selector) 
+        assert issubclass(selector, Selector)
 
         self.running = False
         self.closed = False
@@ -37,7 +37,7 @@ class PosixEventLoop(EventLoop):
 
         self._calls_from_executor = []
         self._read_fds = {} # Maps fd to handler.
-        self.selector = selector() 
+        self.selector = selector()
 
         # Create a pipe for inter thread communication.
         self._schedule_pipe = os.pipe()
@@ -84,31 +84,31 @@ class PosixEventLoop(EventLoop):
             # Set timeout again.
             current_timeout[0] = INPUT_TIMEOUT
 
-            # Quit when the input stream was closed. 
-            if stdin_reader.closed: 
-                self.stop() 
- 
+            # Quit when the input stream was closed.
+            if stdin_reader.closed:
+                self.stop()
+
         self.add_reader(stdin, read_from_stdin)
         self.add_reader(self._schedule_pipe[0], None)
 
         with ctx:
             while self._running:
                 # Call inputhook.
-                if self._inputhook_context: 
-                    with TimeIt() as inputhook_timer: 
+                if self._inputhook_context:
+                    with TimeIt() as inputhook_timer:
                         def ready(wait):
                             " True when there is input ready. The inputhook should return control. "
                             return self._ready_for_reading(current_timeout[0] if wait else 0) != []
                         self._inputhook_context.call_inputhook(ready)
-                    inputhook_duration = inputhook_timer.duration 
-                else: 
-                    inputhook_duration = 0 
+                    inputhook_duration = inputhook_timer.duration
+                else:
+                    inputhook_duration = 0
 
                 # Calculate remaining timeout. (The inputhook consumed some of the time.)
                 if current_timeout[0] is None:
                     remaining_timeout = None
                 else:
-                    remaining_timeout = max(0, current_timeout[0] - inputhook_duration) 
+                    remaining_timeout = max(0, current_timeout[0] - inputhook_duration)
 
                 # Wait until input is ready.
                 fds = self._ready_for_reading(remaining_timeout)
@@ -126,23 +126,23 @@ class PosixEventLoop(EventLoop):
                     # case.
                     tasks = []
                     low_priority_tasks = []
-                    now = None  # Lazy load time. (Fewer system calls.) 
+                    now = None  # Lazy load time. (Fewer system calls.)
 
                     for fd in fds:
                         # For the 'call_from_executor' fd, put each pending
                         # item on either the high or low priority queue.
                         if fd == self._schedule_pipe[0]:
                             for c, max_postpone_until in self._calls_from_executor:
-                                if max_postpone_until is None: 
-                                    # Execute now. 
+                                if max_postpone_until is None:
+                                    # Execute now.
                                     tasks.append(c)
                                 else:
-                                    # Execute soon, if `max_postpone_until` is in the future. 
-                                    now = now or _now() 
-                                    if max_postpone_until < now: 
-                                        tasks.append(c) 
-                                    else: 
-                                        low_priority_tasks.append((c, max_postpone_until)) 
+                                    # Execute soon, if `max_postpone_until` is in the future.
+                                    now = now or _now()
+                                    if max_postpone_until < now:
+                                        tasks.append(c)
+                                    else:
+                                        low_priority_tasks.append((c, max_postpone_until))
                             self._calls_from_executor = []
 
                             # Flush all the pipe content.
@@ -185,8 +185,8 @@ class PosixEventLoop(EventLoop):
         """
         Return the file descriptors that are ready for reading.
         """
-        fds = self.selector.select(timeout) 
-        return fds 
+        fds = self.selector.select(timeout)
+        return fds
 
     def received_winch(self):
         """
@@ -230,23 +230,23 @@ class PosixEventLoop(EventLoop):
         Call this function in the main event loop.
         Similar to Twisted's ``callFromThread``.
 
-        :param _max_postpone_until: `None` or `time.time` value. For interal 
+        :param _max_postpone_until: `None` or `time.time` value. For interal
             use. If the eventloop is saturated, consider this task to be low
             priority and postpone maximum until this timestamp. (For instance,
             repaint is done using low priority.)
         """
-        assert _max_postpone_until is None or isinstance(_max_postpone_until, float) 
+        assert _max_postpone_until is None or isinstance(_max_postpone_until, float)
         self._calls_from_executor.append((callback, _max_postpone_until))
 
         if self._schedule_pipe:
-            try: 
-                os.write(self._schedule_pipe[1], b'x') 
-            except (AttributeError, IndexError, OSError): 
-                # Handle race condition. We're in a different thread. 
-                # - `_schedule_pipe` could have become None in the meantime. 
-                # - We catch `OSError` (actually BrokenPipeError), because the 
-                #   main thread could have closed the pipe already. 
-                pass 
+            try:
+                os.write(self._schedule_pipe[1], b'x')
+            except (AttributeError, IndexError, OSError):
+                # Handle race condition. We're in a different thread.
+                # - `_schedule_pipe` could have become None in the meantime.
+                # - We catch `OSError` (actually BrokenPipeError), because the
+                #   main thread could have closed the pipe already.
+                pass
 
     def stop(self):
         """
@@ -270,18 +270,18 @@ class PosixEventLoop(EventLoop):
 
     def add_reader(self, fd, callback):
         " Add read file descriptor to the event loop. "
-        fd = fd_to_int(fd) 
+        fd = fd_to_int(fd)
         self._read_fds[fd] = callback
-        self.selector.register(fd) 
+        self.selector.register(fd)
 
     def remove_reader(self, fd):
         " Remove read file descriptor from the event loop. "
-        fd = fd_to_int(fd) 
- 
+        fd = fd_to_int(fd)
+
         if fd in self._read_fds:
             del self._read_fds[fd]
 
-        self.selector.unregister(fd) 
+        self.selector.unregister(fd)
 
 
 class call_on_sigwinch(object):

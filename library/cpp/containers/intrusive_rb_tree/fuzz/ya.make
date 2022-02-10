@@ -1,12 +1,12 @@
 FUZZ()
 
-OWNER( 
-    g:util 
-    mikari 
-) 
+OWNER(
+    g:util
+    mikari
+)
 
 SIZE(LARGE)
- 
+
 TAG(ya:fat)
 
 PEERDIR(

@@ -114,7 +114,7 @@ MAIN FEATURES
     your history for lines that match what you've typed so far, completing as
     much as it can.
 
-  - %hist: search history by index. 
+  - %hist: search history by index.
 
 * Persistent command history across sessions.
 
@@ -337,9 +337,9 @@ default_banner_parts = [
 
 default_banner = ''.join(default_banner_parts)
 
-# deprecated GUI banner 
+# deprecated GUI banner
 
-default_gui_banner = '\n'.join([ 
-    'DEPRECATED: IPython.core.usage.default_gui_banner is deprecated and will be removed', 
-    default_banner, 
-]) 
+default_gui_banner = '\n'.join([
+    'DEPRECATED: IPython.core.usage.default_gui_banner is deprecated and will be removed',
+    default_banner,
+])

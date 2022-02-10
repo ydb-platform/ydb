@@ -232,8 +232,8 @@ def which(prog):
                 return p
 
     return None
- 
- 
+
+
 def get_stdout(command):
     stdout, code = get_stdout_and_code(command)
     return stdout if code == 0 else None
@@ -719,10 +719,10 @@ class YMake(object):
     def print_core_conf(self):
         emit('YMAKE_YNDEXER_IGNORE_BUILD_ROOT', 'yes')
         print('@import "${CONF_ROOT}/ymake.core.conf"')
- 
+
     def print_settings(self):
         emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
- 
+
     @staticmethod
     def _find_conf(conf_file):
         script_dir = os.path.dirname(__file__)
@@ -2297,7 +2297,7 @@ class MSVC(object):
 
         self.build = build
         self.tc = tc
- 
+
 
 class MSVCToolchain(MSVC, Toolchain):
     def __init__(self, tc, build):
@@ -2333,46 +2333,46 @@ class MSVCCompiler(MSVC, Compiler):
     def __init__(self, tc, build):
         Compiler.__init__(self, tc, 'MSVC')
         MSVC.__init__(self, tc, build)
- 
+
     def print_compiler(self):
         super(MSVCCompiler, self).print_compiler()
- 
+
         target = self.build.target
 
         win32_winnt = self.WIN32_WINNT.Windows7
 
-        warns_enabled = [ 
+        warns_enabled = [
             4018,  # 'expression' : signed/unsigned mismatch
             4265,  # 'class' : class has virtual functions, but destructor is not virtual
             4296,  # 'operator' : expression is always false
             4431,  # missing type specifier - int assumed
-        ] 
+        ]
         warns_as_error = [
             4013,  # 'function' undefined; assuming extern returning int
         ]
-        warns_disabled = [ 
-            4127,  # conditional expression is constant 
-            4200,  # nonstandard extension used : zero-sized array in struct/union 
-            4201,  # nonstandard extension used : nameless struct/union 
-            4351,  # elements of array will be default initialized 
-            4355,  # 'this' : used in base member initializer list 
+        warns_disabled = [
+            4127,  # conditional expression is constant
+            4200,  # nonstandard extension used : zero-sized array in struct/union
+            4201,  # nonstandard extension used : nameless struct/union
+            4351,  # elements of array will be default initialized
+            4355,  # 'this' : used in base member initializer list
             4503,  # decorated name length exceeded, name was truncated
-            4510,  # default constructor could not be generated 
-            4511,  # copy constructor could not be generated 
-            4512,  # assignment operator could not be generated 
-            4554,  # check operator precedence for possible error; use parentheses to clarify precedence 
-            4610,  # 'object' can never be instantiated - user defined constructor required 
-            4706,  # assignment within conditional expression 
-            4800,  # forcing value to bool 'true' or 'false' (performance warning) 
-            4996,  # The POSIX name for this item is deprecated 
-            4714,  # function marked as __forceinline not inlined 
-            4197,  # 'TAtomic' : top-level volatile in cast is ignored 
-            4245,  # 'initializing' : conversion from 'int' to 'ui32', signed/unsigned mismatch 
+            4510,  # default constructor could not be generated
+            4511,  # copy constructor could not be generated
+            4512,  # assignment operator could not be generated
+            4554,  # check operator precedence for possible error; use parentheses to clarify precedence
+            4610,  # 'object' can never be instantiated - user defined constructor required
+            4706,  # assignment within conditional expression
+            4800,  # forcing value to bool 'true' or 'false' (performance warning)
+            4996,  # The POSIX name for this item is deprecated
+            4714,  # function marked as __forceinline not inlined
+            4197,  # 'TAtomic' : top-level volatile in cast is ignored
+            4245,  # 'initializing' : conversion from 'int' to 'ui32', signed/unsigned mismatch
             4324,  # 'ystd::function<void (uint8_t *)>': structure was padded due to alignment specifier
             5033,  # 'register' is no longer a supported storage class
-        ] 
- 
-        defines = [ 
+        ]
+
+        defines = [
             '/DARCADIA_ROOT=${ARCADIA_ROOT}',
             '/DARCADIA_BUILD_ROOT=${ARCADIA_BUILD_ROOT}',
             '/DFAKEID=$CPP_FAKEID',
@@ -2388,8 +2388,8 @@ class MSVCCompiler(MSVC, Compiler):
             '/D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
             '/DNOMINMAX',
             '/DWIN32_LEAN_AND_MEAN',
-        ] 
- 
+        ]
+
         cxx_defines = [
             # Use builtin offsetof implementation
             # instead of a crutcy macro defined in ucrt/stddef.h.
@@ -2420,12 +2420,12 @@ class MSVCCompiler(MSVC, Compiler):
             '/permissive-'
         ]
         flags += self.tc.arch_opt
- 
+
         c_warnings = ['/we{}'.format(code) for code in warns_as_error]
         c_warnings += ['/w1{}'.format(code) for code in warns_enabled]
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
- 
+
         flags_debug = ['/Ob0', '/Od', '/D_DEBUG']
         flags_release = ['/Ox', '/Ob2', '/Oi', '/DNDEBUG']
 
@@ -2435,7 +2435,7 @@ class MSVCCompiler(MSVC, Compiler):
             # https://devblogs.microsoft.com/cppblog/msvc-now-correctly-reports-__cplusplus/
             "/Zc:__cplusplus"
         ]
- 
+
         if self.tc.use_clang:
             flags += [
                 # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
@@ -2511,7 +2511,7 @@ class MSVCCompiler(MSVC, Compiler):
             masm_io = '-o ${output;suf=${OBJECT_SUF}:SRC} ${input;msvs_source:SRC}'
         else:
             masm_io = '/nologo /c /Fo${output;suf=${OBJECT_SUF}:SRC} ${input;msvs_source:SRC}'
- 
+
         emit('OBJ_CROSS_SUF', '$OBJ_SUF')
         emit('OBJECT_SUF', '$OBJ_SUF.obj')
         emit('WIN32_WINNT', '{value}'.format(value=win32_winnt))
@@ -2546,9 +2546,9 @@ class MSVCCompiler(MSVC, Compiler):
             if not self.tc.use_clang:
                 flags_msvs_only += ['/FD', '/MP']
             debug_info_flags = '/Zi /FS'
-        else: 
+        else:
             debug_info_flags = '/Z7'
- 
+
         if self.tc.use_clang:
             emit('CLANG_CL', 'yes')
         if self.tc.ide_msvs:
@@ -2573,11 +2573,11 @@ class MSVCCompiler(MSVC, Compiler):
             emit('CFLAGS_PER_TYPE', '$CFLAGS_DEBUG')
         if self.build.is_ide:
             emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
- 
+
         append('CFLAGS', flags, flags_msvs_only, '$CFLAGS_PER_TYPE', '$DEBUG_INFO_FLAGS', '$C_WARNING_OPTS', '$C_DEFINES', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL')
         append('CXXFLAGS', '$CFLAGS', '/std:' + self.tc.cxx_std, cxx_flags, cxx_defines, '$CXX_WARNING_OPTS', '$USER_CXXFLAGS', '$USER_CXXFLAGS_GLOBAL')
         append('CONLYFLAGS', flags_c_only, '$USER_CONLYFLAGS', '$USER_CONLYFLAGS_GLOBAL')
- 
+
         append('BC_CFLAGS', '$CFLAGS')
         append('BC_CXXFLAGS', '$BC_CFLAGS', '$CXXFLAGS')
 
@@ -2603,14 +2603,14 @@ class MSVCCompiler(MSVC, Compiler):
         emit('SFDL_FLAG', ['/E', '/C', '/P', '/TP', '/Fi$SFDL_TMP_OUT'])
         emit('WERROR_FLAG', '/WX')
         emit('WERROR_MODE', self.tc.werror_mode)
- 
+
         if not self.tc.under_wine:
             emit('CL_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'cl')
             emit('ML_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'ml')
-        else: 
+        else:
             emit('CL_WRAPPER')
             emit('ML_WRAPPER')
- 
+
         emit('_SRC_C_NODEPS_CMD',
              '${TOOLCHAIN_ENV} ${CL_WRAPPER} ${C_COMPILER} /c /Fo${OUTFILE} ${SRC} ${EXTRA_C_FLAGS} ${pre=/I :INC} '
              '${CFLAGS} ${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"soe"} ${hide;kv:"p CC"} ${hide;kv:"pc yellow"}'
@@ -2651,32 +2651,32 @@ class MSVCLinker(MSVC, Linker):
             (target.is_armv7, 'arm'),
         ))
 
-        libpaths = [] 
+        libpaths = []
         if not self.tc.ide_msvs:
             if self.tc.kit_libs:
                 libpaths.extend([os.path.join(self.tc.kit_libs, name, arch) for name in ('um', 'ucrt')])
             libpaths.append(os.path.join(self.tc.vc_root, 'lib', arch))
 
-        ignored_errors = [ 
-            4221 
-        ] 
+        ignored_errors = [
+            4221
+        ]
 
         flag_machine = '/MACHINE:{}'.format(arch.upper())
 
-        flags_ignore = ['/IGNORE:{}'.format(code) for code in ignored_errors] 
- 
-        flags_common = ['/NOLOGO', '/ERRORREPORT:PROMPT', '/SUBSYSTEM:CONSOLE', '/TLBID:1', '$MSVC_DYNAMICBASE', '/NXCOMPAT'] 
-        flags_common += flags_ignore 
+        flags_ignore = ['/IGNORE:{}'.format(code) for code in ignored_errors]
+
+        flags_common = ['/NOLOGO', '/ERRORREPORT:PROMPT', '/SUBSYSTEM:CONSOLE', '/TLBID:1', '$MSVC_DYNAMICBASE', '/NXCOMPAT']
+        flags_common += flags_ignore
         flags_common += [flag_machine]
- 
-        flags_debug_only = [] 
-        flags_release_only = [] 
- 
+
+        flags_debug_only = []
+        flags_release_only = []
+
         if self.tc.ide_msvs:
-            flags_common += ['/INCREMENTAL'] 
-        else: 
-            flags_common += ['/INCREMENTAL:NO'] 
- 
+            flags_common += ['/INCREMENTAL']
+        else:
+            flags_common += ['/INCREMENTAL:NO']
+
         if self.tc.use_clang:
             flags_debug_only.append('/STACK:4194304')
 
@@ -2687,14 +2687,14 @@ class MSVCLinker(MSVC, Linker):
             else:
                 # No FASTLINK for ya make, because resulting PDB would require .obj files (build_root's) to persist
                 flags_common.append('/DEBUG')
- 
+
         if not self.tc.ide_msvs:
-            flags_common += ['/LIBPATH:"{}"'.format(path) for path in libpaths] 
- 
+            flags_common += ['/LIBPATH:"{}"'.format(path) for path in libpaths]
+
         link_flags_debug = flags_common + flags_debug_only
         link_flags_release = flags_common + flags_release_only
         link_flags_lib = flags_ignore + [flag_machine]
- 
+
         stdlibs = [
             'advapi32.lib',
             'comdlg32.lib',
@@ -2702,10 +2702,10 @@ class MSVCLinker(MSVC, Linker):
             'dnsapi.lib',
             'gdi32.lib',
             'iphlpapi.lib',
-            'kernel32.lib', 
+            'kernel32.lib',
             'mswsock.lib',
-            'ole32.lib', 
-            'oleaut32.lib', 
+            'ole32.lib',
+            'oleaut32.lib',
             'psapi.lib',
             'rpcrt4.lib',
             'secur32.lib',
@@ -2713,13 +2713,13 @@ class MSVCLinker(MSVC, Linker):
             'shlwapi.lib',
             'user32.lib',
             'userenv.lib',
-            'uuid.lib', 
+            'uuid.lib',
             'version.lib',
             'winmm.lib',
             'winspool.lib',
             'ws2_32.lib',
-        ] 
- 
+        ]
+
         emit('LINK_LIB_CMD', linker_lib)
         emit('LINK_EXE_CMD', linker)
         emit('LINK_LIB_FLAGS', link_flags_lib)
@@ -2729,16 +2729,16 @@ class MSVCLinker(MSVC, Linker):
         emit('LDFLAGS_GLOBAL', '')
         emit('LDFLAGS', '')
         emit('OBJADDE', '')
- 
+
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
         if self.build.is_debug:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_DEBUG')
         if self.build.is_ide and self.tc.ide_msvs:
             emit('LINK_EXE_FLAGS_PER_TYPE', '@[debug|$LINK_EXE_FLAGS_DEBUG]@[release|$LINK_EXE_FLAGS_RELEASE]')
- 
+
         emit('LINK_EXE_FLAGS', '$LINK_EXE_FLAGS_PER_TYPE')
- 
+
         emit('LINK_IMPLIB_VALUE')
         emit('LINK_IMPLIB', '/IMPLIB:${output;noext;rootrel;pre=$MODULE_PREFIX:REALPRJNAME.lib}')
         if is_negative_str(preset('NO_DEBUGINFO', 'no')):
@@ -2749,10 +2749,10 @@ class MSVCLinker(MSVC, Linker):
         if not self.tc.under_wine:
             emit('LIB_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'lib')
             emit('LINK_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'link')
-        else: 
+        else:
             emit('LIB_WRAPPER')
             emit('LINK_WRAPPER')
- 
+
         emit('LINK_WRAPPER_DYNLIB', '${YMAKE_PYTHON}', '${input:"build/scripts/link_dyn_lib.py"}', '--arch', 'WINDOWS', '--target', '$TARGET')
         emit_big('''
             EXPORTS_VALUE=
@@ -2760,7 +2760,7 @@ class MSVCLinker(MSVC, Linker):
                 LINK_IMPLIB_VALUE=$LINK_IMPLIB
                 EXPORTS_VALUE=/DEF:${input:EXPORTS_FILE}
             }''')
- 
+
         emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}',
              '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
              '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',

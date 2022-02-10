@@ -1,4 +1,4 @@
-OWNER(mowgli) 
+OWNER(mowgli)
 
 LIBRARY()
 

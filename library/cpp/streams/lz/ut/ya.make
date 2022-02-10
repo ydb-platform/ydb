@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/streams/lz)
 
-OWNER( 
-    pg 
-    g:util 
-) 
+OWNER(
+    pg
+    g:util
+)
 
 RESOURCE(
     random.data /random.data

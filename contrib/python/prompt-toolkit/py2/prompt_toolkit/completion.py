@@ -40,13 +40,13 @@ class Completion(object):
         assert self.start_position <= 0
 
     def __repr__(self):
-        if self.display == self.text: 
-            return '%s(text=%r, start_position=%r)' % ( 
-                self.__class__.__name__, self.text, self.start_position) 
-        else: 
-            return '%s(text=%r, start_position=%r, display=%r)' % ( 
-                self.__class__.__name__, self.text, self.start_position, 
-                self.display) 
+        if self.display == self.text:
+            return '%s(text=%r, start_position=%r)' % (
+                self.__class__.__name__, self.text, self.start_position)
+        else:
+            return '%s(text=%r, start_position=%r, display=%r)' % (
+                self.__class__.__name__, self.text, self.start_position,
+                self.display)
 
     def __eq__(self, other):
         return (
@@ -71,22 +71,22 @@ class Completion(object):
         else:
             return ''
 
-    def new_completion_from_position(self, position): 
-        """ 
-        (Only for internal use!) 
-        Get a new completion by splitting this one. Used by 
-        `CommandLineInterface` when it needs to have a list of new completions 
-        after inserting the common prefix. 
-        """ 
-        assert isinstance(position, int) and position - self.start_position >= 0 
+    def new_completion_from_position(self, position):
+        """
+        (Only for internal use!)
+        Get a new completion by splitting this one. Used by
+        `CommandLineInterface` when it needs to have a list of new completions
+        after inserting the common prefix.
+        """
+        assert isinstance(position, int) and position - self.start_position >= 0
 
-        return Completion( 
-            text=self.text[position - self.start_position:], 
-            display=self.display, 
-            display_meta=self._display_meta, 
-            get_display_meta=self._get_display_meta) 
- 
- 
+        return Completion(
+            text=self.text[position - self.start_position:],
+            display=self.display,
+            display_meta=self._display_meta,
+            get_display_meta=self._get_display_meta)
+
+
 class CompleteEvent(object):
     """
     Event that called the completer.
@@ -140,18 +140,18 @@ def get_common_complete_suffix(document, completions):
         end = completion.text[:-completion.start_position]
         return document.text_before_cursor.endswith(end)
 
-    completions2 = [c for c in completions if doesnt_change_before_cursor(c)] 
+    completions2 = [c for c in completions if doesnt_change_before_cursor(c)]
 
-    # When there is at least one completion that changes the text before the 
-    # cursor, don't return any common part. 
-    if len(completions2) != len(completions): 
-        return '' 
- 
+    # When there is at least one completion that changes the text before the
+    # cursor, don't return any common part.
+    if len(completions2) != len(completions):
+        return ''
+
     # Return the common prefix.
     def get_suffix(completion):
         return completion.text[-completion.start_position:]
 
-    return _commonprefix([get_suffix(c) for c in completions2]) 
+    return _commonprefix([get_suffix(c) for c in completions2])
 
 
 def _commonprefix(strings):

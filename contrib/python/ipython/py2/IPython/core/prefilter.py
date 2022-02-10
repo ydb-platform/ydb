@@ -6,8 +6,8 @@ Prefilters transform user input before it is exec'd by Python.  These
 transforms are used to implement additional syntax such as !ls and %magic.
 """
 
-# Copyright (c) IPython Development Team. 
-# Distributed under the terms of the Modified BSD License. 
+# Copyright (c) IPython Development Team.
+# Distributed under the terms of the Modified BSD License.
 
 from keyword import iskeyword
 import re
@@ -24,7 +24,7 @@ from IPython.core.macro import Macro
 from IPython.core.splitinput import LineInfo
 
 from traitlets import (
-    List, Integer, Unicode, Bool, Instance, CRegExp 
+    List, Integer, Unicode, Bool, Instance, CRegExp
 )
 
 #-----------------------------------------------------------------------------
@@ -114,7 +114,7 @@ class PrefilterManager(Configurable):
     or :meth:`sort_transformers` method after changing the priority.
     """
 
-    multi_line_specials = Bool(True).tag(config=True) 
+    multi_line_specials = Bool(True).tag(config=True)
     shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
 
     def __init__(self, shell=None, **kwargs):
@@ -344,12 +344,12 @@ class PrefilterManager(Configurable):
 class PrefilterTransformer(Configurable):
     """Transform a line of user input."""
 
-    priority = Integer(100).tag(config=True) 
+    priority = Integer(100).tag(config=True)
     # Transformers don't currently use shell or prefilter_manager, but as we
     # move away from checkers and handlers, they will need them.
     shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
     prefilter_manager = Instance('IPython.core.prefilter.PrefilterManager', allow_none=True)
-    enabled = Bool(True).tag(config=True) 
+    enabled = Bool(True).tag(config=True)
 
     def __init__(self, shell=None, prefilter_manager=None, **kwargs):
         super(PrefilterTransformer, self).__init__(
@@ -374,10 +374,10 @@ class PrefilterTransformer(Configurable):
 class PrefilterChecker(Configurable):
     """Inspect an input line and return a handler for that line."""
 
-    priority = Integer(100).tag(config=True) 
+    priority = Integer(100).tag(config=True)
     shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
     prefilter_manager = Instance('IPython.core.prefilter.PrefilterManager', allow_none=True)
-    enabled = Bool(True).tag(config=True) 
+    enabled = Bool(True).tag(config=True)
 
     def __init__(self, shell=None, prefilter_manager=None, **kwargs):
         super(PrefilterChecker, self).__init__(
@@ -396,8 +396,8 @@ class PrefilterChecker(Configurable):
 
 class EmacsChecker(PrefilterChecker):
 
-    priority = Integer(100).tag(config=True) 
-    enabled = Bool(False).tag(config=True) 
+    priority = Integer(100).tag(config=True)
+    enabled = Bool(False).tag(config=True)
 
     def check(self, line_info):
         "Emacs ipython-mode tags certain input lines."
@@ -409,7 +409,7 @@ class EmacsChecker(PrefilterChecker):
 
 class MacroChecker(PrefilterChecker):
 
-    priority = Integer(250).tag(config=True) 
+    priority = Integer(250).tag(config=True)
 
     def check(self, line_info):
         obj = self.shell.user_ns.get(line_info.ifun)
@@ -421,7 +421,7 @@ class MacroChecker(PrefilterChecker):
 
 class IPyAutocallChecker(PrefilterChecker):
 
-    priority = Integer(300).tag(config=True) 
+    priority = Integer(300).tag(config=True)
 
     def check(self, line_info):
         "Instances of IPyAutocall in user_ns get autocalled immediately"
@@ -435,7 +435,7 @@ class IPyAutocallChecker(PrefilterChecker):
 
 class AssignmentChecker(PrefilterChecker):
 
-    priority = Integer(600).tag(config=True) 
+    priority = Integer(600).tag(config=True)
 
     def check(self, line_info):
         """Check to see if user is assigning to a var for the first time, in
@@ -453,7 +453,7 @@ class AssignmentChecker(PrefilterChecker):
 
 class AutoMagicChecker(PrefilterChecker):
 
-    priority = Integer(700).tag(config=True) 
+    priority = Integer(700).tag(config=True)
 
     def check(self, line_info):
         """If the ifun is magic, and automagic is on, run it.  Note: normal,
@@ -477,7 +477,7 @@ class AutoMagicChecker(PrefilterChecker):
 
 class PythonOpsChecker(PrefilterChecker):
 
-    priority = Integer(900).tag(config=True) 
+    priority = Integer(900).tag(config=True)
 
     def check(self, line_info):
         """If the 'rest' of the line begins with a function call or pretty much
@@ -492,14 +492,14 @@ class PythonOpsChecker(PrefilterChecker):
 
 class AutocallChecker(PrefilterChecker):
 
-    priority = Integer(1000).tag(config=True) 
+    priority = Integer(1000).tag(config=True)
 
-    function_name_regexp = CRegExp(re_fun_name, 
-        help="RegExp to identify potential function names." 
-        ).tag(config=True) 
-    exclude_regexp = CRegExp(re_exclude_auto, 
-        help="RegExp to exclude strings with this start from autocalling." 
-        ).tag(config=True) 
+    function_name_regexp = CRegExp(re_fun_name,
+        help="RegExp to identify potential function names."
+        ).tag(config=True)
+    exclude_regexp = CRegExp(re_exclude_auto,
+        help="RegExp to exclude strings with this start from autocalling."
+        ).tag(config=True)
 
     def check(self, line_info):
         "Check if the initial word/function is callable and autocall is on."

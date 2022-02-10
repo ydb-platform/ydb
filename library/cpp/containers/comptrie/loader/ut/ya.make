@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/containers/comptrie/loader)
 
-OWNER(my34) 
+OWNER(my34)
 
 ARCHIVE(
     NAME data.inc

@@ -1,9 +1,9 @@
 G_BENCHMARK()
 
-OWNER( 
-    pg 
-    g:util 
-) 
+OWNER(
+    pg
+    g:util
+)
 
 PEERDIR(
     library/cpp/digest/md5

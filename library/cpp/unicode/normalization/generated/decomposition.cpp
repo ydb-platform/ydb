@@ -42207,7 +42207,7 @@ namespace { namespace NCannonDecompositionTableGenerated {
         }, // P[475]
     }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr P[][32]
 
-    static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] = { 
+    static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] = {
         P[0], P[0], P[0], P[0], P[0], P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[0], P[7], P[8], P[9],
         P[10], P[11], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[12], P[13], P[14], P[15], P[16], P[0],
         P[17], P[18], P[19], P[20], P[0], P[0], P[21], P[22], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0],
@@ -42590,7 +42590,7 @@ namespace { namespace NCannonDecompositionTableGenerated {
         P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0],
         P[459], P[460], P[461], P[462], P[463], P[464], P[465], P[466], P[467], P[468], P[469], P[470], P[471], P[472], P[473], P[474],
         P[475],
-    }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] 
+    }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[]
 
     static const size_t Size = 195102;
 }} // namespace NCannonDecompositionTableGenerated
@@ -90733,7 +90733,7 @@ namespace { namespace NCompatDecompositionTableGenerated {
         }, // P[623]
     }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr P[][32]
 
-    static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] = { 
+    static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] = {
         P[0], P[0], P[0], P[0], P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[0], P[8], P[9], P[10],
         P[11], P[12], P[0], P[0], P[0], P[13], P[14], P[15], P[0], P[0], P[16], P[17], P[18], P[19], P[20], P[21],
         P[22], P[23], P[24], P[25], P[0], P[0], P[26], P[27], P[0], P[0], P[0], P[0], P[28], P[0], P[0], P[0],
@@ -91116,7 +91116,7 @@ namespace { namespace NCompatDecompositionTableGenerated {
         P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0], P[0],
         P[607], P[608], P[609], P[610], P[611], P[612], P[613], P[614], P[615], P[616], P[617], P[618], P[619], P[620], P[621], P[622],
         P[623],
-    }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[] 
+    }; // static const NUnicode::NPrivate::TDecompositionTable::TValuePtr* const Indexes[]
 
     static const size_t Size = 195102;
 }} // namespace NCompatDecompositionTableGenerated

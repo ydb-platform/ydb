@@ -25,12 +25,12 @@ PEERDIR(
 NO_COMPILER_WARNINGS()
 NO_LINT()
 
-RESOURCE_FILES( 
-    PREFIX contrib/python/cryptography/ 
-    .dist-info/METADATA 
-    .dist-info/top_level.txt 
-) 
- 
+RESOURCE_FILES(
+    PREFIX contrib/python/cryptography/
+    .dist-info/METADATA
+    .dist-info/top_level.txt
+)
+
 SRCS(
     build/temp.linux-x86_64-2.7/_openssl.c
     build/temp.linux-x86_64-2.7/_padding.c

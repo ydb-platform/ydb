@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    pg 
-    g:util 
-) 
+OWNER(
+    pg
+    g:util
+)
 
 PEERDIR(
     contrib/libs/fastlz

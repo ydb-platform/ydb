@@ -15,10 +15,10 @@
 
 #include <utility>
 
-/** 
- * Class behaviour is platform-dependent. 
- * It uses platform-dependent separators for path-reconstructing operations. 
- */ 
+/**
+ * Class behaviour is platform-dependent.
+ * It uses platform-dependent separators for path-reconstructing operations.
+ */
 class TFsPath {
 private:
     struct TSplit;

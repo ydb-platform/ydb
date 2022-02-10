@@ -38,12 +38,12 @@ Give it a shot--you'll love it or you'll hate it.
   variables (but otherwise includes the information and context given by
   Verbose).
 
-.. note:: 
+.. note::
 
-  The verbose mode print all variables in the stack, which means it can 
-  potentially leak sensitive information like access keys, or unencryted 
-  password. 
- 
+  The verbose mode print all variables in the stack, which means it can
+  potentially leak sensitive information like access keys, or unencryted
+  password.
+
 Installation instructions for VerboseTB::
 
     import sys,ultratb
@@ -67,9 +67,9 @@ ColorSchemeTable class. Currently the following exist:
   - LightBG: similar to Linux but swaps dark/light colors to be more readable
     in light background terminals.
 
-  - Neutral: a neutral color scheme that should be readable on both light and 
-    dark background 
- 
+  - Neutral: a neutral color scheme that should be readable on both light and
+    dark background
+
 You can implement other color schemes easily, the syntax is fairly
 self-explanatory. Please send back new schemes you develop to the author for
 possible inclusion in future releases.
@@ -88,7 +88,7 @@ Inheritance diagram:
 # the file COPYING, distributed as part of this software.
 #*****************************************************************************
 
-from __future__ import absolute_import 
+from __future__ import absolute_import
 from __future__ import unicode_literals
 from __future__ import print_function
 
@@ -125,11 +125,11 @@ from IPython.utils import path as util_path
 from IPython.utils import py3compat
 from IPython.utils import ulinecache
 from IPython.utils.data import uniq_stable
-from IPython.utils.terminal import get_terminal_size 
-from logging import info, error 
+from IPython.utils.terminal import get_terminal_size
+from logging import info, error
 
-import IPython.utils.colorable as colorable 
- 
+import IPython.utils.colorable as colorable
+
 # Globals
 # amount of space to put line numbers before verbose tracebacks
 INDENT_SIZE = 8
@@ -226,8 +226,8 @@ def findsource(object):
         # the length of lines, which causes an error.  Safeguard against that.
         lnum = min(object.co_firstlineno, len(lines)) - 1
         while lnum > 0:
-            if pmatch(lines[lnum]): 
-                break 
+            if pmatch(lines[lnum]):
+                break
             lnum -= 1
 
         return lines, lnum
@@ -283,11 +283,11 @@ def getargs(co):
                                 remain.pop()
                                 size = count.pop()
                                 stack[-size:] = [stack[-size:]]
-                                if not remain: 
-                                    break 
+                                if not remain:
+                                    break
                                 remain[-1] = remain[-1] - 1
-                            if not remain: 
-                                break 
+                            if not remain:
+                                break
             args[i] = stack[0]
 
     varargs = None
@@ -413,7 +413,7 @@ def _format_traceback_lines(lnum, index, lines, Colors, lvals=None, scheme=None)
         if i == lnum:
             # This is the line with the error
             pad = numbers_width - len(str(i))
-            num = '%s%s' % (debugger.make_arrow(pad), str(lnum)) 
+            num = '%s%s' % (debugger.make_arrow(pad), str(lnum))
             line = '%s%s%s %s%s' % (Colors.linenoEm, num,
                                     Colors.line, line, Colors.Normal)
         else:
@@ -481,22 +481,22 @@ def find_recursion(etype, value, records):
 
 #---------------------------------------------------------------------------
 # Module classes
-class TBTools(colorable.Colorable): 
+class TBTools(colorable.Colorable):
     """Basic tools used by all traceback printer classes."""
 
     # Number of frames to skip when reporting tracebacks
     tb_offset = 0
 
-    def __init__(self, color_scheme='NoColor', call_pdb=False, ostream=None, parent=None, config=None): 
+    def __init__(self, color_scheme='NoColor', call_pdb=False, ostream=None, parent=None, config=None):
         # Whether to call the interactive pdb debugger after printing
         # tracebacks or not
-        super(TBTools, self).__init__(parent=parent, config=config) 
+        super(TBTools, self).__init__(parent=parent, config=config)
         self.call_pdb = call_pdb
 
         # Output stream to write to.  Note that we store the original value in
         # a private attribute and then make the public ostream a property, so
-        # that we can delay accessing sys.stdout until runtime.  The way 
-        # things are written now, the sys.stdout object is dynamically managed 
+        # that we can delay accessing sys.stdout until runtime.  The way
+        # things are written now, the sys.stdout object is dynamically managed
         # so a reference to it should NEVER be stored statically.  This
         # property approach confines this detail to a single location, and all
         # subclasses can simply access self.ostream for writing.
@@ -509,7 +509,7 @@ class TBTools(colorable.Colorable):
         self.old_scheme = color_scheme  # save initial value for toggles
 
         if call_pdb:
-            self.pdb = debugger.Pdb() 
+            self.pdb = debugger.Pdb()
         else:
             self.pdb = None
 
@@ -519,12 +519,12 @@ class TBTools(colorable.Colorable):
         Valid values are:
 
         - None: the default, which means that IPython will dynamically resolve
-          to sys.stdout.  This ensures compatibility with most tools, including 
+          to sys.stdout.  This ensures compatibility with most tools, including
           Windows (where plain stdout doesn't recognize ANSI escapes).
 
         - Any object with 'write' and 'flush' attributes.
         """
-        return sys.stdout if self._ostream is None else self._ostream 
+        return sys.stdout if self._ostream is None else self._ostream
 
     def _set_ostream(self, val):
         assert val is None or (hasattr(val, 'write') and hasattr(val, 'flush'))
@@ -596,9 +596,9 @@ class ListTB(TBTools):
     Because they are meant to be called without a full traceback (only a
     list), instances of this class can't call the interactive pdb debugger."""
 
-    def __init__(self, color_scheme='NoColor', call_pdb=False, ostream=None, parent=None): 
+    def __init__(self, color_scheme='NoColor', call_pdb=False, ostream=None, parent=None):
         TBTools.__init__(self, color_scheme=color_scheme, call_pdb=call_pdb,
-                         ostream=ostream, parent=parent) 
+                         ostream=ostream, parent=parent)
 
     def __call__(self, etype, value, elist):
         self.ostream.flush()
@@ -711,10 +711,10 @@ class ListTB(TBTools):
         have_filedata = False
         Colors = self.Colors
         list = []
-        stype = py3compat.cast_unicode(Colors.excName + etype.__name__ + Colors.Normal) 
+        stype = py3compat.cast_unicode(Colors.excName + etype.__name__ + Colors.Normal)
         if value is None:
             # Not sure if this can still happen in Python 2.6 and above
-            list.append(stype + '\n') 
+            list.append(stype + '\n')
         else:
             if issubclass(etype, SyntaxError):
                 have_filedata = True
@@ -754,10 +754,10 @@ class ListTB(TBTools):
             except Exception:
                 s = self._some_str(value)
             if s:
-                list.append('%s%s:%s %s\n' % (stype, Colors.excName, 
+                list.append('%s%s:%s %s\n' % (stype, Colors.excName,
                                               Colors.Normal, s))
             else:
-                list.append('%s\n' % stype) 
+                list.append('%s\n' % stype)
 
         # sync with user hooks
         if have_filedata:
@@ -795,9 +795,9 @@ class ListTB(TBTools):
     def _some_str(self, value):
         # Lifted from traceback.py
         try:
-            return py3compat.cast_unicode(str(value)) 
+            return py3compat.cast_unicode(str(value))
         except:
-            return u'<unprintable %s object>' % type(value).__name__ 
+            return u'<unprintable %s object>' % type(value).__name__
 
 
 #----------------------------------------------------------------------------
@@ -811,7 +811,7 @@ class VerboseTB(TBTools):
 
     def __init__(self, color_scheme='Linux', call_pdb=False, ostream=None,
                  tb_offset=0, long_header=False, include_vars=True,
-                 check_cache=None, debugger_cls = None): 
+                 check_cache=None, debugger_cls = None):
         """Specify traceback offset, headers and color scheme.
 
         Define how many frames to drop from the tracebacks. Calling it with
@@ -832,8 +832,8 @@ class VerboseTB(TBTools):
             check_cache = linecache.checkcache
         self.check_cache = check_cache
 
-        self.debugger_cls = debugger_cls or debugger.Pdb 
- 
+        self.debugger_cls = debugger_cls or debugger.Pdb
+
     def format_records(self, records, last_unique, recursion_repeat):
         """Format the stack frames of the traceback"""
         frames = []
@@ -929,12 +929,12 @@ class VerboseTB(TBTools):
 
         elif file.endswith(('.pyc', '.pyo')):
             # Look up the corresponding source file.
-            try: 
-                file = openpy.source_from_cache(file) 
-            except ValueError: 
-                # Failed to get the source file for some reason 
-                # E.g. https://github.com/ipython/ipython/issues/9486 
-                return '%s %s\n' % (link, call) 
+            try:
+                file = openpy.source_from_cache(file)
+            except ValueError:
+                # Failed to get the source file for some reason
+                # E.g. https://github.com/ipython/ipython/issues/9486
+                return '%s %s\n' % (link, call)
 
         def linereader(file=file, lnum=[lnum], getline=ulinecache.getline):
             line = getline(file, lnum[0])
@@ -1038,21 +1038,21 @@ class VerboseTB(TBTools):
         colors = self.Colors  # just a shorthand + quicker name lookup
         colorsnormal = colors.Normal  # used a lot
         exc = '%s%s%s' % (colors.excName, etype, colorsnormal)
-        width = min(75, get_terminal_size()[0]) 
+        width = min(75, get_terminal_size()[0])
         if long_version:
             # Header with the exception type, python version, and date
             pyver = 'Python ' + sys.version.split()[0] + ': ' + sys.executable
             date = time.ctime(time.time())
 
-            head = '%s%s%s\n%s%s%s\n%s' % (colors.topline, '-' * width, colorsnormal, 
-                                           exc, ' ' * (width - len(str(etype)) - len(pyver)), 
-                                           pyver, date.rjust(width) ) 
+            head = '%s%s%s\n%s%s%s\n%s' % (colors.topline, '-' * width, colorsnormal,
+                                           exc, ' ' * (width - len(str(etype)) - len(pyver)),
+                                           pyver, date.rjust(width) )
             head += "\nA problem occurred executing Python code.  Here is the sequence of function" \
                     "\ncalls leading up to the error, with the most recent (innermost) call last."
         else:
             # Simplified header
             head = '%s%s' % (exc, 'Traceback (most recent call last)'. \
-                             rjust(width - len(str(etype))) ) 
+                             rjust(width - len(str(etype))) )
 
         return head
 
@@ -1171,7 +1171,7 @@ class VerboseTB(TBTools):
 
         colors = self.Colors  # just a shorthand + quicker name lookup
         colorsnormal = colors.Normal  # used a lot
-        head = '%s%s%s' % (colors.topline, '-' * min(75, get_terminal_size()[0]), colorsnormal) 
+        head = '%s%s%s' % (colors.topline, '-' * min(75, get_terminal_size()[0]), colorsnormal)
         structured_traceback_parts = [head]
         if py3compat.PY3:
             chained_exceptions_tb_offset = 0
@@ -1287,7 +1287,7 @@ class FormattedTB(VerboseTB, ListTB):
     def __init__(self, mode='Plain', color_scheme='Linux', call_pdb=False,
                  ostream=None,
                  tb_offset=0, long_header=False, include_vars=False,
-                 check_cache=None, debugger_cls=None): 
+                 check_cache=None, debugger_cls=None):
 
         # NEVER change the order of this list. Put new modes at the end:
         self.valid_modes = ['Plain', 'Context', 'Verbose']
@@ -1296,7 +1296,7 @@ class FormattedTB(VerboseTB, ListTB):
         VerboseTB.__init__(self, color_scheme=color_scheme, call_pdb=call_pdb,
                            ostream=ostream, tb_offset=tb_offset,
                            long_header=long_header, include_vars=include_vars,
-                           check_cache=check_cache, debugger_cls=debugger_cls) 
+                           check_cache=check_cache, debugger_cls=debugger_cls)
 
         # Different types of tracebacks are joined with different separators to
         # form a single string.  They are taken from this dict
@@ -1446,7 +1446,7 @@ class SyntaxTB(ListTB):
             newtext = ulinecache.getline(value.filename, value.lineno)
             if newtext:
                 value.text = newtext
-        self.last_syntax_error = value 
+        self.last_syntax_error = value
         return super(SyntaxTB, self).structured_traceback(etype, value, elist,
                                                           tb_offset=tb_offset, context=context)
 

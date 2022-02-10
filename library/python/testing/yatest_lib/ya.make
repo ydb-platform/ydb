@@ -3,8 +3,8 @@ OWNER(g:yatest)
 PY23_LIBRARY()
 
 PY_SRCS(
-    NAMESPACE 
-    yatest_lib 
+    NAMESPACE
+    yatest_lib
     external.py
     test_splitter.py
     tools.py

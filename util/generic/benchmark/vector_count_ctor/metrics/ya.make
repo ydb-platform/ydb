@@ -14,8 +14,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
-DEPENDS(util/generic/benchmark/vector_count_ctor) 
+DEPENDS(util/generic/benchmark/vector_count_ctor)
 
 END()

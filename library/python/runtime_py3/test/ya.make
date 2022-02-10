@@ -1,11 +1,11 @@
 PY3TEST()
 
-OWNER( 
-    abodrov 
-    borman 
+OWNER(
+    abodrov
+    borman
 )
 
-DEPENDS(library/python/runtime_py3/test/traceback) 
+DEPENDS(library/python/runtime_py3/test/traceback)
 
 PEERDIR(
     contrib/python/parameterized
@@ -17,7 +17,7 @@ PY_SRCS(
     resources/__init__.py
     resources/submodule/__init__.py
 )
- 
+
 TEST_SRCS(
     test_metadata.py
     test_resources.py

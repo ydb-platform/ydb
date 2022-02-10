@@ -4,12 +4,12 @@
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 
-from __future__ import print_function, absolute_import 
+from __future__ import print_function, absolute_import
 
 from copy import deepcopy
-import warnings 
+import warnings
 
-from .loader import Config, LazyConfigValue, _is_section_key 
+from .loader import Config, LazyConfigValue, _is_section_key
 from traitlets.traitlets import HasTraits, Instance, observe, observe_compat, default
 from ipython_genutils.text import indent, dedent, wrap_paragraphs
 
@@ -66,12 +66,12 @@ class Configurable(HasTraits):
             if kwargs.get('config', None) is None:
                 kwargs['config'] = parent.config
             self.parent = parent
- 
+
         config = kwargs.pop('config', None)
- 
+
         # load kwarg traits, other than config
         super(Configurable, self).__init__(**kwargs)
- 
+
         # load config
         if config is not None:
             # We used to deepcopy, but for now we are trying to just save
@@ -85,7 +85,7 @@ class Configurable(HasTraits):
         else:
             # allow _config_default to return something
             self._load_config(self.config)
- 
+
         # Ensure explicit kwargs are applied after loading config.
         # This is usually redundant, but ensures config doesn't override
         # explicitly assigned values.
@@ -95,25 +95,25 @@ class Configurable(HasTraits):
     #-------------------------------------------------------------------------
     # Static trait notifiations
     #-------------------------------------------------------------------------
- 
+
     @classmethod
     def section_names(cls):
         """return section names as a list"""
         return  [c.__name__ for c in reversed(cls.__mro__) if
             issubclass(c, Configurable) and issubclass(cls, c)
         ]
- 
+
     def _find_my_config(self, cfg):
         """extract my config from a global Config object
- 
+
         will construct a Config object of only the config values that apply to me
         based on my mro(), as well as those of my parent(s) if they exist.
- 
+
         If I am Bar and my parent is Foo, and their parent is Tim,
         this will return merge following config sections, in this order::
- 
+
             [Bar, Foo.bar, Tim.Foo.Bar]
- 
+
         With the last item being the highest priority.
         """
         cfgs = [cfg]
@@ -127,20 +127,20 @@ class Configurable(HasTraits):
                 if c._has_section(sname):
                     my_config.merge(c[sname])
         return my_config
- 
+
     def _load_config(self, cfg, section_names=None, traits=None):
         """load traits from a Config object"""
- 
+
         if traits is None:
             traits = self.traits(config=True)
         if section_names is None:
             section_names = self.section_names()
- 
+
         my_config = self._find_my_config(cfg)
- 
+
         # hold trait notifications until after all config has been loaded
         with self.hold_trait_notifications():
-            for name, config_value in my_config.items(): 
+            for name, config_value in my_config.items():
                 if name in traits:
                     if isinstance(config_value, LazyConfigValue):
                         # ConfigValue is a wrapper for using append / update on containers
@@ -151,21 +151,21 @@ class Configurable(HasTraits):
                     # config object. If we don't, a mutable config_value will be
                     # shared by all instances, effectively making it a class attribute.
                     setattr(self, name, deepcopy(config_value))
-                elif not _is_section_key(name) and not isinstance(config_value, Config): 
+                elif not _is_section_key(name) and not isinstance(config_value, Config):
                     from difflib import get_close_matches
-                    if isinstance(self, LoggingConfigurable): 
-                        warn = self.log.warning 
-                    else: 
-                        warn = lambda msg: warnings.warn(msg, stacklevel=9) 
+                    if isinstance(self, LoggingConfigurable):
+                        warn = self.log.warning
+                    else:
+                        warn = lambda msg: warnings.warn(msg, stacklevel=9)
                     matches = get_close_matches(name, traits)
-                    msg = u"Config option `{option}` not recognized by `{klass}`.".format( 
-                        option=name, klass=self.__class__.__name__) 
- 
+                    msg = u"Config option `{option}` not recognized by `{klass}`.".format(
+                        option=name, klass=self.__class__.__name__)
+
                     if len(matches) == 1:
-                        msg += u"  Did you mean `{matches}`?".format(matches=matches[0]) 
+                        msg += u"  Did you mean `{matches}`?".format(matches=matches[0])
                     elif len(matches) >= 1:
-                        msg +="  Did you mean one of: `{matches}`?".format(matches=', '.join(sorted(matches))) 
-                    warn(msg) 
+                        msg +="  Did you mean one of: `{matches}`?".format(matches=', '.join(sorted(matches)))
+                    warn(msg)
 
     @observe('config')
     @observe_compat
@@ -183,23 +183,23 @@ class Configurable(HasTraits):
         # classes that are Configurable subclasses.  This starts with Configurable
         # and works down the mro loading the config for each section.
         section_names = self.section_names()
-        self._load_config(change.new, traits=traits, section_names=section_names) 
+        self._load_config(change.new, traits=traits, section_names=section_names)
 
     def update_config(self, config):
-        """Update config and load the new values""" 
-        # traitlets prior to 4.2 created a copy of self.config in order to trigger change events. 
-        # Some projects (IPython < 5) relied upon one side effect of this, 
-        # that self.config prior to update_config was not modified in-place. 
-        # For backward-compatibility, we must ensure that self.config 
-        # is a new object and not modified in-place, 
-        # but config consumers should not rely on this behavior. 
-        self.config = deepcopy(self.config) 
-        # load config 
-        self._load_config(config) 
-        # merge it into self.config 
+        """Update config and load the new values"""
+        # traitlets prior to 4.2 created a copy of self.config in order to trigger change events.
+        # Some projects (IPython < 5) relied upon one side effect of this,
+        # that self.config prior to update_config was not modified in-place.
+        # For backward-compatibility, we must ensure that self.config
+        # is a new object and not modified in-place,
+        # but config consumers should not rely on this behavior.
+        self.config = deepcopy(self.config)
+        # load config
+        self._load_config(config)
+        # merge it into self.config
         self.config.merge(config)
-        # TODO: trigger change event if/when dict-update change events take place 
-        # DO NOT trigger full trait-change 
+        # TODO: trigger change event if/when dict-update change events take place
+        # DO NOT trigger full trait-change
 
     @classmethod
     def class_get_help(cls, inst=None):
@@ -220,7 +220,7 @@ class Configurable(HasTraits):
     @classmethod
     def class_get_trait_help(cls, trait, inst=None):
         """Get the help string for a single trait.
- 
+
         If `inst` is given, it's current trait values will be used in place of
         the class default.
         """
@@ -261,19 +261,19 @@ class Configurable(HasTraits):
             """return a commented, wrapped block."""
             s = '\n\n'.join(wrap_paragraphs(s, 78))
 
-            return '## ' + s.replace('\n', '\n#  ') 
+            return '## ' + s.replace('\n', '\n#  ')
 
         # section header
         breaker = '#' + '-'*78
-        parent_classes = ','.join(p.__name__ for p in cls.__bases__) 
-        s = "# %s(%s) configuration" % (cls.__name__, parent_classes) 
+        parent_classes = ','.join(p.__name__ for p in cls.__bases__)
+        s = "# %s(%s) configuration" % (cls.__name__, parent_classes)
         lines = [breaker, s, breaker, '']
         # get the description trait
         desc = cls.class_traits().get('description')
         if desc:
             desc = desc.default_value
-        if not desc: 
-            # no description from trait, use __doc__ 
+        if not desc:
+            # no description from trait, use __doc__
             desc = getattr(cls, '__doc__', '')
         if desc:
             lines.append(c(desc))
@@ -281,7 +281,7 @@ class Configurable(HasTraits):
 
         for name, trait in sorted(cls.class_own_traits(config=True).items()):
             lines.append(c(trait.help))
-            lines.append('#c.%s.%s = %s' % (cls.__name__, name, trait.default_value_repr())) 
+            lines.append('#c.%s.%s = %s' % (cls.__name__, name, trait.default_value_repr()))
             lines.append('')
         return '\n'.join(lines)
 

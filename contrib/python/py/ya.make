@@ -5,7 +5,7 @@ PY23_LIBRARY()
 OWNER(g:python-contrib)
 
 VERSION(1.11.0)
- 
+
 LICENSE(MIT)
 
 NO_LINT()

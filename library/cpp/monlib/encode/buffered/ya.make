@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    g:solomon 
-    jamel 
-    msherbakov 
-) 
+OWNER(
+    g:solomon
+    jamel
+    msherbakov
+)
 
 SRCS(
     buffered_encoder_base.cpp

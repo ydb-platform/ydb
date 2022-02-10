@@ -4,23 +4,23 @@ Renders the command line on the console.
 """
 from __future__ import unicode_literals
 
-from prompt_toolkit.filters import to_cli_filter 
-from prompt_toolkit.layout.mouse_handlers import MouseHandlers 
+from prompt_toolkit.filters import to_cli_filter
+from prompt_toolkit.layout.mouse_handlers import MouseHandlers
 from prompt_toolkit.layout.screen import Point, Screen, WritePosition
 from prompt_toolkit.output import Output
-from prompt_toolkit.styles import Style 
-from prompt_toolkit.token import Token 
+from prompt_toolkit.styles import Style
+from prompt_toolkit.token import Token
 from prompt_toolkit.utils import is_windows
 
-from six.moves import range 
- 
+from six.moves import range
+
 __all__ = (
     'Renderer',
     'print_tokens',
 )
 
 
-def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_token=None, 
+def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_token=None,
                         is_done=False, use_alternate_screen=False, attrs_for_token=None, size=None,
                         previous_width=0):  # XXX: drop is_done
     """
@@ -36,7 +36,7 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
     Don't change things without profiling first.
 
     :param current_pos: Current cursor position.
-    :param last_token: `Token` instance that represents the output attributes of 
+    :param last_token: `Token` instance that represents the output attributes of
             the last drawn character. (Color/attributes.)
     :param attrs_for_token: :class:`._TokenToAttrsCache` instance.
     :param width: The width of the terminal.
@@ -45,11 +45,11 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
     width, height = size.columns, size.rows
 
     #: Remember the last printed character.
-    last_token = [last_token]  # nonlocal 
+    last_token = [last_token]  # nonlocal
 
     #: Variable for capturing the output.
     write = output.write
-    write_raw = output.write_raw 
+    write_raw = output.write_raw
 
     # Create locals for the most used output methods.
     # (Save expensive attribute lookups.)
@@ -65,7 +65,7 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
     def reset_attributes():
         " Wrapper around Output.reset_attributes. "
         _output_reset_attributes()
-        last_token[0] = None  # Forget last char after resetting attributes. 
+        last_token[0] = None  # Forget last char after resetting attributes.
 
     def move_cursor(new):
         " Move cursor to this `new` point. Returns the given Point. "
@@ -100,14 +100,14 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
         """
         # If the last printed character has the same token, it also has the
         # same style, so we don't output it.
-        the_last_token = last_token[0] 
- 
-        if the_last_token and the_last_token == char.token: 
+        the_last_token = last_token[0]
+
+        if the_last_token and the_last_token == char.token:
             write(char.char)
         else:
-            _output_set_attributes(attrs_for_token[char.token]) 
+            _output_set_attributes(attrs_for_token[char.token])
             write(char.char)
-            last_token[0] = char.token 
+            last_token[0] = char.token
 
     # Render for the first time: reset styling.
     if not previous_screen:
@@ -138,10 +138,10 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
     row_count = min(max(screen.height, previous_screen.height), height)
     c = 0  # Column counter.
 
-    for y in range(row_count): 
-        new_row = screen.data_buffer[y] 
-        previous_row = previous_screen.data_buffer[y] 
-        zero_width_escapes_row = screen.zero_width_escapes[y] 
+    for y in range(row_count):
+        new_row = screen.data_buffer[y]
+        previous_row = previous_screen.data_buffer[y]
+        zero_width_escapes_row = screen.zero_width_escapes[y]
 
         new_max_line_len = min(width - 1, max(new_row.keys()) if new_row else 0)
         previous_max_line_len = min(width - 1, max(previous_row.keys()) if previous_row else 0)
@@ -158,11 +158,11 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
             # `Char.__ne__`, but inline the same expression.)
             if new_char.char != old_char.char or new_char.token != old_char.token:
                 current_pos = move_cursor(Point(y=y, x=c))
- 
-                # Send injected escape sequences to output. 
-                if c in zero_width_escapes_row: 
-                    write_raw(zero_width_escapes_row[c]) 
- 
+
+                # Send injected escape sequences to output.
+                if c in zero_width_escapes_row:
+                    write_raw(zero_width_escapes_row[c])
+
                 output_char(new_char)
                 current_pos = current_pos._replace(x=current_pos.x + char_width)
 
@@ -197,16 +197,16 @@ def _output_screen_diff(output, screen, current_pos, previous_screen=None, last_
     if is_done or not use_alternate_screen:
         output.enable_autowrap()
 
-    # Always reset the color attributes. This is important because a background 
-    # thread could print data to stdout and we want that to be displayed in the 
-    # default colors. (Also, if a background color has been set, many terminals 
-    # give weird artifacs on resize events.) 
-    reset_attributes() 
+    # Always reset the color attributes. This is important because a background
+    # thread could print data to stdout and we want that to be displayed in the
+    # default colors. (Also, if a background color has been set, many terminals
+    # give weird artifacs on resize events.)
+    reset_attributes()
 
     if screen.show_cursor or is_done:
         output.show_cursor()
 
-    return current_pos, last_token[0] 
+    return current_pos, last_token[0]
 
 
 class HeightIsUnknownError(Exception):
@@ -254,13 +254,13 @@ class Renderer(object):
         self._mouse_support_enabled = False
         self._bracketed_paste_enabled = False
 
-        # Waiting for CPR flag. True when we send the request, but didn't got a 
-        # response. 
-        self.waiting_for_cpr = False 
- 
+        # Waiting for CPR flag. True when we send the request, but didn't got a
+        # response.
+        self.waiting_for_cpr = False
+
         self.reset(_scroll=True)
 
-    def reset(self, _scroll=False, leave_alternate_screen=True): 
+    def reset(self, _scroll=False, leave_alternate_screen=True):
         # Reset position
         self._cursor_pos = Point(x=0, y=0)
 
@@ -270,7 +270,7 @@ class Renderer(object):
         # instance a toolbar at the bottom position.)
         self._last_screen = None
         self._last_size = None
-        self._last_token = None 
+        self._last_token = None
 
         # When the style hash changes, we have to do a full redraw as well as
         # clear the `_attrs_for_token` dictionary.
@@ -293,7 +293,7 @@ class Renderer(object):
             self.output.scroll_buffer_to_prompt()
 
         # Quit alternate screen.
-        if self._in_alternate_screen and leave_alternate_screen: 
+        if self._in_alternate_screen and leave_alternate_screen:
             self.output.quit_alternate_screen()
             self._in_alternate_screen = False
 
@@ -353,7 +353,7 @@ class Renderer(object):
                 self._min_available_height = self.output.get_size().rows
             else:
                 # Asks for a cursor position report (CPR).
-                self.waiting_for_cpr = True 
+                self.waiting_for_cpr = True
                 self.output.ask_for_cpr()
 
     def report_absolute_cursor_row(self, row):
@@ -369,8 +369,8 @@ class Renderer(object):
         # Set the
         self._min_available_height = rows_below_cursor
 
-        self.waiting_for_cpr = False 
- 
+        self.waiting_for_cpr = False
+
     def render(self, cli, layout, is_done=False):
         """
         Render the current interface to the output.
@@ -441,9 +441,9 @@ class Renderer(object):
             screen.replace_all_tokens(Token.Aborted)
 
         # Process diff and write to output.
-        self._cursor_pos, self._last_token = _output_screen_diff( 
+        self._cursor_pos, self._last_token = _output_screen_diff(
             output, screen, self._cursor_pos,
-            self._last_screen, self._last_token, is_done, 
+            self._last_screen, self._last_token, is_done,
             use_alternate_screen=self.use_alternate_screen,
             attrs_for_token=self._attrs_for_token,
             size=size,
@@ -464,15 +464,15 @@ class Renderer(object):
 
         output.flush()
 
-    def erase(self, leave_alternate_screen=True, erase_title=True): 
+    def erase(self, leave_alternate_screen=True, erase_title=True):
         """
         Hide all output and put the cursor back at the first line. This is for
         instance used for running a system command (while hiding the CLI) and
         later resuming the same CLI.)
- 
-        :param leave_alternate_screen: When True, and when inside an alternate 
-            screen buffer, quit the alternate screen. 
-        :param erase_title: When True, clear the title from the title bar. 
+
+        :param leave_alternate_screen: When True, and when inside an alternate
+            screen buffer, quit the alternate screen.
+        :param erase_title: When True, clear the title from the title bar.
         """
         output = self.output
 
@@ -484,10 +484,10 @@ class Renderer(object):
         output.flush()
 
         # Erase title.
-        if self._last_title and erase_title: 
+        if self._last_title and erase_title:
             output.clear_title()
 
-        self.reset(leave_alternate_screen=leave_alternate_screen) 
+        self.reset(leave_alternate_screen=leave_alternate_screen)
 
     def clear(self):
         """

@@ -38,7 +38,7 @@ def display_page(strng, start=0, screen_lines=25):
     else:
         if start:
             strng = u'\n'.join(strng.splitlines()[start:])
-        data = { 'text/plain': strng } 
+        data = { 'text/plain': strng }
     display(data, raw=True)
 
 
@@ -56,25 +56,25 @@ def page_dumb(strng, start=0, screen_lines=25):
     """Very dumb 'pager' in Python, for when nothing else works.
 
     Only moves forward, same interface as page(), except for pager_cmd and
-    mode. 
-    """ 
-    if isinstance(strng, dict): 
-        strng = strng.get('text/plain', '') 
+    mode.
+    """
+    if isinstance(strng, dict):
+        strng = strng.get('text/plain', '')
     out_ln  = strng.splitlines()[start:]
     screens = chop(out_ln,screen_lines-1)
     if len(screens) == 1:
-        print(os.linesep.join(screens[0])) 
+        print(os.linesep.join(screens[0]))
     else:
         last_escape = ""
         for scr in screens[0:-1]:
             hunk = os.linesep.join(scr)
-            print(last_escape + hunk) 
+            print(last_escape + hunk)
             if not page_more():
                 return
             esc_list = esc_re.findall(hunk)
             if len(esc_list) > 0:
                 last_escape = esc_list[-1]
-        print(last_escape + os.linesep.join(screens[-1])) 
+        print(last_escape + os.linesep.join(screens[-1]))
 
 def _detect_screen_size(screen_lines_def):
     """Attempt to work out the number of lines on the screen.
@@ -192,13 +192,13 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None):
         try:
             screen_lines += _detect_screen_size(screen_lines_def)
         except (TypeError, UnsupportedOperation):
-            print(str_toprint) 
+            print(str_toprint)
             return
 
     #print 'numlines',numlines,'screenlines',screen_lines  # dbg
     if numlines <= screen_lines :
         #print '*** normal print'  # dbg
-        print(str_toprint) 
+        print(str_toprint)
     else:
         # Try to open pager and default to internal one if that fails.
         # All failure modes are tagged as 'retval=1', to match the return
@@ -300,7 +300,7 @@ def get_pager_cmd(pager_cmd=None):
     Makes some attempts at finding an OS-correct one.
     """
     if os.name == 'posix':
-        default_pager_cmd = 'less -R'  # -R for color control sequences 
+        default_pager_cmd = 'less -R'  # -R for color control sequences
     elif os.name in ['nt','dos']:
         default_pager_cmd = 'type'
 
@@ -309,10 +309,10 @@ def get_pager_cmd(pager_cmd=None):
             pager_cmd = os.environ['PAGER']
         except:
             pager_cmd = default_pager_cmd
-     
-    if pager_cmd == 'less' and '-r' not in os.environ.get('LESS', '').lower(): 
-        pager_cmd += ' -R' 
-     
+    
+    if pager_cmd == 'less' and '-r' not in os.environ.get('LESS', '').lower():
+        pager_cmd += ' -R'
+    
     return pager_cmd
 
 
@@ -340,13 +340,13 @@ if os.name == 'nt' and os.environ.get('TERM','dumb') != 'emacs':
 
         @return:    True if need print more lines, False if quit
         """
-        sys.stdout.write('---Return to continue, q to quit--- ') 
+        sys.stdout.write('---Return to continue, q to quit--- ')
         ans = msvcrt.getwch()
         if ans in ("q", "Q"):
             result = False
         else:
             result = True
-        sys.stdout.write("\b"*37 + " "*37 + "\b"*37) 
+        sys.stdout.write("\b"*37 + " "*37 + "\b"*37)
         return result
 else:
     def page_more():

@@ -15,7 +15,7 @@ from .utils import TimeIt
 from ctypes import windll, pointer
 from ctypes.wintypes import DWORD, BOOL, HANDLE
 
-import msvcrt 
+import msvcrt
 import threading
 
 __all__ = (
@@ -29,23 +29,23 @@ INPUT_TIMEOUT_MS = int(1000 * INPUT_TIMEOUT)
 class Win32EventLoop(EventLoop):
     """
     Event loop for Windows systems.
- 
-    :param recognize_paste: When True, try to discover paste actions and turn 
-        the event into a BracketedPaste. 
+
+    :param recognize_paste: When True, try to discover paste actions and turn
+        the event into a BracketedPaste.
     """
-    def __init__(self, inputhook=None, recognize_paste=True): 
+    def __init__(self, inputhook=None, recognize_paste=True):
         assert inputhook is None or callable(inputhook)
 
         self._event = HANDLE(_create_event())
-        self._console_input_reader = ConsoleInputReader(recognize_paste=recognize_paste) 
+        self._console_input_reader = ConsoleInputReader(recognize_paste=recognize_paste)
         self._calls_from_executor = []
 
         self.closed = False
         self._running = False
 
-        # Additional readers. 
-        self._read_fds = {} # Maps fd to handler. 
- 
+        # Additional readers.
+        self._read_fds = {} # Maps fd to handler.
+
         # Create inputhook context.
         self._inputhook_context = InputHookContext(inputhook) if inputhook else None
 
@@ -86,9 +86,9 @@ class Win32EventLoop(EventLoop):
                 windll.kernel32.ResetEvent(self._event)
                 self._process_queued_calls_from_executor()
 
-            elif handle in self._read_fds: 
-                callback = self._read_fds[handle] 
-                callback() 
+            elif handle in self._read_fds:
+                callback = self._read_fds[handle]
+                callback()
             else:
                 # Fire input timeout event.
                 callbacks.input_timeout()
@@ -98,9 +98,9 @@ class Win32EventLoop(EventLoop):
         """
         Return the handle that is ready for reading or `None` on timeout.
         """
-        handles = [self._event, self._console_input_reader.handle] 
-        handles.extend(self._read_fds.keys()) 
-        return _wait_for_handles(handles, timeout) 
+        handles = [self._event, self._console_input_reader.handle]
+        handles.extend(self._read_fds.keys())
+        return _wait_for_handles(handles, timeout)
 
     def stop(self):
         self._running = False
@@ -114,8 +114,8 @@ class Win32EventLoop(EventLoop):
         if self._inputhook_context:
             self._inputhook_context.close()
 
-        self._console_input_reader.close() 
- 
+        self._console_input_reader.close()
+
     def run_in_executor(self, callback):
         """
         Run a long running function in a background thread.
@@ -148,14 +148,14 @@ class Win32EventLoop(EventLoop):
 
     def add_reader(self, fd, callback):
         " Start watching the file descriptor for read availability. "
-        h = msvcrt.get_osfhandle(fd) 
-        self._read_fds[h] = callback 
+        h = msvcrt.get_osfhandle(fd)
+        self._read_fds[h] = callback
 
     def remove_reader(self, fd):
         " Stop watching the file descriptor for read availability. "
-        h = msvcrt.get_osfhandle(fd) 
-        if h in self._read_fds: 
-            del self._read_fds[h] 
+        h = msvcrt.get_osfhandle(fd)
+        if h in self._read_fds:
+            del self._read_fds[h]
 
 
 def _wait_for_handles(handles, timeout=-1):

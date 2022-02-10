@@ -1,7 +1,7 @@
 #include "crc.h"
 
 #include <library/cpp/digest/old_crc/crc.inc>
- 
+
 #include <util/system/defaults.h>
 
 static const ui64 CRCTAB64[256] = {

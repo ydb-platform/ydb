@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/string_utils/levenshtein_diff)
- 
+
 OWNER(myltsev)
 
-SRCS( 
+SRCS(
     levenshtein_diff_ut.cpp
-) 
+)
 
 END()

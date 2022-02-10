@@ -16,14 +16,14 @@ procs = []
 build_kekeke = 45
 
 
-def stringize(s): 
-    return s.encode('utf-8') if isinstance(s, unicode) else s 
- 
- 
+def stringize(s):
+    return s.encode('utf-8') if isinstance(s, unicode) else s
+
+
 def run_subprocess(*args, **kwargs):
-    if 'env' in kwargs: 
-        kwargs['env'] = {stringize(k): stringize(v) for k, v in kwargs['env'].iteritems()} 
- 
+    if 'env' in kwargs:
+        kwargs['env'] = {stringize(k): stringize(v) for k, v in kwargs['env'].iteritems()}
+
     p = subprocess.Popen(*args, **kwargs)
 
     procs.append(p)
@@ -310,7 +310,7 @@ def colorize_line(l):
             parts.extend(colorize_strings(l))
 
         return ''.join(parts)
-    except Exception: 
+    except Exception:
         return lll
 
 
@@ -361,11 +361,11 @@ def make_full_path_arg(arg, bld_root, short_root):
 
 def fix_path(p):
     topdirs = ['/%s/' % d for d in os.listdir('/')]
-    def abs_path_start(path, pos): 
-        if pos < 0: 
-            return False 
-        return pos == 0 or path[pos - 1] == ':' 
- 
+    def abs_path_start(path, pos):
+        if pos < 0:
+            return False
+        return pos == 0 or path[pos - 1] == ':'
+
     pp = None
     for pr in topdirs:
         pp2 = p.find(pr)
@@ -443,7 +443,7 @@ def run_main():
 
     env['WINEDLLOVERRIDES'] = 'msvcr{}=n'.format(version)
     env['WINEDEBUG'] = 'fixme-all'
-    env['INCLUDE'] = ';'.join(fix_path(p) for p in incl_paths) 
+    env['INCLUDE'] = ';'.join(fix_path(p) for p in incl_paths)
     env['VSINSTALLDIR'] = fix_path(tc_dir)
     env['VCINSTALLDIR'] = fix_path(tc_dir + '/VC')
     env['WindowsSdkDir'] = fix_path(tc_dir)
@@ -475,20 +475,20 @@ def run_main():
         out, _ = p.communicate()
         return p.wait(), out
 
-    def print_err_log(log): 
-        if not log: 
-            return 
-        if mode == 'cxx': 
-            log = colorize(log) 
-        print >>sys.stderr, log 
- 
+    def print_err_log(log):
+        if not log:
+            return
+        if mode == 'cxx':
+            log = colorize(log)
+        print >>sys.stderr, log
+
     tout = 200
 
     while True:
         rc, out = run_process(0, tout)
 
         if rc in (-signal.SIGALRM, signal.SIGALRM):
-            print_err_log(out) 
+            print_err_log(out)
             print >>sys.stderr, '##append_tag##time out'
         elif out and ' stack overflow ' in out:
             print >>sys.stderr, '##append_tag##stack overflow'
@@ -503,7 +503,7 @@ def run_main():
                 print >>sys.stderr, e
 
         else:
-            print_err_log(out) 
+            print_err_log(out)
 
             # non-zero return code - bad, return it immediately
             if rc:

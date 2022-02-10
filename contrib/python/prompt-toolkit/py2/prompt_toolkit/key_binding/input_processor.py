@@ -4,20 +4,20 @@ An :class:`~.InputProcessor` receives callbacks for the keystrokes parsed from
 the input in the :class:`~prompt_toolkit.inputstream.InputStream` instance.
 
 The `InputProcessor` will according to the implemented keybindings call the
-correct callbacks when new key presses are feed through `feed`. 
+correct callbacks when new key presses are feed through `feed`.
 """
 from __future__ import unicode_literals
 from prompt_toolkit.buffer import EditReadOnlyBuffer
-from prompt_toolkit.filters.cli import ViNavigationMode 
-from prompt_toolkit.keys import Keys, Key 
-from prompt_toolkit.utils import Event 
+from prompt_toolkit.filters.cli import ViNavigationMode
+from prompt_toolkit.keys import Keys, Key
+from prompt_toolkit.utils import Event
 
 from .registry import BaseRegistry
- 
-from collections import deque 
-from six.moves import range 
+
+from collections import deque
+from six.moves import range
 import weakref
-import six 
+import six
 
 __all__ = (
     'InputProcessor',
@@ -27,16 +27,16 @@ __all__ = (
 
 class KeyPress(object):
     """
-    :param key: A `Keys` instance or text (one character). 
+    :param key: A `Keys` instance or text (one character).
     :param data: The received string on stdin. (Often vt100 escape codes.)
     """
-    def __init__(self, key, data=None): 
-        assert isinstance(key, (six.text_type, Key)) 
-        assert data is None or isinstance(data, six.text_type) 
- 
-        if data is None: 
-            data = key.name if isinstance(key, Key) else key 
- 
+    def __init__(self, key, data=None):
+        assert isinstance(key, (six.text_type, Key))
+        assert data is None or isinstance(data, six.text_type)
+
+        if data is None:
+            data = key.name if isinstance(key, Key) else key
+
         self.key = key
         self.data = data
 
@@ -58,12 +58,12 @@ class InputProcessor(object):
         p = InputProcessor(registry)
 
         # Send keys into the processor.
-        p.feed(KeyPress(Keys.ControlX, '\x18')) 
-        p.feed(KeyPress(Keys.ControlC, '\x03') 
+        p.feed(KeyPress(Keys.ControlX, '\x18'))
+        p.feed(KeyPress(Keys.ControlC, '\x03')
 
-        # Process all the keys in the queue. 
-        p.process_keys() 
- 
+        # Process all the keys in the queue.
+        p.process_keys()
+
         # Now the ControlX-ControlC callback will be called if this sequence is
         # registered in the registry.
 
@@ -72,20 +72,20 @@ class InputProcessor(object):
     """
     def __init__(self, registry, cli_ref):
         assert isinstance(registry, BaseRegistry)
- 
+
         self._registry = registry
         self._cli_ref = cli_ref
- 
-        self.beforeKeyPress = Event(self) 
-        self.afterKeyPress = Event(self) 
- 
-        # The queue of keys not yet send to our _process generator/state machine. 
-        self.input_queue = deque() 
- 
-        # The key buffer that is matched in the generator state machine. 
-        # (This is at at most the amount of keys that make up for one key binding.) 
-        self.key_buffer = [] 
- 
+
+        self.beforeKeyPress = Event(self)
+        self.afterKeyPress = Event(self)
+
+        # The queue of keys not yet send to our _process generator/state machine.
+        self.input_queue = deque()
+
+        # The key buffer that is matched in the generator state machine.
+        # (This is at at most the amount of keys that make up for one key binding.)
+        self.key_buffer = []
+
         # Simple macro recording. (Like readline does.)
         self.record_macro = False
         self.macro = []
@@ -125,7 +125,7 @@ class InputProcessor(object):
         cli = self._cli_ref()
 
         # Try match, with mode flag
-        return [b for b in self._registry.get_bindings_for_keys(keys) if b.filter(cli)] 
+        return [b for b in self._registry.get_bindings_for_keys(keys) if b.filter(cli)]
 
     def _is_prefix_of_longer_match(self, key_presses):
         """
@@ -149,7 +149,7 @@ class InputProcessor(object):
         Coroutine implementing the key match algorithm. Key strokes are sent
         into this generator, and it calls the appropriate handlers.
         """
-        buffer = self.key_buffer 
+        buffer = self.key_buffer
         retry = False
 
         while True:
@@ -174,7 +174,7 @@ class InputProcessor(object):
                 # Exact matches found, call handler.
                 if not is_prefix_of_longer_match and matches:
                     self._call_handler(matches[-1], key_sequence=buffer[:])
-                    del buffer[:]  # Keep reference. 
+                    del buffer[:]  # Keep reference.
 
                 # No match found.
                 elif not is_prefix_of_longer_match and not matches:
@@ -186,70 +186,70 @@ class InputProcessor(object):
                         matches = self._get_matches(buffer[:i])
                         if matches:
                             self._call_handler(matches[-1], key_sequence=buffer[:i])
-                            del buffer[:i] 
+                            del buffer[:i]
                             found = True
-                            break 
+                            break
 
                     if not found:
-                        del buffer[:1] 
+                        del buffer[:1]
 
-    def feed(self, key_press): 
+    def feed(self, key_press):
         """
-        Add a new :class:`KeyPress` to the input queue. 
-        (Don't forget to call `process_keys` in order to process the queue.) 
+        Add a new :class:`KeyPress` to the input queue.
+        (Don't forget to call `process_keys` in order to process the queue.)
         """
         assert isinstance(key_press, KeyPress)
-        self.input_queue.append(key_press) 
+        self.input_queue.append(key_press)
 
-    def process_keys(self): 
-        """ 
-        Process all the keys in the `input_queue`. 
-        (To be called after `feed`.) 
+    def process_keys(self):
+        """
+        Process all the keys in the `input_queue`.
+        (To be called after `feed`.)
 
-        Note: because of the `feed`/`process_keys` separation, it is 
-              possible to call `feed` from inside a key binding. 
-              This function keeps looping until the queue is empty. 
-        """ 
-        while self.input_queue: 
-            key_press = self.input_queue.popleft() 
+        Note: because of the `feed`/`process_keys` separation, it is
+              possible to call `feed` from inside a key binding.
+              This function keeps looping until the queue is empty.
+        """
+        while self.input_queue:
+            key_press = self.input_queue.popleft()
 
-            if key_press.key != Keys.CPRResponse: 
-                self.beforeKeyPress.fire() 
+            if key_press.key != Keys.CPRResponse:
+                self.beforeKeyPress.fire()
 
-            self._process_coroutine.send(key_press) 
- 
-            if key_press.key != Keys.CPRResponse: 
-                self.afterKeyPress.fire() 
- 
-        # Invalidate user interface. 
-        cli = self._cli_ref() 
-        if cli: 
-            cli.invalidate() 
- 
+            self._process_coroutine.send(key_press)
+
+            if key_press.key != Keys.CPRResponse:
+                self.afterKeyPress.fire()
+
+        # Invalidate user interface.
+        cli = self._cli_ref()
+        if cli:
+            cli.invalidate()
+
     def _call_handler(self, handler, key_sequence=None):
         was_recording = self.record_macro
         arg = self.arg
         self.arg = None
 
-        event = KeyPressEvent( 
-            weakref.ref(self), arg=arg, key_sequence=key_sequence, 
-            previous_key_sequence=self._previous_key_sequence, 
-            is_repeat=(handler == self._previous_handler)) 
+        event = KeyPressEvent(
+            weakref.ref(self), arg=arg, key_sequence=key_sequence,
+            previous_key_sequence=self._previous_key_sequence,
+            is_repeat=(handler == self._previous_handler))
 
-        # Save the state of the current buffer. 
-        cli = event.cli  # Can be `None` (In unit-tests only.) 
- 
-        if handler.save_before(event) and cli: 
-            cli.current_buffer.save_to_undo_stack() 
- 
-        # Call handler. 
+        # Save the state of the current buffer.
+        cli = event.cli  # Can be `None` (In unit-tests only.)
+
+        if handler.save_before(event) and cli:
+            cli.current_buffer.save_to_undo_stack()
+
+        # Call handler.
         try:
             handler.call(event)
-            self._fix_vi_cursor_position(event) 
+            self._fix_vi_cursor_position(event)
 
         except EditReadOnlyBuffer:
-            # When a key binding does an attempt to change a buffer which is 
-            # read-only, we can just silently ignore that. 
+            # When a key binding does an attempt to change a buffer which is
+            # read-only, we can just silently ignore that.
             pass
 
         self._previous_key_sequence = key_sequence
@@ -260,29 +260,29 @@ class InputProcessor(object):
         if self.record_macro and was_recording:
             self.macro.extend(key_sequence)
 
-    def _fix_vi_cursor_position(self, event): 
-        """ 
-        After every command, make sure that if we are in Vi navigation mode, we 
-        never put the cursor after the last character of a line. (Unless it's 
-        an empty line.) 
-        """ 
+    def _fix_vi_cursor_position(self, event):
+        """
+        After every command, make sure that if we are in Vi navigation mode, we
+        never put the cursor after the last character of a line. (Unless it's
+        an empty line.)
+        """
         cli = self._cli_ref()
-        if cli: 
-            buff = cli.current_buffer 
-            preferred_column = buff.preferred_column 
+        if cli:
+            buff = cli.current_buffer
+            preferred_column = buff.preferred_column
 
-            if (ViNavigationMode()(event.cli) and 
-                    buff.document.is_cursor_at_the_end_of_line and 
-                    len(buff.document.current_line) > 0): 
-                buff.cursor_position -= 1 
+            if (ViNavigationMode()(event.cli) and
+                    buff.document.is_cursor_at_the_end_of_line and
+                    len(buff.document.current_line) > 0):
+                buff.cursor_position -= 1
 
-                # Set the preferred_column for arrow up/down again. 
-                # (This was cleared after changing the cursor position.) 
-                buff.preferred_column = preferred_column 
- 
- 
- 
-class KeyPressEvent(object): 
+                # Set the preferred_column for arrow up/down again.
+                # (This was cleared after changing the cursor position.)
+                buff.preferred_column = preferred_column
+
+
+
+class KeyPressEvent(object):
     """
     Key press event, delivered to key bindings.
 
@@ -304,7 +304,7 @@ class KeyPressEvent(object):
         self._arg = arg
 
     def __repr__(self):
-        return 'KeyPressEvent(arg=%r, key_sequence=%r, is_repeat=%r)' % ( 
+        return 'KeyPressEvent(arg=%r, key_sequence=%r, is_repeat=%r)' % (
                 self.arg, self.key_sequence, self.is_repeat)
 
     @property
@@ -334,24 +334,24 @@ class KeyPressEvent(object):
         """
         Repetition argument.
         """
-        if self._arg == '-': 
-            return -1 
+        if self._arg == '-':
+            return -1
 
-        result = int(self._arg or 1) 
- 
-        # Don't exceed a million. 
-        if int(result) >= 1000000: 
-            result = 1 
- 
-        return result 
- 
-    @property 
-    def arg_present(self): 
-        """ 
-        True if repetition argument was explicitly provided. 
-        """ 
-        return self._arg is not None 
- 
+        result = int(self._arg or 1)
+
+        # Don't exceed a million.
+        if int(result) >= 1000000:
+            result = 1
+
+        return result
+
+    @property
+    def arg_present(self):
+        """
+        True if repetition argument was explicitly provided.
+        """
+        return self._arg is not None
+
     def append_to_arg_count(self, data):
         """
         Add digit to the input argument.
@@ -361,12 +361,12 @@ class KeyPressEvent(object):
         assert data in '-0123456789'
         current = self._arg
 
-        if data == '-': 
-            assert current is None or current == '-' 
-            result = data 
-        elif current is None: 
-            result = data 
+        if data == '-':
+            assert current is None or current == '-'
+            result = data
+        elif current is None:
+            result = data
         else:
-            result = "%s%s" % (current, data) 
+            result = "%s%s" % (current, data)
 
         self.input_processor.arg = result

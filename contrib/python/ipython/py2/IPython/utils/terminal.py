@@ -11,16 +11,16 @@ Authors:
 
 from __future__ import absolute_import
 
-# Copyright (c) IPython Development Team. 
-# Distributed under the terms of the Modified BSD License. 
+# Copyright (c) IPython Development Team.
+# Distributed under the terms of the Modified BSD License.
 
 import os
 import sys
 import warnings
-try: 
-    from shutil import get_terminal_size as _get_terminal_size 
-except ImportError: 
-    # use backport on Python 2 
+try:
+    from shutil import get_terminal_size as _get_terminal_size
+except ImportError:
+    # use backport on Python 2
     try:
         from backports.shutil_get_terminal_size import get_terminal_size as _get_terminal_size
     except ImportError:
@@ -121,5 +121,5 @@ def freeze_term_title():
     ignore_termtitle = True
 
 
-def get_terminal_size(defaultx=80, defaulty=25): 
-    return _get_terminal_size((defaultx, defaulty)) 
+def get_terminal_size(defaultx=80, defaulty=25):
+    return _get_terminal_size((defaultx, defaulty))

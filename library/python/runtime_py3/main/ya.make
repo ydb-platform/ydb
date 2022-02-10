@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
-    pg 
-    orivej 
-) 
+OWNER(
+    pg
+    orivej
+)
 
 PEERDIR(
     contrib/tools/python3/src

@@ -1,4 +1,4 @@
-OWNER(yazevnul) 
+OWNER(yazevnul)
 
 PY2TEST()
 
@@ -10,7 +10,7 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
 DEPENDS(library/cpp/accurate_accumulate/benchmark)
 

@@ -15,7 +15,7 @@ LICENSE(
     BSD-2-Clause AND
     Public-Domain
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(

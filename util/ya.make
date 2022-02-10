@@ -3,16 +3,16 @@ LIBRARY(yutil)
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
-NEED_CHECK() 
- 
+NEED_CHECK()
+
 NO_UTIL()
 
-# stream 
-# string 
+# stream
+# string
 PEERDIR(
     util/charset
-    contrib/libs/zlib 
-    contrib/libs/double-conversion 
+    contrib/libs/zlib
+    contrib/libs/double-conversion
 )
 
 PEERDIR(
@@ -31,8 +31,8 @@ JOIN_SRCS(
 
 SRCS(
     datetime/parser.rl6
-    digest/city.cpp 
-    random/random.cpp 
+    digest/city.cpp
+    random/random.cpp
     string/cast.cpp
 )
 

@@ -8,11 +8,11 @@ done.
 from __future__ import absolute_import
 from __future__ import print_function
 
-# Copyright (c) IPython Development Team. 
-# Distributed under the terms of the Modified BSD License. 
+# Copyright (c) IPython Development Team.
+# Distributed under the terms of the Modified BSD License.
 
 import sys
-import warnings 
+import warnings
 
 from . import tools
 
@@ -34,9 +34,9 @@ class StreamProxy(io.IOStream):
     """
 
     def __init__(self, name):
-        warnings.warn("StreamProxy is deprecated and unused as of IPython 5", DeprecationWarning, 
-            stacklevel=2, 
-        ) 
+        warnings.warn("StreamProxy is deprecated and unused as of IPython 5", DeprecationWarning,
+            stacklevel=2,
+        )
         self.name=name
 
     @property
@@ -88,7 +88,7 @@ def start_ipython():
 
     # Create custom argv and namespaces for our IPython to be test-friendly
     config = tools.default_config()
-    config.TerminalInteractiveShell.simple_prompt = True 
+    config.TerminalInteractiveShell.simple_prompt = True
 
     # Create and initialize our test-friendly IPython instance.
     shell = TerminalInteractiveShell.instance(config=config,
@@ -128,8 +128,8 @@ def start_ipython():
 
     # Override paging, so we don't require user interaction during the tests.
     def nopage(strng, start=0, screen_lines=0, pager_cmd=None):
-        if isinstance(strng, dict): 
-           strng = strng.get('text/plain', '') 
+        if isinstance(strng, dict):
+           strng = strng.get('text/plain', '')
         print(strng)
     
     page.orig_page = page.pager_page

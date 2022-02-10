@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(velavokr) 
+OWNER(velavokr)
 
 SRCS(
     ct_common.cpp
@@ -14,6 +14,6 @@ PEERDIR(
     util/draft
 )
 
-GENERATE_ENUM_SERIALIZATION(ct_common.h) 
+GENERATE_ENUM_SERIALIZATION(ct_common.h)
 
 END()

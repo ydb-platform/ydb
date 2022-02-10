@@ -1,7 +1,7 @@
-OWNER( 
-    g:util 
-    jamel 
-) 
+OWNER(
+    g:util
+    jamel
+)
 
 UNITTEST_FOR(library/cpp/histogram/hdr)
 

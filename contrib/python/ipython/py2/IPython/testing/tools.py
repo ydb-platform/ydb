@@ -196,7 +196,7 @@ def ipexec(fname, options=None, commands=()):
     """
     if options is None: options = []
 
-    cmdargs = default_argv() + options 
+    cmdargs = default_argv() + options
 
     test_dir = os.path.dirname(__file__)
 
@@ -291,13 +291,13 @@ class TempFileMixin(object):
                 # delete it.  I have no clue why
                 pass
 
-    def __enter__(self): 
-        return self 
- 
-    def __exit__(self, exc_type, exc_value, traceback): 
-        self.tearDown() 
- 
- 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.tearDown()
+
+
 pair_fail_msg = ("Testing {0}\n\n"
                 "In:\n"
                 "  {1!r}\n"

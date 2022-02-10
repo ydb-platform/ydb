@@ -28,7 +28,7 @@
 
 #include "vasnprintf.h"
 
-#if defined(_MSC_VER) && _MSC_VER < 1900 
+#if defined(_MSC_VER) && _MSC_VER < 1900
 /* Print formatted output to string STR.  Similar to sprintf, but
    additional length SIZE limit how much is written into STR.  Returns
    string length of formatted string (which may be larger than SIZE).
@@ -73,4 +73,4 @@ snprintf (char *str, size_t size, const char *format, ...)
 
   return len;
 }
-#endif 
+#endif

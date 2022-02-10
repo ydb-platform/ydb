@@ -1,36 +1,36 @@
-/*************************************************************************** 
- *                                  _   _ ____  _ 
- *  Project                     ___| | | |  _ \| | 
- *                             / __| | | | |_) | | 
- *                            | (__| |_| |  _ <| |___ 
- *                             \___|\___/|_| \_\_____| 
- * 
+/***************************************************************************
+ *                                  _   _ ____  _
+ *  Project                     ___| | | |  _ \| |
+ *                             / __| | | | |_) | |
+ *                            | (__| |_| |  _ <| |___
+ *                             \___|\___/|_| \_\_____|
+ *
  * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * 
- * This software is licensed as described in the file COPYING, which 
- * you should have received as part of this distribution. The terms 
+ *
+ * This software is licensed as described in the file COPYING, which
+ * you should have received as part of this distribution. The terms
  * are also available at https://curl.se/docs/copyright.html.
- * 
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
- * copies of the Software, and permit persons to whom the Software is 
- * furnished to do so, under the terms of the COPYING file. 
- * 
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
- * KIND, either express or implied. 
- * 
- ***************************************************************************/ 
- 
-#include "timeval.h" 
- 
-#if defined(WIN32) && !defined(MSDOS) 
- 
+ *
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
+ * copies of the Software, and permit persons to whom the Software is
+ * furnished to do so, under the terms of the COPYING file.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ***************************************************************************/
+
+#include "timeval.h"
+
+#if defined(WIN32) && !defined(MSDOS)
+
 /* set in win32_init() */
 extern LARGE_INTEGER Curl_freq;
 extern bool Curl_isVistaOrGreater;
 
 /* In case of bug fix this function has a counterpart in tool_util.c */
 struct curltime Curl_now(void)
-{ 
+{
   struct curltime now;
   if(Curl_isVistaOrGreater) { /* QPC timer might have issues pre-Vista */
     LARGE_INTEGER count;
@@ -53,25 +53,25 @@ struct curltime Curl_now(void)
     now.tv_sec = milliseconds / 1000;
     now.tv_usec = (milliseconds % 1000) * 1000;
   }
-  return now; 
-} 
- 
-#elif defined(HAVE_CLOCK_GETTIME_MONOTONIC) 
- 
+  return now;
+}
+
+#elif defined(HAVE_CLOCK_GETTIME_MONOTONIC)
+
 struct curltime Curl_now(void)
-{ 
-  /* 
-  ** clock_gettime() is granted to be increased monotonically when the 
-  ** monotonic clock is queried. Time starting point is unspecified, it 
-  ** could be the system start-up time, the Epoch, or something else, 
-  ** in any case the time starting point does not change once that the 
-  ** system has started up. 
-  */ 
+{
+  /*
+  ** clock_gettime() is granted to be increased monotonically when the
+  ** monotonic clock is queried. Time starting point is unspecified, it
+  ** could be the system start-up time, the Epoch, or something else,
+  ** in any case the time starting point does not change once that the
+  ** system has started up.
+  */
 #ifdef HAVE_GETTIMEOFDAY
-  struct timeval now; 
+  struct timeval now;
 #endif
   struct curltime cnow;
-  struct timespec tsnow; 
+  struct timespec tsnow;
 
   /*
   ** clock_gettime() may be defined by Apple's SDK as weak symbol thus
@@ -91,27 +91,27 @@ struct curltime Curl_now(void)
     (0 == clock_gettime(CLOCK_MONOTONIC, &tsnow))) {
     cnow.tv_sec = tsnow.tv_sec;
     cnow.tv_usec = (unsigned int)(tsnow.tv_nsec / 1000);
-  } 
-  /* 
-  ** Even when the configure process has truly detected monotonic clock 
-  ** availability, it might happen that it is not actually available at 
-  ** run-time. When this occurs simply fallback to other time source. 
-  */ 
-#ifdef HAVE_GETTIMEOFDAY 
+  }
+  /*
+  ** Even when the configure process has truly detected monotonic clock
+  ** availability, it might happen that it is not actually available at
+  ** run-time. When this occurs simply fallback to other time source.
+  */
+#ifdef HAVE_GETTIMEOFDAY
   else {
-    (void)gettimeofday(&now, NULL); 
+    (void)gettimeofday(&now, NULL);
     cnow.tv_sec = now.tv_sec;
     cnow.tv_usec = (unsigned int)now.tv_usec;
   }
-#else 
-  else { 
+#else
+  else {
     cnow.tv_sec = time(NULL);
     cnow.tv_usec = 0;
-  } 
-#endif 
+  }
+#endif
   return cnow;
-} 
- 
+}
+
 #elif defined(HAVE_MACH_ABSOLUTE_TIME)
 
 #include <stdint.h>
@@ -143,64 +143,64 @@ struct curltime Curl_now(void)
   return cnow;
 }
 
-#elif defined(HAVE_GETTIMEOFDAY) 
- 
+#elif defined(HAVE_GETTIMEOFDAY)
+
 struct curltime Curl_now(void)
-{ 
-  /* 
-  ** gettimeofday() is not granted to be increased monotonically, due to 
-  ** clock drifting and external source time synchronization it can jump 
-  ** forward or backward in time. 
-  */ 
-  struct timeval now; 
+{
+  /*
+  ** gettimeofday() is not granted to be increased monotonically, due to
+  ** clock drifting and external source time synchronization it can jump
+  ** forward or backward in time.
+  */
+  struct timeval now;
   struct curltime ret;
-  (void)gettimeofday(&now, NULL); 
+  (void)gettimeofday(&now, NULL);
   ret.tv_sec = now.tv_sec;
   ret.tv_usec = (int)now.tv_usec;
   return ret;
-} 
- 
-#else 
- 
+}
+
+#else
+
 struct curltime Curl_now(void)
-{ 
-  /* 
-  ** time() returns the value of time in seconds since the Epoch. 
-  */ 
+{
+  /*
+  ** time() returns the value of time in seconds since the Epoch.
+  */
   struct curltime now;
   now.tv_sec = time(NULL);
-  now.tv_usec = 0; 
-  return now; 
-} 
- 
-#endif 
- 
-/* 
+  now.tv_usec = 0;
+  return now;
+}
+
+#endif
+
+/*
  * Returns: time difference in number of milliseconds. For too large diffs it
  * returns max value.
- * 
+ *
  * @unittest: 1323
- */ 
+ */
 timediff_t Curl_timediff(struct curltime newer, struct curltime older)
-{ 
+{
   timediff_t diff = (timediff_t)newer.tv_sec-older.tv_sec;
   if(diff >= (TIMEDIFF_T_MAX/1000))
     return TIMEDIFF_T_MAX;
   else if(diff <= (TIMEDIFF_T_MIN/1000))
     return TIMEDIFF_T_MIN;
   return diff * 1000 + (newer.tv_usec-older.tv_usec)/1000;
-} 
- 
-/* 
+}
+
+/*
  * Returns: time difference in number of microseconds. For too large diffs it
  * returns max value.
- */ 
+ */
 timediff_t Curl_timediff_us(struct curltime newer, struct curltime older)
-{ 
+{
   timediff_t diff = (timediff_t)newer.tv_sec-older.tv_sec;
   if(diff >= (TIMEDIFF_T_MAX/1000000))
     return TIMEDIFF_T_MAX;
   else if(diff <= (TIMEDIFF_T_MIN/1000000))
     return TIMEDIFF_T_MIN;
   return diff * 1000000 + newer.tv_usec-older.tv_usec;
-} 
+}

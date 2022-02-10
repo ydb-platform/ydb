@@ -2,10 +2,10 @@
 
 UNITTEST()
 
-OWNER( 
-    g:util 
-    davenger 
-) 
+OWNER(
+    g:util
+    davenger
+)
 
 SET(PIRETESTSDIR contrib/libs/pire/ut)
 

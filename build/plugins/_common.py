@@ -52,8 +52,8 @@ def stripext(fname):
 
 
 def tobuilddir(fname):
-    if not fname: 
-        return '$B' 
+    if not fname:
+        return '$B'
     if fname.startswith('$S'):
         return fname.replace('$S', '$B', 1)
     else:
@@ -113,14 +113,14 @@ def resolve_to_abs_path(path, source_root, build_root):
     if path.startswith('$B') and build_root is not None:
         return path.replace('$B', build_root, 1)
     return path
- 
- 
+
+
 def resolve_to_ymake_path(path):
     return resolve_to_abs_path(path, '${ARCADIA_ROOT}', '${ARCADIA_BUILD_ROOT}')
 
 
-def join_intl_paths(*args): 
-    return '/'.join(args) 
+def join_intl_paths(*args):
+    return '/'.join(args)
 
 
 def get(fun, num):

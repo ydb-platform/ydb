@@ -135,8 +135,8 @@ RECURSE(
     openssl
     par_apply
     par_apply/test
-    path 
-    path/tests 
+    path
+    path/tests
     protobuf
     pymain
     pyscopg2
@@ -154,8 +154,8 @@ RECURSE(
     reservoir_sampling
     refsclient
     resource
-    retry 
-    retry/tests 
+    retry
+    retry/tests
     runtime
     runtime/main
     runtime/test

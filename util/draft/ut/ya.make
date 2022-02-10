@@ -5,10 +5,10 @@ SUBSCRIBER(g:util-subscribers)
 
 SRCDIR(util/draft)
 
-PEERDIR( 
-    util/draft 
-) 
- 
+PEERDIR(
+    util/draft
+)
+
 SRCS(
     date_ut.cpp
     datetime_ut.cpp

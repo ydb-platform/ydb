@@ -72,21 +72,21 @@ def get_long_path_name(path):
 
 def unquote_filename(name, win32=(sys.platform=='win32')):
     """ On Windows, remove leading and trailing quotes from filenames.
- 
-    This function has been deprecated and should not be used any more: 
-    unquoting is now taken care of by :func:`IPython.utils.process.arg_split`. 
+
+    This function has been deprecated and should not be used any more:
+    unquoting is now taken care of by :func:`IPython.utils.process.arg_split`.
     """
-    warn("'unquote_filename' is deprecated since IPython 5.0 and should not " 
+    warn("'unquote_filename' is deprecated since IPython 5.0 and should not "
          "be used anymore", DeprecationWarning, stacklevel=2)
     if win32:
         if name.startswith(("'", '"')) and name.endswith(("'", '"')):
             name = name[1:-1]
     return name
 
- 
+
 def compress_user(path):
     """Reverse of :func:`os.path.expanduser`
-    """ 
+    """
     path = py3compat.unicode_to_str(path, sys.getfilesystemencoding())
     home = os.path.expanduser('~')
     if path.startswith(home):
@@ -101,9 +101,9 @@ def get_py_filename(name, force_win32=None):
     """
 
     name = os.path.expanduser(name)
-    if force_win32 is not None: 
-        warn("The 'force_win32' argument to 'get_py_filename' is deprecated " 
-             "since IPython 5.0 and should not be used anymore", 
+    if force_win32 is not None:
+        warn("The 'force_win32' argument to 'get_py_filename' is deprecated "
+             "since IPython 5.0 and should not be used anymore",
             DeprecationWarning, stacklevel=2)
     if not os.path.isfile(name) and not name.endswith('.py'):
         name += '.py'

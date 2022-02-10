@@ -1,35 +1,35 @@
-/*************************************************************************** 
- *                                  _   _ ____  _ 
- *  Project                     ___| | | |  _ \| | 
- *                             / __| | | | |_) | | 
- *                            | (__| |_| |  _ <| |___ 
- *                             \___|\___/|_| \_\_____| 
- * 
+/***************************************************************************
+ *                                  _   _ ____  _
+ *  Project                     ___| | | |  _ \| |
+ *                             / __| | | | |_) | |
+ *                            | (__| |_| |  _ <| |___
+ *                             \___|\___/|_| \_\_____|
+ *
  * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * 
- * This software is licensed as described in the file COPYING, which 
- * you should have received as part of this distribution. The terms 
+ *
+ * This software is licensed as described in the file COPYING, which
+ * you should have received as part of this distribution. The terms
  * are also available at https://curl.se/docs/copyright.html.
- * 
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell 
- * copies of the Software, and permit persons to whom the Software is 
- * furnished to do so, under the terms of the COPYING file. 
- * 
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY 
- * KIND, either express or implied. 
- * 
- ***************************************************************************/ 
- 
-#include "curl_setup.h" 
- 
-#ifdef USE_NGHTTP2 
-#include <nghttp2/nghttp2.h> 
-#include "urldata.h" 
-#include "http2.h" 
-#include "http.h" 
-#include "sendf.h" 
+ *
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
+ * copies of the Software, and permit persons to whom the Software is
+ * furnished to do so, under the terms of the COPYING file.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ***************************************************************************/
+
+#include "curl_setup.h"
+
+#ifdef USE_NGHTTP2
+#include <nghttp2/nghttp2.h>
+#include "urldata.h"
+#include "http2.h"
+#include "http.h"
+#include "sendf.h"
 #include "select.h"
-#include "curl_base64.h" 
+#include "curl_base64.h"
 #include "strcase.h"
 #include "multiif.h"
 #include "url.h"
@@ -39,9 +39,9 @@
 #include "dynbuf.h"
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
-#include "curl_memory.h" 
-#include "memdebug.h" 
- 
+#include "curl_memory.h"
+#include "memdebug.h"
+
 #define H2_BUFSIZE 32768
 
 #if (NGHTTP2_VERSION_NUM < 0x010c00)
@@ -74,7 +74,7 @@ static int h2_process_pending_input(struct connectdata *conn,
                                     struct http_conn *httpc,
                                     CURLcode *err);
 
-/* 
+/*
  * Curl_http2_init_state() is called when the easy handle is created and
  * allows for HTTP/2 specific init of state.
  */
@@ -327,32 +327,32 @@ static const struct Curl_handler Curl_handler_http2_ssl = {
 };
 
 /*
- * Store nghttp2 version info in this buffer, Prefix with a space.  Return 
- * total length written. 
- */ 
-int Curl_http2_ver(char *p, size_t len) 
-{ 
-  nghttp2_info *h2 = nghttp2_version(0); 
+ * Store nghttp2 version info in this buffer, Prefix with a space.  Return
+ * total length written.
+ */
+int Curl_http2_ver(char *p, size_t len)
+{
+  nghttp2_info *h2 = nghttp2_version(0);
   return msnprintf(p, len, "nghttp2/%s", h2->version_str);
-} 
- 
-/* 
- * The implementation of nghttp2_send_callback type. Here we write |data| with 
- * size |length| to the network and return the number of bytes actually 
- * written. See the documentation of nghttp2_send_callback for the details. 
- */ 
-static ssize_t send_callback(nghttp2_session *h2, 
-                             const uint8_t *data, size_t length, int flags, 
-                             void *userp) 
-{ 
-  struct connectdata *conn = (struct connectdata *)userp; 
+}
+
+/*
+ * The implementation of nghttp2_send_callback type. Here we write |data| with
+ * size |length| to the network and return the number of bytes actually
+ * written. See the documentation of nghttp2_send_callback for the details.
+ */
+static ssize_t send_callback(nghttp2_session *h2,
+                             const uint8_t *data, size_t length, int flags,
+                             void *userp)
+{
+  struct connectdata *conn = (struct connectdata *)userp;
   struct http_conn *c = &conn->proto.httpc;
-  ssize_t written; 
+  ssize_t written;
   CURLcode result = CURLE_OK;
 
-  (void)h2; 
-  (void)flags; 
- 
+  (void)h2;
+  (void)flags;
+
   if(!c->send_underlying)
     /* called before setup properly! */
     return NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -365,16 +365,16 @@ static ssize_t send_callback(nghttp2_session *h2,
   }
 
   if(written == -1) {
-    failf(conn->data, "Failed sending HTTP2 data"); 
-    return NGHTTP2_ERR_CALLBACK_FAILURE; 
-  } 
+    failf(conn->data, "Failed sending HTTP2 data");
+    return NGHTTP2_ERR_CALLBACK_FAILURE;
+  }
 
   if(!written)
-    return NGHTTP2_ERR_WOULDBLOCK; 
- 
-  return written; 
-} 
- 
+    return NGHTTP2_ERR_WOULDBLOCK;
+
+  return written;
+}
+
 
 /* We pass a pointer to this struct in the push callback, but the contents of
    the struct are hidden from the user. */
@@ -383,11 +383,11 @@ struct curl_pushheaders {
   const nghttp2_push_promise *frame;
 };
 
-/* 
+/*
  * push header access function. Only to be used from within the push callback
- */ 
+ */
 char *curl_pushheader_bynum(struct curl_pushheaders *h, size_t num)
-{ 
+{
   /* Verify that we got a good easy handle in the push header struct, mostly to
      detect rubbish input fast(er). */
   if(!h || !GOOD_EASY_HANDLE(h->data))
@@ -627,7 +627,7 @@ static void multi_connchanged(struct Curl_multi *multi)
 static int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
                          void *userp)
 {
-  struct connectdata *conn = (struct connectdata *)userp; 
+  struct connectdata *conn = (struct connectdata *)userp;
   struct http_conn *httpc = &conn->proto.httpc;
   struct Curl_easy *data_s = NULL;
   struct HTTP *stream = NULL;
@@ -773,9 +773,9 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
   size_t nread;
   struct connectdata *conn = (struct connectdata *)userp;
   (void)session;
-  (void)flags; 
+  (void)flags;
   (void)data;
- 
+
   DEBUGASSERT(stream_id); /* should never be a zero stream ID here */
 
   /* get the stream from the hash based on Stream ID */
@@ -783,7 +783,7 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
   if(!data_s)
     /* Receiving a Stream ID not in the hash should not happen, this is an
        internal error more than anything else! */
-    return NGHTTP2_ERR_CALLBACK_FAILURE; 
+    return NGHTTP2_ERR_CALLBACK_FAILURE;
 
   stream = data_s->req.p.http;
   if(!stream)
@@ -816,8 +816,8 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
     data_s->conn->proto.httpc.pause_stream_id = stream_id;
 
     return NGHTTP2_ERR_PAUSE;
-  } 
- 
+  }
+
   /* pause execution of nghttp2 if we received data for another handle
      in order to process them first. */
   if(conn->data != data_s) {
@@ -1127,9 +1127,9 @@ static ssize_t data_source_read_callback(nghttp2_session *session,
                "returns %zu bytes stream %u\n",
                nread, stream_id));
 
-  return nread; 
-} 
- 
+  return nread;
+}
+
 #if !defined(CURL_DISABLE_VERBOSE_STRINGS)
 static int error_callback(nghttp2_session *session,
                           const char *msg,
@@ -1142,7 +1142,7 @@ static int error_callback(nghttp2_session *session,
   return 0;
 }
 #endif
- 
+
 static void populate_settings(struct connectdata *conn,
                               struct http_conn *httpc)
 {
@@ -1211,15 +1211,15 @@ void Curl_http2_done(struct Curl_easy *data, bool premature)
   }
 }
 
-/* 
+/*
  * Initialize nghttp2 for a Curl connection
- */ 
+ */
 static CURLcode http2_init(struct connectdata *conn)
 {
   if(!conn->proto.httpc.h2) {
     int rc;
     nghttp2_session_callbacks *callbacks;
- 
+
     conn->proto.httpc.inbuf = malloc(H2_BUFSIZE);
     if(conn->proto.httpc.inbuf == NULL)
       return CURLE_OUT_OF_MEMORY;
@@ -1263,52 +1263,52 @@ static CURLcode http2_init(struct connectdata *conn)
   return CURLE_OK;
 }
 
-/* 
- * Append headers to ask for a HTTP1.1 to HTTP2 upgrade. 
- */ 
+/*
+ * Append headers to ask for a HTTP1.1 to HTTP2 upgrade.
+ */
 CURLcode Curl_http2_request_upgrade(struct dynbuf *req,
                                     struct connectdata *conn)
-{ 
-  CURLcode result; 
-  ssize_t binlen; 
-  char *base64; 
-  size_t blen; 
+{
+  CURLcode result;
+  ssize_t binlen;
+  char *base64;
+  size_t blen;
   struct SingleRequest *k = &conn->data->req;
   uint8_t *binsettings = conn->proto.httpc.binsettings;
   struct http_conn *httpc = &conn->proto.httpc;
- 
+
   populate_settings(conn, httpc);
- 
-  /* this returns number of bytes it wrote */ 
+
+  /* this returns number of bytes it wrote */
   binlen = nghttp2_pack_settings_payload(binsettings, H2_BINSETTINGS_LEN,
                                          httpc->local_settings,
                                          httpc->local_settings_num);
   if(binlen <= 0) {
-    failf(conn->data, "nghttp2 unexpectedly failed on pack_settings_payload"); 
+    failf(conn->data, "nghttp2 unexpectedly failed on pack_settings_payload");
     Curl_dyn_free(req);
-    return CURLE_FAILED_INIT; 
-  } 
+    return CURLE_FAILED_INIT;
+  }
   conn->proto.httpc.binlen = binlen;
- 
+
   result = Curl_base64url_encode(conn->data, (const char *)binsettings, binlen,
                                  &base64, &blen);
   if(result) {
     Curl_dyn_free(req);
-    return result; 
+    return result;
   }
- 
+
   result = Curl_dyn_addf(req,
                          "Connection: Upgrade, HTTP2-Settings\r\n"
                          "Upgrade: %s\r\n"
                          "HTTP2-Settings: %s\r\n",
                          NGHTTP2_CLEARTEXT_PROTO_VERSION_ID, base64);
-  free(base64); 
- 
+  free(base64);
+
   k->upgr101 = UPGR101_REQUESTED;
 
-  return result; 
-} 
- 
+  return result;
+}
+
 /*
  * Returns nonzero if current HTTP/2 session should be closed.
  */

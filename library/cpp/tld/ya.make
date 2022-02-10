@@ -3,10 +3,10 @@ LIBRARY()
 OWNER(abolkhovityanov)
 
 PYTHON(
-    gen_tld.py tlds-alpha-by-domain.txt 
-    IN tlds-alpha-by-domain.txt 
-    STDOUT tld.inc 
-) 
+    gen_tld.py tlds-alpha-by-domain.txt
+    IN tlds-alpha-by-domain.txt
+    STDOUT tld.inc
+)
 
 SRCS(
     tld.cpp

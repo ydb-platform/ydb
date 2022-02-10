@@ -18,21 +18,21 @@ coordinates to coordinates relative to the user control, and there
 from __future__ import unicode_literals
 
 __all__ = (
-    'MouseEventType', 
+    'MouseEventType',
     'MouseEvent'
 )
 
 
-class MouseEventType: 
+class MouseEventType:
     MOUSE_UP = 'MOUSE_UP'
     MOUSE_DOWN = 'MOUSE_DOWN'
     SCROLL_UP = 'SCROLL_UP'
     SCROLL_DOWN = 'SCROLL_DOWN'
 
 
-MouseEventTypes = MouseEventType  # Deprecated: plural for backwards compatibility. 
- 
- 
+MouseEventTypes = MouseEventType  # Deprecated: plural for backwards compatibility.
+
+
 class MouseEvent(object):
     """
     Mouse event, sent to `UIControl.mouse_handler`.

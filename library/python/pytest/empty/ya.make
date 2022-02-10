@@ -1,12 +1,12 @@
 LIBRARY()
 
-OWNER( 
-    g:yatool 
-    dmitko 
-) 
+OWNER(
+    g:yatool
+    dmitko
+)
 
-SRCS( 
-    main.c 
-) 
+SRCS(
+    main.c
+)
 
 END()

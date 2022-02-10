@@ -16,7 +16,7 @@ from ast import literal_eval
 from ipython_genutils.path import filefind
 from ipython_genutils import py3compat
 from ipython_genutils.encoding import DEFAULT_ENCODING
-from six import text_type 
+from six import text_type
 from traitlets.traitlets import HasTraits, List, Any
 
 #-----------------------------------------------------------------------------
@@ -182,7 +182,7 @@ class Config(dict):
     def merge(self, other):
         """merge another config object into this one"""
         to_update = {}
-        for k, v in other.items(): 
+        for k, v in other.items():
             if k not in self:
                 to_update[k] = v
             else: # I have this key
@@ -385,17 +385,17 @@ class FileConfigLoader(ConfigLoader):
         self.full_filename = filefind(self.filename, self.path)
 
 class JSONFileConfigLoader(FileConfigLoader):
-    """A JSON file loader for config 
+    """A JSON file loader for config
 
-    Can also act as a context manager that rewrite the configuration file to disk on exit. 
- 
-    Example:: 
- 
-        with JSONFileConfigLoader('myapp.json','/home/jupyter/configurations/') as c: 
-            c.MyNewConfigurable.new_value = 'Updated' 
- 
-    """ 
- 
+    Can also act as a context manager that rewrite the configuration file to disk on exit.
+
+    Example::
+
+        with JSONFileConfigLoader('myapp.json','/home/jupyter/configurations/') as c:
+            c.MyNewConfigurable.new_value = 'Updated'
+
+    """
+
     def load_config(self):
         """Load the config from a file and return it as a Config object."""
         self.clear()
@@ -422,24 +422,24 @@ class JSONFileConfigLoader(FileConfigLoader):
         else:
             raise ValueError('Unknown version of JSON config file: {version}'.format(version=version))
 
-    def __enter__(self): 
-        self.load_config() 
-        return self.config 
+    def __enter__(self):
+        self.load_config()
+        return self.config
 
-    def __exit__(self, exc_type, exc_value, traceback): 
-        """ 
-        Exit the context manager but do not handle any errors. 
- 
-        In case of any error, we do not want to write the potentially broken 
-        configuration to disk. 
-        """ 
-        self.config.version = 1 
-        json_config = json.dumps(self.config, indent=2) 
-        with open(self.full_filename, 'w') as f: 
-            f.write(json_config) 
- 
- 
- 
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit the context manager but do not handle any errors.
+
+        In case of any error, we do not want to write the potentially broken
+        configuration to disk.
+        """
+        self.config.version = 1
+        json_config = json.dumps(self.config, indent=2)
+        with open(self.full_filename, 'w') as f:
+            f.write(json_config)
+
+
+
 class PyFileConfigLoader(FileConfigLoader):
     """A config loader for pure python files.
 
@@ -521,7 +521,7 @@ class CommandLineConfigLoader(ConfigLoader):
         if isinstance(cfg, (dict, Config)):
             # don't clobber whole config sections, update
             # each section from config:
-            for sec,c in cfg.items(): 
+            for sec,c in cfg.items():
                 self.config[sec].update(c)
         else:
             raise TypeError("Invalid flag: %r" % cfg)
@@ -603,7 +603,7 @@ class KeyValueConfigLoader(CommandLineConfigLoader):
         if enc is None:
             enc = DEFAULT_ENCODING
         for arg in argv:
-            if not isinstance(arg, text_type): 
+            if not isinstance(arg, text_type):
                 # only decode if not already decoded
                 arg = arg.decode(enc)
             uargv.append(arg)
@@ -769,7 +769,7 @@ class ArgParseConfigLoader(CommandLineConfigLoader):
 
     def _convert_to_config(self):
         """self.parsed_data->self.config"""
-        for k, v in vars(self.parsed_data).items(): 
+        for k, v in vars(self.parsed_data).items():
             exec("self.config.%s = v"%k, locals(), globals())
 
 class KVArgParseConfigLoader(ArgParseConfigLoader):
@@ -786,17 +786,17 @@ class KVArgParseConfigLoader(ArgParseConfigLoader):
         if flags is None:
             flags = self.flags
         paa = self.parser.add_argument
-        for key,value in aliases.items(): 
+        for key,value in aliases.items():
             if key in flags:
                 # flags
                 nargs = '?'
             else:
                 nargs = None
             if len(key) is 1:
-                paa('-'+key, '--'+key, type=text_type, dest=value, nargs=nargs) 
+                paa('-'+key, '--'+key, type=text_type, dest=value, nargs=nargs)
             else:
-                paa('--'+key, type=text_type, dest=value, nargs=nargs) 
-        for key, (value, help) in flags.items(): 
+                paa('--'+key, type=text_type, dest=value, nargs=nargs)
+        for key, (value, help) in flags.items():
             if key in self.aliases:
                 #
                 self.alias_flags[self.aliases[key]] = value
@@ -815,7 +815,7 @@ class KVArgParseConfigLoader(ArgParseConfigLoader):
         else:
             subcs = []
 
-        for k, v in vars(self.parsed_data).items(): 
+        for k, v in vars(self.parsed_data).items():
             if v is None:
                 # it was a flag that shares the name of an alias
                 subcs.append(self.alias_flags[k])

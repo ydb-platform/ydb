@@ -7,7 +7,7 @@ RECURSE(
 )
 
 IF (OS_LINUX)
-    RECURSE( 
-        sym_versions 
-    ) 
+    RECURSE(
+        sym_versions
+    )
 ENDIF()

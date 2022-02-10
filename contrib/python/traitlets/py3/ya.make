@@ -9,7 +9,7 @@ OWNER(borman nslus g:python-contrib)
 VERSION(5.1.1)
 
 LICENSE(BSD-3-Clause)
- 
+
 NO_LINT()
 
 PY_SRCS(
@@ -28,7 +28,7 @@ PY_SRCS(
     traitlets/tests/utils.py
     traitlets/traitlets.py
     traitlets/utils/__init__.py
-    traitlets/utils/bunch.py 
+    traitlets/utils/bunch.py
     traitlets/utils/decorators.py
     traitlets/utils/descriptions.py
     traitlets/utils/getargspec.py

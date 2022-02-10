@@ -87,19 +87,19 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     }
 
     Y_UNIT_TEST(Parent) {
-#ifdef _win_ 
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\etc/passwd").Parent(), TFsPath("\\etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\etc").Parent(), TFsPath("\\"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\").Parent(), TFsPath("\\"));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc\\passwd").Parent(), TFsPath("etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc").Parent(), TFsPath("."));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(".\\etc").Parent(), TFsPath("."));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("C:\\etc/passwd").Parent(), TFsPath("C:\\etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("C:\\etc").Parent(), TFsPath("C:\\"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("C:\\").Parent(), TFsPath("C:\\"));
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/etc/passwd").Parent(), TFsPath("/etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/etc").Parent(), TFsPath("/"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/").Parent(), TFsPath("/"));
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc/passwd").Parent(), TFsPath("etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc").Parent(), TFsPath("."));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("./etc").Parent(), TFsPath("."));
-#endif 
+#endif
 
 #if 0
             UNIT_ASSERT_VALUES_EQUAL(TFsPath("./etc/passwd").Parent(), TFsPath("./etc"));
@@ -194,37 +194,37 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TFsPath p("/db/BASE/primus121-025-1380131338//");
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("primus121-025-1380131338"));
         TFsPath testP = p / "test";
-#ifdef _win_ 
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "\\db\\BASE\\primus121-025-1380131338\\test");
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "/db/BASE/primus121-025-1380131338/test");
-#endif 
+#endif
     }
 
     Y_UNIT_TEST(TestSlashesAndBasenameWin) {
-        TFsPath p("\\db\\BASE\\primus121-025-1380131338\\\\"); 
-        TFsPath testP = p / "test"; 
-#ifdef _win_ 
+        TFsPath p("\\db\\BASE\\primus121-025-1380131338\\\\");
+        TFsPath testP = p / "test";
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("primus121-025-1380131338"));
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "\\db\\BASE\\primus121-025-1380131338\\test");
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("\\db\\BASE\\primus121-025-1380131338\\\\"));
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "\\db\\BASE\\primus121-025-1380131338\\\\/test");
-#endif 
-    } 
- 
+#endif
+    }
+
     Y_UNIT_TEST(TestSlashesAndBasenameWinDrive) {
-        TFsPath p("C:\\db\\BASE\\primus121-025-1380131338\\\\"); 
-        TFsPath testP = p / "test"; 
-#ifdef _win_ 
+        TFsPath p("C:\\db\\BASE\\primus121-025-1380131338\\\\");
+        TFsPath testP = p / "test";
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("primus121-025-1380131338"));
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "C:\\db\\BASE\\primus121-025-1380131338\\test");
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(p.Basename(), TString("C:\\db\\BASE\\primus121-025-1380131338\\\\"));
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "C:\\db\\BASE\\primus121-025-1380131338\\\\/test");
-#endif 
-    } 
- 
+#endif
+    }
+
     Y_UNIT_TEST(TestList) {
         TTestDirectory td("TestList-dir");
 
@@ -350,17 +350,17 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(), TFsPath().Fix());
 
         UNIT_ASSERT_VALUES_EQUAL(TFsPath() / TFsPath(), TFsPath());
-#ifdef _win_ 
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a\\b"), TFsPath() / TString("a\\b"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a\\b"), "a\\b" / TFsPath());
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\a\\b"), TFsPath() / "\\a\\b");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\a\\b"), "\\a\\b" / TFsPath());
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a/b"), TFsPath() / TString("a/b"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a/b"), "a/b" / TFsPath());
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/a/b"), TFsPath() / "/a/b");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/a/b"), "/a/b" / TFsPath());
-#endif 
+#endif
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("."), TFsPath() / ".");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("."), "." / TFsPath());
 
@@ -380,11 +380,11 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT(!TFsPath().IsSubpathOf("a/b"));
         UNIT_ASSERT(TFsPath().IsContainerOf("a/b"));
         UNIT_ASSERT(!TFsPath().IsContainerOf("/a/b"));
-#ifdef _win_ 
+#ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a\\b").RelativeTo(TFsPath()), TFsPath("a\\b"));
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a/b").RelativeTo(TFsPath()), TFsPath("a/b"));
-#endif 
+#endif
 
         UNIT_ASSERT(!TFsPath().Exists());
         UNIT_ASSERT(!TFsPath().IsFile());
@@ -394,21 +394,21 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     }
 
     Y_UNIT_TEST(TestJoinFsPaths) {
-#ifdef _win_ 
-        UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b", "c\\d"), "a\\b\\c\\d"); 
+#ifdef _win_
+        UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b", "c\\d"), "a\\b\\c\\d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b", "..\\c"), "a\\b\\..\\c");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b\\..\\c", "d"), "a\\c\\d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a", "b", "c", "d"), "a\\b\\c\\d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b\\..\\c"), "a\\b\\..\\c");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b", ""), "a\\b");
-#else 
+#else
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a/b", "c/d"), "a/b/c/d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a/b", "../c"), "a/b/../c");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a/b/../c", "d"), "a/c/d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a", "b", "c", "d"), "a/b/c/d");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a/b/../c"), "a/b/../c");
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a/b", ""), "a/b");
-#endif 
+#endif
     }
 
     Y_UNIT_TEST(TestStringCast) {

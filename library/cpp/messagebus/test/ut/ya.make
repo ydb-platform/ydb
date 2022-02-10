@@ -3,14 +3,14 @@ OWNER(g:messagebus)
 UNITTEST_FOR(library/cpp/messagebus)
 
 TIMEOUT(1200)
- 
+
 SIZE(LARGE)
 
-TAG( 
-    ya:not_autocheck 
-    ya:fat 
-) 
- 
+TAG(
+    ya:not_autocheck
+    ya:fat
+)
+
 FORK_SUBTESTS()
 
 PEERDIR(

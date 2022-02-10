@@ -1,13 +1,13 @@
 # coding: utf-8
 
-import codecs 
+import codecs
 import errno
 import logging
 import os
 import random
 import shutil
 import six
-import stat 
+import stat
 import sys
 
 import library.python.func
@@ -23,179 +23,179 @@ except NameError:
     WindowsError = None
 
 
-_diehard_win_tries = 10 
+_diehard_win_tries = 10
 errorfix_win = library.python.windows.errorfix
- 
- 
-class CustomFsError(OSError): 
-    def __init__(self, errno, message='', filename=None): 
-        super(CustomFsError, self).__init__(message) 
-        self.errno = errno 
-        self.strerror = os.strerror(errno) 
-        self.filename = filename 
- 
- 
-# Directories creation 
-# If dst is already exists and is a directory - does nothing 
-# Throws OSError 
-@errorfix_win 
-def ensure_dir(path): 
+
+
+class CustomFsError(OSError):
+    def __init__(self, errno, message='', filename=None):
+        super(CustomFsError, self).__init__(message)
+        self.errno = errno
+        self.strerror = os.strerror(errno)
+        self.filename = filename
+
+
+# Directories creation
+# If dst is already exists and is a directory - does nothing
+# Throws OSError
+@errorfix_win
+def ensure_dir(path):
     try:
         os.makedirs(path)
     except OSError as e:
-        if e.errno != errno.EEXIST or not os.path.isdir(path): 
+        if e.errno != errno.EEXIST or not os.path.isdir(path):
             raise
 
- 
-# Directories creation 
-# If dst is already exists and is a directory - does nothing 
-# Returns path 
-# Throws OSError 
-@errorfix_win 
-def create_dirs(path): 
-    ensure_dir(path) 
+
+# Directories creation
+# If dst is already exists and is a directory - does nothing
+# Returns path
+# Throws OSError
+@errorfix_win
+def create_dirs(path):
+    ensure_dir(path)
     return path
 
 
-# Atomic file/directory move (rename) 
-# Doesn't guarantee dst replacement 
-# Atomic if no device boundaries are crossed 
-# Depends on ctypes on Windows 
-# Throws OSError 
-# On Unix, if dst exists: 
-#   if dst is file or empty dir - replaces it 
-#   if src is dir and dst is not dir - throws OSError (errno ENOTDIR) 
-#   if src is dir and dst is non-empty dir - throws OSError (errno ENOTEMPTY) 
-#   if src is file and dst is dir - throws OSError (errno EISDIR) 
-# On Windows, if dst exists - throws OSError (errno EEXIST) 
-@errorfix_win 
+# Atomic file/directory move (rename)
+# Doesn't guarantee dst replacement
+# Atomic if no device boundaries are crossed
+# Depends on ctypes on Windows
+# Throws OSError
+# On Unix, if dst exists:
+#   if dst is file or empty dir - replaces it
+#   if src is dir and dst is not dir - throws OSError (errno ENOTDIR)
+#   if src is dir and dst is non-empty dir - throws OSError (errno ENOTEMPTY)
+#   if src is file and dst is dir - throws OSError (errno EISDIR)
+# On Windows, if dst exists - throws OSError (errno EEXIST)
+@errorfix_win
 @library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
-def move(src, dst): 
-    os.rename(src, dst) 
+def move(src, dst):
+    os.rename(src, dst)
 
 
-# Atomic replacing file move (rename) 
-# Replaces dst if exists and not a dir 
-# Doesn't guarantee dst dir replacement 
-# Atomic if no device boundaries are crossed 
-# Depends on ctypes on Windows 
-# Throws OSError 
-# On Unix, if dst exists: 
-#   if dst is file - replaces it 
-#   if dst is dir - throws OSError (errno EISDIR) 
-# On Windows, if dst exists: 
-#   if dst is file - replaces it 
-#   if dst is dir - throws OSError (errno EACCES) 
-@errorfix_win 
+# Atomic replacing file move (rename)
+# Replaces dst if exists and not a dir
+# Doesn't guarantee dst dir replacement
+# Atomic if no device boundaries are crossed
+# Depends on ctypes on Windows
+# Throws OSError
+# On Unix, if dst exists:
+#   if dst is file - replaces it
+#   if dst is dir - throws OSError (errno EISDIR)
+# On Windows, if dst exists:
+#   if dst is file - replaces it
+#   if dst is dir - throws OSError (errno EACCES)
+@errorfix_win
 @library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
-def replace_file(src, dst): 
+def replace_file(src, dst):
     if library.python.windows.on_win():
         library.python.windows.replace_file(src, dst)
-    else: 
-        os.rename(src, dst) 
- 
- 
-# File/directory replacing move (rename) 
-# Removes dst if exists 
-# Non-atomic 
-# Depends on ctypes on Windows 
-# Throws OSError 
-@errorfix_win 
-def replace(src, dst): 
-    try: 
-        move(src, dst) 
-    except OSError as e: 
-        if e.errno not in (errno.EEXIST, errno.EISDIR, errno.ENOTDIR, errno.ENOTEMPTY): 
-            raise 
-        remove_tree(dst) 
-        move(src, dst) 
- 
- 
-# Atomic file remove 
-# Throws OSError 
-@errorfix_win 
+    else:
+        os.rename(src, dst)
+
+
+# File/directory replacing move (rename)
+# Removes dst if exists
+# Non-atomic
+# Depends on ctypes on Windows
+# Throws OSError
+@errorfix_win
+def replace(src, dst):
+    try:
+        move(src, dst)
+    except OSError as e:
+        if e.errno not in (errno.EEXIST, errno.EISDIR, errno.ENOTDIR, errno.ENOTEMPTY):
+            raise
+        remove_tree(dst)
+        move(src, dst)
+
+
+# Atomic file remove
+# Throws OSError
+@errorfix_win
 @library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
-def remove_file(path): 
-    os.remove(path) 
- 
- 
-# Atomic empty directory remove 
-# Throws OSError 
-@errorfix_win 
+def remove_file(path):
+    os.remove(path)
+
+
+# Atomic empty directory remove
+# Throws OSError
+@errorfix_win
 @library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries)
-def remove_dir(path): 
-    os.rmdir(path) 
- 
- 
+def remove_dir(path):
+    os.rmdir(path)
+
+
 def fix_path_encoding(path):
     return library.python.strings.to_str(path, library.python.strings.fs_encoding())
 
 
-# File/directory remove 
-# Non-atomic 
-# Throws OSError, AssertionError 
-@errorfix_win 
-def remove_tree(path): 
+# File/directory remove
+# Non-atomic
+# Throws OSError, AssertionError
+@errorfix_win
+def remove_tree(path):
     @library.python.windows.diehard(library.python.windows.RETRIABLE_DIR_ERRORS, tries=_diehard_win_tries)
-    def rmtree(path): 
+    def rmtree(path):
         if library.python.windows.on_win():
             library.python.windows.rmtree(path)
         else:
             shutil.rmtree(fix_path_encoding(path))
- 
-    st = os.lstat(path) 
-    if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode): 
-        remove_file(path) 
-    elif stat.S_ISDIR(st.st_mode): 
-        rmtree(path) 
-    else: 
-        assert False 
- 
- 
-# File/directory remove ignoring errors 
-# Non-atomic 
-@errorfix_win 
-def remove_tree_safe(path): 
-    try: 
-        st = os.lstat(path) 
-        if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode): 
-            os.remove(path) 
-        elif stat.S_ISDIR(st.st_mode): 
+
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode):
+        remove_file(path)
+    elif stat.S_ISDIR(st.st_mode):
+        rmtree(path)
+    else:
+        assert False
+
+
+# File/directory remove ignoring errors
+# Non-atomic
+@errorfix_win
+def remove_tree_safe(path):
+    try:
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode) or stat.S_ISREG(st.st_mode):
+            os.remove(path)
+        elif stat.S_ISDIR(st.st_mode):
             shutil.rmtree(fix_path_encoding(path), ignore_errors=True)
     # XXX
     except UnicodeDecodeError as e:
         logging.exception(u'remove_tree_safe with argument %s raise exception: %s', path, e)
         raise
-    except OSError: 
-        pass 
- 
- 
-# File/directory remove 
-# If path doesn't exist - does nothing 
-# Non-atomic 
-# Throws OSError, AssertionError 
-@errorfix_win 
-def ensure_removed(path): 
-    try: 
-        remove_tree(path) 
-    except OSError as e: 
-        if e.errno != errno.ENOENT: 
-            raise 
- 
- 
-# Atomic file hardlink 
-# Dst must not exist 
-# Depends on ctypes on Windows 
-# Throws OSError 
-# If dst exists - throws OSError (errno EEXIST) 
-@errorfix_win 
-def hardlink(src, lnk): 
+    except OSError:
+        pass
+
+
+# File/directory remove
+# If path doesn't exist - does nothing
+# Non-atomic
+# Throws OSError, AssertionError
+@errorfix_win
+def ensure_removed(path):
+    try:
+        remove_tree(path)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+
+# Atomic file hardlink
+# Dst must not exist
+# Depends on ctypes on Windows
+# Throws OSError
+# If dst exists - throws OSError (errno EEXIST)
+@errorfix_win
+def hardlink(src, lnk):
     if library.python.windows.on_win():
         library.python.windows.hardlink(src, lnk)
-    else: 
-        os.link(src, lnk) 
- 
- 
+    else:
+        os.link(src, lnk)
+
+
 @errorfix_win
 def hardlink_or_copy(src, lnk):
     def should_fallback_to_copy(exc):
@@ -222,18 +222,18 @@ def hardlink_or_copy(src, lnk):
             raise
 
 
-# Atomic file/directory symlink (Unix only) 
-# Dst must not exist 
-# Throws OSError 
-# If dst exists - throws OSError (errno EEXIST) 
-@errorfix_win 
-def symlink(src, lnk): 
+# Atomic file/directory symlink (Unix only)
+# Dst must not exist
+# Throws OSError
+# If dst exists - throws OSError (errno EEXIST)
+@errorfix_win
+def symlink(src, lnk):
     if library.python.windows.on_win():
         library.python.windows.run_disabled(src, lnk)
-    else: 
-        os.symlink(src, lnk) 
- 
- 
+    else:
+        os.symlink(src, lnk)
+
+
 # shutil.copy2 with follow_symlinks=False parameter (Unix only)
 def copy2(src, lnk, follow_symlinks=True):
     if six.PY3:
@@ -247,69 +247,69 @@ def copy2(src, lnk, follow_symlinks=True):
     symlink(os.readlink(src), lnk)
 
 
-# Recursively hardlink directory 
-# Uses plain hardlink for files 
-# Dst must not exist 
-# Non-atomic 
-# Throws OSError 
-@errorfix_win 
-def hardlink_tree(src, dst): 
-    if not os.path.exists(src): 
-        raise CustomFsError(errno.ENOENT, filename=src) 
-    if os.path.isfile(src): 
-        hardlink(src, dst) 
-        return 
+# Recursively hardlink directory
+# Uses plain hardlink for files
+# Dst must not exist
+# Non-atomic
+# Throws OSError
+@errorfix_win
+def hardlink_tree(src, dst):
+    if not os.path.exists(src):
+        raise CustomFsError(errno.ENOENT, filename=src)
+    if os.path.isfile(src):
+        hardlink(src, dst)
+        return
     for dirpath, _, filenames in walk_relative(src):
-        src_dirpath = os.path.join(src, dirpath) if dirpath != '.' else src 
-        dst_dirpath = os.path.join(dst, dirpath) if dirpath != '.' else dst 
-        os.mkdir(dst_dirpath) 
-        for filename in filenames: 
-            hardlink(os.path.join(src_dirpath, filename), os.path.join(dst_dirpath, filename)) 
- 
- 
-# File copy 
-# throws EnvironmentError (OSError, IOError) 
-@errorfix_win 
+        src_dirpath = os.path.join(src, dirpath) if dirpath != '.' else src
+        dst_dirpath = os.path.join(dst, dirpath) if dirpath != '.' else dst
+        os.mkdir(dst_dirpath)
+        for filename in filenames:
+            hardlink(os.path.join(src_dirpath, filename), os.path.join(dst_dirpath, filename))
+
+
+# File copy
+# throws EnvironmentError (OSError, IOError)
+@errorfix_win
 def copy_file(src, dst, copy_function=shutil.copy2):
-    if os.path.isdir(dst): 
-        raise CustomFsError(errno.EISDIR, filename=dst) 
+    if os.path.isdir(dst):
+        raise CustomFsError(errno.EISDIR, filename=dst)
     copy_function(src, dst)
- 
- 
-# File/directory copy 
-# throws EnvironmentError (OSError, IOError, shutil.Error) 
-@errorfix_win 
+
+
+# File/directory copy
+# throws EnvironmentError (OSError, IOError, shutil.Error)
+@errorfix_win
 def copy_tree(src, dst, copy_function=shutil.copy2):
-    if os.path.isfile(src): 
+    if os.path.isfile(src):
         copy_file(src, dst, copy_function=copy_function)
-        return 
+        return
     copytree3(src, dst, copy_function=copy_function)
- 
- 
-# File read 
-# Throws OSError 
-@errorfix_win 
-def read_file(path, binary=True): 
-    with open(path, 'r' + ('b' if binary else '')) as f: 
-        return f.read() 
- 
- 
-# Decoding file read 
-# Throws OSError 
-@errorfix_win 
-def read_file_unicode(path, binary=True, enc='utf-8'): 
-    if not binary: 
+
+
+# File read
+# Throws OSError
+@errorfix_win
+def read_file(path, binary=True):
+    with open(path, 'r' + ('b' if binary else '')) as f:
+        return f.read()
+
+
+# Decoding file read
+# Throws OSError
+@errorfix_win
+def read_file_unicode(path, binary=True, enc='utf-8'):
+    if not binary:
         if six.PY2:
             with open(path, 'r') as f:
                 return library.python.strings.to_unicode(f.read(), enc)
         else:
             with open(path, 'r', encoding=enc) as f:
                 return f.read()
-    # codecs.open is always binary 
+    # codecs.open is always binary
     with codecs.open(path, 'r', encoding=enc, errors=library.python.strings.ENCODING_ERRORS_POLICY) as f:
-        return f.read() 
- 
- 
+        return f.read()
+
+
 @errorfix_win
 def open_file(*args, **kwargs):
     return (
@@ -317,52 +317,52 @@ def open_file(*args, **kwargs):
     )
 
 
-# Atomic file write 
-# Throws OSError 
-@errorfix_win 
-def write_file(path, data, binary=True): 
-    dir_path = os.path.dirname(path) 
-    if dir_path: 
-        ensure_dir(dir_path) 
-    tmp_path = path + '.tmp.' + str(random.random()) 
+# Atomic file write
+# Throws OSError
+@errorfix_win
+def write_file(path, data, binary=True):
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        ensure_dir(dir_path)
+    tmp_path = path + '.tmp.' + str(random.random())
     with open_file(tmp_path, 'w' + ('b' if binary else '')) as f:
         if not isinstance(data, bytes) and binary:
             data = data.encode('UTF-8')
-        f.write(data) 
-    replace_file(tmp_path, path) 
- 
- 
-# File size 
-# Throws OSError 
-@errorfix_win 
-def get_file_size(path): 
-    return os.path.getsize(path) 
- 
- 
-# File/directory size 
-# Non-recursive mode for directory counts size for immediates 
-# While raise_all_errors is set to False, file size fallbacks to zero in case of getsize errors 
-# Throws OSError 
-@errorfix_win 
-def get_tree_size(path, recursive=False, raise_all_errors=False): 
-    if os.path.isfile(path): 
-        return get_file_size(path) 
-    total_size = 0 
-    for dir_path, _, files in os.walk(path): 
-        for f in files: 
-            fp = os.path.join(dir_path, f) 
-            try: 
-                total_size += get_file_size(fp) 
-            except OSError as e: 
-                if raise_all_errors: 
-                    raise 
+        f.write(data)
+    replace_file(tmp_path, path)
+
+
+# File size
+# Throws OSError
+@errorfix_win
+def get_file_size(path):
+    return os.path.getsize(path)
+
+
+# File/directory size
+# Non-recursive mode for directory counts size for immediates
+# While raise_all_errors is set to False, file size fallbacks to zero in case of getsize errors
+# Throws OSError
+@errorfix_win
+def get_tree_size(path, recursive=False, raise_all_errors=False):
+    if os.path.isfile(path):
+        return get_file_size(path)
+    total_size = 0
+    for dir_path, _, files in os.walk(path):
+        for f in files:
+            fp = os.path.join(dir_path, f)
+            try:
+                total_size += get_file_size(fp)
+            except OSError as e:
+                if raise_all_errors:
+                    raise
                 logger.debug("Cannot calculate file size: %s", e)
-        if not recursive: 
-            break 
-    return total_size 
- 
- 
-# Directory copy ported from Python 3 
+        if not recursive:
+            break
+    return total_size
+
+
+# Directory copy ported from Python 3
 def copytree3(
     src,
     dst,

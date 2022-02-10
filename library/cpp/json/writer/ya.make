@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    mvel 
-    myltsev 
-    pg 
-) 
+OWNER(
+    mvel
+    myltsev
+    pg
+)
 
 PEERDIR(
     library/cpp/json/common

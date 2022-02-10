@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/monlib/metrics)
 
-OWNER( 
-    jamel 
-    g:solomon 
-) 
+OWNER(
+    jamel
+    g:solomon
+)
 
 SRCS(
     ewma_ut.cpp

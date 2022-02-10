@@ -323,7 +323,7 @@ class OSMagics(Magics):
 
 
         else:
-            opts, ps = self.parse_options(parameter_s, 'qb', mode='string') 
+            opts, ps = self.parse_options(parameter_s, 'qb', mode='string')
         # jump to previous
         if ps == '-':
             try:
@@ -437,7 +437,7 @@ class OSMagics(Magics):
         """
 
         dir_s = self.shell.dir_stack
-        tgt = os.path.expanduser(parameter_s) 
+        tgt = os.path.expanduser(parameter_s)
         cwd = py3compat.getcwd().replace(self.shell.home_dir,'~')
         if tgt:
             self.cd(parameter_s)
@@ -775,8 +775,8 @@ class OSMagics(Magics):
         The file will be overwritten unless the -a (--append) flag is specified.
         """
         args = magic_arguments.parse_argstring(self.writefile, line)
-        filename = os.path.expanduser(args.filename) 
- 
+        filename = os.path.expanduser(args.filename)
+
         if os.path.exists(filename):
             if args.append:
                 print("Appending to %s" % filename)

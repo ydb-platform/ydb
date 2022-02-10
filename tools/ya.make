@@ -58,7 +58,7 @@ RECURSE(
     html2text
     idl
     idx_relemmatizer
-    inflector 
+    inflector
     is_holiday
     jsv8
     json_to_jsonlines
@@ -84,11 +84,11 @@ RECURSE(
     nodeiter_test/tests
     normalize_requests
     nots
-    oauth_token 
+    oauth_token
     pgmigrate
     pire
     print_ranking_features
-    printcorpus 
+    printcorpus
     printdocstat
     printdom
     printkeys
@@ -143,7 +143,7 @@ RECURSE(
     spamfilt
     stdin
     struct2fieldcalc
-    syntaxer 
+    syntaxer
     tarccreate
     tarcview
     templater

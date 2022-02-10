@@ -36,7 +36,7 @@ class ExtensionManager(Configurable):
     the only argument.  You can do anything you want with IPython at
     that point, including defining new magic and aliases, adding new
     components, etc.
-     
+    
     You can also optionally define an :func:`unload_ipython_extension(ipython)`
     function, which will be called if the user unloads or reloads the extension.
     The extension manager will only call :func:`load_ipython_extension` again
@@ -49,12 +49,12 @@ class ExtensionManager(Configurable):
     is added to ``sys.path`` automatically.
     """
 
-    shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True) 
+    shell = Instance('IPython.core.interactiveshell.InteractiveShellABC', allow_none=True)
 
     def __init__(self, shell=None, **kwargs):
         super(ExtensionManager, self).__init__(shell=shell, **kwargs)
-        self.shell.observe( 
-            self._on_ipython_dir_changed, names=('ipython_dir',) 
+        self.shell.observe(
+            self._on_ipython_dir_changed, names=('ipython_dir',)
         )
         self.loaded = set()
 
@@ -62,7 +62,7 @@ class ExtensionManager(Configurable):
     def ipython_extension_dir(self):
         return os.path.join(self.shell.ipython_dir, u'extensions')
 
-    def _on_ipython_dir_changed(self, change): 
+    def _on_ipython_dir_changed(self, change):
         ensure_dir_exists(self.ipython_extension_dir)
 
     def load_extension(self, module_str):
@@ -74,7 +74,7 @@ class ExtensionManager(Configurable):
         """
         if module_str in self.loaded:
             return "already loaded"
-         
+        
         with self.shell.builtin_trap:
             if module_str not in sys.modules:
                 try:
@@ -92,14 +92,14 @@ class ExtensionManager(Configurable):
 
         This function looks up the extension's name in ``sys.modules`` and
         simply calls ``mod.unload_ipython_extension(self)``.
-         
+        
         Returns the string "no unload function" if the extension doesn't define
         a function to unload itself, "not loaded" if the extension isn't loaded,
         otherwise None.
         """
         if module_str not in self.loaded:
             return "not loaded"
-         
+        
         if module_str in sys.modules:
             mod = sys.modules[module_str]
             if self._call_unload_ipython_extension(mod):
@@ -138,7 +138,7 @@ class ExtensionManager(Configurable):
             return True
 
     def install_extension(self, url, filename=None):
-        """Download and install an IPython extension.  
+        """Download and install an IPython extension. 
 
         If filename is given, the file will be so named (inside the extension
         directory). Otherwise, the name from the URL will be used. The file must

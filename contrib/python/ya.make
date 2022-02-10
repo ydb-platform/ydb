@@ -124,7 +124,7 @@ RECURSE(
     braceexpand
     bravado
     bravado-core
-    bsddb3 
+    bsddb3
     bson
     bz2file
     cached-property
@@ -151,7 +151,7 @@ RECURSE(
     clang
     clang/example
     cli-helpers
-    click 
+    click
     click-didyoumean
     click-plugins
     click-repl
@@ -160,7 +160,7 @@ RECURSE(
     clickhouse-sqlalchemy
     cloudpickle
     color
-    colorama 
+    colorama
     coloredlogs
     colorhash
     colorlog
@@ -202,7 +202,7 @@ RECURSE(
     DAWG-Python
     dbf_light
     debian-inspector
-    decorator 
+    decorator
     deepdiff
     deepmerge
     defusedxml
@@ -210,7 +210,7 @@ RECURSE(
     Deprecated
     dictpath
     diff-match-patch
-    directio 
+    directio
     distro
     django
     django-admin-inline-paginator
@@ -315,7 +315,7 @@ RECURSE(
     dm.xmlsec.binding
     dnspython
     docker
-    docopt 
+    docopt
     docstring-parser
     docutils
     dohq-teamcity
@@ -405,7 +405,7 @@ RECURSE(
     Flask-RESTful
     flask-restplus
     flask-restx
-    Flask-Script 
+    Flask-Script
     flask-shell-ipython
     Flask-Shelve
     Flask-SQLAlchemy
@@ -425,7 +425,7 @@ RECURSE(
     funcparserlib
     funcsigs
     functools32
-    furl 
+    furl
     future
     futures
     gast
@@ -463,11 +463,11 @@ RECURSE(
     graphql-relay
     graphviz
     greenify
-    greenlet 
+    greenlet
     grequests
     grpcio-opentracing
     gspread
-    gunicorn 
+    gunicorn
     h11
     h2
     h3
@@ -505,7 +505,7 @@ RECURSE(
     icalendar
     idna
     idna-ssl
-    ijson 
+    ijson
     imagesize
     IMAPClient
     imgkit
@@ -524,12 +524,12 @@ RECURSE(
     intbitset
     intspan
     invoke
-    ipaddr 
+    ipaddr
     ipaddress
     ipadic
     ipdb
     ipykernel
-    ipython 
+    ipython
     ipython-genutils
     ipython-sql
     ipywidgets
@@ -543,7 +543,7 @@ RECURSE(
     jaraco.functools
     javaproperties
     jdcal
-    jedi 
+    jedi
     Jinja2
     jinja2-time
     jmespath
@@ -604,7 +604,7 @@ RECURSE(
     Mako
     marisa_trie
     markdown2
-    Markdown 
+    Markdown
     MarkupSafe
     marshmallow
     marshmallow_dataclass
@@ -651,9 +651,9 @@ RECURSE(
     mypy-extensions
     mypy-protobuf
     mypy-zope
-    MySQL-python 
+    MySQL-python
     mysqlclient-python
-    namedlist 
+    namedlist
     natsort
     nbclient
     nbconvert
@@ -670,7 +670,7 @@ RECURSE(
     nose
     notebook
     num2words
-    numpy 
+    numpy
     oauth2client
     oauthlib
     objgraph
@@ -692,7 +692,7 @@ RECURSE(
     opt-einsum
     option
     ordered-set
-    orderedmultidict 
+    orderedmultidict
     orderedset
     os-fast-reservoir
     packageurl-python
@@ -733,12 +733,12 @@ RECURSE(
     peewee/playhouse
     pefile
     pem
-    pexpect 
+    pexpect
     pgcli
     PGPy
     pgspecial
     phonenumbers
-    pickleshare 
+    pickleshare
     pika
     Pillow
     pip
@@ -758,7 +758,7 @@ RECURSE(
     pq
     pql
     prance
-    premailer 
+    premailer
     preshed
     pretend
     prettytable
@@ -774,14 +774,14 @@ RECURSE(
     protobuf_to_dict
     psutil
     psycogreen
-    psycopg2 
-    ptpython 
-    ptyprocess 
+    psycopg2
+    ptpython
+    ptyprocess
     publicsuffix2
     pure-eval
     pure-python-adb
     pure-sasl
-    py 
+    py
     py-asciimath
     py-expression-eval
     py-radix
@@ -799,7 +799,7 @@ RECURSE(
     pycollada
     pycountry
     pycparser
-    pycrypto 
+    pycrypto
     pycryptodome
     pycurl
     pycurl/example
@@ -831,7 +831,7 @@ RECURSE(
     pylzma
     pymaven-patch
     PyMeeus
-    pymongo 
+    pymongo
     pymorphy2
     pymorphy2-dicts-ru
     pymqi
@@ -922,7 +922,7 @@ RECURSE(
     pyudev
     pyusb
     PyWavelets
-    PyYAML 
+    PyYAML
     pyzmq
     qemu
     qrcode
@@ -983,7 +983,7 @@ RECURSE(
     seaborn
     selectors2
     selenium
-    semantic-version 
+    semantic-version
     semver
     Send2Trash
     sentinels
@@ -1081,7 +1081,7 @@ RECURSE(
     tqdm
     trace_event
     traceback2
-    traitlets 
+    traitlets
     transfer_manager_client
     transitions
     transliterate
@@ -1110,7 +1110,7 @@ RECURSE(
     umongo
     unicodecsv
     Unidecode
-    unidiff 
+    unidiff
     uplink
     uritemplate
     uritools

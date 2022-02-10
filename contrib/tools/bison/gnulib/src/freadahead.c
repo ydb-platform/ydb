@@ -56,10 +56,10 @@ freadahead (FILE *fp)
   if ((fp_->_flag & _IOWRT) != 0)
     return 0;
   return fp_->_cnt;
-#elif WIN_SDK10 
-  if ((((TWinSdk10File*)fp)->_flags & WIN_SDK10_IOWRITE) != 0) 
-    return 0; 
-  return ((TWinSdk10File*)fp)->_cnt; 
+#elif WIN_SDK10
+  if ((((TWinSdk10File*)fp)->_flags & WIN_SDK10_IOWRITE) != 0)
+    return 0;
+  return ((TWinSdk10File*)fp)->_cnt;
 #elif defined __UCLIBC__            /* uClibc */
 # ifdef __STDIO_BUFFERS
   if (fp->__modeflags & __FLAG_WRITING)

@@ -101,11 +101,11 @@ fpurge (FILE *fp)
   if (fp->_ptr != NULL)
     fp->_cnt = 0;
   return 0;
-# elif WIN_SDK10 
-  ((TWinSdk10File*)fp)->_ptr = ((TWinSdk10File*)fp)->_base; 
-  if (((TWinSdk10File*)fp)->_ptr != NULL) 
-    ((TWinSdk10File*)fp)->_cnt = 0; 
-  return 0; 
+# elif WIN_SDK10
+  ((TWinSdk10File*)fp)->_ptr = ((TWinSdk10File*)fp)->_base;
+  if (((TWinSdk10File*)fp)->_ptr != NULL)
+    ((TWinSdk10File*)fp)->_cnt = 0;
+  return 0;
 # elif defined __UCLIBC__           /* uClibc */
 #  ifdef __STDIO_BUFFERS
   if (fp->__modeflags & __FLAG_WRITING)

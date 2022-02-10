@@ -8,8 +8,8 @@ SRCDIR(util)
 NO_WSHADOW()
 
 PY_SRCS(
-    NAMESPACE 
-    util 
+    NAMESPACE
+    util
     folder/path_ut.pyx
     generic/array_ref_ut.pyx
     generic/deque_ut.pyx

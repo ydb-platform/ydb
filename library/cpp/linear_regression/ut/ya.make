@@ -1,6 +1,6 @@
 UNITTEST()
 
-OWNER(alex-sh) 
+OWNER(alex-sh)
 
 PEERDIR(
     ADDINCL library/cpp/linear_regression

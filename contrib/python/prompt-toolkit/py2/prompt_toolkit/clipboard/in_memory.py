@@ -15,7 +15,7 @@ class InMemoryClipboard(Clipboard):
     This implements a kill-ring, for Emacs mode.
     """
     def __init__(self, data=None, max_size=60):
-        assert data is None or isinstance(data, ClipboardData) 
+        assert data is None or isinstance(data, ClipboardData)
         assert max_size >= 1
 
         self.max_size = max_size

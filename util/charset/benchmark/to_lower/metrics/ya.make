@@ -14,8 +14,8 @@ TAG(
     ya:fat
 )
 
-TEST_SRCS(main.py) 
+TEST_SRCS(main.py)
 
-DEPENDS(util/charset/benchmark/to_lower) 
+DEPENDS(util/charset/benchmark/to_lower)
 
 END()

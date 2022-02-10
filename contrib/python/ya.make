@@ -388,7 +388,7 @@ RECURSE(
     Flask-Bootstrap
     Flask-Bootstrap/example
     Flask-Caching
-    flask-cors
+    flask-cors 
     flask_graphql
     Flask-Humanize
     Flask-Log-Request-ID
@@ -417,7 +417,7 @@ RECURSE(
     Flask-WTF
     flatbuffers
     flex
-    flup
+    flup 
     frozendict
     frozenlist
     fsspec
@@ -483,7 +483,7 @@ RECURSE(
     hstspreload
     html2text
     html5lib
-    httmock
+    httmock 
     http-parser
     httpagentparser
     httpcore
@@ -1043,7 +1043,7 @@ RECURSE(
     suds-jurko
     supervenn
     supervisor
-    svn
+    svn 
     swagger-spec-validator
     sympy
     sysv-ipc

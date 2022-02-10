@@ -13,7 +13,7 @@ SET(PYTHON_FLAGS "-DPy_BUILD_CORE")
 ADDINCL(${PYTHON_SRC_DIR}/Include)
 
 CFLAGS(
-    -DUNQUOTED_VERSION=2.7 
+    -DUNQUOTED_VERSION=2.7
 )
 
 IF (NOT WIN32)
@@ -23,18 +23,18 @@ IF (NOT WIN32)
         EXTRALIBS(-ldl)
 
         CFLAGS(
-            -DUNQUOTED_PYTHONPATH=:plat-linux2 
-            -DUNQUOTED_PLATFORM=linux2 
+            -DUNQUOTED_PYTHONPATH=:plat-linux2
+            -DUNQUOTED_PLATFORM=linux2
         )
     ELSEIF (FREEBSD)
         CFLAGS(
-            -DUNQUOTED_PYTHONPATH=:plat-freebsd${FREEBSD_VER} 
-            -DUNQUOTED_PLATFORM=freebsd${FREEBSD_VER} 
+            -DUNQUOTED_PYTHONPATH=:plat-freebsd${FREEBSD_VER}
+            -DUNQUOTED_PLATFORM=freebsd${FREEBSD_VER}
         )
     ELSEIF (DARWIN)
         CFLAGS(
-            -DUNQUOTED_PYTHONPATH=:plat-darwin 
-            -DUNQUOTED_PLATFORM=darwin 
+            -DUNQUOTED_PYTHONPATH=:plat-darwin
+            -DUNQUOTED_PLATFORM=darwin
         )
         LDFLAGS(
            -framework SystemConfiguration

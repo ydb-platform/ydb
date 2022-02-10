@@ -96,9 +96,9 @@ public:
                 void* tmpin = Stream.next_in;
                 long res = TBase::Read(tmpin);
                 Stream.next_in = (Bytef*)tmpin;
-                if (res <= 0) 
-                    return res; 
-                Stream.avail_in = (uInt)res; 
+                if (res <= 0)
+                    return res;
+                Stream.avail_in = (uInt)res;
             }
 
             Stream.next_out = Buf;

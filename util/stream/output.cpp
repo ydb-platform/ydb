@@ -210,7 +210,7 @@ void Out<typename std::vector<bool>::reference>(IOutputStream& o, const std::vec
 #endif
 
 #ifndef TSTRING_IS_STD_STRING
-template <> 
+template <>
 void Out<TBasicCharRef<TString>>(IOutputStream& o, const TBasicCharRef<TString>& c) {
     o << static_cast<char>(c);
 }
@@ -228,14 +228,14 @@ void Out<TBasicCharRef<TUtf32String>>(IOutputStream& o, const TBasicCharRef<TUtf
 
 template <>
 void Out<const void*>(IOutputStream& o, const void* t) {
-    o << Hex(size_t(t)); 
-} 
- 
-template <> 
+    o << Hex(size_t(t));
+}
+
+template <>
 void Out<void*>(IOutputStream& o, void* t) {
-    Out<const void*>(o, t); 
-} 
- 
+    Out<const void*>(o, t);
+}
+
 using TNullPtr = decltype(nullptr);
 
 template <>

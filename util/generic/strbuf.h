@@ -239,7 +239,7 @@ public:
     inline void RSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         RSplitTemplate(delim, l, r);
     }
-
+ 
     inline void Split(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         SplitTemplate(delim, l, r);
     }
@@ -257,8 +257,8 @@ private:
         const TdSelf tok = SubStr(pos + len);
         l = Head(pos);
         r = tok;
-    }
-
+    } 
+ 
 public:
     // In all methods below with @pos parameter, @pos is supposed to be
     // a result of string find()/rfind()/find_first() or other similiar functions,
@@ -384,11 +384,11 @@ public:
     }
 
     TdSelf RSplitOff(TCharType delim) {
-        TdSelf tok;
-        RSplit(delim, tok, *this);
-        return tok;
-    }
-
+        TdSelf tok; 
+        RSplit(delim, tok, *this); 
+        return tok; 
+    } 
+ 
     bool NextTok(TCharType delim, TdSelf& tok) {
         return NextTokTemplate(delim, tok);
     }
@@ -423,8 +423,8 @@ public:
 
     TdSelf RNextTok(TCharType delim) {
         return RNextTokTemplate(delim);
-    }
-
+    } 
+ 
     TdSelf NextTok(TdSelf delim) {
         return NextTokTemplate(delim);
     }

@@ -73,9 +73,9 @@ private:
             if (opts.RecvBufSize) {
                 SetInputBuffer(ListenSocket_, opts.RecvBufSize);
             }
-            if (opts.ReusePort) { 
-                SetReusePort(ListenSocket_, opts.ReusePort); 
-            } 
+            if (opts.ReusePort) {
+                SetReusePort(ListenSocket_, opts.ReusePort);
+            }
 
             SetNonBlock(ListenSocket_);
 

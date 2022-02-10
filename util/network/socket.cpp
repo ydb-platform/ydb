@@ -307,20 +307,20 @@ void SetInputBuffer(SOCKET s, unsigned value) {
     CheckedSetSockOpt(s, SOL_SOCKET, SO_RCVBUF, value, "input buffer");
 }
 
-#if defined(_linux_) && !defined(SO_REUSEPORT) 
+#if defined(_linux_) && !defined(SO_REUSEPORT)
     #define SO_REUSEPORT 15
-#endif 
- 
-void SetReusePort(SOCKET s, bool value) { 
-#if defined(SO_REUSEPORT) 
-    CheckedSetSockOpt(s, SOL_SOCKET, SO_REUSEPORT, (int)value, "reuse port"); 
-#else 
+#endif
+
+void SetReusePort(SOCKET s, bool value) {
+#if defined(SO_REUSEPORT)
+    CheckedSetSockOpt(s, SOL_SOCKET, SO_REUSEPORT, (int)value, "reuse port");
+#else
     Y_UNUSED(s);
     Y_UNUSED(value);
-    ythrow TSystemError(ENOSYS) << "SO_REUSEPORT is not defined"; 
-#endif 
-} 
- 
+    ythrow TSystemError(ENOSYS) << "SO_REUSEPORT is not defined";
+#endif
+}
+
 void SetNoDelay(SOCKET s, bool value) {
     CheckedSetSockOpt(s, IPPROTO_TCP, TCP_NODELAY, (int)value, "tcp no delay");
 }

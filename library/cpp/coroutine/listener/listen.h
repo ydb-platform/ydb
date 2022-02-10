@@ -20,7 +20,7 @@ public:
             , SendBufSize(0)
             , RecvBufSize(0)
             , EnableDeferAccept(false)
-            , ReusePort(false) 
+            , ReusePort(false)
         {
         }
 
@@ -49,16 +49,16 @@ public:
         }
 
         inline TOptions& SetReusePort(bool reusePort) noexcept {
-            ReusePort = reusePort; 
- 
-            return *this; 
-        } 
- 
+            ReusePort = reusePort;
+
+            return *this;
+        }
+
         size_t ListenQueue;
         unsigned SendBufSize;
         unsigned RecvBufSize;
         bool EnableDeferAccept;
-        bool ReusePort; 
+        bool ReusePort;
     };
 
     class ICallBack {

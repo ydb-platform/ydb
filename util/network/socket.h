@@ -106,7 +106,7 @@ void SetKeepAlive(SOCKET s, bool value);
 void SetCloseOnExec(SOCKET s, bool value);
 void SetOutputBuffer(SOCKET s, unsigned value);
 void SetInputBuffer(SOCKET s, unsigned value);
-void SetReusePort(SOCKET s, bool value); 
+void SetReusePort(SOCKET s, bool value);
 void ShutDown(SOCKET s, int mode);
 bool GetRemoteAddr(SOCKET s, char* str, socklen_t size);
 size_t GetMaximumSegmentSize(SOCKET s);

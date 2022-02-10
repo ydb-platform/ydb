@@ -274,7 +274,7 @@ RECURSE(
     django-netfields
     django-ninja
     django-object-actions
-    django-opentracing
+    django-opentracing 
     django-partial-index
     django-pdb
     django-phonenumbers
@@ -538,7 +538,7 @@ RECURSE(
     isodate
     isort
     itsdangerous
-    jaeger-client
+    jaeger-client 
     janus
     jaraco.functools
     javaproperties
@@ -686,9 +686,9 @@ RECURSE(
     openpyxl
     opensfm
     opentok
-    opentracing
+    opentracing 
     opentracing-async-instrumentation
-    opentracing-instrumentation
+    opentracing-instrumentation 
     opt-einsum
     option
     ordered-set
@@ -1063,8 +1063,8 @@ RECURSE(
     texttable
     textwrap3
     thinc
-    threadloop
-    thrift
+    threadloop 
+    thrift 
     timelib
     timeout-decorator
     tinycss2

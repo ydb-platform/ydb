@@ -919,7 +919,7 @@ RECURSE(
     pytils
     pytracemalloc
     pytz
-    pyudev
+    pyudev 
     pyusb
     PyWavelets
     PyYAML

@@ -346,7 +346,7 @@ namespace NTypeAnnImpl {
 
         for (const auto& child : input->Child(3)->Children()) {
             if (!GetFieldPosition(leftItemType, child->Content())) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown key column: " << child->Content()));
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Unknown key column: " << child->Content())); 
                 return IGraphTransformer::TStatus::Error;
             }
         }

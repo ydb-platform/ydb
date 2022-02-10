@@ -40,11 +40,11 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
     REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
     REGISTER_SETTING(*this, _KqpAllowNewEngine);
-    REGISTER_SETTING(*this, _KqpForceNewEngine);
+    REGISTER_SETTING(*this, _KqpForceNewEngine); 
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
-    REGISTER_SETTING(*this, _KqpMaxComputeActors);
-    REGISTER_SETTING(*this, _KqpEnableSpilling);
-    REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
+    REGISTER_SETTING(*this, _KqpMaxComputeActors); 
+    REGISTER_SETTING(*this, _KqpEnableSpilling); 
+    REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages); 
     REGISTER_SETTING(*this, _KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpPushOlapProcess);
 
@@ -66,8 +66,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisableJoinReverseTableLookup);
     REGISTER_SETTING(*this, OptDisableJoinReverseTableLookupLeftSemi);
     REGISTER_SETTING(*this, OptDisableTopSort);
-    REGISTER_SETTING(*this, OptDisableSqlInToJoin);
-    REGISTER_SETTING(*this, OptEnableInplaceUpdate);
+    REGISTER_SETTING(*this, OptDisableSqlInToJoin); 
+    REGISTER_SETTING(*this, OptEnableInplaceUpdate); 
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
 
     /* Runtime */
@@ -91,14 +91,14 @@ bool TKikimrSettings::HasAllowKqpNewEngine() const {
     return GetFlagValue(_KqpAllowNewEngine.Get());
 }
 
-bool TKikimrSettings::HasKqpForceNewEngine() const {
-    return GetFlagValue(_KqpForceNewEngine.Get());
-}
-
-bool TKikimrSettings::HasUseNewEngine() const {
-    return GetFlagValue(UseNewEngine.Get());
-}
-
+bool TKikimrSettings::HasKqpForceNewEngine() const { 
+    return GetFlagValue(_KqpForceNewEngine.Get()); 
+} 
+ 
+bool TKikimrSettings::HasUseNewEngine() const { 
+    return GetFlagValue(UseNewEngine.Get()); 
+} 
+ 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
     return GetFlagValue(_KqpAllowUnsafeCommit.Get());
 }
@@ -115,14 +115,14 @@ bool TKikimrSettings::SystemColumnsEnabled() const {
     return GetFlagValue(EnableSystemColumns.Get());
 }
 
-bool TKikimrSettings::SpillingEnabled() const {
-    return GetFlagValue(_KqpEnableSpilling.Get());
-}
-
-bool TKikimrSettings::DisableLlvmForUdfStages() const {
-    return GetFlagValue(_KqpDisableLlvmForUdfStages.Get());
-}
-
+bool TKikimrSettings::SpillingEnabled() const { 
+    return GetFlagValue(_KqpEnableSpilling.Get()); 
+} 
+ 
+bool TKikimrSettings::DisableLlvmForUdfStages() const { 
+    return GetFlagValue(_KqpDisableLlvmForUdfStages.Get()); 
+} 
+ 
 bool TKikimrSettings::PushOlapProcess() const {
     auto settingsFlag = GetFlagValue(_KqpPushOlapProcess.Get());
     auto runtimeFlag = GetFlagValue(KqpPushOlapProcess.Get());
@@ -161,14 +161,14 @@ bool TKikimrSettings::HasOptDisableTopSort() const {
     return GetFlagValue(OptDisableTopSort.Get());
 }
 
-bool TKikimrSettings::HasOptDisableSqlInToJoin() const {
-    return GetFlagValue(OptDisableSqlInToJoin.Get());
-}
-
-bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
-    return GetFlagValue(OptEnableInplaceUpdate.Get());
-}
-
+bool TKikimrSettings::HasOptDisableSqlInToJoin() const { 
+    return GetFlagValue(OptDisableSqlInToJoin.Get()); 
+} 
+ 
+bool TKikimrSettings::HasOptEnableInplaceUpdate() const { 
+    return GetFlagValue(OptEnableInplaceUpdate.Get()); 
+} 
+ 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
     return GetOptionalFlagValue(OptEnablePredicateExtract.Get());
 }

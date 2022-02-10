@@ -17,20 +17,20 @@ public:
         : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
 
 protected:
-    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) final {
+    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) final { 
         auto& txState = TxState->Tx();
-        auto request = PrepareRequest();
+        auto request = PrepareRequest(); 
 
-        if (!request.Timeout) {
-            ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Query request timeout."));
-            return TStatus::Error;
-        }
-
-        if (request.CancelAfter && !*request.CancelAfter) {
-            ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_CANCELLED, "Query cancelled by timeout."));
-            return TStatus::Error;
-        }
-
+        if (!request.Timeout) { 
+            ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Query request timeout.")); 
+            return TStatus::Error; 
+        } 
+ 
+        if (request.CancelAfter && !*request.CancelAfter) { 
+            ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_CANCELLED, "Query cancelled by timeout.")); 
+            return TStatus::Error; 
+        } 
+ 
         if (tx) {
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
@@ -43,7 +43,7 @@ protected:
             request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
         } else {
             YQL_ENSURE(commit);
-            if (txState.DeferredEffects.Empty() && !txState.Locks.HasLocks()) {
+            if (txState.DeferredEffects.Empty() && !txState.Locks.HasLocks()) { 
                 return TStatus::Ok;
             }
         }
@@ -51,22 +51,22 @@ protected:
         if (commit) {
             Y_VERIFY_DEBUG(txState.DeferredEffects.Empty() || !txState.Locks.Broken());
 
-            for (const auto& effect : txState.DeferredEffects) {
+            for (const auto& effect : txState.DeferredEffects) { 
                 YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx.GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
                 request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
             }
 
-            if (!txState.DeferredEffects.Empty()) {
-                request.PerShardKeysSizeLimitBytes = TransformCtx->Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
-            }
-
+            if (!txState.DeferredEffects.Empty()) { 
+                request.PerShardKeysSizeLimitBytes = TransformCtx->Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef(); 
+            } 
+ 
             if (txState.Locks.HasLocks()) {
                 request.ValidateLocks = !(txState.GetSnapshot().IsValid() && txState.DeferredEffects.Empty());
-                request.EraseLocks = true;
-
-                for (auto& [lockId, lock] : txState.Locks.LocksMap) {
-                    request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType));
+                request.EraseLocks = true; 
+ 
+                for (auto& [lockId, lock] : txState.Locks.LocksMap) { 
+                    request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType)); 
                 }
             }
         } else if (ShouldAcquireLocks()) {
@@ -77,31 +77,31 @@ protected:
         return TStatus::Async;
     }
 
-    TStatus DoRollback() final {
-        auto& txState = TxState->Tx();
-
-        YQL_CLOG(DEBUG, ProviderKqp) << "TKqpExecutePhysicalDataTransformer::DoRollback()"
-            << ", effects: " << txState.DeferredEffects.Size() << ", locks: " << txState.Locks.Size()
-            << ", timeout: " << TransformCtx->QueryCtx->Deadlines.TimeoutAt;
-
-        if (!txState.Locks.HasLocks()) {
-            ClearTx();
-            return TStatus::Ok;
-        }
-
-        auto request = PrepareRequest();
-
-        request.ValidateLocks = false;
-        request.EraseLocks = true;
-
-        for (auto& [key, lock] : txState.Locks.LocksMap) {
-            request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType));
-        }
-
+    TStatus DoRollback() final { 
+        auto& txState = TxState->Tx(); 
+ 
+        YQL_CLOG(DEBUG, ProviderKqp) << "TKqpExecutePhysicalDataTransformer::DoRollback()" 
+            << ", effects: " << txState.DeferredEffects.Size() << ", locks: " << txState.Locks.Size() 
+            << ", timeout: " << TransformCtx->QueryCtx->Deadlines.TimeoutAt; 
+ 
+        if (!txState.Locks.HasLocks()) { 
+            ClearTx(); 
+            return TStatus::Ok; 
+        } 
+ 
+        auto request = PrepareRequest(); 
+ 
+        request.ValidateLocks = false; 
+        request.EraseLocks = true; 
+ 
+        for (auto& [key, lock] : txState.Locks.LocksMap) { 
+            request.Locks.emplace_back(lock.GetValueRef(txState.Locks.LockType)); 
+        } 
+ 
         ExecuteFuture = Gateway->ExecutePhysical(std::move(request), {});
-        return TStatus::Async;
-    }
-
+        return TStatus::Async; 
+    } 
+ 
     bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
         if (execResult.HasLocks()) {
             YQL_ENSURE(!commit);
@@ -116,31 +116,31 @@ protected:
         }
 
         if (commit) {
-            ClearTx();
+            ClearTx(); 
         }
 
         return true;
     }
 
 private:
-    IKqpGateway::TExecPhysicalRequest PrepareRequest() {
-        IKqpGateway::TExecPhysicalRequest request;
-        auto now = Gateway->GetCurrentTime();
-
-        request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - now;
-        if (auto cancelAt = TransformCtx->QueryCtx->Deadlines.CancelAt) {
-            request.CancelAfter = cancelAt - now;
-        }
-        request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode);
-        request.MaxAffectedShards = TransformCtx->QueryCtx->Limits.PhaseLimits.AffectedShardsLimit;
-        request.TotalReadSizeLimitBytes = TransformCtx->QueryCtx->Limits.PhaseLimits.TotalReadSizeLimitBytes;
-        request.MkqlMemoryLimit = TransformCtx->QueryCtx->Limits.PhaseLimits.ComputeNodeMemoryLimitBytes;
+    IKqpGateway::TExecPhysicalRequest PrepareRequest() { 
+        IKqpGateway::TExecPhysicalRequest request; 
+        auto now = Gateway->GetCurrentTime(); 
+ 
+        request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - now; 
+        if (auto cancelAt = TransformCtx->QueryCtx->Deadlines.CancelAt) { 
+            request.CancelAfter = cancelAt - now; 
+        } 
+        request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode); 
+        request.MaxAffectedShards = TransformCtx->QueryCtx->Limits.PhaseLimits.AffectedShardsLimit; 
+        request.TotalReadSizeLimitBytes = TransformCtx->QueryCtx->Limits.PhaseLimits.TotalReadSizeLimitBytes; 
+        request.MkqlMemoryLimit = TransformCtx->QueryCtx->Limits.PhaseLimits.ComputeNodeMemoryLimitBytes; 
         request.Snapshot = TxState->Tx().GetSnapshot();
         request.IsolationLevel = *TxState->Tx().EffectiveIsolationLevel;
-
-        return request;
-    }
-
+ 
+        return request; 
+    } 
+ 
     bool ShouldAcquireLocks() {
         if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
             return false;
@@ -150,16 +150,16 @@ private:
             return false;  // Do not acquire locks after first lock issue
         }
 
-        if (!TxState->Tx().DeferredEffects.Empty()) {
+        if (!TxState->Tx().DeferredEffects.Empty()) { 
             return true; // Acquire locks in read write tx
         }
 
-        for (auto& tx : TransformCtx->PhysicalQuery->GetTransactions()) {
-            if (tx.GetHasEffects()) {
-                return true; // Acquire locks in read write tx
-            }
-        }
-
+        for (auto& tx : TransformCtx->PhysicalQuery->GetTransactions()) { 
+            if (tx.GetHasEffects()) { 
+                return true; // Acquire locks in read write tx 
+            } 
+        } 
+ 
         if (!TransformCtx->Settings.GetCommitTx()) {
             return true; // Is not a commit tx
         }
@@ -189,5 +189,5 @@ TAutoPtr<IGraphTransformer> CreateKqpExecutePhysicalDataTransformer(TIntrusivePt
     return new TKqpExecutePhysicalDataTransformer(gateway, cluster, txState, transformCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

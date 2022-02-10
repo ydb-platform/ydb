@@ -1,4 +1,4 @@
-#include "datashard_kqp.h"
+#include "datashard_kqp.h" 
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 
@@ -138,9 +138,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
             << " more for the next try");
 
-        txc.NotEnoughMemory();
-        DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
-
+        txc.NotEnoughMemory(); 
+        DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount())); 
+ 
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
 
@@ -148,11 +148,11 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() 
             << " is not ready for " << *op << " execution");
 
-        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
-
+        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY); 
+ 
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;
@@ -258,14 +258,14 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
                 "Datashard execution counters for " << *op << " at "
                                                     << DataShard.TabletID() << ": " << counters.ToString());
 
-    KqpUpdateDataShardStatCounters(DataShard, counters);
-    if (tx->GetDataTx()->CollectStats()) {
-        KqpFillTxStats(DataShard, counters, *result);
-    }
+    KqpUpdateDataShardStatCounters(DataShard, counters); 
+    if (tx->GetDataTx()->CollectStats()) { 
+        KqpFillTxStats(DataShard, counters, *result); 
+    } 
 
-    if (counters.InvisibleRowSkips) {
+    if (counters.InvisibleRowSkips) { 
         DataShard.SysLocksTable().BreakSetLocks(op->LockTxId());
-    }
+    } 
 
     AddLocksToResult(op);
 

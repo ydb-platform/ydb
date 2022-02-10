@@ -69,5 +69,5 @@ TAutoPtr<IGraphTransformer> CreateKqpSubstituteTransformer(TIntrusivePtr<TKqpTra
     return new TKqpSubstituteTransformer(txState, transformCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

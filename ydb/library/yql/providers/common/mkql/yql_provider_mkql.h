@@ -38,7 +38,7 @@ struct TMkqlBuildContext {
         , ParentCtx(&parent)
         , Level(parent.Level + 1U)
         , LambdaId(lambdaId)
-        , Parameters(parent.Parameters)
+        , Parameters(parent.Parameters) 
     {}
 };
 

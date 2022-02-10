@@ -20,8 +20,8 @@ struct TParseReadTableResultBase {
     TSmallVec<TKqpComputeContextBase::TColumn> Columns;
     TSmallVec<TKqpComputeContextBase::TColumn> SystemColumns;
     TSmallVec<bool> SkipNullKeys;
-    TNode* ItemsLimit = nullptr;
-    bool Reverse = false;
+    TNode* ItemsLimit = nullptr; 
+    bool Reverse = false; 
 };
 
 struct TParseReadTableResult : TParseReadTableResultBase {

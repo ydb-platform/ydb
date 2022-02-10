@@ -170,12 +170,12 @@ public:
         AllocNotifyCurrentBytes = 0;
     }
 
-    using TIncreaseMemoryLimitCallback = std::function<void(ui64 currentLimit, ui64 required)>;
-
-    void SetIncreaseMemoryLimitCallback(TIncreaseMemoryLimitCallback&& callback) {
+    using TIncreaseMemoryLimitCallback = std::function<void(ui64 currentLimit, ui64 required)>; 
+ 
+    void SetIncreaseMemoryLimitCallback(TIncreaseMemoryLimitCallback&& callback) { 
         IncreaseMemoryLimitCallback = std::move(callback);
-    }
-
+    } 
+ 
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -185,8 +185,8 @@ protected:
         PeakUsed = Max(PeakUsed, GetUsed());
     }
 
-    bool TryIncreaseLimit(ui64 required);
-
+    bool TryIncreaseLimit(ui64 required); 
+ 
 protected:
     std::stack<void*, std::vector<void*>> FreePages;
     std::unordered_set<void*> AllPages;
@@ -208,7 +208,7 @@ protected:
 
     TAlignedPagePoolCounters Counters;
     bool CheckLostMem = true;
-
+ 
     TAllocNotifyCallback AllocNotifyCallback;
     ui64 AllocNotifyBytes = 0;
     ui64 AllocNotifyCurrentBytes = 0;

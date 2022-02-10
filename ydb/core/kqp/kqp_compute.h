@@ -35,7 +35,7 @@ struct TEvKqpCompute {
         TVector<TOwnedCellVec> Rows;
         std::shared_ptr<arrow::RecordBatch> ArrowBatch;
         TOwnedCellVec LastKey;
-        TDuration CpuTime;
+        TDuration CpuTime; 
         TDuration WaitTime;
         ui32 PageFaults = 0; // number of page faults occurred when filling in this message
         bool Finished = false;
@@ -69,7 +69,7 @@ struct TEvKqpCompute {
             auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId());
 
             ev->Generation = pbEv->Record.GetGeneration();
-            ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
+            ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs()); 
             ev->WaitTime = TDuration::MilliSeconds(pbEv->Record.GetWaitTimeMs());
             ev->PageFault = pbEv->Record.GetPageFault();
             ev->PageFaults = pbEv->Record.GetPageFaults();
@@ -97,7 +97,7 @@ struct TEvKqpCompute {
 
                 Remote->Record.SetScanId(ScanId);
                 Remote->Record.SetGeneration(Generation);
-                Remote->Record.SetCpuTimeUs(CpuTime.MicroSeconds());
+                Remote->Record.SetCpuTimeUs(CpuTime.MicroSeconds()); 
                 Remote->Record.SetWaitTimeMs(WaitTime.MilliSeconds());
                 Remote->Record.SetPageFaults(PageFaults);
                 Remote->Record.SetFinished(Finished);
@@ -186,9 +186,9 @@ struct TEvKqpCompute {
             Record.SetGeneration(generation);
         }
     };
-
-    struct TEvKillScanTablet : public NActors::TEventPB<TEvKillScanTablet, NKikimrKqp::TEvKillScanTablet,
-        TKqpComputeEvents::EvKillScanTablet> {};
+ 
+    struct TEvKillScanTablet : public NActors::TEventPB<TEvKillScanTablet, NKikimrKqp::TEvKillScanTablet, 
+        TKqpComputeEvents::EvKillScanTablet> {}; 
 };
 
 } // namespace NKikimr::NKqp

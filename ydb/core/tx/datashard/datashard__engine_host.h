@@ -40,8 +40,8 @@ public:
     TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
                std::pair<ui64, ui64> stepTxId);
 
-    virtual ~TEngineBay();
-
+    virtual ~TEngineBay(); 
+ 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
     NMiniKQL::IEngineFlat * GetEngine();
     void SetLockTxId(ui64 lockTxId);
@@ -60,28 +60,28 @@ public:
         return Engine->ValidateKeys(Info);
     }
 
-    void AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
-                      const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
+    void AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range, 
+                      const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false); 
 
-    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes);
-
-    void MarkTxLoaded() {
-        Info.Loaded = true;
-    }
-
+    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes); 
+ 
+    void MarkTxLoaded() { 
+        Info.Loaded = true; 
+    } 
+ 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
     void DestroyEngine() {
         ComputeCtx->Clear();
-        if (KqpTasksRunner) {
-            KqpTasksRunner.Reset();
-            {
-                auto guard = TGuard(*KqpAlloc);
-                KqpTypeEnv.Reset();
-            }
-            KqpAlloc.Reset();
-        }
-        KqpExecCtx = {};
-
+        if (KqpTasksRunner) { 
+            KqpTasksRunner.Reset(); 
+            { 
+                auto guard = TGuard(*KqpAlloc); 
+                KqpTypeEnv.Reset(); 
+            } 
+            KqpAlloc.Reset(); 
+        } 
+        KqpExecCtx = {}; 
+ 
         Engine.Reset();
         EngineHost.Reset();
         TraceMessage.clear();
@@ -99,8 +99,8 @@ public:
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
 
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx);
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
+    NKqp::TKqpTasksRunner& GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx); 
+    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx(); 
 
 private:
     std::pair<ui64, ui64> StepTxId;
@@ -114,10 +114,10 @@ private:
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
-    THolder<NMiniKQL::TScopedAlloc> KqpAlloc;
-    THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
-    NYql::NDq::TDqTaskRunnerContext KqpExecCtx;
-    TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;
+    THolder<NMiniKQL::TScopedAlloc> KqpAlloc; 
+    THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv; 
+    NYql::NDq::TDqTaskRunnerContext KqpExecCtx; 
+    TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner; 
 };
 
 }}

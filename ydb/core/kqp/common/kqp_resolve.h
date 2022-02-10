@@ -30,7 +30,7 @@ public:
         TString Path;
         TMap<TString, TColumn> Columns;
         TVector<TString> KeyColumns;
-        TVector<NUdf::TDataTypeId> KeyColumnTypes;
+        TVector<NUdf::TDataTypeId> KeyColumnTypes; 
         ETableKind TableKind = ETableKind::Unknown;
     };
 
@@ -38,11 +38,11 @@ public:
         return TablesById.FindPtr(id);
     }
 
-    const TTable* FindTablePtr(const TTableId& id) const {
-        return TablesById.FindPtr(id);
-    }
-
-    TTable& GetOrAddTable(const TTableId& id, const TStringBuf path) {
+    const TTable* FindTablePtr(const TTableId& id) const { 
+        return TablesById.FindPtr(id); 
+    } 
+ 
+    TTable& GetOrAddTable(const TTableId& id, const TStringBuf path) { 
         auto& table = TablesById[id];
 
         if (table.Path.empty()) {
@@ -76,8 +76,8 @@ TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVe
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);
 
 template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
-    const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TRangeFunc& rangeFunc)
+size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions, 
+    const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TRangeFunc& rangeFunc) 
 {
     auto it = std::lower_bound(partitions.begin(), partitions.end(), key,
         [&keyColumnTypes, &rangeFunc](const auto& partition, const auto& key) {
@@ -90,32 +90,32 @@ size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
 
     MKQL_ENSURE_S(it != partitions.end());
 
-    return std::distance(partitions.begin(), it);
+    return std::distance(partitions.begin(), it); 
 }
 
-template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NUdf::TUnboxedValue& value,
-     const TList& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TVector<ui32>& keyColumnIndices,
-     const TRangeFunc& rangeFunc)
+template<typename TList, typename TRangeFunc> 
+size_t FindKeyPartitionIndex(const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NUdf::TUnboxedValue& value, 
+     const TList& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TVector<ui32>& keyColumnIndices, 
+     const TRangeFunc& rangeFunc) 
 {
-    auto key = MakeKeyCells(value, keyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
+    auto key = MakeKeyCells(value, keyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true); 
 
-    return FindKeyPartitionIndex(key, partitions, keyColumnTypes, rangeFunc);
-}
+    return FindKeyPartitionIndex(key, partitions, keyColumnTypes, rangeFunc); 
+} 
 
-using TSerializedPointOrRange = std::variant<TSerializedCellVec, TSerializedTableRange>;
+using TSerializedPointOrRange = std::variant<TSerializedCellVec, TSerializedTableRange>; 
+ 
+struct TPartitionWithRange { 
+    const TKeyDesc::TPartitionInfo* PartitionInfo; 
+    TSerializedPointOrRange PointOrRange; 
+    std::optional<TSerializedTableRange> FullRange; 
+ 
+    TPartitionWithRange(const TKeyDesc::TPartitionInfo* partitionInfo) 
+        : PartitionInfo(partitionInfo) {} 
+}; 
 
-struct TPartitionWithRange {
-    const TKeyDesc::TPartitionInfo* PartitionInfo;
-    TSerializedPointOrRange PointOrRange;
-    std::optional<TSerializedTableRange> FullRange;
-
-    TPartitionWithRange(const TKeyDesc::TPartitionInfo* partitionInfo)
-        : PartitionInfo(partitionInfo) {}
-};
-
-TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
-    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes);
+TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range, 
+    const TVector<TKeyDesc::TPartitionInfo>& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes); 
 
 template<typename TList, typename TRangeFunc>
 void SortPartitions(TList& partitions, const TVector<NUdf::TDataTypeId>& keyColumnTypes, const TRangeFunc& rangeFunc) {
@@ -135,5 +135,5 @@ void SortPartitions(TList& partitions, const TVector<NUdf::TDataTypeId>& keyColu
 TTableId MakeTableId(const NYql::NNodes::TKqpTable& node);
 TTableId MakeTableId(const NKqpProto::TKqpPhyTable& table);
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

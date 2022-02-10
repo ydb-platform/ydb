@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    kqp_channel_storage.cpp
+    kqp_channel_storage.cpp 
     kqp_compute.cpp
     kqp_compute.h
     kqp_effects.cpp
@@ -18,7 +18,7 @@ SRCS(
     kqp_runtime_impl.h
     kqp_scan_data.cpp
     kqp_scan_data.h
-    kqp_spilling_file.cpp
+    kqp_spilling_file.cpp 
     kqp_tasks_runner.cpp
     kqp_tasks_runner.h
     kqp_transport.h
@@ -47,9 +47,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_spilling.h)
-
+ 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

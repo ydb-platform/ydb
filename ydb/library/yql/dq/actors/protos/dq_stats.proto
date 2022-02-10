@@ -1,235 +1,235 @@
-syntax = "proto3";
-
-package NYql.NDqProto;
-
-option cc_enable_arenas = true;
-
-import "google/protobuf/any.proto";
-
-enum EDqStatsMode {
-    DQ_STATS_MODE_UNSPECIFIED = 0;
-    DQ_STATS_MODE_NONE = 10;
-    DQ_STATS_MODE_BASIC = 20;
-    DQ_STATS_MODE_PROFILE = 30;
-}
-
-message TDqSourceStats {
-    // basic stats
-    uint64 InputIndex = 1;
-    uint64 Chunks = 2;
-    uint64 Bytes = 3;
-    uint64 RowsIn = 4;
-    uint64 RowsOut = 5;
-
-    // profile stats
-    uint64 MaxMemoryUsage = 6;
-    uint32 ErrorsCount = 7;
-
-    google.protobuf.Any Extra = 100;
-}
-
-message TDqInputChannelStats {
-    // basic stats
-    uint64 ChannelId = 1;
-    uint64 Chunks = 2;
-    uint64 Bytes = 3;
-    uint64 RowsIn = 4;
-    uint64 RowsOut = 5;
-
-    // profile stats
-    uint64 DeserializationTimeUs = 6;
-    uint64 MaxMemoryUsage = 7;
-
-    uint32 PollRequests = 8;
-    uint32 ResentMessages = 9;
-    uint64 WaitTimeUs = 10;
-
-    google.protobuf.Any Extra = 100;
-}
-
-message TDqSinkStats {
-    // basic stats
-    uint64 OutputIndex = 1;
-    uint64 Chunks = 2;
-    uint64 Bytes = 3;
-    uint64 RowsIn = 4;
-    uint64 RowsOut = 5;
-
-    // profile stats
-    uint64 MaxMemoryUsage = 6;
-    uint32 ErrorsCount = 7;
-
-    google.protobuf.Any Extra = 100;
-}
-
-message TDqOutputChannelStats {
-    // basic stats
-    uint64 ChannelId = 1;
-    uint64 Chunks = 2;
-    uint64 Bytes = 3;
-    uint64 RowsIn = 4;
-    uint64 RowsOut = 5;
-
-    // profile stats
-    uint64 SerializationTimeUs = 6;
-    uint32 BlockedByCapacity = 7;
-    uint32 ResentMessages = 8;
-    uint32 NoDstActorId = 9;
-    uint32 MaxRowsInMemory = 10;
-    uint64 MaxMemoryUsage = 11;
-
-    uint64 SpilledBytes = 12;
-    uint64 SpilledRows = 13;
-    uint64 SpilledBlobs = 14;
-
-    google.protobuf.Any Extra = 100;
-}
-
-message TDqTableStats {
-    string TablePath = 1;
-
-    uint64 ReadRows = 2;
-    uint64 ReadBytes = 3;
-    uint64 WriteRows = 4;
-    uint64 WriteBytes = 5;
-    uint64 EraseRows = 6;
-    uint64 EraseBytes = 7;
-
-    uint32 AffectedPartitions = 8; // TODO: move it to the Extra
-
-    google.protobuf.Any Extra = 100;
-}
-
+syntax = "proto3"; 
+ 
+package NYql.NDqProto; 
+ 
+option cc_enable_arenas = true; 
+ 
+import "google/protobuf/any.proto"; 
+ 
+enum EDqStatsMode { 
+    DQ_STATS_MODE_UNSPECIFIED = 0; 
+    DQ_STATS_MODE_NONE = 10; 
+    DQ_STATS_MODE_BASIC = 20; 
+    DQ_STATS_MODE_PROFILE = 30; 
+} 
+ 
+message TDqSourceStats { 
+    // basic stats 
+    uint64 InputIndex = 1; 
+    uint64 Chunks = 2; 
+    uint64 Bytes = 3; 
+    uint64 RowsIn = 4; 
+    uint64 RowsOut = 5; 
+ 
+    // profile stats 
+    uint64 MaxMemoryUsage = 6; 
+    uint32 ErrorsCount = 7; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+message TDqInputChannelStats { 
+    // basic stats 
+    uint64 ChannelId = 1; 
+    uint64 Chunks = 2; 
+    uint64 Bytes = 3; 
+    uint64 RowsIn = 4; 
+    uint64 RowsOut = 5; 
+ 
+    // profile stats 
+    uint64 DeserializationTimeUs = 6; 
+    uint64 MaxMemoryUsage = 7; 
+ 
+    uint32 PollRequests = 8; 
+    uint32 ResentMessages = 9; 
+    uint64 WaitTimeUs = 10; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+message TDqSinkStats { 
+    // basic stats 
+    uint64 OutputIndex = 1; 
+    uint64 Chunks = 2; 
+    uint64 Bytes = 3; 
+    uint64 RowsIn = 4; 
+    uint64 RowsOut = 5; 
+ 
+    // profile stats 
+    uint64 MaxMemoryUsage = 6; 
+    uint32 ErrorsCount = 7; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+message TDqOutputChannelStats { 
+    // basic stats 
+    uint64 ChannelId = 1; 
+    uint64 Chunks = 2; 
+    uint64 Bytes = 3; 
+    uint64 RowsIn = 4; 
+    uint64 RowsOut = 5; 
+ 
+    // profile stats 
+    uint64 SerializationTimeUs = 6; 
+    uint32 BlockedByCapacity = 7; 
+    uint32 ResentMessages = 8; 
+    uint32 NoDstActorId = 9; 
+    uint32 MaxRowsInMemory = 10; 
+    uint64 MaxMemoryUsage = 11; 
+ 
+    uint64 SpilledBytes = 12; 
+    uint64 SpilledRows = 13; 
+    uint64 SpilledBlobs = 14; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+message TDqTableStats { 
+    string TablePath = 1; 
+ 
+    uint64 ReadRows = 2; 
+    uint64 ReadBytes = 3; 
+    uint64 WriteRows = 4; 
+    uint64 WriteBytes = 5; 
+    uint64 EraseRows = 6; 
+    uint64 EraseBytes = 7; 
+ 
+    uint32 AffectedPartitions = 8; // TODO: move it to the Extra 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
 message TDqMkqlStat {
     string Name = 1;
     int64 Value = 2;
     bool Deriv = 3;
 }
 
-message TDqTaskStats {
-    // basic stats
-    uint64 TaskId = 1;
-    uint32 StageId = 2;
-    uint64 CpuTimeUs = 3;        // total cpu time (build & compute)
-    uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis
-    uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis
-    uint64 InputRows = 6;
-    uint64 InputBytes = 7;
-    uint64 OutputRows = 8;
-    uint64 OutputBytes = 9;
-
-    repeated TDqTableStats Tables = 10;
-
-    // profile stats
-    uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...
+message TDqTaskStats { 
+    // basic stats 
+    uint64 TaskId = 1; 
+    uint32 StageId = 2; 
+    uint64 CpuTimeUs = 3;        // total cpu time (build & compute) 
+    uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis 
+    uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis 
+    uint64 InputRows = 6; 
+    uint64 InputBytes = 7; 
+    uint64 OutputRows = 8; 
+    uint64 OutputBytes = 9; 
+ 
+    repeated TDqTableStats Tables = 10; 
+ 
+    // profile stats 
+    uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ... 
     uint64 WaitTimeUs = 104;       // total wait (input + output) wall time
-    uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
+    uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...) 
     uint64 ComputeCpuTimeUs = 102; // compute time only
     uint64 PendingInputTimeUs = 107; // time waiting input data
     uint64 PendingOutputTimeUs = 108; // time waiting output data
     uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks)
     repeated TDqMkqlStat MkqlStats = 110; // stats from mkql
-
-    message THistBucket {
-        double Bound = 1;
-        uint64 Value = 2;
-    }
-    repeated THistBucket ComputeCpuTimeByRun = 106;
-
-    repeated TDqSourceStats Sources = 150;
-    repeated TDqInputChannelStats InputChannels = 151;
-    repeated TDqSinkStats Sinks = 152;
-    repeated TDqOutputChannelStats OutputChannels = 153;
-
-    google.protobuf.Any Extra = 200;
-}
-
-message TDqComputeActorStats {
-    // basic stats
-    uint64 CpuTimeUs = 1;  // total cpu time: tasks cpu time + self cpu time
-    uint64 DurationUs = 2; // compute actor duration, wall time (from FirstRowTime to FinishTime)
-    repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used
-
-    // profile stats
-    uint64 MkqlMaxMemoryUsage = 102;       // MKQL allocations stats
-    uint64 MkqlExtraMemoryBytes = 103;
-    uint32 MkqlExtraMemoryRequests = 104;
-
-    google.protobuf.Any Extra = 200;
-}
-
-message TDqStatsAggr {
-    uint64 Min = 1;
-    uint64 Max = 2;
-    uint64 Sum = 3;
-    uint64 Cnt = 4;
-}
-
-message TDqStatsMinMax {
-    uint64 Min = 1;
-    uint64 Max = 2;
-}
-
-message TDqTableAggrStats {
-    string TablePath = 1;
-
-    TDqStatsAggr ReadRows = 2;
-    TDqStatsAggr ReadBytes = 3;
-    TDqStatsAggr WriteRows = 4;
-    TDqStatsAggr WriteBytes = 5;
-    TDqStatsAggr EraseRows = 6;
-    TDqStatsAggr EraseBytes = 7;
-
-    uint32 AffectedPartitions = 8;
-
-    google.protobuf.Any Extra = 100;
-}
-
-// aggregated stats for all tasks of the stage
-message TDqStageStats {
-    uint32 StageId = 1;
-    string StageGuid = 2;
-    string Program = 3;
-
-    uint32 TotalTasksCount = 5;
-    uint32 FailedTasksCount = 6;
-
-    TDqStatsAggr CpuTimeUs = 8;
-    TDqStatsAggr InputRows = 9;
-    TDqStatsAggr InputBytes = 10;
-    TDqStatsAggr OutputRows = 11;
-    TDqStatsAggr OutputBytes = 12;
-
-    TDqStatsMinMax FirstRowTimeMs = 13;
-    TDqStatsMinMax FinishTimeMs = 14;
-    uint64 DurationUs = 15; // microseconds from min(task_first_row_time) to max(task_finish_time)
-
-    repeated TDqTableAggrStats Tables = 16; // is it required?
-
-    repeated TDqComputeActorStats ComputeActors = 17; // more detailed stats
-
-    google.protobuf.Any Extra = 100;
-}
-
-// graph execution stats
-message TDqExecutionStats {
-    // basic stats
-    uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ...
-    uint64 DurationUs = 2; // execution wall time
-
-    uint64 ResultRows = 3;
-    uint64 ResultBytes = 4;
-
-    repeated TDqTableStats Tables = 6;
-
-    // profile stats
-    uint64 ExecuterCpuTimeUs = 10; // executer self cpu time, microseconds
-    uint64 StartTimeMs = 11;       // executer start timestamp, milliseconds
-    uint64 FinishTimeMs = 12;      // executer finish timestamp, milliseconds
-    uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds
-
-    repeated TDqStageStats Stages = 14;
-    repeated string TxPlansWithStats = 15;
-
-    google.protobuf.Any Extra = 100;
-}
+ 
+    message THistBucket { 
+        double Bound = 1; 
+        uint64 Value = 2; 
+    } 
+    repeated THistBucket ComputeCpuTimeByRun = 106; 
+ 
+    repeated TDqSourceStats Sources = 150; 
+    repeated TDqInputChannelStats InputChannels = 151; 
+    repeated TDqSinkStats Sinks = 152; 
+    repeated TDqOutputChannelStats OutputChannels = 153; 
+ 
+    google.protobuf.Any Extra = 200; 
+} 
+ 
+message TDqComputeActorStats { 
+    // basic stats 
+    uint64 CpuTimeUs = 1;  // total cpu time: tasks cpu time + self cpu time 
+    uint64 DurationUs = 2; // compute actor duration, wall time (from FirstRowTime to FinishTime) 
+    repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used 
+ 
+    // profile stats 
+    uint64 MkqlMaxMemoryUsage = 102;       // MKQL allocations stats 
+    uint64 MkqlExtraMemoryBytes = 103; 
+    uint32 MkqlExtraMemoryRequests = 104; 
+ 
+    google.protobuf.Any Extra = 200; 
+} 
+ 
+message TDqStatsAggr { 
+    uint64 Min = 1; 
+    uint64 Max = 2; 
+    uint64 Sum = 3; 
+    uint64 Cnt = 4; 
+} 
+ 
+message TDqStatsMinMax { 
+    uint64 Min = 1; 
+    uint64 Max = 2; 
+} 
+ 
+message TDqTableAggrStats { 
+    string TablePath = 1; 
+ 
+    TDqStatsAggr ReadRows = 2; 
+    TDqStatsAggr ReadBytes = 3; 
+    TDqStatsAggr WriteRows = 4; 
+    TDqStatsAggr WriteBytes = 5; 
+    TDqStatsAggr EraseRows = 6; 
+    TDqStatsAggr EraseBytes = 7; 
+ 
+    uint32 AffectedPartitions = 8; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+// aggregated stats for all tasks of the stage 
+message TDqStageStats { 
+    uint32 StageId = 1; 
+    string StageGuid = 2; 
+    string Program = 3; 
+ 
+    uint32 TotalTasksCount = 5; 
+    uint32 FailedTasksCount = 6; 
+ 
+    TDqStatsAggr CpuTimeUs = 8; 
+    TDqStatsAggr InputRows = 9; 
+    TDqStatsAggr InputBytes = 10; 
+    TDqStatsAggr OutputRows = 11; 
+    TDqStatsAggr OutputBytes = 12; 
+ 
+    TDqStatsMinMax FirstRowTimeMs = 13; 
+    TDqStatsMinMax FinishTimeMs = 14; 
+    uint64 DurationUs = 15; // microseconds from min(task_first_row_time) to max(task_finish_time) 
+ 
+    repeated TDqTableAggrStats Tables = 16; // is it required? 
+ 
+    repeated TDqComputeActorStats ComputeActors = 17; // more detailed stats 
+ 
+    google.protobuf.Any Extra = 100; 
+} 
+ 
+// graph execution stats 
+message TDqExecutionStats { 
+    // basic stats 
+    uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ... 
+    uint64 DurationUs = 2; // execution wall time 
+ 
+    uint64 ResultRows = 3; 
+    uint64 ResultBytes = 4; 
+ 
+    repeated TDqTableStats Tables = 6; 
+ 
+    // profile stats 
+    uint64 ExecuterCpuTimeUs = 10; // executer self cpu time, microseconds 
+    uint64 StartTimeMs = 11;       // executer start timestamp, milliseconds 
+    uint64 FinishTimeMs = 12;      // executer finish timestamp, milliseconds 
+    uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds 
+ 
+    repeated TDqStageStats Stages = 14; 
+    repeated string TxPlansWithStats = 15; 
+ 
+    google.protobuf.Any Extra = 100; 
+} 

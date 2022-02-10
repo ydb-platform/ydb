@@ -30,5 +30,5 @@ void TLogExprTransformer::LogExpr(const TExprNode& input, TExprContext& ctx, con
     YQL_CVLOG(level, component) << description << ":\n" << KqpExprToPrettyString(input, ctx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

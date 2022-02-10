@@ -394,5 +394,5 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteTransformer(TIntrusivePtr<TKqlTransf
     return new TKqpRewriteTransformer(transformCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

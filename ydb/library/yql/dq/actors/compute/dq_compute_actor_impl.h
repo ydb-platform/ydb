@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
@@ -10,7 +10,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
-
+ 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -19,35 +19,35 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/interconnect.h>
-
-#include <util/generic/size_literals.h>
-#include <util/string/join.h>
-#include <util/system/hostname.h>
-
-#if defined CA_LOG_D || defined CA_LOG_I || defined CA_LOG_E || defined CA_LOG_C
-#   error log macro definition clash
-#endif
-
-#define CA_LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-#define CA_LOG(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s)
-
-
-namespace NYql {
-namespace NDq {
+ 
+#include <util/generic/size_literals.h> 
+#include <util/string/join.h> 
+#include <util/system/hostname.h> 
+ 
+#if defined CA_LOG_D || defined CA_LOG_I || defined CA_LOG_E || defined CA_LOG_C 
+#   error log macro definition clash 
+#endif 
+ 
+#define CA_LOG_T(s) \ 
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_D(s) \ 
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_I(s) \ 
+    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_W(s) \ 
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_N(s) \ 
+    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_E(s) \ 
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG_C(s) \ 
+    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+#define CA_LOG(prio, s) \ 
+    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". " << s) 
+ 
+ 
+namespace NYql { 
+namespace NDq { 
 
 enum : ui64 {
     ComputeActorNonProtobufStateVersion = 1,
@@ -55,28 +55,28 @@ enum : ui64 {
 };
 
 constexpr ui32 IssuesBufferSize = 16;
-
-template<typename TDerived>
-class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
-                          , public TDqComputeActorChannels::ICallbacks
+ 
+template<typename TDerived> 
+class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived> 
+                          , public TDqComputeActorChannels::ICallbacks 
                           , public TDqComputeActorCheckpoints::ICallbacks
                           , public IDqSourceActor::ICallbacks
                           , public IDqSinkActor::ICallbacks
-{
+{ 
 protected:
-    enum EEvWakeupTag : ui64 {
-        TimeoutTag = 1,
+    enum EEvWakeupTag : ui64 { 
+        TimeoutTag = 1, 
         PeriodicStatsTag = 2,
         RlSendAllowedTag = 101,
         RlNoResourceTag = 102,
-    };
-
+    }; 
+ 
 public:
     void Bootstrap() {
         try {
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
-            Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
+            Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery, 
                 RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
             this->RegisterWithSameMailbox(Channels);
 
@@ -94,82 +94,82 @@ public:
 
             if (SayHelloOnBootstrap()) {
                 // say "Hello" to executer
-                auto ev = MakeHolder<TEvDqCompute::TEvState>();
-                ev->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
+                auto ev = MakeHolder<TEvDqCompute::TEvState>(); 
+                ev->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING); 
                 ev->Record.SetTaskId(Task.GetId());
 
-                this->Send(ExecuterId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery);
+                this->Send(ExecuterId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery); 
                 this->Become(&TDqComputeActorBase::StateFuncBase);
             }
 
             static_cast<TDerived*>(this)->DoBootstrap();
-        } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+        } catch (const NKikimr::TMemoryLimitExceededException& e) { 
+            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
                 << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const yexception& e) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
+            InternalError(TIssuesIds::DEFAULT_ERROR, e.what()); 
         }
-
-        ReportEventElapsedTime();
+ 
+        ReportEventElapsedTime(); 
     }
 
 protected:
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
+    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task, 
+        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
-        : ExecuterId(executerId)
-        , TxId(txId)
-        , Task(std::move(task))
-        , RuntimeSettings(settings)
-        , MemoryLimits(memoryLimits)
-        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
+        : ExecuterId(executerId) 
+        , TxId(txId) 
+        , Task(std::move(task)) 
+        , RuntimeSettings(settings) 
+        , MemoryLimits(memoryLimits) 
+        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn) 
         , SourceActorFactory(std::move(sourceActorFactory))
         , SinkActorFactory(std::move(sinkActorFactory))
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , Running(!Task.GetCreateSuspended())
-    {
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            BasicStats = std::make_unique<TBasicStats>();
-        }
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) {
-            ProfileStats = std::make_unique<TProfileStats>();
-        }
-        InitializeTask();
-    }
+    { 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) { 
+            BasicStats = std::make_unique<TBasicStats>(); 
+        } 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) { 
+            ProfileStats = std::make_unique<TProfileStats>(); 
+        } 
+        InitializeTask(); 
+    } 
 
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task,
-        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
+    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task, 
+        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
-        : ExecuterId(executerId)
-        , TxId(txId)
-        , Task(task)
-        , RuntimeSettings(settings)
-        , MemoryLimits(memoryLimits)
-        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
+        : ExecuterId(executerId) 
+        , TxId(txId) 
+        , Task(task) 
+        , RuntimeSettings(settings) 
+        , MemoryLimits(memoryLimits) 
+        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn) 
         , SourceActorFactory(std::move(sourceActorFactory))
         , SinkActorFactory(std::move(sinkActorFactory))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , Running(!Task.GetCreateSuspended())
-    {
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            BasicStats = std::make_unique<TBasicStats>();
-        }
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) {
-            ProfileStats = std::make_unique<TProfileStats>();
-        }
-        InitializeTask();
-    }
-
-    void ReportEventElapsedTime() {
-        if (BasicStats) {
-            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
-            BasicStats->CpuTime += TDuration::MicroSeconds(elapsedMicros);
-        }
-    }
-
+    { 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) { 
+            BasicStats = std::make_unique<TBasicStats>(); 
+        } 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) { 
+            ProfileStats = std::make_unique<TProfileStats>(); 
+        } 
+        InitializeTask(); 
+    } 
+ 
+    void ReportEventElapsedTime() { 
+        if (BasicStats) { 
+            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000; 
+            BasicStats->CpuTime += TDuration::MicroSeconds(elapsedMicros); 
+        } 
+    } 
+ 
     TString GetEventTypeString(TAutoPtr<::NActors::IEventHandle>& ev) {
         try {
             if (NActors::IEventBase* eventBase = ev->GetBase()) {
@@ -180,56 +180,56 @@ protected:
         return "Unknown type";
     }
 
-    STFUNC(StateFuncBase) {
-        const bool reportTime = this->CurrentStateFunc() == &TDqComputeActorBase::StateFuncBase;
-
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
-                hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
+    STFUNC(StateFuncBase) { 
+        const bool reportTime = this->CurrentStateFunc() == &TDqComputeActorBase::StateFuncBase; 
+ 
+        try { 
+            switch (ev->GetTypeRewrite()) { 
+                hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase); 
+                hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase); 
+                hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase); 
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecuteBase);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleExecuteBase);
-                FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
-                FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
-                hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
+                FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive); 
+                FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive); 
+                hFunc(TEvDqCompute::TEvRun, HandleExecuteBase); 
                 hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
-                FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
-                FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
-                FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
+                hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase); 
+                FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive); 
+                FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive); 
+                FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive); 
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
-                default: {
+                default: { 
                     CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
-                    InternalError(TIssuesIds::DEFAULT_ERROR, "Unexpected event");
-                }
-            }
-        } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+                    InternalError(TIssuesIds::DEFAULT_ERROR, "Unexpected event"); 
+                } 
+            } 
+        } catch (const NKikimr::TMemoryLimitExceededException& e) { 
+            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
                 << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
-        } catch (const yexception& e) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
-        }
-
-        if (reportTime) {
-            ReportEventElapsedTime();
-        }
-    }
-
-protected:
-    void DoExecute() {
+        } catch (const yexception& e) { 
+            InternalError(TIssuesIds::DEFAULT_ERROR, e.what()); 
+        } 
+ 
+        if (reportTime) { 
+            ReportEventElapsedTime(); 
+        } 
+    } 
+ 
+protected: 
+    void DoExecute() { 
         auto guard = BindAllocator();
         auto* alloc = guard.GetMutex();
-
+ 
         if (State == NDqProto::COMPUTE_STATE_FINISHED) {
             DoHandleChannelsAfterFinishImpl();
         } else {
             DoExecuteImpl();
         }
-
+ 
         if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
             alloc->ReleaseFreePages();
             if (MemoryLimits.FreeMemoryFn) {
@@ -243,29 +243,29 @@ protected:
                 }
             }
         }
-
-        auto now = TInstant::Now();
+ 
+        auto now = TInstant::Now(); 
 
         if (Y_UNLIKELY(ProfileStats)) {
-            ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
-            CA_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
-        }
+            ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated()); 
+            CA_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory); 
+        } 
 
-        ReportStats(now);
-    }
-
+        ReportStats(now); 
+    } 
+ 
     virtual void DoExecuteImpl() {
-        auto sourcesState = GetSourcesState();
-
+        auto sourcesState = GetSourcesState(); 
+ 
         PollSourceActors();
         ERunStatus status = TaskRunner->Run();
 
-        CA_LOG_D("Resume execution, run status: " << status);
+        CA_LOG_D("Resume execution, run status: " << status); 
 
-        if (status != ERunStatus::Finished) {
-            PollSources(std::move(sourcesState));
-        }
-
+        if (status != ERunStatus::Finished) { 
+            PollSources(std::move(sourcesState)); 
+        } 
+ 
         if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
             Checkpoints->DoCheckpoint();
         }
@@ -286,40 +286,40 @@ protected:
 
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
-
+ 
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }
 
-        for (auto& entry : OutputChannelsMap) {
+        for (auto& entry : OutputChannelsMap) { 
             const ui64 channelId = entry.first;
-            TOutputChannelInfo& outputChannel = entry.second;
-
-            if (!outputChannel.HasPeer) {
-                // Channel info not complete, skip until dst info is available
+            TOutputChannelInfo& outputChannel = entry.second; 
+ 
+            if (!outputChannel.HasPeer) { 
+                // Channel info not complete, skip until dst info is available 
                 ProcessOutputsState.ChannelsReady = false;
                 ProcessOutputsState.HasDataToSend = true;
                 ProcessOutputsState.AllOutputsFinished = false;
-                CA_LOG_D("Can not drain channelId: " << channelId << ", no dst actor id");
-                if (Y_UNLIKELY(outputChannel.Stats)) {
-                    outputChannel.Stats->NoDstActorId++;
-                }
-                continue;
-            }
+                CA_LOG_D("Can not drain channelId: " << channelId << ", no dst actor id"); 
+                if (Y_UNLIKELY(outputChannel.Stats)) { 
+                    outputChannel.Stats->NoDstActorId++; 
+                } 
+                continue; 
+            } 
 
             if (!outputChannel.Finished || Checkpoints) {
-                if (Channels->CanSendChannelData(channelId)) {
-                    auto peerState = Channels->GetOutputChannelInFlightState(channelId);
+                if (Channels->CanSendChannelData(channelId)) { 
+                    auto peerState = Channels->GetOutputChannelInFlightState(channelId); 
                     DrainOutputChannel(outputChannel, peerState);
                 } else {
                     ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
-                }
-            } else {
-                CA_LOG_D("Do not drain channelId: " << channelId << ", finished");
+                } 
+            } else { 
+                CA_LOG_D("Do not drain channelId: " << channelId << ", finished"); 
                 ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
-            }
-        }
-
+            } 
+        } 
+ 
         for (auto& entry : SinksMap) {
             const ui64 outputIndex = entry.first;
             TSinkInfo& sinkInfo = entry.second;
@@ -341,69 +341,69 @@ protected:
             status = ERunStatus::Finished;
         }
 
-        if (status != ERunStatus::Finished) {
-            // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
-            // there will be no attempts to send a new piece of data from the other side of this channel.
-            // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck
-            // event with the last known seqNo, and the process on the other side of this channel updates its state
-            // and sends us a new batch of data.
-            bool pollSent = false;
-            for (auto& [channelId, inputChannel] : InputChannelsMap) {
+        if (status != ERunStatus::Finished) { 
+            // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent, 
+            // there will be no attempts to send a new piece of data from the other side of this channel. 
+            // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck 
+            // event with the last known seqNo, and the process on the other side of this channel updates its state 
+            // and sends us a new batch of data. 
+            bool pollSent = false; 
+            for (auto& [channelId, inputChannel] : InputChannelsMap) { 
                 pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
-            }
-            if (!pollSent) {
+            } 
+            if (!pollSent) { 
                 if (ProcessOutputsState.DataWasSent) {
-                    ContinueExecute();
-                }
-                return;
-            }
-        }
-
-        if (status == ERunStatus::PendingOutput) {
+                    ContinueExecute(); 
+                } 
+                return; 
+            } 
+        } 
+ 
+        if (status == ERunStatus::PendingOutput) { 
             if (ProcessOutputsState.DataWasSent) {
-                // we have sent some data, so we have space in output channel(s)
-                ContinueExecute();
-            }
+                // we have sent some data, so we have space in output channel(s) 
+                ContinueExecute(); 
+            } 
             return;
         }
 
         // Handle finishing of our task.
         if (status == ERunStatus::Finished && State != NDqProto::COMPUTE_STATE_FINISHED) {
             if (ProcessOutputsState.HasDataToSend || !ProcessOutputsState.ChannelsReady) {
-                CA_LOG_D("Continue execution, either output buffers are not empty or not all channels are ready"
+                CA_LOG_D("Continue execution, either output buffers are not empty or not all channels are ready" 
                     << ", hasDataToSend: " << ProcessOutputsState.HasDataToSend << ", channelsReady: " << ProcessOutputsState.ChannelsReady);
-            } else {
-                if (!Channels->FinishInputChannels()) {
-                    CA_LOG_D("Continue execution, not all input channels are initialized");
-                    return;
-                }
-                if (Channels->CheckInFlight("Tasks execution finished")) {
+            } else { 
+                if (!Channels->FinishInputChannels()) { 
+                    CA_LOG_D("Continue execution, not all input channels are initialized"); 
+                    return; 
+                } 
+                if (Channels->CheckInFlight("Tasks execution finished")) { 
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels finished");
                     ReportStateAndMaybeDie(TIssue("success"));
-                }
-            }
+                } 
+            } 
         }
     }
 
-protected:
-    void Terminate(bool success, const TString& message) {
+protected: 
+    void Terminate(bool success, const TString& message) { 
 
         if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) {
             MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), MkqlMemoryLimit);
             MkqlMemoryLimit = 0;
         }
 
-        if (Channels) {
-            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Channels->SelfId(), this->SelfId(),
+        if (Channels) { 
+            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Channels->SelfId(), this->SelfId(), 
                 new NActors::TEvents::TEvPoison);
-            Channels->Receive(handle, NActors::TActivationContext::AsActorContext());
-        }
-
+            Channels->Receive(handle, NActors::TActivationContext::AsActorContext()); 
+        } 
+ 
         if (Checkpoints) {
-            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), this->SelfId(),
+            TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), this->SelfId(), 
                 new NActors::TEvents::TEvPoison);
-            Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
+            Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext()); 
         }
 
         for (auto& [_, source] : SourcesMap) {
@@ -418,66 +418,66 @@ protected:
             }
         }
 
-        for (auto& [_, outputChannel] : OutputChannelsMap) {
+        for (auto& [_, outputChannel] : OutputChannelsMap) { 
             if (outputChannel.Channel) {
                 outputChannel.Channel->Terminate();
             }
-        }
-
-        if (RuntimeSettings.TerminateHandler) {
-            RuntimeSettings.TerminateHandler(success, message);
-        }
-
-        this->PassAway();
-    }
-
+        } 
+ 
+        if (RuntimeSettings.TerminateHandler) { 
+            RuntimeSettings.TerminateHandler(success, message); 
+        } 
+ 
+        this->PassAway(); 
+    } 
+ 
     void ReportStateAndMaybeDie(TIssue&& issue) {
         ReportStateAndMaybeDie(
             State == NDqProto::COMPUTE_STATE_FINISHED ?
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
             : Ydb::StatusIds::ABORTED, TIssues({issue}));
-    }
-
-    void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) {
-        auto execEv = MakeHolder<TEvDqCompute::TEvState>();
-        auto& record = execEv->Record;
-
-        record.SetState(state);
-        if (state != NDqProto::COMPUTE_STATE_FINISHED) {
-            record.SetStatus(Ydb::StatusIds::ABORTED);
-        } else {
-            record.SetStatus(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-        }
-        record.SetTaskId(Task.GetId());
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            FillStats(record.MutableStats(), /* last */ true);
-        }
-
-        if (issue.Message) {
-            IssueToMessage(issue, record.MutableIssues()->Add());
-        }
-
-        this->Send(ExecuterId, execEv.Release());
-
-        TerminateSources(issue.Message, state == NDqProto::COMPUTE_STATE_FINISHED);
-        Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, issue.Message);
-    }
-
+    } 
+ 
+    void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) { 
+        auto execEv = MakeHolder<TEvDqCompute::TEvState>(); 
+        auto& record = execEv->Record; 
+ 
+        record.SetState(state); 
+        if (state != NDqProto::COMPUTE_STATE_FINISHED) { 
+            record.SetStatus(Ydb::StatusIds::ABORTED); 
+        } else { 
+            record.SetStatus(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED); 
+        } 
+        record.SetTaskId(Task.GetId()); 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) { 
+            FillStats(record.MutableStats(), /* last */ true); 
+        } 
+ 
+        if (issue.Message) { 
+            IssueToMessage(issue, record.MutableIssues()->Add()); 
+        } 
+ 
+        this->Send(ExecuterId, execEv.Release()); 
+ 
+        TerminateSources(issue.Message, state == NDqProto::COMPUTE_STATE_FINISHED); 
+        Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, issue.Message); 
+    } 
+ 
     void ReportStateAndMaybeDie(Ydb::StatusIds::StatusCode status, const TIssues& issues)
-    {
-        auto execEv = MakeHolder<TEvDqCompute::TEvState>();
-        auto& record = execEv->Record;
-
+    { 
+        auto execEv = MakeHolder<TEvDqCompute::TEvState>(); 
+        auto& record = execEv->Record; 
+ 
         record.SetState(State);
         record.SetStatus(status);
-        record.SetTaskId(Task.GetId());
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            FillStats(record.MutableStats(), /* last */ true);
-        }
-        IssuesToMessage(issues, record.MutableIssues());
+        record.SetTaskId(Task.GetId()); 
+        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) { 
+            FillStats(record.MutableStats(), /* last */ true); 
+        } 
+        IssuesToMessage(issues, record.MutableIssues()); 
 
-        this->Send(ExecuterId, execEv.Release());
-
+        this->Send(ExecuterId, execEv.Release()); 
+ 
         if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
             // checkpointed CAs must not self-destroy
             return;
@@ -487,41 +487,41 @@ protected:
         Terminate(State == NDqProto::COMPUTE_STATE_FINISHED, NDqProto::EComputeState_Name(State));
     }
 
-    void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) {
-        CA_LOG_E(TIssuesIds::EIssueCode_Name(issueCode) << ": " << message << ".");
-        TIssue issue(message);
-        SetIssueCode(issueCode, issue);
+    void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) { 
+        CA_LOG_E(TIssuesIds::EIssueCode_Name(issueCode) << ": " << message << "."); 
+        TIssue issue(message); 
+        SetIssueCode(issueCode, issue); 
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(std::move(issue));
     }
 
-    void ContinueExecute() {
+    void ContinueExecute() { 
         if (!ResumeEventScheduled && Running) {
-            ResumeEventScheduled = true;
-            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution());
-        }
+            ResumeEventScheduled = true; 
+            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution()); 
+        } 
     }
 
-public:
-    i64 GetInputChannelFreeSpace(ui64 channelId) const override {
-        const TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelId);
-        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelId);
-
-        return inputChannel->Channel->GetFreeSpace();
-    }
-
+public: 
+    i64 GetInputChannelFreeSpace(ui64 channelId) const override { 
+        const TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelId); 
+        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelId); 
+ 
+        return inputChannel->Channel->GetFreeSpace(); 
+    } 
+ 
     void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) override {
-        TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelData.GetChannelId());
-        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelData.GetChannelId());
-
-        auto channel = inputChannel->Channel;
-
-        if (channelData.GetData().GetRows()) {
+        TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelData.GetChannelId()); 
+        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelData.GetChannelId()); 
+ 
+        auto channel = inputChannel->Channel; 
+ 
+        if (channelData.GetData().GetRows()) { 
             auto guard = BindAllocator();
-            channel->Push(std::move(*channelData.MutableData()));
-        }
-
+            channel->Push(std::move(*channelData.MutableData())); 
+        } 
+ 
         if (channelData.HasCheckpoint()) {
             Y_VERIFY(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_VERIFY(Checkpoints);
@@ -530,42 +530,42 @@ public:
             Checkpoints->RegisterCheckpoint(checkpoint, channelData.GetChannelId());
         }
 
-        if (channelData.GetFinished()) {
-            channel->Finish();
-        }
-
+        if (channelData.GetFinished()) { 
+            channel->Finish(); 
+        } 
+ 
         if (ack) {
             Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
         }
 
         ResumeExecution();
-    }
-
-    void PeerFinished(ui64 channelId) override {
-        TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
-        YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
-
-        outputChannel->Finished = true;
-        outputChannel->Channel->Finish();
-
-        CA_LOG_D("task: " << Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
-            << " about to clear buffer");
-
-        {
+    } 
+ 
+    void PeerFinished(ui64 channelId) override { 
+        TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId); 
+        YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId); 
+ 
+        outputChannel->Finished = true; 
+        outputChannel->Channel->Finish(); 
+ 
+        CA_LOG_D("task: " << Task.GetId() << ", output channelId: " << channelId << " finished prematurely, " 
+            << " about to clear buffer"); 
+ 
+        { 
             auto guard = BindAllocator();
-            ui32 dropRows = outputChannel->Channel->Drop();
-
-            CA_LOG_I("task: " << Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
-                << "drop " << dropRows << " rows");
-        }
-
-        DoExecute();
-    }
-
-    void ResumeExecution() override {
-        ContinueExecute();
-    }
-
+            ui32 dropRows = outputChannel->Channel->Drop(); 
+ 
+            CA_LOG_I("task: " << Task.GetId() << ", output channelId: " << channelId << " finished prematurely, " 
+                << "drop " << dropRows << " rows"); 
+        } 
+ 
+        DoExecute(); 
+    } 
+ 
+    void ResumeExecution() override { 
+        ContinueExecute(); 
+    } 
+ 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_VERIFY(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
@@ -666,12 +666,12 @@ protected:
         State = NDqProto::COMPUTE_STATE_UNKNOWN;
     }
 
-protected:
-    struct TInputChannelInfo {
+protected: 
+    struct TInputChannelInfo { 
         ui64 ChannelId;
-        IDqInputChannel::TPtr Channel;
+        IDqInputChannel::TPtr Channel; 
         bool HasPeer = false;
-        std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
+        std::optional<NDqProto::TCheckpoint> PendingCheckpoint; 
         const NDqProto::ECheckpointingMode CheckpointingMode;
         ui64 FreeSpace = 0;
 
@@ -682,10 +682,10 @@ protected:
         }
 
         bool IsPaused() const {
-            return PendingCheckpoint.has_value();
+            return PendingCheckpoint.has_value(); 
         }
 
-        void Pause(const NDqProto::TCheckpoint& checkpoint) {
+        void Pause(const NDqProto::TCheckpoint& checkpoint) { 
             YQL_ENSURE(!IsPaused());
             YQL_ENSURE(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             PendingCheckpoint = checkpoint;
@@ -693,11 +693,11 @@ protected:
         }
 
         void Resume() {
-            PendingCheckpoint.reset();
+            PendingCheckpoint.reset(); 
             Channel->Resume();
         }
-    };
-
+    }; 
+ 
     struct TSourceInfo {
         ui64 Index;
         IDqSource::TPtr Source;
@@ -711,24 +711,24 @@ protected:
         TSourceInfo(ui64 index) : Index(index), IssuesBuffer(IssuesBufferSize) {}
     };
 
-    struct TOutputChannelInfo {
+    struct TOutputChannelInfo { 
         ui64 ChannelId;
-        IDqOutputChannel::TPtr Channel;
-        bool HasPeer = false;
+        IDqOutputChannel::TPtr Channel; 
+        bool HasPeer = false; 
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
         bool PopStarted = false;
-
+ 
         explicit TOutputChannelInfo(ui64 channelId)
             : ChannelId(channelId)
         { }
 
-        struct TStats {
-            ui64 BlockedByCapacity = 0;
-            ui64 NoDstActorId = 0;
-        };
-        THolder<TStats> Stats;
-    };
-
+        struct TStats { 
+            ui64 BlockedByCapacity = 0; 
+            ui64 NoDstActorId = 0; 
+        }; 
+        THolder<TStats> Stats; 
+    }; 
+ 
     struct TSinkInfo {
         IDqSink::TPtr Sink;
         IDqSinkActor* SinkActor = nullptr;
@@ -741,19 +741,19 @@ protected:
         TSinkInfo() : IssuesBuffer(IssuesBufferSize) {}
     };
 
-protected:
-    // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
+protected: 
+    // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo() 
 
     virtual THolder<NKikimr::IDestructable> GetSourcesState() {
-        return nullptr;
+        return nullptr; 
     }
 
     virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) {
     }
 
-    virtual void TerminateSources(const TString& /* message */, bool /* success */) {
-    }
-
+    virtual void TerminateSources(const TString& /* message */, bool /* success */) { 
+    } 
+ 
     virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
         return TaskRunner->BindAllocator();
     }
@@ -782,18 +782,18 @@ protected:
         return true;
     }
 
-protected:
-    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
-        ResumeEventScheduled = false;
+protected: 
+    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) { 
+        ResumeEventScheduled = false; 
         if (Running) {
-            DoExecute();
+            DoExecute(); 
         }
     }
 
-    void HandleExecuteBase(TEvDqCompute::TEvChannelsInfo::TPtr& ev) {
+    void HandleExecuteBase(TEvDqCompute::TEvChannelsInfo::TPtr& ev) { 
         auto& record = ev->Get()->Record;
 
-        CA_LOG_D("Received channels info: " << record.ShortDebugString());
+        CA_LOG_D("Received channels info: " << record.ShortDebugString()); 
 
         for (auto& channelUpdate : record.GetUpdate()) {
             TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelUpdate.GetId());
@@ -808,72 +808,72 @@ protected:
                 continue;
             }
 
-            TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelUpdate.GetId());
+            TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelUpdate.GetId()); 
             if (outputChannel && !outputChannel->HasPeer && channelUpdate.GetDstEndpoint().HasActorId()) {
                 auto peer = NActors::ActorIdFromProto(channelUpdate.GetDstEndpoint().GetActorId());
-
-                CA_LOG_D("Update output channelId: " << channelUpdate.GetId() << ", peer: " << peer);
-
-                Channels->SetOutputChannelPeer(channelUpdate.GetId(), peer);
-                outputChannel->HasPeer = true;
+ 
+                CA_LOG_D("Update output channelId: " << channelUpdate.GetId() << ", peer: " << peer); 
+ 
+                Channels->SetOutputChannelPeer(channelUpdate.GetId(), peer); 
+                outputChannel->HasPeer = true; 
 
                 continue;
-            }
+            } 
 
             YQL_ENSURE(inputChannel || outputChannel, "Unknown channelId: " << channelUpdate.GetId() << ", task: " << Task.GetId());
         }
 
-        DoExecute();
+        DoExecute(); 
     }
 
     void HandleExecuteBase(NActors::TEvents::TEvWakeup::TPtr& ev) {
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
-            case EEvWakeupTag::TimeoutTag: {
-                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, TStringBuilder()
-                    << "Timeout event from compute actor " << this->SelfId()
-                    << ", TxId: " << TxId << ", task: " << Task.GetId());
-
-                this->Send(ExecuterId, abortEv.Release());
-
-                TerminateSources("timeout exceeded", false);
-                Terminate(false, "timeout exceeded");
+            case EEvWakeupTag::TimeoutTag: { 
+                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, TStringBuilder() 
+                    << "Timeout event from compute actor " << this->SelfId() 
+                    << ", TxId: " << TxId << ", task: " << Task.GetId()); 
+ 
+                this->Send(ExecuterId, abortEv.Release()); 
+ 
+                TerminateSources("timeout exceeded", false); 
+                Terminate(false, "timeout exceeded"); 
                 break;
-            }
+            } 
             case EEvWakeupTag::PeriodicStatsTag: {
                 const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
                 this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
 
-                auto now = NActors::TActivationContext::Now();
-                if (now - LastSendStatsTime >= maxInterval) {
-                    ReportStats(now);
+                auto now = NActors::TActivationContext::Now(); 
+                if (now - LastSendStatsTime >= maxInterval) { 
+                    ReportStats(now); 
                 }
                 break;
             }
             default:
                 static_cast<TDerived*>(this)->HandleEvWakeup(tag);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleEvWakeup(EEvWakeupTag tag) {
         CA_LOG_E("Unhandled wakeup tag " << (ui64)tag);
     }
 
     void HandleExecuteBase(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        ui32 lostEventType = ev->Get()->SourceType;
-        switch (lostEventType) {
-            case TEvDqCompute::TEvState::EventType: {
-                CA_LOG_E("Handle undelivered TEvState event, abort execution");
-                this->TerminateSources("executer lost", false);
-                Terminate(false, "executer lost");
-                break;
-            }
-            default: {
-                CA_LOG_C("Handle unexpected event undelivery: " << lostEventType);
-            }
-        }
-    }
-
+        ui32 lostEventType = ev->Get()->SourceType; 
+        switch (lostEventType) { 
+            case TEvDqCompute::TEvState::EventType: { 
+                CA_LOG_E("Handle undelivered TEvState event, abort execution"); 
+                this->TerminateSources("executer lost", false); 
+                Terminate(false, "executer lost"); 
+                break; 
+            } 
+            default: { 
+                CA_LOG_C("Handle unexpected event undelivery: " << lostEventType); 
+            } 
+        } 
+    } 
+ 
     void HandleExecuteBase(TEvDqCompute::TEvRun::TPtr& ev) {
         CA_LOG_D("Got TEvRun from actor " << ev->Sender);
         Start();
@@ -891,7 +891,7 @@ protected:
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         evState->Record.SetTaskId(Task.GetId());
-        FillStats(evState->Record.MutableStats(), /* last */ false);
+        FillStats(evState->Record.MutableStats(), /* last */ false); 
         this->Send(ev->Sender, evState.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -902,26 +902,26 @@ protected:
             Channels->SetCheckpointsSupport();
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
-        Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
+        Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext()); 
     }
 
-    void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
-        TString message = ev->Get()->Record.GetMessage();
-        CA_LOG_E("Handle abort execution event from: " << ev->Sender
-            << ", status: " << Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
-            << ", reason: " << message);
-
-        bool success = ev->Get()->Record.GetStatusCode() == Ydb::StatusIds::SUCCESS;
-
-        this->TerminateSources(message, success);
-
-        if (ev->Sender != ExecuterId) {
-            NActors::TActivationContext::Send(ev->Forward(ExecuterId));
-        }
-
-        Terminate(success, message);
-    }
-
+    void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) { 
+        TString message = ev->Get()->Record.GetMessage(); 
+        CA_LOG_E("Handle abort execution event from: " << ev->Sender 
+            << ", status: " << Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode()) 
+            << ", reason: " << message); 
+ 
+        bool success = ev->Get()->Record.GetStatusCode() == Ydb::StatusIds::SUCCESS; 
+ 
+        this->TerminateSources(message, success); 
+ 
+        if (ev->Sender != ExecuterId) { 
+            NActors::TActivationContext::Send(ev->Forward(ExecuterId)); 
+        } 
+ 
+        Terminate(success, message); 
+    } 
+ 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
@@ -946,71 +946,71 @@ private:
 
     virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) {
         YQL_ENSURE(!outputChannel.Finished || Checkpoints);
-
+ 
         const bool wasFinished = outputChannel.Finished;
-        auto channelId = outputChannel.Channel->GetChannelId();
-
+        auto channelId = outputChannel.Channel->GetChannelId(); 
+ 
         const ui32 allowedOvercommit = AllowedChannelsOvercommit();
-
+ 
         const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
-
-        CA_LOG_D("About to drain channelId: " << channelId
-            << ", hasPeer: " << outputChannel.HasPeer
-            << ", peerFreeSpace: " << peerState.PeerFreeSpace
-            << ", inFlightBytes: " << peerState.InFlightBytes
-            << ", inFlightRows: " << peerState.InFlightRows
-            << ", inFlightCount: " << peerState.InFlightCount
-            << ", allowedOvercommit: " << allowedOvercommit
-            << ", toSend: " << toSend
-            << ", finished: " << outputChannel.Channel->IsFinished());
-
+ 
+        CA_LOG_D("About to drain channelId: " << channelId 
+            << ", hasPeer: " << outputChannel.HasPeer 
+            << ", peerFreeSpace: " << peerState.PeerFreeSpace 
+            << ", inFlightBytes: " << peerState.InFlightBytes 
+            << ", inFlightRows: " << peerState.InFlightRows 
+            << ", inFlightCount: " << peerState.InFlightCount 
+            << ", allowedOvercommit: " << allowedOvercommit 
+            << ", toSend: " << toSend 
+            << ", finished: " << outputChannel.Channel->IsFinished()); 
+ 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
 
-        if (toSend <= 0) {
-            if (Y_UNLIKELY(outputChannel.Stats)) {
-                outputChannel.Stats->BlockedByCapacity++;
-            }
-        }
-
-        i64 remains = toSend;
+        if (toSend <= 0) { 
+            if (Y_UNLIKELY(outputChannel.Stats)) { 
+                outputChannel.Stats->BlockedByCapacity++; 
+            } 
+        } 
+ 
+        i64 remains = toSend; 
         while (remains > 0 && (!outputChannel.Finished || Checkpoints)) {
-            ui32 sent = this->SendChannelDataChunk(outputChannel, remains);
-            if (sent == 0) {
-                break;
-            }
-            remains -= sent;
-        }
-
+            ui32 sent = this->SendChannelDataChunk(outputChannel, remains); 
+            if (sent == 0) { 
+                break; 
+            } 
+            remains -= sent; 
+        } 
+ 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || remains != toSend;
-    }
-
-    ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel, ui64 bytes) {
-        auto channel = outputChannel.Channel;
-
-        NDqProto::TData data;
-        NDqProto::TCheckpoint checkpoint;
+    } 
+ 
+    ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel, ui64 bytes) { 
+        auto channel = outputChannel.Channel; 
+ 
+        NDqProto::TData data; 
+        NDqProto::TCheckpoint checkpoint; 
 
         bool hasData = channel->Pop(data, bytes);
         bool hasCheckpoint = channel->Pop(checkpoint);
         if (!hasData && !hasCheckpoint) {
-            if (!channel->IsFinished()) {
-                CA_LOG_D("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished");
-                return 0; // channel is empty and not finished yet
-            }
-        }
+            if (!channel->IsFinished()) { 
+                CA_LOG_D("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished"); 
+                return 0; // channel is empty and not finished yet 
+            } 
+        } 
         const bool wasFinished = outputChannel.Finished;
-        outputChannel.Finished = channel->IsFinished();
+        outputChannel.Finished = channel->IsFinished(); 
         const bool becameFinished = !wasFinished && outputChannel.Finished;
-
-        ui32 dataSize = data.GetRaw().size();
+ 
+        ui32 dataSize = data.GetRaw().size(); 
         ui32 checkpointSize = checkpoint.ByteSize();
-
-        NDqProto::TChannelData channelData;
-        channelData.SetChannelId(channel->GetChannelId());
-        channelData.SetFinished(outputChannel.Finished);
+ 
+        NDqProto::TChannelData channelData; 
+        channelData.SetChannelId(channel->GetChannelId()); 
+        channelData.SetFinished(outputChannel.Finished); 
         if (hasData) {
             channelData.MutableData()->Swap(&data);
         }
@@ -1019,14 +1019,14 @@ private:
             CA_LOG_I("Resume inputs");
             ResumeInputs();
         }
-
+ 
         if (hasData || hasCheckpoint || becameFinished) {
             Channels->SendChannelData(std::move(channelData));
             return dataSize + checkpointSize;
         }
         return 0;
-    }
-
+    } 
+ 
     virtual void DrainSink(ui64 outputIndex, TSinkInfo& sinkInfo) {
         ProcessOutputsState.AllOutputsFinished &= sinkInfo.Finished;
         if (sinkInfo.Finished && !Checkpoints) {
@@ -1098,40 +1098,40 @@ private:
         return dataSize + checkpointSize;
     }
 
-protected:
+protected: 
     const TMaybe<NDqProto::TRlPath>& GetRlPath() const {
         return RuntimeSettings.RlPath;
     }
 
     TTxId GetTxId() const {
-        return TxId;
+        return TxId; 
+    } 
+ 
+    const NDqProto::TDqTask& GetTask() const { 
+        return Task; 
     }
 
-    const NDqProto::TDqTask& GetTask() const {
-        return Task;
-    }
-
-    NDqProto::EDqStatsMode GetStatsMode() const {
+    NDqProto::EDqStatsMode GetStatsMode() const { 
         return RuntimeSettings.StatsMode;
-    }
-
-    bool GetUseLLVM() const {
-        return RuntimeSettings.UseLLVM;
-    }
-
-    const TComputeMemoryLimits& GetMemoryLimits() const {
-        return MemoryLimits;
-    }
-
-protected:
-    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
-        TaskRunner = taskRunner;
-    }
-
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) {
-        YQL_ENSURE(TaskRunner);
-
-        auto guard = TaskRunner->BindAllocator(MkqlMemoryLimit);
+    } 
+ 
+    bool GetUseLLVM() const { 
+        return RuntimeSettings.UseLLVM; 
+    } 
+ 
+    const TComputeMemoryLimits& GetMemoryLimits() const { 
+        return MemoryLimits; 
+    } 
+ 
+protected: 
+    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) { 
+        TaskRunner = taskRunner; 
+    } 
+ 
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) { 
+        YQL_ENSURE(TaskRunner); 
+ 
+        auto guard = TaskRunner->BindAllocator(MkqlMemoryLimit); 
         auto* alloc = guard.GetMutex();
 
         if (CanAllocateExtraMemory) {
@@ -1140,12 +1140,12 @@ protected:
             });
         }
 
-        TDqTaskRunnerMemoryLimits limits;
-        limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-
-        TaskRunner->Prepare(Task, limits, execCtx);
-
+        TDqTaskRunnerMemoryLimits limits; 
+        limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize; 
+        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize; 
+ 
+        TaskRunner->Prepare(Task, limits, execCtx); 
+ 
         FillChannelMaps(
             TaskRunner->GetHolderFactory(),
             TaskRunner->GetTypeEnv(),
@@ -1163,7 +1163,7 @@ protected:
             for (auto& [channelId, channel] : InputChannelsMap) {
                 channel.Channel = TaskRunner->GetInputChannel(channelId);
             }
-        }
+        } 
         for (auto& [inputIndex, source] : SourcesMap) {
             if (TaskRunner) { source.Source = TaskRunner->GetSource(inputIndex); Y_VERIFY(source.Source);}
             Y_VERIFY(SourceActorFactory);
@@ -1187,7 +1187,7 @@ protected:
             for (auto& [channelId, channel] : OutputChannelsMap) {
                 channel.Channel = TaskRunner->GetOutputChannel(channelId);
             }
-        }
+        } 
         for (auto& [outputIndex, sink] : SinksMap) {
             if (TaskRunner) { sink.Sink = TaskRunner->GetSink(outputIndex); }
             Y_VERIFY(SinkActorFactory);
@@ -1206,7 +1206,7 @@ protected:
                 });
             this->RegisterWithSameMailbox(sink.Actor);
         }
-    }
+    } 
 
     void PollSourceActors() { // TODO: rename to PollSources()
         // Don't produce any input from sources if we're about to save checkpoint.
@@ -1264,30 +1264,30 @@ protected:
         InternalError(TIssuesIds::DEFAULT_ERROR, desc);
     }
 
-    virtual ui64 CalcMkqlMemoryLimit() {
-        auto& opts = Task.GetProgram().GetSettings();
-        return opts.GetHasMapJoin()/* || opts.GetHasSort()*/
-            ? MemoryLimits.MkqlHeavyProgramMemoryLimit
-            : MemoryLimits.MkqlLightProgramMemoryLimit;
-    }
-
-private:
-    void InitializeTask() {
-        for (ui32 i = 0; i < Task.InputsSize(); ++i) {
+    virtual ui64 CalcMkqlMemoryLimit() { 
+        auto& opts = Task.GetProgram().GetSettings(); 
+        return opts.GetHasMapJoin()/* || opts.GetHasSort()*/ 
+            ? MemoryLimits.MkqlHeavyProgramMemoryLimit 
+            : MemoryLimits.MkqlLightProgramMemoryLimit; 
+    } 
+ 
+private: 
+    void InitializeTask() { 
+        for (ui32 i = 0; i < Task.InputsSize(); ++i) { 
             const auto& inputDesc = Task.GetInputs(i);
             Y_VERIFY(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
             if (inputDesc.HasSource()) {
                 auto result = SourcesMap.emplace(i, TSourceInfo(i));
-                YQL_ENSURE(result.second);
+                YQL_ENSURE(result.second); 
             } else {
                 for (auto& channel : inputDesc.GetChannels()) {
                     auto result = InputChannelsMap.emplace(channel.GetId(), TInputChannelInfo(channel.GetId(), channel.GetCheckpointingMode()));
                     YQL_ENSURE(result.second);
                 }
             }
-        }
+        } 
 
-        for (ui32 i = 0; i < Task.OutputsSize(); ++i) {
+        for (ui32 i = 0; i < Task.OutputsSize(); ++i) { 
             const auto& outputDesc = Task.GetOutputs(i);
             Y_VERIFY(!outputDesc.HasSink() || outputDesc.ChannelsSize() == 0); // HasSink => no channels
             Y_VERIFY(outputDesc.HasSink() || outputDesc.ChannelsSize() > 0);
@@ -1298,18 +1298,18 @@ private:
                 for (auto& channel : outputDesc.GetChannels()) {
                     TOutputChannelInfo outputChannel(channel.GetId());
                     outputChannel.HasPeer = channel.GetDstEndpoint().HasActorId();
-
-                    if (Y_UNLIKELY(RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {
+ 
+                    if (Y_UNLIKELY(RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) { 
                         outputChannel.Stats = MakeHolder<typename TOutputChannelInfo::TStats>();
                     }
 
                     auto result = OutputChannelsMap.emplace(channel.GetId(), std::move(outputChannel));
                     YQL_ENSURE(result.second);
-                }
+                } 
             }
         }
-
-        MkqlMemoryLimit = CalcMkqlMemoryLimit();
+ 
+        MkqlMemoryLimit = CalcMkqlMemoryLimit(); 
     }
 
     static ui64 AlignMemorySizeToMbBoundary(ui64 memory) {
@@ -1318,42 +1318,42 @@ private:
         return (memory + alignMask) & ~alignMask;
     }
 
-    void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+    void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) { 
         memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
-
-        CA_LOG_I("not enough memory, request +" << memory);
-
-        if (MemoryLimits.AllocateMemoryFn(TxId, Task.GetId(), memory)) {
-            MkqlMemoryLimit += memory;
-            CA_LOG_I("[Mem] memory granted, new limit: " << MkqlMemoryLimit);
-            alloc->SetLimit(MkqlMemoryLimit);
-        } else {
-            CA_LOG_W("[Mem] memory not granted");
-//            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit
-//                << ", requested: " << memory << ", host: " << HostName();
-        }
-
-        if (Y_UNLIKELY(ProfileStats)) {
-            ProfileStats->MkqlExtraMemoryBytes += memory;
-            ProfileStats->MkqlExtraMemoryRequests++;
-        }
-    }
-
-    void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-        if (!BasicStats) {
+ 
+        CA_LOG_I("not enough memory, request +" << memory); 
+ 
+        if (MemoryLimits.AllocateMemoryFn(TxId, Task.GetId(), memory)) { 
+            MkqlMemoryLimit += memory; 
+            CA_LOG_I("[Mem] memory granted, new limit: " << MkqlMemoryLimit); 
+            alloc->SetLimit(MkqlMemoryLimit); 
+        } else { 
+            CA_LOG_W("[Mem] memory not granted"); 
+//            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit 
+//                << ", requested: " << memory << ", host: " << HostName(); 
+        } 
+ 
+        if (Y_UNLIKELY(ProfileStats)) { 
+            ProfileStats->MkqlExtraMemoryBytes += memory; 
+            ProfileStats->MkqlExtraMemoryRequests++; 
+        } 
+    } 
+ 
+    void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) { 
+        if (!BasicStats) { 
             return;
         }
 
-        if (last) {
-            ReportEventElapsedTime();
+        if (last) { 
+            ReportEventElapsedTime(); 
         }
 
-        dst->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds());
-
-        if (ProfileStats) {
-            dst->SetMkqlMaxMemoryUsage(ProfileStats->MkqlMaxUsedMemory);
-            dst->SetMkqlExtraMemoryBytes(ProfileStats->MkqlExtraMemoryBytes);
-            dst->SetMkqlExtraMemoryRequests(ProfileStats->MkqlExtraMemoryRequests);
+        dst->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds()); 
+ 
+        if (ProfileStats) { 
+            dst->SetMkqlMaxMemoryUsage(ProfileStats->MkqlMaxUsedMemory); 
+            dst->SetMkqlExtraMemoryBytes(ProfileStats->MkqlExtraMemoryBytes); 
+            dst->SetMkqlExtraMemoryRequests(ProfileStats->MkqlExtraMemoryRequests); 
         }
 
         if (TaskRunner) {
@@ -1362,42 +1362,42 @@ private:
             if (auto* taskStats = TaskRunner->GetStats()) {
                 auto* protoTask = dst->AddTasks();
                 FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) ProfileStats);
-
+ 
                 for (auto& [outputIndex, sinkInfo] : SinksMap) {
                     if (auto* sinkStats = sinkInfo.Sink ? sinkInfo.Sink->GetStats() : nullptr) {
                         protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
                         protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
-
+ 
                         if (ProfileStats) {
                             auto* protoSink = protoTask->AddSinks();
                             protoSink->SetOutputIndex(outputIndex);
-
+ 
                             protoSink->SetChunks(sinkStats->Chunks);
                             protoSink->SetBytes(sinkStats->Bytes);
                             protoSink->SetRowsIn(sinkStats->RowsIn);
                             protoSink->SetRowsOut(sinkStats->RowsOut);
-
+ 
                             protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
                             protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
                         }
-                    }
-                }
-
+                    } 
+                } 
+ 
                 if (ProfileStats) {
                     for (auto& protoSource : *protoTask->MutableSources()) {
                         if (auto* sourceInfo = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
                             protoSource.SetErrorsCount(sourceInfo->IssuesBuffer.GetAllAddedIssuesCount());
                         }
-                    }
-
+                    } 
+ 
                     for (auto& protoInputChannelStats : *protoTask->MutableInputChannels()) {
                         if (auto* caChannelStats = Channels->GetInputChannelStats(protoInputChannelStats.GetChannelId())) {
                             protoInputChannelStats.SetPollRequests(caChannelStats->PollRequests);
                             protoInputChannelStats.SetWaitTimeUs(caChannelStats->WaitTime.MicroSeconds());
                             protoInputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
                         }
-                    }
-
+                    } 
+ 
                     for (auto& protoOutputChannelStats : *protoTask->MutableOutputChannels()) {
                         if (auto* x = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
                             protoOutputChannelStats.SetResentMessages(x->ResentMessages);
@@ -1409,32 +1409,32 @@ private:
                                 protoOutputChannelStats.SetNoDstActorId(x->NoDstActorId);
                             }
                         }
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
+        } 
+
+        static_cast<TDerived*>(this)->FillExtraStats(dst, last); 
+
+        if (last) { 
+            BasicStats.reset(); 
+            ProfileStats.reset(); 
         }
-
-        static_cast<TDerived*>(this)->FillExtraStats(dst, last);
-
-        if (last) {
-            BasicStats.reset();
-            ProfileStats.reset();
-        }
-    }
-
-    void ReportStats(TInstant now) {
-        if (!RuntimeSettings.ReportStatsSettings) {
+    } 
+ 
+    void ReportStats(TInstant now) { 
+        if (!RuntimeSettings.ReportStatsSettings) { 
             return;
-        }
+        } 
 
-        if (now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
+        if (now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) { 
             return;
-        }
+        } 
 
-        auto evState = std::make_unique<TEvDqCompute::TEvState>();
+        auto evState = std::make_unique<TEvDqCompute::TEvState>(); 
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetTaskId(Task.GetId());
-        FillStats(evState->Record.MutableStats(), /* last */ false);
+        FillStats(evState->Record.MutableStats(), /* last */ false); 
 
         auto dbgPrintStats = [&]() {
             NProtoBuf::TextFormat::Printer printer;
@@ -1450,43 +1450,43 @@ private:
         CA_LOG_D("Send stats to executor actor " << ExecuterId << " TaskId: " << Task.GetId()
             << " Stats: " << dbgPrintStats());
 
-        this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery);
+        this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery); 
 
         LastSendStatsTime = now;
     }
 
-protected:
-    const NActors::TActorId ExecuterId;
+protected: 
+    const NActors::TActorId ExecuterId; 
     const TTxId TxId;
-    const NDqProto::TDqTask Task;
-    const TComputeRuntimeSettings RuntimeSettings;
-    const TComputeMemoryLimits MemoryLimits;
+    const NDqProto::TDqTask Task; 
+    const TComputeRuntimeSettings RuntimeSettings; 
+    const TComputeMemoryLimits MemoryLimits; 
     const bool CanAllocateExtraMemory = false;
     const IDqSourceActorFactory::TPtr SourceActorFactory;
     const IDqSinkActorFactory::TPtr SinkActorFactory;
     const NDqProto::ECheckpointingMode CheckpointingMode;
-    TIntrusivePtr<IDqTaskRunner> TaskRunner;
-    TDqComputeActorChannels* Channels = nullptr;
+    TIntrusivePtr<IDqTaskRunner> TaskRunner; 
+    TDqComputeActorChannels* Channels = nullptr; 
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     THashMap<ui64, TInputChannelInfo> InputChannelsMap; // Channel id -> Channel info
     THashMap<ui64, TSourceInfo> SourcesMap; // Input index -> Source info
     THashMap<ui64, TOutputChannelInfo> OutputChannelsMap; // Channel id -> Channel info
     THashMap<ui64, TSinkInfo> SinksMap; // Output index -> Sink info
-    ui64 MkqlMemoryLimit = 0;
-    bool ResumeEventScheduled = false;
+    ui64 MkqlMemoryLimit = 0; 
+    bool ResumeEventScheduled = false; 
     NDqProto::EComputeState State;
-
-    struct TBasicStats {
-        TDuration CpuTime;
-    };
-    struct TProfileStats {
-        ui64 MkqlMaxUsedMemory = 0;
-        ui64 MkqlExtraMemoryBytes = 0;
-        ui32 MkqlExtraMemoryRequests = 0;
-    };
-    std::unique_ptr<TBasicStats> BasicStats;
-    std::unique_ptr<TProfileStats> ProfileStats;
-
+ 
+    struct TBasicStats { 
+        TDuration CpuTime; 
+    }; 
+    struct TProfileStats { 
+        ui64 MkqlMaxUsedMemory = 0; 
+        ui64 MkqlExtraMemoryBytes = 0; 
+        ui32 MkqlExtraMemoryRequests = 0; 
+    }; 
+    std::unique_ptr<TBasicStats> BasicStats; 
+    std::unique_ptr<TProfileStats> ProfileStats; 
+ 
     struct TProcessOutputsState {
         int Inflight = 0;
         bool ChannelsReady = true;
@@ -1502,5 +1502,5 @@ private:
     TInstant LastSendStatsTime;
 };
 
-} // namespace NYql
-} // namespace NNq
+} // namespace NYql 
+} // namespace NNq 

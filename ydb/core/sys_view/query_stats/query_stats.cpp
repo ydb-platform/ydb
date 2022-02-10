@@ -103,7 +103,7 @@ public:
         , StatsType(statsType)
         , BucketRange(this->TableRange, bucketSize)
     {
-        auto now = TAppData::TimeProvider->Now();
+        auto now = TAppData::TimeProvider->Now(); 
         History = MakeHolder<TScanQueryHistory<TGreater>>(bucketCount, bucketSize, now);
 
         ConvertKeyRange<NKikimrSysView::TEvGetQueryMetricsRequest, ui64, ui32>(Request, this->TableRange);
@@ -120,7 +120,7 @@ public:
             hFunc(TEvPrivate::TEvRetryNode, RetryNode);
             hFunc(TEvSysView::TEvGetQueryStatsResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution); 
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

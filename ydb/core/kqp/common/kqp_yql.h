@@ -15,8 +15,8 @@ enum class EPhysicalQueryType {
 };
 
 struct TKqpPhyQuerySettings {
-    static constexpr std::string_view TypeSettingName = "type"sv;
-    std::optional<EPhysicalQueryType> Type;
+    static constexpr std::string_view TypeSettingName = "type"sv; 
+    std::optional<EPhysicalQueryType> Type; 
 
     static TKqpPhyQuerySettings Parse(const NNodes::TKqpPhysicalQuery& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
@@ -31,33 +31,33 @@ enum class EPhysicalTxType {
 
 struct TKqpPhyTxSettings {
     static constexpr TStringBuf TypeSettingName = "type";
-    std::optional<EPhysicalTxType> Type;
+    std::optional<EPhysicalTxType> Type; 
 
-    static constexpr std::string_view WithEffectsSettingName = "with_effects"sv;
-    bool WithEffects = false;
-
+    static constexpr std::string_view WithEffectsSettingName = "with_effects"sv; 
+    bool WithEffects = false; 
+ 
     static TKqpPhyTxSettings Parse(const NNodes::TKqpPhysicalTx& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
-struct TKqpReadTableSettings {
+struct TKqpReadTableSettings { 
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
-    static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
-    static constexpr TStringBuf ReverseSettingName = "Reverse";
-
-    TVector<TString> SkipNullKeys;
-    TExprNode::TPtr ItemsLimit;
-    bool Reverse = false;
-
-    void AddSkipNullKey(const TString& key);
-    void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
-    void SetReverse() { Reverse = true; }
-
-    static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
+    static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit"; 
+    static constexpr TStringBuf ReverseSettingName = "Reverse"; 
+ 
+    TVector<TString> SkipNullKeys; 
+    TExprNode::TPtr ItemsLimit; 
+    bool Reverse = false; 
+ 
+    void AddSkipNullKey(const TString& key); 
+    void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; } 
+    void SetReverse() { Reverse = true; } 
+ 
+    static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node); 
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);
-    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
-};
-
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const; 
+}; 
+ 
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
 
@@ -91,6 +91,6 @@ struct TKqpReadTableExplainPrompt {
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx);
 TString KqpExprToPrettyString(const NNodes::TExprBase& expr, TExprContext& ctx);
 
-TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
-
+TString PrintKqpStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx); 
+ 
 } // namespace NYql

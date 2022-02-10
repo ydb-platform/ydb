@@ -6,14 +6,14 @@
 namespace NYql::NDq {
 
 struct TDqInputStats {
-    // basic stats
+    // basic stats 
     ui64 Chunks = 0;
     ui64 Bytes = 0;
     ui64 RowsIn = 0;
     ui64 RowsOut = 0;
-    TInstant FirstRowTs;
-
-    // profile stats
+    TInstant FirstRowTs; 
+ 
+    // profile stats 
     ui64 RowsInMemory = 0;
     ui64 MaxMemoryUsage = 0;
 };

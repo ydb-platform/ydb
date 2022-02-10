@@ -7,7 +7,7 @@
 
 namespace NYql::NDqs {
     struct TStageInfoMeta {
-        NNodes::TDqPhyStage Stage;
+        NNodes::TDqPhyStage Stage; 
     };
 
     struct TTaskInputMeta {

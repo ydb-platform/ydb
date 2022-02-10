@@ -105,7 +105,7 @@ private:
     TActorId Sender;
     ui64 LastTxId;
     ui64 LastStep;
-    TMockDbSchemeResolver DbSchemeResolver;
+    TMockDbSchemeResolver DbSchemeResolver; 
     TString DispatchName = "NONE";
     bool AllowIncompleteResult = false;
     bool* ActiveZone = nullptr;
@@ -437,20 +437,20 @@ struct TShardedTableOptions {
 #define Y_UNIT_TEST_WITH_MVCC(N) Y_UNIT_TEST_WITH_MVCC_IMPL(N, UseMvcc)
 #define WithMvcc UseMvcc
 
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
-
+#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \ 
+    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \ 
+    struct TTestRegistration##N {                                                                                                    \ 
+        TTestRegistration##N() {                                                                                                     \ 
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \ 
+            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \ 
+            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \ 
+            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \ 
+        }                                                                                                                            \ 
+    };                                                                                                                               \ 
+    static TTestRegistration##N testRegistration##N;                                                                                 \ 
+    template<bool OPT1, bool OPT2>                                                                                                   \ 
+    void N(NUnitTest::TTestContext&) 
+ 
 void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
                         const TString &root,

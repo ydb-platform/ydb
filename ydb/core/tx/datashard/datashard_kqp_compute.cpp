@@ -1,5 +1,5 @@
 #include "datashard_kqp_compute.h"
-#include "range_ops.h"
+#include "range_ops.h" 
 
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
@@ -61,7 +61,7 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
 };
 
 typedef IComputationNode* (*TCallableScanBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx);
+    const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx); 
 
 struct TKqpScanComputationMap {
     TKqpScanComputationMap() {
@@ -183,18 +183,18 @@ TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
     return ReadVersion;
 }
 
-void TKqpDatashardComputeContext::SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId) {
-    OutputChannels.emplace(std::make_pair(taskId, channelId), actorId);
-}
-
-TActorId TKqpDatashardComputeContext::GetTaskOutputChannel(ui64 taskId, ui64 channelId) const {
-    auto it = OutputChannels.find(std::make_pair(taskId, channelId));
-    if (it != OutputChannels.end()) {
-        return it->second;
-    }
-    return TActorId();
-}
-
+void TKqpDatashardComputeContext::SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId) { 
+    OutputChannels.emplace(std::make_pair(taskId, channelId), actorId); 
+} 
+ 
+TActorId TKqpDatashardComputeContext::GetTaskOutputChannel(ui64 taskId, ui64 channelId) const { 
+    auto it = OutputChannels.find(std::make_pair(taskId, channelId)); 
+    if (it != OutputChannels.end()) { 
+        return it->second; 
+    } 
+    return TActorId(); 
+} 
+ 
 void TKqpDatashardComputeContext::Clear() {
     Database = nullptr;
     LockTxId = 0;
@@ -218,62 +218,62 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
         }
     };
 
-    bool ret = true;
-    auto& scheme = Database->GetScheme();
-
-    for (const auto& vKey : keys) {
-        const TKeyDesc& key = *vKey.Key;
-
-        if (TSysTables::IsSystemTable(key.TableId)) {
-            continue;
-        }
-
-        if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
-            continue;
-        }
-
-        ui64 localTid = GetLocalTableId(key.TableId);
-        Y_VERIFY(localTid, "table not exist");
-
-        auto* tableInfo = scheme.GetTableInfo(localTid);
-        TSmallVec<TRawTypeValue> from;
-        TSmallVec<TRawTypeValue> to;
-        ConvertTableKeys(scheme, tableInfo, key.Range.From, from, nullptr);
-        if (!key.Range.Point) {
-            ConvertTableKeys(scheme, tableInfo, key.Range.To, to, nullptr);
-        }
-
-        TSmallVec<NTable::TTag> columnTags;
-        for (const auto& column : key.Columns) {
-            if (Y_LIKELY(column.Operation == TKeyDesc::EColumnOperation::Read)) {
-                columnTags.push_back(column.Column);
-            }
-        }
-        Y_VERIFY_DEBUG(!columnTags.empty());
-
-        bool ready = Database->Precharge(localTid,
-                                         from,
-                                         key.Range.Point ? from : to,
-                                         columnTags,
-                                         0 /* readFlags */,
+    bool ret = true; 
+    auto& scheme = Database->GetScheme(); 
+ 
+    for (const auto& vKey : keys) { 
+        const TKeyDesc& key = *vKey.Key; 
+ 
+        if (TSysTables::IsSystemTable(key.TableId)) { 
+            continue; 
+        } 
+ 
+        if (key.RowOperation != TKeyDesc::ERowOperation::Read) { 
+            continue; 
+        } 
+ 
+        ui64 localTid = GetLocalTableId(key.TableId); 
+        Y_VERIFY(localTid, "table not exist"); 
+ 
+        auto* tableInfo = scheme.GetTableInfo(localTid); 
+        TSmallVec<TRawTypeValue> from; 
+        TSmallVec<TRawTypeValue> to; 
+        ConvertTableKeys(scheme, tableInfo, key.Range.From, from, nullptr); 
+        if (!key.Range.Point) { 
+            ConvertTableKeys(scheme, tableInfo, key.Range.To, to, nullptr); 
+        } 
+ 
+        TSmallVec<NTable::TTag> columnTags; 
+        for (const auto& column : key.Columns) { 
+            if (Y_LIKELY(column.Operation == TKeyDesc::EColumnOperation::Read)) { 
+                columnTags.push_back(column.Column); 
+            } 
+        } 
+        Y_VERIFY_DEBUG(!columnTags.empty()); 
+ 
+        bool ready = Database->Precharge(localTid, 
+                                         from, 
+                                         key.Range.Point ? from : to, 
+                                         columnTags, 
+                                         0 /* readFlags */, 
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
-                                         key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
+                                         key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward, 
                                          GetReadVersion());
-
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
-            << ", columns: [" << JoinSeq(", ", columnTags) << "]"
-            << ", range: " << DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)
-            << ", itemsLimit: " << key.RangeLimits.ItemsLimit
-            << ", bytesLimit: " << key.RangeLimits.BytesLimit
-            << ", reverse: " << key.Reverse
-            << ", result: " << ready);
-
-        ret &= ready;
-    }
-
-    return ret;
-}
-
-} // namespace NMiniKQL
+ 
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name 
+            << ", columns: [" << JoinSeq(", ", columnTags) << "]" 
+            << ", range: " << DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry) 
+            << ", itemsLimit: " << key.RangeLimits.ItemsLimit 
+            << ", bytesLimit: " << key.RangeLimits.BytesLimit 
+            << ", reverse: " << key.Reverse 
+            << ", result: " << ready); 
+ 
+        ret &= ready; 
+    } 
+ 
+    return ret; 
+} 
+ 
+} // namespace NMiniKQL 
 } // namespace NKikimr

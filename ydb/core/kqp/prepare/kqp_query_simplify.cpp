@@ -261,33 +261,33 @@ TExprNode::TPtr MergeMapsWithSameLambda(TExprBase node, TExprContext& ctx) {
     return ret.Ptr();
 }
 
-TExprNode::TPtr RewritePresentIfToFlatMap(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoIfPresent>()) {
-        return node.Ptr();
-    }
-    auto ifPresent = node.Cast<TCoIfPresent>();
-
-    if (IsKqlPureLambda(ifPresent.PresentHandler())) {
-        return node.Ptr();
-    }
-
-    if (!ifPresent.MissingValue().Maybe<TCoNothing>()) {
-        return node.Ptr();
-    }
-
-    return Build<TCoFlatMap>(ctx, node.Pos())
-            .Input(ifPresent.Optional())
-            .Lambda()
-                .Args({"item"})
-                .Body<TExprApplier>()
-                    .Apply(ifPresent.PresentHandler())
-                    .With(ifPresent.PresentHandler().Args().Arg(0), "item")
-                    .Build()
-                .Build()
-            .Done()
-            .Ptr();
-}
-
+TExprNode::TPtr RewritePresentIfToFlatMap(TExprBase node, TExprContext& ctx) { 
+    if (!node.Maybe<TCoIfPresent>()) { 
+        return node.Ptr(); 
+    } 
+    auto ifPresent = node.Cast<TCoIfPresent>(); 
+ 
+    if (IsKqlPureLambda(ifPresent.PresentHandler())) { 
+        return node.Ptr(); 
+    } 
+ 
+    if (!ifPresent.MissingValue().Maybe<TCoNothing>()) { 
+        return node.Ptr(); 
+    } 
+ 
+    return Build<TCoFlatMap>(ctx, node.Pos()) 
+            .Input(ifPresent.Optional()) 
+            .Lambda() 
+                .Args({"item"}) 
+                .Body<TExprApplier>() 
+                    .Apply(ifPresent.PresentHandler()) 
+                    .With(ifPresent.PresentHandler().Args().Arg(0), "item") 
+                    .Build() 
+                .Build() 
+            .Done() 
+            .Ptr(); 
+} 
+ 
 class TKqpSimplifyTransformer : public TSyncTransformerBase {
 public:
     TKqpSimplifyTransformer()
@@ -335,11 +335,11 @@ public:
                     return ret;
                 }
 
-                ret = RewritePresentIfToFlatMap(node, ctx);
-                if (ret != input) {
-                    return ret;
-                }
-
+                ret = RewritePresentIfToFlatMap(node, ctx); 
+                if (ret != input) { 
+                    return ret; 
+                } 
+ 
                 return ret;
             }, ctx, optSettings);
 
@@ -368,5 +368,5 @@ TAutoPtr<IGraphTransformer> CreateKqpSimplifyTransformer() {
     return new TKqpSimplifyTransformer();
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

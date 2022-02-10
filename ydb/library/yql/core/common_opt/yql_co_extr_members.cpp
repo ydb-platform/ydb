@@ -180,20 +180,20 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
         extractFields.emplace(x->Content());
     }
     TSet<TStringBuf> sortKeys;
-    bool fieldSubset = HaveFieldsSubset(sort.KeySelectorLambda().Body().Ptr(), sort.KeySelectorLambda().Args().Arg(0).Ref(), sortKeys, parentsMap);
+    bool fieldSubset = HaveFieldsSubset(sort.KeySelectorLambda().Body().Ptr(), sort.KeySelectorLambda().Args().Arg(0).Ref(), sortKeys, parentsMap); 
     bool allExist = true;
     if (!sortKeys.empty()) {
         for (const auto& key : sortKeys) {
-            auto ret = extractFields.emplace(key);
-            if (ret.second) {
+            auto ret = extractFields.emplace(key); 
+            if (ret.second) { 
                 allExist = false;
             }
         }
     }
-    if (allExist && sortKeys.size() == extractFields.size()) {
-        YQL_CLOG(DEBUG, Core) << "Force `fieldSubset` for ExtractMembers over " << node->Content();
-        fieldSubset = true;
-    }
+    if (allExist && sortKeys.size() == extractFields.size()) { 
+        YQL_CLOG(DEBUG, Core) << "Force `fieldSubset` for ExtractMembers over " << node->Content(); 
+        fieldSubset = true; 
+    } 
     if (fieldSubset && allExist) {
         YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
         return ctx.Builder(sort.Pos())

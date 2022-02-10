@@ -47,7 +47,7 @@ namespace NTabletFlatExecutor {
 
         ui64 CurrentTxDataLimit = 0;
         ui64 CurrentMemoryLimit = 0;
-        ui32 NotEnoughMemoryCount = 0;
+        ui32 NotEnoughMemoryCount = 0; 
         ui64 TaskId = 0;
 
         TAutoPtr<TMemoryToken> AttachedMemory;

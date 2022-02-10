@@ -6397,12 +6397,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     template<bool Narrow>
-    IGraphTransformer::TStatus SqueezeToDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        const TTypeAnnotationNode* itemType = nullptr;
+    IGraphTransformer::TStatus SqueezeToDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) { 
+        if (!EnsureArgsCount(*input, 4, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        const TTypeAnnotationNode* itemType = nullptr; 
         if constexpr (Narrow) {
             if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -6413,63 +6413,63 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
                 return IGraphTransformer::TStatus::Error;
             }
-        }
-
+        } 
+ 
         auto& lambda1 = input->ChildRef(1);
         auto& lambda2 = input->ChildRef(2);
 
         const auto width = Narrow ? itemType->Cast<TMultiExprType>()->GetSize() : 1U;
         if (const auto status = ConvertToLambda(lambda1, ctx.Expr, width); status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
+            return status; 
+        } 
+ 
         if (const auto status = ConvertToLambda(lambda2, ctx.Expr, width); status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
+            return status; 
+        } 
+ 
         if (const auto& items = Narrow ? itemType->Cast<TMultiExprType>()->GetItems() : TTypeAnnotationNode::TListType{itemType};
             !(UpdateLambdaAllArgumentsTypes(lambda1, items, ctx.Expr) && UpdateLambdaAllArgumentsTypes(lambda2, items, ctx.Expr))) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!lambda1->GetTypeAnn() || !lambda2->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
-        TMaybe<ui64> itemsCount;
-        bool isCompact;
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!lambda1->GetTypeAnn() || !lambda2->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        TMaybe<bool> isMany; 
+        TMaybe<bool> isHashed; 
+        TMaybe<ui64> itemsCount; 
+        bool isCompact; 
         if (const auto error = ParseToDictSettings(*input, ctx.Expr, isMany, isHashed, itemsCount, isCompact)) {
-            ctx.Expr.AddError(*error);
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto keyType = lambda1->GetTypeAnn();
-        auto payloadType = lambda2->GetTypeAnn();
-        if (*isMany) {
-            payloadType = ctx.Expr.MakeType<TListExprType>(payloadType);
-        }
-
-        auto dictType = ctx.Expr.MakeType<TDictExprType>(keyType, payloadType);
-        if (!dictType->Validate(input->Pos(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!*isHashed && !keyType->IsComparable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                << "Expected comparable key type for sorted dict, but got: " << *keyType));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
-            input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(dictType));
-        } else {
-            input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(dictType));
-        }
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+            ctx.Expr.AddError(*error); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto keyType = lambda1->GetTypeAnn(); 
+        auto payloadType = lambda2->GetTypeAnn(); 
+        if (*isMany) { 
+            payloadType = ctx.Expr.MakeType<TListExprType>(payloadType); 
+        } 
+ 
+        auto dictType = ctx.Expr.MakeType<TDictExprType>(keyType, payloadType); 
+        if (!dictType->Validate(input->Pos(), ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!*isHashed && !keyType->IsComparable()) { 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() 
+                << "Expected comparable key type for sorted dict, but got: " << *keyType)); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) { 
+            input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(dictType)); 
+        } else { 
+            input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(dictType)); 
+        } 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     IGraphTransformer::TStatus VoidWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {

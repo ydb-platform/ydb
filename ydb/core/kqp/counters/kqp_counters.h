@@ -268,12 +268,12 @@ public:
     void ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion);
     void ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo);
 
-    // NewEngine
+    // NewEngine 
     void ReportNewEngineForcedQueryStats(NKikimrKqp::EQueryAction action,
         TDuration duration, ui64 computeCpuTime);
     void ReportNewEngineCompatibleQueryStats(NKikimrKqp::EQueryAction action,
         TDuration duration, ui64 computeCpuTime);
-
+ 
     void ReportWorkerCreated(TKqpDbCountersPtr dbCounters);
     void ReportWorkerFinished(TKqpDbCountersPtr dbCounters, TDuration lifeSpan);
     void ReportWorkerCleanupLatency(TKqpDbCountersPtr dbCounters, TDuration cleanupTime);
@@ -317,32 +317,32 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
-    NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors;
+    NMonitoring::TDynamicCounters::TCounterPtr ForceNewEngineCompileErrors; 
 
-    // Resource Manager
-    NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
-    NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
-    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
-    NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
-    NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
-
-    // Spilling counters
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
-
-    // Scan queries counters
-    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;
-    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve;
+    // Resource Manager 
+    NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmMemory; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs; 
+    NMonitoring::TDynamicCounters::TCounterPtr RmInternalError; 
+ 
+    // Spilling counters 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors; 
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors; 
+ 
+    // Scan queries counters 
+    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect; 
+    NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardResolve; 
     NMonitoring::THistogramPtr ScanQueryRateLimitLatency;
-
-    // NewEngine vs OldEngine
+ 
+    // NewEngine vs OldEngine 
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineForcedQueryLatencies;
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> NewEngineCompatibleQueryLatencies;
     NMonitoring::TDynamicCounters::TCounterPtr NewEngineForcedComputeCpuTime;
@@ -350,11 +350,11 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleComputeCpuTime;
     NMonitoring::TDynamicCounters::TCounterPtr NewEngineCompatibleQueryCount;
 
-    // NewEngine tx duration
-    NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;
-    NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
-    NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
-
+    // NewEngine tx duration 
+    NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram; 
+    NMonitoring::THistogramPtr DataTxTotalTimeHistogram; 
+    NMonitoring::THistogramPtr ScanTxTotalTimeHistogram; 
+ 
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters
@@ -363,13 +363,13 @@ public:
     TActorId DbWatcherActorId;
 };
 
-struct TKqpRequestCounters : public TThrRefBase {
-    using TPtr = TIntrusivePtr<TKqpRequestCounters>;
-
-    TIntrusivePtr<TKqpCounters> Counters;
-    TIntrusivePtr<TKqpDbCounters> DbCounters; // may be null
-    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon; // OldEngine compatibility
-};
-
-} // namespace NKqp
+struct TKqpRequestCounters : public TThrRefBase { 
+    using TPtr = TIntrusivePtr<TKqpRequestCounters>; 
+ 
+    TIntrusivePtr<TKqpCounters> Counters; 
+    TIntrusivePtr<TKqpDbCounters> DbCounters; // may be null 
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon; // OldEngine compatibility 
+}; 
+ 
+} // namespace NKqp 
 } // namespace NKikimr

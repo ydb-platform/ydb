@@ -3799,11 +3799,11 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* rawItemType = nullptr;
-        if (!EnsureNewSeqType<false, true>(input->Head(), ctx.Expr, &rawItemType)) {
+        const TTypeAnnotationNode* rawItemType = nullptr; 
+        if (!EnsureNewSeqType<false, true>(input->Head(), ctx.Expr, &rawItemType)) { 
             return IGraphTransformer::TStatus::Error;
         }
-        auto inputTypeKind = input->Head().GetTypeAnn()->GetKind();
+        auto inputTypeKind = input->Head().GetTypeAnn()->GetKind(); 
 
         auto status = ConvertToLambda(input->ChildRef(1), ctx.Expr, 1);
         status = status.Combine(ConvertToLambda(input->ChildRef(2), ctx.Expr, 1));
@@ -3823,8 +3823,8 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        const TTypeAnnotationNode* itemType = nullptr;
-        if (!EnsureNewSeqType<true, true>(*lambdaPreMap, ctx.Expr, &itemType)) {
+        const TTypeAnnotationNode* itemType = nullptr; 
+        if (!EnsureNewSeqType<true, true>(*lambdaPreMap, ctx.Expr, &itemType)) { 
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3890,12 +3890,12 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* retItemType = nullptr;
-        if (!EnsureNewSeqType<true, true>(*lambdaFinishHandler, ctx.Expr, &retItemType)) {
+        const TTypeAnnotationNode* retItemType = nullptr; 
+        if (!EnsureNewSeqType<true, true>(*lambdaFinishHandler, ctx.Expr, &retItemType)) { 
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeSequenceType(inputTypeKind, *retItemType, ctx.Expr));
+        input->SetTypeAnn(MakeSequenceType(inputTypeKind, *retItemType, ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 

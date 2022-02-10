@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-
+ 
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
@@ -15,32 +15,32 @@ namespace NKqp {
 
 using namespace NYdb::NTable;
 
-SIMPLE_UDF(TTestFilter, bool(i64)) {
-    Y_UNUSED(valueBuilder);
-    const i64 arg = args[0].Get<i64>();
-
-    return NUdf::TUnboxedValuePod(arg >= 0);
-}
-
-SIMPLE_UDF(TTestFilterTerminate, bool(i64, i64)) {
-    Y_UNUSED(valueBuilder);
-    const i64 arg1 = args[0].Get<i64>();
-    const i64 arg2 = args[1].Get<i64>();
-
-    if (arg1 < arg2) {
-        UdfTerminate("Bad filter value.");
-    }
-
-    return NUdf::TUnboxedValuePod(true);
-}
-
+SIMPLE_UDF(TTestFilter, bool(i64)) { 
+    Y_UNUSED(valueBuilder); 
+    const i64 arg = args[0].Get<i64>(); 
+ 
+    return NUdf::TUnboxedValuePod(arg >= 0); 
+} 
+ 
+SIMPLE_UDF(TTestFilterTerminate, bool(i64, i64)) { 
+    Y_UNUSED(valueBuilder); 
+    const i64 arg1 = args[0].Get<i64>(); 
+    const i64 arg2 = args[1].Get<i64>(); 
+ 
+    if (arg1 < arg2) { 
+        UdfTerminate("Bad filter value."); 
+    } 
+ 
+    return NUdf::TUnboxedValuePod(true); 
+} 
+ 
 SIMPLE_UDF(TRandString, char*(ui32)) {
     Y_UNUSED(valueBuilder);
     const ui32 size = args[0].Get<ui32>();
-
+ 
     auto str = valueBuilder->NewStringNotFilled(size);
     auto strRef = str.AsStringRef();
-
+ 
     for (ui32 i = 0; i < size; ++i) {
         *(strRef.Data() + i) = '0' + RandomNumber<ui32>() % 10;
     }
@@ -50,13 +50,13 @@ SIMPLE_UDF(TRandString, char*(ui32)) {
 
 SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
 
-NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
-    Y_UNUSED(typeRegistry);
-    auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
-    funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
-    return funcRegistry.Release();
-}
-
+NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) { 
+    Y_UNUSED(typeRegistry); 
+    auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone(); 
+    funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule()); 
+    return funcRegistry.Release(); 
+} 
+ 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
     auto setting = NKikimrKqp::TKqpSetting();
     setting.SetName("_KqpYqlSyntaxVersion");
@@ -66,35 +66,35 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     // EnableKikimrBacktraceFormat(); // Very slow, enable only when required locally
-
+ 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
-    Cerr << "Trying to start KiKiMR, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
-
+    Cerr << "Trying to start KiKiMR, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl; 
+ 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
-    {
-        // Allow NewEngine in tests
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("_KqpAllowNewEngine");
-        setting.SetValue("true");
-        effectiveKqpSettings.push_back(setting);
-
-        // Force NewEngine in tests
+    { 
+        // Allow NewEngine in tests 
+        NKikimrKqp::TKqpSetting setting; 
+        setting.SetName("_KqpAllowNewEngine"); 
+        setting.SetValue("true"); 
+        effectiveKqpSettings.push_back(setting); 
+ 
+        // Force NewEngine in tests 
         // setting.SetName("_KqpForceNewEngine");
         // setting.SetValue("true");
         // effectiveKqpSettings.push_back(setting);
-    }
+    } 
 
-    bool enableSpilling = false;
+    bool enableSpilling = false; 
     if (settings.AppConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("_KqpEnableSpilling");
-        setting.SetValue("true");
-        effectiveKqpSettings.push_back(setting);
-        enableSpilling = true;
-    }
-
+        NKikimrKqp::TKqpSetting setting; 
+        setting.SetName("_KqpEnableSpilling"); 
+        setting.SetValue("true"); 
+        effectiveKqpSettings.push_back(setting); 
+        enableSpilling = true; 
+    } 
+ 
     effectiveKqpSettings.insert(effectiveKqpSettings.end(), settings.KqpSettings.begin(), settings.KqpSettings.end());
 
     ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort));
@@ -393,11 +393,11 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_REQUEST, NActors::NLog::PRI_DEBUG);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_REQUEST, NActors::NLog::PRI_DEBUG); 
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::RPC_REQUEST, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG); 
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 
     Client->InitRootScheme(settings.DomainRoot);
@@ -452,78 +452,78 @@ bool HasIssue(const NYql::TIssues& issues, ui32 code,
     return hasIssue;
 }
 
-void PrintQueryStats(const TDataQueryResult& result) {
-    if (!result.GetStats().Defined()) {
-        return;
-    }
-
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-    Cerr << "------- query stats -----------" << Endl;
-    for (const auto& qp : stats.query_phases()) {
-        Cerr << "-- phase" << Endl
-             << "     duration: " << qp.duration_us() << Endl
-             << "     access:   " << Endl;
-        for (const auto& ta : qp.table_access()) {
-            Cerr << "       name:    " << ta.name() << Endl
-                 << "       reads:   " << ta.reads().rows() << Endl
-                 << "       updates: " << ta.updates().rows() << Endl
-                 << "       deletes: " << ta.deletes().rows() << Endl;
-        }
-    }
-}
-
+void PrintQueryStats(const TDataQueryResult& result) { 
+    if (!result.GetStats().Defined()) { 
+        return; 
+    } 
+ 
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+ 
+    Cerr << "------- query stats -----------" << Endl; 
+    for (const auto& qp : stats.query_phases()) { 
+        Cerr << "-- phase" << Endl 
+             << "     duration: " << qp.duration_us() << Endl 
+             << "     access:   " << Endl; 
+        for (const auto& ta : qp.table_access()) { 
+            Cerr << "       name:    " << ta.name() << Endl 
+                 << "       reads:   " << ta.reads().rows() << Endl 
+                 << "       updates: " << ta.updates().rows() << Endl 
+                 << "       deletes: " << ta.deletes().rows() << Endl; 
+        } 
+    } 
+} 
+ 
 void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+ 
     ui64 actualReads = 0;
     ui64 actualUpdates = 0;
     ui64 actualDeletes = 0;
-
-    for (const auto& phase : stats.query_phases()) {
-        for (const auto& access : phase.table_access()) {
-            if (access.name() == table) {
+ 
+    for (const auto& phase : stats.query_phases()) { 
+        for (const auto& access : phase.table_access()) { 
+            if (access.name() == table) { 
                 actualReads += access.reads().rows();
                 actualUpdates += access.updates().rows();
                 actualDeletes += access.deletes().rows();
-            }
-        }
-    }
-
+            } 
+        } 
+    } 
+ 
     if (expectedStats.ExpectedReads) {
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedReads, actualReads, "table: " << table
             << ", reads expected " << *expectedStats.ExpectedReads << ", actual " << actualReads);
-    }
-
+    } 
+ 
     if (expectedStats.ExpectedUpdates) {
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedUpdates, actualUpdates, "table: " << table
             << ", updates expected " << *expectedStats.ExpectedUpdates << ", actual " << actualUpdates);
-    }
-
+    } 
+ 
     if (expectedStats.ExpectedDeletes) {
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedDeletes, actualDeletes, "table: " << table
             << ", deletes expected " << *expectedStats.ExpectedDeletes << ", actual " << actualDeletes);
-    }
-}
-
-TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,
-    const TString& expectedYson)
-{
-    NYdb::NTable::TExecDataQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-
-    TDataQueryResult result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings)
-            .ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    if (!result.GetIssues().Empty()) {
-        Cerr << result.GetIssues().ToString() << Endl;
-    }
-
-    CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
-
-    return result;
-}
-
+    } 
+} 
+ 
+TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params, 
+    const TString& expectedYson) 
+{ 
+    NYdb::NTable::TExecDataQuerySettings settings; 
+    settings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+ 
+    TDataQueryResult result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings) 
+            .ExtractValueSync(); 
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+    if (!result.GetIssues().Empty()) { 
+        Cerr << result.GetIssues().ToString() << Endl; 
+    } 
+ 
+    CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0))); 
+ 
+    return result; 
+} 
+ 
 void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
     ui32 profileIndex)
 {
@@ -566,33 +566,33 @@ void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& write
 
 template<typename TIterator>
 TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
-    TStringStream out;
+    TStringStream out; 
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-    writer.OnBeginList();
-
-    ui32 profileIndex = 0;
-
-    for (;;) {
-        auto streamPart = it.ReadNext().GetValueSync();
-        if (!streamPart.IsSuccess()) {
-            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-            break;
-        }
-
-        if (streamPart.HasResultSet()) {
+    writer.OnBeginList(); 
+ 
+    ui32 profileIndex = 0; 
+ 
+    for (;;) { 
+        auto streamPart = it.ReadNext().GetValueSync(); 
+        if (!streamPart.IsSuccess()) { 
+            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString()); 
+            break; 
+        } 
+ 
+        if (streamPart.HasResultSet()) { 
             auto resultSet = streamPart.ExtractResultSet();
             PrintResultSet(resultSet, writer);
-        }
-
+        } 
+ 
         FillProfile(streamPart, writer, profiles, profileIndex);
         profileIndex++;
-    }
-
-    writer.OnEndList();
-
-    return out.Str();
-}
-
+    } 
+ 
+    writer.OnEndList(); 
+ 
+    return out.Str(); 
+} 
+ 
 TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles) {
     return StreamResultToYsonImpl(it, profiles);
 }
@@ -708,45 +708,45 @@ TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table
     return NYdb::FormatResultSetYson(streamPart.ExtractPart());
 }
 
-ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
-    ui32 result = 0;
+ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) { 
+    ui32 result = 0; 
 
     if (plan.IsArray()) {
         for (const auto &node: plan.GetArray()) {
-            result += CountPlanNodesByKv(node, key, value);
-        }
-        return result;
-    }
-
-    UNIT_ASSERT(plan.IsMap());
-
-    auto map = plan.GetMap();
-    if (map.contains(key) && map.at(key).GetStringRobust() == value) {
-        return 1;
-    }
-
-    if (map.contains("Plans")) {
-        for (const auto &node: map["Plans"].GetArraySafe()) {
-            result += CountPlanNodesByKv(node, key, value);
-        }
-    }
-
-    if (map.contains("Plan")) {
-        result += CountPlanNodesByKv(map.at("Plan"), key, value);
-    }
-
-    if (map.contains("Operators")) {
-        for (const auto &node : map["Operators"].GetArraySafe()) {
-            result += CountPlanNodesByKv(node, key, value);
-        }
-    }
-
-    return result;
-}
-
-NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
-    if (plan.IsArray()) {
-        for (const auto &node: plan.GetArray()) {
+            result += CountPlanNodesByKv(node, key, value); 
+        } 
+        return result; 
+    } 
+ 
+    UNIT_ASSERT(plan.IsMap()); 
+ 
+    auto map = plan.GetMap(); 
+    if (map.contains(key) && map.at(key).GetStringRobust() == value) { 
+        return 1; 
+    } 
+ 
+    if (map.contains("Plans")) { 
+        for (const auto &node: map["Plans"].GetArraySafe()) { 
+            result += CountPlanNodesByKv(node, key, value); 
+        } 
+    } 
+ 
+    if (map.contains("Plan")) { 
+        result += CountPlanNodesByKv(map.at("Plan"), key, value); 
+    } 
+ 
+    if (map.contains("Operators")) { 
+        for (const auto &node : map["Operators"].GetArraySafe()) { 
+            result += CountPlanNodesByKv(node, key, value); 
+        } 
+    } 
+ 
+    return result; 
+} 
+ 
+NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) { 
+    if (plan.IsArray()) { 
+        for (const auto &node: plan.GetArray()) { 
             auto stage = FindPlanNodeByKv(node, key, value);
             if (stage.IsDefined()) {
                 return stage;

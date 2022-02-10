@@ -371,13 +371,13 @@ namespace NMonitoring {
         }
 
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
-            consumer->OnHistogram(time, TakeSnapshot());
+            consumer->OnHistogram(time, TakeSnapshot()); 
         }
 
         IHistogramSnapshotPtr TakeSnapshot() const override {
-            return Collector_->Snapshot();
-        }
-
+            return Collector_->Snapshot(); 
+        } 
+ 
         void Reset() override {
             Collector_->Reset();
         }

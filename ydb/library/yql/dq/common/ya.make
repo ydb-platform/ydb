@@ -11,9 +11,9 @@ PEERDIR(
 )
 
 SRCS(
-    dq_common.cpp
+    dq_common.cpp 
     dq_resource_quoter.h
-    dq_value.cpp
+    dq_value.cpp 
 )
 
 END()

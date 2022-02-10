@@ -63,13 +63,13 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     auto keyTypes = AS_TYPE(TStructType, AS_TYPE(TStreamType, keysNode.GetStaticType())->GetItemType());
     result.KeyTypes.resize(keyTypes->GetMembersCount());
     for (ui32 i = 0; i < result.KeyTypes.size(); ++i) {
-        if (keyTypes->GetMemberType(i)->IsOptional()) {
-            auto type = AS_TYPE(TDataType, AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType());
-            result.KeyTypes[i] = type->GetSchemeType();
-        } else {
-            auto type = AS_TYPE(TDataType, keyTypes->GetMemberType(i));
-            result.KeyTypes[i] = type->GetSchemeType();
-        }
+        if (keyTypes->GetMemberType(i)->IsOptional()) { 
+            auto type = AS_TYPE(TDataType, AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType()); 
+            result.KeyTypes[i] = type->GetSchemeType(); 
+        } else { 
+            auto type = AS_TYPE(TDataType, keyTypes->GetMemberType(i)); 
+            result.KeyTypes[i] = type->GetSchemeType(); 
+        } 
     }
 
     ParseReadColumns(callable.GetType()->GetReturnType(), tagsNode, result.Columns, result.SystemColumns);
@@ -77,8 +77,8 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     return result;
 }
 
-class TKqpLookupRowsWrapper : public TStatelessFlowComputationNode<TKqpLookupRowsWrapper> {
-    using TBase = TStatelessFlowComputationNode<TKqpLookupRowsWrapper>;
+class TKqpLookupRowsWrapper : public TStatelessFlowComputationNode<TKqpLookupRowsWrapper> { 
+    using TBase = TStatelessFlowComputationNode<TKqpLookupRowsWrapper>; 
 
 public:
     TKqpLookupRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
@@ -91,8 +91,8 @@ public:
         , LocalTid(ComputeCtx.GetLocalTableId(ParseResult.TableId))
         , ColumnTags(ExtractTags(ParseResult.Columns))
         , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
-        , ShardTableStats(ComputeCtx.GetDatashardCounters())
-        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId()))
+        , ShardTableStats(ComputeCtx.GetDatashardCounters()) 
+        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId())) 
         , TableInfo(ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid))
     {
         MKQL_ENSURE_S(TableInfo);
@@ -135,8 +135,8 @@ public:
 
                     switch (ready) {
                         case EReady::Page:
-                            ComputeCtx.SetTabletNotReady();
-                            return TUnboxedValue::MakeYield();
+                            ComputeCtx.SetTabletNotReady(); 
+                            return TUnboxedValue::MakeYield(); 
                         case EReady::Gone:
                             continue;
                         case EReady::Data:
@@ -149,17 +149,17 @@ public:
 
                     TDbTupleRef dbTuple(CellTypes.data(), (*dbRow).data(), dbRow.Size());
                     TUnboxedValue result;
-                    TKqpTableStats tableStats;
-                    FetchRow(dbTuple, result, ctx, tableStats, ComputeCtx, SystemColumnTags);
+                    TKqpTableStats tableStats; 
+                    FetchRow(dbTuple, result, ctx, tableStats, ComputeCtx, SystemColumnTags); 
 
-                    ShardTableStats.NSelectRow++;
-                    ShardTableStats.SelectRowRows++;
-                    ShardTableStats.SelectRowBytes += tableStats.SelectRowBytes;
-
-                    TaskTableStats.NSelectRow++;
-                    TaskTableStats.SelectRowRows++;
-                    TaskTableStats.SelectRowBytes += tableStats.SelectRowBytes;
-
+                    ShardTableStats.NSelectRow++; 
+                    ShardTableStats.SelectRowRows++; 
+                    ShardTableStats.SelectRowBytes += tableStats.SelectRowBytes; 
+ 
+                    TaskTableStats.NSelectRow++; 
+                    TaskTableStats.SelectRowRows++; 
+                    TaskTableStats.SelectRowBytes += tableStats.SelectRowBytes; 
+ 
                     return result;
                 }
 
@@ -190,15 +190,15 @@ private:
     ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
     TSmallVec<TTag> SystemColumnTags;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
+    TKqpTableStats& ShardTableStats; 
+    TKqpTableStats& TaskTableStats; 
     const NTable::TScheme::TTableInfo* TableInfo;
     TSmallVec<NScheme::TTypeId> CellTypes;
     mutable bool Finished = false;
 };
 
-class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTableWrapper> {
-    using TBase = TStatelessFlowComputationNode<TKqpLookupTableWrapper>;
+class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTableWrapper> { 
+    using TBase = TStatelessFlowComputationNode<TKqpLookupTableWrapper>; 
 
 public:
     TKqpLookupTableWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
@@ -211,8 +211,8 @@ public:
         , LocalTid(ComputeCtx.GetLocalTableId(ParseResult.TableId))
         , ColumnTags(ExtractTags(ParseResult.Columns))
         , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
-        , ShardTableStats(ComputeCtx.GetDatashardCounters())
-        , TaskTableStats(ComputeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId()))
+        , ShardTableStats(ComputeCtx.GetDatashardCounters()) 
+        , TaskTableStats(ComputeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) 
         , TableInfo(ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid))
     {
         MKQL_ENSURE_S(TableInfo);
@@ -261,32 +261,32 @@ public:
             }
 
             TUnboxedValue result;
-            TKqpTableStats tableStats;
-            auto fetched = TryFetchRow(*Iterator, result, ctx, tableStats, ComputeCtx, SystemColumnTags, ParseResult.SkipNullKeys);
-
-            if (Iterator->Stats.InvisibleRowSkips) {
+            TKqpTableStats tableStats; 
+            auto fetched = TryFetchRow(*Iterator, result, ctx, tableStats, ComputeCtx, SystemColumnTags, ParseResult.SkipNullKeys); 
+ 
+            if (Iterator->Stats.InvisibleRowSkips) { 
                 ComputeCtx.BreakSetLocks();
-            }
-
-            ShardTableStats += tableStats;
-            TaskTableStats += tableStats;
-
-            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
-
-            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            ShardTableStats.InvisibleRowSkips += invisibleRowSkips;
-
-            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
-
+            } 
+ 
+            ShardTableStats += tableStats; 
+            TaskTableStats += tableStats; 
+ 
+            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0); 
+            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0); 
+ 
+            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+            ShardTableStats.InvisibleRowSkips += invisibleRowSkips; 
+ 
+            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+            TaskTableStats.InvisibleRowSkips += invisibleRowSkips; 
+ 
             if (fetched) {
                 return result;
             }
 
             if (Iterator->Last() == NTable::EReady::Page) {
-                ComputeCtx.SetTabletNotReady();
-                return TUnboxedValue::MakeYield();
+                ComputeCtx.SetTabletNotReady(); 
+                return TUnboxedValue::MakeYield(); 
             }
 
             Iterator = nullptr;
@@ -308,8 +308,8 @@ private:
     ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
     TSmallVec<TTag> SystemColumnTags;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
+    TKqpTableStats& ShardTableStats; 
+    TKqpTableStats& TaskTableStats; 
     const NTable::TScheme::TTableInfo* TableInfo;
     mutable TAutoPtr<NTable::TTableIt> Iterator;
     mutable bool Finished = false;
@@ -329,9 +329,9 @@ IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputa
     MKQL_ENSURE_S(tableInfo);
 
     if (tableInfo->KeyColumns.size() == parseResult.KeyIndices.size()) {
-        return new TKqpLookupRowsWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode);
+        return new TKqpLookupRowsWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode); 
     } else {
-        return new TKqpLookupTableWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode);
+        return new TKqpLookupTableWrapper(ctx.Mutables, computeCtx, ctx.Env, parseResult, lookupKeysNode); 
     }
 }
 
@@ -340,7 +340,7 @@ IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputa
 IComputationNode* WrapKqpLookupTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {
-    return WrapKqpLookupTableInternal(callable, ctx, computeCtx);
+    return WrapKqpLookupTableInternal(callable, ctx, computeCtx); 
 }
 
 } // namespace NMiniKQL

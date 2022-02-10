@@ -73,7 +73,7 @@ namespace NKikimr {
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
         TIntrusivePtr<TDomainsInfo> Domains;
         TMap<ui32, NKikimrProto::TKeyConfig> Keys;
-        bool EnableKqpSpilling = false;
+        bool EnableKqpSpilling = false; 
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;

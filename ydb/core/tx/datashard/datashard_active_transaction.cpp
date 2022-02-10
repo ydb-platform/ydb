@@ -55,103 +55,103 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         if (self->TableInfos.contains(tx.GetTableId().GetTableId())) {
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
             Y_VERIFY(info, "Unexpected missing table info");
-            TSerializedTableRange range(tx.GetRange());
+            TSerializedTableRange range(tx.GetRange()); 
             EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                                             tx.GetTableId().GetTableId()),
-                                   {}, range.ToTableRange(), info->KeyColumnTypes);
+                                   {}, range.ToTableRange(), info->KeyColumnTypes); 
         } else {
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = "Trying to read from table that doesn't exist";
         }
     } else if (IsKqpTx()) {
-        if (Y_UNLIKELY(!IsKqpDataTx())) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << TabletId()
-                << ", txid: " << StepTxId_.TxId << ", tx: " << Tx.DebugString());
-            ErrCode = NKikimrTxDataShard::TError::BAD_TX_KIND;
-            ErrStr = TStringBuilder() << "Unexpected KQP transaction type: "
-                << NKikimrTxDataShard::EKqpTransactionType_Name(Tx.GetKqpTransaction().GetType()) << ".";
-            return;
-        }
-
-        auto& typeRegistry = *AppData()->TypeRegistry;
-        auto& computeCtx = EngineBay.GetKqpComputeCtx();
-
-        try {
-            bool hasPersistentChannels = false;
-            if (!KqpValidateTransaction(GetKqpTransaction(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed, datashard: "
-                    << TabletId() << ", txid: " << StepTxId_.TxId);
-                ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-                ErrStr = "Transaction validation failed.";
-                return;
-            }
-            computeCtx.SetHasPersistentChannels(hasPersistentChannels);
-
-            for (auto& task : GetKqpTransaction().GetTasks()) {
-                NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
-                if (!task.GetMeta().UnpackTo(&meta)) {
+        if (Y_UNLIKELY(!IsKqpDataTx())) { 
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << TabletId() 
+                << ", txid: " << StepTxId_.TxId << ", tx: " << Tx.DebugString()); 
+            ErrCode = NKikimrTxDataShard::TError::BAD_TX_KIND; 
+            ErrStr = TStringBuilder() << "Unexpected KQP transaction type: " 
+                << NKikimrTxDataShard::EKqpTransactionType_Name(Tx.GetKqpTransaction().GetType()) << "."; 
+            return; 
+        } 
+ 
+        auto& typeRegistry = *AppData()->TypeRegistry; 
+        auto& computeCtx = EngineBay.GetKqpComputeCtx(); 
+ 
+        try { 
+            bool hasPersistentChannels = false; 
+            if (!KqpValidateTransaction(GetKqpTransaction(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) { 
+                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed, datashard: " 
+                    << TabletId() << ", txid: " << StepTxId_.TxId); 
+                ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR; 
+                ErrStr = "Transaction validation failed."; 
+                return; 
+            } 
+            computeCtx.SetHasPersistentChannels(hasPersistentChannels); 
+ 
+            for (auto& task : GetKqpTransaction().GetTasks()) { 
+                NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta; 
+                if (!task.GetMeta().UnpackTo(&meta)) { 
                     LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed"
                         << ", datashard: " << TabletId()
-                        << ", txid: " << StepTxId_.TxId
-                        << ", failed to load task meta: " << task.GetMeta().value());
+                        << ", txid: " << StepTxId_.TxId 
+                        << ", failed to load task meta: " << task.GetMeta().value()); 
                     ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-                    ErrStr = "Transaction validation failed: invalid task metadata.";
+                    ErrStr = "Transaction validation failed: invalid task metadata."; 
                     return;
                 }
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << TabletId()
-                    << ", task: " << task.GetId() << ", meta: " << meta.ShortDebugString());
-
-                auto& tableMeta = meta.GetTable();
-
-                auto tableInfoPtr = self->TableInfos.FindPtr(tableMeta.GetTableId().GetTableId());
-                if (!tableInfoPtr) {
-                    ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' doesn't exist";
-                    return;
-                }
-                auto tableInfo = tableInfoPtr->Get();
-                YQL_ENSURE(tableInfo);
-
-                if (tableInfo->GetTableSchemaVersion() != 0 &&
-                    tableMeta.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
-                {
-                    ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED;
-                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed.";
-                    return;
-                }
-
-                for (auto& read : meta.GetReads()) {
-                    for (auto& column : read.GetColumns()) {
-                        if (tableInfo->Columns.contains(column.GetId()) || IsSystemColumn(column.GetName())) {
-                            // ok
-                        } else {
-                            ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED;
-                            ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed:"
-                                << " column '" << column.GetName() << "' not found.";
-                            return;
-                        }
-                    }
-                }
-
-                KqpSetTxKeys(TabletId(), task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
-
-                for (auto& output : task.GetOutputs()) {
-                    for (auto& channel : output.GetChannels()) {
-                        computeCtx.SetTaskOutputChannel(task.GetId(), channel.GetId(),
-                            ActorIdFromProto(channel.GetDstEndpoint().GetActorId()));
-                    }
-                }
-            }
-
-            if (Tx.HasPerShardKeysSizeLimitBytes()) {
-                PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes();
-            }
-
-            IsReadOnly = IsReadOnly && Tx.GetReadOnly();
-
-            KqpSetTxLocksKeys(GetKqpTransaction().GetLocks(), self->SysLocksTable(), EngineBay);
-            EngineBay.MarkTxLoaded();
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << TabletId() 
+                    << ", task: " << task.GetId() << ", meta: " << meta.ShortDebugString()); 
+ 
+                auto& tableMeta = meta.GetTable(); 
+ 
+                auto tableInfoPtr = self->TableInfos.FindPtr(tableMeta.GetTableId().GetTableId()); 
+                if (!tableInfoPtr) { 
+                    ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR; 
+                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' doesn't exist"; 
+                    return; 
+                } 
+                auto tableInfo = tableInfoPtr->Get(); 
+                YQL_ENSURE(tableInfo); 
+ 
+                if (tableInfo->GetTableSchemaVersion() != 0 && 
+                    tableMeta.GetSchemaVersion() != tableInfo->GetTableSchemaVersion()) 
+                { 
+                    ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED; 
+                    ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed."; 
+                    return; 
+                } 
+ 
+                for (auto& read : meta.GetReads()) { 
+                    for (auto& column : read.GetColumns()) { 
+                        if (tableInfo->Columns.contains(column.GetId()) || IsSystemColumn(column.GetName())) { 
+                            // ok 
+                        } else { 
+                            ErrCode = NKikimrTxDataShard::TError::SCHEME_CHANGED; 
+                            ErrStr = TStringBuilder() << "Table '" << tableMeta.GetTablePath() << "' scheme changed:" 
+                                << " column '" << column.GetName() << "' not found."; 
+                            return; 
+                        } 
+                    } 
+                } 
+ 
+                KqpSetTxKeys(TabletId(), task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay); 
+ 
+                for (auto& output : task.GetOutputs()) { 
+                    for (auto& channel : output.GetChannels()) { 
+                        computeCtx.SetTaskOutputChannel(task.GetId(), channel.GetId(), 
+                            ActorIdFromProto(channel.GetDstEndpoint().GetActorId())); 
+                    } 
+                } 
+            } 
+ 
+            if (Tx.HasPerShardKeysSizeLimitBytes()) { 
+                PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes(); 
+            } 
+ 
+            IsReadOnly = IsReadOnly && Tx.GetReadOnly(); 
+ 
+            KqpSetTxLocksKeys(GetKqpTransaction().GetLocks(), self->SysLocksTable(), EngineBay); 
+            EngineBay.MarkTxLoaded(); 
 
             auto& tasksRunner = GetKqpTasksRunner(); // prepare tasks runner, can throw TMemoryLimitExceededException
 
@@ -159,17 +159,17 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             auto execCtx = DefaultKqpExecutionContext();
             tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
-        } catch (const TMemoryLimitExceededException&) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Not enough memory to create tasks runner, datashard: "
-                << TabletId() << ", txid: " << StepTxId_.TxId);
+        } catch (const TMemoryLimitExceededException&) { 
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Not enough memory to create tasks runner, datashard: " 
+                << TabletId() << ", txid: " << StepTxId_.TxId); 
+            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR; 
+            ErrStr = TStringBuilder() << "Transaction validation failed: not enough memory."; 
+            return; 
+        } catch (const yexception& e) { 
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while validating KQP transaction, datashard: " 
+                << TabletId() << ", txid: " << StepTxId_.TxId << ", error: " << e.what()); 
             ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-            ErrStr = TStringBuilder() << "Transaction validation failed: not enough memory.";
-            return;
-        } catch (const yexception& e) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while validating KQP transaction, datashard: "
-                << TabletId() << ", txid: " << StepTxId_.TxId << ", error: " << e.what());
-            ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
-            ErrStr = TStringBuilder() << "Transaction validation failed: " << e.what() << ".";
+            ErrStr = TStringBuilder() << "Transaction validation failed: " << e.what() << "."; 
             return;
         }
     } else {
@@ -199,9 +199,9 @@ TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDataTx::GetKqpTasks() const {
+const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDataTx::GetKqpTasks() const { 
     Y_VERIFY(IsKqpTx());
-    return Tx.GetKqpTransaction().GetTasks();
+    return Tx.GetKqpTransaction().GetTasks(); 
 }
 
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
@@ -660,7 +660,7 @@ void TActiveTransaction::FinalizeDataTxPlan()
 {
     Y_VERIFY(IsDataTx());
     Y_VERIFY(!IsImmediate());
-    Y_VERIFY(!IsKqpScanTransaction());
+    Y_VERIFY(!IsKqpScanTransaction()); 
 
     TVector<EExecutionUnitKind> plan;
 
@@ -709,7 +709,7 @@ public:
             // Restore transaction type flags
             if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction())
                 tx->SetKqpDataTransactionFlag();
-            Y_VERIFY_S(!dataTx->IsKqpScanTx(), "unexpected kqp scan tx");
+            Y_VERIFY_S(!dataTx->IsKqpScanTx(), "unexpected kqp scan tx"); 
         }
 
         tx->FinalizeDataTxPlan();
@@ -732,7 +732,7 @@ THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPip
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {
     Y_VERIFY(GetExecutionPlan().empty());
-    Y_VERIFY(!IsKqpScanTransaction());
+    Y_VERIFY(!IsKqpScanTransaction()); 
 
     TVector<EExecutionUnitKind> plan;
     if (IsDataTx()) {

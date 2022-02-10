@@ -1132,12 +1132,12 @@ struct TStoragePolicy {
     FLUENT_SETTING_VECTOR(TColumnFamilyPolicy, ColumnFamilies);
 };
 
-struct TExplicitPartitions {
-    using TSelf = TExplicitPartitions;
-
-    FLUENT_SETTING_VECTOR(TValue, SplitPoints);
-};
-
+struct TExplicitPartitions { 
+    using TSelf = TExplicitPartitions; 
+ 
+    FLUENT_SETTING_VECTOR(TValue, SplitPoints); 
+}; 
+ 
 struct TPartitioningPolicy {
     using TSelf = TPartitioningPolicy;
 
@@ -1146,8 +1146,8 @@ struct TPartitioningPolicy {
     FLUENT_SETTING_OPTIONAL(EAutoPartitioningPolicy, AutoPartitioning);
 
     FLUENT_SETTING_OPTIONAL(ui64, UniformPartitions);
-
-    FLUENT_SETTING_OPTIONAL(TExplicitPartitions, ExplicitPartitions);
+ 
+    FLUENT_SETTING_OPTIONAL(TExplicitPartitions, ExplicitPartitions); 
 };
 
 struct TReplicationPolicy {

@@ -86,7 +86,7 @@ namespace NPDisk {
     {
         runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(),
             TActorSetupCmd(
-                NResourceBroker::CreateResourceBrokerActor(NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)),
+                NResourceBroker::CreateResourceBrokerActor(NResourceBroker::MakeDefaultConfig(), runtime.GetDynamicCounters(0)), 
                 TMailboxType::Revolving, 0),
             nodeIndex);
     }

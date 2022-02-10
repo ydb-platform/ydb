@@ -41,7 +41,7 @@ using namespace Yql::DqsProto;
 namespace NYql::NDqs {
     namespace {
         TVector<TDqPhyStage> GetStages(const TExprNode::TPtr& exprRoot) {
-            TVector<TDqPhyStage> stages;
+            TVector<TDqPhyStage> stages; 
             VisitExpr(
                 exprRoot,
                 [](const TExprNode::TPtr& exprNode) {
@@ -50,7 +50,7 @@ namespace NYql::NDqs {
                 },
                 [&stages](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
-                    if (auto maybeStage = node.Maybe<TDqPhyStage>()) {
+                    if (auto maybeStage = node.Maybe<TDqPhyStage>()) { 
                         stages.push_back(maybeStage.Cast());
                     }
 
@@ -371,7 +371,7 @@ namespace NYql::NDqs {
             program.SetRaw(programStr);
             taskMeta.SetStageId(stageId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
-            taskDesc.SetStageId(stageId);
+            taskDesc.SetStageId(stageId); 
 
             plan.emplace_back(std::move(taskDesc));
         }
@@ -493,14 +493,14 @@ namespace NYql::NDqs {
         continue;                                        \
     }
 
-    void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
-        NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
+    void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) { 
+        NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {}; 
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
             if (input.Maybe<TDqConnection>()) {
                 BUILD_CONNECTION(TDqCnUnionAll, BuildUnionAllChannels);
-                BUILD_CONNECTION(TDqCnHashShuffle, BuildHashShuffleChannels);
+                BUILD_CONNECTION(TDqCnHashShuffle, BuildHashShuffleChannels); 
                 BUILD_CONNECTION(TDqCnBroadcast, BuildBroadcastChannels);
                 BUILD_CONNECTION(TDqCnMap, BuildMapChannels);
                 BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels);
@@ -613,7 +613,7 @@ namespace NYql::NDqs {
         switch (output.Type) {
             case TTaskOutputType::Map:
                 YQL_ENSURE(output.Channels.size() == 1);
-                outputDesc.MutableMap(); //->SetChannelId(output.Channels[0]);
+                outputDesc.MutableMap(); //->SetChannelId(output.Channels[0]); 
                 break;
 
             case TTaskOutputType::HashPartition: {
@@ -627,9 +627,9 @@ namespace NYql::NDqs {
             }
 
             case TTaskOutputType::Broadcast: {
-                //for (const auto channel : output.Channels) {
-                    outputDesc.MutableBroadcast(); //->AddChannelIds(channel);
-                //}
+                //for (const auto channel : output.Channels) { 
+                    outputDesc.MutableBroadcast(); //->AddChannelIds(channel); 
+                //} 
                 break;
             }
 

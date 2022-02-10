@@ -15,7 +15,7 @@ SRCS(
     metric_sub_registry_ut.cpp
     metric_value_ut.cpp
     summary_collector_ut.cpp
-    timer_ut.cpp
+    timer_ut.cpp 
 )
 
 RESOURCE(

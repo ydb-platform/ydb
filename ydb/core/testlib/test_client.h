@@ -111,7 +111,7 @@ namespace Tests {
         bool EnableConsole = true;
         bool EnableConfigsDispatcher = true;
         bool UseRealThreads = true;
-        bool EnableKqpSpilling = false;
+        bool EnableKqpSpilling = false; 
         bool EnableYq = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
@@ -149,7 +149,7 @@ namespace Tests {
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
-        TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
+        TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; } 
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }

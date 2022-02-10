@@ -91,9 +91,9 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
                     << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
                     << " more for the next try");
 
-        txc.NotEnoughMemory();
-        DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
-
+        txc.NotEnoughMemory(); 
+        DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount())); 
+ 
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
 
@@ -105,8 +105,8 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
                     "Tablet " << DataShard.TabletID() << " is not ready for " << *op
                     << " execution");
 
-        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
-
+        DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY); 
+ 
         tx->ReleaseTxData(txc, ctx);
 
         return EExecutionStatus::Restart;

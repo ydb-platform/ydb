@@ -45,16 +45,16 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
         }
     }
 
-    if (tx->GetDataTx()->CheckCancelled()) {
-        tx->ReleaseTxData(txc, ctx);
-        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)
-            ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");
-
-        DataShard.IncCounter(op->IsImmediate() ? COUNTER_IMMEDIATE_TX_CANCELLED : COUNTER_PLANNED_TX_CANCELLED);
-
-        return EExecutionStatus::Executed;
-    }
-
+    if (tx->GetDataTx()->CheckCancelled()) { 
+        tx->ReleaseTxData(txc, ctx); 
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED) 
+            ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled"); 
+ 
+        DataShard.IncCounter(op->IsImmediate() ? COUNTER_IMMEDIATE_TX_CANCELLED : COUNTER_PLANNED_TX_CANCELLED); 
+ 
+        return EExecutionStatus::Executed; 
+    } 
+ 
     try {
         KqpPrepareInReadsets(op->InReadSets(), tx->GetDataTx()->GetKqpTransaction(), DataShard.TabletID());
     } catch (const yexception& e) {

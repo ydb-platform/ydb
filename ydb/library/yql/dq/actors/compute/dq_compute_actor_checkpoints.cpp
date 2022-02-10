@@ -22,7 +22,7 @@
 #define LOG_CP_E(s) \
     LOG_E("[Checkpoint " << MakeStringForLog(*PendingCheckpoint.Checkpoint) << "] " << s)
 
-namespace NYql::NDq {
+namespace NYql::NDq { 
 
 using namespace NActors;
 
@@ -167,7 +167,7 @@ bool TDqComputeActorCheckpoints::ShouldIgnoreOldCoordinator(const E& ev, bool ve
     return false;
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev, false)) {
         return;
     }
@@ -200,7 +200,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
     }
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev)) {
         return;
     }
@@ -213,7 +213,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&
     ComputeActor->ResumeExecution();
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvSaveTaskStateResult::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvSaveTaskStateResult::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev)) {
         return;
     }
@@ -221,7 +221,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvSaveTaskStateResult::TP
     EventsQueue.Send(ev->Release().Release(), ev->Cookie);
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev)) {
         return;
     }
@@ -273,7 +273,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
     }
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev)) {
         return;
     }
@@ -328,7 +328,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRun::TPtr& ev) {
     EventsQueue.OnEventReceived(ev);
 }
 
-void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvCommitState::TPtr& ev) {
+void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvCommitState::TPtr& ev) { 
     if (ShouldIgnoreOldCoordinator(ev)) {
         return;
     }
@@ -395,10 +395,10 @@ bool TDqComputeActorCheckpoints::SaveState() {
         PendingCheckpoint.Clear();
         LOG_CP_E("Failed to save state: " << e.what());
 
-        auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
+        auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>(); 
         resultEv->Record.MutableCheckpoint()->CopyFrom(*PendingCheckpoint.Checkpoint);
         resultEv->Record.SetTaskId(Task.GetId());
-        resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
+        resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR); 
         EventsQueue.Send(std::move(resultEv));
 
         return false;
@@ -408,7 +408,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
     return true;
 }
 
-void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) {
+void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) { 
     if (!PendingCheckpoint) {
         PendingCheckpoint = checkpoint;
     } else {
@@ -500,4 +500,4 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& t
     return NDqProto::CHECKPOINTING_MODE_DISABLED;
 }
 
-} // namespace NYql::NDq
+} // namespace NYql::NDq 

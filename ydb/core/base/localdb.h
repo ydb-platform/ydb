@@ -144,8 +144,8 @@ extern const TString UnknownTaskName;
 extern const TString TransactionTaskName;
 extern const TString ScanTaskName;
 extern const TString BackgroundCompactionTaskName;
-extern const TString KqpResourceManagerTaskName;
-extern const TString KqpResourceManagerQueue;
+extern const TString KqpResourceManagerTaskName; 
+extern const TString KqpResourceManagerQueue; 
 extern const TString LegacyQueueIdTaskNamePrefix;
 
 }}

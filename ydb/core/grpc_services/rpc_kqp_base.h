@@ -41,14 +41,14 @@ inline TString GetTransactionModeName(const Ydb::Table::TransactionSettings& set
     }
 }
 
-inline NYql::NDqProto::EDqStatsMode GetKqpStatsMode(Ydb::Table::QueryStatsCollection::Mode mode) {
+inline NYql::NDqProto::EDqStatsMode GetKqpStatsMode(Ydb::Table::QueryStatsCollection::Mode mode) { 
     switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+            return NYql::NDqProto::DQ_STATS_MODE_BASIC; 
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+            return NYql::NDqProto::DQ_STATS_MODE_PROFILE; 
         default:
-            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+            return NYql::NDqProto::DQ_STATS_MODE_NONE; 
     }
 }
 

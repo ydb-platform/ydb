@@ -10,19 +10,19 @@ namespace NKqp {
 
 struct TKqpRangePartition {
     TKeyDesc::TPartitionRangeInfo Range;
-    ui64 ChannelId = std::numeric_limits<ui64>::max();
+    ui64 ChannelId = std::numeric_limits<ui64>::max(); 
 };
 
 TTableId ParseTableId(const NMiniKQL::TRuntimeNode& node);
 
 NUdf::TDataTypeId UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 
-NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
+NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer( 
     TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
-    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
-    const NMiniKQL::TTypeEnvironment& typeEnv);
+    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices, 
+    const NMiniKQL::TTypeEnvironment& typeEnv); 
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKqp 
+} // namespace NKikimr 

@@ -971,17 +971,17 @@
             ]
         },
         {
-            "Name": "TCoSqueezeToDict",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SqueezeToDict"},
-            "Children": [
-                {"Index": 0, "Name": "Stream", "Type": "TExprBase"},
-                {"Index": 1, "Name": "KeySelector", "Type": "TCoLambda"},
-                {"Index": 2, "Name": "PayloadSelector", "Type": "TCoLambda"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoAtomList"}
-            ]
-        },
-        {
+            "Name": "TCoSqueezeToDict", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "SqueezeToDict"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Stream", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "KeySelector", "Type": "TCoLambda"}, 
+                {"Index": 2, "Name": "PayloadSelector", "Type": "TCoLambda"}, 
+                {"Index": 3, "Name": "Settings", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoSqueezeToList",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SqueezeToList"},
@@ -991,22 +991,22 @@
             ]
         },
         {
-            "Name": "TCoDictKeys",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DictKeys"},
-            "Children": [
-                {"Index": 0, "Name": "Dict", "Type": "TExprBase"}
-            ]
-        },
-        {
-            "Name": "TCoDictPayloads",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DictPayloads"},
-            "Children": [
-                {"Index": 0, "Name": "Dict", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Name": "TCoDictKeys", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DictKeys"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Dict", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoDictPayloads", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DictPayloads"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Dict", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoDictItems",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DictItems"},
@@ -1496,13 +1496,13 @@
                 {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
             ]
         },
-
+ 
         {
-            "Name": "TCoFlattenMembers",
-            "VarArgBase": "TCoNameValueTuple",
-            "Match": {"Type": "Callable", "Name": "FlattenMembers"}
-        },
-        {
+            "Name": "TCoFlattenMembers", 
+            "VarArgBase": "TCoNameValueTuple", 
+            "Match": {"Type": "Callable", "Name": "FlattenMembers"} 
+        }, 
+        { 
             "Name": "TCoAssumeUnique",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "AssumeUnique"},
@@ -1789,15 +1789,15 @@
             ]
         },
         {
-            "Name": "TCoStrictCast",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "StrictCast"},
-            "Children": [
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Type", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Name": "TCoStrictCast", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "StrictCast"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Type", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoFromYsonSimpleType",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "FromYsonSimpleType"},

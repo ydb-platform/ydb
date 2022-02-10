@@ -5,7 +5,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-
+ 
 #include <util/generic/size_literals.h>
 
 namespace NYql::NDq {
@@ -14,8 +14,8 @@ using namespace NYql::NNodes;
 
 namespace {
 
-inline std::string_view GetTableLabel(const TExprBase& node) {
-    static const std::string_view empty;
+inline std::string_view GetTableLabel(const TExprBase& node) { 
+    static const std::string_view empty; 
 
     if (node.Maybe<TCoAtom>()) {
         return node.Cast<TCoAtom>().Value();
@@ -24,8 +24,8 @@ inline std::string_view GetTableLabel(const TExprBase& node) {
     return empty;
 }
 
-inline TString GetColumnName(std::string_view label, const TItemExprType *key) {
-    if (!label.empty()) {
+inline TString GetColumnName(std::string_view label, const TItemExprType *key) { 
+    if (!label.empty()) { 
         return FullColumnName(label, key->GetName());
     }
 
@@ -33,7 +33,7 @@ inline TString GetColumnName(std::string_view label, const TItemExprType *key) {
 }
 
 std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprContext& ctx, const TDqJoinBase& join,
-    std::string_view leftTableLabel, std::string_view rightTableLabel)
+    std::string_view leftTableLabel, std::string_view rightTableLabel) 
 {
     TExprNode::TListType leftNodes;
     TExprNode::TListType rightNodes;
@@ -63,63 +63,63 @@ std::pair<TExprNode::TListType, TExprNode::TListType> JoinKeysToAtoms(TExprConte
         rightNodes.emplace_back(rightValue);
     }
 
-    return {std::move(leftNodes), std::move(rightNodes)};
+    return {std::move(leftNodes), std::move(rightNodes)}; 
 }
 
-TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, const TExprNode::TListType& keyAtoms,
-    const TTypeAnnotationNode::TListType& keyDryTypes, bool optional)
-{
-    YQL_ENSURE(keyAtoms.size() == keyDryTypes.size());
-
-    TExprNode::TListType keysTuple;
-
-    auto keySelectorArg = Build<TCoArgument>(ctx, pos)
-        .Name("keyArg")
-        .Done();
-
-    for (const auto& atom: keyAtoms) {
-        auto member = Build<TCoMember>(ctx, pos)
-            .Struct(keySelectorArg)
-            .Name(atom)
-            .Done();
-
-        keysTuple.emplace_back(member.Ptr());
-    }
-
-    if (keysTuple.size() == 1) {
-        return optional
-            ? Build<TCoLambda>(ctx, pos)
-                .Args({keySelectorArg})
-                .Body<TCoStrictCast>()
-                    .Value(keysTuple[0])
-                    .Type(ExpandType(pos, *keyDryTypes[0], ctx))
-                    .Build()
-                .Done().Ptr()
-            : Build<TCoLambda>(ctx, pos)
-                .Args({keySelectorArg})
-                .Body<TCoJust>()
-                    .Input(keysTuple[0])
-                    .Build()
-                .Done().Ptr();
-    }
-
-    auto type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyDryTypes));
-    return optional
-        ? Build<TCoLambda>(ctx, pos)
-            .Args({keySelectorArg})
-            .Body<TCoStrictCast>()
-                .Value(ctx.NewList(pos, std::move(keysTuple)))
-                .Type(ExpandType(pos, *type, ctx))
-                .Build()
-            .Done().Ptr()
-        : Build<TCoLambda>(ctx, pos)
-            .Args({keySelectorArg})
-            .Body<TCoJust>()
-                .Input(ctx.NewList(pos, std::move(keysTuple)))
-                .Build()
-            .Done().Ptr();
-}
-
+TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, const TExprNode::TListType& keyAtoms, 
+    const TTypeAnnotationNode::TListType& keyDryTypes, bool optional) 
+{ 
+    YQL_ENSURE(keyAtoms.size() == keyDryTypes.size()); 
+ 
+    TExprNode::TListType keysTuple; 
+ 
+    auto keySelectorArg = Build<TCoArgument>(ctx, pos) 
+        .Name("keyArg") 
+        .Done(); 
+ 
+    for (const auto& atom: keyAtoms) { 
+        auto member = Build<TCoMember>(ctx, pos) 
+            .Struct(keySelectorArg) 
+            .Name(atom) 
+            .Done(); 
+ 
+        keysTuple.emplace_back(member.Ptr()); 
+    } 
+ 
+    if (keysTuple.size() == 1) { 
+        return optional 
+            ? Build<TCoLambda>(ctx, pos) 
+                .Args({keySelectorArg}) 
+                .Body<TCoStrictCast>() 
+                    .Value(keysTuple[0]) 
+                    .Type(ExpandType(pos, *keyDryTypes[0], ctx)) 
+                    .Build() 
+                .Done().Ptr() 
+            : Build<TCoLambda>(ctx, pos) 
+                .Args({keySelectorArg}) 
+                .Body<TCoJust>() 
+                    .Input(keysTuple[0]) 
+                    .Build() 
+                .Done().Ptr(); 
+    } 
+ 
+    auto type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyDryTypes)); 
+    return optional 
+        ? Build<TCoLambda>(ctx, pos) 
+            .Args({keySelectorArg}) 
+            .Body<TCoStrictCast>() 
+                .Value(ctx.NewList(pos, std::move(keysTuple))) 
+                .Type(ExpandType(pos, *type, ctx)) 
+                .Build() 
+            .Done().Ptr() 
+        : Build<TCoLambda>(ctx, pos) 
+            .Args({keySelectorArg}) 
+            .Body<TCoJust>() 
+                .Input(ctx.NewList(pos, std::move(keysTuple))) 
+                .Build() 
+            .Done().Ptr(); 
+} 
+ 
 } // anonymous namespace end
 
 /**
@@ -128,8 +128,8 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
  * Restrictions:
  *  - Don't select join strategy, always use `MapJoin`
  *  - Explicitly convert right input to the dict
- *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda
- *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
+ *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda 
+ *    (rely on the fact that there will be only one element in the `FlatMap`-stream) 
  */
 TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
@@ -175,7 +175,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         if (!keyTypes[i])
             keyTypes.clear();
     }
-
+ 
     auto leftInput = ctx.NewCallable(mapJoin.LeftInput().Pos(), "ToFlow", {mapJoin.LeftInput().Ptr()});
     auto rightInput = ctx.NewCallable(mapJoin.RightInput().Pos(), "ToFlow", {mapJoin.RightInput().Ptr()});
 
@@ -233,7 +233,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
                 .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
                 .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
                 .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
-                .Build()
+                .Build() 
             .Build()
         .Done();
 }
@@ -271,9 +271,9 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
     // because stream supports single iteration only
     auto itemArg = Build<TCoArgument>(ctx, crossJoin.Pos()).Name("item").Done();
     auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, crossJoin.Pos())
-        .Input<TCoToFlow>()
-            .Input(crossJoin.RightInput())
-            .Build()
+        .Input<TCoToFlow>() 
+            .Input(crossJoin.RightInput()) 
+            .Build() 
         .InitHandler()
             .Args({itemArg})
             .Body<TCoAsList>()
@@ -321,22 +321,22 @@ TExprBase DqPeepholeRewriteCrossJoin(const TExprBase& node, TExprContext& ctx) {
 
 namespace {
 
-TExprNode::TPtr UnpackJoinedData(const TStructExprType* leftRowType, const TStructExprType* rightRowType,
-    std::string_view leftLabel, std::string_view rightLabel, TPositionHandle pos, TExprContext& ctx)
+TExprNode::TPtr UnpackJoinedData(const TStructExprType* leftRowType, const TStructExprType* rightRowType, 
+    std::string_view leftLabel, std::string_view rightLabel, TPositionHandle pos, TExprContext& ctx) 
 {
-    auto arg = Build<TCoArgument>(ctx, pos)
+    auto arg = Build<TCoArgument>(ctx, pos) 
             .Name("packedItem")
             .Done();
 
-    const auto& leftScheme = leftRowType->GetItems();
-    const auto& rightScheme = rightRowType->GetItems();
+    const auto& leftScheme = leftRowType->GetItems(); 
+    const auto& rightScheme = rightRowType->GetItems(); 
 
     TExprNode::TListType outValueItems;
-    outValueItems.reserve(leftScheme.size() + rightScheme.size());
+    outValueItems.reserve(leftScheme.size() + rightScheme.size()); 
 
     for (int tableIndex = 0; tableIndex < 2; tableIndex++) {
-        const auto& scheme = tableIndex ? rightScheme : leftScheme;
-        const auto label = tableIndex ? rightLabel : leftLabel;
+        const auto& scheme = tableIndex ? rightScheme : leftScheme; 
+        const auto label = tableIndex ? rightLabel : leftLabel; 
 
         for (const auto& item : scheme) {
             auto nameAtom = ctx.NewAtom(pos, item->GetName());
@@ -373,72 +373,72 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         return node;
     }
 
-    const auto joinDict = node.Cast<TDqPhyJoinDict>();
-    const auto joinKind = joinDict.JoinType().Value();
+    const auto joinDict = node.Cast<TDqPhyJoinDict>(); 
+    const auto joinKind = joinDict.JoinType().Value(); 
 
-    YQL_ENSURE(joinKind != "Cross"sv);
+    YQL_ENSURE(joinKind != "Cross"sv); 
+ 
+    const auto leftTableLabel = GetTableLabel(joinDict.LeftLabel()); 
+    const auto rightTableLabel = GetTableLabel(joinDict.RightLabel()); 
+ 
+    auto [leftKeys, rightKeys] = JoinKeysToAtoms(ctx, joinDict, leftTableLabel, rightTableLabel); 
 
-    const auto leftTableLabel = GetTableLabel(joinDict.LeftLabel());
-    const auto rightTableLabel = GetTableLabel(joinDict.RightLabel());
+    YQL_CLOG(TRACE, CoreDq) << "[DqPeepholeRewriteJoinDict] join types" 
+        << ", left: " << *joinDict.LeftInput().Ref().GetTypeAnn() 
+        << ", right: " << *joinDict.RightInput().Ref().GetTypeAnn(); 
 
-    auto [leftKeys, rightKeys] = JoinKeysToAtoms(ctx, joinDict, leftTableLabel, rightTableLabel);
+    const auto* leftRowType = GetSeqItemType(joinDict.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>(); 
+    const auto* rightRowType = GetSeqItemType(joinDict.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>(); 
 
-    YQL_CLOG(TRACE, CoreDq) << "[DqPeepholeRewriteJoinDict] join types"
-        << ", left: " << *joinDict.LeftInput().Ref().GetTypeAnn()
-        << ", right: " << *joinDict.RightInput().Ref().GetTypeAnn();
-
-    const auto* leftRowType = GetSeqItemType(joinDict.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-    const auto* rightRowType = GetSeqItemType(joinDict.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-
-    bool optKeyLeft = false, optKeyRight = false, badKey = false;
-    TTypeAnnotationNode::TListType keyTypeItems;
-    keyTypeItems.reserve(leftKeys.size());
-    for (auto i = 0U; i < leftKeys.size(); ++i) {
-        auto leftKeyType = leftRowType->FindItemType(leftKeys[i]->Content());
-        auto rightKeyType = rightRowType->FindItemType(rightKeys[i]->Content());
+    bool optKeyLeft = false, optKeyRight = false, badKey = false; 
+    TTypeAnnotationNode::TListType keyTypeItems; 
+    keyTypeItems.reserve(leftKeys.size()); 
+    for (auto i = 0U; i < leftKeys.size(); ++i) { 
+        auto leftKeyType = leftRowType->FindItemType(leftKeys[i]->Content()); 
+        auto rightKeyType = rightRowType->FindItemType(rightKeys[i]->Content()); 
         keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(leftKeyType, optKeyLeft, ctx), DryType(rightKeyType, optKeyRight, ctx), ctx));
-        badKey = !keyTypeItems.back();
-        if (badKey) {
-            YQL_CLOG(DEBUG, CoreDq) << "Not comparable keys in join: " << leftKeys[i]->Content()
-                << "(" << *leftKeyType << ") vs " << rightKeys[i]->Content() << "(" << *rightKeyType << ")";
-            break;
-        }
-    }
-
-    TExprNode::TPtr leftKeySelector;
-    TExprNode::TPtr rightKeySelector;
-
-    if (badKey) {
-        leftKeySelector = Build<TCoLambda>(ctx, node.Pos())
-            .Args({"row"})
-            .Body<TCoBool>()
-                .Literal().Build("true")
-                .Build()
-            .Done().Ptr();
-
-        rightKeySelector = Build<TCoLambda>(ctx, node.Pos())
-            .Args({"item"})
-            .Body<TCoBool>()
-                .Literal().Build("false")
-                .Build()
-            .Done().Ptr();
-    } else {
-        leftKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), leftKeys, keyTypeItems, optKeyLeft);
-        rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, optKeyRight);
-    }
-
-    auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
-        return Build<TCoSqueezeToDict>(ctx, input.Pos())
+        badKey = !keyTypeItems.back(); 
+        if (badKey) { 
+            YQL_CLOG(DEBUG, CoreDq) << "Not comparable keys in join: " << leftKeys[i]->Content() 
+                << "(" << *leftKeyType << ") vs " << rightKeys[i]->Content() << "(" << *rightKeyType << ")"; 
+            break; 
+        } 
+    } 
+ 
+    TExprNode::TPtr leftKeySelector; 
+    TExprNode::TPtr rightKeySelector; 
+ 
+    if (badKey) { 
+        leftKeySelector = Build<TCoLambda>(ctx, node.Pos()) 
+            .Args({"row"}) 
+            .Body<TCoBool>() 
+                .Literal().Build("true") 
+                .Build() 
+            .Done().Ptr(); 
+ 
+        rightKeySelector = Build<TCoLambda>(ctx, node.Pos()) 
+            .Args({"item"}) 
+            .Body<TCoBool>() 
+                .Literal().Build("false") 
+                .Build() 
+            .Done().Ptr(); 
+    } else { 
+        leftKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), leftKeys, keyTypeItems, optKeyLeft); 
+        rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, optKeyRight); 
+    } 
+ 
+    auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) { 
+        return Build<TCoSqueezeToDict>(ctx, input.Pos()) 
             .Stream(input)
             .KeySelector(keySelector)
             .PayloadSelector()
-                .Args({"item"})
-                .Body("item")
+                .Args({"item"}) 
+                .Body("item") 
                 .Build()
             .Settings()
-                .Add<TCoAtom>().Build("Hashed")
-                .Add<TCoAtom>().Build("Many")
-                .Add<TCoAtom>().Build("Compact")
+                .Add<TCoAtom>().Build("Hashed") 
+                .Add<TCoAtom>().Build("Many") 
+                .Add<TCoAtom>().Build("Compact") 
                 .Build()
             .Done();
     };
@@ -447,16 +447,16 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     auto rightDict = streamToDict(joinDict.RightInput(), rightKeySelector);
 
     auto join = Build<TCoFlatMap>(ctx, joinDict.Pos())
-        .Input(leftDict) // only 1 element with dict
+        .Input(leftDict) // only 1 element with dict 
         .Lambda()
-            .Args({"left"})
+            .Args({"left"}) 
             .Body<TCoFlatMap>()
-                .Input(rightDict) // only 1 element with dict
+                .Input(rightDict) // only 1 element with dict 
                 .Lambda()
-                    .Args({"right"})
+                    .Args({"right"}) 
                     .Body<TCoJoinDict>()
-                        .LeftInput("left")
-                        .RightInput("right")
+                        .LeftInput("left") 
+                        .RightInput("right") 
                         .JoinKind(joinDict.JoinType())
                         .Build()
                     .Build()
@@ -467,7 +467,7 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     // Join return list of tuple of structs. I.e. if you have tables t1 and t2 with values t1.a, t1.b and t2.c, t2.d,
     // you will receive List<Tuple<Struct<t1.a, t1.b>, Struct<t2.c, t2.d>>> and this data should be unpacked to
     // List<Struct<t1.a, t1.b, t2.c, t2.d>>
-    auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx);
+    auto unpackData = UnpackJoinedData(leftRowType, rightRowType, leftTableLabel, rightTableLabel, join.Pos(), ctx); 
 
     return Build<TCoMap>(ctx, joinDict.Pos())
         .Input(join)

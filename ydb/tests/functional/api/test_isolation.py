@@ -2,7 +2,7 @@
 from hamcrest import assert_that, equal_to, raises, contains_string
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-import pytest
+import pytest 
 import ydb
 
 
@@ -41,30 +41,30 @@ class TestTransactionIsolation(object):
             'upsert into %s (id, value) values (1, 10), (2, 20); ' % table, commit_tx=True)
         return table, session
 
-    @staticmethod
-    def _prepare_engine(new_engine):
-        if new_engine:
-            return 'pragma kikimr.UseNewEngine = "true";'
-        else:
-            return 'pragma kikimr.UseNewEngine = "false";'
-
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_write_cycles_g0(self, new_engine):
+    @staticmethod 
+    def _prepare_engine(new_engine): 
+        if new_engine: 
+            return 'pragma kikimr.UseNewEngine = "true";' 
+        else: 
+            return 'pragma kikimr.UseNewEngine = "false";' 
+ 
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_prevents_write_cycles_g0(self, new_engine): 
         """Write Cycles (G0), locking updated rows"""
         table_name, session = self._prepare("test_prevents_write_cycles_g0")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        t1.execute('{} upsert into {} (id, value) values (1, 11)'.format(prefix, table_name))
-        t2.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values (1, 12)'.format(prefix, table_name))
-        t1.execute('{} upsert into {} (id, value) values (2, 21)'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        t1.execute('{} upsert into {} (id, value) values (1, 11)'.format(prefix, table_name)) 
+        t2.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values (1, 12)'.format(prefix, table_name)) 
+        t1.execute('{} upsert into {} (id, value) values (2, 21)'.format(prefix, table_name)) 
         t1.commit()
 
-        result_rows = t1.execute("{} select id, value from {} order by id;".format(prefix, table_name), commit_tx=True)
+        result_rows = t1.execute("{} select id, value from {} order by id;".format(prefix, table_name), commit_tx=True) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -76,7 +76,7 @@ class TestTransactionIsolation(object):
         )
 
         def callee():
-            t2.execute("{} upsert into {} (id, value) values (2, 22);".format(prefix, table_name))
+            t2.execute("{} upsert into {} (id, value) values (2, 22);".format(prefix, table_name)) 
             t2.commit()
 
         assert_that(
@@ -88,7 +88,7 @@ class TestTransactionIsolation(object):
         )
 
         for e_thread in (t1, ):
-            result_rows = e_thread.execute("{} select id, value from {} order by id;".format(prefix, table_name))
+            result_rows = e_thread.execute("{} select id, value from {} order by id;".format(prefix, table_name)) 
             assert_that(
                 result_rows[0].rows,
                 equal_to(
@@ -99,17 +99,17 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_aborted_reads_g1a(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_prevents_aborted_reads_g1a(self, new_engine): 
         table_name, session = self._prepare("test_prevents_aborted_reads_g1a")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        t1.execute('{} update {} set value = 101 where id = 1;'.format(prefix, table_name))
-        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        t1.execute('{} update {} set value = 101 where id = 1;'.format(prefix, table_name)) 
+        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -122,7 +122,7 @@ class TestTransactionIsolation(object):
 
         # abort;  -- T1 ----> replaced to rollback
         t1.rollback()
-        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -134,18 +134,18 @@ class TestTransactionIsolation(object):
         )
         t2.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_intermediate_reads_g1b(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_prevents_intermediate_reads_g1b(self, new_engine): 
         table_name, session = self._prepare("test_prevents_intermediate_reads_g1b")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        t1.execute('{} select * from {} where id=1'.format(prefix, table_name))
-        t1.execute('{} upsert into {} (id, value) values (1, 101);'.format(prefix, table_name))
-        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True)
+        prefix = self._prepare_engine(new_engine) 
+ 
+        t1.execute('{} select * from {} where id=1'.format(prefix, table_name)) 
+        t1.execute('{} upsert into {} (id, value) values (1, 101);'.format(prefix, table_name)) 
+        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -156,10 +156,10 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name))
+        t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name)) 
         t1.commit()
 
-        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True)
+        result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name), commit_tx=True) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -171,24 +171,24 @@ class TestTransactionIsolation(object):
         )
         t2.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_isolation_mailing_list_example(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_isolation_mailing_list_example(self, new_engine): 
         table_name, session = self._prepare("test_isolation_mailing_list_example")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine(new_engine) 
 
-        t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 3);'.format(prefix, table_name)), commit_tx=True)
-
-        t1.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name)))
-        t2.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name)))
-        t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 4);'.format(prefix, table_name)))
+        t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 3);'.format(prefix, table_name)), commit_tx=True) 
+ 
+        t1.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name))) 
+        t2.execute(session.prepare('{} select id, value FROM {} WHERE id = 1'.format(prefix, table_name))) 
+        t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 4);'.format(prefix, table_name))) 
         t1.commit()
 
         def callee():
-            t2.execute(session.prepare('{} upsert into {} (id, value) values (1, 5);'.format(prefix, table_name)))
+            t2.execute(session.prepare('{} upsert into {} (id, value) values (1, 5);'.format(prefix, table_name))) 
             t2.commit()
 
         assert_that(
@@ -200,7 +200,7 @@ class TestTransactionIsolation(object):
         )
 
         for thr in (t1, ):
-            result_rows = thr.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name), commit_tx=True)
+            result_rows = thr.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name), commit_tx=True) 
             assert_that(
                 result_rows[0].rows[0].value,
                 equal_to(
@@ -208,23 +208,23 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_observed_transaction_vanishes_otv(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_prevents_observed_transaction_vanishes_otv(self, new_engine): 
         table_name, session = self._prepare("test_prevents_observed_transaction_vanishes_otv")
 
         t1 = session.transaction()
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        t1.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
-        t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name))
-        t1.execute('{} upsert into {} (id, value) values (2, 19);'.format(prefix, table_name))
-        t2.execute('{} select * from {} where id=1'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values (1, 12);'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        t1.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name)) 
+        t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name)) 
+        t1.execute('{} upsert into {} (id, value) values (2, 19);'.format(prefix, table_name)) 
+        t2.execute('{} select * from {} where id=1'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values (1, 12);'.format(prefix, table_name)) 
         t1.commit()
-        result_rows = t3.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t3.execute('{} select value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -235,7 +235,7 @@ class TestTransactionIsolation(object):
         )
 
         def callee():
-            t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name))
+            t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name)) 
             t2.commit()
 
         assert_that(
@@ -246,10 +246,10 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t3.execute('{} select value from {} where id = 2;'.format(prefix, table_name))
+        t3.execute('{} select value from {} where id = 2;'.format(prefix, table_name)) 
         # commit; -- T2 we already got transaction locks invalidated error
 
-        result_rows = t3.execute('{} select value from {} where id = 2;'.format(prefix, table_name))
+        result_rows = t3.execute('{} select value from {} where id = 2;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -258,7 +258,7 @@ class TestTransactionIsolation(object):
                 ]
             )
         )
-        result_rows = t3.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t3.execute('{} select value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -269,19 +269,19 @@ class TestTransactionIsolation(object):
         )
         t3.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_does_not_prevent_predicate_many_preceders_pmp(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_does_not_prevent_predicate_many_preceders_pmp(self, new_engine): 
         table_name, session = self._prepare("test_does_not_prevent_predicate_many_preceders_pmp")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select id from {} where value = 30;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select id from {} where value = 30;'.format(prefix, table_name)) 
         assert_that(result_rows[0].rows, equal_to([]))
 
-        t2.execute('{} upsert into {} (id, value) values(3, 30);'.format(prefix, table_name))
+        t2.execute('{} upsert into {} (id, value) values(3, 30);'.format(prefix, table_name)) 
         t2.commit()
 
         try:
@@ -292,31 +292,31 @@ class TestTransactionIsolation(object):
         else:
             assert_that(result_rows[0].rows, equal_to([]))
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_p4(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_lost_update_p4(self, new_engine): 
         table_name, session = self._prepare("test_lost_update_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select id from {} where id = 1;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select id from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [{'id': 1}]
             )
         )
 
-        result_rows = t2.execute('{} select id from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select id from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [{'id': 1}]
             )
         )
 
-        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name))
-        t2.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name))
+        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name)) 
+        t2.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name)) 
 
         t1.commit()
 
@@ -331,16 +331,16 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_on_value_p4(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_lost_update_on_value_p4(self, new_engine): 
         table_name, session = self._prepare("test_lost_update_on_value_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -350,7 +350,7 @@ class TestTransactionIsolation(object):
             )
         )
 
-        result_rows = t2.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -360,11 +360,11 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name))
+        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name)) 
         t1.commit()
 
         def callee():
-            t2.execute('{} update {} set value = 12 where id = 1;'.format(prefix, table_name))
+            t2.execute('{} update {} set value = 12 where id = 1;'.format(prefix, table_name)) 
             t2.commit()
 
         assert_that(
@@ -375,16 +375,16 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_on_value_with_upsert_p4(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_lost_update_on_value_with_upsert_p4(self, new_engine): 
         table_name, session = self._prepare("test_lost_update_on_value_with_upsert_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [
@@ -393,7 +393,7 @@ class TestTransactionIsolation(object):
             )
         )
 
-        result_rows = t2.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [
@@ -402,9 +402,9 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t1.execute('{} upsert into {} (id, value) VALUES (1, 11);'.format(prefix, table_name))
+        t1.execute('{} upsert into {} (id, value) VALUES (1, 11);'.format(prefix, table_name)) 
         t1.commit()
-        t2.execute('{} upsert into {} (id, value) VALUES (1, 12);'.format(prefix, table_name))
+        t2.execute('{} upsert into {} (id, value) VALUES (1, 12);'.format(prefix, table_name)) 
 
         def callee():
             t2.commit()
@@ -417,16 +417,16 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_read_skew_g_single(self, new_engine): 
         table_name, session = self._prepare("test_read_skew_g_single")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [
@@ -435,14 +435,14 @@ class TestTransactionIsolation(object):
             )
         )
 
-        result_rows = t2.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [{'value': 10}]
             )
         )
 
-        result_rows = t2.execute('{} select value from {} where id = 2;'.format(prefix, table_name))
+        result_rows = t2.execute('{} select value from {} where id = 2;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [
@@ -451,8 +451,8 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t2.execute('{} upsert into {} (id, value) values (1, 12);'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name))
+        t2.execute('{} upsert into {} (id, value) values (1, 12);'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name)) 
         t2.commit()
 
         try:
@@ -469,18 +469,18 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single_predicate_deps(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_read_skew_g_single_predicate_deps(self, new_engine): 
         table_name, session = self._prepare("test_read_skew_g_single_predicate_deps")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine(new_engine) 
 
-        t1.execute('{} select value from {} where value % 5 = 0;'.format(prefix, table_name))
-        t2.execute('{} update {} set value = 12 where value = 10;'.format(prefix, table_name))
-
+        t1.execute('{} select value from {} where value % 5 = 0;'.format(prefix, table_name)) 
+        t2.execute('{} update {} set value = 12 where value = 10;'.format(prefix, table_name)) 
+ 
         t2.commit()
 
         try:
@@ -491,16 +491,16 @@ class TestTransactionIsolation(object):
         else:
             assert_that(result_rows[0].rows, equal_to([]))
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single_write_predicate(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_read_skew_g_single_write_predicate(self, new_engine): 
         table_name, session = self._prepare("test_read_skew_g_single_write_predicate")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows, equal_to(
                 [
@@ -509,9 +509,9 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t2.execute('{} select * from {};'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values (1, 12)'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name))
+        t2.execute('{} select * from {};'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values (1, 12)'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name)) 
 
         t2.commit()
 
@@ -526,19 +526,19 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_write_skew_g2_item(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_write_skew_g2_item(self, new_engine): 
         table_name, session = self._prepare("test_write_skew_g2_item")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        t1.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
-        t2.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
-        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name))
-        t2.execute('{} update {} set value = 21 where id = 2;'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        t1.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name)) 
+        t2.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name)) 
+        t1.execute('{} update {} set value = 11 where id = 1;'.format(prefix, table_name)) 
+        t2.execute('{} update {} set value = 21 where id = 2;'.format(prefix, table_name)) 
         t1.commit()
 
         def callee():
@@ -552,21 +552,21 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_anti_dependency_cycles_g2(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_anti_dependency_cycles_g2(self, new_engine): 
         table_name, session = self._prepare("test_anti_dependency_cycles_g2")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine(new_engine) 
 
-        t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
-        t2.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
+        t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name)) 
+        t2.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name)) 
 
-        t1.execute('{} upsert into {} (id, value) values(3, 30);'.format(prefix, table_name))
-        t2.execute('{} upsert into {} (id, value) values(4, 42);'.format(prefix, table_name))
-
+        t1.execute('{} upsert into {} (id, value) values(3, 30);'.format(prefix, table_name)) 
+        t2.execute('{} upsert into {} (id, value) values(4, 42);'.format(prefix, table_name)) 
+ 
         t1.commit()
 
         def callee():
@@ -580,17 +580,17 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_anti_dependency_cycles_g2_two_edges(self, new_engine):
+    @pytest.mark.parametrize('new_engine', [True, False]) 
+    def test_anti_dependency_cycles_g2_two_edges(self, new_engine): 
         table_name, session = self._prepare("test_anti_dependency_cycles_g2_two_edges")
 
         t1 = session.transaction()
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
-
-        result_rows = t1.execute('{} select id, value from {};'.format(prefix, table_name))
+        prefix = self._prepare_engine(new_engine) 
+ 
+        result_rows = t1.execute('{} select id, value from {};'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -601,11 +601,11 @@ class TestTransactionIsolation(object):
             )
         )
 
-        t2.execute('{} update {} set value = value + 5 where id = 2;'.format(prefix, table_name))
+        t2.execute('{} update {} set value = value + 5 where id = 2;'.format(prefix, table_name)) 
 
         t2.commit()
 
-        result_rows = t3.execute('{} select id, value from {};'.format(prefix, table_name))
+        result_rows = t3.execute('{} select id, value from {};'.format(prefix, table_name)) 
         assert_that(
             result_rows[0].rows,
             equal_to(
@@ -619,7 +619,7 @@ class TestTransactionIsolation(object):
         t3.commit()
 
         def callee():
-            t1.execute('{} update {} set value = 0 where id = 1;'.format(prefix, table_name))
+            t1.execute('{} update {} set value = 0 where id = 1;'.format(prefix, table_name)) 
 
         assert_that(
             callee,

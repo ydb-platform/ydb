@@ -87,7 +87,7 @@ void CheckPlanForMergeCn(const TMaybe<TString>& planJson, bool hasChildSort, con
         UNIT_ASSERT(childSort.IsDefined());
     }
 
-    // Check that TopSort has no Merge Connection in children
+    // Check that TopSort has no Merge Connection in children 
     auto topSort = FindPlanNodeByKv(plan, "Name", sortOp);
     if (topSort.IsDefined()) {
         mergeCn = FindPlanNodeByKv(topSort, "Node Type", "DqCnMerge");

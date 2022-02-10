@@ -54,26 +54,26 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
     return GetKqpColumns(table, columnNames, allowSystemColumns);
 }
 
-TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKikimrTableMetadata& tableMeta) {
-    TSmallVec<bool> skipNullKeys(tableMeta.KeyColumnNames.size(), false);
-
-    for (const auto& key : settings.SkipNullKeys) {
-        size_t keyIndex = FindIndex(tableMeta.KeyColumnNames, key);
-        YQL_ENSURE(keyIndex != NPOS);
-        skipNullKeys[keyIndex] = true;
-    }
-
-    return skipNullKeys;
-}
-
-NMiniKQL::TType* CreateColumnType(NUdf::TDataTypeId typeId, const TKqlCompileContext& ctx) {
-    if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        return ctx.PgmBuilder().NewDecimalType(22, 9);
-    } else {
-        return ctx.PgmBuilder().NewDataType(typeId);
-    }
-}
-
+TSmallVec<bool> GetSkipNullKeys(const TKqpReadTableSettings& settings, const TKikimrTableMetadata& tableMeta) { 
+    TSmallVec<bool> skipNullKeys(tableMeta.KeyColumnNames.size(), false); 
+ 
+    for (const auto& key : settings.SkipNullKeys) { 
+        size_t keyIndex = FindIndex(tableMeta.KeyColumnNames, key); 
+        YQL_ENSURE(keyIndex != NPOS); 
+        skipNullKeys[keyIndex] = true; 
+    } 
+ 
+    return skipNullKeys; 
+} 
+ 
+NMiniKQL::TType* CreateColumnType(NUdf::TDataTypeId typeId, const TKqlCompileContext& ctx) { 
+    if (typeId == NUdf::TDataType<NUdf::TDecimal>::Id) { 
+        return ctx.PgmBuilder().NewDecimalType(22, 9); 
+    } else { 
+        return ctx.PgmBuilder().NewDataType(typeId); 
+    } 
+} 
+ 
 void ValidateColumnType(const TTypeAnnotationNode* type, NUdf::TDataTypeId columnTypeId) {
     YQL_ENSURE(type);
     bool isOptional;
@@ -248,7 +248,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             TKqpKeyRanges ranges = MakeComputedKeyRanges(readTable, ctx, buildCtx);
 
-            // Return type depends on the process program, so it is built explicitly.
+            // Return type depends on the process program, so it is built explicitly. 
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*readTable.Ref().GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build type: " << errorStream.Str());
@@ -257,7 +257,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             // in physical plan directly to executer. Read callables in MKQL only used to associate
             // input stream of the graph with the external scans, so it doesn't make much sense to pass
             // the process program through callable.
-            // We anyway move to explicit sources as external nodes in KQP program, so all the information
+            // We anyway move to explicit sources as external nodes in KQP program, so all the information 
             // about read settings will be passed in a side channel, not the program.
             auto result = ctx.PgmBuilder().KqpWideReadTableRanges(
                 MakeTableId(readTable.Table()),
@@ -347,20 +347,20 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpEnsure::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpEnsure ensure(&node);
-
-            const auto value = MkqlBuildExpr(ensure.Value().Ref(), buildCtx);
-            const auto predicate = MkqlBuildExpr(ensure.Predicate().Ref(), buildCtx);
-            const auto issueCode = buildCtx.ProgramBuilder.NewDataLiteral<ui32>(FromString(ensure.IssueCode().Value()));
-            const auto message = MkqlBuildExpr(ensure.Message().Ref(), buildCtx);
-
-            return ctx.PgmBuilder().KqpEnsure(value, predicate, issueCode, message);
-        });
-
+    compiler->AddCallable(TKqpEnsure::CallableName(), 
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) { 
+            TKqpEnsure ensure(&node); 
+ 
+            const auto value = MkqlBuildExpr(ensure.Value().Ref(), buildCtx); 
+            const auto predicate = MkqlBuildExpr(ensure.Predicate().Ref(), buildCtx); 
+            const auto issueCode = buildCtx.ProgramBuilder.NewDataLiteral<ui32>(FromString(ensure.IssueCode().Value())); 
+            const auto message = MkqlBuildExpr(ensure.Message().Ref(), buildCtx); 
+ 
+            return ctx.PgmBuilder().KqpEnsure(value, predicate, issueCode, message); 
+        }); 
+ 
     return compiler;
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

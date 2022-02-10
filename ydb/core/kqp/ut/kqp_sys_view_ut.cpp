@@ -11,45 +11,45 @@ using namespace NYdb::NScheme;
 
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
-    Y_UNIT_TEST(Join) {
-        return; // nodes table is currently switched off
+    Y_UNIT_TEST(Join) { 
+        return; // nodes table is currently switched off 
 
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr; 
         auto client = kikimr.GetTableClient();
-
-        while (true) {
+ 
+        while (true) { 
             auto it = client.StreamExecuteScanQuery(
                 "select NodeId from `/Root/.sys/partition_stats` where Path = '/Root/KeyValue' limit 1"
-            ).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            if (StreamResultToYson(it) == "[[#]]") {
-                ::Sleep(TDuration::Seconds(1));
-                Cerr << "waiting..." << Endl;
-                Cerr.Flush();
-            } else {
-                break;
-            }
-        }
-
+            ).GetValueSync(); 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            if (StreamResultToYson(it) == "[[#]]") { 
+                ::Sleep(TDuration::Seconds(1)); 
+                Cerr << "waiting..." << Endl; 
+                Cerr.Flush(); 
+            } else { 
+                break; 
+            } 
+        } 
+ 
         auto it = client.StreamExecuteScanQuery(R"(
-            --!syntax_v1
-            select n.Host, ps.Path, ps.RowCount
-            from `/Root/.sys/partition_stats` as ps
-            join `/Root/.sys/nodes` as n
-            on ps.NodeId = n.NodeId
-            where ps.Path = '/Root/KeyValue'
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
-    }
-
+            --!syntax_v1 
+            select n.Host, ps.Path, ps.RowCount 
+            from `/Root/.sys/partition_stats` as ps 
+            join `/Root/.sys/nodes` as n 
+            on ps.NodeId = n.NodeId 
+            where ps.Path = '/Root/KeyValue' 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+        CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it)); 
+    } 
+ 
     Y_UNIT_TEST(PartitionStatsSimple) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT OwnerId, PartIdx, Path, PathId
+            SELECT OwnerId, PartIdx, Path, PathId 
             FROM `/Root/.sys/partition_stats`
             ORDER BY PathId, PartIdx;
         )").GetValueSync();
@@ -165,11 +165,11 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         CompareYson(R"([
-            [[72057594046644480u];[5u];[2u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[3u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[4u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[5u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[6u];["/Root/BatchUpload"]];
+            [[72057594046644480u];[5u];[2u];["/Root/BatchUpload"]]; 
+            [[72057594046644480u];[5u];[3u];["/Root/BatchUpload"]]; 
+            [[72057594046644480u];[5u];[4u];["/Root/BatchUpload"]]; 
+            [[72057594046644480u];[5u];[5u];["/Root/BatchUpload"]]; 
+            [[72057594046644480u];[5u];[6u];["/Root/BatchUpload"]]; 
         ])", StreamResultToYson(it));
     }
 
@@ -189,9 +189,9 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         auto expected = Sprintf(R"([
-            [[%du];["::1"]];
-            [[%du];["::1"]];
-            [[%du];["::1"]]
+            [[%du];["::1"]]; 
+            [[%du];["::1"]]; 
+            [[%du];["::1"]] 
         ])", offset, offset + 1, offset + 2);
 
         CompareYson(expected, StreamResultToYson(it));
@@ -215,9 +215,9 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         auto expected = Sprintf(R"([
-            [[%du];["::1"]];
-            [[%du];["::1"]];
-            [[%du];["::1"]]
+            [[%du];["::1"]]; 
+            [[%du];["::1"]]; 
+            [[%du];["::1"]] 
         ])", offset + 1, offset + 2, offset + 3);
 
         CompareYson(expected, StreamResultToYson(it));
@@ -241,13 +241,13 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         auto expected = Sprintf(R"([
-            [[%du];["::1"]];
+            [[%du];["::1"]]; 
         ])", offset + 2);
 
         CompareYson(expected, StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(QueryStatsSimple) {
+    Y_UNIT_TEST_NEW_ENGINE(QueryStatsSimple) { 
         auto checkTable = [&] (const TStringBuf tableName) {
             TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
 
@@ -259,15 +259,15 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
             {
-                auto result = session.ExecuteDataQuery(Q_(R"(
+                auto result = session.ExecuteDataQuery(Q_(R"( 
                     SELECT * FROM `/Root/TwoShard`
-                )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+                )"), TTxControl::BeginTx().CommitTx()).GetValueSync(); 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
             {
-                auto result = session.ExecuteDataQuery(Q_(R"(
+                auto result = session.ExecuteDataQuery(Q_(R"( 
                     SELECT * FROM `/Root/EightShard`
-                )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+                )"), TTxControl::BeginTx().CommitTx()).GetValueSync(); 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
 
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto streamPart = it.ReadNext().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SCHEME_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SCHEME_ERROR); 
         driver.Stop(true);
     }
 

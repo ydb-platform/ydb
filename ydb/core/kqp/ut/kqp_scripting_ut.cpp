@@ -3,8 +3,8 @@
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
-#include <library/cpp/json/json_prettifier.h>
-
+#include <library/cpp/json/json_prettifier.h> 
+ 
 namespace NKikimr {
 namespace NKqp {
 
@@ -42,11 +42,11 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 2u);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UnsafeTimestampCast) {
+    Y_UNIT_TEST_NEW_ENGINE(UnsafeTimestampCast) { 
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
 
-        auto result = client.ExecuteYqlScript(Q_(R"(
+        auto result = client.ExecuteYqlScript(Q_(R"( 
             CREATE TABLE [/Root/TsTest] (
                 Key Timestamp,
                 Value String,
@@ -56,13 +56,13 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
             UPSERT INTO [/Root/TsTest]
             SELECT * FROM [/Root/KeyValue];
-        )")).GetValueSync();
+        )")).GetValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = client.ExecuteYqlScript(Q1_(R"(
+        result = client.ExecuteYqlScript(Q1_(R"( 
             UPSERT INTO `/Root/TsTest`
             SELECT * FROM `/Root/KeyValue`;
-        )")).GetValueSync();
+        )")).GetValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     }
 

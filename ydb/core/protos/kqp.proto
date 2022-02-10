@@ -79,7 +79,7 @@ message TQueryRequest {
     optional bool KeepSession = 5;
     optional bytes Cluster = 6;
     optional NKikimrMiniKQL.TParams Parameters = 7;
-    reserved 8; // (deprecated) SqlAutoCommit
+    reserved 8; // (deprecated) SqlAutoCommit 
     optional EQueryAction Action = 9;
     optional bool Profile = 10; // DEPRECATED, use StatsMode instead
     optional bytes PreparedQuery = 11;
@@ -91,7 +91,7 @@ message TQueryRequest {
     optional uint64 TimeoutMs = 17;
     optional Ydb.YqlInternal.ExecQuerySettings QuerySettings = 18;
     reserved 19; // (deprecated) StatsMode
-    optional NYql.NDqProto.EDqStatsMode StatsMode = 20;
+    optional NYql.NDqProto.EDqStatsMode StatsMode = 20; 
 }
 
 message TKqpPathIdProto {
@@ -258,7 +258,7 @@ message TEvQueryResponse {
     reserved 2; // (deprecated) KqpError
     optional TQueryResponse Response = 3;
     optional Ydb.StatusIds.StatusCode YdbStatus = 4;
-    reserved 5; // (deprecated) ForcedNewEngine
+    reserved 5; // (deprecated) ForcedNewEngine 
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
 }
@@ -365,7 +365,7 @@ message TExecuterTxResult {
     repeated NKikimrMiniKQL.TResult Results = 3;
     optional NKikimrMiniKQL.TResult Locks = 4;
     reserved 5; // (deprecated) Stats
-    optional NYql.NDqProto.TDqExecutionStats Stats = 6;
+    optional NYql.NDqProto.TDqExecutionStats Stats = 6; 
 };
 
 message TExecuterTxResponse {
@@ -380,24 +380,24 @@ message TEvExecuterTxResponse {
 
 message TEvExecuterStreamData {
     optional Ydb.ResultSet ResultSet = 1;
-    optional uint64 SeqNo = 2;
+    optional uint64 SeqNo = 2; 
 };
 
-message TEvExecuterStreamDataAck {
-    optional uint64 SeqNo = 1;
-    optional int64 FreeSpace = 2;
+message TEvExecuterStreamDataAck { 
+    optional uint64 SeqNo = 1; 
+    optional int64 FreeSpace = 2; 
     optional bool Enough = 3 [default = false];
-};
-
-message TEvExecuterStreamProfile {
+}; 
+ 
+message TEvExecuterStreamProfile { 
     reserved 1; // (deprecated) Profile
-    optional NYql.NDqProto.TDqExecutionStats Profile = 2;
-};
-
-message TEvExecuterProgress {
+    optional NYql.NDqProto.TDqExecutionStats Profile = 2; 
+}; 
+ 
+message TEvExecuterProgress { 
     optional NActorsProto.TActorId ExecuterActorId = 1;
-};
-
+}; 
+ 
 message TKqpProxyNodeResources {
     optional uint32 NodeId = 1;
     optional uint64 DataCenterNumId = 2;
@@ -407,141 +407,141 @@ message TKqpProxyNodeResources {
     optional uint32 Threads = 6;
 }
 
-message TKqpSnapshot {
-    optional uint64 Step = 1;
-    optional uint64 TxId = 2;
-}
+message TKqpSnapshot { 
+    optional uint64 Step = 1; 
+    optional uint64 TxId = 2; 
+} 
 
-/// Legacy ResourceManager events //////////////////////////////////////////////////////////////////////////////////////
-message TEvStartComputeTasks {
-    optional uint64 TxId = 1;
-    repeated NYql.NDqProto.TDqTask Tasks = 2;
+/// Legacy ResourceManager events ////////////////////////////////////////////////////////////////////////////////////// 
+message TEvStartComputeTasks { 
+    optional uint64 TxId = 1; 
+    repeated NYql.NDqProto.TDqTask Tasks = 2; 
     reserved 3; // (deprecated) WaitResourcesTimeoutMs
-    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4;
-    optional NActorsProto.TActorId ExecuterActorId = 5; // overwrite for ev->Sender
+    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4; 
+    optional NActorsProto.TActorId ExecuterActorId = 5; // overwrite for ev->Sender 
+ 
+    optional TKqpSnapshot Snapshot = 8; 
+} 
+ 
+message TEvStartComputeTasksFailure { 
+    optional uint64 TxId = 1; 
+ 
+    enum EReason { 
+        MEMORY_LIMIT_EXCEEDED = 1;         // total memory limit per query and per node 
+        NOT_ENOUGH_MEMORY = 2;             // not enough memory at moment 
+        COMPUTE_ACTORS_LIMIT_EXCEEDED = 3; // -//- 
+        NOT_ENOUGH_COMPUTE_ACTORS = 4;     // -//- 
+        REQUEST_ALREADY_EXISTS = 5; 
+        NOT_READY = 6;                     // ResourceManager not ready yet 
+    } 
+    optional EReason Reason = 2; 
+    optional string Message = 3; 
+} 
+ 
+message TEvStartedComputeTasks { 
+    optional uint64 TxId = 1; 
+ 
+    message TStartedTask { 
+        optional uint64 TaskId = 1; 
+        optional NActorsProto.TActorId ActorId = 2; 
+    } 
+    repeated TStartedTask StartedTasks = 2; 
+} 
+ 
+message TEvCancelComputeTasks { 
+    optional uint64 TxId = 1; 
+    repeated Ydb.Issue.IssueMessage Issues = 2; 
+} 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
+/// KQP Node Events //////////////////////////////////////////////////////////////////////////////////////////////////// 
+message TEvStartKqpTasksRequest { 
+    optional uint64 TxId = 1; 
+    repeated NYql.NDqProto.TDqTask Tasks = 2; 
+    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 3; 
+    optional NActorsProto.TActorId ExecuterActorId = 4; 
+    optional TKqpSnapshot Snapshot = 5; 
+    optional bool StartAllOrFail = 6 [default = true]; 
+} 
+ 
+message TEvStartKqpTasksResponse { 
+    message TStartedTask { 
+        optional uint64 TaskId = 1; 
+        optional NActorsProto.TActorId ActorId = 2; 
+    } 
+ 
+    enum ENotStartedTaskReason { 
+        // node limits 
+        NOT_ENOUGH_MEMORY = 1; 
+        NOT_ENOUGH_EXECUTION_UNITS = 2; 
+        // query limits 
+        QUERY_MEMORY_LIMIT_EXCEEDED = 3; 
+        QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4; 
+        // any other error 
+        INTERNAL_ERROR = 5; 
+    } 
+ 
+    message TNotStartedTask { 
+        optional uint64 TaskId = 1; 
+        optional ENotStartedTaskReason Reason = 2; 
+        optional string Message = 3; 
+    } 
+ 
+    optional uint64 TxId = 1; 
+    repeated TStartedTask StartedTasks = 2; 
+    repeated TNotStartedTask NotStartedTasks = 3; 
+} 
+ 
+message TEvCancelKqpTasksRequest { 
+    optional uint64 TxId = 1; 
+    optional string Reason = 2; 
+} 
+ 
+message TEvCancelKqpTasksResponse { 
+} 
+ 
+message TKqpNodeResources { 
+    optional NActorsProto.TActorId ResourceManagerActorId = 2; // legacy 
+    optional uint32 AvailableComputeActors = 4; // legacy 
+    optional uint64 UsedMemory = 5; // legacy 
+    optional uint64 TotalMemory = 7; // legacy 
+    message TTxResources { 
+        optional uint64 TxId = 1; 
+        optional uint32 ComputeActors = 2; 
+        optional uint64 Memory = 3; 
+        optional uint32 StartTimestamp = 4; 
+    } 
+    repeated TTxResources Transactions = 6; // legacy 
+ 
+    //////////////////////////////////////////////////// 
+ 
+    optional uint32 NodeId = 1; 
+    optional uint32 Timestamp = 3; 
+ 
+    message TMemory { 
+        optional uint32 Pool = 1; 
+        optional uint64 Available = 2; 
+    } 
+    repeated TMemory Memory = 8; 
+    optional uint32 ExecutionUnits = 9; 
+} 
 
-    optional TKqpSnapshot Snapshot = 8;
-}
-
-message TEvStartComputeTasksFailure {
-    optional uint64 TxId = 1;
-
-    enum EReason {
-        MEMORY_LIMIT_EXCEEDED = 1;         // total memory limit per query and per node
-        NOT_ENOUGH_MEMORY = 2;             // not enough memory at moment
-        COMPUTE_ACTORS_LIMIT_EXCEEDED = 3; // -//-
-        NOT_ENOUGH_COMPUTE_ACTORS = 4;     // -//-
-        REQUEST_ALREADY_EXISTS = 5;
-        NOT_READY = 6;                     // ResourceManager not ready yet
-    }
-    optional EReason Reason = 2;
-    optional string Message = 3;
-}
-
-message TEvStartedComputeTasks {
-    optional uint64 TxId = 1;
-
-    message TStartedTask {
-        optional uint64 TaskId = 1;
-        optional NActorsProto.TActorId ActorId = 2;
-    }
-    repeated TStartedTask StartedTasks = 2;
-}
-
-message TEvCancelComputeTasks {
-    optional uint64 TxId = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// KQP Node Events ////////////////////////////////////////////////////////////////////////////////////////////////////
-message TEvStartKqpTasksRequest {
-    optional uint64 TxId = 1;
-    repeated NYql.NDqProto.TDqTask Tasks = 2;
-    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 3;
-    optional NActorsProto.TActorId ExecuterActorId = 4;
-    optional TKqpSnapshot Snapshot = 5;
-    optional bool StartAllOrFail = 6 [default = true];
-}
-
-message TEvStartKqpTasksResponse {
-    message TStartedTask {
-        optional uint64 TaskId = 1;
-        optional NActorsProto.TActorId ActorId = 2;
-    }
-
-    enum ENotStartedTaskReason {
-        // node limits
-        NOT_ENOUGH_MEMORY = 1;
-        NOT_ENOUGH_EXECUTION_UNITS = 2;
-        // query limits
-        QUERY_MEMORY_LIMIT_EXCEEDED = 3;
-        QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4;
-        // any other error
-        INTERNAL_ERROR = 5;
-    }
-
-    message TNotStartedTask {
-        optional uint64 TaskId = 1;
-        optional ENotStartedTaskReason Reason = 2;
-        optional string Message = 3;
-    }
-
-    optional uint64 TxId = 1;
-    repeated TStartedTask StartedTasks = 2;
-    repeated TNotStartedTask NotStartedTasks = 3;
-}
-
-message TEvCancelKqpTasksRequest {
-    optional uint64 TxId = 1;
-    optional string Reason = 2;
-}
-
-message TEvCancelKqpTasksResponse {
-}
-
-message TKqpNodeResources {
-    optional NActorsProto.TActorId ResourceManagerActorId = 2; // legacy
-    optional uint32 AvailableComputeActors = 4; // legacy
-    optional uint64 UsedMemory = 5; // legacy
-    optional uint64 TotalMemory = 7; // legacy
-    message TTxResources {
-        optional uint64 TxId = 1;
-        optional uint32 ComputeActors = 2;
-        optional uint64 Memory = 3;
-        optional uint32 StartTimestamp = 4;
-    }
-    repeated TTxResources Transactions = 6; // legacy
-
-    ////////////////////////////////////////////////////
-
-    optional uint32 NodeId = 1;
-    optional uint32 Timestamp = 3;
-
-    message TMemory {
-        optional uint32 Pool = 1;
-        optional uint64 Available = 2;
-    }
-    repeated TMemory Memory = 8;
-    optional uint32 ExecutionUnits = 9;
-}
-
-/// Scans
+/// Scans 
 message TEvScanInitActor {
     optional uint64 ScanId = 1;
     optional NActorsProto.TActorId ScanActorId = 2;
-    optional uint32 Generation = 3;
+    optional uint32 Generation = 3; 
 };
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional uint32 Generation = 3;
+    optional uint32 Generation = 3; 
 }
 
 message TEvRemoteScanData {
     optional uint32 ScanId = 1;
-    optional uint64 CpuTimeUs = 2;
+    optional uint64 CpuTimeUs = 2; 
     optional uint64 WaitTimeMs = 3;
     optional uint32 PageFaults = 4;
     optional bool PageFault = 5;
@@ -563,8 +563,8 @@ message TEvRemoteScanData {
 
 message TEvRemoteScanDataAck {
     optional uint64 FreeSpace = 1;
-    optional uint32 Generation = 2;
+    optional uint32 Generation = 2; 
 }
-
-message TEvKillScanTablet {
-}
+ 
+message TEvKillScanTablet { 
+} 

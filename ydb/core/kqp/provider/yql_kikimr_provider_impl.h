@@ -137,18 +137,18 @@ public:
         , Completed(false) {}
 
     bool HasResult() const override {
-        if (Completed) {
-            YQL_ENSURE(ExtractedResult.has_value());
-        }
+        if (Completed) { 
+            YQL_ENSURE(ExtractedResult.has_value()); 
+        } 
         return Completed;
     }
 
-    TResult GetResult() override {
+    TResult GetResult() override { 
         YQL_ENSURE(Completed);
-        if (ExtractedResult) {
-            return std::move(*ExtractedResult);
-        }
-        return std::move(Future.ExtractValue());
+        if (ExtractedResult) { 
+            return std::move(*ExtractedResult); 
+        } 
+        return std::move(Future.ExtractValue()); 
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -157,8 +157,8 @@ public:
         }
 
         if (Future.HasValue()) {
-            ExtractedResult.emplace(std::move(Future.ExtractValue()));
-            ExtractedResult->ReportIssues(ExprCtx.IssueManager);
+            ExtractedResult.emplace(std::move(Future.ExtractValue())); 
+            ExtractedResult->ReportIssues(ExprCtx.IssueManager); 
 
             Completed = true;
             return NThreading::MakeFuture(true);
@@ -172,7 +172,7 @@ public:
 
 private:
     NThreading::TFuture<TResult> Future;
-    std::optional<TResult> ExtractedResult;
+    std::optional<TResult> ExtractedResult; 
     TExprContext& ExprCtx;
     bool Completed;
 };
@@ -242,15 +242,15 @@ NNodes::TExprBase DeduplicateByMembers(const NNodes::TExprBase& expr, const TSet
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, const TMaybe<bool>& useNewEngine, TExprContext& ctx);
-TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
+TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx); 
 TExprNode::TPtr KiApplyLimitToSelectRange(NNodes::TExprBase node, TExprContext& ctx);
 TExprNode::TPtr KiPushPredicateToSelectRange(NNodes::TExprBase node, TExprContext& ctx,
     const TKikimrTablesData& tablesData, const TKikimrConfiguration& config);
 TExprNode::TPtr KiApplyExtractMembersToSelectRow(NNodes::TExprBase node, TExprContext& ctx);
 TExprNode::TPtr KiRewriteEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
     const TKikimrConfiguration& config, TExprContext& ctx);
-TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
-    const TKikimrConfiguration& config, TExprContext& ctx);
+TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData, 
+    const TKikimrConfiguration& config, TExprContext& ctx); 
 
 bool KiTableLookupCanCompare(NNodes::TExprBase node);
 NNodes::TMaybeNode<NNodes::TExprBase> KiTableLookupGetValue(NNodes::TExprBase node, const TTypeAnnotationNode* type,

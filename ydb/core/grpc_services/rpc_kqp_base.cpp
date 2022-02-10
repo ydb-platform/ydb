@@ -48,10 +48,10 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
                 return a.name() < b.name();
             });
 
-        NKqpProto::TKqpExecutionExtraStats executionExtraStats;
-        if (exec.HasExtra() && exec.GetExtra().UnpackTo(&executionExtraStats)) {
-            toPhase.set_affected_shards(executionExtraStats.GetAffectedShards());
-        }
+        NKqpProto::TKqpExecutionExtraStats executionExtraStats; 
+        if (exec.HasExtra() && exec.GetExtra().UnpackTo(&executionExtraStats)) { 
+            toPhase.set_affected_shards(executionExtraStats.GetAffectedShards()); 
+        } 
     }
 
     if (kqpStats.HasCompilation()) {

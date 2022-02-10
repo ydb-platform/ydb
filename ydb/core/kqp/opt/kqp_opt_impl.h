@@ -14,19 +14,19 @@ static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::T
 {
 //#define KQP_ENABLE_DUMP_APPLIED_RULE
 #ifdef KQP_ENABLE_DUMP_APPLIED_RULE
-    if (input != output) {
-        auto builder = TStringBuilder() << "Rule applied: " << name << Endl;
-        builder << "Expression before rule application: " << Endl;
-        builder << KqpExprToPrettyString(*input, ctx) << Endl;
-        builder << "Expression after rule application: " << Endl;
-        builder << KqpExprToPrettyString(*output, ctx);
-        YQL_CLOG(INFO, ProviderKqp) << builder;
-    }
+    if (input != output) { 
+        auto builder = TStringBuilder() << "Rule applied: " << name << Endl; 
+        builder << "Expression before rule application: " << Endl; 
+        builder << KqpExprToPrettyString(*input, ctx) << Endl; 
+        builder << "Expression after rule application: " << Endl; 
+        builder << KqpExprToPrettyString(*output, ctx); 
+        YQL_CLOG(INFO, ProviderKqp) << builder; 
+    } 
 #else
     Y_UNUSED(ctx);
-    if (input != output) {
-        YQL_CLOG(INFO, ProviderKqp) << name;
-    }
+    if (input != output) { 
+        YQL_CLOG(INFO, ProviderKqp) << name; 
+    } 
 #endif
 }
 
@@ -48,7 +48,7 @@ NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMe
 NYql::NNodes::TExprBase KqpBuildJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap,
     bool allowStageMultiUsage);
-
+ 
 TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
     const NYql::TKikimrTablesData& tables, TStringBuf cluster);
 

@@ -66,16 +66,16 @@ public:
 
 private:
     STRICT_STFUNC(Handler, {
-        HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
+        HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData) 
         HFunc(TEvReadyState, OnReadyState);
         HFunc(TEvQueryResponse, OnQueryResult);
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     })
 
-    void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) {
+    void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) { 
         YQL_LOG_CTX_SCOPE(TraceId);
 
-        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>(); 
 
         if (!Discard) {
             if (!Finished && ev->Get()->Record.GetChannelData().GetData().GetRaw().size() > 0) {

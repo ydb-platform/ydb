@@ -29,11 +29,11 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpSlowLogTraceThresholdMs;
     NCommon::TConfSetting<ui32, false> _KqpYqlSyntaxVersion;
     NCommon::TConfSetting<bool, false> _KqpAllowNewEngine;
-    NCommon::TConfSetting<bool, false> _KqpForceNewEngine;
+    NCommon::TConfSetting<bool, false> _KqpForceNewEngine; 
     NCommon::TConfSetting<bool, false> _KqpAllowUnsafeCommit;
-    NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
-    NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
-    NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
+    NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors; 
+    NCommon::TConfSetting<bool, false> _KqpEnableSpilling; 
+    NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages; 
     /*
      * Both settings for predicates push are needed.
      */
@@ -59,8 +59,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptDisableJoinReverseTableLookup;
     NCommon::TConfSetting<bool, false> OptDisableJoinReverseTableLookupLeftSemi;
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
-    NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin;
-    NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
+    NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin; 
+    NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate; 
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
 
     /* Runtime */
@@ -75,14 +75,14 @@ struct TKikimrSettings {
     bool HasAllowNullCompareInIndex() const;
     bool HasUnwrapReadTableValues() const;
     bool HasAllowKqpNewEngine() const;
-    bool HasKqpForceNewEngine() const;
-    bool HasUseNewEngine() const;
+    bool HasKqpForceNewEngine() const; 
+    bool HasUseNewEngine() const; 
     bool AllowReverseRange() const;
     bool HasDefaultCluster() const;
     bool HasAllowKqpUnsafeCommit() const;
     bool SystemColumnsEnabled() const;
-    bool SpillingEnabled() const;
-    bool DisableLlvmForUdfStages() const;
+    bool SpillingEnabled() const; 
+    bool DisableLlvmForUdfStages() const; 
     bool PushOlapProcess() const;
 
     bool HasOptDisableJoinRewrite() const;
@@ -90,12 +90,12 @@ struct TKikimrSettings {
     bool HasOptDisableJoinReverseTableLookup() const;
     bool HasOptDisableJoinReverseTableLookupLeftSemi() const;
     bool HasOptDisableTopSort() const;
-    bool HasOptDisableSqlInToJoin() const;
+    bool HasOptDisableSqlInToJoin() const; 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetEnableLlvm() const;
-
+ 
     // WARNING: For testing purposes only, inplace update is not ready for production usage.
-    bool HasOptEnableInplaceUpdate() const;
+    bool HasOptEnableInplaceUpdate() const; 
 };
 
 struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher {

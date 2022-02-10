@@ -24,8 +24,8 @@ inline TActorId MakeResourceBrokerID(ui32 node = 0) {
 
 using TResourceValues = std::array<ui64, RESOURCE_COUNT>;
 
-class IResourceBroker;
-
+class IResourceBroker; 
+ 
 struct TEvResourceBroker {
     enum EEv {
         EvSubmitTask = EventSpaceBegin(TKikimrEvents::ES_RESOURCE_BROKER),
@@ -35,19 +35,19 @@ struct TEvResourceBroker {
         EvFinishTask,
         EvNotifyActorDied,
         EvConfigure,
-        EvConfigRequest,
-        EvTaskRemoved,
-        EvResourceBrokerRequest,
+        EvConfigRequest, 
+        EvTaskRemoved, 
+        EvResourceBrokerRequest, 
 
         EvTaskOperationError = EvSubmitTask + 512,
         EvResourceAllocated,
-        EvConfigureResult,
-        EvConfigResponse,
-        EvResourceBrokerResponse
+        EvConfigureResult, 
+        EvConfigResponse, 
+        EvResourceBrokerResponse 
     };
 
-    static_assert(EvResourceBrokerRequest < EvTaskOperationError);
-
+    static_assert(EvResourceBrokerRequest < EvTaskOperationError); 
+ 
     struct TTask {
         /**
          * 0 is invalid task ID value and is used to choose task ID
@@ -147,21 +147,21 @@ struct TEvResourceBroker {
 
     struct TEvRemoveTask : public TEventLocal<TEvRemoveTask, EvRemoveTask> {
         ui64 TaskId;
-        bool ReplyOnSuccess;
+        bool ReplyOnSuccess; 
 
-        TEvRemoveTask(ui64 taskId, bool replyOnSuccess = false)
+        TEvRemoveTask(ui64 taskId, bool replyOnSuccess = false) 
             : TaskId(taskId)
-            , ReplyOnSuccess(replyOnSuccess)
+            , ReplyOnSuccess(replyOnSuccess) 
         {
             Y_VERIFY(taskId);
         }
     };
 
-    struct TEvTaskRemoved : public TEventLocal<TEvTaskRemoved, EvTaskRemoved> {
-        ui64 TaskId;
-        TIntrusivePtr<TThrRefBase> Cookie;
-    };
-
+    struct TEvTaskRemoved : public TEventLocal<TEvTaskRemoved, EvTaskRemoved> { 
+        ui64 TaskId; 
+        TIntrusivePtr<TThrRefBase> Cookie; 
+    }; 
+ 
     struct TEvFinishTask : public TEventLocal<TEvFinishTask, EvFinishTask> {
         ui64 TaskId;
         bool Cancel;
@@ -197,44 +197,44 @@ struct TEvResourceBroker {
                                                 NKikimrResourceBroker::TResourceBrokerConfigResult,
                                                 EvConfigureResult> {
     };
-
-    struct TEvConfigRequest : public TEventLocal<TEvConfigRequest, EvConfigRequest> {
-        TString Queue;
-
-        TEvConfigRequest(const TString& queue)
-            : Queue(queue) {}
-    };
-
-    struct TEvConfigResponse : public TEventLocal<TEvConfigResponse, EvConfigResponse> {
-        TMaybe<NKikimrResourceBroker::TQueueConfig> QueueConfig;
-    };
-
-    struct TEvResourceBrokerRequest : public TEventLocal<TEvResourceBrokerRequest, EvResourceBrokerRequest> {};
-
-    struct TEvResourceBrokerResponse : public TEventLocal<TEvResourceBrokerResponse, EvResourceBrokerResponse> {
-        TIntrusivePtr<IResourceBroker> ResourceBroker;
-    };
+ 
+    struct TEvConfigRequest : public TEventLocal<TEvConfigRequest, EvConfigRequest> { 
+        TString Queue; 
+ 
+        TEvConfigRequest(const TString& queue) 
+            : Queue(queue) {} 
+    }; 
+ 
+    struct TEvConfigResponse : public TEventLocal<TEvConfigResponse, EvConfigResponse> { 
+        TMaybe<NKikimrResourceBroker::TQueueConfig> QueueConfig; 
+    }; 
+ 
+    struct TEvResourceBrokerRequest : public TEventLocal<TEvResourceBrokerRequest, EvResourceBrokerRequest> {}; 
+ 
+    struct TEvResourceBrokerResponse : public TEventLocal<TEvResourceBrokerResponse, EvResourceBrokerResponse> { 
+        TIntrusivePtr<IResourceBroker> ResourceBroker; 
+    }; 
 };
 
-class IResourceBroker : public TThrRefBase {
-public:
-    virtual bool SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender) = 0;
-    virtual bool FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender) = 0;
-    /**
-     * Merges in-fly tasks of the same type. All donor's resources goes to recipient's ones.
-     * Donor task will be finished.
-     */
-    virtual bool MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) = 0;
-    virtual bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) = 0;
-};
-
+class IResourceBroker : public TThrRefBase { 
+public: 
+    virtual bool SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender) = 0; 
+    virtual bool FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender) = 0; 
+    /** 
+     * Merges in-fly tasks of the same type. All donor's resources goes to recipient's ones. 
+     * Donor task will be finished. 
+     */ 
+    virtual bool MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) = 0; 
+    virtual bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) = 0; 
+}; 
+ 
 NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig();
 
-void MergeConfigUpdates(NKikimrResourceBroker::TResourceBrokerConfig &config,
-                        const NKikimrResourceBroker::TResourceBrokerConfig &updates);
+void MergeConfigUpdates(NKikimrResourceBroker::TResourceBrokerConfig &config, 
+                        const NKikimrResourceBroker::TResourceBrokerConfig &updates); 
 
-IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                                  const NMonitoring::TDynamicCounterPtr& counters);
+IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config, 
+                                  const NMonitoring::TDynamicCounterPtr& counters); 
 
 } // NResourceBroker
 } // NKikimr

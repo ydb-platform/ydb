@@ -3893,38 +3893,38 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
         }
-    }
+    } 
 
-    Y_UNIT_TEST(TestExplicitPartitioning) {
-        TKikimrWithGrpcAndRootSchema server;
-
-        auto connection = TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-        TTableClient client(connection);
-
-        auto sessionResult = client.CreateSession().ExtractValueSync();
-        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-        auto session = sessionResult.GetSession();
-
-        {
-            auto tableBuilder = client.GetTableBuilder()
+    Y_UNIT_TEST(TestExplicitPartitioning) { 
+        TKikimrWithGrpcAndRootSchema server; 
+ 
+        auto connection = TDriver( 
+            TDriverConfig() 
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
+ 
+        TTableClient client(connection); 
+ 
+        auto sessionResult = client.CreateSession().ExtractValueSync(); 
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString()); 
+        auto session = sessionResult.GetSession(); 
+ 
+        { 
+            auto tableBuilder = client.GetTableBuilder() 
                 .AddNullableColumn("Value", EPrimitiveType::Utf8)
                 .AddNullableColumn("SubKey", EPrimitiveType::Utf8)
-                .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                .SetPrimaryKeyColumn("Key");
-
-            TExplicitPartitions partitions;
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build());
-            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build());
-
-            auto tableSettings = TCreateTableSettings().PartitioningPolicy(
+                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                .SetPrimaryKeyColumn("Key"); 
+ 
+            TExplicitPartitions partitions; 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(10).EndTuple().Build()); 
+            partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint32(20).EndTuple().Build()); 
+ 
+            auto tableSettings = TCreateTableSettings().PartitioningPolicy( 
                 TPartitioningPolicy().ExplicitPartitions(partitions).AutoPartitioning(
                         EAutoPartitioningPolicy::AutoSplitMerge));
-
-            auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+ 
+            auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
 
             for(ui32 idx = 0; idx < 25; ++idx) {
                 // trying to wait for split merge to complete (if enabled...???)
@@ -3932,32 +3932,32 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 Sleep(TDuration::Seconds(1));
             }
 
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(R"___(
-                UPSERT INTO [Root/Foo] (Key, Value) VALUES
-                    (1, "one"),
-                    (2, "two"),
-                    (12, "twelve"),
-                    (15, "fifteen"),
-                    (17, "seventeen"),
-                    (100500, "too much")
-            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto res = session.ExecuteDataQuery("select count(*) from [Root/Foo]", TTxControl::BeginTx().CommitTx())
-                .GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-            TResultSetParser parser{res.GetResultSet(0)};
-            while (parser.TryNextRow()) {
-                UNIT_ASSERT_EQUAL(6, TValueParser{parser.GetValue(0)}.GetUint64());
-            }
-        }
-
+        } 
+ 
+        { 
+            auto result = session.ExecuteDataQuery(R"___( 
+                UPSERT INTO [Root/Foo] (Key, Value) VALUES 
+                    (1, "one"), 
+                    (2, "two"), 
+                    (12, "twelve"), 
+                    (15, "fifteen"), 
+                    (17, "seventeen"), 
+                    (100500, "too much") 
+            )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+ 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        } 
+ 
+        { 
+            auto res = session.ExecuteDataQuery("select count(*) from [Root/Foo]", TTxControl::BeginTx().CommitTx()) 
+                .GetValueSync(); 
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString()); 
+            TResultSetParser parser{res.GetResultSet(0)}; 
+            while (parser.TryNextRow()) { 
+                UNIT_ASSERT_EQUAL(6, TValueParser{parser.GetValue(0)}.GetUint64()); 
+            } 
+        } 
+ 
         EnsureTablePartitions(client, "/Root/Foo", 3);
     }
 

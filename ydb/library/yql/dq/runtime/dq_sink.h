@@ -8,7 +8,7 @@
 namespace NYql::NDq {
 
 struct TDqSinkStats : TDqOutputStats {
-    const ui64 OutputIndex;
+    const ui64 OutputIndex; 
 
     explicit TDqSinkStats(ui64 outputIndex)
         : OutputIndex(outputIndex) {}
@@ -30,7 +30,7 @@ public:
     virtual const TDqSinkStats* GetStats() const = 0;
 };
 
-IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
-    bool collectProfileStats);
+IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, 
+    bool collectProfileStats); 
 
 } // namespace NYql::NDq

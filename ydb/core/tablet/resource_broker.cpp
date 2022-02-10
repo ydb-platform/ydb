@@ -374,19 +374,19 @@ TScheduler::~TScheduler()
         entry.second->Queue->EraseTask(entry.second, false, Now);
 }
 
-const TTask* TScheduler::FindTask(ui64 taskId, const TActorId &client) const {
-    auto it = Tasks.find(std::make_pair(client, taskId));
-    return it != Tasks.end() ? it->second.Get() : nullptr;
-}
-
+const TTask* TScheduler::FindTask(ui64 taskId, const TActorId &client) const { 
+    auto it = Tasks.find(std::make_pair(client, taskId)); 
+    return it != Tasks.end() ? it->second.Get() : nullptr; 
+} 
+ 
 bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
                             const TActorId &client,
-                            const TActorSystem &as)
+                            const TActorSystem &as) 
 {
     auto &config = TaskConfig(task.Type);
     TTaskPtr newTask = new TTask(task, client, Now, config.Counters);
 
-    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
               "Submitted new %s task %s priority=%" PRIu64 " resources={%s}",
               config.Name.data(), newTask->GetIdString().data(), task.Priority,
               JoinSeq(", ", task.RequiredResources).data());
@@ -398,13 +398,13 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
         } while (Tasks.contains(id));
         newTask->TaskId = id.second;
 
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Use ID %" PRIu64 " for submitted task",
                   id.second);
     } else if (Tasks.contains(id)) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-            "SubmitTask failed for task %" PRIu64 " to %s: task with the same ID has been already submitted",
-            task.TaskId, ToString(client).c_str());
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+            "SubmitTask failed for task %" PRIu64 " to %s: task with the same ID has been already submitted", 
+            task.TaskId, ToString(client).c_str()); 
         return false;
     }
 
@@ -412,7 +412,7 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
         MissingTaskTypeCounter->Inc();
 
     Tasks.emplace(id, newTask);
-    AssignTask(newTask, as);
+    AssignTask(newTask, as); 
 
     return true;
 }
@@ -423,18 +423,18 @@ bool TScheduler::UpdateTask(ui64 taskId,
                             ui64 priority,
                             const TString &type,
                             bool resubmit,
-                            const TActorSystem &as)
+                            const TActorSystem &as) 
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "UpdateTask failed for task %" PRIu64 " to %s: cannot update unknown task",
-                  taskId, ToString(client).c_str());
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "UpdateTask failed for task %" PRIu64 " to %s: cannot update unknown task", 
+                  taskId, ToString(client).c_str()); 
         return false;
     }
 
     auto task = it->second;
-    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
               "Update task %s (priority=%" PRIu64 " type=%s resources={%s} resubmit=%" PRIu32 ")",
               task->GetIdString().data(), priority, type.data(), JoinSeq(", ", requiredResources).data(),
               (ui32)resubmit);
@@ -448,82 +448,82 @@ bool TScheduler::UpdateTask(ui64 taskId,
     if (resubmit && task->InFly)
         task->InFly = false;
 
-    AssignTask(task, as);
+    AssignTask(task, as); 
 
     return true;
 }
 
-bool TScheduler::UpdateTaskCookie(ui64 taskId,
+bool TScheduler::UpdateTaskCookie(ui64 taskId, 
                                   const TActorId &client,
                                   TIntrusivePtr<TThrRefBase> cookie,
-                                  const TActorSystem &as)
+                                  const TActorSystem &as) 
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "UpdateTaskCookie failed for task %" PRIu64 " to %s: cannot update unknown task's cookie",
-                  taskId, ToString(client).c_str());
-        return false;
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "UpdateTaskCookie failed for task %" PRIu64 " to %s: cannot update unknown task's cookie", 
+                  taskId, ToString(client).c_str()); 
+        return false; 
     }
 
     auto task = it->second;
-    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
               "Update cookie for task %s", task->GetIdString().data());
 
     task->Cookie = cookie;
-    return true;
+    return true; 
 }
 
-TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
-                                                              const TActorId &client,
-                                                              const TActorSystem &as)
+TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId, 
+                                                              const TActorId &client, 
+                                                              const TActorSystem &as) 
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "RemoveQueuedTask failed for task %" PRIu64 " to %s: cannot remove unknown task",
-                  taskId, ToString(client).c_str());
-        return TTerminateTaskResult(false, nullptr);
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "RemoveQueuedTask failed for task %" PRIu64 " to %s: cannot remove unknown task", 
+                  taskId, ToString(client).c_str()); 
+        return TTerminateTaskResult(false, nullptr); 
     }
 
     auto task = it->second;
     if (task->InFly) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "RemoveQueuedTask failed for task %" PRIu64 " to %s: cannot remove in-fly task",
-                  taskId, ToString(client).c_str());
-        return TTerminateTaskResult(false, task);
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "RemoveQueuedTask failed for task %" PRIu64 " to %s: cannot remove in-fly task", 
+                  taskId, ToString(client).c_str()); 
+        return TTerminateTaskResult(false, task); 
     }
 
-    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Removing task %s",
+    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Removing task %s", 
               task->GetIdString().data());
 
-    EraseTask(task, false, as);
-
-    return TTerminateTaskResult(true, task);
+    EraseTask(task, false, as); 
+ 
+    return TTerminateTaskResult(true, task); 
 }
 
-TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
-                                                        const TActorId &client,
-                                                        bool cancel,
-                                                        const TActorSystem &as)
+TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId, 
+                                                        const TActorId &client, 
+                                                        bool cancel, 
+                                                        const TActorSystem &as) 
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "FinishTask failed for task %" PRIu64 " to %s: cannot finish unknown task",
-                  taskId, ToString(client).c_str());
-        return TTerminateTaskResult(false, nullptr);
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "FinishTask failed for task %" PRIu64 " to %s: cannot finish unknown task", 
+                  taskId, ToString(client).c_str()); 
+        return TTerminateTaskResult(false, nullptr); 
     }
 
     auto task = it->second;
     if (!task->InFly) {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-                  "FinishTask failed for task %" PRIu64 " to %s: cannot finish queued task",
-                  taskId, ToString(client).c_str());
-        return TTerminateTaskResult(false, task);
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
+                  "FinishTask failed for task %" PRIu64 " to %s: cannot finish queued task", 
+                  taskId, ToString(client).c_str()); 
+        return TTerminateTaskResult(false, task); 
     }
 
-    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Finish task %s (release resources {%s})",
+    LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Finish task %s (release resources {%s})", 
               task->GetIdString().data(), JoinSeq(", ", task->RequiredResources).data());
 
     // Add execution time to statistics but cancelled tasks
@@ -533,12 +533,12 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
     if (!cancel)
         config.ExecTime.Add(execTime);
 
-    EraseTask(task, true, as);
+    EraseTask(task, true, as); 
 
-    return TTerminateTaskResult(true, task);
+    return TTerminateTaskResult(true, task); 
 }
 
-bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
+bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as) 
 {
     bool res = false;
 
@@ -550,9 +550,9 @@ bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
             ++it;
 
             if (inFly)
-                FinishTask(id, client, true, as);
+                FinishTask(id, client, true, as); 
             else
-                RemoveQueuedTask(id, client, as);
+                RemoveQueuedTask(id, client, as); 
 
             res = true;
         } else
@@ -562,7 +562,7 @@ bool TScheduler::RemoveTasks(const TActorId &client, const TActorSystem &as)
     return res;
 }
 
-void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
+void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as) 
 {
     auto queue = task->Queue;
     auto oldp = queue->PlannedResourceUsage;
@@ -571,22 +571,22 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
     queue->EraseTask(task, finished, Now);
 
     if (oldp != queue->PlannedResourceUsage)
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Updated planned resource usage for queue %s from %f to %f (remove task %s)",
                   queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data());
 
     if (oldr != queue->RealResourceUsage)
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Updated real resource usage for queue %s from %f to %f",
                   queue->Name.data(), oldr, queue->RealResourceUsage);
 
     Tasks.erase(std::make_pair(task->Client, task->TaskId));
 }
 
-void TScheduler::ScheduleTasks(const TActorSystem &as,
-                               std::function<void(const TTask &task)> &&onTaskSchedule)
+void TScheduler::ScheduleTasks(const TActorSystem &as, 
+                               std::function<void(const TTask &task)> &&onTaskSchedule) 
 {
-    UpdateResourceUsage(as);
+    UpdateResourceUsage(as); 
 
     TSet<TTaskQueuePtr, TTaskQueueLess> pending;
     for (auto &entry : Queues) {
@@ -613,7 +613,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // Allow resource over-usage if no tasks are running.
         if (!ResourceLimit->HasResources(task->RequiredResources)
             && *TotalCounters->InFlyTasks) {
-            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                       "Not enough resources to start task %s",
                       task->GetIdString().data());
             blockedResources |= task->GetRequiredResourcesMask();
@@ -624,13 +624,13 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // Allow resource over-usage if no tasks are running in this queue.
         if (!queue->QueueLimit.HasResources(task->RequiredResources)
             && *queue->QueueCounters.InFlyTasks) {
-            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                       "Skip queue %s due to exceeded limits",
                       queue->Name.data());
             continue;
         }
 
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Allocate resources {%s} for task %s from queue %s",
                   JoinSeq(", ", task->RequiredResources).data(),
                   task->GetIdString().data(), queue->Name.data());
@@ -639,16 +639,16 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         task->InFly = true;
         task->StartTime = Now;
         task->FinishTime = Now + EstimateTaskExecutionTime(task);
-        AssignTask(task, as);
+        AssignTask(task, as); 
 
-        onTaskSchedule(*task);
+        onTaskSchedule(*task); 
 
         if (!queue->Empty())
             pending.insert(queue);
     }
 }
 
-void TScheduler::UpdateResourceUsage(const TActorSystem &as)
+void TScheduler::UpdateResourceUsage(const TActorSystem &as) 
 {
     for (auto &entry : Queues) {
         auto &queue = entry.second;
@@ -656,24 +656,24 @@ void TScheduler::UpdateResourceUsage(const TActorSystem &as)
         queue->UpdateRealResourceUsage(Now);
 
         if (old != queue->RealResourceUsage)
-            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+            LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                       "Updated real resource usage for queue %s from %f to %f (in-fly consumption {%s})",
                       queue->Name.data(), old, queue->RealResourceUsage,
                       JoinSeq(", ", queue->QueueLimit.Used).data());
     }
 }
 
-void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
+void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as) 
 {
     TString state = task->InFly ? "in-fly" : "waiting";
     TTaskQueuePtr queue = TaskConfig(task->Type).Queue;
 
     if (!TaskConfigs.contains(task->Type)) {
-        LOG_ERROR(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_ERROR(as, NKikimrServices::RESOURCE_BROKER, 
                   "Assigning %s task '%s' of unknown type '%s' to default queue",
                   state.data(), task->GetIdString().data(), task->Type.data());
     } else {
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Assigning %s task %s to queue %s",
                   state.data(), task->GetIdString().data(), queue->Name.data());
     }
@@ -700,12 +700,12 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     queue->InsertTask(task, Now);
 
     if (oldr != queue->RealResourceUsage)
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Updated real resource usage for queue %s from %f to %f",
                   queue->Name.data(), oldr, queue->RealResourceUsage);
 
     if (oldp != queue->PlannedResourceUsage)
-        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
+        LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, 
                   "Updated planned resource usage for queue %s from %f to %f (insert task %s)",
                   queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data());
 }
@@ -729,7 +729,7 @@ TDuration TScheduler::EstimateTaskExecutionTime(TTaskPtr task)
     return TaskConfig(task->Type).ExecTime.GetAverage();
 }
 
-void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as)
+void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSystem &as) 
 {
     // Remove all tasks from queues.
     for (auto &entry : Tasks)
@@ -764,7 +764,7 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
 
     // Move all tasks to queues.
     for (auto &entry : Tasks)
-        AssignTask(entry.second, as);
+        AssignTask(entry.second, as); 
 }
 
 void TScheduler::UpdateTime(TInstant now)
@@ -800,312 +800,312 @@ void TScheduler::OutputState(IOutputStream &os) const
 }
 
 TResourceBroker::TResourceBroker(const TResourceBrokerConfig &config,
-                                 const NMonitoring::TDynamicCounterPtr &counters,
-                                 TActorSystem *actorSystem)
+                                 const NMonitoring::TDynamicCounterPtr &counters, 
+                                 TActorSystem *actorSystem) 
     : Config(config)
     , Scheduler(counters)
-    , ActorSystem(actorSystem)
+    , ActorSystem(actorSystem) 
 {
-    with_lock(Lock) {
-        Scheduler.Configure(Config, *ActorSystem);
-    }
+    with_lock(Lock) { 
+        Scheduler.Configure(Config, *ActorSystem); 
+    } 
 }
 
-void TResourceBroker::Configure(const TResourceBrokerConfig &config)
+void TResourceBroker::Configure(const TResourceBrokerConfig &config) 
 {
-    with_lock(Lock) {
-        Config = config;
+    with_lock(Lock) { 
+        Config = config; 
 
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        Scheduler.Configure(Config, *ActorSystem);
-        Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-            ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-        });
-    }
-}
-
-TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::TEvSubmitTask &ev,
-                                                      const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-            return {};
-        }
-    }
-
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-    error->TaskId = ev.Task.TaskId;
-    error->Status.Code = TEvResourceBroker::TStatus::ALREADY_EXISTS;
-    error->Status.Message = "task with the same ID has been already submitted";
-    error->Cookie = ev.Task.Cookie;
-    return error;
-}
-
-bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& ev, const TActorId& sender)
-{
-    with_lock(Lock) {
-        bool success = false;
-
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this, taskId = ev.Task.TaskId, &success](const TTask &task) {
-                if (task.TaskId == taskId) {
-                    success = true;
-                } else {
-                    ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-                }
-            });
-
-            if (!success) {
-                auto removed = Scheduler.RemoveQueuedTask(ev.Task.TaskId, sender, *ActorSystem);
-                Y_VERIFY_DEBUG(removed.Success);
-            }
-        }
-
-        return success;
-    }
-}
-
-TResourceBroker::TOpError TResourceBroker::UpdateTask(const TEvResourceBroker::TEvUpdateTask& ev,
-                                                      const TActorId& sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (Scheduler.UpdateTask(ev.TaskId, sender, ev.RequiredResources, ev.Priority, ev.Type, ev.Resubmit, *ActorSystem)) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-            return {};
-        }
-    }
-
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-    error->TaskId = ev.TaskId;
-    error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
-    error->Status.Message = "cannot update unknown task";
-    error->Cookie = nullptr;
-    return error;
-}
-
-bool TResourceBroker::MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) {
-    with_lock(Lock) {
-        auto recipientTask = Scheduler.FindTask(recipientTaskId, sender);
-        if (!recipientTask || !recipientTask->InFly) {
-            return false;
-        }
-
-        auto donorTask = Scheduler.FindTask(donorTaskId, sender);
-        if (!donorTask || !donorTask->InFly) {
-            return false;
-        }
-
-        if (recipientTask->Type != donorTask->Type) {
-            return false;
-        }
-
-        TResourceValues mergedResources;
-        for (ui64 i = 0; i < recipientTask->RequiredResources.size(); ++i) {
-            mergedResources[i] = recipientTask->RequiredResources[i] + donorTask->RequiredResources[i];
-        }
-
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-
-        bool updated = Scheduler.UpdateTask(recipientTaskId, sender, mergedResources, recipientTask->Priority,
-            recipientTask->Type, /* resubmit */ false, *ActorSystem);
-        Y_VERIFY_DEBUG(updated);
-
-        auto finished = Scheduler.FinishTask(donorTaskId, sender, /* cancel */ false, *ActorSystem);
-        Y_VERIFY_DEBUG(finished.Success);
-
-        Scheduler.ScheduleTasks(*ActorSystem, [this, recipientTaskId](const TTask &task) {
-            Y_VERIFY_DEBUG(task.TaskId != recipientTaskId);
-            ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-        });
-
-        return true;
-    }
-}
-
-bool TResourceBroker::ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender)
-{
-    with_lock(Lock) {
-        auto task = Scheduler.FindTask(taskId, sender);
-        if (!task) {
-            return false;
-        }
-
-        auto resources = task->RequiredResources;
-        for (ui32 i = 0; i < resources.size(); ++i) {
-            if (i < reduceBy.size()) {
-                resources[i] = resources[i] > reduceBy[i] ? resources[i] - reduceBy[i] : 0;
-            }
-        }
-
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-
-        if (Scheduler.UpdateTask(taskId, sender, resources, task->Priority, task->Type, false, *ActorSystem)) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this, taskId](const TTask &task) {
-                if (task.TaskId != taskId) {
-                    ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-                }
-            });
-            return true;
-        }
-
-        LOG_ERROR(*ActorSystem, NKikimrServices::RESOURCE_BROKER,
-            "ReduceTaskResourcesInstant failed for task %" PRIu64, taskId);
-        return false;
-    }
-}
-
-TResourceBroker::TOpError TResourceBroker::UpdateTaskCookie(const TEvResourceBroker::TEvUpdateTaskCookie &ev,
-                                                            const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (Scheduler.UpdateTaskCookie(ev.TaskId, sender, ev.Cookie, *ActorSystem)) {
-            return {};
-        }
-    }
-
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-    error->TaskId = ev.TaskId;
-    error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
-    error->Status.Message = "cannot update unknown task's cookie";
-    error->Cookie = nullptr;
-    return error;
-}
-
-TResourceBroker::TOpError TResourceBroker::RemoveTask(const TEvResourceBroker::TEvRemoveTask &ev,
-                                                      const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-
-        auto result = Scheduler.RemoveQueuedTask(ev.TaskId, sender, *ActorSystem);
-
-        if (result.Success) {
-            if (ev.ReplyOnSuccess) {
-                auto resp = MakeHolder<TEvResourceBroker::TEvTaskRemoved>();
-                resp->TaskId = result.Task->TaskId;
-                resp->Cookie = result.Task->Cookie;
-
-                ActorSystem->Send(sender, resp.Release());
-            }
-
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-
-            return {};
-        }
-
-        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-        error->TaskId = ev.TaskId;
-
-        if (result.Task) {
-            error->Status.Code = TEvResourceBroker::TStatus::TASK_IN_FLY;
-            error->Status.Message = "cannot remove in-fly task";
-            error->Cookie = result.Task->Cookie;
-        } else {
-            error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
-            error->Status.Message = "cannot remove unknown task";
-            error->Cookie = nullptr;
-        }
-
-        return error;
-    }
-}
-
-TResourceBroker::TOpError TResourceBroker::FinishTask(const TEvResourceBroker::TEvFinishTask &ev,
-                                                      const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-
-        auto result = Scheduler.FinishTask(ev.TaskId, sender, ev.Cancel, *ActorSystem);
-
-        if (result.Success) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-
-            return {};
-        }
-
-        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
-        error->TaskId = ev.TaskId;
-
-        if (result.Task) {
-            error->Status.Code = TEvResourceBroker::TStatus::TASK_IN_QUEUE;
-            error->Status.Message = "cannot finish queued task";
-            error->Cookie = result.Task->Cookie;
-        } else {
-            error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
-            error->Status.Message = "cannot finish unknown task";
-            error->Cookie = nullptr;
-        }
-
-        return error;
-    }
-}
-
-bool TResourceBroker::FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev,
-                                        const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-
-        auto result = Scheduler.FinishTask(ev.TaskId, sender, ev.Cancel, *ActorSystem);
-
-        if (result.Success) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-        } else {
-            LOG_ERROR(*ActorSystem, NKikimrServices::RESOURCE_BROKER,
-                "FinishTaskInstant failed for task %" PRIu64 ": %s",
-                ev.TaskId, (result.Task ? "cannot finish queued task" : "cannot finish unknown task"));
-        }
-
-        return result.Success;
-    }
-}
-
-void TResourceBroker::NotifyActorDied(const TEvResourceBroker::TEvNotifyActorDied &, const TActorId &sender)
-{
-    with_lock(Lock) {
-        Scheduler.UpdateTime(ActorSystem->Timestamp());
-        if (Scheduler.RemoveTasks(sender, *ActorSystem)) {
-            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) {
-                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
-            });
-        }
-    }
-}
-
-void TResourceBroker::OutputState(TStringStream& str)
-{
-    with_lock(Lock) {
-        Scheduler.OutputState(str);
-    }
-}
-
-TResourceBrokerActor::TResourceBrokerActor(const TResourceBrokerConfig &config,
-                                           const NMonitoring::TDynamicCounterPtr &counters)
-    : Config(config)
-    , Counters(counters)
-{
-}
-
-void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
-{
-    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "TResourceBrokerActor bootstrap");
-
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        Scheduler.Configure(Config, *ActorSystem); 
+        Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+            ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+        }); 
+    } 
+} 
+ 
+TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::TEvSubmitTask &ev, 
+                                                      const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+            return {}; 
+        } 
+    } 
+ 
+    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>(); 
+    error->TaskId = ev.Task.TaskId; 
+    error->Status.Code = TEvResourceBroker::TStatus::ALREADY_EXISTS; 
+    error->Status.Message = "task with the same ID has been already submitted"; 
+    error->Cookie = ev.Task.Cookie; 
+    return error; 
+} 
+ 
+bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& ev, const TActorId& sender) 
+{ 
+    with_lock(Lock) { 
+        bool success = false; 
+ 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        if (Scheduler.SubmitTask(ev.Task, sender, *ActorSystem)) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this, taskId = ev.Task.TaskId, &success](const TTask &task) { 
+                if (task.TaskId == taskId) { 
+                    success = true; 
+                } else { 
+                    ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+                } 
+            }); 
+ 
+            if (!success) { 
+                auto removed = Scheduler.RemoveQueuedTask(ev.Task.TaskId, sender, *ActorSystem); 
+                Y_VERIFY_DEBUG(removed.Success); 
+            } 
+        } 
+ 
+        return success; 
+    } 
+} 
+ 
+TResourceBroker::TOpError TResourceBroker::UpdateTask(const TEvResourceBroker::TEvUpdateTask& ev, 
+                                                      const TActorId& sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        if (Scheduler.UpdateTask(ev.TaskId, sender, ev.RequiredResources, ev.Priority, ev.Type, ev.Resubmit, *ActorSystem)) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+            return {}; 
+        } 
+    } 
+ 
+    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>(); 
+    error->TaskId = ev.TaskId; 
+    error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK; 
+    error->Status.Message = "cannot update unknown task"; 
+    error->Cookie = nullptr; 
+    return error; 
+} 
+ 
+bool TResourceBroker::MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) { 
+    with_lock(Lock) { 
+        auto recipientTask = Scheduler.FindTask(recipientTaskId, sender); 
+        if (!recipientTask || !recipientTask->InFly) { 
+            return false; 
+        } 
+ 
+        auto donorTask = Scheduler.FindTask(donorTaskId, sender); 
+        if (!donorTask || !donorTask->InFly) { 
+            return false; 
+        } 
+ 
+        if (recipientTask->Type != donorTask->Type) { 
+            return false; 
+        } 
+ 
+        TResourceValues mergedResources; 
+        for (ui64 i = 0; i < recipientTask->RequiredResources.size(); ++i) { 
+            mergedResources[i] = recipientTask->RequiredResources[i] + donorTask->RequiredResources[i]; 
+        } 
+ 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+ 
+        bool updated = Scheduler.UpdateTask(recipientTaskId, sender, mergedResources, recipientTask->Priority, 
+            recipientTask->Type, /* resubmit */ false, *ActorSystem); 
+        Y_VERIFY_DEBUG(updated); 
+ 
+        auto finished = Scheduler.FinishTask(donorTaskId, sender, /* cancel */ false, *ActorSystem); 
+        Y_VERIFY_DEBUG(finished.Success); 
+ 
+        Scheduler.ScheduleTasks(*ActorSystem, [this, recipientTaskId](const TTask &task) { 
+            Y_VERIFY_DEBUG(task.TaskId != recipientTaskId); 
+            ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+        }); 
+ 
+        return true; 
+    } 
+} 
+ 
+bool TResourceBroker::ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) 
+{ 
+    with_lock(Lock) { 
+        auto task = Scheduler.FindTask(taskId, sender); 
+        if (!task) { 
+            return false; 
+        } 
+ 
+        auto resources = task->RequiredResources; 
+        for (ui32 i = 0; i < resources.size(); ++i) { 
+            if (i < reduceBy.size()) { 
+                resources[i] = resources[i] > reduceBy[i] ? resources[i] - reduceBy[i] : 0; 
+            } 
+        } 
+ 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+ 
+        if (Scheduler.UpdateTask(taskId, sender, resources, task->Priority, task->Type, false, *ActorSystem)) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this, taskId](const TTask &task) { 
+                if (task.TaskId != taskId) { 
+                    ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+                } 
+            }); 
+            return true; 
+        } 
+ 
+        LOG_ERROR(*ActorSystem, NKikimrServices::RESOURCE_BROKER, 
+            "ReduceTaskResourcesInstant failed for task %" PRIu64, taskId); 
+        return false; 
+    } 
+} 
+ 
+TResourceBroker::TOpError TResourceBroker::UpdateTaskCookie(const TEvResourceBroker::TEvUpdateTaskCookie &ev, 
+                                                            const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        if (Scheduler.UpdateTaskCookie(ev.TaskId, sender, ev.Cookie, *ActorSystem)) { 
+            return {}; 
+        } 
+    } 
+ 
+    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>(); 
+    error->TaskId = ev.TaskId; 
+    error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK; 
+    error->Status.Message = "cannot update unknown task's cookie"; 
+    error->Cookie = nullptr; 
+    return error; 
+} 
+ 
+TResourceBroker::TOpError TResourceBroker::RemoveTask(const TEvResourceBroker::TEvRemoveTask &ev, 
+                                                      const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+ 
+        auto result = Scheduler.RemoveQueuedTask(ev.TaskId, sender, *ActorSystem); 
+ 
+        if (result.Success) { 
+            if (ev.ReplyOnSuccess) { 
+                auto resp = MakeHolder<TEvResourceBroker::TEvTaskRemoved>(); 
+                resp->TaskId = result.Task->TaskId; 
+                resp->Cookie = result.Task->Cookie; 
+ 
+                ActorSystem->Send(sender, resp.Release()); 
+            } 
+ 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+ 
+            return {}; 
+        } 
+ 
+        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>(); 
+        error->TaskId = ev.TaskId; 
+ 
+        if (result.Task) { 
+            error->Status.Code = TEvResourceBroker::TStatus::TASK_IN_FLY; 
+            error->Status.Message = "cannot remove in-fly task"; 
+            error->Cookie = result.Task->Cookie; 
+        } else { 
+            error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK; 
+            error->Status.Message = "cannot remove unknown task"; 
+            error->Cookie = nullptr; 
+        } 
+ 
+        return error; 
+    } 
+} 
+ 
+TResourceBroker::TOpError TResourceBroker::FinishTask(const TEvResourceBroker::TEvFinishTask &ev, 
+                                                      const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+ 
+        auto result = Scheduler.FinishTask(ev.TaskId, sender, ev.Cancel, *ActorSystem); 
+ 
+        if (result.Success) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+ 
+            return {}; 
+        } 
+ 
+        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>(); 
+        error->TaskId = ev.TaskId; 
+ 
+        if (result.Task) { 
+            error->Status.Code = TEvResourceBroker::TStatus::TASK_IN_QUEUE; 
+            error->Status.Message = "cannot finish queued task"; 
+            error->Cookie = result.Task->Cookie; 
+        } else { 
+            error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK; 
+            error->Status.Message = "cannot finish unknown task"; 
+            error->Cookie = nullptr; 
+        } 
+ 
+        return error; 
+    } 
+} 
+ 
+bool TResourceBroker::FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev, 
+                                        const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+ 
+        auto result = Scheduler.FinishTask(ev.TaskId, sender, ev.Cancel, *ActorSystem); 
+ 
+        if (result.Success) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+        } else { 
+            LOG_ERROR(*ActorSystem, NKikimrServices::RESOURCE_BROKER, 
+                "FinishTaskInstant failed for task %" PRIu64 ": %s", 
+                ev.TaskId, (result.Task ? "cannot finish queued task" : "cannot finish unknown task")); 
+        } 
+ 
+        return result.Success; 
+    } 
+} 
+ 
+void TResourceBroker::NotifyActorDied(const TEvResourceBroker::TEvNotifyActorDied &, const TActorId &sender) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.UpdateTime(ActorSystem->Timestamp()); 
+        if (Scheduler.RemoveTasks(sender, *ActorSystem)) { 
+            Scheduler.ScheduleTasks(*ActorSystem, [this](const TTask &task) { 
+                ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie)); 
+            }); 
+        } 
+    } 
+} 
+ 
+void TResourceBroker::OutputState(TStringStream& str) 
+{ 
+    with_lock(Lock) { 
+        Scheduler.OutputState(str); 
+    } 
+} 
+ 
+TResourceBrokerActor::TResourceBrokerActor(const TResourceBrokerConfig &config, 
+                                           const NMonitoring::TDynamicCounterPtr &counters) 
+    : Config(config) 
+    , Counters(counters) 
+{ 
+} 
+ 
+void TResourceBrokerActor::Bootstrap(const TActorContext &ctx) 
+{ 
+    LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "TResourceBrokerActor bootstrap"); 
+ 
     NActors::TMon* mon = AppData(ctx)->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -1113,68 +1113,68 @@ void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
                                false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
     }
 
-    ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(Config), std::move(Counters), ctx.ActorSystem());
+    ResourceBroker = MakeIntrusive<TResourceBroker>(std::move(Config), std::move(Counters), ctx.ActorSystem()); 
     Become(&TThis::StateWork);
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvSubmitTask::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvSubmitTask::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
-    auto error = ResourceBroker->SubmitTask(*ev->Get(), ev->Sender);
-
-    if (error) {
-        ctx.Send(ev->Sender, error.Release());
-    }
+    auto error = ResourceBroker->SubmitTask(*ev->Get(), ev->Sender); 
+ 
+    if (error) { 
+        ctx.Send(ev->Sender, error.Release()); 
+    } 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvUpdateTask::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvUpdateTask::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
-    auto error = ResourceBroker->UpdateTask(*ev->Get(), ev->Sender);
-
-    if (error) {
-        ctx.Send(ev->Sender, error.Release());
-    }
+    auto error = ResourceBroker->UpdateTask(*ev->Get(), ev->Sender); 
+ 
+    if (error) { 
+        ctx.Send(ev->Sender, error.Release()); 
+    } 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvUpdateTaskCookie::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvUpdateTaskCookie::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
-    auto error = ResourceBroker->UpdateTaskCookie(*ev->Get(), ev->Sender);
-
-    if (error) {
-        ctx.Send(ev->Sender, error.Release());
-    }
+    auto error = ResourceBroker->UpdateTaskCookie(*ev->Get(), ev->Sender); 
+ 
+    if (error) { 
+        ctx.Send(ev->Sender, error.Release()); 
+    } 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvRemoveTask::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvRemoveTask::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
-    auto error = ResourceBroker->RemoveTask(*ev->Get(), ev->Sender);
-
-    if (error) {
-        ctx.Send(ev->Sender, error.Release());
-    }
+    auto error = ResourceBroker->RemoveTask(*ev->Get(), ev->Sender); 
+ 
+    if (error) { 
+        ctx.Send(ev->Sender, error.Release()); 
+    } 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvFinishTask::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvFinishTask::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
-    auto error = ResourceBroker->FinishTask(*ev->Get(), ev->Sender);
-
-    if (error) {
-        ctx.Send(ev->Sender, error.Release());
-    }
+    auto error = ResourceBroker->FinishTask(*ev->Get(), ev->Sender); 
+ 
+    if (error) { 
+        ctx.Send(ev->Sender, error.Release()); 
+    } 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvNotifyActorDied::TPtr &ev,
-                                  const TActorContext &)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvNotifyActorDied::TPtr &ev, 
+                                  const TActorContext &) 
 {
-    ResourceBroker->NotifyActorDied(*ev->Get(), ev->Sender);
+    ResourceBroker->NotifyActorDied(*ev->Get(), ev->Sender); 
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
-                                  const TActorContext &ctx)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev, 
+                                  const TActorContext &ctx) 
 {
     auto &rec = ev->Get()->Record;
     TAutoPtr<TEvResourceBroker::TEvConfigureResult> response
@@ -1218,7 +1218,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     } else {
         response->Record.SetSuccess(true);
 
-        ResourceBroker->Configure(std::move(ev->Get()->Record));
+        ResourceBroker->Configure(std::move(ev->Get()->Record)); 
     }
 
     LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "Configure result: %s",
@@ -1227,34 +1227,34 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     ctx.Send(ev->Sender, response.Release());
 }
 
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&)
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev, const TActorContext&) 
+{ 
+    auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>(); 
+    for (auto& queue : Config.GetQueues()) { 
+        if (queue.GetName() == ev->Get()->Queue) { 
+            resp->QueueConfig = queue; 
+            break; 
+        } 
+    } 
+    Send(ev->Sender, resp.Release()); 
+} 
+ 
+void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx) 
 {
-    auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
-    for (auto& queue : Config.GetQueues()) {
-        if (queue.GetName() == ev->Get()->Queue) {
-            resp->QueueConfig = queue;
-            break;
-        }
-    }
-    Send(ev->Sender, resp.Release());
-}
-
-void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx)
-{
-    auto resp = MakeHolder<TEvResourceBroker::TEvResourceBrokerResponse>();
-    resp->ResourceBroker = ResourceBroker;
-
-    ctx.Send(ev->Sender, resp.Release());
-}
-
-void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx)
-{
+    auto resp = MakeHolder<TEvResourceBroker::TEvResourceBrokerResponse>(); 
+    resp->ResourceBroker = ResourceBroker; 
+ 
+    ctx.Send(ev->Sender, resp.Release()); 
+} 
+ 
+void TResourceBrokerActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) 
+{ 
     TStringStream str;
     HTML(str) {
         PRE() {
             str << "Current config:" << Endl
                 << Config.DebugString() << Endl;
-            ResourceBroker->OutputState(str);
+            ResourceBroker->OutputState(str); 
         }
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -1264,16 +1264,16 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
-    const ui64 DefaultQueueCPU = 2;
-
+    const ui64 DefaultQueueCPU = 2; 
+ 
     const ui64 KqpRmQueueCPU = 4;
-    const ui64 KqpRmQueueMemory = 10ULL << 30;
-
+    const ui64 KqpRmQueueMemory = 10ULL << 30; 
+ 
     const ui64 TotalCPU = 20;
-    const ui64 TotalMemory = 16ULL << 30;
-
-    static_assert(KqpRmQueueMemory < TotalMemory);
-
+    const ui64 TotalMemory = 16ULL << 30; 
+ 
+    static_assert(KqpRmQueueMemory < TotalMemory); 
+ 
     auto queue = config.AddQueues();
     queue->SetName(NLocalDb::DefaultQueueName);
     queue->SetWeight(30);
@@ -1319,7 +1319,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(10);
 
-    queue = config.AddQueues();
+    queue = config.AddQueues(); 
     queue->SetName("queue_backup");
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(2);
@@ -1330,11 +1330,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetCpu(10);
 
     queue = config.AddQueues();
-    queue->SetName(NLocalDb::KqpResourceManagerQueue);
+    queue->SetName(NLocalDb::KqpResourceManagerQueue); 
     queue->SetWeight(30);
     queue->MutableLimit()->SetCpu(KqpRmQueueCPU);
     queue->MutableLimit()->SetMemory(KqpRmQueueMemory);
-
+ 
     queue = config.AddQueues();
     queue->SetName("queue_build_index");
     queue->SetWeight(100);
@@ -1405,7 +1405,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetQueueName("queue_scan");
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
 
-    task = config.AddTasks();
+    task = config.AddTasks(); 
     task->SetName("backup");
     task->SetQueueName("queue_backup");
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
@@ -1416,10 +1416,10 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(5).GetValue());
 
     task = config.AddTasks();
-    task->SetName(NLocalDb::KqpResourceManagerTaskName);
-    task->SetQueueName(NLocalDb::KqpResourceManagerQueue);
-    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
-
+    task->SetName(NLocalDb::KqpResourceManagerTaskName); 
+    task->SetQueueName(NLocalDb::KqpResourceManagerQueue); 
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue()); 
+ 
     task = config.AddTasks();
     task->SetName("build_index");
     task->SetQueueName("queue_build_index");
@@ -1537,10 +1537,10 @@ void MergeConfigUpdates(
 }
 
 
-IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                                  const NMonitoring::TDynamicCounterPtr &counters)
+IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config, 
+                                  const NMonitoring::TDynamicCounterPtr &counters) 
 {
-    return new TResourceBrokerActor(config, counters);
+    return new TResourceBrokerActor(config, counters); 
 }
 
 

@@ -1,12 +1,12 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
-SRCS(
-    kqp_node.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    kqp_node.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
@@ -17,12 +17,12 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/library/yql/dq/actors/compute
-)
-
-YQL_LAST_ABI_VERSION()
-
-END()
-
+) 
+ 
+YQL_LAST_ABI_VERSION() 
+ 
+END() 
+ 
 RECURSE_FOR_TESTS(
     ut
 )

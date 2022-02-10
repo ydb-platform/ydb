@@ -126,17 +126,17 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_EQUAL(&resp, &resp.SetContent("some stuff"));
         UNIT_ASSERT_EQUAL(&resp, &resp.SetContent("some other stuff").SetContentType("text/plain"));
     }
-
-    Y_UNIT_TEST(TestSetContentType) {
-        const char* EXPECTED = "HTTP/1.1 200 Ok\r\n"
-                               "Content-Type: text/xml\r\n"
-                               "Content-Length: 28\r\n"
-                               "\r\n"
-                               "<xml><tag value=\"1\" /></xml>";
-        THttpResponse resp;
-        resp.SetContent("<xml><tag value=\"1\" /></xml>")
-            .SetContentType("application/json")
-            .SetContentType("text/xml");
-        UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED);
-    }
+ 
+    Y_UNIT_TEST(TestSetContentType) { 
+        const char* EXPECTED = "HTTP/1.1 200 Ok\r\n" 
+                               "Content-Type: text/xml\r\n" 
+                               "Content-Length: 28\r\n" 
+                               "\r\n" 
+                               "<xml><tag value=\"1\" /></xml>"; 
+        THttpResponse resp; 
+        resp.SetContent("<xml><tag value=\"1\" /></xml>") 
+            .SetContentType("application/json") 
+            .SetContentType("text/xml"); 
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED); 
+    } 
 }

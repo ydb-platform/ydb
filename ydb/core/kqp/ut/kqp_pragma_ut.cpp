@@ -23,29 +23,29 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Runtime) {
+    Y_UNIT_TEST_NEW_ENGINE(Runtime) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             PRAGMA kikimr.IsolationLevel = "ReadCommitted";
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1; 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Auth) {
+    Y_UNIT_TEST_NEW_ENGINE(Auth) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             PRAGMA kikimr.Auth = "default_kikimr";
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1; 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED));

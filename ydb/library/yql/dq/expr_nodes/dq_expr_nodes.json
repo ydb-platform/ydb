@@ -80,10 +80,10 @@
         "ListBase": "TDqSink"
     },
     {
-        "Name": "TDqStageBase",
+        "Name": "TDqStageBase", 
         "Base": "TCallable",
-        "Match": {"Type": "CallableBase"},
-        "Builder": {"Generate": "None"},
+        "Match": {"Type": "CallableBase"}, 
+        "Builder": {"Generate": "None"}, 
         "Children": [
             {"Index": 0, "Name": "Inputs", "Type": "TExprList"},
             {"Index": 1, "Name": "Program", "Type": "TCoLambda"},
@@ -92,29 +92,29 @@
         ]
     },
     {
-        "Name": "TDqStage",
-        "Base": "TDqStageBase",
-        "Match": {"Type": "Callable", "Name": "DqStage"}
-    },
-    {
-        "Name": "TDqPhyStage",
-        "Base": "TDqStageBase",
+        "Name": "TDqStage", 
+        "Base": "TDqStageBase", 
+        "Match": {"Type": "Callable", "Name": "DqStage"} 
+    }, 
+    { 
+        "Name": "TDqPhyStage", 
+        "Base": "TDqStageBase", 
         "Match": {"Type": "Callable", "Name": "DqPhyStage"}
-    },
-    {
+    }, 
+    { 
         "Name": "TDqStageList",
         "ListBase": "TDqStageBase"
     },
     {
-        "Name": "TDqPhyStageList",
-        "ListBase": "TDqPhyStage"
-    },
-    {
+        "Name": "TDqPhyStageList", 
+        "ListBase": "TDqPhyStage" 
+    }, 
+    { 
         "Name": "TDqOutput",
         "Base": "TCallable",
         "Match": {"Type": "Callable", "Name": "TDqOutput"},
         "Children": [
-            {"Index": 0, "Name": "Stage", "Type": "TDqStageBase"},
+            {"Index": 0, "Name": "Stage", "Type": "TDqStageBase"}, 
             {"Index": 1, "Name": "Index", "Type": "TCoAtom"}
         ]
     },
@@ -128,9 +128,9 @@
         ]
     },
     {
-        "Name": "TDqCnHashShuffle",
+        "Name": "TDqCnHashShuffle", 
         "Base": "TDqConnection",
-        "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
+        "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"}, 
         "Children": [
             {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"}
         ]
@@ -153,12 +153,12 @@
     {
         "Name": "TDqCnResult",
         "Base": "TDqConnection",
-        "Match": {"Type": "Callable", "Name": "DqCnResult"},
-        "Children": [
-            {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"}
-        ]
-    },
-    {
+        "Match": {"Type": "Callable", "Name": "DqCnResult"}, 
+        "Children": [ 
+            {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"} 
+        ] 
+    }, 
+    { 
         "Name": "TDqCnValue",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnValue"}
@@ -185,12 +185,12 @@
         ]
     },
     {
-        "Name": "TDqReplicate",
-        "Base": "TFreeArgCallable",
-        "Match": {"Type": "Callable", "Name": "DqReplicate"},
-        "Children": [
-            {"Index": 0, "Name": "Input", "Type": "TExprBase"}
-        ]
+        "Name": "TDqReplicate", 
+        "Base": "TFreeArgCallable", 
+        "Match": {"Type": "Callable", "Name": "DqReplicate"}, 
+        "Children": [ 
+            {"Index": 0, "Name": "Input", "Type": "TExprBase"} 
+        ] 
     },
     {
         "Name": "TDqQuery",

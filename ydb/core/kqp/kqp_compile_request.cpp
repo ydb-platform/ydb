@@ -57,7 +57,7 @@ public:
             return;
         }
 
-        if (!NavigateTables(*compileResult->PreparedQuery, compileResult->Query->Database, ctx)) {
+        if (!NavigateTables(*compileResult->PreparedQuery, compileResult->Query->Database, ctx)) { 
             ctx.Send(Owner, ev->Release().Release());
             Die(ctx);
             return;

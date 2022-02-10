@@ -108,7 +108,7 @@ void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKey
     if (bound.Maybe<TKqlKeyInc>()) {
         boundProto.SetIsInclusive(true);
     } else if (bound.Maybe<TKqlKeyExc>()) {
-        boundProto.SetIsInclusive(false);
+        boundProto.SetIsInclusive(false); 
     } else {
         YQL_ENSURE(false, "Unexpected key bound type: " << bound.CallableName());
     }
@@ -140,28 +140,28 @@ void FillKeyRange(const TKqlKeyRange& range, NKqpProto::TKqpPhyKeyRange& rangePr
 }
 
 template <typename TReader, typename TProto>
-void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto) {
+void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto) { 
     FillKeyRange(read.Range(), *readProto.MutableKeyRange());
-
-    auto settings = TKqpReadTableSettings::Parse(read);
-
-    readProto.MutableSkipNullKeys()->Resize(tableMeta.KeyColumnNames.size(), false);
-    for (const auto& key : settings.SkipNullKeys) {
-        size_t keyIndex = FindIndex(tableMeta.KeyColumnNames, key);
-        YQL_ENSURE(keyIndex != NPOS);
-        readProto.MutableSkipNullKeys()->Set(keyIndex, true);
-    }
-
-    if (settings.ItemsLimit) {
-        TExprBase expr(settings.ItemsLimit);
-        if (expr.template Maybe<TCoParameter>()) {
-            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value()));
-        } else {
-            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
-        }
-    }
-
-    readProto.SetReverse(settings.Reverse);
+ 
+    auto settings = TKqpReadTableSettings::Parse(read); 
+ 
+    readProto.MutableSkipNullKeys()->Resize(tableMeta.KeyColumnNames.size(), false); 
+    for (const auto& key : settings.SkipNullKeys) { 
+        size_t keyIndex = FindIndex(tableMeta.KeyColumnNames, key); 
+        YQL_ENSURE(keyIndex != NPOS); 
+        readProto.MutableSkipNullKeys()->Set(keyIndex, true); 
+    } 
+ 
+    if (settings.ItemsLimit) { 
+        TExprBase expr(settings.ItemsLimit); 
+        if (expr.template Maybe<TCoParameter>()) { 
+            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value())); 
+        } else { 
+            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content()); 
+        } 
+    } 
+ 
+    readProto.SetReverse(settings.Reverse); 
 }
 
 template <typename TReader, typename TProto>
@@ -211,99 +211,99 @@ void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool i
 }
 
 void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto) {
-    auto maybeList = lookup.LookupKeys().Maybe<TCoIterator>().List();
+    auto maybeList = lookup.LookupKeys().Maybe<TCoIterator>().List(); 
     YQL_ENSURE(maybeList, "Expected iterator as lookup input, got: " << lookup.LookupKeys().Ref().Content());
-
-    if (auto maybeParam = maybeList.Cast().Maybe<TCoParameter>()) {
-         lookupProto.MutableKeysValue()->MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
+ 
+    if (auto maybeParam = maybeList.Cast().Maybe<TCoParameter>()) { 
+         lookupProto.MutableKeysValue()->MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue()); 
     } else if (auto maybeAsList = maybeList.Cast().Maybe<TCoAsList>()) {
-        auto asList = maybeAsList.Cast();
-        auto proto = lookupProto.MutableKeysValue()->MutableRowsList();
-
-        for (auto row : asList) {
-            YQL_ENSURE(row.Maybe<TCoAsStruct>(), "" << row.Ref().Dump());
-            auto asStruct = row.Cast<TCoAsStruct>();
-            auto protoRow = proto->AddRows();
-            auto& protoRowColumns = *protoRow->MutableColumns();
-
-            auto* structType = asStruct.Ref().GetTypeAnn()->Cast<TStructExprType>();
-
-            for (auto item : asStruct) {
-                auto tuple = item.Cast<TCoNameValueTuple>();
-                auto columnName = tuple.Name().StringValue();
-                auto& protoColumn = protoRowColumns[columnName];
-
-                if (auto maybeParam = tuple.Value().Maybe<TCoParameter>()) {
-                    protoColumn.MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
-                } else {
-                    YQL_ENSURE(tuple.Value().Maybe<TCoDataCtor>(), "" << tuple.Value().Ref().Dump());
-                    auto dataCtor = tuple.Value().Cast<TCoDataCtor>();
-
-                    auto value = dataCtor.Literal().Value();
-
-                    auto& protoType = *protoColumn.MutableLiteralValue()->MutableType();
-                    auto& protoValue = *protoColumn.MutableLiteralValue()->MutableValue();
-
-                    auto type = structType->FindItemType(columnName);
-                    auto slot = type->Cast<TDataExprType>()->GetSlot();
-                    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-
-                    YQL_ENSURE(NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(typeId));
-
-                    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    protoType.MutableData()->SetScheme(typeId);
-
-                    switch (slot) {
-                        case EDataSlot::Bool:
-                            protoValue.SetBool(FromString<bool>(value));
-                            break;
-                        case EDataSlot::Uint8:
-                        case EDataSlot::Uint32:
-                        case EDataSlot::Date:
-                        case EDataSlot::Datetime:
-                            protoValue.SetUint32(FromString<ui32>(value));
-                            break;
-                        case EDataSlot::Int32:
-                            protoValue.SetInt32(FromString<i32>(value));
-                            break;
-                        case EDataSlot::Int64:
-                        case EDataSlot::Interval:
-                            protoValue.SetInt64(FromString<i64>(value));
-                            break;
-                        case EDataSlot::Uint64:
-                        case EDataSlot::Timestamp:
-                            protoValue.SetUint64(FromString<ui64>(value));
-                            break;
-                        case EDataSlot::String:
-                        case EDataSlot::DyNumber:
-                            protoValue.SetBytes(value.Data(), value.Size());
-                            break;
-                        case EDataSlot::Utf8:
-                            protoValue.SetText(ToString(value));
-                            break;
-                        case EDataSlot::Decimal: {
-                            const auto paramsDataType = type->Cast<TDataExprParamsType>();
-                            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-                            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
-                            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision);
-                            protoType.MutableData()->MutableDecimalParams()->SetScale(scale);
-
-                            auto v = NDecimal::FromString(dataCtor.Cast<TCoDecimal>().Literal().Value(), precision, scale);
-                            const auto p = reinterpret_cast<ui8*>(&v);
-                            protoValue.SetLow128(*reinterpret_cast<ui64*>(p));
-                            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
-                            break;
-                        }
-
-                        default:
-                            YQL_ENSURE(false, "Unexpected type slot " << slot);
-                    }
-                }
-            }
-        }
+        auto asList = maybeAsList.Cast(); 
+        auto proto = lookupProto.MutableKeysValue()->MutableRowsList(); 
+ 
+        for (auto row : asList) { 
+            YQL_ENSURE(row.Maybe<TCoAsStruct>(), "" << row.Ref().Dump()); 
+            auto asStruct = row.Cast<TCoAsStruct>(); 
+            auto protoRow = proto->AddRows(); 
+            auto& protoRowColumns = *protoRow->MutableColumns(); 
+ 
+            auto* structType = asStruct.Ref().GetTypeAnn()->Cast<TStructExprType>(); 
+ 
+            for (auto item : asStruct) { 
+                auto tuple = item.Cast<TCoNameValueTuple>(); 
+                auto columnName = tuple.Name().StringValue(); 
+                auto& protoColumn = protoRowColumns[columnName]; 
+ 
+                if (auto maybeParam = tuple.Value().Maybe<TCoParameter>()) { 
+                    protoColumn.MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue()); 
+                } else { 
+                    YQL_ENSURE(tuple.Value().Maybe<TCoDataCtor>(), "" << tuple.Value().Ref().Dump()); 
+                    auto dataCtor = tuple.Value().Cast<TCoDataCtor>(); 
+ 
+                    auto value = dataCtor.Literal().Value(); 
+ 
+                    auto& protoType = *protoColumn.MutableLiteralValue()->MutableType(); 
+                    auto& protoValue = *protoColumn.MutableLiteralValue()->MutableValue(); 
+ 
+                    auto type = structType->FindItemType(columnName); 
+                    auto slot = type->Cast<TDataExprType>()->GetSlot(); 
+                    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId; 
+ 
+                    YQL_ENSURE(NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(typeId)); 
+ 
+                    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+                    protoType.MutableData()->SetScheme(typeId); 
+ 
+                    switch (slot) { 
+                        case EDataSlot::Bool: 
+                            protoValue.SetBool(FromString<bool>(value)); 
+                            break; 
+                        case EDataSlot::Uint8: 
+                        case EDataSlot::Uint32: 
+                        case EDataSlot::Date: 
+                        case EDataSlot::Datetime: 
+                            protoValue.SetUint32(FromString<ui32>(value)); 
+                            break; 
+                        case EDataSlot::Int32: 
+                            protoValue.SetInt32(FromString<i32>(value)); 
+                            break; 
+                        case EDataSlot::Int64: 
+                        case EDataSlot::Interval: 
+                            protoValue.SetInt64(FromString<i64>(value)); 
+                            break; 
+                        case EDataSlot::Uint64: 
+                        case EDataSlot::Timestamp: 
+                            protoValue.SetUint64(FromString<ui64>(value)); 
+                            break; 
+                        case EDataSlot::String: 
+                        case EDataSlot::DyNumber: 
+                            protoValue.SetBytes(value.Data(), value.Size()); 
+                            break; 
+                        case EDataSlot::Utf8: 
+                            protoValue.SetText(ToString(value)); 
+                            break; 
+                        case EDataSlot::Decimal: { 
+                            const auto paramsDataType = type->Cast<TDataExprParamsType>(); 
+                            auto precision = FromString<ui8>(paramsDataType->GetParamOne()); 
+                            auto scale = FromString<ui8>(paramsDataType->GetParamTwo()); 
+                            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision); 
+                            protoType.MutableData()->MutableDecimalParams()->SetScale(scale); 
+ 
+                            auto v = NDecimal::FromString(dataCtor.Cast<TCoDecimal>().Literal().Value(), precision, scale); 
+                            const auto p = reinterpret_cast<ui8*>(&v); 
+                            protoValue.SetLow128(*reinterpret_cast<ui64*>(p)); 
+                            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8)); 
+                            break; 
+                        } 
+ 
+                        default: 
+                            YQL_ENSURE(false, "Unexpected type slot " << slot); 
+                    } 
+                } 
+            } 
+        } 
     } else {
         YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content());
-    }
+    } 
 }
 
 void FillOlapProgram(const TCoLambda& process, const TKikimrTableMetadata& tableMeta,
@@ -313,11 +313,11 @@ void FillOlapProgram(const TCoLambda& process, const TKikimrTableMetadata& table
 }
 
 void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-    NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx)
+    NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx) 
 {
     auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
-    YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
-        << PrintKqpStageOnly(connection.Output().Stage(), ctx));
+    YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: " 
+        << PrintKqpStageOnly(connection.Output().Stage(), ctx)); 
 
     auto outputIndex = FromString<ui32>(connection.Output().Index().Value());
 
@@ -329,8 +329,8 @@ void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& sta
         return;
     }
 
-    if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
-        auto& shuffleProto = *connectionProto.MutableHashShuffle();
+    if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) { 
+        auto& shuffleProto = *connectionProto.MutableHashShuffle(); 
         for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
             shuffleProto.AddKeyColumns(TString(keyColumn));
         }
@@ -453,15 +453,15 @@ private:
             auto connection = input.Cast<TDqConnection>();
 
             auto& protoInput = *stageProto.AddInputs();
-            FillConnection(connection, stagesMap, protoInput, ctx);
+            FillConnection(connection, stagesMap, protoInput, ctx); 
         }
 
         bool hasSort = false;
         bool hasMapJoin = false;
-        bool hasUdf = false;
+        bool hasUdf = false; 
         VisitExpr(stage.Program().Ptr(), [&](const TExprNode::TPtr& exprNode) {
             TExprBase node(exprNode);
-            if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) {
+            if (auto maybeReadTable = node.Maybe<TKqpWideReadTable>()) { 
                 auto readTable = maybeReadTable.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTable.Table().Path()).Metadata;
                 YQL_ENSURE(tableMeta);
@@ -469,7 +469,7 @@ private:
                 auto& tableOp = *stageProto.AddTableOps();
                 FillTable(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
-                FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
+                FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange()); 
             } else if (auto maybeLookupTable = node.Maybe<TKqpLookupTable>()) {
                 auto lookupTable = maybeLookupTable.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, lookupTable.Table().Path()).Metadata;
@@ -525,11 +525,11 @@ private:
             } else if (node.Maybe<TCoMapJoinCore>()) {
                 hasMapJoin = true;
             } else if (node.Maybe<TCoUdf>()) {
-                hasUdf = true;
-            } else {
-                YQL_ENSURE(!node.Maybe<TKqpReadTable>());
-            }
-
+                hasUdf = true; 
+            } else { 
+                YQL_ENSURE(!node.Maybe<TKqpReadTable>()); 
+            } 
+ 
             return true;
         });
 
@@ -554,14 +554,14 @@ private:
 
         auto paramsType = NDq::CollectParameters(stage.Program(), ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
-            ctx, {});
+            ctx, {}); 
 
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
         programProto.MutableSettings()->SetHasMapJoin(hasMapJoin);
         programProto.MutableSettings()->SetHasSort(hasSort);
-        programProto.MutableSettings()->SetHasUdf(hasUdf);
+        programProto.MutableSettings()->SetHasUdf(hasUdf); 
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());
@@ -577,20 +577,20 @@ private:
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
 
-        bool hasEffectStage = false;
-
+        bool hasEffectStage = false; 
+ 
         TMap<ui64, ui32> stagesMap;
         for (const auto& stage : tx.Stages()) {
-            auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap);
-            hasEffectStage |= protoStage->GetIsEffectsStage();
+            auto* protoStage = txProto.AddStages(); 
+            CompileStage(stage, *protoStage, ctx, stagesMap); 
+            hasEffectStage |= protoStage->GetIsEffectsStage(); 
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
 
-        YQL_ENSURE(hasEffectStage == txSettings.WithEffects);
-
-        txProto.SetHasEffects(txSettings.WithEffects);
-
+        YQL_ENSURE(hasEffectStage == txSettings.WithEffects); 
+ 
+        txProto.SetHasEffects(txSettings.WithEffects); 
+ 
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -619,12 +619,12 @@ private:
 
         TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
         for (const auto& resultNode : tx.Results()) {
-            YQL_ENSURE(resultNode.Maybe<TDqConnection>(), "" << NCommon::ExprToPrettyString(ctx, tx.Ref()));
+            YQL_ENSURE(resultNode.Maybe<TDqConnection>(), "" << NCommon::ExprToPrettyString(ctx, tx.Ref())); 
             auto connection = resultNode.Cast<TDqConnection>();
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx);
+            FillConnection(connection, stagesMap, connectionProto, ctx); 
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -648,24 +648,24 @@ private:
             YQL_ENSURE(type);
 
             ExportTypeToProto(type, *resultProto.MutableItemType());
-
-            TMaybeNode<TCoAtomList> maybeColumnHints;
-            if (connection.Maybe<TDqCnResult>()) {
-                maybeColumnHints = connection.Cast<TDqCnResult>().ColumnHints();
-            } else if (connection.Maybe<TDqCnValue>()) {
-                // no column hints
-            } else {
-                YQL_ENSURE(false, "Unexpected tx result connection type " << connection.CallableName());
-            }
-
-            if (maybeColumnHints) {
-                auto columnHints = maybeColumnHints.Cast();
-                auto& columnHintsProto = *resultProto.MutableColumnHints();
-                columnHintsProto.Reserve(columnHints.Size());
-                for (const auto& columnHint : columnHints) {
-                    columnHintsProto.Add(TString(columnHint.Value()));
-                }
-            }
+ 
+            TMaybeNode<TCoAtomList> maybeColumnHints; 
+            if (connection.Maybe<TDqCnResult>()) { 
+                maybeColumnHints = connection.Cast<TDqCnResult>().ColumnHints(); 
+            } else if (connection.Maybe<TDqCnValue>()) { 
+                // no column hints 
+            } else { 
+                YQL_ENSURE(false, "Unexpected tx result connection type " << connection.CallableName()); 
+            } 
+ 
+            if (maybeColumnHints) { 
+                auto columnHints = maybeColumnHints.Cast(); 
+                auto& columnHintsProto = *resultProto.MutableColumnHints(); 
+                columnHintsProto.Reserve(columnHints.Size()); 
+                for (const auto& columnHint : columnHints) { 
+                    columnHintsProto.Add(TString(columnHint.Value())); 
+                } 
+            } 
         }
     }
 
@@ -687,5 +687,5 @@ TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
     return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

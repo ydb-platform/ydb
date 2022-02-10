@@ -118,7 +118,7 @@ protected:
     TMaybeNode<TExprBase> PushSkipNullMembersToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushSkipNullMembersToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -127,7 +127,7 @@ protected:
     TMaybeNode<TExprBase> PushExtractMembersToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushExtractMembersToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -136,7 +136,7 @@ protected:
     TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("BuildFlatmapStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -145,7 +145,7 @@ protected:
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -166,7 +166,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("BuildTopSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -175,7 +175,7 @@ protected:
     TMaybeNode<TExprBase> BuildTakeSkipStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("BuildTakeSkipStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -184,7 +184,7 @@ protected:
     TMaybeNode<TExprBase> BuildSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqBuildSortStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("BuildSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -193,7 +193,7 @@ protected:
     TMaybeNode<TExprBase> BuildTakeStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("BuildTakeStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -220,7 +220,7 @@ protected:
     TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushJoinToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -244,7 +244,7 @@ protected:
     TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushLMapToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -253,7 +253,7 @@ protected:
     TMaybeNode<TExprBase> PushOrderedLMapToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushOrderedLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        TExprBase output = DqPushOrderedLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
         DumpAppliedRule("PushOrderedLMapToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -300,14 +300,14 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        TExprBase output = DqBuildHasItems(node, ctx, optCtx);
+    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) { 
+        TExprBase output = DqBuildHasItems(node, ctx, optCtx); 
         DumpAppliedRule("DqBuildHasItems", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        TExprBase output = DqBuildScalarPrecompute(node, ctx, optCtx);
+    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) { 
+        TExprBase output = DqBuildScalarPrecompute(node, ctx, optCtx); 
         DumpAppliedRule("BuildScalarPrecompute", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

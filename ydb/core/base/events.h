@@ -65,7 +65,7 @@ struct TKikimrEvents : TEvents {
         ES_PQ_L2_CACHE, //4142
         ES_TOKEN_BUILDER,
         ES_TICKET_PARSER,
-        ES_KQP = NYql::NDq::TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE, // 4145
+        ES_KQP = NYql::NDq::TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE, // 4145 
         ES_BLACKBOX_VALIDATOR,
         ES_SELF_PING,
         ES_PIPECACHE,
@@ -121,7 +121,7 @@ struct TKikimrEvents : TEvents {
         ES_FILESTORE,
         ES_FILESTORE_PRIVATE,
         ES_YDB_METERING,
-        ES_IMPORT_SERVICE, // 4200
+        ES_IMPORT_SERVICE, // 4200 
         ES_TX_OLAPSHARD,
         ES_TX_COLUMNSHARD,
         ES_CROSSREF,
@@ -133,7 +133,7 @@ struct TKikimrEvents : TEvents {
         ES_DATASTREAMS_PROXY,
         ES_IAM_TOKEN_SERVICE,
         ES_HEALTH_CHECK,
-        ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212
+        ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212 
         ES_YQ, // 4213
         ES_CHANGE_EXCHANGE,
         ES_DATABASE_SERVICE, //4215

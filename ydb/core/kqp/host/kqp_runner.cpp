@@ -1,5 +1,5 @@
 #include "kqp_host_impl.h"
-#include "kqp_ne_helper.h"
+#include "kqp_ne_helper.h" 
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compile/kqp_compile.h>
@@ -43,9 +43,9 @@ public:
     using TResult = IKikimrQueryExecutor::TQueryResult;
 
     TAsyncRunResult(const TExprNode::TPtr& queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        const TKqlTransformContext& transformCtx)
+        const TKqlTransformContext& transformCtx) 
         : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
-        , TransformCtx(transformCtx) {}
+        , TransformCtx(transformCtx) {} 
 
     void FillResult(TResult& queryResult) const override {
         if (TransformCtx.QueryCtx->PrepareOnly) {
@@ -57,7 +57,7 @@ public:
                 queryResult.ProtobufArenaPtr.get());
         }
 
-        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits;
+        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits; 
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
     }
 
@@ -84,7 +84,7 @@ public:
             results.push_back(result);
         }
 
-        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits;
+        queryResult.QueryTraits = TransformCtx.QueryCtx->QueryTraits; 
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
         queryResult.Results = std::move(results);
     }
@@ -117,8 +117,8 @@ public:
         output = input;
 
         if (Iterations > MaxTransformIterations) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Exceeded maximum allowed KQP iterations: " << MaxTransformIterations));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
+                << "Exceeded maximum allowed KQP iterations: " << MaxTransformIterations)); 
             return TStatus::Error;
         }
 
@@ -156,33 +156,33 @@ public:
         KqlTypeAnnTransformer = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(*typesCtx),
             *typesCtx);
 
-        auto logLevel = NLog::ELevel::TRACE;
-        auto logComp = NLog::EComponent::ProviderKqp;
-
+        auto logLevel = NLog::ELevel::TRACE; 
+        auto logComp = NLog::EComponent::ProviderKqp; 
+ 
         KqlOptimizeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("KqlOptimizeTransformer", logComp, logLevel), "LogKqlOptimize")
+            .Add(TLogExprTransformer::Sync("KqlOptimizeTransformer", logComp, logLevel), "LogKqlOptimize") 
             .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation()
             .AddOptimization(false)
             .Build(false);
 
-        KqlPrepareTransformer = TTransformationPipeline(typesCtx)
+        KqlPrepareTransformer = TTransformationPipeline(typesCtx) 
             .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("KqlPrepareTransformer", logComp, logLevel), "LogKqlRun")
+            .Add(TLogExprTransformer::Sync("KqlPrepareTransformer", logComp, logLevel), "LogKqlRun") 
             .Add(new TKqpIterationGuardTransformer(), "IterationGuard")
             .AddTypeAnnotationTransformer()
             .Add(CreateKqpCheckKiProgramTransformer(), "CheckQuery")
             .Add(CreateKqpSimplifyTransformer(), "Simplify")
             .Add(CreateKqpAnalyzeTransformer(TransformCtx), "Analyze")
             .Add(CreateKqpRewriteTransformer(TransformCtx), "Rewrite")
-            .Add(CreateKqpExecTransformer(Gateway, Cluster, TxState, TransformCtx), "Prepare")
+            .Add(CreateKqpExecTransformer(Gateway, Cluster, TxState, TransformCtx), "Prepare") 
             .Add(CreateKqpSubstituteTransformer(TxState, TransformCtx), "Substitute")
             .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
             .Build(false);
 
         PreparedRunTransformer = TTransformationPipeline(typesCtx)
-            .Add(TLogExprTransformer::Sync("PreparedRun iteration", logComp, logLevel), "KqlPreparedRun")
+            .Add(TLogExprTransformer::Sync("PreparedRun iteration", logComp, logLevel), "KqlPreparedRun") 
             .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot")
             .Add(CreateKqpExecutePreparedTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePrepared")
             .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
@@ -194,7 +194,7 @@ public:
 
         PhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("PhysicalOptimizeTransformer", logComp, logLevel), "LogPhysicalOptimize")
+            .Add(TLogExprTransformer::Sync("PhysicalOptimizeTransformer", logComp, logLevel), "LogPhysicalOptimize") 
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
@@ -202,27 +202,27 @@ public:
             .AddCommonOptimization()
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "PhysicalOptimize")
-            .Add(CreateKqpFinalizingOptTransformer(), "FinalizingOptimize")
+            .Add(CreateKqpFinalizingOptTransformer(), "FinalizingOptimize") 
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
-            .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery") 
             .Build(false);
 
         PhysicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("PhysicalBuildQueryTransformer", logComp, logLevel), "LogPhysicalBuildQuery")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .Add(TLogExprTransformer::Sync("PhysicalBuildQueryTransformer", logComp, logLevel), "LogPhysicalBuildQuery") 
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config)) 
             .AddPostTypeAnnotation()
-            .Add(
-                CreateKqpBuildTxsTransformer(
-                    OptimizeCtx,
-                    BuildQueryCtx,
-                    CreateTypeAnnotationTransformer(
-                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
-                        *typesCtx),
-                    *typesCtx,
-                    Config),
-                "BuildPhysicalTxs")
+            .Add( 
+                CreateKqpBuildTxsTransformer( 
+                    OptimizeCtx, 
+                    BuildQueryCtx, 
+                    CreateTypeAnnotationTransformer( 
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), 
+                        *typesCtx), 
+                    *typesCtx, 
+                    Config), 
+                "BuildPhysicalTxs") 
             .Build(false);
 
         PhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)
@@ -243,7 +243,7 @@ public:
             .Build(false);
 
         ScanRunQueryTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpCreateSnapshotTransformer(Gateway, TransformCtx, TxState), "CreateSnapshot")
+            .Add(CreateKqpCreateSnapshotTransformer(Gateway, TransformCtx, TxState), "CreateSnapshot") 
             .Add(CreateKqpExecuteScanTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecuteScan")
             .Add(CreateKqpReleaseSnapshotTransformer(Gateway, TxState), "ReleaseSnapshot")
             .Build(false);
@@ -254,10 +254,10 @@ public:
     {
         YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Dml);
         YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
-        YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery);
-        YQL_ENSURE(TMaybeNode<TKiDataQuery>(query));
+        YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery); 
+        YQL_ENSURE(TMaybeNode<TKiDataQuery>(query)); 
 
-        return PrepareQueryInternal(cluster, TKiDataQuery(query), ctx, settings);
+        return PrepareQueryInternal(cluster, TKiDataQuery(query), ctx, settings); 
     }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareScanQuery(const TString& cluster, const TExprNode::TPtr& query,
@@ -265,28 +265,28 @@ public:
     {
         YQL_ENSURE(TransformCtx->QueryCtx->Type == EKikimrQueryType::Scan);
         YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
-        YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery);
-        YQL_ENSURE(TMaybeNode<TKiDataQuery>(query));
+        YQL_ENSURE(TransformCtx->QueryCtx->PreparingQuery); 
+        YQL_ENSURE(TMaybeNode<TKiDataQuery>(query)); 
 
         TKiDataQuery dataQuery(query);
-
+ 
         if (dataQuery.Results().Size() != 1) {
             ctx.AddError(YqlIssue(ctx.GetPosition(dataQuery.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 "Scan query should have a single result set."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
         if (dataQuery.Effects().ArgCount() > 0) {
             ctx.AddError(YqlIssue(ctx.GetPosition(dataQuery.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 "Scan query cannot have data modifications."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
         IKikimrQueryExecutor::TExecuteSettings scanSettings(settings);
-        return PrepareQueryInternal(cluster, dataQuery, ctx, scanSettings);
+        return PrepareQueryInternal(cluster, dataQuery, ctx, scanSettings); 
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedDataQuery(const TString& cluster, TExprNode* queryExpr,
-        const NKikimrKqp::TPreparedKql& kql, TExprContext& ctx,
+        const NKikimrKqp::TPreparedKql& kql, TExprContext& ctx, 
         const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
         YQL_ENSURE(queryExpr->Type() == TExprNode::World);
@@ -296,8 +296,8 @@ public:
 
         TransformCtx->Reset();
         TransformCtx->Settings.CopyFrom(kql.GetSettings());
-        TransformCtx->Settings.SetCommitTx(settings.CommitTx);
-        TransformCtx->Settings.SetRollbackTx(settings.RollbackTx);
+        TransformCtx->Settings.SetCommitTx(settings.CommitTx); 
+        TransformCtx->Settings.SetRollbackTx(settings.RollbackTx); 
         TransformCtx->PreparedKql = &kql;
 
         YQL_ENSURE(TxState->Tx().EffectiveIsolationLevel);
@@ -305,10 +305,10 @@ public:
 
         bool strictDml = MergeFlagValue(Config->StrictDml.Get(Cluster), settings.StrictDml);
         if (!ApplyTableOperations(kql, strictDml, ctx)) {
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
-        return MakeIntrusive<TAsyncRunResult>(queryExpr, ctx, *PreparedRunTransformer, *TransformCtx);
+        return MakeIntrusive<TAsyncRunResult>(queryExpr, ctx, *PreparedRunTransformer, *TransformCtx); 
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
@@ -330,13 +330,13 @@ public:
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx,
         const NActors::TActorId& target) override
-    {
-        YQL_ENSURE(cluster == Cluster);
+    { 
+        YQL_ENSURE(cluster == Cluster); 
         YQL_ENSURE(phyQuery.GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN);
-
+ 
         return ExecutePhysicalScanQuery(world, phyQuery, ctx, target);
-    }
-
+    } 
+ 
 private:
     bool ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations,
         const TVector<NKqpProto::TKqpTableInfo>& tableInfos, bool strictDml, TExprContext& ctx)
@@ -361,17 +361,17 @@ private:
         return ApplyTableOperations(operations, tableInfos, strictDml, ctx);
     }
 
-    TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster, const TKiDataQuery& dataQuery,
+    TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster, const TKiDataQuery& dataQuery, 
         TExprContext& ctx, const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
         YQL_ENSURE(cluster == Cluster);
 
-        auto* queryCtx = TransformCtx->QueryCtx.Get();
-
-        if (queryCtx->Type == EKikimrQueryType::Dml) {
+        auto* queryCtx = TransformCtx->QueryCtx.Get(); 
+ 
+        if (queryCtx->Type == EKikimrQueryType::Dml) { 
             ui32 resultsCount = dataQuery.Results().Size();
             for (ui32 i = 0; i < resultsCount; ++i) {
-                auto& result = *queryCtx->PreparingQuery->AddResults();
+                auto& result = *queryCtx->PreparingQuery->AddResults(); 
                 result.SetKqlIndex(0);
                 result.SetResultIndex(i);
                 for (const auto& column : dataQuery.Results().Item(i).Columns()) {
@@ -379,43 +379,43 @@ private:
                 }
                 result.SetRowsLimit(FromString<ui64>(dataQuery.Results().Item(i).RowsLimit()));
             }
-        } else {
-            // scan query
+        } else { 
+            // scan query 
         }
 
         bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
-
-        std::optional<TKqpTransactionInfo::EEngine> engine;
-        if (settings.UseNewEngine.Defined()) {
-            engine = *settings.UseNewEngine
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->UseNewEngine.Get().Defined()) {
-            engine = Config->UseNewEngine.Get().Get()
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if ((queryCtx->Type == EKikimrQueryType::Scan) ||
-            (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine))
-        {
+ 
+        std::optional<TKqpTransactionInfo::EEngine> engine; 
+        if (settings.UseNewEngine.Defined()) { 
+            engine = *settings.UseNewEngine 
+                ? TKqpTransactionInfo::EEngine::NewEngine 
+                : TKqpTransactionInfo::EEngine::OldEngine; 
+        } 
+        if (!engine.has_value() && Config->UseNewEngine.Get().Defined()) { 
+            engine = Config->UseNewEngine.Get().Get() 
+                ? TKqpTransactionInfo::EEngine::NewEngine 
+                : TKqpTransactionInfo::EEngine::OldEngine; 
+        } 
+        if (!engine.has_value() && Config->HasKqpForceNewEngine()) { 
+            engine = TKqpTransactionInfo::EEngine::NewEngine; 
+        } 
+ 
+        if ((queryCtx->Type == EKikimrQueryType::Scan) || 
+            (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine)) 
+        { 
             return PrepareQueryNewEngine(cluster, dataQuery, ctx, settings, sysColumnsEnabled);
         }
 
-        // OldEngine only
-        YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine);
-
+        // OldEngine only 
+        YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine); 
+ 
         for (const auto& [name, table] : TransformCtx->Tables->GetTables()) {
             if (!table.Metadata->SysView.empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), TStringBuilder() 
                     << "Table " << table.Metadata->Name << " is a system view. "
                     << "System views are not supported by data queries."
                 ));
-                return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+                return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
             }
         }
 
@@ -426,14 +426,14 @@ private:
         TExprNode::TPtr optimizedProgram = program.Ptr();
         auto status = InstantTransform(*KqlOptimizeTransformer, optimizedProgram, ctx);
         if (status != IGraphTransformer::TStatus::Ok || !TMaybeNode<TKiProgram>(optimizedProgram)) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to optimize KQL query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to optimize KQL query.")); 
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
         YQL_ENSURE(optimizedProgram->GetTypeAnn());
-
-        queryCtx->QueryTraits = CollectQueryTraits(TKiProgram(optimizedProgram), ctx);
-
+ 
+        queryCtx->QueryTraits = CollectQueryTraits(TKiProgram(optimizedProgram), ctx); 
+ 
         KqlTypeAnnTransformer->Rewind();
 
         TExprNode::TPtr finalProgram;
@@ -443,8 +443,8 @@ private:
         status = PeepHoleOptimizeNode<false>(optimizedProgram, finalProgram, ctx, TypesCtx, KqlTypeAnnTransformer.Get(),
             hasNonDeterministicFunctions, peepholeSettings);
         if (status != IGraphTransformer::TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to peephole optimize KQL query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to peephole optimize KQL query.")); 
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
         status = ReplaceNonDetFunctionsWithParams(finalProgram, ctx);
@@ -454,7 +454,7 @@ private:
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
-        KqlPrepareTransformer->Rewind();
+        KqlPrepareTransformer->Rewind(); 
 
         NKikimrKqp::TKqlSettings kqlSettings;
         kqlSettings.SetCommitTx(settings.CommitTx);
@@ -467,24 +467,24 @@ private:
             TxState->Tx().EffectiveIsolationLevel = kqlSettings.GetIsolationLevel();
         }
 
-        TransformCtx->QueryCtx->PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
-        auto kql = TransformCtx->QueryCtx->PreparingQuery->AddKqls();
-        kql->MutableSettings()->CopyFrom(TransformCtx->Settings);
+        TransformCtx->QueryCtx->PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1); 
+        auto kql = TransformCtx->QueryCtx->PreparingQuery->AddKqls(); 
+        kql->MutableSettings()->CopyFrom(TransformCtx->Settings); 
 
-        FillAstAndPlan(*kql, finalProgram, ctx);
+        FillAstAndPlan(*kql, finalProgram, ctx); 
 
-        auto operations = TableOperationsToProto(dataQuery.Operations(), ctx);
-        for (auto& op : operations) {
-            const auto& tableName = op.GetTable();
+        auto operations = TableOperationsToProto(dataQuery.Operations(), ctx); 
+        for (auto& op : operations) { 
+            const auto& tableName = op.GetTable(); 
 
-            kql->AddOperations()->CopyFrom(op);
-            const auto& desc = TransformCtx->Tables->GetTable(cluster, tableName);
-            TableDescriptionToTableInfo(desc, kql->AddTableInfo());
-        }
+            kql->AddOperations()->CopyFrom(op); 
+            const auto& desc = TransformCtx->Tables->GetTable(cluster, tableName); 
+            TableDescriptionToTableInfo(desc, kql->AddTableInfo()); 
+        } 
 
-        TransformCtx->PreparingKql = kql;
+        TransformCtx->PreparingKql = kql; 
 
-        return MakeIntrusive<TAsyncRunResult>(finalProgram, ctx, *KqlPrepareTransformer, *TransformCtx);
+        return MakeIntrusive<TAsyncRunResult>(finalProgram, ctx, *KqlPrepareTransformer, *TransformCtx); 
     }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryNewEngine(const TString& cluster, const TKiDataQuery& dataQuery,
@@ -495,19 +495,19 @@ private:
         YQL_ENSURE(!settings.RollbackTx);
         YQL_ENSURE(TransformCtx->QueryCtx->PrepareOnly);
 
-        EKikimrQueryType queryType = TransformCtx->QueryCtx->Type;
-        switch (queryType) {
-            case EKikimrQueryType::Dml:
+        EKikimrQueryType queryType = TransformCtx->QueryCtx->Type; 
+        switch (queryType) { 
+            case EKikimrQueryType::Dml: 
             case EKikimrQueryType::Scan:
-                break;
-            default:
-                YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType);
-        }
-
-        if (!Config->HasAllowKqpNewEngine() && queryType == EKikimrQueryType::Dml) {
+                break; 
+            default: 
+                YQL_ENSURE(false, "PrepareQueryNewEngine, unexpected query type: " << queryType); 
+        } 
+ 
+        if (!Config->HasAllowKqpNewEngine() && queryType == EKikimrQueryType::Dml) { 
             ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()),
                 "NewEngine execution is not allowed on this cluster."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
         auto kqlQuery = BuildKqlQuery(dataQuery, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx);
@@ -516,7 +516,7 @@ private:
         }
 
         auto query = kqlQuery->Ptr();
-        YQL_CLOG(INFO, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+        YQL_CLOG(INFO, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx); 
 
         TransformCtx->Reset();
         TransformCtx->Settings = NKikimrKqp::TKqlSettings();
@@ -526,10 +526,10 @@ private:
         auto status = InstantTransform(*PhysicalOptimizeTransformer, optimizedQuery, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to optimize query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Optimized KQL query: " << KqpExprToPrettyString(*optimizedQuery, ctx);
+        YQL_CLOG(INFO, ProviderKqp) << "Optimized KQL query: " << KqpExprToPrettyString(*optimizedQuery, ctx); 
 
         BuildQueryCtx->Reset();
         PhysicalBuildQueryTransformer->Rewind();
@@ -537,7 +537,7 @@ private:
         status = InstantTransform(*PhysicalBuildQueryTransformer, builtQuery, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to build physical query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
 
         PhysicalPeepholeTransformer->Rewind();
@@ -549,16 +549,16 @@ private:
                 ctx.IssueManager.GetIssues()));
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx);
+        YQL_CLOG(INFO, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx); 
 
-        auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
+        auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery; 
         TKqpPhysicalQuery physicalQuery(transformedQuery);
         auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry);
         auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQuery.Operations(),
             *preparedQuery.MutablePhysicalQuery(), ctx);
         if (!ret) {
             ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to compile physical query."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
         }
         preparedQuery.SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
         // TODO(sk): only on stats mode or if explain-only
@@ -629,7 +629,7 @@ private:
 
     TAutoPtr<IGraphTransformer> KqlTypeAnnTransformer;
     TAutoPtr<IGraphTransformer> KqlOptimizeTransformer;
-    TAutoPtr<IGraphTransformer> KqlPrepareTransformer;
+    TAutoPtr<IGraphTransformer> KqlPrepareTransformer; 
     TAutoPtr<IGraphTransformer> PreparedRunTransformer;
     TAutoPtr<IGraphTransformer> PreparedExplainTransformer;
 
@@ -803,5 +803,5 @@ TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, co
     return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, funcRegistry);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

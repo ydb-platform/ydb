@@ -33,7 +33,7 @@ public:
         TBase::Bootstrap(ctx);
 
         this->Become(&TExecuteDataQueryRPC::StateWork);
-        Proceed(ctx);
+        Proceed(ctx); 
     }
 
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -43,7 +43,7 @@ public:
         }
     }
 
-    void Proceed(const TActorContext& ctx) {
+    void Proceed(const TActorContext& ctx) { 
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
         const auto requestType = Request_->GetRequestType();
@@ -76,7 +76,7 @@ public:
                 ConvertYdbParamsToMiniKQLParams(req->parameters(), params);
                 ev->Record.MutableRequest()->MutableParameters()->CopyFrom(params);
             } catch (const std::exception& ex) {
-                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Failed to parse query parameters.");
+                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Failed to parse query parameters."); 
                 issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::ExceptionToIssue(ex)));
 
                 NYql::TIssues issues;
@@ -238,7 +238,7 @@ public:
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);
         } else {
-            return OnQueryResponseErrorWithTxMeta(record, ctx);
+            return OnQueryResponseErrorWithTxMeta(record, ctx); 
         }
     }
 };

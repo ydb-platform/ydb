@@ -2698,40 +2698,40 @@ TExprNode::TPtr OptimizeLogicalDups(const TExprNode::TPtr& node, TExprContext& c
     return node;
 }
 
-TExprNode::TPtr ExpandCombineByKey(const TExprNode::TPtr& node, TExprContext& ctx) {
-    const bool isStreamOrFlow = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
-        node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
-
-    if (!isStreamOrFlow) {
-        return node;
-    }
-
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over stream or flow";
-
-    TCoCombineByKey combine(node);
-
-    return Build<TCoCombineCore>(ctx, node->Pos())
-        .Input<TCoFlatMap>()
-            .Input(combine.Input())
-            .Lambda()
-                .Args({"arg"})
-                .Body<TExprApplier>()
-                    .Apply(combine.PreMapLambda())
-                    .With(0, "arg")
-                    .Build()
-                .Build()
-            .Build()
-        .KeyExtractor(combine.KeySelectorLambda())
-        .InitHandler(combine.InitHandlerLambda())
-        .UpdateHandler(combine.UpdateHandlerLambda())
-        .FinishHandler(combine.FinishHandlerLambda())
-        .MemLimit()
-            .Value("0")
-            .Build()
-        .Done()
-        .Ptr();
-}
-
+TExprNode::TPtr ExpandCombineByKey(const TExprNode::TPtr& node, TExprContext& ctx) { 
+    const bool isStreamOrFlow = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || 
+        node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow; 
+ 
+    if (!isStreamOrFlow) { 
+        return node; 
+    } 
+ 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over stream or flow"; 
+ 
+    TCoCombineByKey combine(node); 
+ 
+    return Build<TCoCombineCore>(ctx, node->Pos()) 
+        .Input<TCoFlatMap>() 
+            .Input(combine.Input()) 
+            .Lambda() 
+                .Args({"arg"}) 
+                .Body<TExprApplier>() 
+                    .Apply(combine.PreMapLambda()) 
+                    .With(0, "arg") 
+                    .Build() 
+                .Build() 
+            .Build() 
+        .KeyExtractor(combine.KeySelectorLambda()) 
+        .InitHandler(combine.InitHandlerLambda()) 
+        .UpdateHandler(combine.UpdateHandlerLambda()) 
+        .FinishHandler(combine.FinishHandlerLambda()) 
+        .MemLimit() 
+            .Value("0") 
+            .Build() 
+        .Done() 
+        .Ptr(); 
+} 
+ 
 template<typename TRowType>
 TExprNode::TPtr MakeWideMapJoinCore(const TExprNode& mapjoin, TExprNode::TPtr&& input, TExprContext& ctx) {
     const auto inStructType = GetSeqItemType(mapjoin.Head().GetTypeAnn())->Cast<TRowType>();
@@ -5945,7 +5945,7 @@ IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, 
 
 template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
+    TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator, 
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings)
 {
     hasNonDeterministicFunctions = false;

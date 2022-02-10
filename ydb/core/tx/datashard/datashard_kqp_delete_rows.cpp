@@ -48,13 +48,13 @@ public:
                 return;
             }
 
-            ui64 nEraseRow = Owner.ShardTableStats.NEraseRow;
-
+            ui64 nEraseRow = Owner.ShardTableStats.NEraseRow; 
+ 
             engineCtx.Host->EraseRow(Owner.TableId, keyTuple);
-
-            if (i64 delta = Owner.ShardTableStats.NEraseRow - nEraseRow; delta > 0) {
-                Owner.TaskTableStats.NEraseRow += delta;
-            }
+ 
+            if (i64 delta = Owner.ShardTableStats.NEraseRow - nEraseRow; delta > 0) { 
+                Owner.TaskTableStats.NEraseRow += delta; 
+            } 
         };
 
     private:
@@ -93,7 +93,7 @@ public:
     }
 
 public:
-    TKqpDeleteRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
+    TKqpDeleteRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx, 
         const TTableId& tableId, IComputationNode* rowsNode, TVector<NUdf::TDataTypeId> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
         : TBase(mutables)
         , TableId(tableId)
@@ -101,8 +101,8 @@ public:
         , RowTypes(std::move(rowTypes))
         , KeyIndices(std::move(keyIndices))
         , Env(env)
-        , ShardTableStats(computeCtx.GetDatashardCounters())
-        , TaskTableStats(computeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
+        , ShardTableStats(computeCtx.GetDatashardCounters()) 
+        , TaskTableStats(computeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {} 
 
 private:
     void RegisterDependencies() const final {
@@ -115,8 +115,8 @@ private:
     const TVector<NUdf::TDataTypeId> RowTypes;
     const TVector<ui32> KeyIndices;
     const TTypeEnvironment& Env;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
+    TKqpTableStats& ShardTableStats; 
+    TKqpTableStats& TaskTableStats; 
 };
 
 } // namespace

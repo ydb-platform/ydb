@@ -197,7 +197,7 @@ private:
  *
  * Real resource usage is the second parameter used to schedule resource
  * allocation. It is computed before each queue resource consumption modification
- * and also may be additionally re-computed before choosing the next task by
+ * and also may be additionally re-computed before choosing the next task by 
  * scheduler.
  *
  * Real resource usage may exceed planned one. Therefore max of these two components
@@ -257,14 +257,14 @@ public:
 
 /**
  * Scheduler class manages tasks and queues. It directly communicates clients
- * in case of an error or successful resource allocation.
+ * in case of an error or successful resource allocation. 
  *
  * Task submission/update/removal doesn't cause resource allocation. ScheduleTasks
- * method should be called to trigger resource allocation.
+ * method should be called to trigger resource allocation. 
  *
  * Before next task allocation scheduler simply orders non-empty queues according
  * to their resource usage and pick the top task of the first queue. If chosen
- * task cannot be run because of total resource limit then resource allocation
+ * task cannot be run because of total resource limit then resource allocation 
  * stops. If we have resources but queue's limit doesn't allow to chosen task
  * then this queue is skipped.
  *
@@ -305,50 +305,50 @@ public:
     ~TScheduler();
 
     /**
-     * Returns TTask raw pointer if it exists.
+     * Returns TTask raw pointer if it exists. 
      */
-    const TTask* FindTask(ui64 taskId, const TActorId &client) const;
+    const TTask* FindTask(ui64 taskId, const TActorId &client) const; 
     /**
-     * Create new task and queue it. Return true on success, and false if task with the same id already exists.
+     * Create new task and queue it. Return true on success, and false if task with the same id already exists. 
      */
-    bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as);
-    /**
-     * Update queued task. Return true on success and false if task not found.
-     */
+    bool SubmitTask(const TEvResourceBroker::TTask &task, const TActorId &client, const TActorSystem &as); 
+    /** 
+     * Update queued task. Return true on success and false if task not found. 
+     */ 
     bool UpdateTask(ui64 taskId, const TActorId &client, const TResourceValues &requiredResources,
-                    ui64 priority, const TString &type, bool resubmit, const TActorSystem &as);
+                    ui64 priority, const TString &type, bool resubmit, const TActorSystem &as); 
     /**
-     * Update cookie for submitted task. Return true on success and false if task not found.
+     * Update cookie for submitted task. Return true on success and false if task not found. 
      */
-    bool UpdateTaskCookie(ui64 taskId, const TActorId &client, TIntrusivePtr<TThrRefBase> cookie,
-                          const TActorSystem &as);
-
-    struct TTerminateTaskResult {
-        bool Success;
-        TTaskPtr Task; // can be nullptr
-
-        TTerminateTaskResult(bool success, TTaskPtr task)
-            : Success(success), Task(task) {}
-    };
-
+    bool UpdateTaskCookie(ui64 taskId, const TActorId &client, TIntrusivePtr<TThrRefBase> cookie, 
+                          const TActorSystem &as); 
+ 
+    struct TTerminateTaskResult { 
+        bool Success; 
+        TTaskPtr Task; // can be nullptr 
+ 
+        TTerminateTaskResult(bool success, TTaskPtr task) 
+            : Success(success), Task(task) {} 
+    }; 
+ 
     /**
-     * Remove queued task. Return <true, task> on success, and <false, task> otherwise.
+     * Remove queued task. Return <true, task> on success, and <false, task> otherwise. 
      */
-    TTerminateTaskResult RemoveQueuedTask(ui64 taskId, const TActorId &client, const TActorSystem &as);
+    TTerminateTaskResult RemoveQueuedTask(ui64 taskId, const TActorId &client, const TActorSystem &as); 
     /**
-     * Finish/cancel task and release its resources. Return <true, task> on success, and <false, task> otherwise.
+     * Finish/cancel task and release its resources. Return <true, task> on success, and <false, task> otherwise. 
      */
-    TTerminateTaskResult FinishTask(ui64 taskId, const TActorId &client, bool cancel, const TActorSystem &as);
-
+    TTerminateTaskResult FinishTask(ui64 taskId, const TActorId &client, bool cancel, const TActorSystem &as); 
+ 
     /**
      * Remove queued tasks and finish in-fly tasks submitted by specified client.
      * Return true if any task was affected.
      */
-    bool RemoveTasks(const TActorId &client, const TActorSystem &as);
+    bool RemoveTasks(const TActorId &client, const TActorSystem &as); 
     /**
      * Try to allocate resources for next tasks until we are out of resources or tasks.
      */
-    void ScheduleTasks(const TActorSystem &as, std::function<void(const TTask &task)> &&onTaskSchedule);
+    void ScheduleTasks(const TActorSystem &as, std::function<void(const TTask &task)> &&onTaskSchedule); 
 
     /**
      * Build or reconfigure queues and limits according to new config. Config should
@@ -356,7 +356,7 @@ public:
      * unknown task). On re-configuration tasks may migrate between queues according
      * to new mapping.
      */
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as);
+    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config, const TActorSystem &as); 
 
     /**
      * Update current scheduler time which is used for all resource consumption
@@ -369,15 +369,15 @@ public:
 
 private:
     // Erase task from all structure.
-    void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as);
+    void EraseTask(TTaskPtr task, bool finished, const TActorSystem &as); 
     // Update resource usage for all queues.
-    void UpdateResourceUsage(const TActorSystem &as);
+    void UpdateResourceUsage(const TActorSystem &as); 
 
     /**
      * Insert task to queue according to its type. Also used to attach in-fly
      * tasks to queues.
      */
-    void AssignTask(TTaskPtr &task, const TActorSystem &as);
+    void AssignTask(TTaskPtr &task, const TActorSystem &as); 
     /**
      * Get estimated execution time for task basing on default config and
      * collected statistics.
@@ -399,49 +399,49 @@ private:
 };
 
 /**
- * TResourceBroker is a simple thread-safe wrapper for scheduler.
+ * TResourceBroker is a simple thread-safe wrapper for scheduler. 
  */
-class TResourceBroker : public IResourceBroker {
+class TResourceBroker : public IResourceBroker { 
 public:
-    TResourceBroker(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                    const NMonitoring::TDynamicCounterPtr &counters,
-                    TActorSystem *actorSystem);
-
-    bool SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender) override;
-    bool FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender) override;
-    bool MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) override;
-    bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) override;
-
-    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
-
-    using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
-
-    TOpError SubmitTask(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender);
-    TOpError UpdateTask(const TEvResourceBroker::TEvUpdateTask &ev, const TActorId &sender);
-    TOpError UpdateTaskCookie(const TEvResourceBroker::TEvUpdateTaskCookie &ev, const TActorId &sender);
-    TOpError RemoveTask(const TEvResourceBroker::TEvRemoveTask &ev, const TActorId &sender);
-    TOpError FinishTask(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender);
-
-    void NotifyActorDied(const TEvResourceBroker::TEvNotifyActorDied &ev, const TActorId &sender);
-
-    void OutputState(TStringStream &str);
-
-private:
-    NKikimrResourceBroker::TResourceBrokerConfig Config;
-    TScheduler Scheduler;
-    TMutex Lock;
-    TActorSystem* ActorSystem;
-};
-
-
-class TResourceBrokerActor : public TActorBootstrapped<TResourceBrokerActor> {
-public:
+    TResourceBroker(const NKikimrResourceBroker::TResourceBrokerConfig &config, 
+                    const NMonitoring::TDynamicCounterPtr &counters, 
+                    TActorSystem *actorSystem); 
+ 
+    bool SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender) override; 
+    bool FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender) override; 
+    bool MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, const TActorId &sender) override; 
+    bool ReduceTaskResourcesInstant(ui64 taskId, const TResourceValues& reduceBy, const TActorId& sender) override; 
+ 
+    void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config); 
+ 
+    using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>; 
+ 
+    TOpError SubmitTask(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender); 
+    TOpError UpdateTask(const TEvResourceBroker::TEvUpdateTask &ev, const TActorId &sender); 
+    TOpError UpdateTaskCookie(const TEvResourceBroker::TEvUpdateTaskCookie &ev, const TActorId &sender); 
+    TOpError RemoveTask(const TEvResourceBroker::TEvRemoveTask &ev, const TActorId &sender); 
+    TOpError FinishTask(const TEvResourceBroker::TEvFinishTask &ev, const TActorId &sender); 
+ 
+    void NotifyActorDied(const TEvResourceBroker::TEvNotifyActorDied &ev, const TActorId &sender); 
+ 
+    void OutputState(TStringStream &str); 
+ 
+private: 
+    NKikimrResourceBroker::TResourceBrokerConfig Config; 
+    TScheduler Scheduler; 
+    TMutex Lock; 
+    TActorSystem* ActorSystem; 
+}; 
+ 
+ 
+class TResourceBrokerActor : public TActorBootstrapped<TResourceBrokerActor> { 
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_COMPACTION_BROKER;
     }
 
-    TResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                         const NMonitoring::TDynamicCounterPtr &counters);
+    TResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config, 
+                         const NMonitoring::TDynamicCounterPtr &counters); 
 
     void Bootstrap(const TActorContext &ctx);
 
@@ -454,8 +454,8 @@ public:
             HFunc(TEvResourceBroker::TEvFinishTask, Handle);
             HFunc(TEvResourceBroker::TEvNotifyActorDied, Handle);
             HFunc(TEvResourceBroker::TEvConfigure, Handle);
-            HFunc(TEvResourceBroker::TEvConfigRequest, Handle);
-            HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle);
+            HFunc(TEvResourceBroker::TEvConfigRequest, Handle); 
+            HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle); 
             HFunc(NMon::TEvHttpInfo, Handle);
         default:
             Y_FAIL("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
@@ -472,13 +472,13 @@ private:
     void Handle(TEvResourceBroker::TEvFinishTask::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvNotifyActorDied::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResourceBroker::TEvConfigure::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvResourceBroker::TEvConfigRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvResourceBroker::TEvConfigRequest::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx); 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     NKikimrResourceBroker::TResourceBrokerConfig Config;
-    NMonitoring::TDynamicCounterPtr Counters;
-    TIntrusivePtr<TResourceBroker> ResourceBroker;
+    NMonitoring::TDynamicCounterPtr Counters; 
+    TIntrusivePtr<TResourceBroker> ResourceBroker; 
 };
 
 } // NResourceBroker

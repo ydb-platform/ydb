@@ -104,23 +104,23 @@ message TGetStoredBytesResponse {
 }
 
 message TGetStatsResponse {
-    reserved 1; // NKqpProto.TKqpStatsTask Stats = 1;
-    NDqProto.TDqTaskStats Stats = 2;
+    reserved 1; // NKqpProto.TKqpStatsTask Stats = 1; 
+    NDqProto.TDqTaskStats Stats = 2; 
 }
 
 message TGetStatsInputResponse {
-    reserved 1; // NKqpProto.TKqpStatsTask.TInputChannelStats Stats = 1;
-    NDqProto.TDqInputChannelStats Stats = 2;
+    reserved 1; // NKqpProto.TKqpStatsTask.TInputChannelStats Stats = 1; 
+    NDqProto.TDqInputChannelStats Stats = 2; 
 }
 
 message TGetStatsOutputResponse {
-    reserved 1; // NKqpProto.TKqpStatsTask.TOutputChannelStats Stats = 1;
-    NDqProto.TDqOutputChannelStats Stats = 2;
+    reserved 1; // NKqpProto.TKqpStatsTask.TOutputChannelStats Stats = 1; 
+    NDqProto.TDqOutputChannelStats Stats = 2; 
 }
 
 message TGetStatsSourceResponse {
-    reserved 1; // NKqpProto.TKqpStatsTask.TSourceStats Stats = 1;
-    NDqProto.TDqSourceStats Stats = 2;
+    reserved 1; // NKqpProto.TKqpStatsTask.TSourceStats Stats = 1; 
+    NDqProto.TDqSourceStats Stats = 2; 
 }
 
 message TSinkStatsResponse {

@@ -87,8 +87,8 @@ public:
 
         block = good;
 
-        ValueCleanup(Flow->GetRepresentation(), item, ctx, block);
-
+        ValueCleanup(Flow->GetRepresentation(), item, ctx, block); 
+ 
         const auto decr = BinaryOperator::CreateSub(count, ConstantInt::get(count->getType(), 1ULL), "decr", block);
         count->addIncoming(decr, block);
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, decr, ConstantInt::get(decr->getType(), 0ULL), "next", block);

@@ -6,4 +6,4 @@ $fetch = (
 );
 
 SELECT * FROM $fetch
-ORDER BY Amount DESC, Group, Name LIMIT 5;
+ORDER BY Amount DESC, Group, Name LIMIT 5; 

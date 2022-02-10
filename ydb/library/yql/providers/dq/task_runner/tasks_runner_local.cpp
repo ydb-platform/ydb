@@ -106,16 +106,16 @@ private:
 
     ui64 TaskId;
     ui64 ChannelId;
-    IDqOutputChannel::TPtr Channel;
+    IDqOutputChannel::TPtr Channel; 
     TCounters& QueryStat;
     TDqOutputChannelStats Stats;
 };
 
-class TLocalTaskRunner: public ITaskRunner {
+class TLocalTaskRunner: public ITaskRunner { 
 public:
     TLocalTaskRunner(const NDqProto::TDqTask& task, TIntrusivePtr<IDqTaskRunner> runner)
-        : Task(task)
-        , Runner(runner)
+        : Task(task) 
+        , Runner(runner) 
     { }
 
     ~TLocalTaskRunner()
@@ -125,13 +125,13 @@ public:
         return 1;
     }
 
-    ui64 GetTaskId() const override {
-        return Task.GetId();
+    ui64 GetTaskId() const override { 
+        return Task.GetId(); 
     }
 
     NYql::NDqProto::TPrepareResponse Prepare() override {
         NYql::NDqProto::TPrepareResponse ret;
-        Runner->Prepare(Task, DefaultMemoryLimits());
+        Runner->Prepare(Task, DefaultMemoryLimits()); 
         return ret;
     }
 
@@ -145,16 +145,16 @@ public:
             QueryStat.FlushCounters(response);
         }
         return response;
-    }
-
-    IInputChannel::TPtr GetInputChannel(ui64 channelId) override {
-        return new TLocalInputChannel(Runner->GetInputChannel(channelId), Task.GetId(), channelId, &QueryStat);
-    }
-
-    IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override {
-        return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), channelId, &QueryStat);
-    }
-
+    } 
+ 
+    IInputChannel::TPtr GetInputChannel(ui64 channelId) override { 
+        return new TLocalInputChannel(Runner->GetInputChannel(channelId), Task.GetId(), channelId, &QueryStat); 
+    } 
+ 
+    IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override { 
+        return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), channelId, &QueryStat); 
+    } 
+ 
     IDqSource::TPtr GetSource(ui64 index) override {
         return Runner->GetSource(index);
     }
@@ -171,7 +171,7 @@ public:
         return Runner->GetSecureParams();
     }
 
-    const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
+    const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override { 
         return Runner->GetTypeEnv();
     }
 
@@ -179,14 +179,14 @@ public:
         return Runner->GetHolderFactory();
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
-        return Runner->BindAllocator(memoryLimit);
-    }
-
-    bool IsAllocatorAttached() override {
-        return Runner->IsAllocatorAttached();
-    }
-
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override { 
+        return Runner->BindAllocator(memoryLimit); 
+    } 
+ 
+    bool IsAllocatorAttached() override { 
+        return Runner->IsAllocatorAttached(); 
+    } 
+ 
     TStatus GetStatus() override {
         return {0, ""};
     }
@@ -196,8 +196,8 @@ private:
         QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Stats, Task.GetId());
     }
 
-    NDqProto::TDqTask Task;
-    TIntrusivePtr<IDqTaskRunner> Runner;
+    NDqProto::TDqTask Task; 
+    TIntrusivePtr<IDqTaskRunner> Runner; 
     TCounters QueryStat;
     TDqTaskRunnerStats Stats;
 };
@@ -232,7 +232,7 @@ protected:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TTaskTransformFactory TaskTransformFactory;
 
-    NDq::TDqTaskRunnerContext ExecutionContext;
+    NDq::TDqTaskRunnerContext ExecutionContext; 
 };
 
 /*______________________________________________________________________________________________*/
@@ -257,7 +257,7 @@ public:
         settings.TerminateOnError = TerminateOnError;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
-        settings.AllowGeneratorsInUnboxedValues = true;
+        settings.AllowGeneratorsInUnboxedValues = true; 
 
         Yql::DqsProto::TTaskMeta taskMeta;
         task.GetMeta().UnpackTo(&taskMeta);
@@ -275,7 +275,7 @@ public:
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
-        return MakeDqTaskRunner(ctx, settings, { });
+        return MakeDqTaskRunner(ctx, settings, { }); 
     }
 
 private:

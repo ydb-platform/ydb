@@ -38,7 +38,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , ScanId(scanId)
         , TxId(txId)
-        , ScanGen(scanGen)
+        , ScanGen(scanGen) 
         , RequestCookie(requestCookie)
         , DataFormat(dataFormat)
         , TablePath(table)
@@ -102,7 +102,7 @@ private:
         }
 
         Y_VERIFY(ev->Get()->Generation == ScanGen);
-
+ 
         PeerFreeSpace = ev->Get()->FreeSpace;
 
         ContinueProcessing();
@@ -299,7 +299,7 @@ private:
 private:
     void MakeResult(size_t reserveRows = 0) {
         if (!Finished && !Result) {
-            Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
+            Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, ScanGen); 
             if (reserveRows) {
                 Y_VERIFY(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
                 Result->Rows.reserve(reserveRows);
@@ -363,8 +363,8 @@ private:
         Result->PageFaults = PageFaults;
         Result->Finished = lastBatch;
         TDuration totalElapsedTime = TDuration::Seconds(GetElapsedTicksAsSeconds());
-        // Result->TotalTime = totalElapsedTime - LastReportedElapsedTime;
-        // TODO: Result->CpuTime = ...
+        // Result->TotalTime = totalElapsedTime - LastReportedElapsedTime; 
+        // TODO: Result->CpuTime = ... 
         LastReportedElapsedTime = totalElapsedTime;
 
         PageFaults = 0;
@@ -427,7 +427,7 @@ private:
     TActorId BlobCacheActorId;
     const ui32 ScanId;
     const ui64 TxId;
-    const ui32 ScanGen;
+    const ui32 ScanGen; 
     const ui64 RequestCookie;
     const i64 MaxReadAheadBytes = DEFAULT_READ_AHEAD_BYTES;
     const NKikimrTxDataShard::EScanDataFormat DataFormat;
@@ -667,7 +667,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const auto& snapshot = request.GetSnapshot();
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
-    const ui32 scanGen = request.GetGeneration();
+    const ui32 scanGen = request.GetGeneration(); 
     TString table = request.GetTablePath();
     auto dataFormat = request.GetDataFormat();
     TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
@@ -686,7 +686,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     LOG_S_DEBUG("Starting scan"
                 << ", txId: " << txId
                 << ", scanId: " << scanId
-                << ", gen: " << scanGen
+                << ", gen: " << scanGen 
                 << ", table: " << table
                 << ", snapshot: " << snapshot
                 << ", shard: " << Self->TabletID()

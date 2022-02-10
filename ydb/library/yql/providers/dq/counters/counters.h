@@ -272,8 +272,8 @@ struct TCounters {
         };
 
         // basic stats
-        ADD_COUNTER(ComputeCpuTime)
-        ADD_COUNTER(BuildCpuTime)
+        ADD_COUNTER(ComputeCpuTime) 
+        ADD_COUNTER(BuildCpuTime) 
 
         // profile stats
         ADD_COUNTER(WaitTime)

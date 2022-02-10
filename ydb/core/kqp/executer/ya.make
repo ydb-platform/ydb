@@ -6,18 +6,18 @@ OWNER(
 )
 
 SRCS(
-    kqp_data_executer.cpp
-    kqp_scan_executer.cpp
-    kqp_executer_impl.cpp
-    kqp_executer_stats.cpp
-    kqp_literal_executer.cpp
-    kqp_locks_helper.cpp
-    kqp_partition_helper.cpp
-    kqp_planner.cpp
-    kqp_planner_strategy.cpp
+    kqp_data_executer.cpp 
+    kqp_scan_executer.cpp 
+    kqp_executer_impl.cpp 
+    kqp_executer_stats.cpp 
+    kqp_literal_executer.cpp 
+    kqp_locks_helper.cpp 
+    kqp_partition_helper.cpp 
+    kqp_planner.cpp 
+    kqp_planner_strategy.cpp 
     kqp_shards_resolver.cpp
-    kqp_result_channel.cpp
-    kqp_table_resolver.cpp
+    kqp_result_channel.cpp 
+    kqp_table_resolver.cpp 
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
 )

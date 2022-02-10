@@ -7,23 +7,23 @@
 #include <util/thread/pool.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-class TMockDbSchemeResolver : public NYql::IDbSchemeResolver {
+class TMockDbSchemeResolver : public NYql::IDbSchemeResolver { 
 public:
     TMockDbSchemeResolver()
     {
         MtpQueue.Start(2);
     }
 
-    template <typename Func>
-    NThreading::TFuture<NThreading::TFutureType<::TFunctionResult<Func>>> Async(Func&& func, IThreadPool& queue) {
-        auto promise = NThreading::NewPromise<NThreading::TFutureType<::TFunctionResult<Func>>>();
-        auto lambda = [promise, func = std::forward<Func>(func)]() mutable {
-            NThreading::NImpl::SetValue(promise, func);
-        };
-        queue.SafeAddFunc(std::move(lambda));
-        return promise.GetFuture();
-    }
-
+    template <typename Func> 
+    NThreading::TFuture<NThreading::TFutureType<::TFunctionResult<Func>>> Async(Func&& func, IThreadPool& queue) { 
+        auto promise = NThreading::NewPromise<NThreading::TFutureType<::TFunctionResult<Func>>>(); 
+        auto lambda = [promise, func = std::forward<Func>(func)]() mutable { 
+            NThreading::NImpl::SetValue(promise, func); 
+        }; 
+        queue.SafeAddFunc(std::move(lambda)); 
+        return promise.GetFuture(); 
+    } 
+ 
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         TTableResults results;
         results.reserve(tables.size());
@@ -51,7 +51,7 @@ public:
             results.push_back(result);
         }
 
-        return Async([results]() {
+        return Async([results]() { 
             return results;
         }, MtpQueue);
     }
@@ -74,8 +74,8 @@ private:
     THashMap<TString, IDbSchemeResolver::TTableResult> Tables;
 };
 
-namespace NYql {
-
+namespace NYql { 
+ 
 inline TExprContainer::TPtr ParseText(const TString& programText) {
     TAstParseResult astRes = ParseAst(programText);
     astRes.Issues.PrintTo(Cerr);

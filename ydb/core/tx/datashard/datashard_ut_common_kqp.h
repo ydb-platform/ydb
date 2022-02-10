@@ -124,21 +124,21 @@ namespace NKqpHelpers {
         return ev->Get()->Record.GetResponse().GetSessionId();
     }
 
-    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
+    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest( 
         const TActorId sender,
-        const TString& sql,
-        const bool collectStats = false)
-    {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        const TString& sql, 
+        const bool collectStats = false) 
+    { 
+        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(); 
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-        request->Record.MutableRequest()->SetKeepSession(false);
-        request->Record.MutableRequest()->SetQuery(sql);
-        request->Record.MutableRequest()->SetProfile(collectStats);
+        request->Record.MutableRequest()->SetKeepSession(false); 
+        request->Record.MutableRequest()->SetQuery(sql); 
+        request->Record.MutableRequest()->SetProfile(collectStats); 
         ActorIdToProto(sender, request->Record.MutableRequestActorId());
-        return request;
-    }
-
+        return request; 
+    } 
+ 
 } // namespace NKqpHelpers
 } // namespace NDataShard
 } // namespace NKikimr

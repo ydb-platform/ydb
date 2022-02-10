@@ -255,14 +255,14 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
         return THash<double>()(ReadUnaligned<double>((const double*)cell.Data()));
 
     case NYql::NProto::TypeIds::Date:
-        return THash<ui16>()(ReadUnaligned<ui16>((const ui16*)cell.Data()));
+        return THash<ui16>()(ReadUnaligned<ui16>((const ui16*)cell.Data())); 
     case NYql::NProto::TypeIds::Datetime:
         return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data()));
     case NYql::NProto::TypeIds::Timestamp:
         return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
     case NYql::NProto::TypeIds::Interval:
         return THash<ui32>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
-
+ 
     case NYql::NProto::TypeIds::String:
     case NYql::NProto::TypeIds::Utf8:
     case NYql::NProto::TypeIds::Yson:

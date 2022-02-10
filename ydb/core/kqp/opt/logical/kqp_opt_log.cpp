@@ -40,7 +40,7 @@ public:
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend)); 
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
 
@@ -92,13 +92,13 @@ protected:
         DumpAppliedRule("RewriteTakeSortToTopSort", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteSqlInToEquiJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteSqlInToEquiJoin(node, ctx, KqpCtx, Config);
         DumpAppliedRule("RewriteSqlInToEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteSqlInCompactToJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteSqlInCompactToJoin(node, ctx);
         DumpAppliedRule("KqpRewriteSqlInCompactToJoin", node.Ptr(), output.Ptr(), ctx);
@@ -135,12 +135,12 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverExtend(TExprBase node, TExprContext& ctx) {
-        auto output = DqFlatMapOverExtend(node, ctx);
-        DumpAppliedRule("RewriteFlatMapOverExtend", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
+    TMaybeNode<TExprBase> RewriteFlatMapOverExtend(TExprBase node, TExprContext& ctx) { 
+        auto output = DqFlatMapOverExtend(node, ctx); 
+        DumpAppliedRule("RewriteFlatMapOverExtend", node.Ptr(), output.Ptr(), ctx); 
+        return output; 
+    } 
+ 
     TMaybeNode<TExprBase> RewriteIndexRead(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteIndexRead(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteIndexRead", node.Ptr(), output.Ptr(), ctx);

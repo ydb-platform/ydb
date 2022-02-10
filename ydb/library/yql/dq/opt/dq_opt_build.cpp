@@ -1,35 +1,35 @@
-#include "dq_opt_build.h"
-#include "dq_opt.h"
+#include "dq_opt_build.h" 
+#include "dq_opt.h" 
 #include "dq_opt_phy_finalizing.h"
-
+ 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
-
-namespace NYql::NDq {
-
-using namespace NNodes;
-
+ 
+namespace NYql::NDq { 
+ 
+using namespace NNodes; 
+ 
 namespace {
 
 TExprBase RewriteProgramResultToStream(const TExprBase& result, TExprContext& ctx) {
     if (result.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
         return result;
-    }
-
+    } 
+ 
     if (auto maybeToFlow = result.Maybe<TCoToFlow>()) {
-        auto toFlow = maybeToFlow.Cast();
-        if (toFlow.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+        auto toFlow = maybeToFlow.Cast(); 
+        if (toFlow.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) { 
             return toFlow.Input();
-        }
+        } 
 
         return Build<TCoToStream>(ctx, result.Pos())
             .Input(toFlow.Input())
-            .Done();
-    }
-
+            .Done(); 
+    } 
+ 
     if (const auto itemType = result.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         ETypeAnnotationKind::Struct == itemType->GetKind() && result.Ref().IsCallable({"PartitionsByKeys", "CombineByKey"})) {
         if (const auto structType = itemType->Cast<TStructExprType>(); structType->GetSize() > 0U) {
@@ -75,14 +75,14 @@ TExprBase RewriteProgramResultToStream(const TExprBase& result, TExprContext& ct
 
     return Build<TCoFromFlow>(ctx, result.Pos()) // TODO: TDqOutputReader?
         .Input(result)
-        .Done();
-}
-
+        .Done(); 
+} 
+ 
 void CollectArgsReplaces(const TDqStage& dqStage, TVector<TCoArgument>& newArgs, TNodeOnNodeOwnedMap& argsMap,
     TExprContext& ctx)
 {
     newArgs.reserve(dqStage.Program().Args().Size());
-
+ 
     for (const auto& arg : dqStage.Program().Args()) {
         auto newArg = TCoArgument(ctx.NewArgument(arg.Pos(), arg.Name()));
         newArgs.emplace_back(newArg);
@@ -91,18 +91,18 @@ void CollectArgsReplaces(const TDqStage& dqStage, TVector<TCoArgument>& newArgs,
                 .Input(newArg)
                 .Done();
             argsMap.emplace(arg.Raw(), argReplace.Ptr());
-        } else {
+        } else { 
             argsMap.emplace(arg.Raw(), newArg.Ptr());
-        }
-    }
+        } 
+    } 
 }
-
+ 
 struct TStageConsumersInfo {
     ui32 ConsumersCount = 0;
     std::vector<TMaybeNode<TDqOutput>> Consumers;
     bool HasDependantConsumers = false;
 };
-
+ 
 void MakeConsumerReplaces(
     const TDqStage& dqStage,
     const std::vector<TDqOutput>& consumers,
@@ -110,13 +110,13 @@ void MakeConsumerReplaces(
     TExprContext& ctx)
 {
     auto replicate = dqStage.Program().Body().Cast<TDqReplicate>();
-
+ 
     TVector<TExprBase> stageResults;
     for (const auto& output : consumers) {
         auto index = FromString<ui32>(output.Index().Value());
         stageResults.push_back(replicate.Args().Get(index + 1));
     }
-
+ 
     YQL_ENSURE(!stageResults.empty());
     TMaybeNode<TExprBase> stageResult;
     if (stageResults.size() == 1) {
@@ -132,12 +132,12 @@ void MakeConsumerReplaces(
                 .Build()
             .Done();
     }
-
+ 
     TVector<TCoArgument> newArgs;
     newArgs.reserve(dqStage.Inputs().Size());
     TNodeOnNodeOwnedMap argsMap;
     CollectArgsReplaces(dqStage, newArgs, argsMap, ctx);
-
+ 
     auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
         .Inputs(dqStage.Inputs())
         .Program<TCoLambda>()
@@ -147,17 +147,17 @@ void MakeConsumerReplaces(
         .Settings(TDqStageSettings::New(dqStage).BuildNode(ctx, dqStage.Pos()))
         .Sinks(dqStage.Sinks())
         .Done();
-
+ 
     for (ui32 i = 0; i < consumers.size(); ++i) {
         auto newOutput = Build<TDqOutput>(ctx, dqStage.Pos())
             .Stage(newStage)
             .Index().Build(ToString(i))
             .Done();
-
+ 
         replaces.emplace(consumers[i].Raw(), newOutput.Ptr());
     }
 }
-
+ 
 void MakeConsumerReplaces(
     const TDqStage& dqStage,
     const TStageConsumersInfo& info,
@@ -217,7 +217,7 @@ public:
                 }
             } else {
                 queryRoots.push_back(head);
-            }
+            } 
         }
 
         auto filter = [](const TExprNode::TPtr& exprNode) {
@@ -261,7 +261,7 @@ public:
                 }
             }
         }
-
+ 
         TNodeOnNodeOwnedMap replaces;
         for (const auto& [stage, info] : consumersMap) {
             MakeConsumerReplaces(TDqStage(stage), info, AllowDependantConsumers, replaces, ctx);
@@ -275,7 +275,7 @@ public:
         settings.VisitLambdas = false;
         return RemapExpr(input, output, replaces, ctx, settings);
     }
-
+ 
 private:
     const bool AllowDependantConsumers;
 };
@@ -283,93 +283,93 @@ private:
 class TDqBuildPhysicalStagesTransformer : public TSyncTransformerBase {
 public:
     explicit TDqBuildPhysicalStagesTransformer() {}
-
+ 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_CLOG(TRACE, CoreDq) << "[DQ/Build/TransformPhysical] " << NCommon::ExprToPrettyString(ctx, *input);
         output = input;
-
-        TNodeOnNodeOwnedMap replaces;
+ 
+        TNodeOnNodeOwnedMap replaces; 
         VisitExpr(input, [&ctx, &replaces](const TExprNode::TPtr& node) {
-            if (node->IsLambda()) {
-                return false;
-            }
-
-            if (replaces.contains(node.Get())) {
-                return false;
-            }
-
-            TExprBase expr{node};
-
-            if (expr.Maybe<TDqStage>()) {
-                auto stage = expr.Cast<TDqStage>();
-
-                TVector<TCoArgument> newArgs;
-                newArgs.reserve(stage.Inputs().Size());
-                TNodeOnNodeOwnedMap argsMap;
-                CollectArgsReplaces(stage, newArgs, argsMap, ctx);
-
-                auto result = RewriteProgramResultToStream(stage.Program().Body(), ctx).Ptr();
-                auto newBody = ctx.ReplaceNodes(std::move(result), argsMap);
-
-                auto newStage = Build<TDqPhyStage>(ctx, stage.Pos())
-                    .Inputs(stage.Inputs())
-                    .Program()
-                        .Args(newArgs)
-                        .Body(newBody)
-                        .Build()
-                    .Settings(TDqStageSettings::New(stage).BuildNode(ctx, stage.Pos()))
-                    .Sinks(stage.Sinks())
-                    .Done();
-
-                replaces.emplace(stage.Raw(), newStage.Ptr());
+            if (node->IsLambda()) { 
+                return false; 
+            } 
+ 
+            if (replaces.contains(node.Get())) { 
+                return false; 
+            } 
+ 
+            TExprBase expr{node}; 
+ 
+            if (expr.Maybe<TDqStage>()) { 
+                auto stage = expr.Cast<TDqStage>(); 
+ 
+                TVector<TCoArgument> newArgs; 
+                newArgs.reserve(stage.Inputs().Size()); 
+                TNodeOnNodeOwnedMap argsMap; 
+                CollectArgsReplaces(stage, newArgs, argsMap, ctx); 
+ 
+                auto result = RewriteProgramResultToStream(stage.Program().Body(), ctx).Ptr(); 
+                auto newBody = ctx.ReplaceNodes(std::move(result), argsMap); 
+ 
+                auto newStage = Build<TDqPhyStage>(ctx, stage.Pos()) 
+                    .Inputs(stage.Inputs()) 
+                    .Program() 
+                        .Args(newArgs) 
+                        .Body(newBody) 
+                        .Build() 
+                    .Settings(TDqStageSettings::New(stage).BuildNode(ctx, stage.Pos())) 
+                    .Sinks(stage.Sinks()) 
+                    .Done(); 
+ 
+                replaces.emplace(stage.Raw(), newStage.Ptr()); 
 
                 YQL_CLOG(TRACE, CoreDq) << " [DQ/Build/TransformPhysical] replace stage #"
                     << stage.Ref().UniqueId() << " -> #" << newStage.Ref().UniqueId();
-            }
-
-            return true;
-        });
-
+            } 
+ 
+            return true; 
+        }); 
+ 
         if (replaces.empty()) {
             return TStatus::Ok;
         }
-
+ 
         TOptimizeExprSettings settings{nullptr};
         settings.VisitLambdas = false;
         auto status = RemapExpr(input, output, replaces, ctx, settings);
-#if 0
+#if 0 
         VisitExpr(output, [](const TExprNode::TPtr& node) {
             YQL_ENSURE(!TDqStage::Match(node.Get()), "DqStage #" << node->UniqueId());
             return true;
         });
-#endif
+#endif 
         return status;
-    }
+    } 
 };
-
+ 
 } // namespace
-
+ 
 TAutoPtr<IGraphTransformer> CreateDqBuildPhyStagesTransformer(bool allowDependantConsumers) {
     TVector<TTransformStage> transformers;
-
+ 
     transformers.push_back(TTransformStage(CreateFunctorTransformer(
         [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return DqReplicateStageMultiOutput(input, output, ctx);
         }),
         "ReplicateStageMultiOutput",
         TIssuesIds::DEFAULT_ERROR));
-
+ 
     transformers.push_back(TTransformStage(
         new TDqReplaceStageConsumersTransformer(allowDependantConsumers),
         "ReplaceStageConsumers",
         TIssuesIds::DEFAULT_ERROR));
-
+ 
     transformers.push_back(TTransformStage(
         new TDqBuildPhysicalStagesTransformer(),
         "BuildPhysicalStages",
         TIssuesIds::DEFAULT_ERROR));
-
+ 
     return CreateCompositeGraphTransformer(transformers, false);
-}
-
-} // namespace NYql::NDq
+} 
+ 
+} // namespace NYql::NDq 

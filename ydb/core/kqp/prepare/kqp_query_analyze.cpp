@@ -562,5 +562,5 @@ TAutoPtr<IGraphTransformer> CreateKqpAnalyzeTransformer(TIntrusivePtr<TKqlTransf
     return new TKqpAnalyzeTransformer(transformCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

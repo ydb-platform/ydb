@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ExplicitTcl) {
+    Y_UNIT_TEST_NEW_ENGINE(ExplicitTcl) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -56,23 +56,23 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             .GetTransaction();
         UNIT_ASSERT(tx.IsActive());
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )"), TTxControl::Tx(tx)).ExtractValueSync();
+        )"), TTxControl::Tx(tx)).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto commitResult = tx.Commit().ExtractValueSync();
-        UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString()); 
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
@@ -129,31 +129,31 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CommitRequired) {
+    Y_UNIT_TEST_NEW_ENGINE(CommitRequired) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::OnlineRO())).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO())).ExtractValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::StaleRO())).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::StaleRO())).ExtractValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RollbackTx) {
+    Y_UNIT_TEST_NEW_ENGINE(RollbackTx) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        // with effects, without locks
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        // with effects, without locks 
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
 
         auto tx = result.GetTransaction();
@@ -163,9 +163,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto rollbackResult = tx->Rollback().ExtractValueSync();
         UNIT_ASSERT(rollbackResult.IsSuccess());
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
@@ -174,113 +174,113 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RollbackTx2) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        // with effects, with locks
-        auto result = session.ExecuteDataQuery(Q_(R"(
+    Y_UNIT_TEST_NEW_ENGINE(RollbackTx2) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        // with effects, with locks 
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPDATE [/Root/KeyValue] SET Value = "New" WHERE Key = 1;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        auto tx = result.GetTransaction();
-        UNIT_ASSERT(tx);
-        UNIT_ASSERT(tx->IsActive());
-
-        auto rollbackResult = tx->Rollback().ExtractValueSync();
-        UNIT_ASSERT(rollbackResult.IsSuccess());
-
-        result = session.ExecuteDataQuery(Q_(R"(
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        auto tx = result.GetTransaction(); 
+        UNIT_ASSERT(tx); 
+        UNIT_ASSERT(tx->IsActive()); 
+ 
+        auto rollbackResult = tx->Rollback().ExtractValueSync(); 
+        UNIT_ASSERT(rollbackResult.IsSuccess()); 
+ 
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-
-        rollbackResult = tx->Rollback().ExtractValueSync();
-        UNIT_ASSERT(!rollbackResult.IsSuccess());
-        UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(RollbackRoTx) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        auto tx = result.GetTransaction();
-        UNIT_ASSERT(tx);
-        UNIT_ASSERT(tx->IsActive());
-
-        auto rollbackResult = tx->Rollback().ExtractValueSync();
-        UNIT_ASSERT(rollbackResult.IsSuccess());
-
-        rollbackResult = tx->Rollback().ExtractValueSync();
-        UNIT_ASSERT(!rollbackResult.IsSuccess());
-        UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(CommitRoTx) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        auto tx = result.GetTransaction();
-        UNIT_ASSERT(tx);
-        UNIT_ASSERT(tx->IsActive());
-
-        auto commitResult = tx->Commit().ExtractValueSync();
-        UNIT_ASSERT(commitResult.IsSuccess());
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(CommitRoTx_TLI) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        auto tx = result.GetTransaction();
-        UNIT_ASSERT(tx);
-        UNIT_ASSERT(tx->IsActive());
-
-        {
-            result = session.ExecuteDataQuery(Q_(R"(
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT(result.IsSuccess()); 
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0))); 
+ 
+        rollbackResult = tx->Rollback().ExtractValueSync(); 
+        UNIT_ASSERT(!rollbackResult.IsSuccess()); 
+        UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND)); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(RollbackRoTx) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q_(R"( 
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        auto tx = result.GetTransaction(); 
+        UNIT_ASSERT(tx); 
+        UNIT_ASSERT(tx->IsActive()); 
+ 
+        auto rollbackResult = tx->Rollback().ExtractValueSync(); 
+        UNIT_ASSERT(rollbackResult.IsSuccess()); 
+ 
+        rollbackResult = tx->Rollback().ExtractValueSync(); 
+        UNIT_ASSERT(!rollbackResult.IsSuccess()); 
+        UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND)); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(CommitRoTx) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q_(R"( 
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        auto tx = result.GetTransaction(); 
+        UNIT_ASSERT(tx); 
+        UNIT_ASSERT(tx->IsActive()); 
+ 
+        auto commitResult = tx->Commit().ExtractValueSync(); 
+        UNIT_ASSERT(commitResult.IsSuccess()); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(CommitRoTx_TLI) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q_(R"( 
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        auto tx = result.GetTransaction(); 
+        UNIT_ASSERT(tx); 
+        UNIT_ASSERT(tx->IsActive()); 
+ 
+        { 
+            result = session.ExecuteDataQuery(Q_(R"( 
                 UPDATE `/Root/KeyValue` SET Value = "New" WHERE Key = 1;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        auto commitResult = tx->Commit().ExtractValueSync();
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        } 
+ 
+        auto commitResult = tx->Commit().ExtractValueSync(); 
         if (kikimr.IsUsingSnapshotReads()) {
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
         }
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(EmptyTxOnCommit) {
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(EmptyTxOnCommit) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
 
         auto tx = result.GetTransaction();
@@ -345,21 +345,21 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(commitResult.IsSuccess());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RollbackInvalidated) {
+    Y_UNIT_TEST_NEW_ENGINE(RollbackInvalidated) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto tx = result.GetTransaction();
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [BadTable];
-        )"), TTxControl::Tx(*tx)).ExtractValueSync();
+        )"), TTxControl::Tx(*tx)).ExtractValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
 
         UNIT_ASSERT(result.GetTransaction());
@@ -370,14 +370,14 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CommitPrepared) {
+    Y_UNIT_TEST_NEW_ENGINE(CommitPrepared) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto query = session.PrepareDataQuery(Q_(R"(
+        auto query = session.PrepareDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )")).ExtractValueSync().GetQuery();
+        )")).ExtractValueSync().GetQuery(); 
 
         auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
@@ -385,14 +385,14 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto tx = result.GetTransaction();
         UNIT_ASSERT(!tx->IsActive());
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InvalidateOnError) {
+    Y_UNIT_TEST_NEW_ENGINE(InvalidateOnError) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -402,20 +402,20 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             .GetTransaction();
         UNIT_ASSERT(tx.IsActive());
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             INSERT INTO [/Root/KeyValue] (Key, Value) VALUES (1u, "New");
-        )"), TTxControl::Tx(tx)).ExtractValueSync();
-        // result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        )"), TTxControl::Tx(tx)).ExtractValueSync(); 
+        // result.GetIssues().PrintTo(Cerr); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString()); 
 
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (1u, "New");
-        )"), TTxControl::Tx(tx)).ExtractValueSync();
-        // result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString());
+        )"), TTxControl::Tx(tx)).ExtractValueSync(); 
+        // result.GetIssues().PrintTo(Cerr); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString()); 
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CommitStats) {
+    Y_UNIT_TEST_NEW_ENGINE(CommitStats) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -425,9 +425,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             .GetTransaction();
         UNIT_ASSERT(tx.IsActive());
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
-        )"), TTxControl::Tx(tx)).ExtractValueSync();
+        )"), TTxControl::Tx(tx)).ExtractValueSync(); 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         NYdb::NTable::TCommitTxSettings commitSettings;
@@ -443,38 +443,38 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
     }
-
-    Y_UNIT_TEST(MixEnginesOldNew) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
-            .ExtractValueSync()
-            .GetTransaction();
-        UNIT_ASSERT(tx.IsActive());
-
-        auto result = session.ExecuteDataQuery(R"(
+ 
+    Y_UNIT_TEST(MixEnginesOldNew) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto tx = session.BeginTransaction(TTxSettings::SerializableRW()) 
+            .ExtractValueSync() 
+            .GetTransaction(); 
+        UNIT_ASSERT(tx.IsActive()); 
+ 
+        auto result = session.ExecuteDataQuery(R"( 
+            SELECT * FROM `/Root/KeyValue` 
+        )", TTxControl::Tx(tx)).ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        result = session.ExecuteDataQuery(R"( 
+            PRAGMA Kikimr.UseNewEngine = "true"; 
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "New"); 
+        )", TTxControl::Tx(tx).CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        result = session.ExecuteDataQuery(R"( 
             SELECT * FROM `/Root/KeyValue`
-        )", TTxControl::Tx(tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
-            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "New");
-        )", TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteDataQuery(R"(
-            SELECT * FROM `/Root/KeyValue`
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([
-            [[1u];["New"]];
-            [[2u];["Two"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        CompareYson(R"([ 
+            [[1u];["New"]]; 
+            [[2u];["Two"]] 
+            ])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

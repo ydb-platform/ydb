@@ -35,5 +35,5 @@ IDqOutputConsumer::TPtr CreateKqpApplyEffectsConsumer(NUdf::IApplyContext* apply
     return MakeIntrusive<TKqpApplyEffectsConsumer>(applyCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

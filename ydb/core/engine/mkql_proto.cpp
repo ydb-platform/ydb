@@ -128,7 +128,7 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
         auto dictType = static_cast<TDictType*>(type);
         auto keyType = dictType->GetKeyType();
         auto payloadType = dictType->GetPayloadType();
-        auto dictBuilder = factory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+        auto dictBuilder = factory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed); 
 
         for (const auto& x : value.pairs()) {
             dictBuilder->Add(

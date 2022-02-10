@@ -22,7 +22,7 @@ public:
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod*) const override {
             ActorSystem->Send(new NActors::IEventHandle(
-                CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution()));
+                CurrentActorId, NActors::TActorId(), new NDq::TEvDqCompute::TEvResumeExecution())); 
             return NUdf::TUnboxedValue::Void();
         }
 

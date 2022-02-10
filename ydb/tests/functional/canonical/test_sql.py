@@ -128,8 +128,8 @@ class BaseCanonicalTest(object):
             is_v1 = True
 
         if use_new_engine:
-            query_parts = ["PRAGMA Kikimr.UseNewEngine=\"True\";"] + query_parts
-
+            query_parts = ["PRAGMA Kikimr.UseNewEngine=\"True\";"] + query_parts 
+ 
         query_parts = ["PRAGMA TablePathPrefix=\"{}\";".format(cls.prefix)] + query_parts
         if is_v1:
             query_parts = ['--!syntax_v1'] + query_parts
@@ -521,7 +521,7 @@ class TestCanonicalFolder1(BaseCanonicalTest):
     data_folder = 'ydb/tests/functional/canonical/sql'
     uniq_idx = 'base'
 
-    @pytest.mark.parametrize(['query_name', 'kind'],
+    @pytest.mark.parametrize(['query_name', 'kind'], 
                              get_queries('ydb/tests/functional/canonical/sql'))
     def test_case(self, query_name, kind):
-        return self.run_test_case(query_name, kind)
+        return self.run_test_case(query_name, kind) 

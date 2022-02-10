@@ -272,7 +272,7 @@ public:
             }
 
             if (TransformCtx->Settings.GetCommitTx() && !TransformCtx->QueryCtx->PrepareOnly) {
-                if (TxState->Tx().DeferredEffects.Empty()) {
+                if (TxState->Tx().DeferredEffects.Empty()) { 
                     // Merge read-only query with commit tx
                     return TStatus::Ok;
                 }
@@ -346,8 +346,8 @@ public:
         TransformCtx->MkqlResults.push_back(mkqlResult);
 
         if (TransformCtx->QueryCtx->PrepareOnly) {
-            YQL_ENSURE(!TransformCtx->GetPreparingKql().GetMkqls().empty());
-            auto& mkql = *TransformCtx->GetPreparingKql().MutableMkqls()->rbegin();
+            YQL_ENSURE(!TransformCtx->GetPreparingKql().GetMkqls().empty()); 
+            auto& mkql = *TransformCtx->GetPreparingKql().MutableMkqls()->rbegin(); 
             mkql.SetProgram(result.CompiledProgram);
             mkql.SetProgramText(MkqlExecuteResult.Program);
         } else {
@@ -386,12 +386,12 @@ private:
 
 void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::TTxStats& txStats) {
     auto& dstExec = *dst.AddExecutions();
-    NKqpProto::TKqpExecutionExtraStats executionExtraStats;
+    NKqpProto::TKqpExecutionExtraStats executionExtraStats; 
 
-    dstExec.SetDurationUs(txStats.GetDurationUs());
-    dstExec.SetCpuTimeUs(txStats.GetComputeCpuTimeUsec());
-
-    auto& dstComputeTime = *executionExtraStats.MutableComputeCpuTimeUs();
+    dstExec.SetDurationUs(txStats.GetDurationUs()); 
+    dstExec.SetCpuTimeUs(txStats.GetComputeCpuTimeUsec()); 
+ 
+    auto& dstComputeTime = *executionExtraStats.MutableComputeCpuTimeUs(); 
     dstComputeTime.SetMin(txStats.GetComputeCpuTimeUsec());
     dstComputeTime.SetMax(txStats.GetComputeCpuTimeUsec());
     dstComputeTime.SetSum(txStats.GetComputeCpuTimeUsec());
@@ -416,7 +416,7 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
             ++cnt;
         }
         if (cnt) {
-            auto& dstShardTime = *executionExtraStats.MutableShardsCpuTimeUs();
+            auto& dstShardTime = *executionExtraStats.MutableShardsCpuTimeUs(); 
             dstShardTime.SetMin(minCpu);
             dstShardTime.SetMax(maxCpu);
             dstShardTime.SetSum(sumCpu);
@@ -425,8 +425,8 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
             dst.SetReadSetsCount(dst.GetReadSetsCount() + sumReadSets);
             dst.SetMaxShardProgramSize(Max(dst.GetMaxShardProgramSize(), maxProgramSize));
             dst.SetMaxShardReplySize(Max(dst.GetMaxShardReplySize(), maxReplySize));
-
-            dstExec.SetCpuTimeUs(dstExec.GetCpuTimeUs() + sumCpu);
+ 
+            dstExec.SetCpuTimeUs(dstExec.GetCpuTimeUs() + sumCpu); 
         }
     }
 
@@ -439,16 +439,16 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
         dstTable.SetWriteRows(table.GetUpdateRow().GetRows());
         dstTable.SetWriteBytes(table.GetUpdateRow().GetBytes());
         dstTable.SetEraseRows(table.GetEraseRow().GetRows());
-        dstTable.SetAffectedPartitions(table.GetShardCount());
+        dstTable.SetAffectedPartitions(table.GetShardCount()); 
 
         // NOTE: This might be incorrect in case when single shard has several
         // tables, i.e. collocated tables.
         affectedShards += table.GetShardCount();
     }
 
-    executionExtraStats.SetAffectedShards(affectedShards);
-
-    dstExec.MutableExtra()->PackFrom(executionExtraStats);
+    executionExtraStats.SetAffectedShards(affectedShards); 
+ 
+    dstExec.MutableExtra()->PackFrom(executionExtraStats); 
 }
 
 } // namespace
@@ -499,7 +499,7 @@ TMkqlExecuteResult ExecuteMkql(TKiProgram program, TIntrusivePtr<IKqpGateway> ga
     if (transformCtx->QueryCtx->PrepareOnly) {
         YQL_CLOG(INFO, ProviderKqp) << "Preparing MiniKQL program:" << Endl << mkqlProgramText;
 
-        auto& mkql = *transformCtx->GetPreparingKql().AddMkqls();
+        auto& mkql = *transformCtx->GetPreparingKql().AddMkqls(); 
         for (auto& binding : paramBindings) {
             mkql.AddBindings()->CopyFrom(binding);
         }
@@ -536,7 +536,7 @@ bool AddDeferredEffect(NNodes::TExprBase effect, const TVector<NKikimrKqp::TPara
     TExprContext& ctx, TKqpTransactionState& txState, TKqlTransformContext& transformCtx, bool preserveParamValues)
 {
     if (transformCtx.QueryCtx->PrepareOnly) {
-        auto& newEffect = *transformCtx.GetPreparingKql().AddEffects();
+        auto& newEffect = *transformCtx.GetPreparingKql().AddEffects(); 
         newEffect.SetNodeAst(NCommon::SerializeExpr(ctx, effect.Ref()));
         for (auto& binding : bindings) {
             newEffect.AddBindings()->CopyFrom(binding);
@@ -558,10 +558,10 @@ bool AddDeferredEffect(NNodes::TExprBase effect, const TVector<NKikimrKqp::TPara
         effect = PreserveParams(effect, bindingsMap, ctx, txState, transformCtx, preserveParamValues);
     }
 
-    bool added = txState.Tx().AddDeferredEffect(effect);
-    YQL_ENSURE(added, "Cannot execute new- and old- execution engine queries in the same transaction");
+    bool added = txState.Tx().AddDeferredEffect(effect); 
+    YQL_ENSURE(added, "Cannot execute new- and old- execution engine queries in the same transaction"); 
 
-    YQL_CLOG(INFO, ProviderKqp) << "Adding deferred effect, total " << txState.Tx().DeferredEffects.Size() << ": "
+    YQL_CLOG(INFO, ProviderKqp) << "Adding deferred effect, total " << txState.Tx().DeferredEffects.Size() << ": " 
         << Endl << KqpExprToPrettyString(effect, ctx);
     return true;
 }
@@ -840,5 +840,5 @@ TAutoPtr<IGraphTransformer> CreateKqpExecTransformer(TIntrusivePtr<IKqpGateway> 
     return new TKqpExecTransformer(gateway, cluster, txState, transformCtx);
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

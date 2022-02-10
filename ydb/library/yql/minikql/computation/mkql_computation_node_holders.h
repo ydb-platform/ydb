@@ -379,22 +379,22 @@ public:
 
     NUdf::TUnboxedValuePod VectorAsArray(TUnboxedValueVector& values) const;
 
-    template <class TForwardIterator>
-    NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {
-        auto count = std::distance(first, last);
-        if (count == 0)
-            return GetEmptyContainer();
-
-        NUdf::TUnboxedValue* itemsPtr = nullptr;
-        auto tuple = CreateDirectArrayHolder(count, itemsPtr);
-        while (first != last) {
-            *itemsPtr++ = std::move(*first);
-            ++first;
-        }
-
-        return tuple;
-    }
-
+    template <class TForwardIterator> 
+    NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const { 
+        auto count = std::distance(first, last); 
+        if (count == 0) 
+            return GetEmptyContainer(); 
+ 
+        NUdf::TUnboxedValue* itemsPtr = nullptr; 
+        auto tuple = CreateDirectArrayHolder(count, itemsPtr); 
+        while (first != last) { 
+            *itemsPtr++ = std::move(*first); 
+            ++first; 
+        } 
+ 
+        return tuple; 
+    } 
+ 
     NUdf::TUnboxedValuePod CreateDirectSortedSetHolder(
             TSortedSetFiller filler,
             const TKeyTypes& types,

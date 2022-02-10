@@ -1,5 +1,5 @@
 #include "yql_kikimr_provider_impl.h"
-#include "yql_kikimr_opt_utils.h"
+#include "yql_kikimr_opt_utils.h" 
 
 #include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -52,11 +52,11 @@ TTableLookup::TCompareResult CompareIntegralNodes(TCoAtom left, TCoAtom right, N
 
         case TTableLookup::TCompareResult::Greater:
             adjacent = leftValue == rightValue + 1;
-            break;
+            break; 
 
         case TTableLookup::TCompareResult::Less:
             adjacent = rightValue == leftValue + 1;
-            break;
+            break; 
     }
 
     return TTableLookup::TCompareResult(compareResult, adjacent);
@@ -924,123 +924,123 @@ NNodes::TExprBase TKikimrKeyRange::BuildIndexReadRangeExpr(const TKikimrTableDes
         .Done();
 }
 
-TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
-    const TKikimrConfiguration& config, TExprContext& ctx)
-{
-    if (config.HasOptDisableSqlInToJoin()) {
-        return node.Ptr();
-    }
-
-    if (!node.Maybe<TCoFlatMap>()) {
-        return node.Ptr();
-    }
-    auto flatMap = node.Cast<TCoFlatMap>();
-
-    // SqlIn expected to be rewritten to (FlatMap <collection> (OptionalIf ...))
+TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData, 
+    const TKikimrConfiguration& config, TExprContext& ctx) 
+{ 
+    if (config.HasOptDisableSqlInToJoin()) { 
+        return node.Ptr(); 
+    } 
+ 
+    if (!node.Maybe<TCoFlatMap>()) { 
+        return node.Ptr(); 
+    } 
+    auto flatMap = node.Cast<TCoFlatMap>(); 
+ 
+    // SqlIn expected to be rewritten to (FlatMap <collection> (OptionalIf ...)) 
     // or (FlatMap <collection> (FlatListIf ...))
     if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>() && !flatMap.Lambda().Body().Maybe<TCoFlatListIf>()) {
-        return node.Ptr();
-    }
+        return node.Ptr(); 
+    } 
+ 
+    if (!flatMap.Input().Maybe<TKiSelectRangeBase>()) { 
+        return node.Ptr(); 
+    } 
 
-    if (!flatMap.Input().Maybe<TKiSelectRangeBase>()) {
-        return node.Ptr();
-    }
-
-    auto selectRange = flatMap.Input().Cast<TKiSelectRangeBase>();
-
-    TMaybeNode<TCoAtom> indexTable;
-    if (auto indexSelect = selectRange.Maybe<TKiSelectIndexRange>()) {
-        indexTable = indexSelect.Cast().IndexName();
-    }
-
-    // retrieve selected ranges
+    auto selectRange = flatMap.Input().Cast<TKiSelectRangeBase>(); 
+ 
+    TMaybeNode<TCoAtom> indexTable; 
+    if (auto indexSelect = selectRange.Maybe<TKiSelectIndexRange>()) { 
+        indexTable = indexSelect.Cast().IndexName(); 
+    } 
+ 
+    // retrieve selected ranges 
     const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value();
-    const TKikimrTableDescription& tableDesc = tablesData.ExistingTable(selectRange.Cluster().Value(), lookupTable);
-    auto selectKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, tableDesc, selectRange.Range());
-    if (!selectKeyRange) {
-        return node.Ptr();
-    }
-
-    // check which key prefixes are used (and only with points)
-    TVector<TStringBuf> keys; // remaining key parts, that can be used in SqlIn (only in asc order)
-    for (size_t idx = 0; idx < selectKeyRange->GetColumnRanges().size(); ++idx) {
-        const auto& columnRange = selectKeyRange->GetColumnRange(idx);
-        if (columnRange.IsDefined()) {
-            if (!keys.empty()) {
-                return node.Ptr();
-            }
-            if (columnRange.IsPoint()) {
-                continue;
-            }
-            return node.Ptr();
-        }
-        keys.emplace_back(tableDesc.Metadata->KeyColumnNames[idx]);
-    }
-    if (keys.empty()) {
-        return node.Ptr();
-    }
-
-    auto flatMapLambdaArg = flatMap.Lambda().Args().Arg(0);
-
-    auto findMemberIndexInKeys = [&keys](const TCoArgument& flatMapLambdaArg, const TCoMember& member) {
-        if (member.Struct().Raw() != flatMapLambdaArg.Raw()) {
-            return -1;
-        }
-        for (size_t i = 0; i < keys.size(); ++i) {
-            if (member.Name().Value() == keys[i]) {
-                return (int) i;
-            }
-        }
-        return -1;
-    };
-
-    auto shouldConvertSqlInToJoin = [&flatMapLambdaArg, &findMemberIndexInKeys](const TCoSqlIn& sqlIn, bool negated) {
-        if (negated) {
-            // negated can't be rewritten to the index-lookup, so skip it
-            return false;
-        }
-
-        // validate key prefix
-        if (sqlIn.Lookup().Maybe<TCoMember>()) {
-            if (findMemberIndexInKeys(flatMapLambdaArg, sqlIn.Lookup().Cast<TCoMember>()) != 0) {
-                return false;
-            }
-        } else if (sqlIn.Lookup().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            auto children = sqlIn.Lookup().Ref().ChildrenList();
-            TVector<int> usedKeyIndexes{Reserve(children.size())};
-            for (const auto& itemPtr : children) {
-                TExprBase item{itemPtr};
-                if (!item.Maybe<TCoMember>()) {
-                    return false;
-                }
-                int keyIndex = findMemberIndexInKeys(flatMapLambdaArg, item.Cast<TCoMember>());
-                if (keyIndex >= 0) {
-                    usedKeyIndexes.push_back(keyIndex);
-                }
-            }
-            if (usedKeyIndexes.empty()) {
-                return false;
-            }
-            ::Sort(usedKeyIndexes);
-            for (size_t i = 0; i < usedKeyIndexes.size(); ++i) {
-                if (usedKeyIndexes[i] != (int) i) {
-                    return false;
-                }
-            }
-        } else {
-            return false;
-        }
-
-        return CanRewriteSqlInToEquiJoin(sqlIn.Lookup().Ref().GetTypeAnn(), sqlIn.Collection().Ref().GetTypeAnn());
-    };
-
+    const TKikimrTableDescription& tableDesc = tablesData.ExistingTable(selectRange.Cluster().Value(), lookupTable); 
+    auto selectKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, tableDesc, selectRange.Range()); 
+    if (!selectKeyRange) { 
+        return node.Ptr(); 
+    } 
+ 
+    // check which key prefixes are used (and only with points) 
+    TVector<TStringBuf> keys; // remaining key parts, that can be used in SqlIn (only in asc order) 
+    for (size_t idx = 0; idx < selectKeyRange->GetColumnRanges().size(); ++idx) { 
+        const auto& columnRange = selectKeyRange->GetColumnRange(idx); 
+        if (columnRange.IsDefined()) { 
+            if (!keys.empty()) { 
+                return node.Ptr(); 
+            } 
+            if (columnRange.IsPoint()) { 
+                continue; 
+            } 
+            return node.Ptr(); 
+        } 
+        keys.emplace_back(tableDesc.Metadata->KeyColumnNames[idx]); 
+    } 
+    if (keys.empty()) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto flatMapLambdaArg = flatMap.Lambda().Args().Arg(0); 
+ 
+    auto findMemberIndexInKeys = [&keys](const TCoArgument& flatMapLambdaArg, const TCoMember& member) { 
+        if (member.Struct().Raw() != flatMapLambdaArg.Raw()) { 
+            return -1; 
+        } 
+        for (size_t i = 0; i < keys.size(); ++i) { 
+            if (member.Name().Value() == keys[i]) { 
+                return (int) i; 
+            } 
+        } 
+        return -1; 
+    }; 
+ 
+    auto shouldConvertSqlInToJoin = [&flatMapLambdaArg, &findMemberIndexInKeys](const TCoSqlIn& sqlIn, bool negated) { 
+        if (negated) { 
+            // negated can't be rewritten to the index-lookup, so skip it 
+            return false; 
+        } 
+ 
+        // validate key prefix 
+        if (sqlIn.Lookup().Maybe<TCoMember>()) { 
+            if (findMemberIndexInKeys(flatMapLambdaArg, sqlIn.Lookup().Cast<TCoMember>()) != 0) { 
+                return false; 
+            } 
+        } else if (sqlIn.Lookup().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) { 
+            auto children = sqlIn.Lookup().Ref().ChildrenList(); 
+            TVector<int> usedKeyIndexes{Reserve(children.size())}; 
+            for (const auto& itemPtr : children) { 
+                TExprBase item{itemPtr}; 
+                if (!item.Maybe<TCoMember>()) { 
+                    return false; 
+                } 
+                int keyIndex = findMemberIndexInKeys(flatMapLambdaArg, item.Cast<TCoMember>()); 
+                if (keyIndex >= 0) { 
+                    usedKeyIndexes.push_back(keyIndex); 
+                } 
+            } 
+            if (usedKeyIndexes.empty()) { 
+                return false; 
+            } 
+            ::Sort(usedKeyIndexes); 
+            for (size_t i = 0; i < usedKeyIndexes.size(); ++i) { 
+                if (usedKeyIndexes[i] != (int) i) { 
+                    return false; 
+                } 
+            } 
+        } else { 
+            return false; 
+        } 
+ 
+        return CanRewriteSqlInToEquiJoin(sqlIn.Lookup().Ref().GetTypeAnn(), sqlIn.Collection().Ref().GetTypeAnn()); 
+    }; 
+ 
     const bool prefixOnly = true;
     if (auto ret = TryConvertSqlInPredicatesToJoins(flatMap, shouldConvertSqlInToJoin, ctx, prefixOnly)) {
-        YQL_CLOG(INFO, ProviderKikimr) << "KiSqlInToEquiJoin";
-        return ret;
-    }
-
-    return node.Ptr();
-}
-
+        YQL_CLOG(INFO, ProviderKikimr) << "KiSqlInToEquiJoin"; 
+        return ret; 
+    } 
+ 
+    return node.Ptr(); 
+} 
+ 
 } // namespace NYql

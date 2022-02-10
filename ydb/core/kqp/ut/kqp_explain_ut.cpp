@@ -461,16 +461,16 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UPDATE `/Root/EightShard` SET Data=Data-1 WHERE Key In (100,200,300);
             DELETE FROM `/Root/EightShard` WHERE Key > 350;
         )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-
-        // Cerr << plan << Endl;
-
-        auto upsertsCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
-
+ 
+        // Cerr << plan << Endl; 
+ 
+        auto upsertsCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr"); 
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2); 
+ 
         auto deletesCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
 

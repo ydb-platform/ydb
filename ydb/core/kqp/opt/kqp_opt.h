@@ -7,7 +7,7 @@
 
 namespace NKikimr::NKqp::NOpt {
 
-struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
+struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> { 
     TKqpOptimizeContext(const TString& cluster, const NYql::TKikimrConfiguration::TPtr& config,
         const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables)
         : Cluster(cluster)
@@ -48,13 +48,13 @@ bool IsKqpEffectsStage(const NYql::NNodes::TDqStageBase& stage);
 TMaybe<NYql::NNodes::TKqlQuery> BuildKqlQuery(NYql::NNodes::TKiDataQuery query, const NYql::TKikimrTablesData& tablesData,
     NYql::TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizingOptTransformer();
+TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizingOptTransformer(); 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryPhasesTransformer();
 TAutoPtr<NYql::IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
-TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer();
+TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(); 
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer,
-    NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer, 
+    NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config); 
 
 } // namespace NKikimr::NKqp::NOpt

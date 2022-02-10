@@ -22,21 +22,21 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return compute;
             }
 
-            auto name = callable.GetType()->GetName();
-
-            if (name == "KqpWideReadTable"sv) {
-                return WrapKqpScanWideReadTable(callable, ctx, *computeCtx);
+            auto name = callable.GetType()->GetName(); 
+ 
+            if (name == "KqpWideReadTable"sv) { 
+                return WrapKqpScanWideReadTable(callable, ctx, *computeCtx); 
             }
 
-            if (name == "KqpWideReadTableRanges"sv) {
-                return WrapKqpScanWideReadTableRanges(callable, ctx, *computeCtx);
-            }
-
-            // only for _pure_ compute actors!
-            if (name == "KqpEnsure"sv) {
-                return WrapKqpEnsure(callable, ctx);
-            }
-
+            if (name == "KqpWideReadTableRanges"sv) { 
+                return WrapKqpScanWideReadTableRanges(callable, ctx, *computeCtx); 
+            } 
+ 
+            // only for _pure_ compute actors! 
+            if (name == "KqpEnsure"sv) { 
+                return WrapKqpEnsure(callable, ctx); 
+            } 
+ 
             return nullptr;
         };
 }

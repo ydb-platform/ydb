@@ -129,10 +129,10 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
             res.SetKind(NKikimrMiniKQL::ETypeKind::Void);
             break;
 
-        case TType::EKind::Null:
-            res.SetKind(NKikimrMiniKQL::ETypeKind::Null);
-            break;
-
+        case TType::EKind::Null: 
+            res.SetKind(NKikimrMiniKQL::ETypeKind::Null); 
+            break; 
+ 
         case TType::EKind::Data: {
             auto dataType = static_cast<TDataType *>(type);
             auto schemeType = dataType->GetSchemeType();
@@ -429,11 +429,11 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
         case TType::EKind::EmptyDict:
             break;
 
-        case TType::EKind::Null: {
-            res.SetNullFlagValue(::google::protobuf::NULL_VALUE);
-            break;
-        }
-
+        case TType::EKind::Null: { 
+            res.SetNullFlagValue(::google::protobuf::NULL_VALUE); 
+            break; 
+        } 
+ 
         case TType::EKind::Data: {
             HandleKindDataExport(type, value, res);
             break;
@@ -525,11 +525,11 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
         case TType::EKind::EmptyDict:
 	    break;
 
-        case TType::EKind::Null: {
-            res.set_null_flag_value(::google::protobuf::NULL_VALUE);
-            break;
-        }
-
+        case TType::EKind::Null: { 
+            res.set_null_flag_value(::google::protobuf::NULL_VALUE); 
+            break; 
+        } 
+ 
         case TType::EKind::Data: {
             HandleKindDataExport(type, value, res);
             break;
@@ -689,24 +689,24 @@ Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(const TType* type, const
         case NUdf::TDataType<NUdf::TJsonDocument>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes);
             return MakeString(value.GetBytes());
-        case NUdf::TDataType<NUdf::TDecimal>::Id:
-            return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(value.GetLow128(), value.GetHi128()));
+        case NUdf::TDataType<NUdf::TDecimal>::Id: 
+            return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(value.GetLow128(), value.GetHi128())); 
         case NUdf::TDataType<NUdf::TDyNumber>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes);
             return MakeString(value.GetBytes());
-        case NUdf::TDataType<NUdf::TUuid>::Id: {
-            MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kLow128);
-            union {
-                ui64 half[2];
-                char bytes[16];
-            } buf;
-            buf.half[0] = value.GetLow128();
-            buf.half[1] = value.GetHi128();
-            return MakeString(NUdf::TStringRef(buf.bytes, 16));
-        }
+        case NUdf::TDataType<NUdf::TUuid>::Id: { 
+            MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kLow128); 
+            union { 
+                ui64 half[2]; 
+                char bytes[16]; 
+            } buf; 
+            buf.half[0] = value.GetLow128(); 
+            buf.half[1] = value.GetHi128(); 
+            return MakeString(NUdf::TStringRef(buf.bytes, 16)); 
+        } 
         default:
-            MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes,
-                "got: " << (int) oneOfCase << ", type: " << (int) dataType->GetSchemeType());
+            MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes, 
+                "got: " << (int) oneOfCase << ", type: " << (int) dataType->GetSchemeType()); 
             return MakeString(value.GetBytes());
     }
 }
@@ -937,9 +937,9 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
         case NKikimrMiniKQL::ETypeKind::Void: {
             return env.GetVoid()->GetType();
         }
-        case NKikimrMiniKQL::ETypeKind::Null: {
-            return env.GetNull()->GetType();
-        }
+        case NKikimrMiniKQL::ETypeKind::Null: { 
+            return env.GetNull()->GetType(); 
+        } 
         case NKikimrMiniKQL::ETypeKind::Data: {
             const NKikimrMiniKQL::TDataType& protoData = type.GetData();
             NUdf::TDataTypeId schemeType = protoData.GetScheme();
@@ -1013,9 +1013,9 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
         case TCallableType::EKind::Void: {
             return env.GetVoid();
         }
-        case TCallableType::EKind::Null: {
-            return env.GetNull();
-        }
+        case TCallableType::EKind::Null: { 
+            return env.GetNull(); 
+        } 
         case TCallableType::EKind::Data: {
             TDataType* dataType = static_cast<TDataType*>(type);
             TDataLiteral* dataNode = nullptr;
@@ -1189,9 +1189,9 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
         case TType::EKind::Void:
             return NUdf::TUnboxedValuePod::Void();
 
-        case TType::EKind::Null:
-            return NUdf::TUnboxedValuePod();
-
+        case TType::EKind::Null: 
+            return NUdf::TUnboxedValuePod(); 
+ 
         case TType::EKind::Data:
             return HandleKindDataImport(type, value);
 
@@ -1249,7 +1249,7 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
             auto dictType = static_cast<const TDictType*>(type);
             const TType* keyType = dictType->GetKeyType();
             const TType* payloadType = dictType->GetPayloadType();
-            auto dictBuilder = factory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+            auto dictBuilder = factory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed); 
 
             for (const auto& x : value.GetDict()) {
                 dictBuilder->Add(

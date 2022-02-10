@@ -196,13 +196,13 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeId> types, 
     }
 }
 
-TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeId> types, const NKikimr::TTableRange &range,
-    const NScheme::TTypeRegistry& typeRegistry)
-{
-    if (range.Point) {
-        return DebugPrintPoint(types, range.From, typeRegistry);
-    }
-
+TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeId> types, const NKikimr::TTableRange &range, 
+    const NScheme::TTypeRegistry& typeRegistry) 
+{ 
+    if (range.Point) { 
+        return DebugPrintPoint(types, range.From, typeRegistry); 
+    } 
+ 
     return TStringBuilder()
             << (range.InclusiveFrom ? "[" : "(")
             << DebugPrintPoint(types, range.From, typeRegistry)
@@ -217,23 +217,23 @@ TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeId> types, const T
 
     return DbgPrintTuple(pointRef, typeRegistry);
 }
-
-TString NKikimr::DebugPrintPartitionInfo(const TKeyDesc::TPartitionInfo& partition,
-    const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry)
-{
-    TStringBuilder range;
-    if (partition.Range) {
-        range << "{ EndKeyPrefix: " << DebugPrintPoint(keyTypes, partition.Range->EndKeyPrefix.GetCells(), typeRegistry)
-              << ", IsInclusive: " << partition.Range->IsInclusive
-              << ", IsPoint: " << partition.Range->IsPoint
-              << " }";
-    } else {
-        range << "full";
-    }
-
-    return TStringBuilder()
-        << "TPartitionInfo{"
-        << " ShardId: " << partition.ShardId
-        << ", Range: " << range
-        << " }";
-}
+ 
+TString NKikimr::DebugPrintPartitionInfo(const TKeyDesc::TPartitionInfo& partition, 
+    const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) 
+{ 
+    TStringBuilder range; 
+    if (partition.Range) { 
+        range << "{ EndKeyPrefix: " << DebugPrintPoint(keyTypes, partition.Range->EndKeyPrefix.GetCells(), typeRegistry) 
+              << ", IsInclusive: " << partition.Range->IsInclusive 
+              << ", IsPoint: " << partition.Range->IsPoint 
+              << " }"; 
+    } else { 
+        range << "full"; 
+    } 
+ 
+    return TStringBuilder() 
+        << "TPartitionInfo{" 
+        << " ShardId: " << partition.ShardId 
+        << ", Range: " << range 
+        << " }"; 
+} 

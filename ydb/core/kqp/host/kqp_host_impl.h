@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-NYql::NDqProto::EDqStatsMode GetStatsMode(NYql::EKikimrStatsMode statsMode);
+NYql::NDqProto::EDqStatsMode GetStatsMode(NYql::EKikimrStatsMode statsMode); 
 
 template<typename TResult, bool copyIssues = true>
 class TKqpAsyncResultBase : public NYql::IKikimrAsyncResult<TResult> {
@@ -31,7 +31,7 @@ public:
         return false;
     }
 
-    TResult GetResult() override {
+    TResult GetResult() override { 
         YQL_ENSURE(HasResult());
 
         if (Status.GetValue() == NYql::IGraphTransformer::TStatus::Error) {
@@ -49,7 +49,7 @@ public:
             result.AddIssues(ExprCtx.IssueManager.GetIssues());
         }
         FillResult(result);
-        return std::move(result);
+        return std::move(result); 
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -107,7 +107,7 @@ private:
 template<typename TResult, typename TApplyResult>
 class TKqpAsyncApplyResult : public NYql::IKikimrAsyncResult<TApplyResult> {
 public:
-    using TCallback = std::function<TIntrusivePtr<NYql::IKikimrAsyncResult<TApplyResult>>(TResult&&)>;
+    using TCallback = std::function<TIntrusivePtr<NYql::IKikimrAsyncResult<TApplyResult>>(TResult&&)>; 
 
     TKqpAsyncApplyResult(TIntrusivePtr<NYql::IKikimrAsyncResult<TResult>> result, const TCallback& callback)
         : Result(result)
@@ -125,10 +125,10 @@ public:
         return ApplyResult->HasResult();
     }
 
-    TApplyResult GetResult() override {
+    TApplyResult GetResult() override { 
         YQL_ENSURE(HasResult());
 
-        return std::move(ApplyResult->GetResult());
+        return std::move(ApplyResult->GetResult()); 
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -154,7 +154,7 @@ private:
 template<typename TItem, typename TExecResult>
 class TKqpAsyncExecAllResult : public NYql::IKikimrAsyncResult<TExecResult> {
 public:
-    using TCallback = std::function<TIntrusivePtr<NYql::IKikimrAsyncResult<TExecResult>>(TItem&&)>;
+    using TCallback = std::function<TIntrusivePtr<NYql::IKikimrAsyncResult<TExecResult>>(TItem&&)>; 
 
     TKqpAsyncExecAllResult(const TVector<TItem>& items, const TCallback& callback)
         : Items(items)
@@ -167,7 +167,7 @@ public:
         return CurrentIndex >= Items.size();
     }
 
-    TExecResult GetResult() override {
+    TExecResult GetResult() override { 
         YQL_ENSURE(HasResult());
 
         TExecResult execResult;
@@ -177,7 +177,7 @@ public:
 
         execResult.AddIssues(Issues);
 
-        return std::move(execResult);
+        return std::move(execResult); 
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -186,7 +186,7 @@ public:
         }
 
         if (!CurrentResult) {
-            CurrentResult.Reset(Callback(std::move(Items[CurrentIndex])));
+            CurrentResult.Reset(Callback(std::move(Items[CurrentIndex]))); 
         }
 
         if (CurrentResult->HasResult()) {
@@ -258,13 +258,13 @@ public:
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedDataQuery(const TString& cluster,
-        NYql::TExprNode* queryExpr, const NKikimrKqp::TPreparedKql& kql, NYql::TExprContext& ctx,
+        NYql::TExprNode* queryExpr, const NKikimrKqp::TPreparedKql& kql, NYql::TExprContext& ctx, 
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
         const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, NYql::TExprContext& ctx,
-        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
-
+        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0; 
+ 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, NYql::TExprContext& ctx,
         const NActors::TActorId& target) = 0;
@@ -293,10 +293,10 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<
     TIntrusivePtr<TKqlTransformContext> transformCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState);
+    TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState); 
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
     TIntrusivePtr<TKqpTransactionState> txState);
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

@@ -33,5 +33,5 @@ private:
 
 TIntrusivePtr<NYql::NCommon::IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx);
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

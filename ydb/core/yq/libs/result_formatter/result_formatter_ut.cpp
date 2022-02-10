@@ -286,13 +286,13 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         NJson::WriteJson(&stream, &root);
 
         //Cerr << stream.Str() << Endl;
-        TString expected1 = R"___({"data":[{"column0":[["31337","113370"],["113370","31337"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
-        TString expected2 = R"___({"data":[{"column0":[["113370","31337"],["31337","113370"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___";
+        TString expected1 = R"___({"data":[{"column0":[["31337","113370"],["113370","31337"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___"; 
+        TString expected2 = R"___({"data":[{"column0":[["113370","31337"],["31337","113370"]]}],"columns":[{"name":"column0","type":["DictType",["DataType","Int32"],["DataType","Int64"]]}]})___"; 
 
-        auto actual = stream.Str();
-
-        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected either " << expected1 << " or " << expected2
-            << ", got " << actual);
+        auto actual = stream.Str(); 
+ 
+        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected either " << expected1 << " or " << expected2 
+            << ", got " << actual); 
     }
 
     Y_UNIT_TEST(VariantTuple) {

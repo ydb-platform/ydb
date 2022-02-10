@@ -41,18 +41,18 @@ public:
         TItem* item = &const_cast<TItem&>(*it.first);
         auto removedItem = List.Insert(item);
 
-        IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
+        IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize()); 
         if (item->Value.CompileResult->PreparedQueryNewEngine) {
             IncBytes(item->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-        }
+        } 
 
         if (removedItem) {
-            DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize());
+            DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize()); 
 
             if (removedItem->Value.CompileResult->PreparedQueryNewEngine) {
                 DecBytes(removedItem->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-            }
-
+            } 
+ 
             QueryIndex.erase(*removedItem->Value.CompileResult->Query);
             Index.erase(removedItem->Key);
         }
@@ -104,10 +104,10 @@ public:
         TItem* item = &const_cast<TItem&>(*it);
         List.Erase(item);
 
-        DecBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
+        DecBytes(item->Value.CompileResult->PreparedQuery->ByteSize()); 
         if (item->Value.CompileResult->PreparedQueryNewEngine) {
             DecBytes(item->Value.CompileResult->PreparedQueryNewEngine->ByteSize());
-        }
+        } 
 
         Y_VERIFY(item->Value.CompileResult);
         Y_VERIFY(item->Value.CompileResult->Query);
@@ -141,13 +141,13 @@ public:
         return prevSize - Size();
     }
 
-    void Clear() {
-        List = TList(List.GetMaxSize());
-        Index.clear();
-        QueryIndex.clear();
-        ByteSize = 0;
-    }
-
+    void Clear() { 
+        List = TList(List.GetMaxSize()); 
+        Index.clear(); 
+        QueryIndex.clear(); 
+        ByteSize = 0; 
+    } 
+ 
 private:
     void DecBytes(ui64 bytes) {
         if (bytes > ByteSize) {
@@ -314,12 +314,12 @@ public:
         Y_UNUSED(ctx);
 
         QueryReplayBackend.Reset(CreateQueryReplayBackend(Config, Counters, QueryReplayFactory));
-        // Subscribe for TableService config changes
-        ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
-             IEventHandle::FlagTrackDelivery);
-
+        // Subscribe for TableService config changes 
+        ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem; 
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), 
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}), 
+             IEventHandle::FlagTrackDelivery); 
+ 
         Become(&TKqpCompileService::MainState);
         if (Config.GetCompileQueryCacheTTLSec()) {
             StartCheckQueriesTtlTimer(ctx);
@@ -333,67 +333,67 @@ private:
             HFunc(TEvKqp::TEvCompileResponse, Handle);
             HFunc(TEvKqp::TEvCompileInvalidateRequest, Handle);
             HFunc(TEvKqp::TEvRecompileRequest, Handle);
-
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
-            hFunc(TEvents::TEvUndelivered, HandleUndelivery);
-
+ 
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig); 
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig); 
+            hFunc(TEvents::TEvUndelivered, HandleUndelivery); 
+ 
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            cFunc(TEvents::TEvPoison::EventType, PassAway); 
         default:
             Y_FAIL("TKqpCompileService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
 private:
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes");
-    }
-
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-        auto &event = ev->Get()->Record;
-
-        ui32 prevForceNewEnginePercent = Config.GetForceNewEnginePercent();
-        ui32 prevForceNewEngineLevel = Config.GetForceNewEngineLevel();
-
-        Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
-        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
-
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-
-        if (Config.GetForceNewEnginePercent() != prevForceNewEnginePercent ||
-            Config.GetForceNewEngineLevel() != prevForceNewEngineLevel)
-        {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "ForceNewEnginePercent/Level was changed from "
-                << prevForceNewEnginePercent << '/' << prevForceNewEngineLevel << " to "
-                << Config.GetForceNewEnginePercent() << '/' << Config.GetForceNewEngineLevel());
-
-            if (prevForceNewEnginePercent == 0 && Config.GetForceNewEnginePercent() != 0) {
-                // clear cache only on `enable feature` action
-                QueryCache.Clear();
-            }
-        }
-    }
-
-    void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
-        switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Failed to deliver subscription request to config dispatcher");
-                break;
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Failed to deliver config notification response");
-                break;
-            default:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
-                break;
-        }
-    }
-
+    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) { 
+        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes"); 
+    } 
+ 
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) { 
+        auto &event = ev->Get()->Record; 
+ 
+        ui32 prevForceNewEnginePercent = Config.GetForceNewEnginePercent(); 
+        ui32 prevForceNewEngineLevel = Config.GetForceNewEngineLevel(); 
+ 
+        Config.Swap(event.MutableConfig()->MutableTableServiceConfig()); 
+        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config"); 
+ 
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event); 
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie); 
+ 
+        if (Config.GetForceNewEnginePercent() != prevForceNewEnginePercent || 
+            Config.GetForceNewEngineLevel() != prevForceNewEngineLevel) 
+        { 
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, 
+                "ForceNewEnginePercent/Level was changed from " 
+                << prevForceNewEnginePercent << '/' << prevForceNewEngineLevel << " to " 
+                << Config.GetForceNewEnginePercent() << '/' << Config.GetForceNewEngineLevel()); 
+ 
+            if (prevForceNewEnginePercent == 0 && Config.GetForceNewEnginePercent() != 0) { 
+                // clear cache only on `enable feature` action 
+                QueryCache.Clear(); 
+            } 
+        } 
+    } 
+ 
+    void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) { 
+        switch (ev->Get()->SourceType) { 
+            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest: 
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, 
+                    "Failed to deliver subscription request to config dispatcher"); 
+                break; 
+            case NConsole::TEvConsole::EvConfigNotificationResponse: 
+                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, 
+                    "Failed to deliver config notification response"); 
+                break; 
+            default: 
+                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, 
+                    "Undelivered event with unexpected source type: %d", ev->Get()->SourceType); 
+                break; 
+        } 
+    } 
+ 
     void Handle(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         try {
             PerformRequest(ev, ctx);
@@ -652,14 +652,14 @@ private:
                 break;
             }
 
-            if (request->Deadline && request->Deadline < TAppData::TimeProvider->Now()) {
+            if (request->Deadline && request->Deadline < TAppData::TimeProvider->Now()) { 
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Compilation timed out"
                     << ", sender: " << request->Sender
                     << ", deadline: " << request->Deadline);
 
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
-                NYql::TIssue issue(NYql::TPosition(), "Compilation timed out.");
+                NYql::TIssue issue(NYql::TPosition(), "Compilation timed out."); 
                 ReplyError(request->Sender, "", Ydb::StatusIds::TIMEOUT, {issue}, ctx);
             } else {
                 StartCompilation(std::move(*request), ctx);
@@ -670,17 +670,17 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        bool recompileWithNewEngine = Config.GetForceNewEnginePercent() > 0;
-
+        bool recompileWithNewEngine = Config.GetForceNewEnginePercent() > 0; 
+ 
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, ModuleResolverState, Counters,
-            request.Uid, request.Query, request.UserToken, request.DbCounters, recompileWithNewEngine);
+            request.Uid, request.Query, request.UserToken, request.DbCounters, recompileWithNewEngine); 
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Created compile actor"
             << ", sender: " << request.Sender
-            << ", compileActor: " << compileActorId
-            << ", recompileWithNewEngine: " << recompileWithNewEngine);
+            << ", compileActor: " << compileActorId 
+            << ", recompileWithNewEngine: " << recompileWithNewEngine); 
 
         request.CompileActor = compileActorId;
         RequestsQueue.AddActiveRequest(std::move(request));
@@ -691,7 +691,7 @@ private:
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
     }
 
-    void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
+    void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult, 
         const NKqpProto::TKqpStatsCompile& compileStats, const TActorContext& ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"
@@ -701,16 +701,16 @@ private:
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult);
         responseEv->Stats.CopyFrom(compileStats);
-
-        if (responseEv->CompileResult && responseEv->CompileResult->PreparedQueryNewEngine) {
-            responseEv->ForceNewEnginePercent = Config.GetForceNewEnginePercent();
-            responseEv->ForceNewEngineLevel = Config.GetForceNewEngineLevel();
-        }
-
+ 
+        if (responseEv->CompileResult && responseEv->CompileResult->PreparedQueryNewEngine) { 
+            responseEv->ForceNewEnginePercent = Config.GetForceNewEnginePercent(); 
+            responseEv->ForceNewEngineLevel = Config.GetForceNewEngineLevel(); 
+        } 
+ 
         ctx.Send(sender, responseEv.Release());
     }
 
-    void ReplyFromCache(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
+    void ReplyFromCache(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult, 
         const TActorContext& ctx)
     {
         NKqpProto::TKqpStatsCompile stats;
@@ -719,13 +719,13 @@ private:
         Reply(sender, compileResult, stats, ctx);
     }
 
-    void ReplyError(const TActorId& sender, const TString& uid, Ydb::StatusIds::StatusCode status,
+    void ReplyError(const TActorId& sender, const TString& uid, Ydb::StatusIds::StatusCode status, 
         const TIssues& issues, const TActorContext& ctx)
     {
         Reply(sender, TKqpCompileResult::Make(uid, status, issues), NKqpProto::TKqpStatsCompile(), ctx);
     }
 
-    void ReplyInternalError(const TActorId& sender, const TString& uid, const TString& message,
+    void ReplyInternalError(const TActorId& sender, const TString& uid, const TString& message, 
         const TActorContext& ctx)
     {
         NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Internal error during query compilation.");
@@ -764,5 +764,5 @@ IActor* CreateKqpCompileService(const TTableServiceConfig& serviceConfig, const 
             std::move(queryReplayFactory));
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

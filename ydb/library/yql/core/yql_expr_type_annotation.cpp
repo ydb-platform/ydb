@@ -1783,12 +1783,12 @@ bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isO
     return IsDataOrOptionalOfData({}, typeAnnotation, isOptional, dataType, err, hasErrorType);
 }
 
-bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
-    bool isOptional;
-    const TDataExprType* dataType;
-    return IsDataOrOptionalOfData(typeAnnotation, isOptional, dataType);
-}
-
+bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) { 
+    bool isOptional; 
+    const TDataExprType* dataType; 
+    return IsDataOrOptionalOfData(typeAnnotation, isOptional, dataType); 
+} 
+ 
 bool EnsureArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx) {
     if (node.ChildrenSize() != expectedArgs) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expectedArgs << " argument(s), but got " <<

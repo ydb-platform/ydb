@@ -51,7 +51,7 @@ namespace NYql::NDqs {
 
     private:
         bool BuildReadStage(const TDqSettings::TPtr& settings, const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
-        void BuildConnections(const NNodes::TDqPhyStage& stage);
+        void BuildConnections(const NNodes::TDqPhyStage& stage); 
         THashMap<NDq::TStageId, std::tuple<TString,ui64>> BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);

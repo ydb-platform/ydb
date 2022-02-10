@@ -315,7 +315,7 @@ public:
         , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx))
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
-        , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
+        , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor)) 
         , PlanInfoTransformer(CreateKiSinkPlanInfoTransformer(queryExecutor))
     {
         Y_UNUSED(FunctionRegistry);
@@ -418,7 +418,7 @@ public:
     }
 
     bool CanExecute(const TExprNode& node) override {
-        if (node.IsCallable(TKiExecDataQuery::CallableName())) {
+        if (node.IsCallable(TKiExecDataQuery::CallableName())) { 
             return true;
         }
 
@@ -438,7 +438,7 @@ public:
         }
 
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
-            if (maybeRight.Input().Maybe<TKiExecDataQuery>()) {
+            if (maybeRight.Input().Maybe<TKiExecDataQuery>()) { 
                 return true;
             }
         }
@@ -661,16 +661,16 @@ public:
         return false;
     }
 
-    void GetInputs(const TExprNode&, TVector<TPinInfo>&) override {
+    void GetInputs(const TExprNode&, TVector<TPinInfo>&) override { 
     }
 
-    void GetOutputs(const TExprNode&, TVector<TPinInfo>&) override {
+    void GetOutputs(const TExprNode&, TVector<TPinInfo>&) override { 
     }
 
-    void WritePlanDetails(const TExprNode&, NYson::TYsonWriter&) override {
+    void WritePlanDetails(const TExprNode&, NYson::TYsonWriter&) override { 
     }
 
-    TString GetProviderPath(const TExprNode&) override {
+    TString GetProviderPath(const TExprNode&) override { 
         return TString(KikimrProviderName);
     }
 

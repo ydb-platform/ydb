@@ -1466,7 +1466,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     TPageCollectionTxEnv env(*PrivatePageCache);
 
     TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId);
-    txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
+    txc.NotEnoughMemory(seat->NotEnoughMemoryCount); 
 
     Database->Begin(Stamp(), env);
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
@@ -1503,7 +1503,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     seat->AttachedMemory = txc.ExtractMemoryToken();
     seat->RequestedMemory = txc.GetRequestedMemory();
     seat->CapturedMemory = txc.GetMemoryGCToken();
-    seat->NotEnoughMemoryCount = txc.GetNotEnoughMemoryCount();
+    seat->NotEnoughMemoryCount = txc.GetNotEnoughMemoryCount(); 
 
     if (seat->AttachedMemory)
         Counters->Cumulative()[TExecutorCounters::TX_MEM_ATTACHES].Increment(1);

@@ -10,5 +10,5 @@ import "ydb/public/api/protos/ydb_common.proto";
 
 message ExecQuerySettings {
     Ydb.FeatureFlag.Status strict_dml = 1;
-    reserved 2; // Ydb.FeatureFlag.Status use_new_engine = 2;
+    reserved 2; // Ydb.FeatureFlag.Status use_new_engine = 2; 
 }

@@ -12,7 +12,7 @@ namespace NKqp {
 enum class TKqpExecuteFlag : ui32 {
     Results  = 1 << 0,
     Commit   = 1 << 1,
-    Rollback = 1 << 2,
+    Rollback = 1 << 2, 
 };
 
 Y_DECLARE_FLAGS(TKqpExecuteFlags, TKqpExecuteFlag);
@@ -40,23 +40,23 @@ public:
     void Rewind() override;
 
 protected:
-    virtual TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) = 0;
-    virtual TStatus DoRollback() = 0;
+    virtual TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) = 0; 
+    virtual TStatus DoRollback() = 0; 
 
-    virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NYql::TExprContext& ctx, bool commit) = 0;
+    virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NYql::TExprContext& ctx, bool commit) = 0; 
 
 protected:
     NYql::NDq::TMkqlValueRef GetParamValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
 
     TKqpParamsMap PrepareParameters(const NKqpProto::TKqpPhyTx& tx);
 
-    void ClearTx();
-
+    void ClearTx(); 
+ 
 private:
-    TStatus Execute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx);
-    TStatus Rollback();
+    TStatus Execute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx); 
+    TStatus Rollback(); 
 
-    bool AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx);
+    bool AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx); 
 
     void PreserveParams(const NKqpProto::TKqpPhyTx& tx, TParamValueMap& paramsMap);
 
@@ -84,5 +84,5 @@ protected:
     std::shared_ptr<TTransformState> TransformState;
 };
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

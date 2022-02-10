@@ -307,19 +307,19 @@ public:
 
     void StartStreamingTx(ui64 txId, ui32 count) {
         ActiveStreamingTxs[txId] += count;
-    }
-
-    bool FinishStreamingTx(ui64 txId) {
-        if (auto it = ActiveStreamingTxs.find(txId); it != ActiveStreamingTxs.end()) {
-            it->second--;
-            if (it->second == 0) {
-                ActiveStreamingTxs.erase(it);
-            }
-            return true;
-        }
-        return false;
-    }
-
+    } 
+ 
+    bool FinishStreamingTx(ui64 txId) { 
+        if (auto it = ActiveStreamingTxs.find(txId); it != ActiveStreamingTxs.end()) { 
+            it->second--; 
+            if (it->second == 0) { 
+                ActiveStreamingTxs.erase(it); 
+            } 
+            return true; 
+        } 
+        return false; 
+    } 
+ 
     bool HasWaitingSchemeOps() const { return !WaitingSchemeOps.empty(); }
 
     bool AddWaitingSchemeOp(const TOperation::TPtr& op);
@@ -449,7 +449,7 @@ private:
     TOperation::TPtr NextActiveOp;
     // Slow operation profiles.
     TList<TStoredExecutionProfile> SlowOpProfiles;
-    TMap<ui64, ui32> ActiveStreamingTxs;
+    TMap<ui64, ui32> ActiveStreamingTxs; 
 
     typedef TList<TOperation::TPtr> TWaitingSchemeOpsOrder;
     typedef THashMap<TOperation::TPtr, TWaitingSchemeOpsOrder::iterator> TWaitingSchemeOps;

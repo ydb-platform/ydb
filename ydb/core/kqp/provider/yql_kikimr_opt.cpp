@@ -593,7 +593,7 @@ TExprNode::TPtr KiRewritePartialTakeSortOverSelectIndexRange(TExprBase node, con
     if (!CanPushPartialSort(maybePartialSort.Cast(), indexDesc, &sortByColumns)) {
         return node.Ptr();
     }
-
+ 
     auto filter = [&ctx, &node, &partialSort, &partialTake](const TExprBase& in) mutable {
         auto out = Build<TKiPartialTake>(ctx, node.Pos())
             .Input<TKiPartialSort>()
@@ -670,11 +670,11 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
             auto ret = inputNode;
             TExprBase node(inputNode);
 
-            ret = KiSqlInToEquiJoin(node, sessionCtx->Tables(), sessionCtx->Config(), ctx);
-            if (ret != inputNode) {
-                return ret;
-            }
-
+            ret = KiSqlInToEquiJoin(node, sessionCtx->Tables(), sessionCtx->Config(), ctx); 
+            if (ret != inputNode) { 
+                return ret; 
+            } 
+ 
             ret = KiApplyExtractMembersToSelectRange(node, ctx);
             if (ret != inputNode) {
                 return ret;
@@ -755,11 +755,11 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             if (auto maybeDatasink = node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
                 auto cluster = TString(maybeDatasink.Cast().Cluster());
                 auto useNewEngine = sessionCtx->Config().UseNewEngine.Get();
-                if (!useNewEngine.Defined() && sessionCtx->Config().HasKqpForceNewEngine()) {
-                    useNewEngine = true;
-                }
+                if (!useNewEngine.Defined() && sessionCtx->Config().HasKqpForceNewEngine()) { 
+                    useNewEngine = true; 
+                } 
 
-                ret = KiBuildQuery(node, useNewEngine, ctx);
+                ret = KiBuildQuery(node, useNewEngine, ctx); 
 
                 if (ret != inputNode) {
                     return ret;
@@ -768,7 +768,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
 
             if (sessionCtx->Config().HasDefaultCluster()) {
                 auto defaultCluster = sessionCtx->Config()._DefaultCluster.Get().GetRef();
-                ret = KiBuildResult(node, defaultCluster, ctx);
+                ret = KiBuildResult(node, defaultCluster, ctx); 
                 if (ret != inputNode) {
                     return ret;
                 }

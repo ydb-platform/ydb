@@ -4,13 +4,13 @@
 #include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-
+ 
 namespace NYql::NDq {
 
 IGraphTransformer::TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqPhyStage(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqOutput(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqCnResult(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx);
@@ -29,6 +29,6 @@ bool IsTypeSupportedInMergeCn(EDataSlot type);
 bool IsTypeSupportedInMergeCn(const TDataExprType* dataType);
 bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sortKeyTypes);
 
-TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
-
+TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx); 
+ 
 } // namespace NYql::NDq

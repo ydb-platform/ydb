@@ -260,8 +260,8 @@ const TString UnknownTaskName = "unknown";
 const TString TransactionTaskName = "transaction";
 const TString ScanTaskName = "scan";
 const TString BackgroundCompactionTaskName = "background_compaction";
-const TString KqpResourceManagerTaskName = "kqp_query";
-const TString KqpResourceManagerQueue = "queue_kqp_resource_manager";
+const TString KqpResourceManagerTaskName = "kqp_query"; 
+const TString KqpResourceManagerQueue = "queue_kqp_resource_manager"; 
 const TString LegacyQueueIdTaskNamePrefix = "compaction_gen";
 
 }}

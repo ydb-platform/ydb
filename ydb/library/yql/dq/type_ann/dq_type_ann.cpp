@@ -7,7 +7,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
-
+ 
 namespace NYql::NDq {
 
 using namespace NYql::NNodes;
@@ -20,8 +20,8 @@ const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext
 
     ui32 resultIndex;
     if (!TryFromString(output.Index().Value(), resultIndex)) {
-        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()),
-            TStringBuilder() << "Failed to convert to integer: " << output.Index().Value()));
+        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()), 
+            TStringBuilder() << "Failed to convert to integer: " << output.Index().Value())); 
         return nullptr;
     }
 
@@ -31,8 +31,8 @@ const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext
     }
 
     if (resultIndex >= stageResultTuple->GetSize()) {
-        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()),
-            TStringBuilder() << "Stage result index out of bounds: " << resultIndex));
+        ctx.AddError(TIssue(ctx.GetPosition(output.Pos()), 
+            TStringBuilder() << "Stage result index out of bounds: " << resultIndex)); 
         return nullptr;
     }
 
@@ -49,74 +49,74 @@ const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprC
 }
 
 template <typename TStage>
-TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) {
+TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) { 
+    if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) { 
         return TStatus::Error;
     }
 
-    auto* inputsTuple = stage->Child(TDqStageBase::idx_Inputs);
-    auto& programLambda = stage->ChildRef(TDqStageBase::idx_Program);
-    auto* settingsTuple = stage->Child(TDqPhyStage::idx_Settings);
-
-    if (!EnsureTuple(*inputsTuple, ctx)) {
+    auto* inputsTuple = stage->Child(TDqStageBase::idx_Inputs); 
+    auto& programLambda = stage->ChildRef(TDqStageBase::idx_Program); 
+    auto* settingsTuple = stage->Child(TDqPhyStage::idx_Settings); 
+ 
+    if (!EnsureTuple(*inputsTuple, ctx)) { 
         return TStatus::Error;
     }
 
     if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
-        if (!EnsureTuple(*settingsTuple, ctx)) {
+        if (!EnsureTuple(*settingsTuple, ctx)) { 
             return TStatus::Error;
         }
-        for (auto& setting: settingsTuple->Children()) {
-            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+        for (auto& setting: settingsTuple->Children()) { 
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) { 
                 return TStatus::Error;
             }
-            if (!EnsureAtom(*setting->Child(0), ctx)) {
+            if (!EnsureAtom(*setting->Child(0), ctx)) { 
                 return TStatus::Error;
             }
         }
     }
 
-    if (!EnsureLambda(*programLambda, ctx)) {
+    if (!EnsureLambda(*programLambda, ctx)) { 
         return TStatus::Error;
     }
 
-    if (!EnsureArgsCount(programLambda->Head(), inputsTuple->ChildrenSize(), ctx)) {
+    if (!EnsureArgsCount(programLambda->Head(), inputsTuple->ChildrenSize(), ctx)) { 
         return TStatus::Error;
     }
 
     TVector<const TTypeAnnotationNode*> argTypes;
-    argTypes.reserve(inputsTuple->ChildrenSize());
+    argTypes.reserve(inputsTuple->ChildrenSize()); 
 
-    for (const auto& input: inputsTuple->Children()) {
-        if (!TDqPhyPrecompute::Match(input.Get()) &&
-            !(TDqConnection::Match(input.Get()) && !TDqCnValue::Match(input.Get())) &&
-            !TDqSource::Match(input.Get()) &&
-            !(input->Content() == "KqpTxResultBinding"sv))
-        {
-            ctx.AddError(TIssue(TStringBuilder() << "Unexpected stage input " << input->Content()));
-            return TStatus::Error;
-        }
-
-        auto* argType = input->GetTypeAnn();
-        if (!TDqPhyPrecompute::Match(input.Get()) && input->Content() != "KqpTxResultBinding") {
-            if (argType->GetKind() == ETypeAnnotationKind::List) {
-                auto* listItemType = argType->Cast<TListExprType>()->GetItemType();
-                if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
-                    argType = ctx.MakeType<TStreamExprType>(listItemType);
-                } else {
-                    argType = ctx.MakeType<TFlowExprType>(listItemType);
-                }
+    for (const auto& input: inputsTuple->Children()) { 
+        if (!TDqPhyPrecompute::Match(input.Get()) && 
+            !(TDqConnection::Match(input.Get()) && !TDqCnValue::Match(input.Get())) && 
+            !TDqSource::Match(input.Get()) && 
+            !(input->Content() == "KqpTxResultBinding"sv)) 
+        { 
+            ctx.AddError(TIssue(TStringBuilder() << "Unexpected stage input " << input->Content())); 
+            return TStatus::Error; 
+        } 
+ 
+        auto* argType = input->GetTypeAnn(); 
+        if (!TDqPhyPrecompute::Match(input.Get()) && input->Content() != "KqpTxResultBinding") { 
+            if (argType->GetKind() == ETypeAnnotationKind::List) { 
+                auto* listItemType = argType->Cast<TListExprType>()->GetItemType(); 
+                if constexpr (std::is_same_v<TStage, TDqPhyStage>) { 
+                    argType = ctx.MakeType<TStreamExprType>(listItemType); 
+                } else { 
+                    argType = ctx.MakeType<TFlowExprType>(listItemType); 
+                } 
             }
-        }
+        } 
         argTypes.emplace_back(argType);
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(programLambda, argTypes, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(programLambda, argTypes, ctx)) { 
         return TStatus::Error;
     }
-
-    auto* resultType = programLambda->GetTypeAnn();
-    if (!resultType) {
+ 
+    auto* resultType = programLambda->GetTypeAnn(); 
+    if (!resultType) { 
         return TStatus::Repeat;
     }
 
@@ -130,7 +130,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             itemType = resultType->template Cast<TFlowExprType>()->GetItemType();
         } else if (resultType->GetKind() == ETypeAnnotationKind::Stream) {
             itemType = resultType->template Cast<TStreamExprType>()->GetItemType();
-        }
+        } 
         if (itemType) {
             if (itemType->GetKind() == ETypeAnnotationKind::Variant) {
                 auto variantType = itemType->Cast<TVariantExprType>()->GetUnderlyingType();
@@ -144,21 +144,21 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
                 resultTypesTuple.emplace_back(ctx.MakeType<TListExprType>(itemType));
             }
         } else {
-            YQL_ENSURE(resultType->GetKind() != ETypeAnnotationKind::List, "stage: " << stage->Dump());
+            YQL_ENSURE(resultType->GetKind() != ETypeAnnotationKind::List, "stage: " << stage->Dump()); 
             resultTypesTuple.emplace_back(resultType);
-        }
-    }
+        } 
+    } 
 
-    if (TDqStageBase::idx_Sinks < stage->ChildrenSize()) {
-        for (const auto& sink: stage->Child(TDqStageBase::idx_Sinks)->Children()) {
+    if (TDqStageBase::idx_Sinks < stage->ChildrenSize()) { 
+        for (const auto& sink: stage->Child(TDqStageBase::idx_Sinks)->Children()) { 
             sink->SetTypeAnn(resultType);
         }
     }
 
-    stage->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypesTuple));
+    stage->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypesTuple)); 
     return TStatus::Ok;
-}
-
+} 
+ 
 THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>
 ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) {
     THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result;
@@ -187,7 +187,7 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
     return result;
 }
 
-template <bool IsMapJoin>
+template <bool IsMapJoin> 
 const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType,
     const TStringBuf& leftLabel, const TStructExprType& rightRowType, const TStringBuf& rightLabel,
     const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
@@ -212,12 +212,12 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         return nullptr;
     }
 
-    if constexpr (IsMapJoin) {
-        if (joinType.StartsWith("Right") || joinType == "Cross") {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                << "Unsupported map join type: " << joinType));
-            return nullptr;
-        }
+    if constexpr (IsMapJoin) { 
+        if (joinType.StartsWith("Right") || joinType == "Cross") { 
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
+                << "Unsupported map join type: " << joinType)); 
+            return nullptr; 
+        } 
     }
 
     // check join keys
@@ -281,10 +281,10 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     };
 
     TVector<const TItemExprType*> resultStructItems;
-    if (joinType != "RightOnly" && joinType != "RightSemi") {
-        addAllMembersFrom(leftType, &resultStructItems, joinType == "Right");
-    }
-    if (joinType != "LeftOnly" && joinType != "LeftSemi") {
+    if (joinType != "RightOnly" && joinType != "RightSemi") { 
+        addAllMembersFrom(leftType, &resultStructItems, joinType == "Right"); 
+    } 
+    if (joinType != "LeftOnly" && joinType != "LeftSemi") { 
         addAllMembersFrom(rightType, &resultStructItems, joinType == "Left");
     }
 
@@ -292,7 +292,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     return rowType;
 }
 
-template <bool IsMapJoin>
+template <bool IsMapJoin> 
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
     if (!EnsureArgsCount(*input, 6, ctx)) {
         return nullptr;
@@ -368,8 +368,8 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
 
-    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
-        rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
+    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType, 
+        rightTableLabel, join.JoinType(), join.JoinKeys(), ctx); 
 }
 
 TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -386,13 +386,13 @@ TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    auto* cn = node->Child(TDqPhyPrecompute::idx_Connection);
-    if (!TDqConnection::Match(cn)) {
-        ctx.AddError(TIssue(ctx.GetPosition(cn->Pos()), TStringBuilder() << "Expected DqConnection, got " << cn->Content()));
+    auto* cn = node->Child(TDqPhyPrecompute::idx_Connection); 
+    if (!TDqConnection::Match(cn)) { 
+        ctx.AddError(TIssue(ctx.GetPosition(cn->Pos()), TStringBuilder() << "Expected DqConnection, got " << cn->Content())); 
         return TStatus::Error;
     }
 
-    node->SetTypeAnn(cn->GetTypeAnn());
+    node->SetTypeAnn(cn->GetTypeAnn()); 
     return TStatus::Ok;
 }
 
@@ -522,21 +522,21 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
+TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) { 
     if (!EnsureArgsCount(*input, 2, ctx)) {
         return TStatus::Error;
     }
 
-    if (!EnsureCallable(*input->Child(TDqCnHashShuffle::idx_Output), ctx)) {
+    if (!EnsureCallable(*input->Child(TDqCnHashShuffle::idx_Output), ctx)) { 
         return TStatus::Error;
     }
 
-    if (!TDqOutput::Match(input->Child(TDqCnHashShuffle::idx_Output))) {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Child(TDqCnHashShuffle::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+    if (!TDqOutput::Match(input->Child(TDqCnHashShuffle::idx_Output))) { 
+        ctx.AddError(TIssue(ctx.GetPosition(input->Child(TDqCnHashShuffle::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName())); 
         return TStatus::Error;
     }
 
-    if (!EnsureTupleMinSize(*input->Child(TDqCnHashShuffle::idx_KeyColumns), 1, ctx)) {
+    if (!EnsureTupleMinSize(*input->Child(TDqCnHashShuffle::idx_KeyColumns), 1, ctx)) { 
         return TStatus::Error;
     }
 
@@ -551,7 +551,7 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
     }
 
     auto structType = itemType->Cast<TStructExprType>();
-    for (const auto& column: input->Child(TDqCnHashShuffle::idx_KeyColumns)->Children()) {
+    for (const auto& column: input->Child(TDqCnHashShuffle::idx_KeyColumns)->Children()) { 
         if (!EnsureAtom(*column, ctx)) {
             return TStatus::Error;
         }
@@ -566,19 +566,19 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqCnValue(const TExprNode::TPtr& cnValue, TExprContext& ctx) {
-    if (!EnsureArgsCount(*cnValue, 1, ctx)) {
+TStatus AnnotateDqCnValue(const TExprNode::TPtr& cnValue, TExprContext& ctx) { 
+    if (!EnsureArgsCount(*cnValue, 1, ctx)) { 
         return TStatus::Error;
     }
 
-    auto& output = cnValue->ChildRef(TDqCnValue::idx_Output);
-    if (!TDqOutput::Match(output.Get())) {
-        ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName()
-            << ", got " << output->Content()));
+    auto& output = cnValue->ChildRef(TDqCnValue::idx_Output); 
+    if (!TDqOutput::Match(output.Get())) { 
+        ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName() 
+            << ", got " << output->Content())); 
         return TStatus::Error;
     }
 
-    auto* resultType = GetDqOutputType(TDqOutput(output), ctx);
+    auto* resultType = GetDqOutputType(TDqOutput(output), ctx); 
     if (!resultType) {
         return TStatus::Error;
     }
@@ -588,7 +588,7 @@ TStatus AnnotateDqCnValue(const TExprNode::TPtr& cnValue, TExprContext& ctx) {
         outputType = resultType->Cast<TListExprType>()->GetItemType();
     }
 
-    cnValue->SetTypeAnn(outputType);
+    cnValue->SetTypeAnn(outputType); 
     return TStatus::Ok;
 }
 
@@ -674,7 +674,7 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto resultRowType = GetDqJoinResultType<false>(input, false, ctx);
+    auto resultRowType = GetDqJoinResultType<false>(input, false, ctx); 
     if (!resultRowType) {
         return TStatus::Error;
     }
@@ -684,7 +684,7 @@ TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto resultRowType = GetDqJoinResultType<true>(input, true, ctx);
+    auto resultRowType = GetDqJoinResultType<true>(input, true, ctx); 
     if (!resultRowType) {
         return TStatus::Error;
     }
@@ -694,7 +694,7 @@ TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx)
 }
 
 TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto resultRowType = GetDqJoinResultType<false>(input, true, ctx);
+    auto resultRowType = GetDqJoinResultType<false>(input, true, ctx); 
     if (!resultRowType) {
         return TStatus::Error;
     }
@@ -773,11 +773,11 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
     return CreateFunctorTransformer(
-        [coreTransformer](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        [coreTransformer](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
             output = input;
             TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] {
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "At function: " << input->Content());
+                    TStringBuilder() << "At function: " << input->Content()); 
             });
 
             if (TDqStage::Match(input.Get())) {
@@ -786,8 +786,8 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyStage::Match(input.Get())) {
                 return AnnotateDqPhyStage(input, ctx);
-            }
-
+            } 
+ 
             if (TDqOutput::Match(input.Get())) {
                 return AnnotateDqOutput(input, ctx);
             }
@@ -796,8 +796,8 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqConnection(input, ctx);
             }
 
-            if (TDqCnHashShuffle::Match(input.Get())) {
-                return AnnotateDqCnHashShuffle(input, ctx);
+            if (TDqCnHashShuffle::Match(input.Get())) { 
+                return AnnotateDqCnHashShuffle(input, ctx); 
             }
 
             if (TDqCnMap::Match(input.Get())) {
@@ -822,8 +822,8 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
-            }
-
+            } 
+ 
             if (TDqJoin::Match(input.Get())) {
                 return AnnotateDqJoin(input, ctx);
             }
@@ -916,24 +916,24 @@ bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sort
     return true;
 }
 
-TString PrintDqStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
-    if (stage.Inputs().Empty()) {
-        return NCommon::ExprToPrettyString(ctx, stage.Ref());
-    }
-
-    TNodeOnNodeOwnedMap replaces;
-    for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
-        auto input = stage.Inputs().Item(i);
-        auto param = Build<NNodes::TCoParameter>(ctx, input.Pos())
-            .Name().Build(TStringBuilder() << "stage_input_" << i)
-            .Type(ExpandType(input.Pos(), *input.Ref().GetTypeAnn(), ctx))
-            .Done();
-
-        replaces[input.Raw()] = param.Ptr();
-    }
-
-    auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces);
-    return NCommon::ExprToPrettyString(ctx, *newStage);
-}
-
+TString PrintDqStageOnly(const TDqStageBase& stage, TExprContext& ctx) { 
+    if (stage.Inputs().Empty()) { 
+        return NCommon::ExprToPrettyString(ctx, stage.Ref()); 
+    } 
+ 
+    TNodeOnNodeOwnedMap replaces; 
+    for (ui64 i = 0; i < stage.Inputs().Size(); ++i) { 
+        auto input = stage.Inputs().Item(i); 
+        auto param = Build<NNodes::TCoParameter>(ctx, input.Pos()) 
+            .Name().Build(TStringBuilder() << "stage_input_" << i) 
+            .Type(ExpandType(input.Pos(), *input.Ref().GetTypeAnn(), ctx)) 
+            .Done(); 
+ 
+        replaces[input.Raw()] = param.Ptr(); 
+    } 
+ 
+    auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces); 
+    return NCommon::ExprToPrettyString(ctx, *newStage); 
+} 
+ 
 } // namespace NYql::NDq

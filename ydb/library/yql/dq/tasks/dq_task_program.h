@@ -13,7 +13,7 @@ const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext
 
 TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsType,
                      const NCommon::IMkqlCallableCompiler& compiler, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-                     const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, TExprContext& exprCtx,
-                     const TVector<NNodes::TExprBase>& reads);
+                     const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, TExprContext& exprCtx, 
+                     const TVector<NNodes::TExprBase>& reads); 
 
 } // namespace NYql::NDq

@@ -28,18 +28,18 @@ public:
         StoredBytes += space;
         StoredRows += batch.size();
 
-        auto& stats = MutableBasicStats();
-        stats.Chunks++;
-        stats.Bytes += space;
-        stats.RowsIn += batch.size();
-        if (!stats.FirstRowTs) {
-            stats.FirstRowTs = TInstant::Now();
+        auto& stats = MutableBasicStats(); 
+        stats.Chunks++; 
+        stats.Bytes += space; 
+        stats.RowsIn += batch.size(); 
+        if (!stats.FirstRowTs) { 
+            stats.FirstRowTs = TInstant::Now(); 
         }
 
-        if (auto* profile = MutableProfileStats()) {
-            profile->MaxMemoryUsage = std::max(profile->MaxMemoryUsage, StoredBytes);
-        }
-
+        if (auto* profile = MutableProfileStats()) { 
+            profile->MaxMemoryUsage = std::max(profile->MaxMemoryUsage, StoredBytes); 
+        } 
+ 
         Batches.emplace_back(std::move(batch));
     }
 
@@ -81,12 +81,12 @@ public:
             Batches.clear();
         }
 
-        MutableBasicStats().RowsOut += batch.size();
+        MutableBasicStats().RowsOut += batch.size(); 
         return true;
     }
 
     void Finish() override {
-        Finished = true;
+        Finished = true; 
     }
 
     bool IsFinished() const override {
@@ -97,14 +97,14 @@ public:
         return InputType;
     }
 
-    auto& MutableBasicStats() {
-        return static_cast<TDerived*>(this)->BasicStats;
+    auto& MutableBasicStats() { 
+        return static_cast<TDerived*>(this)->BasicStats; 
     }
 
-    auto* MutableProfileStats() {
-        return static_cast<TDerived*>(this)->ProfileStats;
-    }
-
+    auto* MutableProfileStats() { 
+        return static_cast<TDerived*>(this)->ProfileStats; 
+    } 
+ 
     void Pause() override {
         Y_VERIFY(!IsPaused());
         if (!Finished) {

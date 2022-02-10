@@ -7,17 +7,17 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpParams) {
-    Y_UNIT_TEST_NEW_ENGINE(RowsList) {
+    Y_UNIT_TEST_NEW_ENGINE(RowsList) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto query = session.PrepareDataQuery(Q1_(R"(
-            DECLARE $rows AS List<Struct<Group: Uint32?, Name: String?, Amount: Uint64?, Comment: String?>>;
+        auto query = session.PrepareDataQuery(Q1_(R"( 
+            DECLARE $rows AS List<Struct<Group: Uint32?, Name: String?, Amount: Uint64?, Comment: String?>>; 
 
-            UPSERT INTO `/Root/Test`
+            UPSERT INTO `/Root/Test` 
             SELECT Group, Name, Amount FROM AS_TABLE($rows);
-        )")).ExtractValueSync().GetQuery();
+        )")).ExtractValueSync().GetQuery(); 
 
         auto params = query.GetParamsBuilder()
             .AddParam("$rows")
@@ -45,9 +45,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             std::move(params)).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/Test` WHERE Group = 137;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        result = session.ExecuteDataQuery(Q_(R"( 
+            SELECT * FROM `/Root/Test` WHERE Group = 137; 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
         UNIT_ASSERT(result.IsSuccess());
 
         CompareYson(R"([
@@ -67,14 +67,14 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 .Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        auto result = session.ExecuteDataQuery(Q_(R"( 
             DECLARE $group AS Uint32;
             DECLARE $name AS String;
 
             SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync(); 
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(BadParameterType) {
@@ -91,14 +91,14 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 .Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
             DECLARE $group AS Uint32;
             DECLARE $name AS String;
 
             SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync(); 
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString()); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(DefaultParameterValue) {
@@ -112,12 +112,12 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 .Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $value1 AS Uint32?;
-            DECLARE $value2 AS String?;
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
+            DECLARE $value1 AS Uint32?; 
+            DECLARE $value2 AS String?; 
 
             SELECT $value1, $value2;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync(); 
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[11u];#]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 .Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"(
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
             DECLARE $ParamBool AS Bool;
             DECLARE $ParamByte AS Uint8;
             DECLARE $ParamInt32 AS Int32;
@@ -197,12 +197,12 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             DECLARE $ParamTimestamp AS Timestamp;
             DECLARE $ParamInterval AS Interval;
 
-            DECLARE $ParamOpt AS String?;
-            DECLARE $ParamTuple AS Tuple<Utf8, Int32>;
-            DECLARE $ParamList AS List<Uint64>;
-            DECLARE $ParamEmptyList AS List<Uint64>;
-            DECLARE $ParamStruct AS Struct<Name:Utf8,Value:Int64>;
-            DECLARE $ParamDict AS Dict<String,Uint32>;
+            DECLARE $ParamOpt AS String?; 
+            DECLARE $ParamTuple AS Tuple<Utf8, Int32>; 
+            DECLARE $ParamList AS List<Uint64>; 
+            DECLARE $ParamEmptyList AS List<Uint64>; 
+            DECLARE $ParamStruct AS Struct<Name:Utf8,Value:Int64>; 
+            DECLARE $ParamDict AS Dict<String,Uint32>; 
 
             SELECT
                 $ParamBool AS ValueBool,
@@ -227,23 +227,23 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 $ParamEmptyList AS ValueEmptyList,
                 $ParamStruct AS ValueStruct,
                 $ParamDict AS ValueDict;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync(); 
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto actual = ReformatYson(FormatResultSetYson(result.GetResultSet(0)));
-        auto expected1 = ReformatYson(R"([[
-            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u;
-            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
-            [["Key2";20u];["Key1";10u]]
-        ]])");
-        auto expected2 = ReformatYson(R"([[
-            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u;
-            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
-            [["Key1";10u];["Key2";20u]]
-        ]])");
-
-        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected: " << expected1 << ", got: " << actual);
+ 
+        auto actual = ReformatYson(FormatResultSetYson(result.GetResultSet(0))); 
+        auto expected1 = ReformatYson(R"([[ 
+            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u; 
+            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5]; 
+            [["Key2";20u];["Key1";10u]] 
+        ]])"); 
+        auto expected2 = ReformatYson(R"([[ 
+            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u; 
+            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5]; 
+            [["Key1";10u];["Key2";20u]] 
+        ]])"); 
+ 
+        UNIT_ASSERT_C(actual == expected1 || actual == expected2, "expected: " << expected1 << ", got: " << actual); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(InvalidJson) {
@@ -286,5 +286,5 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     }
 }
 
-} // namespace NKqp
+} // namespace NKqp 
 } // namespace NKikimr

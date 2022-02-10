@@ -755,13 +755,13 @@ namespace {
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
 
-        case ETypeAnnotationKind::Flow:
-        {
+        case ETypeAnnotationKind::Flow: 
+        { 
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Flow"), pool);
-            auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TFlowExprType>()->GetItemType(), pool, refAtoms);
-            return TAstNode::NewList(TPosition(), pool, self, itemType);
+            auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TFlowExprType>()->GetItemType(), pool, refAtoms); 
+            return TAstNode::NewList(TPosition(), pool, self, itemType); 
         }
-
+ 
         case ETypeAnnotationKind::Multi:
         {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool);
@@ -774,18 +774,18 @@ namespace {
             return TAstNode::NewList(TPosition(), children.data(), children.size(), pool);
         }
 
-        case ETypeAnnotationKind::EmptyList:
+        case ETypeAnnotationKind::EmptyList: 
         {
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyList"), pool);
         }
-        case ETypeAnnotationKind::EmptyDict:
+        case ETypeAnnotationKind::EmptyDict: 
         {
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyDict"), pool);
         }
-        case ETypeAnnotationKind::LastType:
-            YQL_ENSURE(false, "Unknown kind: " << annotation.GetKind());
-
-        }
+        case ETypeAnnotationKind::LastType: 
+            YQL_ENSURE(false, "Unknown kind: " << annotation.GetKind()); 
+ 
+        } 
     }
 
     TAstNode* AnnotateAstNode(TAstNode* node, const TExprNode* exprNode, ui32 flags, TMemoryPool& pool, bool refAtoms) {
@@ -2565,26 +2565,26 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
     return NewLambda(outer.Pos(), NewArguments(inner.Head().Pos(), std::move(newArgNodes)), std::move(newBody));
 }
 
-TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones,
+TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones, 
     bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier)
-{
+{ 
     const auto ins = deepClones.emplace(&node, nullptr);
     if (ins.second) {
         TExprNode::TListType children;
         children.reserve(node.ChildrenSize());
-
-        if (customCopier && customCopier(node, children)) {
-        } else {
-            node.ForEachChild([&](const TExprNode& child) {
+ 
+        if (customCopier && customCopier(node, children)) { 
+        } else { 
+            node.ForEachChild([&](const TExprNode& child) { 
                 children.emplace_back(DeepCopy(child, nodeCtx, deepClones, internStrings, copyTypes, copyResult, customCopier));
-            });
-        }
-
+            }); 
+        } 
+ 
         ++NodeAllocationCounter;
-        auto newNode = TExprNode::NewNode(AppendPosition(nodeCtx.GetPosition(node.Pos())), node.Type(),
-            std::move(children), internStrings ? AppendString(node.Content()) : node.Content(), node.Flags(),
-            AllocateNextUniqueId());
-
+        auto newNode = TExprNode::NewNode(AppendPosition(nodeCtx.GetPosition(node.Pos())), node.Type(), 
+            std::move(children), internStrings ? AppendString(node.Content()) : node.Content(), node.Flags(), 
+            AllocateNextUniqueId()); 
+ 
         if (copyTypes && node.GetTypeAnn()) {
             newNode->SetTypeAnn(node.GetTypeAnn());
         }

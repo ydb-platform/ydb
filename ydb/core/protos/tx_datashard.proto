@@ -112,18 +112,18 @@ message TReadTableTransaction {
     optional uint64 SnapshotTxId = 6;
 }
 
-message TKqpLocks {
+message TKqpLocks { 
     repeated TLock Locks = 1;
-    repeated uint64 SendingShards = 2;   // empty at Erase
-    repeated uint64 ReceivingShards = 3; // empty at Erase
-
-    enum ELocksOp {
-        Unspecified = 0;
-        Validate = 1;
-        ValidateAndErase = 2;
-        Erase = 3;
-    }
-    optional ELocksOp Op = 4;
+    repeated uint64 SendingShards = 2;   // empty at Erase 
+    repeated uint64 ReceivingShards = 3; // empty at Erase 
+ 
+    enum ELocksOp { 
+        Unspecified = 0; 
+        Validate = 1; 
+        ValidateAndErase = 2; 
+        Erase = 3; 
+    } 
+    optional ELocksOp Op = 4; 
 }
 
 message TKqpValidateLocksResult {
@@ -144,83 +144,83 @@ enum EScanDataFormat {
 }
 
 message TKqpTransaction {
-    message TColumnMeta {
-        optional uint32 Id = 1;
-        optional string Name = 2;
-        optional uint32 Type = 3;
-    }
-
-    message TTableKeyRange {
-        // ordered lists of non-intersecting ranges and points
-        repeated NKikimrTx.TKeyRange KeyRanges = 1;
-        repeated bytes KeyPoints = 2;
-    }
-
-    message TTableMeta {
-        optional TTableId TableId = 1;
-        optional string TablePath = 2;
-        optional uint64 SchemaVersion = 3;
-        // reserved 4
-        optional string SysViewInfo = 5;
+    message TColumnMeta { 
+        optional uint32 Id = 1; 
+        optional string Name = 2; 
+        optional uint32 Type = 3; 
+    } 
+ 
+    message TTableKeyRange { 
+        // ordered lists of non-intersecting ranges and points 
+        repeated NKikimrTx.TKeyRange KeyRanges = 1; 
+        repeated bytes KeyPoints = 2; 
+    } 
+ 
+    message TTableMeta { 
+        optional TTableId TableId = 1; 
+        optional string TablePath = 2; 
+        optional uint64 SchemaVersion = 3; 
+        // reserved 4 
+        optional string SysViewInfo = 5; 
         optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind
-    }
-
-    // Data-query task meta
-    message TDataTaskMeta {
-        // key range - can be either explicit full datashard range or ordered list of non-intersecting ranges
-        message TKeyRange {
-            oneof Kind {
-                NKikimrTx.TKeyRange FullRange = 1;
-                TTableKeyRange Ranges = 2;
-            }
-        }
-
-        // single Read operation (== single ReadTable callable)
-        message TReadOpMeta {
-            repeated TColumnMeta Columns = 1;
-            optional TKeyRange Range = 2;
-            optional uint64 ItemsLimit = 3;
-            optional bool Reverse = 4;
-        }
-
-        message TWriteOpMeta {
-            optional TKeyRange Range = 1;
-        }
-
-        optional TTableMeta Table = 1;
-        repeated TReadOpMeta Reads = 2;   // if not set/empty -> no reads
-        optional TWriteOpMeta Writes = 3; // if not set -> no writes
-    };
-
-     // Scan-query task meta
-     message TScanTaskMeta {
-         // represents single scan instance over the specified table, with given limit and ordering
-         // can cover multiple datashards
-         message TReadOpMeta {
-             // shard id hint, may change (split, merge, kick, ...)
-             optional uint64 ShardId = 1;
-             // ordered list of non-intersecting ranges (not adjacent), with points (`To` is empty and `ToInclusive` is true)
-             repeated NKikimrTx.TKeyRange KeyRanges = 2;
-         }
-
-         optional TTableMeta Table = 1;
-         repeated TColumnMeta Columns = 2;
-         repeated uint32 KeyColumnTypes = 3; // for debug logs only
-         repeated bool SkipNullKeys = 4;
-         repeated TReadOpMeta Reads = 5;
+    } 
+ 
+    // Data-query task meta 
+    message TDataTaskMeta { 
+        // key range - can be either explicit full datashard range or ordered list of non-intersecting ranges 
+        message TKeyRange { 
+            oneof Kind { 
+                NKikimrTx.TKeyRange FullRange = 1; 
+                TTableKeyRange Ranges = 2; 
+            } 
+        } 
+ 
+        // single Read operation (== single ReadTable callable) 
+        message TReadOpMeta { 
+            repeated TColumnMeta Columns = 1; 
+            optional TKeyRange Range = 2; 
+            optional uint64 ItemsLimit = 3; 
+            optional bool Reverse = 4; 
+        } 
+ 
+        message TWriteOpMeta { 
+            optional TKeyRange Range = 1; 
+        } 
+ 
+        optional TTableMeta Table = 1; 
+        repeated TReadOpMeta Reads = 2;   // if not set/empty -> no reads 
+        optional TWriteOpMeta Writes = 3; // if not set -> no writes 
+    }; 
+ 
+     // Scan-query task meta 
+     message TScanTaskMeta { 
+         // represents single scan instance over the specified table, with given limit and ordering 
+         // can cover multiple datashards 
+         message TReadOpMeta { 
+             // shard id hint, may change (split, merge, kick, ...) 
+             optional uint64 ShardId = 1; 
+             // ordered list of non-intersecting ranges (not adjacent), with points (`To` is empty and `ToInclusive` is true) 
+             repeated NKikimrTx.TKeyRange KeyRanges = 2; 
+         } 
+ 
+         optional TTableMeta Table = 1; 
+         repeated TColumnMeta Columns = 2; 
+         repeated uint32 KeyColumnTypes = 3; // for debug logs only 
+         repeated bool SkipNullKeys = 4; 
+         repeated TReadOpMeta Reads = 5; 
          optional uint64 ItemsLimit = 6;
          optional bool Reverse = 7;
          reserved 8; // optional bytes ProcessProgram = 8;
          optional EScanDataFormat DataFormat = 9;
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
-    }
-
+    } 
+ 
     optional EKqpTransactionType Type = 1;
     repeated NYql.NDqProto.TDqTask Tasks = 2;
-    optional TKqpLocks Locks = 3;
-
-    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4;
-    reserved 5;
+    optional TKqpLocks Locks = 3; 
+ 
+    optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4; 
+    reserved 5; 
 
     optional NKikimrKqp.TKqpSnapshot Snapshot = 6;
 }
@@ -231,12 +231,12 @@ message TKqpTaskInfo {
 }
 
 message TKqpReply {
-    repeated NYql.NDqProto.TChannelData Outputs = 1;
+    repeated NYql.NDqProto.TChannelData Outputs = 1; 
     repeated TKqpTaskInfo Tasks = 2;
 }
 
 message TKqpReadset {
-    repeated NYql.NDqProto.TChannelData Outputs = 1;
+    repeated NYql.NDqProto.TChannelData Outputs = 1; 
     optional TKqpValidateLocksResult ValidateLocksResult = 2;
 }
 
@@ -579,8 +579,8 @@ message TEvProposeTransactionResult {
     optional NKikimrQueryStats.TTxStats TxStats = 23;
     optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...)
     optional bytes DataLastKey = 25; // Response data last key (for retries)
-    reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
-    optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics
+    reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26; 
+    optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics 
 }
 
 message TEvProposeTransactionRestart {
@@ -1385,9 +1385,9 @@ message TEvKqpScan {
     repeated bool SkipNullKeys = 8;
     repeated NKikimrTx.TKeyRange Ranges = 9;
     optional NKikimrKqp.TKqpSnapshot Snapshot = 10;
-    reserved 11; // optional NKqpProto.EKqpStatsMode StatsMode = 11;
+    reserved 11; // optional NKqpProto.EKqpStatsMode StatsMode = 11; 
     optional uint64 TimeoutMs = 12;
-    optional uint32 Generation = 13;
+    optional uint32 Generation = 13; 
     // Seralized OlapProgram in old format without parameters
     reserved 14;
     optional uint64 ItemsLimit = 15;
@@ -1577,7 +1577,7 @@ message TEvReadCancel {
 message TEvApplyReplicationChanges {
     message TUpdates {
         // Column tags
-        repeated uint32 Tags = 1;
+        repeated uint32 Tags = 1; 
         // Serialized values (TSerializedCellVec)
         optional bytes Data = 2;
     }

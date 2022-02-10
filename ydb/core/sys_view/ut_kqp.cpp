@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[4u];[0u];["/Root/Table0"]]
+                [[4u];[0u];["/Root/Table0"]] 
             ])", NKqp::StreamResultToYson(it));
         }
         {
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[5u];[0u];["/Root/Tenant1/Table1"]]
+                [[5u];[0u];["/Root/Tenant1/Table1"]] 
             ])", NKqp::StreamResultToYson(it));
         }
         {
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[6u];[0u];["/Root/Tenant2/Table2"]]
+                [[6u];[0u];["/Root/Tenant2/Table2"]] 
             ])", NKqp::StreamResultToYson(it));
         }
     }
@@ -273,8 +273,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
 
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG); 
+ 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {

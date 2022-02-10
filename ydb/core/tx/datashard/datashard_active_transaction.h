@@ -196,9 +196,9 @@ public:
     }
 
     const NKikimrTxDataShard::TKqpTransaction &GetKqpTransaction() const { return Tx.GetKqpTransaction(); }
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& GetKqpTasks() const;
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpTasksRunner(Tx.GetKqpTransaction()); }
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& GetKqpTasks() const; 
+    NKqp::TKqpTasksRunner& GetKqpTasksRunner() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpTasksRunner(Tx.GetKqpTransaction()); } 
+    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); } 
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
@@ -419,13 +419,13 @@ public:
     // out-of-order stuff
 
     ui32 ExtractKeys() {
-        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
+        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx())) 
             return DataTx->ExtractKeys(false);
         return 0;
     }
 
     bool ReValidateKeys() {
-        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
+        if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx())) 
             return DataTx->ReValidateKeys();
         return true;
     }

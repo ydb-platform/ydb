@@ -4,10 +4,10 @@
 
 namespace NYql::NDq {
 
-class TDqComputeContextBase : private TNonCopyable {
-public:
-    virtual ~TDqComputeContextBase() = default;
-};
+class TDqComputeContextBase : private TNonCopyable { 
+public: 
+    virtual ~TDqComputeContextBase() = default; 
+}; 
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetDqBaseComputeFactory(const TDqComputeContextBase* computeCtx);
 

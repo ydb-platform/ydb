@@ -95,7 +95,7 @@ public:
         IDqGateway::TResult result;
         NDqProto::TDqTask task;
         task.SetId(0);
-        task.SetStageId(0);
+        task.SetStageId(0); 
 
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
@@ -134,17 +134,17 @@ public:
         settings.SecureParams = secureParams;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
-        settings.AllowGeneratorsInUnboxedValues = true;
-        auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
+        settings.AllowGeneratorsInUnboxedValues = true; 
+        auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {}); 
 
-        {
-            auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
-            runner->Prepare(task, limits);
-        }
-
+        { 
+            auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0)); 
+            runner->Prepare(task, limits); 
+        } 
+ 
         TVector<NDqProto::TData> rows;
         {
-            auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
+            auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0)); 
             YQL_LOG(DEBUG) << " NDq::ERunStatus " << runner->Run();
 
             NDq::ERunStatus status;
@@ -211,7 +211,7 @@ private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
-        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false), "Build-Phy");
+        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false), "Build-Phy"); 
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(), "Rewrite-Phy-Callables");
     }
 

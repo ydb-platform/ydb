@@ -14,8 +14,8 @@ namespace NMiniKQL {
 using namespace NTable;
 using namespace NUdf;
 
-namespace {
-
+namespace { 
+ 
 void ValidateKeyType(const TType* keyType, const std::pair<NScheme::TTypeId, TString>& keyColumn) {
     auto type = keyType;
 
@@ -192,7 +192,7 @@ void CreateRangePoints(ui64 localTid, const TSerializedTableRange& serializedTab
     ConvertTableKeys(computeCtx.Database->GetScheme(), tableInfo, tableRange.To, to, nullptr);
 }
 
-template <bool IsReverse>
+template <bool IsReverse> 
 class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> {
 public:
     TKqpWideReadTableWrapperBase(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
@@ -202,9 +202,9 @@ public:
         , TypeEnv(typeEnv)
         , SystemColumnTags(systemColumnTags)
         , SkipNullKeys(skipNullKeys)
-        , ShardTableStats(ComputeCtx.GetDatashardCounters())
+        , ShardTableStats(ComputeCtx.GetDatashardCounters()) 
         , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId())) {
-    }
+    } 
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         return this->ReadValue(ctx, output);
@@ -223,20 +223,20 @@ protected:
     EFetchResult ReadNext(NUdf::TUnboxedValue* const* output) const {
         bool breakLocks = false;
         while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-            if (!breakLocks && (breakLocks = bool(Iterator->Stats.InvisibleRowSkips))) {
+            if (!breakLocks && (breakLocks = bool(Iterator->Stats.InvisibleRowSkips))) { 
                 ComputeCtx.BreakSetLocks();
-            }
+            } 
             TDbTupleRef rowKey = Iterator->GetKey();
 
-            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
-
-            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            ShardTableStats.InvisibleRowSkips +=  invisibleRowSkips;
-
-            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            TaskTableStats.InvisibleRowSkips +=  invisibleRowSkips;
-
+            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0); 
+            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0); 
+ 
+            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+            ShardTableStats.InvisibleRowSkips +=  invisibleRowSkips; 
+ 
+            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+            TaskTableStats.InvisibleRowSkips +=  invisibleRowSkips; 
+ 
             Y_VERIFY(SkipNullKeys.size() <= rowKey.ColumnCount);
             bool skipRow = false;
             for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
@@ -279,35 +279,35 @@ protected:
                 }
             }
 
-            if (Remains) {
-                Remains = *Remains - 1;
-            }
-
-            ShardTableStats.SelectRangeRows++;
-            ShardTableStats.SelectRangeBytes += rowSize;
-
-            TaskTableStats.SelectRangeRows++;
-            TaskTableStats.SelectRangeBytes += rowSize;
-
+            if (Remains) { 
+                Remains = *Remains - 1; 
+            } 
+ 
+            ShardTableStats.SelectRangeRows++; 
+            ShardTableStats.SelectRangeBytes += rowSize; 
+ 
+            TaskTableStats.SelectRangeRows++; 
+            TaskTableStats.SelectRangeBytes += rowSize; 
+ 
             return EFetchResult::One;
         }
 
-        if (!breakLocks && bool(Iterator->Stats.InvisibleRowSkips)) {
+        if (!breakLocks && bool(Iterator->Stats.InvisibleRowSkips)) { 
             ComputeCtx.BreakSetLocks();
-        }
+        } 
 
-        auto deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-        auto invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
+        auto deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0); 
+        auto invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0); 
 
-        ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-        ShardTableStats.InvisibleRowSkips += invisibleRowSkips;
-
-        TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-        TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
-
+        ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+        ShardTableStats.InvisibleRowSkips += invisibleRowSkips; 
+ 
+        TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips; 
+        TaskTableStats.InvisibleRowSkips += invisibleRowSkips; 
+ 
         if (Iterator->Last() == NTable::EReady::Page) {
-            ComputeCtx.SetTabletNotReady();
-            return EFetchResult::Yield;
+            ComputeCtx.SetTabletNotReady(); 
+            return EFetchResult::Yield; 
         }
 
         return EFetchResult::Finish;
@@ -379,18 +379,18 @@ private:
 
 private:
     void RegisterDependencies() const final {
-        this->FlowDependsOn(FromNode);
-        this->FlowDependsOn(ToNode);
+        this->FlowDependsOn(FromNode); 
+        this->FlowDependsOn(ToNode); 
     }
 
 private:
     TParseReadTableResult ParseResult;
     IComputationNode* FromNode;
     IComputationNode* ToNode;
-    IComputationNode* ItemsLimit;
+    IComputationNode* ItemsLimit; 
     ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
-    ui64 TaskId;
+    ui64 TaskId; 
 };
 
 template <bool IsReverse>
@@ -478,7 +478,7 @@ void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationCo
     const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
 {
     size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size();
-
+ 
     TUnboxedValue* rowItems = nullptr;
     row = ctx.HolderFactory.CreateDirectArrayHolder(columnsCount, rowItems);
 
@@ -501,13 +501,13 @@ void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationCo
         }
     }
 
-    tableStats.NSelectRow++;
-    tableStats.SelectRowRows++;
-    tableStats.SelectRowBytes += rowSize;
+    tableStats.NSelectRow++; 
+    tableStats.SelectRowRows++; 
+    tableStats.SelectRowBytes += rowSize; 
 }
 
-template <typename TTableIterator>
-bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
+template <typename TTableIterator> 
+bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats, 
     const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
     const TSmallVec<bool>& skipNullKeys)
 {
@@ -535,22 +535,22 @@ bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationC
     return false;
 }
 
-} // namespace
-
-bool TryFetchRow(TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
-    const TSmallVec<bool>& skipNullKeys)
-{
-    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
-}
-
-bool TryFetchRow(TTableReverseIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
-    const TSmallVec<bool>& skipNullKeys)
-{
-    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
-}
-
+} // namespace 
+ 
+bool TryFetchRow(TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats, 
+    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags, 
+    const TSmallVec<bool>& skipNullKeys) 
+{ 
+    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys); 
+} 
+ 
+bool TryFetchRow(TTableReverseIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats, 
+    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags, 
+    const TSmallVec<bool>& skipNullKeys) 
+{ 
+    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys); 
+} 
+ 
 void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
     const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
 {
@@ -593,16 +593,16 @@ IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNo
     ValidateKeyTuple(parseResult.FromTuple->GetType(), keyColumns);
     ValidateKeyTuple(parseResult.ToTuple->GetType(), keyColumns);
 
-    IComputationNode* itemsLimit = nullptr;
-    if (parseResult.ItemsLimit) {
-        itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit);
-    }
-
-    if (parseResult.Reverse) {
-        return new TKqpWideReadTableWrapper<true>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit);
-    }
-
-    return new TKqpWideReadTableWrapper<false>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit);
+    IComputationNode* itemsLimit = nullptr; 
+    if (parseResult.ItemsLimit) { 
+        itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit); 
+    } 
+ 
+    if (parseResult.Reverse) { 
+        return new TKqpWideReadTableWrapper<true>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit); 
+    } 
+ 
+    return new TKqpWideReadTableWrapper<false>(computeCtx, ctx.Env, parseResult, fromNode, toNode, itemsLimit); 
 }
 
 } // namespace NMiniKQL

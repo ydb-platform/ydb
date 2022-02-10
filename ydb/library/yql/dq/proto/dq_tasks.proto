@@ -3,7 +3,7 @@ option cc_enable_arenas = true;
 
 package NYql.NDqProto;
 
-import "google/protobuf/any.proto";
+import "google/protobuf/any.proto"; 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 
@@ -21,15 +21,15 @@ enum ECheckpointingMode {
 }
 
 message TProgram {
-    message TSettings {
-        bool HasMapJoin = 1;
-        bool HasSort = 2;
-        bool HasUdf = 3;
-    }
+    message TSettings { 
+        bool HasMapJoin = 1; 
+        bool HasSort = 2; 
+        bool HasUdf = 3; 
+    } 
 
     uint32 RuntimeVersion = 1;
     bytes Raw = 2;
-    TSettings Settings = 3;
+    TSettings Settings = 3; 
 }
 
 message TDqUri {
@@ -56,7 +56,7 @@ message TChannel {
     TEndpoint DstEndpoint = 6;
 
     bool IsPersistent = 7;
-    bool InMemory = 8;
+    bool InMemory = 8; 
     ECheckpointingMode CheckpointingMode = 9;
 }
 
@@ -141,13 +141,13 @@ message TDqTransform {
 
 message TDqTask {
     uint64 Id = 1;
-    uint32 StageId = 9;
+    uint32 StageId = 9; 
     TEndpoint Executer = 2;
     TProgram Program = 3;
     map<string, TData> Parameters = 4;
     repeated TTaskInput Inputs = 5;
     repeated TTaskOutput Outputs = 6;
-    google.protobuf.Any Meta = 7;
+    google.protobuf.Any Meta = 7; 
     bool CreateSuspended = 8;
     optional TDqTransform OutputTransform = 12;
 }

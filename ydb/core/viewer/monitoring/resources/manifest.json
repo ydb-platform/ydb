@@ -1,13 +1,13 @@
-{
-  "vendors.css": "resources/css/vendors.css",
-  "vendors.js": "resources/js/vendors.js",
+{ 
+  "vendors.css": "resources/css/vendors.css", 
+  "vendors.js": "resources/js/vendors.js", 
   "vendors.js.map": "resources/js/vendors.js.map",
   "html2canvas.js": "resources/js/html2canvas.js",
   "html2canvas.js.map": "resources/js/html2canvas.js.map",
-  "main.css": "resources/css/main.css",
-  "main.js": "resources/js/main.js",
+  "main.css": "resources/css/main.css", 
+  "main.js": "resources/js/main.js", 
   "main.js.map": "resources/js/main.js.map",
-  "runtime.js": "resources/js/runtime.js",
+  "runtime.js": "resources/js/runtime.js", 
   "sanitize-html.js": "resources/js/sanitize-html.js",
   "sanitize-html.js.map": "resources/js/sanitize-html.js.map",
   "js/5.js": "resources/js/5.js",
@@ -19,7 +19,7 @@
   "js/11.js": "resources/js/11.js",
   "js/12.js": "resources/js/12.js",
   "js/13.js": "resources/js/13.js",
-  "../index.html": "resources/../index.html",
+  "../index.html": "resources/../index.html", 
   "assets/fonts/codicon.css": "resources/assets/fonts/codicon.59002d8c.ttf",
   "editor.worker.js": "resources/editor.worker.js",
   "favicon.png": "resources/favicon.png",
@@ -27,4 +27,4 @@
   "js/main.js.LICENSE.txt": "resources/js/main.js.LICENSE.txt",
   "js/sanitize-html.js.LICENSE.txt": "resources/js/sanitize-html.js.LICENSE.txt",
   "js/vendors.js.LICENSE.txt": "resources/js/vendors.js.LICENSE.txt"
-}
+} 

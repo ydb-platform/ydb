@@ -61,7 +61,7 @@ RESOURCE(
     monitoring/resources/assets/fonts/codicon.59002d8c.ttf monitoring/resources/assets/fonts/codicon.59002d8c.ttf
     monitoring/resources/css/main.css monitoring/resources/css/main.css
     monitoring/resources/css/vendors.css monitoring/resources/css/vendors.css
-    monitoring/resources/editor.worker.js monitoring/resources/editor.worker.js
+    monitoring/resources/editor.worker.js monitoring/resources/editor.worker.js 
     monitoring/resources/favicon.png monitoring/resources/favicon.png
     monitoring/resources/js/10.js monitoring/resources/js/10.js
     monitoring/resources/js/11.js monitoring/resources/js/11.js

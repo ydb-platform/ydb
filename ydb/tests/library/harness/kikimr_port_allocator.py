@@ -140,19 +140,19 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
 class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137):
         super(KikimrFixedNodePortAllocator, self).__init__()
-        if os.getenv('MON_PORT') is not None:
-            self.__mon_port = int(os.getenv('MON_PORT'))
-        else:
-            self.__mon_port = mon_port
+        if os.getenv('MON_PORT') is not None: 
+            self.__mon_port = int(os.getenv('MON_PORT')) 
+        else: 
+            self.__mon_port = mon_port 
         if os.getenv('GRPC_PORT') is not None:
             self.__grpc_port = int(os.getenv('GRPC_PORT'))
         else:
             self.__grpc_port = grpc_port
         self.__mbus_port = mbus_port
-        if os.getenv('IC_PORT') is not None:
-            self.__ic_port = int(os.getenv('IC_PORT'))
-        else:
-            self.__ic_port = ic_port
+        if os.getenv('IC_PORT') is not None: 
+            self.__ic_port = int(os.getenv('IC_PORT')) 
+        else: 
+            self.__ic_port = ic_port 
         self.__sqs_port = sqs_port
         if os.getenv('GRPC_TLS_PORT') is not None:
             self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT'))

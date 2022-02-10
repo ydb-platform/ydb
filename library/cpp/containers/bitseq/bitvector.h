@@ -8,16 +8,16 @@
 #include <util/ysaveload.h>
 
 template <typename T>
-class TReadonlyBitVector;
-
-template <typename T>
+class TReadonlyBitVector; 
+ 
+template <typename T> 
 class TBitVector {
 public:
     using TWord = T;
     using TTraits = TBitSeqTraits<TWord>;
 
 private:
-    friend class TReadonlyBitVector<T>;
+    friend class TReadonlyBitVector<T>; 
     ui64 Size_;
     TVector<TWord> Data_;
 
@@ -61,7 +61,7 @@ public:
     }
 
     bool Test(ui64 pos) const {
-        return TTraits::Test(Data(), pos, Size_);
+        return TTraits::Test(Data(), pos, Size_); 
     }
 
     void Reset(ui64 pos) {
@@ -70,7 +70,7 @@ public:
     }
 
     TWord Get(ui64 pos, ui8 width, TWord mask) const {
-        return TTraits::Get(Data(), pos, width, mask, Size_);
+        return TTraits::Get(Data(), pos, width, mask, Size_); 
     }
 
     TWord Get(ui64 pos, ui8 width) const {
@@ -127,7 +127,7 @@ public:
     }
 
     const TWord* Data() const {
-        return Data_.data();
+        return Data_.data(); 
     }
 
     void Save(IOutputStream* out) const {

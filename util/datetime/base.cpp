@@ -67,80 +67,80 @@ namespace {
 
         return o << p.I;
     }
-
+ 
     inline IOutputStream& operator<<(IOutputStream& o, const TPad<6>& p) {
-        if (p.I < 100000) {
-            if (p.I >= 0) {
-                if (p.I < 10) {
-                    o << '0' << '0' << '0' << '0' << '0';
-                } else if (p.I < 100) {
-                    o << '0' << '0' << '0' << '0';
-                } else if (p.I < 1000) {
-                    o << '0' << '0' << '0';
-                } else if (p.I < 10000) {
-                    o << '0' << '0';
-                } else {
-                    o << '0';
-                }
-            }
-        }
-
-        return o << p.I;
-    }
-
+        if (p.I < 100000) { 
+            if (p.I >= 0) { 
+                if (p.I < 10) { 
+                    o << '0' << '0' << '0' << '0' << '0'; 
+                } else if (p.I < 100) { 
+                    o << '0' << '0' << '0' << '0'; 
+                } else if (p.I < 1000) { 
+                    o << '0' << '0' << '0'; 
+                } else if (p.I < 10000) { 
+                    o << '0' << '0'; 
+                } else { 
+                    o << '0'; 
+                } 
+            } 
+        } 
+ 
+        return o << p.I; 
+    } 
+ 
     void WriteMicroSecondsToStream(IOutputStream& os, ui32 microSeconds) {
-        os << '.' << Pad<6>(microSeconds);
-    }
-
+        os << '.' << Pad<6>(microSeconds); 
+    } 
+ 
     void WriteTmToStream(IOutputStream& os, const struct tm& theTm) {
-        os << Pad<4>(theTm.tm_year + 1900) << '-' << Pad<2>(theTm.tm_mon + 1) << '-' << Pad<2>(theTm.tm_mday) << 'T'
+        os << Pad<4>(theTm.tm_year + 1900) << '-' << Pad<2>(theTm.tm_mon + 1) << '-' << Pad<2>(theTm.tm_mday) << 'T' 
            << Pad<2>(theTm.tm_hour) << ':' << Pad<2>(theTm.tm_min) << ':' << Pad<2>(theTm.tm_sec);
-    }
-
+    } 
+ 
     template <bool PrintUpToSeconds, bool iso>
     void WritePrintableLocalTimeToStream(IOutputStream& os, const ::NPrivate::TPrintableLocalTime<PrintUpToSeconds, iso>& timeToPrint) {
         const TInstant& momentToPrint = timeToPrint.MomentToPrint;
-        struct tm localTime;
-        momentToPrint.LocalTime(&localTime);
-        WriteTmToStream(os, localTime);
-        if (!PrintUpToSeconds) {
-            WriteMicroSecondsToStream(os, momentToPrint.MicroSecondsOfSecond());
-        }
-#ifndef _win_
-        i64 utcOffsetInMinutes = localTime.tm_gmtoff / 60;
-#else
-        TIME_ZONE_INFORMATION tz;
-        if (GetTimeZoneInformation(&tz) == TIME_ZONE_ID_INVALID) {
-            ythrow TSystemError() << "Failed to get the system time zone";
-        }
-        i64 utcOffsetInMinutes = -tz.Bias;
-#endif
-        if (utcOffsetInMinutes == 0) {
-            os << 'Z';
-        } else {
-            if (utcOffsetInMinutes < 0) {
-                os << '-';
-                utcOffsetInMinutes = -utcOffsetInMinutes;
-            } else {
-                os << '+';
-            }
+        struct tm localTime; 
+        momentToPrint.LocalTime(&localTime); 
+        WriteTmToStream(os, localTime); 
+        if (!PrintUpToSeconds) { 
+            WriteMicroSecondsToStream(os, momentToPrint.MicroSecondsOfSecond()); 
+        } 
+#ifndef _win_ 
+        i64 utcOffsetInMinutes = localTime.tm_gmtoff / 60; 
+#else 
+        TIME_ZONE_INFORMATION tz; 
+        if (GetTimeZoneInformation(&tz) == TIME_ZONE_ID_INVALID) { 
+            ythrow TSystemError() << "Failed to get the system time zone"; 
+        } 
+        i64 utcOffsetInMinutes = -tz.Bias; 
+#endif 
+        if (utcOffsetInMinutes == 0) { 
+            os << 'Z'; 
+        } else { 
+            if (utcOffsetInMinutes < 0) { 
+                os << '-'; 
+                utcOffsetInMinutes = -utcOffsetInMinutes; 
+            } else { 
+                os << '+'; 
+            } 
             os << Pad<2>(utcOffsetInMinutes / 60);
             if (iso) {
                 os << ':';
             }
             os << Pad<2>(utcOffsetInMinutes % 60);
-        }
-    }
+        } 
+    } 
 }
 
-template <>
+template <> 
 void Out<TDuration>(IOutputStream& os, TTypeTraits<TDuration>::TFuncParam duration) {
-    os << duration.Seconds();
-    WriteMicroSecondsToStream(os, duration.MicroSecondsOfSecond());
-    os << 's';
-}
-
-template <>
+    os << duration.Seconds(); 
+    WriteMicroSecondsToStream(os, duration.MicroSecondsOfSecond()); 
+    os << 's'; 
+} 
+ 
+template <> 
 void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant) {
     char buf[64];
     auto len = FormatDate8601(buf, sizeof(buf), instant.TimeT());
@@ -149,20 +149,20 @@ void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant)
     Y_ENSURE(len, TStringBuf("Out<TInstant>: year does not fit into an integer"));
 
     os.Write(buf, len - 1 /* 'Z' */);
-    WriteMicroSecondsToStream(os, instant.MicroSecondsOfSecond());
-    os << 'Z';
-}
-
-template <>
+    WriteMicroSecondsToStream(os, instant.MicroSecondsOfSecond()); 
+    os << 'Z'; 
+} 
+ 
+template <> 
 void Out<::NPrivate::TPrintableLocalTime<false, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, false>>::TFuncParam localTime) {
-    WritePrintableLocalTimeToStream(os, localTime);
-}
-
-template <>
+    WritePrintableLocalTimeToStream(os, localTime); 
+} 
+ 
+template <> 
 void Out<::NPrivate::TPrintableLocalTime<false, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<false, true>>::TFuncParam localTime) {
-    WritePrintableLocalTimeToStream(os, localTime);
-}
-
+    WritePrintableLocalTimeToStream(os, localTime); 
+} 
+ 
 template <>
 void Out<::NPrivate::TPrintableLocalTime<true, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, false>>::TFuncParam localTime) {
     WritePrintableLocalTimeToStream(os, localTime);
@@ -174,13 +174,13 @@ void Out<::NPrivate::TPrintableLocalTime<true, true>>(IOutputStream& os, TTypeTr
 }
 
 TString TDuration::ToString() const {
-    return ::ToString(*this);
-}
-
+    return ::ToString(*this); 
+} 
+ 
 TString TInstant::ToString() const {
-    return ::ToString(*this);
-}
-
+    return ::ToString(*this); 
+} 
+ 
 TString TInstant::ToRfc822String() const {
     return FormatGmTime("%a, %d %b %Y %H:%M:%S GMT");
 }
@@ -189,19 +189,19 @@ TString TInstant::ToStringUpToSeconds() const {
     char buf[64];
     auto len = FormatDate8601(buf, sizeof(buf), TimeT());
     if (!len) {
-        ythrow yexception() << "TInstant::ToStringUpToSeconds: year does not fit into an integer";
+        ythrow yexception() << "TInstant::ToStringUpToSeconds: year does not fit into an integer"; 
     }
     return TString(buf, len);
-}
-
+} 
+ 
 TString TInstant::ToIsoStringLocal() const {
     return ::ToString(FormatIsoLocal(*this));
 }
 
 TString TInstant::ToStringLocal() const {
-    return ::ToString(FormatLocal(*this));
-}
-
+    return ::ToString(FormatLocal(*this)); 
+} 
+ 
 TString TInstant::ToRfc822StringLocal() const {
     return FormatLocalTime("%a, %d %b %Y %H:%M:%S %Z");
 }
@@ -211,9 +211,9 @@ TString TInstant::ToIsoStringLocalUpToSeconds() const {
 }
 
 TString TInstant::ToStringLocalUpToSeconds() const {
-    return ::ToString(FormatLocalUpToSeconds(*this));
-}
-
+    return ::ToString(FormatLocalUpToSeconds(*this)); 
+} 
+ 
 TString TInstant::FormatLocalTime(const char* format) const noexcept {
     struct tm theTm;
     LocalTime(&theTm);
@@ -228,12 +228,12 @@ TString TInstant::FormatGmTime(const char* format) const noexcept {
 
 ::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant) {
     return ::NPrivate::TPrintableLocalTime<false, true>(instant);
-}
-
+} 
+ 
 ::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant) {
     return ::NPrivate::TPrintableLocalTime<false, false>(instant);
-}
-
+} 
+ 
 ::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant) {
     return ::NPrivate::TPrintableLocalTime<true, true>(instant);
 }
@@ -242,10 +242,10 @@ TString TInstant::FormatGmTime(const char* format) const noexcept {
     return ::NPrivate::TPrintableLocalTime<true, false>(instant);
 }
 
-void Sleep(TDuration duration) {
-    NanoSleep(duration.NanoSeconds());
-}
-
+void Sleep(TDuration duration) { 
+    NanoSleep(duration.NanoSeconds()); 
+} 
+ 
 void sprint_gm_date(char* buf, time_t when, long* sec) {
     struct tm theTm;
     ::Zero(theTm);
@@ -317,8 +317,8 @@ size_t FormatDate8601(char* buf, size_t len, time_t when) {
     if (ret) {
         TMemoryOutput out(buf, len);
 
-        WriteTmToStream(out, theTm);
-        out << 'Z';
+        WriteTmToStream(out, theTm); 
+        out << 'Z'; 
 
         return out.Buf() - buf;
     }

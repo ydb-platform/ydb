@@ -183,7 +183,7 @@ size_t NSystemInfo::GetPageSize() noexcept {
 
     return sysInfo.dwPageSize;
 #else
-    return sysconf(_SC_PAGESIZE);
+    return sysconf(_SC_PAGESIZE); 
 #endif
 }
 

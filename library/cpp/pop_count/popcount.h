@@ -66,7 +66,7 @@ static inline ui32 PopCountImpl(ui32 n) {
 }
 
 static inline ui32 PopCountImpl(ui64 n) {
-#if defined(_MSC_VER) && !defined(_i386_)
+#if defined(_MSC_VER) && !defined(_i386_) 
     return __popcnt64(n);
 #else
 #if defined(_x86_64_)

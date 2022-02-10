@@ -94,7 +94,7 @@ void NanoSleep(ui64 ns) noexcept {
 #endif
 }
 
-#if defined(_x86_)
+#if defined(_x86_) 
 extern const bool HaveRdtscp = NX86::HaveRDTSCP();
 #endif
 

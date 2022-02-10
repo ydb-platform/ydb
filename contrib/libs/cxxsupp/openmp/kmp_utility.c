@@ -288,8 +288,8 @@ __kmp_query_cpuid( kmp_cpuinfo_t *p )
     { // Parse CPU brand string for frequency.
 
         union kmp_cpu_brand_string {
-            ui32             buf[ 12 ];
-            char             string[ sizeof( ui32 ) * 12 + 1 ];
+            ui32             buf[ 12 ]; 
+            char             string[ sizeof( ui32 ) * 12 + 1 ]; 
         }; // union kmp_cpu_brand_string
         union kmp_cpu_brand_string brand;
 
@@ -298,7 +298,7 @@ __kmp_query_cpuid( kmp_cpuinfo_t *p )
         p->frequency = 0;
 
         // Get CPU brand string.
-        CpuBrand(brand.buf);
+        CpuBrand(brand.buf); 
         brand.string[ sizeof( brand.string ) - 1 ] = 0; // Just in case. ;-)
         KA_TRACE( trace_level, ( "cpu brand string: \"%s\"\n", brand.string ) );
 

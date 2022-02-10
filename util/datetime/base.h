@@ -443,15 +443,15 @@ public:
         return GmTimeR(&clock, tm);
     }
 
-    /**
-     * Formats the instant using the UTC time zone, with microsecond precision.
-     *
-     * @returns An ISO 8601 formatted string, e.g. '2015-11-21T23:30:27.991669Z'.
+    /** 
+     * Formats the instant using the UTC time zone, with microsecond precision. 
+     * 
+     * @returns An ISO 8601 formatted string, e.g. '2015-11-21T23:30:27.991669Z'. 
      * @note Global Out method is defined to TInstant, so it can be written as text to IOutputStream.
-     */
+     */ 
     TString ToString() const;
-
-    /**
+ 
+    /** 
      * Formats the instant using the UTC time zone.
      *
      * @returns An RFC822 formatted string, e.g. 'Sun, 06 Nov 1994 08:49:37 GMT'.
@@ -459,18 +459,18 @@ public:
     TString ToRfc822String() const;
 
     /**
-     * Formats the instant using the UTC time zone, with second precision.
-     *
-     * @returns An ISO 8601 formatted string, e.g. '2015-11-21T23:30:27Z'.
-     */
+     * Formats the instant using the UTC time zone, with second precision. 
+     * 
+     * @returns An ISO 8601 formatted string, e.g. '2015-11-21T23:30:27Z'. 
+     */ 
     TString ToStringUpToSeconds() const;
 
-    /**
-     * Formats the instant using the system time zone, with microsecond precision.
-     *
+    /** 
+     * Formats the instant using the system time zone, with microsecond precision. 
+     * 
      * @returns An ISO 8601 / RFC 3339 formatted string,
      * e.g. '2015-11-22T04:30:27.991669+05:00'.
-     */
+     */ 
     TString ToIsoStringLocal() const;
 
     /**
@@ -480,8 +480,8 @@ public:
      * e.g. '2015-11-22T04:30:27.991669+0500'.
      */
     TString ToStringLocal() const;
-
-    /**
+ 
+    /** 
      * Formats the instant using the system time zone.
      *
      * @returns An RFC822 formatted string, e.g. 'Sun, 06 Nov 1994 08:49:37 MSK'.
@@ -489,11 +489,11 @@ public:
     TString ToRfc822StringLocal() const;
 
     /**
-     * Formats the instant using the system time zone, with second precision.
-     *
+     * Formats the instant using the system time zone, with second precision. 
+     * 
      * @returns An ISO 8601 / RFC 3339 formatted string,
      * e.g. '2015-11-22T04:30:27+05:00'.
-     */
+     */ 
     TString ToIsoStringLocalUpToSeconds() const;
 
     /**
@@ -503,7 +503,7 @@ public:
      * e.g. '2015-11-22T04:30:27+0500'.
      */
     TString ToStringLocalUpToSeconds() const;
-
+ 
     TString FormatLocalTime(const char* format) const noexcept;
     TString FormatGmTime(const char* format) const noexcept;
 
@@ -566,41 +566,41 @@ struct THash<TInstant> {
     }
 };
 
-namespace NPrivate {
+namespace NPrivate { 
     template <bool PrintUpToSeconds, bool iso>
-    struct TPrintableLocalTime {
-        TInstant MomentToPrint;
-
+    struct TPrintableLocalTime { 
+        TInstant MomentToPrint; 
+ 
         constexpr explicit TPrintableLocalTime(TInstant momentToPrint)
-            : MomentToPrint(momentToPrint)
-        {
-        }
-    };
-}
-
+            : MomentToPrint(momentToPrint) 
+        { 
+        } 
+    }; 
+} 
+ 
 /** @name Helpers for printing local times to `IOutputStream`s.
- *        The FormatLocal* functions create an opaque object that, when written to
+ *        The FormatLocal* functions create an opaque object that, when written to 
  *        a `IOutputStream`, outputs this instant as an ISO 8601 formatted string
- *        using the system time zone.
- *
- *  @note The only reason behind this set of functions is to avoid excessive
- *        allocations when you directly print the local time to a stream.
- *
- *        If you need something beyond just printing the value or your code
- *        is not performance-critical, feel free to use the corresponding
- *        TInstant::ToString*() functions.
- */
-///@{
+ *        using the system time zone. 
+ * 
+ *  @note The only reason behind this set of functions is to avoid excessive 
+ *        allocations when you directly print the local time to a stream. 
+ * 
+ *        If you need something beyond just printing the value or your code 
+ *        is not performance-critical, feel free to use the corresponding 
+ *        TInstant::ToString*() functions. 
+ */ 
+///@{ 
 /// @see TInstant::ToIsoStringLocal()
 ::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant);
-/// @see TInstant::ToStringLocal()
+/// @see TInstant::ToStringLocal() 
 ::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant);
 /// @see TInstant::ToIsoStringLocalUpToSeconds()
 ::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant);
-/// @see TInstant::ToStringLocalUpToSeconds()
+/// @see TInstant::ToStringLocalUpToSeconds() 
 ::NPrivate::TPrintableLocalTime<true, false> FormatLocalUpToSeconds(TInstant instant);
-///@}
-
+///@} 
+ 
 template <class S>
 static constexpr bool operator<(const TTimeBase<S>& l, const TTimeBase<S>& r) noexcept {
     return l.GetValue() < r.GetValue();

@@ -1,7 +1,7 @@
-#pragma once 
- 
-#include <util/generic/strbuf.h> 
- 
+#pragma once
+
+#include <util/generic/strbuf.h>
+
 namespace NSize {
     ui64 ParseSize(TStringBuf size);
 

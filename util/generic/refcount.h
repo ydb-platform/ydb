@@ -38,16 +38,16 @@ public:
     }
 
     inline bool TryWeakInc() noexcept {
-        if (!Counter_) { 
-            return false; 
-        } 
- 
-        Inc(); 
+        if (!Counter_) {
+            return false;
+        }
+
+        Inc();
         Y_ASSERT(Counter_ != 0);
 
-        return true; 
-    } 
- 
+        return true;
+    }
+
     inline TAtomicBase Val() const noexcept {
         return Counter_;
     }
@@ -130,22 +130,22 @@ public:
     }
 
     inline bool TryWeakInc() noexcept {
-        while (true) { 
-            intptr_t curValue = Counter_; 
- 
-            if (!curValue) { 
-                return false; 
-            } 
- 
-            intptr_t newValue = curValue + 1; 
+        while (true) {
+            intptr_t curValue = Counter_;
+
+            if (!curValue) {
+                return false;
+            }
+
+            intptr_t newValue = curValue + 1;
             Y_ASSERT(newValue != 0);
- 
-            if (AtomicCas(&Counter_, newValue, curValue)) { 
-                return true; 
-            } 
-        } 
-    } 
- 
+
+            if (AtomicCas(&Counter_, newValue, curValue)) {
+                return true;
+            }
+        }
+    }
+
 private:
     TAtomic Counter_;
 };

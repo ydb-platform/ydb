@@ -1,10 +1,10 @@
-#include "parse_size.h" 
- 
-#include <util/generic/yexception.h> 
-#include <util/generic/ylimits.h> 
+#include "parse_size.h"
+
+#include <util/generic/yexception.h>
+#include <util/generic/ylimits.h>
 #include <util/string/cast.h>
 #include <util/stream/output.h>
- 
+
 namespace {
     enum ESuffixShifts {
         ESS_KILO_BYTES = 10,
@@ -64,16 +64,16 @@ namespace NSize {
         } else {
             return value;
         }
-    } 
- 
+    }
+
     TSize FromKiloBytes(ui64 value) {
         return TSize(ShiftValue(value, ESS_KILO_BYTES));
     }
- 
+
     TSize FromMegaBytes(ui64 value) {
         return TSize(ShiftValue(value, ESS_MEGA_BYTES));
-    } 
- 
+    }
+
     TSize FromGigaBytes(ui64 value) {
         return TSize(ShiftValue(value, ESS_GIGA_BYTES));
     }

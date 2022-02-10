@@ -31,19 +31,19 @@ TBuffer::TBuffer(const char* buf, size_t len)
 }
 
 TBuffer& TBuffer::operator=(TBuffer&& b) noexcept {
-    y_deallocate(Data_); 
- 
-    Data_ = b.Data_; 
-    Len_ = b.Len_; 
-    Pos_ = b.Pos_; 
- 
-    b.Data_ = nullptr; 
-    b.Len_ = 0; 
-    b.Pos_ = 0; 
- 
-    return *this; 
-} 
- 
+    y_deallocate(Data_);
+
+    Data_ = b.Data_;
+    Len_ = b.Len_;
+    Pos_ = b.Pos_;
+
+    b.Data_ = nullptr;
+    b.Len_ = 0;
+    b.Pos_ = 0;
+
+    return *this;
+}
+
 void TBuffer::Append(const char* buf, size_t len) {
     if (len > Avail()) {
         Reserve(Pos_ + len);

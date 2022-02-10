@@ -64,10 +64,10 @@ public:
         return SetContent(content).SetContentType(contentType);
     }
 
-    HttpCodes HttpCode() const { 
-        return Code; 
-    } 
- 
+    HttpCodes HttpCode() const {
+        return Code;
+    }
+
     THttpResponse& SetHttpCode(HttpCodes code) {
         Code = code;
         return *this;

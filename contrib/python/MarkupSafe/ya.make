@@ -1,5 +1,5 @@
 PY23_LIBRARY()
- 
+
 LICENSE(Service-Py23-Proxy)
 
 OWNER(g:python-contrib)
@@ -9,10 +9,10 @@ IF (PYTHON2)
 ELSE()
     PEERDIR(contrib/python/MarkupSafe/py3)
 ENDIF()
- 
+
 NO_LINT()
 
-END() 
+END()
 
 RECURSE(
     py2

@@ -1,41 +1,41 @@
-#include "str.h" 
- 
+#include "str.h"
+
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/typetraits.h> 
- 
-template <typename T> 
-const T ReturnConstTemp(); 
- 
+#include <util/generic/typetraits.h>
+
+template <typename T>
+const T ReturnConstTemp();
+
 Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
     Y_UNIT_TEST(Lvalue) {
         TString str = "Hello, World!";
-        TStringInput input(str); 
- 
+        TStringInput input(str);
+
         TString result = input.ReadAll();
- 
+
         UNIT_ASSERT_VALUES_EQUAL(result, str);
-    } 
- 
+    }
+
     Y_UNIT_TEST(ConstRef) {
         TString str = "Hello, World!";
         const TString& r = str;
-        TStringInput input(r); 
- 
+        TStringInput input(r);
+
         TString result = input.ReadAll();
- 
+
         UNIT_ASSERT_VALUES_EQUAL(result, str);
-    } 
- 
+    }
+
     Y_UNIT_TEST(NonConstRef) {
         TString str = "Hello, World!";
         TString& r = str;
-        TStringInput input(r); 
- 
+        TStringInput input(r);
+
         TString result = input.ReadAll();
- 
+
         UNIT_ASSERT_VALUES_EQUAL(result, str);
-    } 
- 
+    }
+
     Y_UNIT_TEST(Transfer) {
         TString inputString = "some_string";
         TStringInput input(inputString);
@@ -149,4 +149,4 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         // Check old stream is in a valid state
         output1 << "baz";
     }
-} 
+}

@@ -360,7 +360,7 @@ idna_to_unicode_internal (char *utf8in,
    */
 
 step3:
-  if (strncmp (IDNA_ACE_PREFIX, utf8in, STRLEN (IDNA_ACE_PREFIX)) != 0) 
+  if (strncmp (IDNA_ACE_PREFIX, utf8in, STRLEN (IDNA_ACE_PREFIX)) != 0)
     {
       free (utf8in);
       return IDNA_NO_ACE_PREFIX;

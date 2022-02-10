@@ -8,13 +8,13 @@
 #include "string.h"
 
 #include <library/cpp/yt/assert/assert.h>
- 
+
 #include <library/cpp/yt/small_containers/compact_vector.h>
- 
+
 #include <library/cpp/yt/misc/enum.h>
- 
+
 #include <cctype>
-#include <optional> 
+#include <optional>
 
 namespace NYT {
 
@@ -22,11 +22,11 @@ namespace NYT {
 
 static const char GenericSpecSymbol = 'v';
 
-inline bool IsQuotationSpecSymbol(char symbol) 
-{ 
-    return symbol == 'Q' || symbol == 'q'; 
-} 
- 
+inline bool IsQuotationSpecSymbol(char symbol)
+{
+    return symbol == 'Q' || symbol == 'q';
+}
+
 // TStringBuf
 inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBuf format)
 {
@@ -137,7 +137,7 @@ inline void FormatValue(TStringBuilderBase* builder, bool value, TStringBuf form
         if (*current == 'l') {
             ++current;
             lowercase = true;
-        } else if (IsQuotationSpecSymbol(*current)) { 
+        } else if (IsQuotationSpecSymbol(*current)) {
             ++current;
         } else
             break;
@@ -178,7 +178,7 @@ struct TValueFormatter<TEnum, typename std::enable_if<TEnumTraits<TEnum>::IsEnum
             if (*current == 'l') {
                 ++current;
                 lowercase = true;
-            } else if (IsQuotationSpecSymbol(*current)) { 
+            } else if (IsQuotationSpecSymbol(*current)) {
                 ++current;
             } else {
                 break;
@@ -237,27 +237,27 @@ void FormatRange(TStringBuilderBase* builder, const TRange& range, const TFormat
     builder->AppendChar(']');
 }
 
-template <class TRange, class TFormatter> 
+template <class TRange, class TFormatter>
 void FormatKeyValueRange(TStringBuilderBase* builder, const TRange& range, const TFormatter& formatter, size_t limit = std::numeric_limits<size_t>::max())
-{ 
-    builder->AppendChar('{'); 
+{
+    builder->AppendChar('{');
     size_t index = 0;
-    for (const auto& item : range) { 
+    for (const auto& item : range) {
         if (index > 0) {
-            builder->AppendString(DefaultJoinToStringDelimiter); 
-        } 
+            builder->AppendString(DefaultJoinToStringDelimiter);
+        }
         if (index == limit) {
-            builder->AppendString(DefaultRangeEllipsisFormat); 
-            break; 
-        } 
-        formatter(builder, item.first); 
-        builder->AppendString(DefaultKeyValueDelimiter); 
-        formatter(builder, item.second); 
+            builder->AppendString(DefaultRangeEllipsisFormat);
+            break;
+        }
+        formatter(builder, item.first);
+        builder->AppendString(DefaultKeyValueDelimiter);
+        formatter(builder, item.second);
         ++index;
-    } 
-    builder->AppendChar('}'); 
-} 
- 
+    }
+    builder->AppendChar('}');
+}
+
 // TFormattableView
 template <class TRange, class TFormatter>
 struct TValueFormatter<TFormattableView<TRange, TFormatter>>
@@ -317,26 +317,26 @@ struct TValueFormatter<std::set<T>>
     }
 };
 
-// std::map 
-template <class K, class V> 
-struct TValueFormatter<std::map<K, V>> 
-{ 
+// std::map
+template <class K, class V>
+struct TValueFormatter<std::map<K, V>>
+{
     static void Do(TStringBuilderBase* builder, const std::map<K, V>& collection, TStringBuf /*format*/)
-    { 
-        FormatKeyValueRange(builder, collection, TDefaultFormatter()); 
-    } 
-}; 
- 
-// std::multimap 
-template <class K, class V> 
-struct TValueFormatter<std::multimap<K, V>> 
-{ 
+    {
+        FormatKeyValueRange(builder, collection, TDefaultFormatter());
+    }
+};
+
+// std::multimap
+template <class K, class V>
+struct TValueFormatter<std::multimap<K, V>>
+{
     static void Do(TStringBuilderBase* builder, const std::multimap<K, V>& collection, TStringBuf /*format*/)
-    { 
-        FormatKeyValueRange(builder, collection, TDefaultFormatter()); 
-    } 
-}; 
- 
+    {
+        FormatKeyValueRange(builder, collection, TDefaultFormatter());
+    }
+};
+
 // THashSet
 template <class T>
 struct TValueFormatter<THashSet<T>>
@@ -357,26 +357,26 @@ struct TValueFormatter<THashMultiSet<T>>
     }
 };
 
-// THashMap 
-template <class K, class V> 
-struct TValueFormatter<THashMap<K, V>> 
-{ 
+// THashMap
+template <class K, class V>
+struct TValueFormatter<THashMap<K, V>>
+{
     static void Do(TStringBuilderBase* builder, const THashMap<K, V>& collection, TStringBuf /*format*/)
-    { 
-        FormatKeyValueRange(builder, collection, TDefaultFormatter()); 
-    } 
-}; 
- 
-// THashMultiMap 
-template <class K, class V> 
-struct TValueFormatter<THashMultiMap<K, V>> 
-{ 
+    {
+        FormatKeyValueRange(builder, collection, TDefaultFormatter());
+    }
+};
+
+// THashMultiMap
+template <class K, class V>
+struct TValueFormatter<THashMultiMap<K, V>>
+{
     static void Do(TStringBuilderBase* builder, const THashMultiMap<K, V>& collection, TStringBuf /*format*/)
-    { 
-        FormatKeyValueRange(builder, collection, TDefaultFormatter()); 
-    } 
-}; 
- 
+    {
+        FormatKeyValueRange(builder, collection, TDefaultFormatter());
+    }
+};
+
 // TEnumIndexedVector
 template <class E, class T>
 struct TValueFormatter<TEnumIndexedVector<E, T>>
@@ -439,37 +439,37 @@ auto FormatValue(TStringBuilderBase* builder, const TValue& value, TStringBuf fo
 }
 
 template <class TValue>
-void FormatValueViaSprintf( 
+void FormatValueViaSprintf(
     TStringBuilderBase* builder,
-    TValue value, 
+    TValue value,
     TStringBuf format,
     TStringBuf genericSpec)
 {
     constexpr int MaxFormatSize = 64;
     constexpr int SmallResultSize = 64;
 
-    auto copyFormat = [] (char* destination, const char* source, int length) { 
-        int position = 0; 
+    auto copyFormat = [] (char* destination, const char* source, int length) {
+        int position = 0;
         for (int index = 0; index < length; ++index) {
-            if (IsQuotationSpecSymbol(source[index])) { 
-                continue; 
-            } 
-            destination[position] = source[index]; 
-            ++position; 
-        } 
-        return destination + position; 
-    }; 
- 
+            if (IsQuotationSpecSymbol(source[index])) {
+                continue;
+            }
+            destination[position] = source[index];
+            ++position;
+        }
+        return destination + position;
+    };
+
     char formatBuf[MaxFormatSize];
     YT_VERIFY(format.length() >= 1 && format.length() <= MaxFormatSize - 2); // one for %, one for \0
     formatBuf[0] = '%';
     if (format[format.length() - 1] == GenericSpecSymbol) {
-        char* formatEnd = copyFormat(formatBuf + 1, format.begin(), format.length() - 1); 
+        char* formatEnd = copyFormat(formatBuf + 1, format.begin(), format.length() - 1);
         ::memcpy(formatEnd, genericSpec.begin(), genericSpec.length());
-        formatEnd[genericSpec.length()] = '\0'; 
+        formatEnd[genericSpec.length()] = '\0';
     } else {
-        char* formatEnd = copyFormat(formatBuf + 1, format.begin(), format.length()); 
-        *formatEnd = '\0'; 
+        char* formatEnd = copyFormat(formatBuf + 1, format.begin(), format.length());
+        *formatEnd = '\0';
     }
 
     char* result = builder->Preallocate(SmallResultSize);
@@ -481,27 +481,27 @@ void FormatValueViaSprintf(
     builder->Advance(resultSize);
 }
 
-template <class TValue> 
-char* WriteIntToBufferBackwards(char* buffer, TValue value); 
- 
-template <class TValue> 
+template <class TValue>
+char* WriteIntToBufferBackwards(char* buffer, TValue value);
+
+template <class TValue>
 void FormatValueViaHelper(TStringBuilderBase* builder, TValue value, TStringBuf format, TStringBuf genericSpec)
-{ 
+{
     if (format == TStringBuf("v")) {
-        const int MaxResultSize = 64; 
-        char buffer[MaxResultSize]; 
-        char* end = buffer + MaxResultSize; 
-        char* start = WriteIntToBufferBackwards(end, value); 
-        builder->AppendString(TStringBuf(start, end)); 
-    } else { 
-        FormatValueViaSprintf(builder, value, format, genericSpec); 
-    } 
-} 
- 
-#define XX(valueType, castType, genericSpec) \ 
+        const int MaxResultSize = 64;
+        char buffer[MaxResultSize];
+        char* end = buffer + MaxResultSize;
+        char* start = WriteIntToBufferBackwards(end, value);
+        builder->AppendString(TStringBuf(start, end));
+    } else {
+        FormatValueViaSprintf(builder, value, format, genericSpec);
+    }
+}
+
+#define XX(valueType, castType, genericSpec) \
     inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf format) \
     { \
-        FormatValueViaHelper(builder, static_cast<castType>(value), format, genericSpec); \ 
+        FormatValueViaHelper(builder, static_cast<castType>(value), format, genericSpec); \
     }
 
 XX(i8,              int,                TStringBuf("d"))
@@ -513,32 +513,32 @@ XX(ui32,            unsigned int,       TStringBuf("u"))
 XX(long,            long,               TStringBuf("ld"))
 XX(unsigned long,   unsigned long,      TStringBuf("lu"))
 
-#undef XX 
+#undef XX
 
-#define XX(valueType, castType, genericSpec) \ 
+#define XX(valueType, castType, genericSpec) \
     inline void FormatValue(TStringBuilderBase* builder, valueType value, TStringBuf format) \
-    { \ 
-        FormatValueViaSprintf(builder, static_cast<castType>(value), format, genericSpec); \ 
-    } 
- 
+    { \
+        FormatValueViaSprintf(builder, static_cast<castType>(value), format, genericSpec); \
+    }
+
 XX(double,          double,             TStringBuf("lf"))
 XX(float,           float,              TStringBuf("f"))
- 
-#undef XX 
- 
+
+#undef XX
+
 // Pointer
-template <class T> 
+template <class T>
 void FormatValue(TStringBuilderBase* builder, T* value, TStringBuf format)
-{ 
+{
     FormatValueViaSprintf(builder, value, format, TStringBuf("p"));
-} 
- 
-// TDuration (specialize for performance reasons) 
+}
+
+// TDuration (specialize for performance reasons)
 inline void FormatValue(TStringBuilderBase* builder, TDuration value, TStringBuf /*format*/)
-{ 
+{
     builder->AppendFormat("%vus", value.MicroSeconds());
-} 
- 
+}
+
 // TInstant (specialize for TFormatTraits)
 inline void FormatValue(TStringBuilderBase* builder, TInstant value, TStringBuf format)
 {

@@ -15,8 +15,8 @@
 
 #include "compact_vector.h"
 
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 #include <cstddef>
 #include <iterator>
 #include <set>

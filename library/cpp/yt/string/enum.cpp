@@ -1,6 +1,6 @@
-#include "enum.h" 
+#include "enum.h"
 
-#include "format.h" 
+#include "format.h"
 
 namespace NYT {
 
@@ -9,12 +9,12 @@ namespace NYT {
 TString DecodeEnumValue(TStringBuf value)
 {
     auto camelValue = UnderscoreCaseToCamelCase(value);
-    auto underscoreValue = CamelCaseToUnderscoreCase(camelValue); 
-    if (value != underscoreValue) { 
+    auto underscoreValue = CamelCaseToUnderscoreCase(camelValue);
+    if (value != underscoreValue) {
         throw TSimpleException(Format("Enum value %Qv is not in a proper underscore case; did you mean %Qv?",
-            value, 
+            value,
             underscoreValue));
-    } 
+    }
     return camelValue;
 }
 

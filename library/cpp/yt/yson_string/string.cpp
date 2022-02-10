@@ -1,4 +1,4 @@
-#include "string.h" 
+#include "string.h"
 
 #include <library/cpp/yt/assert/assert.h>
 

@@ -211,7 +211,7 @@ RECURSE(
     dictpath
     diff-match-patch
     directio
-    distro 
+    distro
     django
     django-admin-inline-paginator
     django-admin-rangefilter

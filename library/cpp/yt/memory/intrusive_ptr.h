@@ -3,11 +3,11 @@
 #include "ref_counted.h"
 
 #include <util/generic/hash.h>
-#include <util/generic/utility.h> 
- 
-#include <utility> 
+#include <util/generic/utility.h>
+
+#include <utility>
 #include <type_traits>
- 
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -110,7 +110,7 @@ public:
     }
 
     //! Move assignment operator.
-    TIntrusivePtr& operator=(TIntrusivePtr&& other) noexcept 
+    TIntrusivePtr& operator=(TIntrusivePtr&& other) noexcept
     {
         TIntrusivePtr(std::move(other)).Swap(*this);
         return *this;

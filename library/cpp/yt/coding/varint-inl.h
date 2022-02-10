@@ -1,9 +1,9 @@
-#ifndef VARINT_INL_H_ 
-#error "Direct inclusion of this file is not allowed, include varint.h" 
+#ifndef VARINT_INL_H_
+#error "Direct inclusion of this file is not allowed, include varint.h"
 // For the sake of sane code completion.
 #include "varint.h"
-#endif 
- 
+#endif
+
 #include "zig_zag.h"
 
 namespace NYT {
@@ -11,13 +11,13 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TWriteCallback>
-Y_FORCE_INLINE int WriteVarUint64Impl(TWriteCallback doWrite, ui64 value) 
+Y_FORCE_INLINE int WriteVarUint64Impl(TWriteCallback doWrite, ui64 value)
 {
     bool stop = false;
     int bytesWritten = 0;
     while (!stop) {
         ++bytesWritten;
-        ui8 byte = static_cast<ui8>(value | 0x80); 
+        ui8 byte = static_cast<ui8>(value | 0x80);
         value >>= 7;
         if (value == 0) {
             stop = true;
@@ -36,17 +36,17 @@ Y_FORCE_INLINE int WriteVarUint64(IOutputStream* output, ui64 value)
     }, value);
 }
 
-Y_FORCE_INLINE int WriteVarUint64(char* output, ui64 value) 
+Y_FORCE_INLINE int WriteVarUint64(char* output, ui64 value)
 {
     return WriteVarUint64Impl([&] (ui8 byte) {
-        *output++ = byte; 
+        *output++ = byte;
     }, value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOutput>
-Y_FORCE_INLINE int WriteVarUint32Impl(TOutput output, ui32 value) 
+Y_FORCE_INLINE int WriteVarUint32Impl(TOutput output, ui32 value)
 {
     return WriteVarUint64(output, static_cast<ui64>(value));
 }
@@ -56,7 +56,7 @@ Y_FORCE_INLINE int WriteVarUint32(IOutputStream* output, ui32 value)
     return WriteVarUint32Impl(output, value);
 }
 
-Y_FORCE_INLINE int WriteVarUint32(char* output, ui32 value) 
+Y_FORCE_INLINE int WriteVarUint32(char* output, ui32 value)
 {
     return WriteVarUint32Impl(output, value);
 }
@@ -64,7 +64,7 @@ Y_FORCE_INLINE int WriteVarUint32(char* output, ui32 value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOutput>
-Y_FORCE_INLINE int WriteVarInt32Impl(TOutput output, i32 value) 
+Y_FORCE_INLINE int WriteVarInt32Impl(TOutput output, i32 value)
 {
     return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode32(value)));
 }
@@ -74,7 +74,7 @@ Y_FORCE_INLINE int WriteVarInt32(IOutputStream* output, i32 value)
     return WriteVarInt32Impl(output, value);
 }
 
-Y_FORCE_INLINE int WriteVarInt32(char* output, i32 value) 
+Y_FORCE_INLINE int WriteVarInt32(char* output, i32 value)
 {
     return WriteVarInt32Impl(output, value);
 }
@@ -82,7 +82,7 @@ Y_FORCE_INLINE int WriteVarInt32(char* output, i32 value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOutput>
-Y_FORCE_INLINE int WriteVarInt64Impl(TOutput output, i64 value) 
+Y_FORCE_INLINE int WriteVarInt64Impl(TOutput output, i64 value)
 {
     return WriteVarUint64(output, static_cast<ui64>(ZigZagEncode64(value)));
 }
@@ -92,7 +92,7 @@ Y_FORCE_INLINE int WriteVarInt64(IOutputStream* output, i64 value)
     return WriteVarInt64Impl(output, value);
 }
 
-Y_FORCE_INLINE int WriteVarInt64(char* output, i64 value) 
+Y_FORCE_INLINE int WriteVarInt64(char* output, i64 value)
 {
     return WriteVarInt64Impl(output, value);
 }
@@ -100,7 +100,7 @@ Y_FORCE_INLINE int WriteVarInt64(char* output, i64 value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TReadCallback>
-Y_FORCE_INLINE int ReadVarUint64Impl(TReadCallback doRead, ui64* value) 
+Y_FORCE_INLINE int ReadVarUint64Impl(TReadCallback doRead, ui64* value)
 {
     size_t count = 0;
     ui64 result = 0;
@@ -130,7 +130,7 @@ Y_FORCE_INLINE int ReadVarUint64(IInputStream* input, ui64* value)
     }, value);
 }
 
-Y_FORCE_INLINE int ReadVarUint64(const char* input, ui64* value) 
+Y_FORCE_INLINE int ReadVarUint64(const char* input, ui64* value)
 {
     return ReadVarUint64Impl([&] () {
         char byte = *input;
@@ -170,7 +170,7 @@ Y_FORCE_INLINE int ReadVarUint32(IInputStream* input, ui32* value)
     return ReadVarUint32Impl(value, input);
 }
 
-Y_FORCE_INLINE int ReadVarUint32(const char* input, ui32* value) 
+Y_FORCE_INLINE int ReadVarUint32(const char* input, ui32* value)
 {
     return ReadVarUint32Impl(value, input);
 }
@@ -199,7 +199,7 @@ Y_FORCE_INLINE int ReadVarInt32(IInputStream* input, i32* value)
     return ReadVarInt32Impl(value, input);
 }
 
-Y_FORCE_INLINE int ReadVarInt32(const char* input, i32* value) 
+Y_FORCE_INLINE int ReadVarInt32(const char* input, i32* value)
 {
     return ReadVarInt32Impl(value, input);
 }
@@ -225,7 +225,7 @@ Y_FORCE_INLINE int ReadVarInt64(IInputStream* input, i64* value)
     return ReadVarInt64Impl(value, input);
 }
 
-Y_FORCE_INLINE int ReadVarInt64(const char* input, i64* value) 
+Y_FORCE_INLINE int ReadVarInt64(const char* input, i64* value)
 {
     return ReadVarInt64Impl(value, input);
 }

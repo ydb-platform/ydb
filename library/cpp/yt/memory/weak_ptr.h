@@ -128,7 +128,7 @@ public:
     }
 
     //! Move assignment operator.
-    TWeakPtr& operator=(TWeakPtr&& other) noexcept 
+    TWeakPtr& operator=(TWeakPtr&& other) noexcept
     {
         other.Swap(*this);
         return *this;

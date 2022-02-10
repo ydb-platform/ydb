@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/typetraits.h>
 
 #include <library/cpp/yt/exception/exception.h>
@@ -78,17 +78,17 @@ struct TGuid
     static bool FromStringHex32(TStringBuf str, TGuid* guid);
 };
 
-bool operator == (TGuid lhs, TGuid rhs); 
-bool operator != (TGuid lhs, TGuid rhs); 
-bool operator <  (TGuid lhs, TGuid rhs); 
+bool operator == (TGuid lhs, TGuid rhs);
+bool operator != (TGuid lhs, TGuid rhs);
+bool operator <  (TGuid lhs, TGuid rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr int MaxGuidStringSize = 4 * 8 + 3;
-char* WriteGuidToBuffer(char* ptr, TGuid value); 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+char* WriteGuidToBuffer(char* ptr, TGuid value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -206,19 +206,19 @@ void TBlob::SetTagCookie(const TBlob& other)
 #endif
 }
 
-void swap(TBlob& left, TBlob& right) 
-{ 
-    if (&left != &right) { 
-        std::swap(left.Begin_, right.Begin_); 
-        std::swap(left.Size_, right.Size_); 
-        std::swap(left.Capacity_, right.Capacity_); 
+void swap(TBlob& left, TBlob& right)
+{
+    if (&left != &right) {
+        std::swap(left.Begin_, right.Begin_);
+        std::swap(left.Size_, right.Size_);
+        std::swap(left.Capacity_, right.Capacity_);
         std::swap(left.PageAligned_, right.PageAligned_);
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         std::swap(left.TagCookie_, right.TagCookie_);
 #endif
-    } 
-} 
- 
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

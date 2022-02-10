@@ -1,7 +1,7 @@
-#include <library/cpp/testing/gtest/gtest.h> 
+#include <library/cpp/testing/gtest/gtest.h>
 
-#include <library/cpp/yt/string/enum.h> 
-#include <library/cpp/yt/string/format.h> 
+#include <library/cpp/yt/string/enum.h>
+#include <library/cpp/yt/string/format.h>
 
 #include <limits>
 
@@ -58,4 +58,4 @@ TEST(TFormatTest, Enum)
 } // namespace
 } // namespace NYT
 
- 
+

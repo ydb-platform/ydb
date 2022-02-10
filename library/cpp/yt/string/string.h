@@ -4,16 +4,16 @@
 
 #include <library/cpp/yt/exception/exception.h>
 
-#include <util/datetime/base.h> 
- 
-#include <util/generic/string.h> 
- 
+#include <util/datetime/base.h>
+
+#include <util/generic/string.h>
+
 #include <util/string/strip.h>
 
-#include <vector> 
-#include <set> 
-#include <map> 
- 
+#include <vector>
+#include <set>
+#include <map>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -194,12 +194,12 @@ TString Trim(const TString& str, const TString& whitespaces);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Implemented for |[u]i(32|64)|. 
-template <class T> 
-char* WriteIntToBufferBackwards(char* ptr, T value); 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+//! Implemented for |[u]i(32|64)|.
+template <class T>
+char* WriteIntToBufferBackwards(char* ptr, T value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TCaseInsensitiveStringHasher
 {
     size_t operator()(TStringBuf arg) const;
@@ -214,8 +214,8 @@ struct TCaseInsensitiveStringEqualityComparer
 
 bool TryParseBool(TStringBuf value, bool* result);
 bool ParseBool(TStringBuf value);
-TStringBuf FormatBool(bool value); 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+TStringBuf FormatBool(bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

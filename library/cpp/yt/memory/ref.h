@@ -1,7 +1,7 @@
 #pragma once
 
 #include "new.h"
-#include "range.h" 
+#include "range.h"
 #include "shared_range.h"
 
 #include <type_traits>
@@ -13,80 +13,80 @@ namespace NYT {
 // Forward declaration.
 class TBlob;
 
-//! A non-owning reference to a range of memory. 
+//! A non-owning reference to a range of memory.
 class TRef
-    : public TRange<char> 
+    : public TRange<char>
 {
 public:
-    //! Creates a null TRef. 
+    //! Creates a null TRef.
     TRef() = default;
 
-    //! Creates a TRef for a given block of memory. 
+    //! Creates a TRef for a given block of memory.
     TRef(const void* data, size_t size);
 
-    //! Creates a TRef for a given range of memory. 
+    //! Creates a TRef for a given range of memory.
     TRef(const void* begin, const void* end);
 
     //! Creates an empty TRef.
     static TRef MakeEmpty();
 
-    //! Creates a non-owning TRef for a given blob. 
+    //! Creates a non-owning TRef for a given blob.
     static TRef FromBlob(const TBlob& blob);
 
-    //! Creates a non-owning TRef for a given string. 
+    //! Creates a non-owning TRef for a given string.
     static TRef FromString(const TString& str);
 
     //! Creates a non-owning TRef for a given stringbuf.
     static TRef FromStringBuf(TStringBuf strBuf);
 
-    //! Creates a non-owning TRef for a given pod structure. 
+    //! Creates a non-owning TRef for a given pod structure.
     template <class T>
     static TRef FromPod(const T& data);
- 
-    //! Creates a TRef for a part of existing range. 
+
+    //! Creates a TRef for a part of existing range.
     TRef Slice(size_t startOffset, size_t endOffset) const;
 
-    //! Compares the content for bitwise equality. 
+    //! Compares the content for bitwise equality.
     static bool AreBitwiseEqual(TRef lhs, TRef rhs);
-}; 
+};
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-//! A non-owning reference to a mutable range of memory. 
-//! Use with caution :) 
-class TMutableRef 
-    : public TMutableRange<char> 
-{ 
-public: 
-    //! Creates a null TMutableRef. 
+////////////////////////////////////////////////////////////////////////////////
+
+//! A non-owning reference to a mutable range of memory.
+//! Use with caution :)
+class TMutableRef
+    : public TMutableRange<char>
+{
+public:
+    //! Creates a null TMutableRef.
     //! Note empty TMutableRef is not the same as null TMutableRef.
     //! `operator bool` can be used to check if ref is nonnull.
     TMutableRef() = default;
- 
-    //! Creates a TMutableRef for a given block of memory. 
+
+    //! Creates a TMutableRef for a given block of memory.
     TMutableRef(void* data, size_t size);
- 
-    //! Creates a TMutableRef for a given range of memory. 
+
+    //! Creates a TMutableRef for a given range of memory.
     TMutableRef(void* begin, void* end);
- 
+
     //! Creates an empty TMutableRef.
     static TMutableRef MakeEmpty();
 
-    //! Converts a TMutableRef to TRef. 
+    //! Converts a TMutableRef to TRef.
     operator TRef() const;
 
-    //! Creates a non-owning TMutableRef for a given blob. 
+    //! Creates a non-owning TMutableRef for a given blob.
     static TMutableRef FromBlob(TBlob& blob);
 
-    //! Creates a non-owning TMutableRef for a given pod structure. 
-    template <class T> 
+    //! Creates a non-owning TMutableRef for a given pod structure.
+    template <class T>
     static TMutableRef FromPod(T& data);
 
-    //! Creates a non-owning TMutableRef for a given string. 
-    //! Ensures that the string is not shared. 
+    //! Creates a non-owning TMutableRef for a given string.
+    //! Ensures that the string is not shared.
     static TMutableRef FromString(TString& str);
 
-    //! Creates a TMutableRef for a part of existing range. 
+    //! Creates a TMutableRef for a part of existing range.
     TMutableRef Slice(size_t startOffset, size_t endOffset) const;
 };
 
@@ -101,16 +101,16 @@ struct TDefaultSharedBlobTag { };
 
 //! A reference to a range of memory with shared ownership.
 class TSharedRef
-    : public TSharedRange<char> 
+    : public TSharedRange<char>
 {
 public:
-    //! Creates a null TSharedRef. 
+    //! Creates a null TSharedRef.
     TSharedRef() = default;
 
-    //! Creates a TSharedRef with a given holder. 
+    //! Creates a TSharedRef with a given holder.
     TSharedRef(TRef ref, THolderPtr holder);
 
-    //! Creates a TSharedRef from a pointer and length. 
+    //! Creates a TSharedRef from a pointer and length.
     TSharedRef(const void* data, size_t length, THolderPtr holder);
 
     //! Creates a TSharedRef from a range.
@@ -119,39 +119,39 @@ public:
     //! Creates an empty TSharedRef.
     static TSharedRef MakeEmpty();
 
-    //! Converts a TSharedRef to TRef. 
+    //! Converts a TSharedRef to TRef.
     operator TRef() const;
 
 
-    //! Creates a TSharedRef from a string. 
+    //! Creates a TSharedRef from a string.
     //! Since strings are ref-counted, no data is copied.
     //! The memory is marked with a given tag.
     template <class TTag>
     static TSharedRef FromString(TString str);
 
-    //! Creates a TSharedRef from a string. 
+    //! Creates a TSharedRef from a string.
     //! Since strings are ref-counted, no data is copied.
     //! The memory is marked with TDefaultSharedBlobTag.
     static TSharedRef FromString(TString str);
 
-    //! Creates a TSharedRef reference from a string. 
+    //! Creates a TSharedRef reference from a string.
     //! Since strings are ref-counted, no data is copied.
     //! The memory is marked with a given tag.
     static TSharedRef FromString(TString str, TRefCountedTypeCookie tagCookie);
 
-    //! Creates a TSharedRef for a given blob taking ownership of its content. 
+    //! Creates a TSharedRef for a given blob taking ownership of its content.
     static TSharedRef FromBlob(TBlob&& blob);
 
-    //! Creates a copy of a given TRef. 
-    //! The memory is marked with a given tag. 
+    //! Creates a copy of a given TRef.
+    //! The memory is marked with a given tag.
     static TSharedRef MakeCopy(TRef ref, TRefCountedTypeCookie tagCookie);
- 
-    //! Creates a copy of a given TRef. 
-    //! The memory is marked with a given tag. 
-    template <class TTag> 
+
+    //! Creates a copy of a given TRef.
+    //! The memory is marked with a given tag.
+    template <class TTag>
     static TSharedRef MakeCopy(TRef ref);
 
-    //! Creates a TSharedRef for a part of existing range. 
+    //! Creates a TSharedRef for a part of existing range.
     TSharedRef Slice(size_t startOffset, size_t endOffset) const;
 
     //! Creates a TSharedRef for a part of existing range.
@@ -160,54 +160,54 @@ public:
     //! Creates a vector of slices with specified size.
     std::vector<TSharedRef> Split(size_t partSize) const;
 
-private: 
+private:
     friend class TSharedRefArrayImpl;
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-//! A reference to a mutable range of memory with shared ownership. 
-//! Use with caution :) 
-class TSharedMutableRef 
-    : public TSharedMutableRange<char> 
-{ 
-public: 
-    //! Creates a null TSharedMutableRef. 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! A reference to a mutable range of memory with shared ownership.
+//! Use with caution :)
+class TSharedMutableRef
+    : public TSharedMutableRange<char>
+{
+public:
+    //! Creates a null TSharedMutableRef.
     TSharedMutableRef() = default;
- 
-    //! Creates a TSharedMutableRef with a given holder. 
+
+    //! Creates a TSharedMutableRef with a given holder.
     TSharedMutableRef(const TMutableRef& ref, THolderPtr holder);
- 
-    //! Creates a TSharedMutableRef from a pointer and length. 
+
+    //! Creates a TSharedMutableRef from a pointer and length.
     TSharedMutableRef(void* data, size_t length, THolderPtr holder);
- 
+
     //! Creates a TSharedMutableRef from a range.
     TSharedMutableRef(void* begin, void* end, THolderPtr holder);
- 
+
     //! Creates an empty TSharedMutableRef.
     static TSharedMutableRef MakeEmpty();
 
-    //! Converts a TSharedMutableRef to TMutableRef. 
+    //! Converts a TSharedMutableRef to TMutableRef.
     operator TMutableRef() const;
 
-    //! Converts a TSharedMutableRef to TSharedRef. 
+    //! Converts a TSharedMutableRef to TSharedRef.
     operator TSharedRef() const;
 
-    //! Converts a TSharedMutableRef to TRef. 
+    //! Converts a TSharedMutableRef to TRef.
     operator TRef() const;
 
- 
-    //! Allocates a new shared block of memory. 
-    //! The memory is marked with a given tag. 
-    template <class TTag> 
+
+    //! Allocates a new shared block of memory.
+    //! The memory is marked with a given tag.
+    template <class TTag>
     static TSharedMutableRef Allocate(size_t size, bool initializeStorage = true);
 
-    //! Allocates a new shared block of memory. 
-    //! The memory is marked with TDefaultSharedBlobTag. 
+    //! Allocates a new shared block of memory.
+    //! The memory is marked with TDefaultSharedBlobTag.
     static TSharedMutableRef Allocate(size_t size, bool initializeStorage = true);
 
-    //! Allocates a new shared block of memory. 
-    //! The memory is marked with a given tag. 
+    //! Allocates a new shared block of memory.
+    //! The memory is marked with a given tag.
     static TSharedMutableRef Allocate(size_t size, bool initializeStorage, TRefCountedTypeCookie tagCookie);
 
     //! Allocates a new page aligned shared block of memory.
@@ -226,22 +226,22 @@ public:
     //! The memory is marked with a given tag.
     static TSharedMutableRef AllocatePageAligned(size_t size, bool initializeStorage, TRefCountedTypeCookie tagCookie);
 
-    //! Creates a TSharedMutableRef for the whole blob taking ownership of its content. 
+    //! Creates a TSharedMutableRef for the whole blob taking ownership of its content.
     static TSharedMutableRef FromBlob(TBlob&& blob);
 
-    //! Creates a copy of a given TRef. 
-    //! The memory is marked with a given tag. 
+    //! Creates a copy of a given TRef.
+    //! The memory is marked with a given tag.
     static TSharedMutableRef MakeCopy(TRef ref, TRefCountedTypeCookie tagCookie);
 
-    //! Creates a copy of a given TRef. 
-    //! The memory is marked with a given tag. 
-    template <class TTag> 
+    //! Creates a copy of a given TRef.
+    //! The memory is marked with a given tag.
+    template <class TTag>
     static TSharedMutableRef MakeCopy(TRef ref);
 
-    //! Creates a reference for a part of existing range. 
+    //! Creates a reference for a part of existing range.
     TSharedMutableRef Slice(size_t startOffset, size_t endOffset) const;
 
-    //! Creates a reference for a part of existing range. 
+    //! Creates a reference for a part of existing range.
     TSharedMutableRef Slice(void* begin, void* end) const;
 };
 
@@ -270,13 +270,13 @@ public:
     template <class TParts>
     TSharedRefArray(TParts&& parts, TMoveParts);
 
-    TSharedRefArray& operator = (const TSharedRefArray& other); 
-    TSharedRefArray& operator = (TSharedRefArray&& other); 
+    TSharedRefArray& operator = (const TSharedRefArray& other);
+    TSharedRefArray& operator = (TSharedRefArray&& other);
 
     explicit operator bool() const;
 
-    void Reset(); 
- 
+    void Reset();
+
     size_t Size() const;
     size_t size() const;
     i64 ByteSize() const;
@@ -303,7 +303,7 @@ private:
         As&&... args);
 };
 
-// STL interop. 
+// STL interop.
 const TSharedRef* begin(const TSharedRefArray& array);
 const TSharedRef* end(const TSharedRefArray& array);
 
@@ -364,17 +364,17 @@ TString ToString(TRef ref);
 TString ToString(const TMutableRef& ref);
 TString ToString(const TSharedRef& ref);
 TString ToString(const TSharedMutableRef& ref);
- 
+
 size_t GetPageSize();
 size_t RoundUpToPage(size_t bytes);
 
 size_t GetByteSize(TRef ref);
 size_t GetByteSize(const TSharedRefArray& array);
-template <class T> 
+template <class T>
 size_t GetByteSize(TRange<T> parts);
 template <class T>
 size_t GetByteSize(const std::vector<T>& parts);
- 
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

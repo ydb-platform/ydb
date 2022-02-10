@@ -1,10 +1,10 @@
 #pragma once
 
-#include "string.h" 
+#include "string.h"
 
-#include <library/cpp/yt/misc/enum.h> 
+#include <library/cpp/yt/misc/enum.h>
 
-#include <optional> 
+#include <optional>
 
 namespace NYT {
 

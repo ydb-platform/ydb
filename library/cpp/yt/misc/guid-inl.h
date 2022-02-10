@@ -32,18 +32,18 @@ Y_FORCE_INLINE TGuid::operator bool() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE bool operator == (TGuid lhs, TGuid rhs) 
+Y_FORCE_INLINE bool operator == (TGuid lhs, TGuid rhs)
 {
     return lhs.Parts64[0] == rhs.Parts64[0] &&
            lhs.Parts64[1] == rhs.Parts64[1];
 }
 
-Y_FORCE_INLINE bool operator != (TGuid lhs, TGuid rhs) 
+Y_FORCE_INLINE bool operator != (TGuid lhs, TGuid rhs)
 {
     return !(lhs == rhs);
 }
 
-Y_FORCE_INLINE bool operator < (TGuid lhs, TGuid rhs) 
+Y_FORCE_INLINE bool operator < (TGuid lhs, TGuid rhs)
 {
 #ifdef __GNUC__
     ui64 lhs0 = __builtin_bswap64(lhs.Parts64[0]);

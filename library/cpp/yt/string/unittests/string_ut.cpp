@@ -1,4 +1,4 @@
-#include <library/cpp/testing/gtest/gtest.h> 
+#include <library/cpp/testing/gtest/gtest.h>
 
 #include <library/cpp/yt/string/string.h>
 

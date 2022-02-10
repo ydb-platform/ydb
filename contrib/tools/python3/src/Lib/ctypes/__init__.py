@@ -371,8 +371,8 @@ class CDLL(object):
             _restype_ = self._func_restype_
         self._FuncPtr = _FuncPtr
 
-        self._builtin = {} 
- 
+        self._builtin = {}
+
         if handle is None:
             if isinstance(self._name, dict):
                 self._builtin = self._name['symbols']

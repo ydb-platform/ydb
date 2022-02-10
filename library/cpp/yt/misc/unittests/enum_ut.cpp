@@ -1,6 +1,6 @@
-#include <library/cpp/testing/gtest/gtest.h> 
+#include <library/cpp/testing/gtest/gtest.h>
 
-#include <library/cpp/yt/misc/enum.h> 
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT {
 namespace {

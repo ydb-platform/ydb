@@ -1,5 +1,5 @@
-PY23_LIBRARY()
-
+PY23_LIBRARY() 
+ 
 OWNER(exprmntr)
 
 PY_SRCS(conftest.py)

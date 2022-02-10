@@ -196,70 +196,70 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT(node == copyNode);
     }
 
-    Y_UNIT_TEST(TestComparison) { 
-        using namespace NYT::NNodeCmp; 
-        { 
-            TNode nodeNoAttributes = TNode()("lee", 42)("faa", 54); 
-            TNode node = nodeNoAttributes; 
-            node.Attributes()("foo", true)("bar", false); 
-            UNIT_ASSERT_EXCEPTION(node > nodeNoAttributes, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(node >= nodeNoAttributes, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(nodeNoAttributes < node, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(nodeNoAttributes <= node, TNode::TTypeError); 
-        } 
-        { 
-            TNode nodeMap = TNode()("map", 23); 
-            TNode nodeList = TNode::CreateList(); 
-            UNIT_ASSERT_EXCEPTION(nodeList > nodeMap, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(nodeMap < nodeList, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(nodeMap >= nodeMap, TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(nodeList <= nodeList, TNode::TTypeError); 
-        } 
-        { 
-            TNode node1("aaa"); 
-            TNode node2("bbb"); 
-            TNode node3("ccc"); 
-            UNIT_ASSERT(node1 < node2); 
-            UNIT_ASSERT(node1 <= node2); 
-            UNIT_ASSERT(node1 < node3); 
-            UNIT_ASSERT(node1 <= node3); 
-            UNIT_ASSERT(!(node3 < node1)); 
-            UNIT_ASSERT(!(node1 > node3)); 
-            UNIT_ASSERT(!(node3 <= node1)); 
-            UNIT_ASSERT(!(node1 >= node3)); 
- 
-            UNIT_ASSERT(node3 > node2); 
-            UNIT_ASSERT(node3 >= node2); 
-            UNIT_ASSERT(node3 > node1); 
-            UNIT_ASSERT(node3 >= node1); 
- 
-            UNIT_ASSERT(node1 <= node1); 
-            UNIT_ASSERT(node1 >= node1); 
-        } 
-        { 
-            TNode node1(23); 
-            TNode node2("bbb"); 
-            TNode node3 = TNode::CreateEntity(); 
- 
-            UNIT_ASSERT(node1 > node2); 
-            UNIT_ASSERT(node1 >= node2); 
-            UNIT_ASSERT(node2 < node1); 
-            UNIT_ASSERT(node2 <= node1); 
- 
-            UNIT_ASSERT(!(node1 < node2)); 
-            UNIT_ASSERT(!(node1 <= node2)); 
-            UNIT_ASSERT(!(node2 > node1)); 
-            UNIT_ASSERT(!(node2 >= node1)); 
- 
-            UNIT_ASSERT(node1 < node3); 
-            UNIT_ASSERT(node2 < node3); 
-            UNIT_ASSERT(node3 <= node3); 
-            UNIT_ASSERT(!(node3 < node3)); 
-            UNIT_ASSERT(!(node3 > node3)); 
-            UNIT_ASSERT(!(node2 >= node3)); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(TestComparison) {
+        using namespace NYT::NNodeCmp;
+        {
+            TNode nodeNoAttributes = TNode()("lee", 42)("faa", 54);
+            TNode node = nodeNoAttributes;
+            node.Attributes()("foo", true)("bar", false);
+            UNIT_ASSERT_EXCEPTION(node > nodeNoAttributes, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(node >= nodeNoAttributes, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(nodeNoAttributes < node, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(nodeNoAttributes <= node, TNode::TTypeError);
+        }
+        {
+            TNode nodeMap = TNode()("map", 23);
+            TNode nodeList = TNode::CreateList();
+            UNIT_ASSERT_EXCEPTION(nodeList > nodeMap, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(nodeMap < nodeList, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(nodeMap >= nodeMap, TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(nodeList <= nodeList, TNode::TTypeError);
+        }
+        {
+            TNode node1("aaa");
+            TNode node2("bbb");
+            TNode node3("ccc");
+            UNIT_ASSERT(node1 < node2);
+            UNIT_ASSERT(node1 <= node2);
+            UNIT_ASSERT(node1 < node3);
+            UNIT_ASSERT(node1 <= node3);
+            UNIT_ASSERT(!(node3 < node1));
+            UNIT_ASSERT(!(node1 > node3));
+            UNIT_ASSERT(!(node3 <= node1));
+            UNIT_ASSERT(!(node1 >= node3));
+
+            UNIT_ASSERT(node3 > node2);
+            UNIT_ASSERT(node3 >= node2);
+            UNIT_ASSERT(node3 > node1);
+            UNIT_ASSERT(node3 >= node1);
+
+            UNIT_ASSERT(node1 <= node1);
+            UNIT_ASSERT(node1 >= node1);
+        }
+        {
+            TNode node1(23);
+            TNode node2("bbb");
+            TNode node3 = TNode::CreateEntity();
+
+            UNIT_ASSERT(node1 > node2);
+            UNIT_ASSERT(node1 >= node2);
+            UNIT_ASSERT(node2 < node1);
+            UNIT_ASSERT(node2 <= node1);
+
+            UNIT_ASSERT(!(node1 < node2));
+            UNIT_ASSERT(!(node1 <= node2));
+            UNIT_ASSERT(!(node2 > node1));
+            UNIT_ASSERT(!(node2 >= node1));
+
+            UNIT_ASSERT(node1 < node3);
+            UNIT_ASSERT(node2 < node3);
+            UNIT_ASSERT(node3 <= node3);
+            UNIT_ASSERT(!(node3 < node3));
+            UNIT_ASSERT(!(node3 > node3));
+            UNIT_ASSERT(!(node2 >= node3));
+        }
+    }
+
     Y_UNIT_TEST(TestSaveLoad) {
         TNode node = TNode()("foo", "bar")("baz", 42);
         node.Attributes()["attr_name"] = "attr_value";

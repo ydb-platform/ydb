@@ -20,7 +20,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-# include "idn_config.h" 
+# include "idn_config.h"
 #endif
 
 #include <stdlib.h>
@@ -495,7 +495,7 @@ idna_to_ascii_4z (const uint32_t * input, char **output, int flags)
 {
   const uint32_t *start = input;
   const uint32_t *end = input;
-  char buf[1<<9]; 
+  char buf[1<<9];
   char *out = NULL;
   int rc;
 

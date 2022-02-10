@@ -602,7 +602,7 @@ RECURSE(
     M2Crypto
     m3u8
     Mako
-    marisa_trie 
+    marisa_trie
     markdown2
     Markdown
     MarkupSafe
@@ -1020,7 +1020,7 @@ RECURSE(
     spdx-tools
     spidev
     spintop-openhtf
-    splunk-sdk-python 
+    splunk-sdk-python
     sqlalchemy
     SQLAlchemy-Continuum
     sqlalchemy-stubs

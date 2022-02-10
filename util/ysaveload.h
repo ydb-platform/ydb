@@ -322,7 +322,7 @@ public:
 
 template <class TVec>
 class TVectorSerializer {
-    using TIter = typename TVec::iterator;
+    using TIter = typename TVec::iterator; 
 
 public:
     static inline void Save(IOutputStream* rh, const TVec& v) {

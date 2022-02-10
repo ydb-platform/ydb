@@ -110,7 +110,7 @@ struct TNullTmpl {
     }
 };
 
-using TNull = TNullTmpl<0>;
+using TNull = TNullTmpl<0>; 
 
 /*
  * Class for zero-initialize padding bytes in derived classes

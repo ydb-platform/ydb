@@ -121,8 +121,8 @@ namespace NDetail {
 
     template <>
     struct TRecodeTraits<char> {
-        using TCharTo = wchar16;
-        using TStringBufTo = TWtringBuf;
+        using TCharTo = wchar16; 
+        using TStringBufTo = TWtringBuf; 
         using TStringTo = TUtf16String;
         enum { ReserveSize = 4 }; // How many TCharFrom characters we should reserve for one TCharTo character in worst case
                                   // Here an unicode character can be converted up to 4 bytes of UTF8
@@ -130,8 +130,8 @@ namespace NDetail {
 
     template <>
     struct TRecodeTraits<wchar16> {
-        using TCharTo = char;
-        using TStringBufTo = TStringBuf;
+        using TCharTo = char; 
+        using TStringBufTo = TStringBuf; 
         using TStringTo = TString;
         enum { ReserveSize = 2 }; // possible surrogate pairs ?
     };
@@ -140,7 +140,7 @@ namespace NDetail {
     template <typename TResult>
     struct TRecodeResultOps {
         // default implementation will work with TString and TUtf16String - 99% of usage
-        using TResultChar = typename TResult::char_type;
+        using TResultChar = typename TResult::char_type; 
 
         static inline size_t Size(const TResult& dst) {
             return dst.size();
@@ -160,7 +160,7 @@ namespace NDetail {
 
     template <typename TCharFrom, typename TResult>
     typename TRecodeTraits<TCharFrom>::TStringBufTo Recode(const TBasicStringBuf<TCharFrom> src, TResult& dst, ECharset encoding) {
-        using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo;
+        using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo; 
         // make enough room for re-coded string
         TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, src.size() * TRecodeTraits<TCharTo>::ReserveSize);
         // do re-coding
@@ -173,7 +173,7 @@ namespace NDetail {
     // appending version of Recode()
     template <typename TCharFrom, typename TResult>
     typename TRecodeTraits<TCharFrom>::TStringBufTo RecodeAppend(const TBasicStringBuf<TCharFrom> src, TResult& dst, ECharset encoding) {
-        using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo;
+        using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo; 
         size_t dstOrigSize = TRecodeResultOps<TResult>::Size(dst);
         TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, dstOrigSize + src.size() * TRecodeTraits<TCharTo>::ReserveSize);
         TBasicStringBuf<TCharTo> appended = NBaseOps::Recode(src, dstbuf + dstOrigSize, encoding);

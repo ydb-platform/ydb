@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL("zlib", d.Child("file.zlib").GetExtension());
         UNIT_ASSERT_VALUES_EQUAL("zlib", d.Child("file.ylib.zlib").GetExtension());
     }
-
+ 
     Y_UNIT_TEST(TestRename) {
         TTestDirectory xx("TestRename");
         TFsPath f1 = xx.Child("f1");

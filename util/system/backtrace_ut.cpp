@@ -5,7 +5,7 @@
 
 #include <util/stream/output.h>
 
-using PFunc = int (*)(void**, size_t);
+using PFunc = int (*)(void**, size_t); 
 
 int Dbg1(void** buf, size_t len) {
     volatile int ret = (int)BackTrace(buf, len);

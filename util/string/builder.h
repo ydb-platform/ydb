@@ -1,9 +1,9 @@
-#pragma once
-
-#include <util/stream/str.h>
+#pragma once 
+ 
+#include <util/stream/str.h> 
 #include <utility>
 #include <util/generic/string.h>
-
+ 
 namespace NPrivateStringBuilder {
     class TStringBuilder: public TString {
     public:
@@ -20,14 +20,14 @@ namespace NPrivateStringBuilder {
 
         TStringOutput Out;
     };
-
+ 
     template <class T>
     static inline TStringBuilder& operator<<(TStringBuilder& builder, const T& t) {
         builder.Out << t;
-
+ 
         return builder;
     }
-
+ 
     template <class T>
     static inline TStringBuilder&& operator<<(TStringBuilder&& builder, const T& t) {
         builder.Out << t;

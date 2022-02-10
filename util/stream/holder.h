@@ -1,13 +1,13 @@
-#pragma once
-
-#include <util/generic/ptr.h>
+#pragma once 
+ 
+#include <util/generic/ptr.h> 
 
 #include <utility>
 #include <type_traits>
-
+ 
 class IInputStream;
 class IOutputStream;
-
+ 
 namespace NPrivate {
     template <class Stream, bool isInput = std::is_base_of<IInputStream, Stream>::value>
     struct TStreamBase {
@@ -34,11 +34,11 @@ namespace NPrivate {
  */
 template <class Base, class StreamBase = typename ::NPrivate::TStreamBase<Base>::TType>
 class THoldingStream: private THolder<StreamBase>, public Base {
-public:
+public: 
     template <class... Args>
     inline THoldingStream(THolder<StreamBase> stream, Args&&... args)
         : THolder<StreamBase>(std::move(stream))
         , Base(this->Get(), std::forward<Args>(args)...)
-    {
-    }
-};
+    { 
+    } 
+}; 

@@ -54,17 +54,17 @@ namespace {
 
     template <unsigned N>
     struct TToRealTypeBySize {
-        using TResult = ui32;
+        using TResult = ui32; 
     };
 
     template <>
     struct TToRealTypeBySize<8> {
-        using TResult = ui64;
+        using TResult = ui64; 
     };
 
     template <class T>
     struct TToRealType {
-        using TResult = typename TToRealTypeBySize<sizeof(T)>::TResult;
+        using TResult = typename TToRealTypeBySize<sizeof(T)>::TResult; 
     };
 }
 

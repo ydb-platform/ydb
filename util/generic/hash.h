@@ -65,11 +65,11 @@ struct __yhashtable_iterator {
     using node = __yhashtable_node<Value>;
 
     using iterator_category = std::forward_iterator_tag;
-    using value_type = Value;
-    using difference_type = ptrdiff_t;
-    using size_type = size_t;
-    using reference = Value&;
-    using pointer = Value*;
+    using value_type = Value; 
+    using difference_type = ptrdiff_t; 
+    using size_type = size_t; 
+    using reference = Value&; 
+    using pointer = Value*; 
 
     node* cur;
 
@@ -108,11 +108,11 @@ struct __yhashtable_const_iterator {
     using node = __yhashtable_node<Value>;
 
     using iterator_category = std::forward_iterator_tag;
-    using value_type = Value;
-    using difference_type = ptrdiff_t;
-    using size_type = size_t;
-    using reference = const Value&;
-    using pointer = const Value*;
+    using value_type = Value; 
+    using difference_type = ptrdiff_t; 
+    using size_type = size_t; 
+    using reference = const Value&; 
+    using pointer = const Value*; 
 
     const node* cur;
 
@@ -204,21 +204,21 @@ public:
  */
 template <class T, class Alloc>
 class _yhashtable_buckets: private _allocator_base<Alloc> {
-    using base_type = _allocator_base<Alloc>;
+    using base_type = _allocator_base<Alloc>; 
 
     static_assert(sizeof(T) == sizeof(size_t), "T is expected to be the same size as size_t.");
 
 public:
-    using allocator_type = Alloc;
-    using value_type = T;
-    using pointer = T*;
-    using const_pointer = const T*;
-    using reference = T&;
-    using const_reference = const T&;
-    using iterator = pointer;
-    using const_iterator = const_pointer;
-    using size_type = size_t;
-    using difference_type = ptrdiff_t;
+    using allocator_type = Alloc; 
+    using value_type = T; 
+    using pointer = T*; 
+    using const_pointer = const T*; 
+    using reference = T&; 
+    using const_reference = const T&; 
+    using iterator = pointer; 
+    using const_iterator = const_pointer; 
+    using size_type = size_t; 
+    using difference_type = ptrdiff_t; 
     using TBucketDivisor = ::NPrivate::THashDivisor;
 
     _yhashtable_buckets(const Alloc& other)
@@ -349,7 +349,7 @@ private:
  */
 template <class HashFcn, class ExtractKey, class EqualKey, class Alloc, bool IsEmpty = std::is_empty<HashFcn>::value&& std::is_empty<ExtractKey>::value&& std::is_empty<EqualKey>::value>
 class _yhashtable_base: public _allocator_base<Alloc> {
-    using base_type = _allocator_base<Alloc>;
+    using base_type = _allocator_base<Alloc>; 
 
 public:
     _yhashtable_base(const HashFcn& hash, const ExtractKey& extract, const EqualKey& equals, const Alloc& alloc)
@@ -405,7 +405,7 @@ private:
 
 template <class HashFcn, class ExtractKey, class EqualKey, class Alloc>
 class _yhashtable_base<HashFcn, ExtractKey, EqualKey, Alloc, true>: public _allocator_base<Alloc> {
-    using base_type = _allocator_base<Alloc>;
+    using base_type = _allocator_base<Alloc>; 
 
 public:
     _yhashtable_base(const HashFcn&, const ExtractKey&, const EqualKey&, const Alloc& alloc)
@@ -451,27 +451,27 @@ extern const void* const _yhashtable_empty_data[];
 template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc>
 class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>::base_type {
     using traits_type = _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>;
-    using base_type = typename traits_type::base_type;
-    using node = typename traits_type::node;
-    using nodep_allocator_type = typename traits_type::nodep_allocator_type;
+    using base_type = typename traits_type::base_type; 
+    using node = typename traits_type::node; 
+    using nodep_allocator_type = typename traits_type::nodep_allocator_type; 
     using buckets_type = _yhashtable_buckets<node*, nodep_allocator_type>;
     using TBucketDivisor = ::NPrivate::THashDivisor;
 
 public:
-    using key_type = Key;
-    using value_type = Value;
-    using hasher = HashFcn;
-    using key_equal = EqualKey;
-    using key_extract = ExtractKey;
+    using key_type = Key; 
+    using value_type = Value; 
+    using hasher = HashFcn; 
+    using key_equal = EqualKey; 
+    using key_extract = ExtractKey; 
     using allocator_type = Alloc;
-    using node_allocator_type = typename traits_type::node_allocator_type;
+    using node_allocator_type = typename traits_type::node_allocator_type; 
 
-    using size_type = size_t;
-    using difference_type = ptrdiff_t;
-    using pointer = value_type*;
-    using const_pointer = const value_type*;
-    using reference = value_type&;
-    using const_reference = const value_type&;
+    using size_type = size_t; 
+    using difference_type = ptrdiff_t; 
+    using pointer = value_type*; 
+    using const_pointer = const value_type*; 
+    using reference = value_type&; 
+    using const_reference = const value_type&; 
 
     node_allocator_type& GetNodeAllocator() {
         return this->_get_alloc();
@@ -513,7 +513,7 @@ private:
 public:
     using iterator = __yhashtable_iterator<Value>;
     using const_iterator = __yhashtable_const_iterator<Value>;
-    using insert_ctx = node**;
+    using insert_ctx = node**; 
 
     friend struct __yhashtable_iterator<Value>;
     friend struct __yhashtable_const_iterator<Value>;
@@ -1428,24 +1428,24 @@ private:
     ht rep;
 
 public:
-    using key_type = typename ht::key_type;
-    using value_type = typename ht::value_type;
-    using hasher = typename ht::hasher;
-    using key_equal = typename ht::key_equal;
+    using key_type = typename ht::key_type; 
+    using value_type = typename ht::value_type; 
+    using hasher = typename ht::hasher; 
+    using key_equal = typename ht::key_equal; 
     using allocator_type = typename ht::allocator_type;
-    using node_allocator_type = typename ht::node_allocator_type;
-    using mapped_type = T;
+    using node_allocator_type = typename ht::node_allocator_type; 
+    using mapped_type = T; 
 
-    using size_type = typename ht::size_type;
-    using difference_type = typename ht::difference_type;
-    using pointer = typename ht::pointer;
-    using const_pointer = typename ht::const_pointer;
-    using reference = typename ht::reference;
-    using const_reference = typename ht::const_reference;
+    using size_type = typename ht::size_type; 
+    using difference_type = typename ht::difference_type; 
+    using pointer = typename ht::pointer; 
+    using const_pointer = typename ht::const_pointer; 
+    using reference = typename ht::reference; 
+    using const_reference = typename ht::const_reference; 
 
-    using iterator = typename ht::iterator;
-    using const_iterator = typename ht::const_iterator;
-    using insert_ctx = typename ht::insert_ctx;
+    using iterator = typename ht::iterator; 
+    using const_iterator = typename ht::const_iterator; 
+    using insert_ctx = typename ht::insert_ctx; 
 
     hasher hash_function() const {
         return rep.hash_function();
@@ -1760,22 +1760,22 @@ private:
     ht rep;
 
 public:
-    using key_type = typename ht::key_type;
-    using value_type = typename ht::value_type;
-    using hasher = typename ht::hasher;
-    using key_equal = typename ht::key_equal;
-    using mapped_type = T;
+    using key_type = typename ht::key_type; 
+    using value_type = typename ht::value_type; 
+    using hasher = typename ht::hasher; 
+    using key_equal = typename ht::key_equal; 
+    using mapped_type = T; 
     using allocator_type = typename ht::allocator_type;
 
-    using size_type = typename ht::size_type;
-    using difference_type = typename ht::difference_type;
-    using pointer = typename ht::pointer;
-    using const_pointer = typename ht::const_pointer;
-    using reference = typename ht::reference;
-    using const_reference = typename ht::const_reference;
+    using size_type = typename ht::size_type; 
+    using difference_type = typename ht::difference_type; 
+    using pointer = typename ht::pointer; 
+    using const_pointer = typename ht::const_pointer; 
+    using reference = typename ht::reference; 
+    using const_reference = typename ht::const_reference; 
 
-    using iterator = typename ht::iterator;
-    using const_iterator = typename ht::const_iterator;
+    using iterator = typename ht::iterator; 
+    using const_iterator = typename ht::const_iterator; 
     using insert_ctx = typename ht::insert_ctx;
 
     hasher hash_function() const {

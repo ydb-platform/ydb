@@ -36,8 +36,8 @@ protected:
         }
     };
     using seg_container = TVector<seg_inf>;
-    using seg_iterator = typename seg_container::iterator;
-    using seg_const_iterator = typename seg_container::const_iterator;
+    using seg_iterator = typename seg_container::iterator; 
+    using seg_const_iterator = typename seg_container::const_iterator; 
     const size_t segment_size; // default size of a memory chunk in sizeof(T)-units
     size_t last_free;          // size of free memory in chunk in sizeof(T)-units
     size_t last_ins_size;      // size of memory used in chunk by the last append() in bytes
@@ -148,7 +148,7 @@ public:
 
 class segmented_string_pool: public segmented_pool<char> {
 private:
-    using _Base = segmented_pool<char>;
+    using _Base = segmented_pool<char>; 
 
 public:
     segmented_string_pool()

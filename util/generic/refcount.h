@@ -81,13 +81,13 @@ private:
     size_t ThreadId;
 };
 #else
-using TCheckPolicy = TNoCheckPolicy;
+using TCheckPolicy = TNoCheckPolicy; 
 #endif
 
 // Use this one if access from multiple threads to your pointer is an error and you want to enforce thread checks
-using TSimpleCounter = TSimpleCounterTemplate<TCheckPolicy>;
+using TSimpleCounter = TSimpleCounterTemplate<TCheckPolicy>; 
 // Use this one if you do want to share the pointer between threads, omit thread checks and do the synchronization yourself
-using TExplicitSimpleCounter = TSimpleCounterTemplate<TNoCheckPolicy>;
+using TExplicitSimpleCounter = TSimpleCounterTemplate<TNoCheckPolicy>; 
 
 template <class TCounterCheckPolicy>
 struct TCommonLockOps<TSimpleCounterTemplate<TCounterCheckPolicy>> {

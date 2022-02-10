@@ -236,7 +236,7 @@ void Out<void*>(IOutputStream& o, void* t) {
     Out<const void*>(o, t);
 }
 
-using TNullPtr = decltype(nullptr);
+using TNullPtr = decltype(nullptr); 
 
 template <>
 void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) {

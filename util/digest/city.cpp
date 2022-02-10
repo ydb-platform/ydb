@@ -31,9 +31,9 @@
 
     #include "city.h"
 
-using uint8 = ui8;
-using uint32 = ui32;
-using uint64 = ui64;
+using uint8 = ui8; 
+using uint32 = ui32; 
+using uint64 = ui64; 
 
     #include <util/system/unaligned_mem.h>
     #include <util/generic/algorithm.h>

@@ -99,7 +99,7 @@ const size_t DEFCHAR_BUF = 58; // CCL_NUM + 1
 #define SHIFT(i) (ULL(1) << (i))
 
 namespace NUnicode {
-    using TCombining = ui8;
+    using TCombining = ui8; 
 
     namespace NPrivate {
         struct TProperty {
@@ -112,7 +112,7 @@ namespace NUnicode {
 
         extern const size_t DEFAULT_KEY;
 
-        using TUnidataTable = NUnicodeTable::TTable<NUnicodeTable::TSubtable<NUnicodeTable::UNICODE_TABLE_SHIFT, NUnicodeTable::TValues<TProperty>>>;
+        using TUnidataTable = NUnicodeTable::TTable<NUnicodeTable::TSubtable<NUnicodeTable::UNICODE_TABLE_SHIFT, NUnicodeTable::TValues<TProperty>>>; 
         const TUnidataTable& UnidataTable();
 
         inline const TProperty& CharProperty(wchar32 ch) {

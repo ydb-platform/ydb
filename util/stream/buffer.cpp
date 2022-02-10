@@ -44,7 +44,7 @@ private:
 };
 
 namespace {
-    using TImpl = TBufferOutput::TImpl;
+    using TImpl = TBufferOutput::TImpl; 
 
     class TOwnedImpl: private TBuffer, public TImpl {
     public:

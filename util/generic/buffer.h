@@ -10,8 +10,8 @@
 
 class TBuffer {
 public:
-    using TIterator = char*;
-    using TConstIterator = const char*;
+    using TIterator = char*; 
+    using TConstIterator = const char*; 
 
     TBuffer(size_t len = 0);
     TBuffer(const char* buf, size_t len);

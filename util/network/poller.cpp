@@ -5,7 +5,7 @@
 
 namespace {
     struct TMutexLocking {
-        using TMyMutex = TMutex;
+        using TMyMutex = TMutex; 
     };
 }
 

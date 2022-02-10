@@ -194,12 +194,12 @@ UNIT_TEST_SUITE_REGISTRATION(TAtomicTest<TAtomic>);
 // chooses type *other than* T1
 template <typename T1, typename T2, typename T3>
 struct TChooser {
-    using TdType = T2;
+    using TdType = T2; 
 };
 
 template <typename T1, typename T2>
 struct TChooser<T1, T1, T2> {
-    using TdType = T2;
+    using TdType = T2; 
 };
 
 template <typename T1>
@@ -208,7 +208,7 @@ struct TChooser<T1, T1, T1> {};
     #if defined(__IOS__) && defined(_32_)
 using TAltAtomic = int;
     #else
-using TAltAtomic = volatile TChooser<TAtomicBase, long, long long>::TdType;
+using TAltAtomic = volatile TChooser<TAtomicBase, long, long long>::TdType; 
     #endif
 
 class TTTest: public TAtomicTest<TAltAtomic> {

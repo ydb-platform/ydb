@@ -124,13 +124,13 @@ bool resolvepath(TString& folder, const TString& home) {
 
 #else
 
-using dir_type = enum {
-    dt_empty,
-    dt_error,
-    dt_up,
-    dt_dir
-};
-
+using dir_type = enum { 
+    dt_empty, 
+    dt_error, 
+    dt_up, 
+    dt_dir 
+}; 
+ 
 // precondition:  *ptr != '\\' || *ptr == 0 (cause dt_error)
 // postcondition: *ptr != '\\'
 template <typename T>
@@ -181,14 +181,14 @@ static int next_dir(T*& ptr) {
     return dt_error;
 }
 
-using disk_type = enum {
-    dk_noflags = 0,
-    dk_unc = 1,
-    dk_hasdrive = 2,
-    dk_fromroot = 4,
-    dk_error = 8
-};
-
+using disk_type = enum { 
+    dk_noflags = 0, 
+    dk_unc = 1, 
+    dk_hasdrive = 2, 
+    dk_fromroot = 4, 
+    dk_error = 8 
+}; 
+ 
 // root slash (if any) - part of disk
 template <typename T>
 static int skip_disk(T*& ptr) {

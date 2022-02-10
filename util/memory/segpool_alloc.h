@@ -30,15 +30,15 @@
 
 template <class _Tp>
 struct segpool_alloc {
-    using pool_type = segmented_pool<char>;
+    using pool_type = segmented_pool<char>; 
     pool_type* pool;
-    using pointer = _Tp*;
-    using const_pointer = const _Tp*;
-    using reference = _Tp&;
-    using const_reference = const _Tp&;
-    using size_type = size_t;
-    using difference_type = ptrdiff_t;
-    using value_type = _Tp;
+    using pointer = _Tp*; 
+    using const_pointer = const _Tp*; 
+    using reference = _Tp&; 
+    using const_reference = const _Tp&; 
+    using size_type = size_t; 
+    using difference_type = ptrdiff_t; 
+    using value_type = _Tp; 
 #ifndef NDEBUG
     ui64 pool_count, malloc_count, pool_free_count, malloc_free_count;
 #endif
@@ -90,7 +90,7 @@ struct segpool_alloc {
     }
     template <class _Tp1>
     struct rebind {
-        using other = segpool_alloc<_Tp1>;
+        using other = segpool_alloc<_Tp1>; 
     };
     size_type max_size() const {
         return size_type(-1) / sizeof(_Tp);

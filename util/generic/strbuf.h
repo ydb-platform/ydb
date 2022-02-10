@@ -19,7 +19,7 @@ private:
 
 public:
     using char_type = TCharType; // TODO: DROP
-    using traits_type = TTraits;
+    using traits_type = TTraits; 
 
     //Resolving some ambiguity between TStringBase and std::basic_string_view
     //for typenames

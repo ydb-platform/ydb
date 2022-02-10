@@ -152,7 +152,7 @@ namespace NPrivate {
 }
 
 namespace NTls {
-    using TDtor = void (*)(void*);
+    using TDtor = void (*)(void*); 
 
     class TKey {
     public:

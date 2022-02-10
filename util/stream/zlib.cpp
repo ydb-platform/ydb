@@ -184,7 +184,7 @@ namespace {
         IInputStream* Stream_;
     };
 
-    using TZeroCopyDecompress = TZLibDecompress::TImpl;
+    using TZeroCopyDecompress = TZLibDecompress::TImpl; 
 }
 
 class TZLibCompress::TImpl: public TAdditionalStorage<TImpl>, private TZLibCommon {

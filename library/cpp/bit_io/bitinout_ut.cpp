@@ -51,7 +51,7 @@ class TBitIOTest: public TTestBase {
     UNIT_TEST_SUITE_END();
 
 private:
-    using TBi = NBitIO::TBitInput;
+    using TBi = NBitIO::TBitInput; 
     using TVec = TVector<char>;
 
     void static CheckBits(const TVec& v, const TString& ref, const TString& rem) {

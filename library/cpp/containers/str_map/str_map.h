@@ -41,11 +41,11 @@ protected:
 
 public:
     using yh = THashMap<const char*, T, HashFcn, EqualTo, Alloc>;
-    using iterator = typename yh::iterator;
-    using const_iterator = typename yh::const_iterator;
-    using mapped_type = typename yh::mapped_type;
-    using size_type = typename yh::size_type;
-    using pool_size_type = typename yh::size_type;
+    using iterator = typename yh::iterator; 
+    using const_iterator = typename yh::const_iterator; 
+    using mapped_type = typename yh::mapped_type; 
+    using size_type = typename yh::size_type; 
+    using pool_size_type = typename yh::size_type; 
     string_hash() {
         pool.Reserve(HASH_SIZE_DEFAULT * AVERAGEWORD_BUF); // reserve here
     }
@@ -107,12 +107,12 @@ protected:
 
 public:
     using yh = THashMap<const C*, T, HashFcn, EqualTo>;
-    using iterator = typename yh::iterator;
-    using const_iterator = typename yh::const_iterator;
-    using mapped_type = typename yh::mapped_type;
-    using size_type = typename yh::size_type;
-    using key_type = typename yh::key_type;
-    using value_type = typename yh::value_type;
+    using iterator = typename yh::iterator; 
+    using const_iterator = typename yh::const_iterator; 
+    using mapped_type = typename yh::mapped_type; 
+    using size_type = typename yh::size_type; 
+    using key_type = typename yh::key_type; 
+    using value_type = typename yh::value_type; 
 
     THashWithSegmentedPoolForKeys(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)
         : yh(hash_size)
@@ -178,13 +178,13 @@ public:
 template <class T, class HashFcn, class EqualTo>
 class segmented_string_hash: public THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo> {
 public:
-    using Base = THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo>;
-    using iterator = typename Base::iterator;
-    using const_iterator = typename Base::const_iterator;
-    using mapped_type = typename Base::mapped_type;
-    using size_type = typename Base::size_type;
-    using key_type = typename Base::key_type;
-    using value_type = typename Base::value_type;
+    using Base = THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo>; 
+    using iterator = typename Base::iterator; 
+    using const_iterator = typename Base::const_iterator; 
+    using mapped_type = typename Base::mapped_type; 
+    using size_type = typename Base::size_type; 
+    using key_type = typename Base::key_type; 
+    using value_type = typename Base::value_type; 
 
 public:
     segmented_string_hash(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)

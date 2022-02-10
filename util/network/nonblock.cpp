@@ -89,7 +89,7 @@ namespace {
             return Singleton<TFeatureCheck>();
         }
 
-        using TAccept4 = int (*)(int sockfd, struct sockaddr* addr, socklen_t* addrlen, int flags);
+        using TAccept4 = int (*)(int sockfd, struct sockaddr* addr, socklen_t* addrlen, int flags); 
         TAccept4 Accept4;
         bool HaveSockNonBlock;
     };

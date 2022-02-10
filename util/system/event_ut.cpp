@@ -5,7 +5,7 @@
 
 #include <util/thread/pool.h>
 
-namespace {
+namespace { 
     struct TSharedData {
         TSharedData()
             : Counter(0)
@@ -14,7 +14,7 @@ namespace {
         }
 
         TAtomic Counter;
-        TManualEvent event;
+        TManualEvent event; 
         bool failed;
     };
 
@@ -31,10 +31,10 @@ namespace {
 
             if (Id_ == 0) {
                 usleep(100);
-                bool cond = Data_.Counter == 0;
-                if (!cond) {
-                    Data_.failed = true;
-                }
+                bool cond = Data_.Counter == 0; 
+                if (!cond) { 
+                    Data_.failed = true; 
+                } 
                 Data_.event.Signal();
             } else {
                 while (!Data_.event.WaitT(TDuration::Seconds(100))) {
@@ -49,50 +49,50 @@ namespace {
     };
 
     class TSignalTask: public IObjectInQueue {
-    private:
+    private: 
         TManualEvent& Ev_;
-
-    public:
+ 
+    public: 
         TSignalTask(TManualEvent& ev)
             : Ev_(ev)
-        {
-        }
-
+        { 
+        } 
+ 
         void Process(void*) override {
             Ev_.Signal();
-        }
-    };
-
+        } 
+    }; 
+ 
     class TOwnerTask: public IObjectInQueue {
-    public:
-        TManualEvent Barrier;
-        THolder<TManualEvent> Ev;
-
-    public:
-        TOwnerTask()
-            : Ev(new TManualEvent)
-        {
-        }
-
+    public: 
+        TManualEvent Barrier; 
+        THolder<TManualEvent> Ev; 
+ 
+    public: 
+        TOwnerTask() 
+            : Ev(new TManualEvent) 
+        { 
+        } 
+ 
         void Process(void*) override {
-            Ev->WaitI();
-            Ev.Destroy();
-        }
-    };
-
+            Ev->WaitI(); 
+            Ev.Destroy(); 
+        } 
+    }; 
+ 
 }
-
+ 
 Y_UNIT_TEST_SUITE(EventTest) {
     Y_UNIT_TEST(WaitAndSignalTest) {
-        TSharedData data;
+        TSharedData data; 
         TThreadPool queue;
-        queue.Start(5);
+        queue.Start(5); 
         for (size_t i = 0; i < 5; ++i) {
-            UNIT_ASSERT(queue.Add(new TThreadTask(data, i)));
+            UNIT_ASSERT(queue.Add(new TThreadTask(data, i))); 
         }
-        queue.Stop();
-        UNIT_ASSERT(data.Counter == 10);
-        UNIT_ASSERT(!data.failed);
+        queue.Stop(); 
+        UNIT_ASSERT(data.Counter == 10); 
+        UNIT_ASSERT(!data.failed); 
     }
 
     Y_UNIT_TEST(ConcurrentSignalAndWaitTest) {
@@ -112,21 +112,21 @@ Y_UNIT_TEST_SUITE(EventTest) {
         queue.Stop();
     }
 
-    /** Test for a problem: http://nga.at.yandex-team.ru/5772 */
+    /** Test for a problem: http://nga.at.yandex-team.ru/5772 */ 
     Y_UNIT_TEST(DestructorBeforeSignalFinishTest) {
         return;
         TVector<THolder<IObjectInQueue>> tasks;
-        for (size_t i = 0; i < 1000; ++i) {
+        for (size_t i = 0; i < 1000; ++i) { 
             auto owner = MakeHolder<TOwnerTask>();
             tasks.emplace_back(MakeHolder<TSignalTask>(*owner->Ev));
             tasks.emplace_back(std::move(owner));
-        }
+        } 
 
         TThreadPool queue;
         queue.Start(4);
         for (auto& task : tasks) {
-            UNIT_ASSERT(queue.Add(task.Get()));
-        }
-        queue.Stop();
-    }
-}
+            UNIT_ASSERT(queue.Add(task.Get())); 
+        } 
+        queue.Stop(); 
+    } 
+} 

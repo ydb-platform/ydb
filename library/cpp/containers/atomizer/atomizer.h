@@ -20,11 +20,11 @@ private:
     TVector<const char*> order;
 
 public:
-    using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator;
-    using const_iterator = typename string_hash<ui32, HashFcn, EqualTo>::const_iterator;
-    using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type;
-    using size_type = typename string_hash<ui32, HashFcn, EqualTo>::size_type;
-    using pool_size_type = typename string_hash<ui32, HashFcn, EqualTo>::pool_size_type;
+    using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator; 
+    using const_iterator = typename string_hash<ui32, HashFcn, EqualTo>::const_iterator; 
+    using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type; 
+    using size_type = typename string_hash<ui32, HashFcn, EqualTo>::size_type; 
+    using pool_size_type = typename string_hash<ui32, HashFcn, EqualTo>::pool_size_type; 
 
     using string_hash<ui32, HashFcn, EqualTo>::pool;
     using string_hash<ui32, HashFcn, EqualTo>::size;
@@ -112,15 +112,15 @@ private:
     TOrder order;
 
 public:
-    using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator;
-    using const_iterator = typename string_hash<ui32, HashFcn, EqualTo>::const_iterator;
-    using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type;
-    using size_type = typename string_hash<ui32, HashFcn, EqualTo>::size_type;
-    using pool_size_type = typename string_hash<ui32, HashFcn, EqualTo>::pool_size_type;
+    using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator; 
+    using const_iterator = typename string_hash<ui32, HashFcn, EqualTo>::const_iterator; 
+    using value_type = typename string_hash<ui32, HashFcn, EqualTo>::value_type; 
+    using size_type = typename string_hash<ui32, HashFcn, EqualTo>::size_type; 
+    using pool_size_type = typename string_hash<ui32, HashFcn, EqualTo>::pool_size_type; 
 
-    using o_iterator = typename TOrder::iterator;
-    using o_const_iterator = typename TOrder::const_iterator;
-    using o_value_type = typename TOrder::value_type;
+    using o_iterator = typename TOrder::iterator; 
+    using o_const_iterator = typename TOrder::const_iterator; 
+    using o_value_type = typename TOrder::value_type; 
 
     using string_hash<ui32, HashFcn, EqualTo>::pool;
     using string_hash<ui32, HashFcn, EqualTo>::size;

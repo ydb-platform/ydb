@@ -34,7 +34,7 @@ class TRedBlackTreeTest: public TTestBase {
         int N;
     };
 
-    using TTree = TRbTree<TNode, TCmp>;
+    using TTree = TRbTree<TNode, TCmp>; 
 
     UNIT_TEST_SUITE(TRedBlackTreeTest);
     UNIT_TEST(TestEmpty)

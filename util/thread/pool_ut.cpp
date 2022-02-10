@@ -32,24 +32,24 @@ struct TThreadPoolTest {
     };
 
     struct TOwnedTask: public IObjectInQueue {
-        bool& Processed;
-        bool& Destructed;
-
-        TOwnedTask(bool& processed, bool& destructed)
-            : Processed(processed)
-            , Destructed(destructed)
-        {
-        }
-
+        bool& Processed; 
+        bool& Destructed; 
+ 
+        TOwnedTask(bool& processed, bool& destructed) 
+            : Processed(processed) 
+            , Destructed(destructed) 
+        { 
+        } 
+ 
         ~TOwnedTask() override {
-            Destructed = true;
-        }
-
-        void Process(void*) override {
-            Processed = true;
-        }
-    };
-
+            Destructed = true; 
+        } 
+ 
+        void Process(void*) override { 
+            Processed = true; 
+        } 
+    }; 
+ 
     inline void TestAnyQueue(IThreadPool* queue, size_t queueSize = 1000) {
         TReallyFastRng32 rand(17);
         const size_t cnt = 1000;
@@ -112,18 +112,18 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
             t.TestAnyQueue(&q);
         }
     }
-
+ 
     Y_UNIT_TEST(TestAddAndOwn) {
         TThreadPool q;
-        q.Start(2);
-        bool processed = false;
-        bool destructed = false;
+        q.Start(2); 
+        bool processed = false; 
+        bool destructed = false; 
         q.SafeAddAndOwn(MakeHolder<TThreadPoolTest::TOwnedTask>(processed, destructed));
-        q.Stop();
-
-        UNIT_ASSERT_C(processed, "Not processed");
-        UNIT_ASSERT_C(destructed, "Not destructed");
-    }
+        q.Stop(); 
+ 
+        UNIT_ASSERT_C(processed, "Not processed"); 
+        UNIT_ASSERT_C(destructed, "Not destructed"); 
+    } 
 
     Y_UNIT_TEST(TestAddFunc) {
         TFailAddQueue queue;

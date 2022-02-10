@@ -95,8 +95,8 @@ namespace NTL {
     using T2 = TTypeSelector<wchar_t, T1::TSignedInts, T1::TUnsignedInts>;
 }
 
-using TSignedInts = NTL::T2::TSignedInts;
-using TUnsignedInts = NTL::T2::TUnsignedInts;
+using TSignedInts = NTL::T2::TSignedInts; 
+using TUnsignedInts = NTL::T2::TUnsignedInts; 
 
 template <unsigned sizeOf>
 struct TSizeOfPredicate {

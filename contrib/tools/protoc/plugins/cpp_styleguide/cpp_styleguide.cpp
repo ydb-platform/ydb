@@ -715,20 +715,20 @@ namespace NPlugins {
                 }
             }
 
-            void GenerateDeclarations() {
-                GenerateFieldAccessorDeclarations();
-
+            void GenerateDeclarations() { 
+                GenerateFieldAccessorDeclarations(); 
+ 
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateDeclarations();
-                }
-            }
-
-            void GenerateDefinitions() {
-                GenerateClassExtension();
-                GenerateDebugOutputExtension();
-                GenerateClassDefinitionExtension();
-            }
-
+                } 
+            } 
+ 
+            void GenerateDefinitions() { 
+                GenerateClassExtension(); 
+                GenerateDebugOutputExtension(); 
+                GenerateClassDefinitionExtension(); 
+            } 
+ 
         private:
             void GenerateFieldAccessorDeclarations() {
                 TProtoStringType fileName = HeaderFileName(Descriptor_->file());
@@ -835,7 +835,7 @@ namespace NPlugins {
                     return;
                 }
 
-                TProtoStringType fileName = SourceFileName(Descriptor_->file());
+                TProtoStringType fileName = SourceFileName(Descriptor_->file()); 
                 TProtoStringType scope = "namespace_scope";
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
                     OutputDirectory_->OpenForInsert(fileName, scope));

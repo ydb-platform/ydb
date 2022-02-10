@@ -29,7 +29,7 @@ class TMutexTest: public TTestBase {
 
     class TThreadTask: public IObjectInQueue {
     public:
-        using PFunc = void (TThreadTask::*)(void);
+        using PFunc = void (TThreadTask::*)(void); 
 
         TThreadTask(PFunc func, TSharedData& data, size_t id)
             : Func_(func)

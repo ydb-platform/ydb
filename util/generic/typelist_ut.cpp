@@ -70,7 +70,7 @@ public:
 
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TAnyType>::type, TA);
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIs1ArgTemplate>::type, TMyVector<TA>);
-        using TMyMapPTATB = TMyMap<TA*, TB>;
+        using TMyMapPTATB = TMyMap<TA*, TB>; 
         UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIsNArgTemplate>::type, TMyMapPTATB);
     }
 

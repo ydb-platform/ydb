@@ -16,7 +16,7 @@ namespace NAccessors {
 
         template <typename Ta>
         struct TBegin: public TMemoryAccessorBase<Ta> {
-            using TElementType = typename TMemoryTraits<Ta>::TElementType;
+            using TElementType = typename TMemoryTraits<Ta>::TElementType; 
 
             template <typename Tb>
             struct TNoMemoryIndirectionBegin {
@@ -57,7 +57,7 @@ namespace NAccessors {
                 std::conditional_t<
                     TMemoryAccessorBase<Ta>::ContinuousMemory,
                     TIndirectMemoryRegionBegin<Ta>,
-                    typename TMemoryAccessorBase<Ta>::TBadAccessor>>;
+                    typename TMemoryAccessorBase<Ta>::TBadAccessor>>; 
 
             static const TElementType* Get(const Ta& b) {
                 return TGet::Get(b);
@@ -66,7 +66,7 @@ namespace NAccessors {
 
         template <typename Ta>
         struct TEnd: public TMemoryAccessorBase<Ta> {
-            using TElementType = typename TMemoryTraits<Ta>::TElementType;
+            using TElementType = typename TMemoryTraits<Ta>::TElementType; 
 
             template <typename Tb>
             struct TNoMemoryIndirectionEnd {
@@ -107,7 +107,7 @@ namespace NAccessors {
                 std::conditional_t<
                     TMemoryAccessorBase<Ta>::ContinuousMemory,
                     TIndirectMemoryRegionEnd<Ta>,
-                    typename TMemoryAccessorBase<Ta>::TBadAccessor>>;
+                    typename TMemoryAccessorBase<Ta>::TBadAccessor>>; 
 
             static const TElementType* Get(const Ta& b) {
                 return TGet::Get(b);
@@ -345,7 +345,7 @@ namespace NAccessors {
 
         template <typename Ta>
         struct TAssign: public TMemoryAccessorBase<Ta> {
-            using TElementType = typename TMemoryTraits<Ta>::TElementType;
+            using TElementType = typename TMemoryTraits<Ta>::TElementType; 
 
             template <typename Tb>
             struct TNoMemoryIndirectionAssign {
@@ -403,7 +403,7 @@ namespace NAccessors {
                         std::conditional_t<
                             TMemoryTraits<Tb>::OwnsMemory,
                             TByClearAppend<Tb>,
-                            TByConstruction<Tb>>>>;
+                            TByConstruction<Tb>>>>; 
 
                 static void Do(Tb& b, const TElementType* beg, const TElementType* end) {
                     TDo::Do(b, beg, end);

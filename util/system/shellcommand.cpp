@@ -25,8 +25,8 @@
     #include <sys/wait.h>
 
 using TPid = pid_t;
-using TWaitResult = pid_t;
-using TExitStatus = int;
+using TWaitResult = pid_t; 
+using TExitStatus = int; 
     #define WAIT_PROCEED 0
 
     #if defined(_darwin_)
@@ -40,8 +40,8 @@ using TGetGroupListGid = gid_t;
     #include "winint.h"
 
 using TPid = HANDLE;
-using TWaitResult = DWORD;
-using TExitStatus = DWORD;
+using TWaitResult = DWORD; 
+using TExitStatus = DWORD; 
     #define WAIT_PROCEED WAIT_TIMEOUT
 
     #pragma warning(disable : 4296) // 'wait_result >= WAIT_OBJECT_0' : expression is always tru
@@ -182,7 +182,7 @@ private:
 };
 
 #else
-using TRealPipeHandle = TPipeHandle;
+using TRealPipeHandle = TPipeHandle; 
 using REALPIPEHANDLE = PIPEHANDLE;
     #define INVALID_REALPIPEHANDLE INVALID_PIPEHANDLE
 #endif

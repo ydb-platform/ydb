@@ -3,14 +3,14 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 
-using TRbTreeColorType = bool;
+using TRbTreeColorType = bool; 
 
 #define RBTreeRed false
 #define RBTreeBlack true
 
 struct TRbTreeNodeBase {
-    using TColorType = TRbTreeColorType;
-    using TBasePtr = TRbTreeNodeBase*;
+    using TColorType = TRbTreeColorType; 
+    using TBasePtr = TRbTreeNodeBase*; 
 
     TColorType Color_;
     TBasePtr Parent_;
@@ -63,7 +63,7 @@ struct TRbTreeBaseIterator;
 template <class TDummy>
 class TRbGlobal {
 public:
-    using TBasePtr = TRbTreeNodeBase*;
+    using TBasePtr = TRbTreeNodeBase*; 
 
     static void Rebalance(TBasePtr x, TBasePtr& root);
     static TBasePtr RebalanceForErase(TBasePtr z, TBasePtr& root, TBasePtr& leftmost, TBasePtr& rightmost);
@@ -76,10 +76,10 @@ public:
     static void RotateRight(TBasePtr x, TBasePtr& root);
 };
 
-using TRbGlobalInst = TRbGlobal<bool>;
+using TRbGlobalInst = TRbGlobal<bool>; 
 
 struct TRbTreeBaseIterator {
-    using TBasePtr = TRbTreeNodeBase*;
+    using TBasePtr = TRbTreeNodeBase*; 
     TBasePtr Node_;
 
     inline TRbTreeBaseIterator(TBasePtr x = nullptr) noexcept
@@ -90,10 +90,10 @@ struct TRbTreeBaseIterator {
 
 template <class TValue, class TTraits>
 struct TRbTreeIterator: public TRbTreeBaseIterator {
-    using TReference = typename TTraits::TReference;
-    using TPointer = typename TTraits::TPointer;
-    using TSelf = TRbTreeIterator<TValue, TTraits>;
-    using TBasePtr = TRbTreeNodeBase*;
+    using TReference = typename TTraits::TReference; 
+    using TPointer = typename TTraits::TPointer; 
+    using TSelf = TRbTreeIterator<TValue, TTraits>; 
+    using TBasePtr = TRbTreeNodeBase*; 
 
     inline TRbTreeIterator() noexcept = default;
 
@@ -161,18 +161,18 @@ class TRbTree {
     };
 
     struct TNonConstTraits {
-        using TReference = TValue&;
-        using TPointer = TValue*;
+        using TReference = TValue&; 
+        using TPointer = TValue*; 
     };
 
     struct TConstTraits {
-        using TReference = const TValue&;
-        using TPointer = const TValue*;
+        using TReference = const TValue&; 
+        using TPointer = const TValue*; 
     };
 
-    using TNodeBase = TRbTreeNodeBase;
-    using TBasePtr = TRbTreeNodeBase*;
-    using TColorType = TRbTreeColorType;
+    using TNodeBase = TRbTreeNodeBase; 
+    using TBasePtr = TRbTreeNodeBase*; 
+    using TColorType = TRbTreeColorType; 
 
 public:
     class TRealNode: public TNodeBase {
@@ -206,8 +206,8 @@ public:
         TRbTree* Tree_;
     };
 
-    using TIterator = TRbTreeIterator<TValue, TNonConstTraits>;
-    using TConstIterator = TRbTreeIterator<TValue, TConstTraits>;
+    using TIterator = TRbTreeIterator<TValue, TNonConstTraits>; 
+    using TConstIterator = TRbTreeIterator<TValue, TConstTraits>; 
 
     inline TRbTree() noexcept {
         Init();

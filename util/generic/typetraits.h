@@ -97,7 +97,7 @@ namespace NPrivate {
 
 template <class T>
 class TTypeTraits: public TTypeTraitsBase<T> {
-    using TBase = TTypeTraitsBase<T>;
+    using TBase = TTypeTraitsBase<T>; 
 
     /*
      * can be effectively passed to function as value

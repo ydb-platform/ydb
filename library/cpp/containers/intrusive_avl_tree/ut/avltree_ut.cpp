@@ -27,7 +27,7 @@ private:
         int Val;
     };
 
-    using TIts = TAvlTree<TIt, TItCompare>;
+    using TIts = TAvlTree<TIt, TItCompare>; 
 };
 
 inline bool TAvlTreeTest::TItCompare::Compare(const TIt& l, const TIt& r) noexcept {

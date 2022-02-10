@@ -471,7 +471,7 @@ public:
 
 private:
     class TImpl;
-    using TImplRef = TSimpleIntrusivePtr<TImpl>;
+    using TImplRef = TSimpleIntrusivePtr<TImpl>; 
     TImplRef Impl;
 };
 

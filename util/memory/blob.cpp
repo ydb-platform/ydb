@@ -16,7 +16,7 @@ template <class TCounter>
 class TDynamicBlobBase: public TBlob::TBase,
                         public TRefCounted<TDynamicBlobBase<TCounter>, TCounter>,
                         public TAdditionalStorage<TDynamicBlobBase<TCounter>> {
-    using TRefBase = TRefCounted<TDynamicBlobBase, TCounter>;
+    using TRefBase = TRefCounted<TDynamicBlobBase, TCounter>; 
 
 public:
     inline TDynamicBlobBase() = default;
@@ -42,7 +42,7 @@ public:
 
 template <class TCounter>
 class TBufferBlobBase: public TBlob::TBase, public TRefCounted<TBufferBlobBase<TCounter>, TCounter> {
-    using TRefBase = TRefCounted<TBufferBlobBase, TCounter>;
+    using TRefBase = TRefCounted<TBufferBlobBase, TCounter>; 
 
 public:
     inline TBufferBlobBase(TBuffer& buf) {
@@ -69,7 +69,7 @@ private:
 
 template <class TCounter>
 class TStringBlobBase: public TBlob::TBase, public TRefCounted<TStringBlobBase<TCounter>, TCounter> {
-    using TRefBase = TRefCounted<TStringBlobBase, TCounter>;
+    using TRefBase = TRefCounted<TStringBlobBase, TCounter>; 
 
 public:
     inline TStringBlobBase(const TString& s)
@@ -102,7 +102,7 @@ private:
 
 template <class TCounter>
 class TMappedBlobBase: public TBlob::TBase, public TRefCounted<TMappedBlobBase<TCounter>, TCounter> {
-    using TRefBase = TRefCounted<TMappedBlobBase<TCounter>, TCounter>;
+    using TRefBase = TRefCounted<TMappedBlobBase<TCounter>, TCounter>; 
 
 public:
     inline TMappedBlobBase(const TMemoryMap& map, ui64 offset, size_t len, EMappingMode mode)
@@ -171,7 +171,7 @@ TBlob TBlob::DeepCopy() const {
 
 template <class TCounter>
 static inline TBlob CopyConstruct(const void* data, size_t len) {
-    using Base = TDynamicBlobBase<TCounter>;
+    using Base = TDynamicBlobBase<TCounter>; 
     THolder<Base> base(new (len) Base);
 
     Y_ASSERT(base->Length() == len);
@@ -198,7 +198,7 @@ TBlob TBlob::NoCopy(const void* data, size_t length) {
 
 template <class TCounter>
 static inline TBlob ConstructFromMap(const TMemoryMap& map, ui64 offset, size_t length, EMappingMode mode) {
-    using TBase = TMappedBlobBase<TCounter>;
+    using TBase = TMappedBlobBase<TCounter>; 
     THolder<TBase> base(new TBase(map, offset, length, mode));
     TBlob ret(base->Data(), base->Length(), base.Get());
     Y_UNUSED(base.Release());
@@ -302,7 +302,7 @@ TBlob TBlob::FromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) {
 
 template <class TCounter>
 static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) {
-    using TBase = TDynamicBlobBase<TCounter>;
+    using TBase = TDynamicBlobBase<TCounter>; 
     THolder<TBase> base(new (length) TBase);
 
     Y_ASSERT(base->Length() == length);
@@ -352,7 +352,7 @@ TBlob TBlob::FromFileContent(const TFile& file, ui64 offset, size_t length) {
 
 template <class TCounter>
 static inline TBlob ConstructFromBuffer(TBuffer& in) {
-    using TBase = TBufferBlobBase<TCounter>;
+    using TBase = TBufferBlobBase<TCounter>; 
     THolder<TBase> base(new TBase(in));
 
     TBlob ret(base->Buffer().Data(), base->Buffer().Size(), base.Get());
@@ -392,7 +392,7 @@ TBlob TBlob::FromBuffer(TBuffer& in) {
 
 template <class TCounter, class S>
 TBlob ConstructFromString(S&& s) {
-    using TBase = TStringBlobBase<TCounter>;
+    using TBase = TStringBlobBase<TCounter>; 
     auto base = MakeHolder<TBase>(std::forward<S>(s));
 
     TBlob ret(base->String().data(), base->String().size(), base.Get());

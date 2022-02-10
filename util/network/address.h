@@ -16,7 +16,7 @@ namespace NAddr {
     };
 
     using IRemoteAddrPtr = THolder<IRemoteAddr>;
-    using IRemoteAddrRef = TAtomicSharedPtr<NAddr::IRemoteAddr>;
+    using IRemoteAddrRef = TAtomicSharedPtr<NAddr::IRemoteAddr>; 
 
     IRemoteAddrPtr GetSockAddr(SOCKET s);
     IRemoteAddrPtr GetPeerAddr(SOCKET s);

@@ -10,9 +10,9 @@ namespace NUnicodeTable {
 
     template <class Value>
     struct TValueSelector {
-        using TStored = const Value;
-        using TValueRef = const Value&;
-        using TValuePtr = const Value*;
+        using TStored = const Value; 
+        using TValueRef = const Value&; 
+        using TValuePtr = const Value*; 
 
         static inline TValueRef Get(TValuePtr val) {
             return *val;
@@ -21,9 +21,9 @@ namespace NUnicodeTable {
 
     template <class Value>
     struct TValueSelector<const Value*> {
-        using TStored = const Value[];
-        using TValueRef = const Value*;
-        using TValuePtr = const Value*;
+        using TStored = const Value[]; 
+        using TValueRef = const Value*; 
+        using TValuePtr = const Value*; 
 
         static inline TValueRef Get(TValuePtr val) {
             return val;
@@ -32,13 +32,13 @@ namespace NUnicodeTable {
 
     template <class Value>
     struct TValues {
-        using TSelector = TValueSelector<Value>;
+        using TSelector = TValueSelector<Value>; 
 
-        using TStored = typename TSelector::TStored;
-        using TValueRef = typename TSelector::TValueRef;
-        using TValuePtr = typename TSelector::TValuePtr;
+        using TStored = typename TSelector::TStored; 
+        using TValueRef = typename TSelector::TValueRef; 
+        using TValuePtr = typename TSelector::TValuePtr; 
 
-        using TData = const TValuePtr*;
+        using TData = const TValuePtr*; 
 
         static inline TValuePtr Get(TData table, size_t index) {
             static_assert(std::is_pointer<TData>::value, "expect std::is_pointer<TData>::value");
@@ -52,10 +52,10 @@ namespace NUnicodeTable {
 
     template <int Shift, class TChild>
     struct TSubtable {
-        using TStored = typename TChild::TStored;
-        using TValueRef = typename TChild::TValueRef;
-        using TValuePtr = typename TChild::TValuePtr;
-        using TData = const typename TChild::TData*;
+        using TStored = typename TChild::TStored; 
+        using TValueRef = typename TChild::TValueRef; 
+        using TValuePtr = typename TChild::TValuePtr; 
+        using TData = const typename TChild::TData*; 
 
         static inline TValuePtr Get(TData table, size_t key) {
             static_assert(std::is_pointer<TData>::value, "expect std::is_pointer<TData>::value");
@@ -70,16 +70,16 @@ namespace NUnicodeTable {
     template <class T>
     class TTable {
     private:
-        using TImpl = T;
-        using TData = typename TImpl::TData;
+        using TImpl = T; 
+        using TData = typename TImpl::TData; 
 
         const TData Data;
         const size_t MSize;
 
     public:
-        using TStored = typename TImpl::TStored;
-        using TValueRef = typename TImpl::TValueRef;
-        using TValuePtr = typename TImpl::TValuePtr;
+        using TStored = typename TImpl::TStored; 
+        using TValueRef = typename TImpl::TValueRef; 
+        using TValuePtr = typename TImpl::TValuePtr; 
 
     private:
         inline TValueRef GetImpl(size_t key) const {

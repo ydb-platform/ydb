@@ -26,7 +26,7 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestIntrusiveConvertion);
     UNIT_TEST(TestIntrusiveConstConvertion);
     UNIT_TEST(TestIntrusiveConstConstruction);
-    UNIT_TEST(TestMakeIntrusive);
+    UNIT_TEST(TestMakeIntrusive); 
     UNIT_TEST(TestCopyOnWritePtr1);
     UNIT_TEST(TestCopyOnWritePtr2);
     UNIT_TEST(TestOperatorBool);
@@ -78,7 +78,7 @@ private:
     void TestIntrusiveConvertion();
     void TestIntrusiveConstConvertion();
     void TestIntrusiveConstConstruction();
-    void TestMakeIntrusive();
+    void TestMakeIntrusive(); 
     void TestCopyOnWritePtr1();
     void TestCopyOnWritePtr2();
     void TestOperatorBool();
@@ -418,17 +418,17 @@ void TPointerTest::TestIntrusiveConstConvertion() {
 }
 
 void TPointerTest::TestMakeIntrusive() {
-    {
-        UNIT_ASSERT_VALUES_EQUAL(0, TOp::Cnt);
-        auto p = MakeIntrusive<TOp>();
-        UNIT_ASSERT_VALUES_EQUAL(1, p->RefCount());
-        UNIT_ASSERT_VALUES_EQUAL(1, TOp::Cnt);
-    }
+    { 
+        UNIT_ASSERT_VALUES_EQUAL(0, TOp::Cnt); 
+        auto p = MakeIntrusive<TOp>(); 
+        UNIT_ASSERT_VALUES_EQUAL(1, p->RefCount()); 
+        UNIT_ASSERT_VALUES_EQUAL(1, TOp::Cnt); 
+    } 
     UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
-}
-
+} 
+ 
 void TPointerTest::TestCopyOnWritePtr1() {
-    using TPtr = TCowPtr<TSimpleSharedPtr<int>>;
+    using TPtr = TCowPtr<TSimpleSharedPtr<int>>; 
     TPtr p1;
     UNIT_ASSERT(!p1.Shared());
 
@@ -484,7 +484,7 @@ struct X: public TSimpleRefCount<X> {
 };
 
 void TPointerTest::TestCopyOnWritePtr2() {
-    using TPtr = TCowPtr<TIntrusivePtr<X>>;
+    using TPtr = TCowPtr<TIntrusivePtr<X>>; 
     TPtr p1;
     UNIT_ASSERT(!p1.Shared());
 
@@ -537,7 +537,7 @@ namespace {
             char t[2];
         };
 
-        using RTNo = char;
+        using RTNo = char; 
 
         static RTYes Func(TTo);
         static RTNo Func(...);

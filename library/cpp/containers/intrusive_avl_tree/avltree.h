@@ -7,7 +7,7 @@ struct TAvlTreeItem;
 
 template <class T, class C>
 class TAvlTree: public TNonCopyable {
-    using TTreeItem = TAvlTreeItem<T, C>;
+    using TTreeItem = TAvlTreeItem<T, C>; 
     friend struct TAvlTreeItem<T, C>;
 
     static inline const T* AsT(const TTreeItem* item) noexcept {
@@ -178,7 +178,7 @@ class TAvlTree: public TNonCopyable {
 
 public:
     using const_iterator = TConstIterator;
-    using iterator = TIterator;
+    using iterator = TIterator; 
 
     inline TAvlTree() noexcept
         : Root_(nullptr)
@@ -721,7 +721,7 @@ private:
 template <class T, class C>
 struct TAvlTreeItem: public TNonCopyable {
 public:
-    using TTree = TAvlTree<T, C>;
+    using TTree = TAvlTree<T, C>; 
     friend class TAvlTree<T, C>;
     friend typename TAvlTree<T, C>::TConstIterator;
     friend typename TAvlTree<T, C>::TIterator;

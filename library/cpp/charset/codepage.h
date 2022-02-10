@@ -17,9 +17,9 @@ struct CodePage;
 struct Recoder;
 struct Encoder;
 
-/*****************************************************************\ 
-*                    struct CodePage                              * 
-\*****************************************************************/ 
+/*****************************************************************\
+*                    struct CodePage                              *
+\*****************************************************************/
 struct CodePage {
     ECharset CPEnum;       // int MIBEnum;
     const char* Names[30]; // name[0] -- preferred mime-name
@@ -186,26 +186,26 @@ inline const CodePage* CodePageByName(const char* name) {
 }
 
 ECharset EncodingHintByName(const char* name);
- 
-/*****************************************************************\ 
-*                    struct Encoder                               * 
-\*****************************************************************/ 
+
+/*****************************************************************\
+*                    struct Encoder                               *
+\*****************************************************************/
 struct Encoder {
     char* Table[256];
     const char* DefaultChar;
 
     inline char Code(wchar32 ch) const {
-        if (ch > 0xFFFF) 
-            return 0; 
+        if (ch > 0xFFFF)
+            return 0;
         return (unsigned char)Table[(ch >> 8) & 255][ch & 255];
     }
 
     inline char Tr(wchar32 ch) const {
-        char code = Code(ch); 
-        if (code == 0 && ch != 0) 
+        char code = Code(ch);
+        if (code == 0 && ch != 0)
             code = DefaultChar[NUnicode::CharType(ch)];
         Y_ASSERT(code != 0 || ch == 0);
-        return code; 
+        return code;
     }
 
     inline unsigned char operator[](wchar32 ch) const {
@@ -217,18 +217,18 @@ struct Encoder {
     char* DefaultPlane;
 };
 
-/*****************************************************************\ 
-*                    struct Recoder                               * 
-\*****************************************************************/ 
+/*****************************************************************\
+*                    struct Recoder                               *
+\*****************************************************************/
 struct Recoder {
-    unsigned char Table[257]; 
+    unsigned char Table[257];
 
     void Create(const CodePage& source, const CodePage& target);
     void Create(const CodePage& source, const Encoder* wideTarget);
 
     void Create(const CodePage& page, wchar32 (*mapper)(wchar32));
     void Create(const CodePage& page, const Encoder* widePage, wchar32 (*mapper)(wchar32));
- 
+
     inline unsigned char Tr(unsigned char c) const {
         return Table[c];
     }
@@ -242,9 +242,9 @@ struct Recoder {
 };
 
 extern const struct Encoder& WideCharToYandex;
- 
+
 const Encoder& EncoderByCharset(ECharset enc);
- 
+
 namespace NCodepagePrivate {
     class TCodePageData {
     private:
@@ -265,7 +265,7 @@ namespace NCodepagePrivate {
         friend const Encoder& ::EncoderByCharset(ECharset enc);
     };
 }
- 
+
 inline const Encoder& EncoderByCharset(ECharset enc) {
     if (!SingleByteCodepage(enc)) {
         ythrow yexception() << "Encoder structure can only be used for single byte encodings";

@@ -29,7 +29,7 @@ namespace {
             if (!IsAsciiHex((ui8)x[0]) || !IsAsciiHex((ui8)x[1]))
                 return '%';
             ui8 c = 0;
- 
+
             GETXC;
             GETXC;
             return c;
@@ -160,7 +160,7 @@ void CGIEscape(TString& url) {
     char* to = tempBuf.Data();
 
     url.AssignNoAlias(to, CGIEscape(to, url.data(), url.size()));
-} 
+}
 
 TString CGIEscapeRet(const TStringBuf url) {
     TString to;
@@ -233,7 +233,7 @@ void CGIUnescape(TString& url) {
     } else {
         url = CGIUnescapeRet(url);
     }
-} 
+}
 
 TString CGIUnescapeRet(const TStringBuf from) {
     TString to;

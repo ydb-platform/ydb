@@ -243,7 +243,7 @@ RECURSE(
     nsync
     numa
     nvidia
-    odpi 
+    odpi
     onnx
     opencl-headers
     opencv

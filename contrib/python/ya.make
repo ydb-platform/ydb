@@ -186,7 +186,7 @@ RECURSE(
     cssselect
     cssutils
     curlify
-    cx-Oracle 
+    cx-Oracle
     cycler
     cymem
     cytoolz

@@ -10,13 +10,13 @@ inline void DoConcatStrings(TStringStream&) {
 
 template <class T, class... R>
 inline void DoConcatStrings(TStringStream& ss, const T& t, const R&... r) {
-    ss << t;
-    DoConcatStrings(ss, r...);
+    ss << t; 
+    DoConcatStrings(ss, r...); 
 }
 
 template <class... R>
 inline TString ConcatStrings(const R&... r) {
     TStringStream ss;
-    DoConcatStrings(ss, r...);
+    DoConcatStrings(ss, r...); 
     return ss.Str();
 }

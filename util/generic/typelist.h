@@ -7,8 +7,8 @@
 #include <type_traits>
 
 template <class... R>
-struct TTypeList;
-
+struct TTypeList; 
+ 
 namespace NTL {
     template <unsigned N, typename TL>
     struct TGetImpl {
@@ -22,7 +22,7 @@ namespace NTL {
 }
 
 template <>
-struct TTypeList<> {
+struct TTypeList<> { 
     static constexpr size_t Length = 0;
 
     template <class>
@@ -34,13 +34,13 @@ struct TTypeList<> {
     };
 };
 
-using TNone = TTypeList<>;
+using TNone = TTypeList<>; 
 
 template <class H, class... R>
-struct TTypeList<H, R...> {
-    using THead = H;
-    using TTail = TTypeList<R...>;
-
+struct TTypeList<H, R...> { 
+    using THead = H; 
+    using TTail = TTypeList<R...>; 
+ 
     static constexpr size_t Length = 1 + sizeof...(R);
 
     template <class V>
@@ -55,26 +55,26 @@ struct TTypeList<H, R...> {
     };
 };
 
-//FIXME: temporary to check overall build
+//FIXME: temporary to check overall build 
 template <class T>
 struct TTypeList<T, TNone>: public TTypeList<T> {
-};
-
+}; 
+ 
 using TCommonSignedInts = TTypeList<signed char, signed short, signed int, signed long, signed long long>;
 using TCommonUnsignedInts = TTypeList<unsigned char, unsigned short, unsigned int, unsigned long, unsigned long long, bool>;
 using TFixedWidthSignedInts = TTypeList<i8, i16, i32, i64>;
 using TFixedWidthUnsignedInts = TTypeList<ui8, ui16, ui32, ui64>;
 using TFloats = TTypeList<float, double, long double>;
-
+ 
 namespace NTL {
     template <class T1, class T2>
-    struct TConcat;
-
+    struct TConcat; 
+ 
     template <class... R1, class... R2>
-    struct TConcat<TTypeList<R1...>, TTypeList<R2...>> {
+    struct TConcat<TTypeList<R1...>, TTypeList<R2...>> { 
         using type = TTypeList<R1..., R2...>;
-    };
-
+    }; 
+ 
     template <bool isSigned, class T, class TS, class TU>
     struct TTypeSelectorBase {
         using TSignedInts = typename TConcat<TTypeList<T>, TS>::type;

@@ -22,7 +22,7 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
 #if defined(_unix_)
     Y_ASSERT(TSYSLOG_LOCAL0 <= facility && facility <= TSYSLOG_LOCAL7);
 
-    static const int f2sf[] = {
+    static const int f2sf[] = { 
         LOG_LOCAL0,
         LOG_LOCAL1,
         LOG_LOCAL2,

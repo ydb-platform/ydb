@@ -80,12 +80,12 @@ public:
     bool FindTimezoneName(ui32 id, NUdf::TStringRef& name) const final;
     bool FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const final;
 
-    bool EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const final;
-    bool FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
-    bool FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
-
+    bool EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const final; 
+    bool FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day, 
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final; 
+    bool FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, 
+        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final; 
+ 
 private:
     const THolderFactory& HolderFactory_;
     NUdf::EValidatePolicy Policy_;

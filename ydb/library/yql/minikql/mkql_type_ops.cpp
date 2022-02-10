@@ -671,7 +671,7 @@ public:
         ui32 dayOfYear = 365;
         ui32 dayOfWeek = 2;
         ui32 weekOfYear = 52;
-        ui32 weekOfYearIso8601 = 1;
+        ui32 weekOfYearIso8601 = 1; 
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
             ui32 year, month, day;
@@ -681,11 +681,11 @@ public:
             if (++dayOfWeek > 7) {
                 dayOfWeek = 1;
                 ++weekOfYear;
-                if ((month == 12 && day >= 29) || (month == 1 && day <= 4)) {
-                    weekOfYearIso8601 = 1;
-                } else {
-                    ++weekOfYearIso8601;
-                }
+                if ((month == 12 && day >= 29) || (month == 1 && day <= 4)) { 
+                    weekOfYearIso8601 = 1; 
+                } else { 
+                    ++weekOfYearIso8601; 
+                } 
             }
 
             if (year > prevYear) {
@@ -695,7 +695,7 @@ public:
                 weekOfYear = 1;
             }
 
-            Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek};
+            Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek}; 
         }
     }
 
@@ -755,7 +755,7 @@ public:
         return true;
     }
 
-    bool EnrichByOffset(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
+    bool EnrichByOffset(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const { 
         if (Y_UNLIKELY(value >= Days_.size())) {
             return false;
         }
@@ -763,13 +763,13 @@ public:
         auto& info = Days_[value];
         dayOfYear = info.DayOfYear;
         weekOfYear = info.WeekOfYear;
-        weekOfYearIso8601 = info.WeekOfYearIso8601;
+        weekOfYearIso8601 = info.WeekOfYearIso8601; 
         dayOfWeek = info.DayOfWeek;
         return true;
     }
 
-    bool EnrichDate(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
-        return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    bool EnrichDate(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const { 
+        return EnrichByOffset(++value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek); 
     }
 
     static const TDateTable& Instance() {
@@ -786,7 +786,7 @@ private:
         ui32 Day : 5;
         ui32 DayOfYear : 9;
         ui32 WeekOfYear : 6;
-        ui32 WeekOfYearIso8601: 6;
+        ui32 WeekOfYearIso8601: 6; 
         ui32 DayOfWeek : 3;
     };
 
@@ -891,7 +891,7 @@ bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour,
     }
 }
 
-bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
+bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) { 
     if (tzId) {
         if (value >= NUdf::MAX_DATE) {
             return false;
@@ -907,10 +907,10 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
     } else {
         return false;
     }
-    return TDateTable::Instance().EnrichByOffset(value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    return TDateTable::Instance().EnrichByOffset(value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek); 
 }
 
-bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
+bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) { 
     ui16 offset;
     if (tzId) {
         if (value >= NUdf::MAX_DATETIME) {
@@ -926,11 +926,11 @@ bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour,
         return false;
     }
 
-    return TDateTable::Instance().EnrichByOffset(offset, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+    return TDateTable::Instance().EnrichByOffset(offset, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek); 
 }
 
-bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) {
-    return TDateTable::Instance().EnrichDate(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
+bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) { 
+    return TDateTable::Instance().EnrichDate(date, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek); 
 }
 
 bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value) {

@@ -22,7 +22,7 @@ namespace {
         unsigned int Year : 12;
         unsigned int DayOfYear : 9;
         unsigned int WeekOfYear : 6;
-        unsigned int WeekOfYearIso8601 : 6;
+        unsigned int WeekOfYearIso8601 : 6; 
         unsigned int DayOfWeek : 3;
         unsigned int Month : 4;
         unsigned int Day : 5;
@@ -48,9 +48,9 @@ namespace {
         }
 
         inline void FromDate(const IDateBuilder& builder, ui16 value, ui16 timezoneId = 0) {
-            ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek; 
 
-            if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
+            if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) { 
                 ythrow yexception() << "Error in FullSplitDate";
             }
 
@@ -62,7 +62,7 @@ namespace {
 
             DayOfYear = dayOfYear;
             WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
+            WeekOfYearIso8601 = weekOfYearIso8601; 
             DayOfWeek = dayOfWeek;
         }
 
@@ -83,9 +83,9 @@ namespace {
         }
 
         inline void FromDatetime(const IDateBuilder& builder, ui32 value, ui16 timezoneId = 0) {
-            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
+            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek; 
 
-            if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
+            if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) { 
                 ythrow yexception() << "Error in FullSplitDatetime";
             }
 
@@ -99,7 +99,7 @@ namespace {
 
             DayOfYear = dayOfYear;
             WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
+            WeekOfYearIso8601 = weekOfYearIso8601; 
             DayOfWeek = dayOfWeek;
         }
 
@@ -127,14 +127,14 @@ namespace {
                 return false;
             }
 
-            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
-            if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
+            ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek; 
+            if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) { 
                 ythrow yexception() << "Error in FullSplitDatetime.";
             }
 
             DayOfYear = dayOfYear;
             WeekOfYear = weekOfYear;
-            WeekOfYearIso8601 = weekOfYearIso8601;
+            WeekOfYearIso8601 = weekOfYearIso8601; 
             DayOfWeek = dayOfWeek;
 
             return true;
@@ -175,7 +175,7 @@ namespace {
     ACCESSORS(Year, ui16)
     ACCESSORS(DayOfYear, ui16)
     ACCESSORS(WeekOfYear, ui8)
-    ACCESSORS(WeekOfYearIso8601, ui8)
+    ACCESSORS(WeekOfYearIso8601, ui8) 
     ACCESSORS(DayOfWeek, ui8)
     ACCESSORS(Month, ui8)
     ACCESSORS(Day, ui8)
@@ -504,7 +504,7 @@ namespace {
     }
 
     GET_METHOD(WeekOfYear, ui8)
-    GET_METHOD(WeekOfYearIso8601, ui8)
+    GET_METHOD(WeekOfYearIso8601, ui8) 
 
     SIMPLE_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
@@ -1660,7 +1660,7 @@ namespace {
         TGetMonth,
         TGetMonthName,
         TGetWeekOfYear,
-        TGetWeekOfYearIso8601,
+        TGetWeekOfYearIso8601, 
         TGetDayOfMonth,
         TGetDayOfWeek,
         TGetDayOfWeekName,

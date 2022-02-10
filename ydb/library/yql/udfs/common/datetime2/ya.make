@@ -2,7 +2,7 @@ YQL_UDF(datetime2_udf)
 
 YQL_ABI_VERSION(
     2
-    24
+    24 
     0
 )
 

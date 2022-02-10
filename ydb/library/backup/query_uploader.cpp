@@ -22,7 +22,7 @@ TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient
     , RequestLimiter(opts.GetRps(), opts.GetRps())
     , Client(client)
 {
-    TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+    TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true)); 
     TasksQueue->Start(opts.InFly, opts.InFly + 1);
 }
 

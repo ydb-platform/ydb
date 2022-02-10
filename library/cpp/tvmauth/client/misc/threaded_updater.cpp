@@ -4,7 +4,7 @@
 
 #include <util/string/builder.h>
 #include <util/system/spin_wait.h>
-#include <util/system/thread.h>
+#include <util/system/thread.h> 
 
 namespace NTvmAuth {
     TThreadedUpdaterBase::TThreadedUpdaterBase(TDuration workerAwakingPeriod,
@@ -86,7 +86,7 @@ namespace NTvmAuth {
     }
 
     void* TThreadedUpdaterBase::WorkerWrap(void* arg) {
-        TThread::SetCurrentThreadName("TicketParserUpd");
+        TThread::SetCurrentThreadName("TicketParserUpd"); 
         TThreadedUpdaterBase& this_ = *reinterpret_cast<TThreadedUpdaterBase*>(arg);
         this_.Started_.Signal();
         this_.LogDebug("Thread-worker started");

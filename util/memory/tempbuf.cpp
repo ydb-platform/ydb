@@ -198,9 +198,9 @@ TTempBuf::TTempBuf(const TTempBuf&) noexcept = default;
 
 TTempBuf::TTempBuf(TTempBuf&& b) noexcept
     : Impl_(std::move(b.Impl_))
-{
-}
-
+{ 
+} 
+ 
 TTempBuf::~TTempBuf() = default;
 
 TTempBuf& TTempBuf::operator=(const TTempBuf& b) noexcept {
@@ -271,9 +271,9 @@ void TTempBuf::Append(const void* data, size_t len) {
 }
 
 bool TTempBuf::IsNull() const noexcept {
-    return !Impl_;
-}
-
+    return !Impl_; 
+} 
+ 
 #if 0
     #include <util/datetime/cputimer.h>
 

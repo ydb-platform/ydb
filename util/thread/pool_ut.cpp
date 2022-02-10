@@ -5,9 +5,9 @@
 #include <util/stream/output.h>
 #include <util/random/fast.h>
 #include <util/system/spinlock.h>
-#include <util/system/thread.h>
-#include <util/system/mutex.h>
-#include <util/system/condvar.h>
+#include <util/system/thread.h> 
+#include <util/system/mutex.h> 
+#include <util/system/condvar.h> 
 
 struct TThreadPoolTest {
     TSpinLock Lock;
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
 
     Y_UNIT_TEST(TestTThreadPoolBlocking) {
         TThreadPoolTest t;
-        TThreadPool q(TThreadPool::TParams().SetBlocking(true));
+        TThreadPool q(TThreadPool::TParams().SetBlocking(true)); 
         t.TestAnyQueue(&q, 100);
     }
 
@@ -132,32 +132,32 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         );
         UNIT_ASSERT_VALUES_EQUAL(added, false);
     }
-
+ 
     Y_UNIT_TEST(TestSafeAddFuncThrows) {
         TFailAddQueue queue;
         UNIT_CHECK_GENERATED_EXCEPTION(queue.SafeAddFunc([] {}), TThreadPoolException);
     }
 
     Y_UNIT_TEST(TestFunctionNotCopied) {
-        struct TFailOnCopy {
-            TFailOnCopy() {
-            }
-
-            TFailOnCopy(TFailOnCopy&&) {
-            }
-
-            TFailOnCopy(const TFailOnCopy&) {
+        struct TFailOnCopy { 
+            TFailOnCopy() { 
+            } 
+ 
+            TFailOnCopy(TFailOnCopy&&) { 
+            } 
+ 
+            TFailOnCopy(const TFailOnCopy&) { 
                 UNIT_FAIL("Don't copy std::function inside TThreadPool");
-            }
-        };
-
-        TThreadPool queue(TThreadPool::TParams().SetBlocking(false).SetCatching(true));
-        queue.Start(2);
-
+            } 
+        }; 
+ 
+        TThreadPool queue(TThreadPool::TParams().SetBlocking(false).SetCatching(true)); 
+        queue.Start(2); 
+ 
         queue.SafeAddFunc([data = TFailOnCopy()]() {});
-
-        queue.Stop();
-    }
+ 
+        queue.Stop(); 
+    } 
 
     Y_UNIT_TEST(TestInfoGetters) {
         TThreadPool queue;
@@ -178,80 +178,80 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
 
         queue.Stop();
     }
-
+ 
     void TestFixedThreadName(IThreadPool& pool, const TString& expectedName) {
-        pool.Start(1);
-        TString name;
-        pool.SafeAddFunc([&name]() {
-            name = TThread::CurrentThreadName();
-        });
-        pool.Stop();
+        pool.Start(1); 
+        TString name; 
+        pool.SafeAddFunc([&name]() { 
+            name = TThread::CurrentThreadName(); 
+        }); 
+        pool.Stop(); 
         if (TThread::CanGetCurrentThreadName()) {
             UNIT_ASSERT_EQUAL(name, expectedName);
             UNIT_ASSERT_UNEQUAL(TThread::CurrentThreadName(), expectedName);
         }
-    }
-
-    Y_UNIT_TEST(TestFixedThreadName) {
-        const TString expectedName = "HelloWorld";
-        {
-            TThreadPool pool(TThreadPool::TParams().SetBlocking(true).SetCatching(false).SetThreadName(expectedName));
-            TestFixedThreadName(pool, expectedName);
-        }
-        {
-            TAdaptiveThreadPool pool(TThreadPool::TParams().SetThreadName(expectedName));
-            TestFixedThreadName(pool, expectedName);
-        }
-    }
-
+    } 
+ 
+    Y_UNIT_TEST(TestFixedThreadName) { 
+        const TString expectedName = "HelloWorld"; 
+        { 
+            TThreadPool pool(TThreadPool::TParams().SetBlocking(true).SetCatching(false).SetThreadName(expectedName)); 
+            TestFixedThreadName(pool, expectedName); 
+        } 
+        { 
+            TAdaptiveThreadPool pool(TThreadPool::TParams().SetThreadName(expectedName)); 
+            TestFixedThreadName(pool, expectedName); 
+        } 
+    } 
+ 
     void TestEnumeratedThreadName(IThreadPool& pool, const THashSet<TString>& expectedNames) {
-        pool.Start(expectedNames.size());
-        TMutex lock;
-        TCondVar allReady;
-        size_t readyCount = 0;
-        THashSet<TString> names;
-        for (size_t i = 0; i < expectedNames.size(); ++i) {
-            pool.SafeAddFunc([&]() {
+        pool.Start(expectedNames.size()); 
+        TMutex lock; 
+        TCondVar allReady; 
+        size_t readyCount = 0; 
+        THashSet<TString> names; 
+        for (size_t i = 0; i < expectedNames.size(); ++i) { 
+            pool.SafeAddFunc([&]() { 
                 with_lock (lock) {
-                    if (++readyCount == expectedNames.size()) {
-                        allReady.BroadCast();
-                    } else {
-                        while (readyCount != expectedNames.size()) {
-                            allReady.WaitI(lock);
-                        }
-                    }
-                    names.insert(TThread::CurrentThreadName());
-                }
-            });
-        }
-        pool.Stop();
+                    if (++readyCount == expectedNames.size()) { 
+                        allReady.BroadCast(); 
+                    } else { 
+                        while (readyCount != expectedNames.size()) { 
+                            allReady.WaitI(lock); 
+                        } 
+                    } 
+                    names.insert(TThread::CurrentThreadName()); 
+                } 
+            }); 
+        } 
+        pool.Stop(); 
         if (TThread::CanGetCurrentThreadName()) {
             UNIT_ASSERT_EQUAL(names, expectedNames);
         }
-    }
-
-    Y_UNIT_TEST(TestEnumeratedThreadName) {
-        const TString namePrefix = "HelloWorld";
-        const THashSet<TString> expectedNames = {
-            "HelloWorld0",
-            "HelloWorld1",
-            "HelloWorld2",
-            "HelloWorld3",
-            "HelloWorld4",
-            "HelloWorld5",
-            "HelloWorld6",
-            "HelloWorld7",
-            "HelloWorld8",
-            "HelloWorld9",
-            "HelloWorld10",
-        };
-        {
-            TThreadPool pool(TThreadPool::TParams().SetBlocking(true).SetCatching(false).SetThreadNamePrefix(namePrefix));
-            TestEnumeratedThreadName(pool, expectedNames);
-        }
-        {
-            TAdaptiveThreadPool pool(TThreadPool::TParams().SetThreadNamePrefix(namePrefix));
-            TestEnumeratedThreadName(pool, expectedNames);
-        }
-    }
+    } 
+ 
+    Y_UNIT_TEST(TestEnumeratedThreadName) { 
+        const TString namePrefix = "HelloWorld"; 
+        const THashSet<TString> expectedNames = { 
+            "HelloWorld0", 
+            "HelloWorld1", 
+            "HelloWorld2", 
+            "HelloWorld3", 
+            "HelloWorld4", 
+            "HelloWorld5", 
+            "HelloWorld6", 
+            "HelloWorld7", 
+            "HelloWorld8", 
+            "HelloWorld9", 
+            "HelloWorld10", 
+        }; 
+        { 
+            TThreadPool pool(TThreadPool::TParams().SetBlocking(true).SetCatching(false).SetThreadNamePrefix(namePrefix)); 
+            TestEnumeratedThreadName(pool, expectedNames); 
+        } 
+        { 
+            TAdaptiveThreadPool pool(TThreadPool::TParams().SetThreadNamePrefix(namePrefix)); 
+            TestEnumeratedThreadName(pool, expectedNames); 
+        } 
+    } 
 }

@@ -80,66 +80,66 @@ IObjectInQueue* MakeThrFuncObj(T&& func) {
     return new TThrFuncObj<std::remove_cv_t<std::remove_reference_t<T>>>(std::forward<T>(func));
 }
 
-struct TThreadPoolParams {
-    bool Catching_ = true;
-    bool Blocking_ = false;
-    IThreadFactory* Factory_ = SystemThreadFactory();
-    TString ThreadName_;
-    bool EnumerateThreads_ = false;
-
-    using TSelf = TThreadPoolParams;
-
-    TThreadPoolParams() {
-    }
-
-    TThreadPoolParams(IThreadFactory* factory)
-        : Factory_(factory)
-    {
-    }
-
-    TThreadPoolParams(const TString& name) {
-        SetThreadName(name);
-    }
-
-    TThreadPoolParams(const char* name) {
-        SetThreadName(name);
-    }
-
-    TSelf& SetCatching(bool val) {
-        Catching_ = val;
-        return *this;
-    }
-
-    TSelf& SetBlocking(bool val) {
-        Blocking_ = val;
-        return *this;
-    }
-
-    TSelf& SetFactory(IThreadFactory* factory) {
-        Factory_ = factory;
-        return *this;
-    }
-
-    TSelf& SetThreadName(const TString& name) {
-        ThreadName_ = name;
-        EnumerateThreads_ = false;
-        return *this;
-    }
-
-    TSelf& SetThreadNamePrefix(const TString& prefix) {
-        ThreadName_ = prefix;
-        EnumerateThreads_ = true;
-        return *this;
-    }
-};
-
+struct TThreadPoolParams { 
+    bool Catching_ = true; 
+    bool Blocking_ = false; 
+    IThreadFactory* Factory_ = SystemThreadFactory(); 
+    TString ThreadName_; 
+    bool EnumerateThreads_ = false; 
+ 
+    using TSelf = TThreadPoolParams; 
+ 
+    TThreadPoolParams() { 
+    } 
+ 
+    TThreadPoolParams(IThreadFactory* factory) 
+        : Factory_(factory) 
+    { 
+    } 
+ 
+    TThreadPoolParams(const TString& name) { 
+        SetThreadName(name); 
+    } 
+ 
+    TThreadPoolParams(const char* name) { 
+        SetThreadName(name); 
+    } 
+ 
+    TSelf& SetCatching(bool val) { 
+        Catching_ = val; 
+        return *this; 
+    } 
+ 
+    TSelf& SetBlocking(bool val) { 
+        Blocking_ = val; 
+        return *this; 
+    } 
+ 
+    TSelf& SetFactory(IThreadFactory* factory) { 
+        Factory_ = factory; 
+        return *this; 
+    } 
+ 
+    TSelf& SetThreadName(const TString& name) { 
+        ThreadName_ = name; 
+        EnumerateThreads_ = false; 
+        return *this; 
+    } 
+ 
+    TSelf& SetThreadNamePrefix(const TString& prefix) { 
+        ThreadName_ = prefix; 
+        EnumerateThreads_ = true; 
+        return *this; 
+    } 
+}; 
+ 
 /**
  * A queue processed simultaneously by several threads
  */
 class IThreadPool: public IThreadFactory, public TNonCopyable {
 public:
-    using TParams = TThreadPoolParams;
-
+    using TParams = TThreadPoolParams; 
+ 
     ~IThreadPool() override = default;
 
     /**
@@ -255,18 +255,18 @@ public:
     }
 };
 
-class TThreadPoolBase: public IThreadPool, public TThreadFactoryHolder {
-public:
-    TThreadPoolBase(const TParams& params);
-
-protected:
-    TParams Params;
-};
-
+class TThreadPoolBase: public IThreadPool, public TThreadFactoryHolder { 
+public: 
+    TThreadPoolBase(const TParams& params); 
+ 
+protected: 
+    TParams Params; 
+}; 
+ 
 /** queue processed by fixed size thread pool */
-class TThreadPool: public TThreadPoolBase {
+class TThreadPool: public TThreadPoolBase { 
 public:
-    TThreadPool(const TParams& params = {});
+    TThreadPool(const TParams& params = {}); 
     ~TThreadPool() override;
 
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
@@ -290,9 +290,9 @@ private:
  * Always create new thread for new task, when all existing threads are busy.
  * Maybe dangerous, number of threads is not limited.
  */
-class TAdaptiveThreadPool: public TThreadPoolBase {
+class TAdaptiveThreadPool: public TThreadPoolBase { 
 public:
-    TAdaptiveThreadPool(const TParams& params = {});
+    TAdaptiveThreadPool(const TParams& params = {}); 
     ~TAdaptiveThreadPool() override;
 
     /**
@@ -308,15 +308,15 @@ public:
     void Stop() noexcept override;
     size_t Size() const noexcept override;
 
-private:
+private: 
     class TImpl;
     THolder<TImpl> Impl_;
 };
 
 /** Behave like TThreadPool or TAdaptiveThreadPool, choosen by thrnum parameter of Start()  */
-class TSimpleThreadPool: public TThreadPoolBase {
+class TSimpleThreadPool: public TThreadPoolBase { 
 public:
-    TSimpleThreadPool(const TParams& params = {});
+    TSimpleThreadPool(const TParams& params = {}); 
     ~TSimpleThreadPool() override;
 
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
@@ -387,4 +387,4 @@ inline void Delete(THolder<IThreadPool> q) {
  * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise
  * You could specify blocking and catching modes for TThreadPool only
  */
-THolder<IThreadPool> CreateThreadPool(size_t threadCount, size_t queueSizeLimit = 0, const IThreadPool::TParams& params = {});
+THolder<IThreadPool> CreateThreadPool(size_t threadCount, size_t queueSizeLimit = 0, const IThreadPool::TParams& params = {}); 

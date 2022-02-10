@@ -191,8 +191,8 @@ RECURSE(
     toloka-airflow
     toloka-prefect
     tools_structured_logs
-    thread
-    thread/test
+    thread 
+    thread/test 
     tskv
     tvmauth
     tvm2

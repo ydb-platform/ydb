@@ -21,7 +21,7 @@ TBaseServerRequestData::TBaseServerRequestData(const char* qs, SOCKET s)
     , Path(nullptr)
     , Search((char*)qs)
     , SearchLength(qs ? strlen(qs) : 0)
-    , OrigSearch(Search, SearchLength)
+    , OrigSearch(Search, SearchLength) 
     , Socket(s)
     , BeginTime(MicroSeconds())
 {
@@ -110,7 +110,7 @@ const char* TBaseServerRequestData::Environment(const char* key) const {
 void TBaseServerRequestData::Clear() {
     HeadersIn_.clear();
     Addr = Path = Search = nullptr;
-    OrigSearch = {};
+    OrigSearch = {}; 
     SearchLength = 0;
     Host.clear();
     Port.clear();
@@ -174,8 +174,8 @@ bool TBaseServerRequestData::Parse(const char* origReq) {
     } else {
         SearchLength = 0;
     }
-    OrigSearch = {Search, SearchLength};
-
+    OrigSearch = {Search, SearchLength}; 
+ 
     return true;
 }
 

@@ -321,8 +321,8 @@ public:
     };
 
     void ListenSocket() {
-        TThread::SetCurrentThreadName(Options_.ListenThreadName.c_str());
-
+        TThread::SetCurrentThreadName(Options_.ListenThreadName.c_str()); 
+ 
         ErrorCode = 0;
         TIntrusiveListWithAutoDelete<TListenSocket, TDelete> Reqs;
 
@@ -410,8 +410,8 @@ public:
         : TImpl(
               parent,
               cb,
-              MakeThreadPool<TSimpleThreadPool>(factory, options.UseElasticQueues, cb, options.RequestsThreadName),
-              MakeThreadPool<TThreadPool>(factory, options.UseElasticQueues, nullptr, options.FailRequestsThreadName),
+              MakeThreadPool<TSimpleThreadPool>(factory, options.UseElasticQueues, cb, options.RequestsThreadName), 
+              MakeThreadPool<TThreadPool>(factory, options.UseElasticQueues, nullptr, options.FailRequestsThreadName), 
               options) {
     }
 
@@ -461,17 +461,17 @@ public:
 
 private:
     template <class TThreadPool_>
-    static THolder<IThreadPool> MakeThreadPool(IThreadFactory* factory, bool elastic, ICallBack* callback = nullptr, const TString& threadName = {}) {
+    static THolder<IThreadPool> MakeThreadPool(IThreadFactory* factory, bool elastic, ICallBack* callback = nullptr, const TString& threadName = {}) { 
         if (!factory) {
             factory = SystemThreadFactory();
         }
 
         THolder<IThreadPool> pool;
-        const auto params = IThreadPool::TParams().SetFactory(factory).SetThreadName(threadName);
+        const auto params = IThreadPool::TParams().SetFactory(factory).SetThreadName(threadName); 
         if (callback) {
-            pool = MakeHolder<TThreadPoolBinder<TThreadPool_, THttpServer::ICallBack>>(callback, params);
+            pool = MakeHolder<TThreadPoolBinder<TThreadPool_, THttpServer::ICallBack>>(callback, params); 
         } else {
-            pool = MakeHolder<TThreadPool_>(params);
+            pool = MakeHolder<TThreadPool_>(params); 
         }
 
         if (elastic) {
@@ -631,20 +631,20 @@ bool TClientRequest::Reply(void* /*ThreadSpecificResource*/) {
 
 bool TClientRequest::IsLocal() const {
     return HasLocalAddress(Socket());
-}
-
-bool TClientRequest::CheckLoopback() {
-    bool isLocal = false;
-
-    try {
-        isLocal = IsLocal();
-    } catch (const yexception& e) {
+} 
+ 
+bool TClientRequest::CheckLoopback() { 
+    bool isLocal = false; 
+ 
+    try { 
+        isLocal = IsLocal(); 
+    } catch (const yexception& e) { 
         Output() << "HTTP/1.0 500 Oops\r\n\r\n"
                  << e.what() << "\r\n";
         return false;
-    }
-
-    if (!isLocal) {
+    } 
+ 
+    if (!isLocal) { 
         Output() << "HTTP/1.0 403 Permission denied\r\n"
                     "Content-Type: text/html; charset=windows-1251\r\n"
                     "Connection: close\r\n"

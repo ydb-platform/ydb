@@ -51,9 +51,9 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         // This should work
         UNIT_ASSERT(rd.Parse(" /yandsearch?&gta=fake&haha=da HTTP 1.1 OK"));
 
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "&gta=fake&haha=da");
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf());
-
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "&gta=fake&haha=da"); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf()); 
+ 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.Has("gta", "fake"));
         UNIT_ASSERT(rd.CgiParam.Has("haha", "da"));
@@ -63,27 +63,27 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
     }
 
     Y_UNIT_TEST(Ctor) {
-        const TString qs("gta=fake&haha=da");
-        TServerRequestData rd(qs.c_str());
-
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs);
-        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs);
-
+        const TString qs("gta=fake&haha=da"); 
+        TServerRequestData rd(qs.c_str()); 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs); 
+ 
         UNIT_ASSERT(rd.CgiParam.Has("gta"));
         UNIT_ASSERT(rd.CgiParam.Has("haha"));
         UNIT_ASSERT(!rd.CgiParam.Has("no-param"));
     }
 
     Y_UNIT_TEST(HashCut) {
-        const TString qs("&gta=fake&haha=da");
-        const TString header = " /yandsearch?" + qs + "#&uberParam=yes&q=? HTTP 1.1 OK";
-
+        const TString qs("&gta=fake&haha=da"); 
+        const TString header = " /yandsearch?" + qs + "#&uberParam=yes&q=? HTTP 1.1 OK"; 
+ 
         TServerRequestData rd;
-        rd.Parse(header.c_str());
+        rd.Parse(header.c_str()); 
 
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs);
-        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs);
-
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs); 
+ 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.Has("gta"));
         UNIT_ASSERT(rd.CgiParam.Has("haha"));
@@ -94,9 +94,9 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         TServerRequestData rd;
         rd.Parse(" /y#ndsearch?&gta=fake&haha=da&uberParam=yes&q=? HTTP 1.1 OK");
 
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "");
-        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), "");
-
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), ""); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), ""); 
+ 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.empty());
     }
@@ -105,29 +105,29 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         TServerRequestData rd;
         rd.Parse(" /yandsearch?#");
 
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), "");
-        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), "");
-
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), ""); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), ""); 
+ 
         rd.Scan();
         UNIT_ASSERT(rd.CgiParam.empty());
     }
 
     Y_UNIT_TEST(AppendQueryString) {
-        const TString qs("gta=fake&haha=da");
-        TServerRequestData rd(qs.c_str());
+        const TString qs("gta=fake&haha=da"); 
+        TServerRequestData rd(qs.c_str()); 
 
         UNIT_ASSERT(rd.CgiParam.Has("gta", "fake"));
         UNIT_ASSERT(rd.CgiParam.Has("haha", "da"));
 
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs);
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf());
-
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), rd.OrigQueryStringBuf()); 
+ 
         constexpr TStringBuf appendix = "gta=true&gta=new";
         rd.AppendQueryString(appendix.data(), appendix.size());
-
-        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs + '&' + appendix);
-        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs);
-
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.QueryStringBuf(), qs + '&' + appendix); 
+        UNIT_ASSERT_STRINGS_EQUAL(rd.OrigQueryStringBuf(), qs); 
+ 
         rd.Scan();
 
         UNIT_ASSERT(rd.CgiParam.Has("gta", "true"));

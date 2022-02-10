@@ -1,14 +1,14 @@
 #include "tempbuf.h"
 
 #include <utility>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 class TTempBufTest: public TTestBase {
     UNIT_TEST_SUITE(TTempBufTest);
     UNIT_TEST(TestCreate);
     UNIT_TEST(TestOps);
-    UNIT_TEST(TestMoveCtor);
+    UNIT_TEST(TestMoveCtor); 
     UNIT_TEST(TestAppend);
     UNIT_TEST(TestProceed);
     UNIT_TEST_SUITE_END();
@@ -16,7 +16,7 @@ class TTempBufTest: public TTestBase {
 public:
     void TestCreate();
     void TestOps();
-    void TestMoveCtor();
+    void TestMoveCtor(); 
     void TestProceed();
 
     void TestAppend() {
@@ -64,19 +64,19 @@ void TTempBufTest::TestOps() {
     UNIT_ASSERT(tmp.Size() >= 201);
     UNIT_ASSERT_EQUAL(tmp.Filled(), 0);
 }
-
-void TTempBufTest::TestMoveCtor() {
-    TTempBuf src;
-    UNIT_ASSERT(!src.IsNull());
-
-    src.Proceed(10);
-
+ 
+void TTempBufTest::TestMoveCtor() { 
+    TTempBuf src; 
+    UNIT_ASSERT(!src.IsNull()); 
+ 
+    src.Proceed(10); 
+ 
     TTempBuf dst(std::move(src));
-
-    UNIT_ASSERT(src.IsNull());
-    UNIT_ASSERT(!dst.IsNull());
-    UNIT_ASSERT_EQUAL(dst.Filled(), 10);
-}
+ 
+    UNIT_ASSERT(src.IsNull()); 
+    UNIT_ASSERT(!dst.IsNull()); 
+    UNIT_ASSERT_EQUAL(dst.Filled(), 10); 
+} 
 
 void TTempBufTest::TestProceed() {
     TTempBuf src;

@@ -2,7 +2,7 @@
 #include "element.h"
 
 #include <utility>
-
+ 
 TLogElement::TLogElement(const TLog* parent)
     : Parent_(parent)
     , Priority_(Parent_->DefaultPriority())
@@ -25,10 +25,10 @@ TLogElement::~TLogElement() {
 }
 
 void TLogElement::DoFlush() {
-    if (IsNull()) {
-        return;
-    }
-
+    if (IsNull()) { 
+        return; 
+    } 
+ 
     const size_t filled = Filled();
 
     if (filled) {

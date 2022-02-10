@@ -126,7 +126,7 @@ TMutex::TMutex()
 }
 
 TMutex::TMutex(TMutex&&) = default;
-
+ 
 TMutex::~TMutex() = default;
 
 void TMutex::Acquire() noexcept {

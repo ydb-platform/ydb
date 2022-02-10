@@ -7,7 +7,7 @@
 
 #include <util/system/align.h>
 #include <util/stream/output.h>
-#include <util/ysaveload.h>
+#include <util/ysaveload.h> 
 
 namespace NMaybe {
     struct TPolicyUndefinedExcept {
@@ -387,31 +387,31 @@ public:
     }
 
     void Save(IOutputStream* out) const {
-        const bool defined = Defined();
+        const bool defined = Defined(); 
 
-        ::Save<bool>(out, defined);
+        ::Save<bool>(out, defined); 
 
-        if (defined) {
+        if (defined) { 
             ::Save(out, *Data());
-        }
-    }
-
+        } 
+    } 
+ 
     void Load(IInputStream* in) {
-        bool defined;
+        bool defined; 
 
-        ::Load(in, defined);
+        ::Load(in, defined); 
 
-        if (defined) {
-            if (!Defined()) {
-                ConstructInPlace();
-            }
+        if (defined) { 
+            if (!Defined()) { 
+                ConstructInPlace(); 
+            } 
 
             ::Load(in, *Data());
-        } else {
-            Clear();
-        }
-    }
-
+        } else { 
+            Clear(); 
+        } 
+    } 
+ 
     void Swap(TMaybe& other) {
         if (this->Defined_ == other.Defined_) {
             if (this->Defined_) {

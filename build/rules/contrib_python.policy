@@ -1,89 +1,89 @@
-# django-1.11 deprecation 
+# django-1.11 deprecation
 ALLOW contrib/python/.*/tests? -> contrib/python/django/django-1.11
-ALLOW contrib/deprecated/python/.*/tests? -> contrib/python/django/django-1.11 
-ALLOW ads/yacontext/apps/procontext -> contrib/python/django/django-1.11 
-ALLOW devtools/dummy_arcadia/django_settings -> contrib/python/django/django-1.11 
+ALLOW contrib/deprecated/python/.*/tests? -> contrib/python/django/django-1.11
+ALLOW ads/yacontext/apps/procontext -> contrib/python/django/django-1.11
+ALLOW devtools/dummy_arcadia/django_settings -> contrib/python/django/django-1.11
 ALLOW devtools/signer/signer -> contrib/python/django/django-1.11
-ALLOW douber/backend -> contrib/python/django/django-1.11 
-ALLOW intranet/audit/src -> contrib/python/django/django-1.11 
-ALLOW intranet/crt/tests -> contrib/python/django/django-1.11 
-ALLOW intranet/crt -> contrib/python/django/django-1.11 
-ALLOW intranet/dogma/dogma -> contrib/python/django/django-1.11 
-ALLOW intranet/magiclinks/src -> contrib/python/django/django-1.11 
-ALLOW intranet/paste/src -> contrib/python/django/django-1.11 
+ALLOW douber/backend -> contrib/python/django/django-1.11
+ALLOW intranet/audit/src -> contrib/python/django/django-1.11
+ALLOW intranet/crt/tests -> contrib/python/django/django-1.11
+ALLOW intranet/crt -> contrib/python/django/django-1.11
+ALLOW intranet/dogma/dogma -> contrib/python/django/django-1.11
+ALLOW intranet/magiclinks/src -> contrib/python/django/django-1.11
+ALLOW intranet/paste/src -> contrib/python/django/django-1.11
 ALLOW intranet/pypi/src -> contrib/python/django/django-1.11
 ALLOW intranet/qooker/src -> contrib/python/django/django-1.11
-ALLOW intranet/search/core -> contrib/python/django/django-1.11 
-ALLOW intranet/search/settings -> contrib/python/django/django-1.11 
-ALLOW intranet/sync_tools/tests -> contrib/python/django/django-1.11 
+ALLOW intranet/search/core -> contrib/python/django/django-1.11
+ALLOW intranet/search/settings -> contrib/python/django/django-1.11
+ALLOW intranet/sync_tools/tests -> contrib/python/django/django-1.11
 ALLOW intranet/wiki -> contrib/python/django/django-1.11
 ALLOW intranet/plan/src -> contrib/python/django/django-1.11
 ALLOW intranet/plan -> contrib/python/django/django-1.11
-ALLOW library/python/django_alive -> contrib/python/django/django-1.11 
-ALLOW library/python/django_celery_monitoring -> contrib/python/django/django-1.11 
-ALLOW library/python/django_mds -> contrib/python/django/django-1.11 
-ALLOW library/python/django_russian -> contrib/python/django/django-1.11 
-ALLOW library/python/metrics_framework -> contrib/python/django/django-1.11 
-ALLOW library/python/python-django-yauth/tests -> contrib/python/django/django-1.11 
-ALLOW library/python/tools_mongodb_cache -> contrib/python/django/django-1.11 
-ALLOW mssngr/botplatform/src/bots/common/fanout -> contrib/python/django/django-1.11 
-ALLOW mssngr/botplatform/src/bots/common -> contrib/python/django/django-1.11 
-ALLOW mssngr/botplatform/tests -> contrib/python/django/django-1.11 
+ALLOW library/python/django_alive -> contrib/python/django/django-1.11
+ALLOW library/python/django_celery_monitoring -> contrib/python/django/django-1.11
+ALLOW library/python/django_mds -> contrib/python/django/django-1.11
+ALLOW library/python/django_russian -> contrib/python/django/django-1.11
+ALLOW library/python/metrics_framework -> contrib/python/django/django-1.11
+ALLOW library/python/python-django-yauth/tests -> contrib/python/django/django-1.11
+ALLOW library/python/tools_mongodb_cache -> contrib/python/django/django-1.11
+ALLOW mssngr/botplatform/src/bots/common/fanout -> contrib/python/django/django-1.11
+ALLOW mssngr/botplatform/src/bots/common -> contrib/python/django/django-1.11
+ALLOW mssngr/botplatform/tests -> contrib/python/django/django-1.11
 ALLOW passport/backend/contrib/django_contrib_comments -> contrib/python/django/django-1.11
-ALLOW plus/gift/pdfgen -> contrib/python/django/django-1.11 
-ALLOW plus/utils/tests -> contrib/python/django/django-1.11 
+ALLOW plus/gift/pdfgen -> contrib/python/django/django-1.11
+ALLOW plus/utils/tests -> contrib/python/django/django-1.11
 ALLOW quality/antifraud/viewers/antifraud_viewer/lib -> contrib/python/django/django-1.11
-ALLOW quality/functionality/chats/common/bots -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/chats/feedback/src/feedback -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/chats/ycm/src/ycm -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/libs/storage -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/libs/wutils -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/rich_snippets/migrations -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/storage/migrations -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/storage -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/turbo/migrations -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/turbo -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/ya_user/migrations -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/apps/ya_user -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server/core -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/server -> contrib/python/django/django-1.11 
-ALLOW quality/functionality/parsepl/testing/server -> contrib/python/django/django-1.11 
-ALLOW rt-research/multik/pylib/operations_queue -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/mm_backend/bin -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/mm_backend/tests -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/mm_backend -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/tv_proxy/bin -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/tv_proxy/proxy -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/tv_proxy/tests -> contrib/python/django/django-1.11 
-ALLOW smarttv/alice/tv_proxy -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka/bin -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka/functional_tests -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka/proxy -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka/tests -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka/utils -> contrib/python/django/django-1.11 
-ALLOW smarttv/droideka -> contrib/python/django/django-1.11 
+ALLOW quality/functionality/chats/common/bots -> contrib/python/django/django-1.11
+ALLOW quality/functionality/chats/feedback/src/feedback -> contrib/python/django/django-1.11
+ALLOW quality/functionality/chats/ycm/src/ycm -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/libs/storage -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/libs/wutils -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/rich_snippets/migrations -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/storage/migrations -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/storage -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/turbo/migrations -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/turbo -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/ya_user/migrations -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/apps/ya_user -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server/core -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/server -> contrib/python/django/django-1.11
+ALLOW quality/functionality/parsepl/testing/server -> contrib/python/django/django-1.11
+ALLOW rt-research/multik/pylib/operations_queue -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/mm_backend/bin -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/mm_backend/tests -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/mm_backend -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/tv_proxy/bin -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/tv_proxy/proxy -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/tv_proxy/tests -> contrib/python/django/django-1.11
+ALLOW smarttv/alice/tv_proxy -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka/bin -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka/functional_tests -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka/proxy -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka/tests -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka/utils -> contrib/python/django/django-1.11
+ALLOW smarttv/droideka -> contrib/python/django/django-1.11
 ALLOW travel/avia/.* -> contrib/python/django/django-1.11
-ALLOW travel/rasp/admin -> contrib/python/django/django-1.11 
-ALLOW travel/rasp/library/python/common -> contrib/python/django/django-1.11 
+ALLOW travel/rasp/admin -> contrib/python/django/django-1.11
+ALLOW travel/rasp/library/python/common -> contrib/python/django/django-1.11
 ALLOW travel/rasp/library/python/sitemap -> contrib/python/django/django-1.11
-ALLOW travel/library/python/entrypoint -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/advisor -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/common/tests -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/demo -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/launcher -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/lockscreen -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/project -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/setup_wizard -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/tests/recipe.inc -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/weather -> contrib/python/django/django-1.11 
-ALLOW yaphone/advisor/widget -> contrib/python/django/django-1.11 
-ALLOW yaphone/dialer/dialer/tests -> contrib/python/django/django-1.11 
-ALLOW yaphone/dialer/dialer -> contrib/python/django/django-1.11 
-ALLOW yaphone/dialer/project/bin -> contrib/python/django/django-1.11 
-ALLOW yaphone/dialer/project -> contrib/python/django/django-1.11 
-ALLOW yaphone/utils/geo -> contrib/python/django/django-1.11 
-DENY .* -> contrib/python/django/django-1.11 
- 
+ALLOW travel/library/python/entrypoint -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/advisor -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/common/tests -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/demo -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/launcher -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/lockscreen -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/project -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/setup_wizard -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/tests/recipe.inc -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/weather -> contrib/python/django/django-1.11
+ALLOW yaphone/advisor/widget -> contrib/python/django/django-1.11
+ALLOW yaphone/dialer/dialer/tests -> contrib/python/django/django-1.11
+ALLOW yaphone/dialer/dialer -> contrib/python/django/django-1.11
+ALLOW yaphone/dialer/project/bin -> contrib/python/django/django-1.11
+ALLOW yaphone/dialer/project -> contrib/python/django/django-1.11
+ALLOW yaphone/utils/geo -> contrib/python/django/django-1.11
+DENY .* -> contrib/python/django/django-1.11
+
 ALLOW maps -> maps/contrib
 DENY .* -> maps/contrib
 
@@ -103,9 +103,9 @@ DENY .* -> contrib/deprecated/python/diff2html
 # usage restriction
 ALLOW yweb/antimalware/ -> contrib/libs/sophos
 DENY .* -> contrib/libs/sophos
- 
-# contrib/python/backports should not be used in new projects because we want 
-# to start new projects on Py3 
+
+# contrib/python/backports should not be used in new projects because we want
+# to start new projects on Py3
 ALLOW contrib/python/backports.tempfile ->  contrib/python/backports.weakref
 DENY .* ->  contrib/python/backports.weakref
 
@@ -120,8 +120,8 @@ ALLOW yabs/amazon/cache_proxy -> contrib/python/toredis
 ALLOW yql/udfs/common/python/python_arc -> contrib/python/toredis
 DENY .* -> contrib/python/toredis
 
-# contrib/python/MySQL-python dosen't support Python 3, use mysqlclient-python 
-# or pymysql instead of this. 
+# contrib/python/MySQL-python dosen't support Python 3, use mysqlclient-python
+# or pymysql instead of this.
 ALLOW adfox/amacs/tests/functional/libs/builders -> contrib/python/MySQL-python
 ALLOW adfox/amacs/tests/functional/libs/config -> contrib/python/MySQL-python
 ALLOW adfox/amacs/tests/functional/libs/db -> contrib/python/MySQL-python
@@ -170,11 +170,11 @@ ALLOW yql/udfs/common/python/python_arc -> contrib/deprecated/python/mipp
 DENY .* -> contrib/deprecated/python/mipp
 DENY .* -> contrib/deprecated/python/mpop
 
-DENY .* -> contrib/python/pdbpp 
- 
-ALLOW contrib/python/pdbpp -> contrib/python/fancycompleter 
-DENY .* -> contrib/python/fancycompleter 
- 
+DENY .* -> contrib/python/pdbpp
+
+ALLOW contrib/python/pdbpp -> contrib/python/fancycompleter
+DENY .* -> contrib/python/fancycompleter
+
 ALLOW infra/procman -> contrib/python/skynet_pyro4
 ALLOW skynet -> contrib/python/skynet_pyro4
 DENY .* -> contrib/python/skynet_pyro4

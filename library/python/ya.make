@@ -39,7 +39,7 @@ RECURSE(
     codecs/test
     compress
     compress/tests
-    cookiemy 
+    cookiemy
     coredump_filter
     cores
     coverage
@@ -53,8 +53,8 @@ RECURSE(
     deploy_formatter
     deprecated
     dir-sync
-    django 
-    django/example 
+    django
+    django/example
     django-idm-api
     django-multic
     django-sform

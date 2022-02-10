@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(ironpeter) 
+OWNER(ironpeter)
 
 SRCS(
     comptable.cpp

@@ -22,13 +22,13 @@ typedef uint32_t ui32;
 typedef int32_t i32;
 #endif
 
-#if defined(_darwin_) && defined(_64_) 
-typedef unsigned long ui64; 
+#if defined(_darwin_) && defined(_64_)
+typedef unsigned long ui64;
 typedef long i64;
-#else 
+#else
 typedef uint64_t ui64;
 typedef int64_t i64;
-#endif 
+#endif
 
 #define LL(number) INT64_C(number)
 #define ULL(number) UINT64_C(number)

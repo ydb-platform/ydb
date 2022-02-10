@@ -9,12 +9,12 @@ import _common
 import lib._metric_resolvers as mr
 import _test_const as consts
 import _requirements as reqs
-import StringIO 
+import StringIO
 import subprocess
 import collections
 
 import ymake
- 
+
 
 MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
 MDS_SHEME = 'mds'
@@ -27,14 +27,14 @@ CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
 VALID_NETWORK_REQUIREMENTS = ("full", "restricted")
 VALID_DNS_REQUIREMENTS = ("default", "local", "dns64")
-BLOCK_SEPARATOR = '=============================================================' 
+BLOCK_SEPARATOR = '============================================================='
 SPLIT_FACTOR_MAX_VALUE = 1000
 SPLIT_FACTOR_TEST_FILES_MAX_VALUE = 4250
 PARTITION_MODS = ('SEQUENTIAL', 'MODULO')
 DEFAULT_TIDY_CONFIG = "build/config/tests/clang_tidy/config.yaml"
 DEFAULT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_default_map.json"
 PROJECT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_project_map.json"
- 
+
 
 tidy_config_map = None
 
@@ -42,14 +42,14 @@ def ontest_data(unit, *args):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
-def save_in_file(filepath, data): 
-    if filepath: 
-        with open(filepath, 'a') as file_handler: 
-            if os.stat(filepath).st_size == 0: 
-                print >>file_handler,  BLOCK_SEPARATOR 
-            print >> file_handler, data 
- 
- 
+def save_in_file(filepath, data):
+    if filepath:
+        with open(filepath, 'a') as file_handler:
+            if os.stat(filepath).st_size == 0:
+                print >>file_handler,  BLOCK_SEPARATOR
+            print >> file_handler, data
+
+
 def prepare_recipes(data):
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
     data = data.replace("$TEST_RECIPES_VALUE", "")
@@ -321,15 +321,15 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
-    string_handler = StringIO.StringIO() 
+    string_handler = StringIO.StringIO()
     for k, v in valid_kw.iteritems():
-        print >>string_handler, k + ': ' + v 
+        print >>string_handler, k + ': ' + v
     print >>string_handler, BLOCK_SEPARATOR
-    data = string_handler.getvalue() 
-    string_handler.close() 
-    return data 
- 
- 
+    data = string_handler.getvalue()
+    string_handler.close()
+    return data
+
+
 def serialize_list(lst):
     lst = filter(None, lst)
     return '\"' + ';'.join(lst) + '\"' if lst else ''
@@ -414,8 +414,8 @@ def get_project_tidy_config(unit):
 
 
 def onadd_ytest(unit, *args):
-    keywords = {"DEPENDS": -1, "DATA": -1, "TIMEOUT": 1, "FORK_MODE": 1, "SPLIT_FACTOR": 1, 
-                "FORK_SUBTESTS": 0, "FORK_TESTS": 0} 
+    keywords = {"DEPENDS": -1, "DATA": -1, "TIMEOUT": 1, "FORK_MODE": 1, "SPLIT_FACTOR": 1,
+                "FORK_SUBTESTS": 0, "FORK_TESTS": 0}
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
     test_data = sorted(_common.filter_out_by_keyword(spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'))
@@ -463,14 +463,14 @@ def onadd_ytest(unit, *args):
         unit.set(["DEFAULT_TIDY_CONFIG", default_config_path])
         unit.set(["PROJECT_TIDY_CONFIG", project_config_path])
 
-    fork_mode = [] 
-    if 'FORK_SUBTESTS' in spec_args: 
-        fork_mode.append('subtests') 
-    if 'FORK_TESTS' in spec_args: 
-        fork_mode.append('tests') 
-    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split() 
-    fork_mode = ' '.join(fork_mode) if fork_mode else '' 
- 
+    fork_mode = []
+    if 'FORK_SUBTESTS' in spec_args:
+        fork_mode.append('subtests')
+    if 'FORK_TESTS' in spec_args:
+        fork_mode.append('tests')
+    fork_mode = fork_mode or spec_args.get('FORK_MODE', []) or unit.get('TEST_FORK_MODE').split()
+    fork_mode = ' '.join(fork_mode) if fork_mode else ''
+
     unit_path = get_norm_unit_path(unit)
 
     test_record = {
@@ -506,7 +506,7 @@ def onadd_ytest(unit, *args):
         'TEST_PARTITION': unit.get("TEST_PARTITION") or 'SEQUENTIAL',
         'GO_BENCH_TIMEOUT': unit.get('GO_BENCH_TIMEOUT') or '',
     }
- 
+
     if flat_args[1] == "go.bench":
         if "ya:run_go_benchmark" not in test_record["TAG"]:
             return
@@ -522,8 +522,8 @@ def onadd_ytest(unit, *args):
     if data:
         unit.set_property(["DART_DATA", data])
         save_in_file(unit.get('TEST_DART_OUT_FILE'), data)
- 
- 
+
+
 def java_srcdirs_to_data(unit, var):
     extra_data = []
     for srcdir in (unit.get(var) or '').replace('$' + var, '').split():

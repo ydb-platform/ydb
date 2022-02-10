@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/comptable)
 
-OWNER(ironpeter) 
+OWNER(ironpeter)
 
 SRCS(
     comptable_ut.cpp

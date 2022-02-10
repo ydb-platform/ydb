@@ -399,9 +399,9 @@ int mkpath(char* path, int mode) {
     return NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)) ? 0 : -1;
 }
 
-// Implementation of realpath in FreeBSD (version 9.0 and less) and GetFullPathName in Windows 
-// did not require last component of the file name to exist (other implementations will fail 
-// if it does not). Use RealLocation if that behaviour is required. 
+// Implementation of realpath in FreeBSD (version 9.0 and less) and GetFullPathName in Windows
+// did not require last component of the file name to exist (other implementations will fail
+// if it does not). Use RealLocation if that behaviour is required.
 TString RealPath(const TString& path) {
     TTempBuf result;
     Y_ASSERT(result.Size() > MAX_PATH); //TMP_BUF_LEN > MAX_PATH
@@ -416,13 +416,13 @@ TString RealPath(const TString& path) {
 
 TString RealLocation(const TString& path) {
     if (NFs::Exists(path))
-        return RealPath(path); 
+        return RealPath(path);
     TString dirpath = GetDirName(path);
     if (NFs::Exists(dirpath))
         return RealPath(dirpath) + GetDirectorySeparatorS() + GetFileNameComponent(path.data());
-    ythrow TFileError() << "RealLocation failed \"" << path << "\""; 
-} 
- 
+    ythrow TFileError() << "RealLocation failed \"" << path << "\"";
+}
+
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
     int ret;
 

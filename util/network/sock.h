@@ -251,10 +251,10 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         if (ret < 0)
             return -errno;
 
-        socklen_t len = Len(); 
-        if (getsockname(s, (struct sockaddr*)(SockAddr()), &len) < 0) 
-            return -WSAGetLastError(); 
- 
+        socklen_t len = Len();
+        if (getsockname(s, (struct sockaddr*)(SockAddr()), &len) < 0)
+            return -WSAGetLastError();
+
         return 0;
     }
 

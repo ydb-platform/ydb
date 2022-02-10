@@ -24,13 +24,13 @@ SRCS(
     bits_ut.cpp
     btree_cow_ut.cpp
     btree_ut.cpp
-    cache_ut.cpp 
+    cache_ut.cpp
     circular_queue_ut.cpp
     concurrent_rw_hash_ut.cpp
     fast_tls_ut.cpp
     fragmented_buffer_ut.cpp
     hazard_ut.cpp
-    hyperlog_counter_ut.cpp 
+    hyperlog_counter_ut.cpp
     interval_set_ut.cpp
     intrusive_fixed_hash_set_ut.cpp
     intrusive_heap_ut.cpp
@@ -42,7 +42,7 @@ SRCS(
     operation_queue_priority_ut.cpp
     page_map_ut.cpp
     queue_inplace_ut.cpp
-    queue_oneone_inplace_ut.cpp 
+    queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
     time_series_vec_ut.cpp
     token_bucket_ut.cpp

@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 import sys
 from shutil import copyfileobj as copy
-import os.path 
+import os.path
 
 if __name__ == '__main__':
     for filename in sys.argv[1:] or ["-"]:
         if filename == "-":
             copy(sys.stdin, sys.stdout)
-        else: 
+        else:
             if os.path.exists(filename):
                 with open(filename, 'rb') as file:
                     copy(file, sys.stdout)

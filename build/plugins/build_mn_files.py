@@ -7,7 +7,7 @@ def on_build_mns_files(unit, *args):
     ranking_suffix = ''
     check = ''
     index = 0
-    fml_unused_tool = '' 
+    fml_unused_tool = ''
     while index < len(args):
         if args[index] == 'NAME':
             index += 1
@@ -17,7 +17,7 @@ def on_build_mns_files(unit, *args):
             ranking_suffix = args[index]
         elif args[index] == 'CHECK':
             check = 'CHECK'
-            fml_unused_tool = unit.get('FML_UNUSED_TOOL') or '$FML_UNUSED_TOOL' 
+            fml_unused_tool = unit.get('FML_UNUSED_TOOL') or '$FML_UNUSED_TOOL'
         else:
             files.append(args[index])
         index += 1

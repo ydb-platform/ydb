@@ -1,8 +1,8 @@
 UNITTEST_FOR(ydb/core/testlib/actors)
 
-OWNER( 
+OWNER(
     g:kikimr
-) 
+)
 
 FORK_SUBTESTS()
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

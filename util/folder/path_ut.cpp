@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(Cwd) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath::Cwd().RealPath(), TFsPath(".").RealPath());
     }
- 
+
     Y_UNIT_TEST(TestSubpathOf) {
         UNIT_ASSERT(TFsPath("/a/b/c/d").IsSubpathOf("/a/b"));
 
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
         UNIT_ASSERT_EXCEPTION(TFsPath("a/b/c").RelativePath(TFsPath("d/e")), TIoException);
     }
- 
+
     Y_UNIT_TEST(TestUndefined) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(), TFsPath(""));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(), TFsPath().Fix());

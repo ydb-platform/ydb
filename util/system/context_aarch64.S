@@ -1,12 +1,12 @@
 .p2align 2
-#if !(defined __darwin__) && !(defined __arm64__) 
+#if !(defined __darwin__) && !(defined __arm64__)
 .global __mysetjmp
 .type __mysetjmp,@function
-__mysetjmp: 
-#else 
-.global ___mysetjmp 
-___mysetjmp: 
-#endif 
+__mysetjmp:
+#else
+.global ___mysetjmp
+___mysetjmp:
+#endif
     // IHI0055B_aapcs64.pdf 5.1.1, 5.1.2 callee saved registers
     stp x19, x20, [x0,#0]
     stp x21, x22, [x0,#16]
@@ -24,14 +24,14 @@ ___mysetjmp:
     ret
 
 .p2align 2
-#if !(defined __darwin__) && !(defined __arm64__) 
+#if !(defined __darwin__) && !(defined __arm64__)
 .global __mylongjmp
 .type __mylongjump,@function
-__mylongjmp: 
-#else 
-.global ___mylongjmp 
-___mylongjmp: 
-#endif 
+__mylongjmp:
+#else
+.global ___mylongjmp
+___mylongjmp:
+#endif
     // IHI0055B_aapcs64.pdf 5.1.1, 5.1.2 callee saved registers
     ldp x19, x20, [x0,#0]
     ldp x21, x22, [x0,#16]

@@ -9,7 +9,7 @@
 
 #if defined(_darwin_)
     #define Y_DISABLE_THRKEY_OPTIMIZATION
-#endif 
+#endif
 
 #if defined(_arm_) && defined(_linux_)
     #define Y_DISABLE_THRKEY_OPTIMIZATION

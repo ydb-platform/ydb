@@ -2,12 +2,12 @@ LIBRARY()
 
 OWNER(pg)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/getopt/small
     library/cpp/svnversion
     library/cpp/build_info
-) 
- 
+)
+
 SRCS(
     GLOBAL print.cpp
 )

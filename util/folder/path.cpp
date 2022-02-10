@@ -77,29 +77,29 @@ TFsPath TFsPath::RelativeTo(const TFsPath& root) const {
     return TFsPath(split.Reconstruct());
 }
 
-TFsPath TFsPath::RelativePath(const TFsPath& root) const { 
-    TSplit split = GetSplit(); 
-    const TSplit& rsplit = root.GetSplit(); 
-    size_t cnt = 0; 
+TFsPath TFsPath::RelativePath(const TFsPath& root) const {
+    TSplit split = GetSplit();
+    const TSplit& rsplit = root.GetSplit();
+    size_t cnt = 0;
 
     while (split.size() > cnt && rsplit.size() > cnt && split[cnt] == rsplit[cnt]) {
         ++cnt;
     }
     bool absboth = split.IsAbsolute && rsplit.IsAbsolute;
     if (cnt == 0 && !absboth) {
-        ythrow TIoException() << "No common parts in " << *this << " and " << root; 
+        ythrow TIoException() << "No common parts in " << *this << " and " << root;
     }
     TString r;
     for (size_t i = 0; i < rsplit.size() - cnt; i++) {
-        r += i == 0 ? ".." : "/.."; 
+        r += i == 0 ? ".." : "/..";
     }
     for (size_t i = cnt; i < split.size(); i++) {
         r += (i == 0 || i == cnt && rsplit.size() - cnt == 0 ? "" : "/");
         r += split[i];
     }
     return r.size() ? TFsPath(r) : TFsPath();
-} 
- 
+}
+
 TFsPath TFsPath::Parent() const {
     if (!IsDefined()) {
         return TFsPath();
@@ -314,11 +314,11 @@ TFsPath TFsPath::RealPath() const {
     return ::RealPath(*this);
 }
 
-TFsPath TFsPath::RealLocation() const { 
-    CheckDefined(); 
+TFsPath TFsPath::RealLocation() const {
+    CheckDefined();
     return ::RealLocation(*this);
-} 
- 
+}
+
 TFsPath TFsPath::ReadLink() const {
     CheckDefined();
 

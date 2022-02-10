@@ -5,7 +5,7 @@
 // An example of usage:
 // 1) Define a field option in your .proto to identify fields which should be inlined, e.g.
 //
-//     import "google/protobuf/descriptor.proto"; 
+//     import "google/protobuf/descriptor.proto";
 //     extend google.protobuf.FieldOptions {
 //         optional bool this_is_json = 58253;   // do not forget assign some more or less unique tag
 //     }

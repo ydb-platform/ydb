@@ -1,4 +1,4 @@
-def get_include_callback(): 
+def get_include_callback():
     """
     .. function: get_include_callback    returns function that processes each DOM element to get xsyn include from it, and it's aware of directory with all the xsyns.
 
@@ -55,6 +55,6 @@ def process_xsyn(filepath, on_element):
     return res
 
 
-def get_all_includes(filepath): 
-    callback = get_include_callback() 
-    return process_xsyn(filepath, callback) 
+def get_all_includes(filepath):
+    callback = get_include_callback()
+    return process_xsyn(filepath, callback)

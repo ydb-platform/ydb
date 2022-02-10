@@ -1,11 +1,11 @@
-import errno 
-import sys 
-import os 
-import shutil 
+import errno
+import sys
+import os
+import shutil
 import optparse
 import tarfile
- 
- 
+
+
 def parse_args():
     parser = optparse.OptionParser()
     parser.add_option('--build-root')
@@ -15,15 +15,15 @@ def parse_args():
 
 
 def ensure_dir_exists(path):
-    try: 
-        os.makedirs(path) 
-    except OSError as e: 
-        if e.errno == errno.EEXIST and os.path.isdir(path): 
-            pass 
-        else: 
-            raise 
- 
- 
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+
+
 def hardlink_or_copy(src, dst):
     if os.name == 'nt':
         shutil.copy(src, dst)
@@ -40,7 +40,7 @@ def hardlink_or_copy(src, dst):
                 raise
 
 
-def main(): 
+def main():
     opts, args = parse_args()
     assert opts.build_root
     assert opts.dest_dir
@@ -56,13 +56,13 @@ def main():
             raise Exception('Unsopported archive type for {}. Use one of: tar, tar.gz, tgz.'.format(os.path.basename(opts.dest_arch)))
 
     for arg in args:
-        dst = arg 
+        dst = arg
         if dst.startswith(opts.build_root):
             dst = dst[len(opts.build_root) + 1:]
- 
+
         if dest_arch and not arg.endswith('.pkg.fake'):
             dest_arch.add(arg, arcname=dst)
- 
+
         dst = os.path.join(opts.dest_dir, dst)
         ensure_dir_exists(os.path.dirname(dst))
         hardlink_or_copy(arg, dst)
@@ -71,5 +71,5 @@ def main():
         dest_arch.close()
 
 
-if __name__ == '__main__': 
-    sys.exit(main()) 
+if __name__ == '__main__':
+    sys.exit(main())

@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     ddoarn
     fomichev
-    vvvv 
+    vvvv
     g:kikimr
 )
 

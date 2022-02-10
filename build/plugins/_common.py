@@ -68,51 +68,51 @@ def before(s, ss):
 
     return s[:p]
 
- 
-def sort_by_keywords(keywords, args): 
-    flat = [] 
-    res = {} 
- 
-    cur_key = None 
-    limit = -1 
-    for arg in args: 
-        if arg in keywords: 
-            limit = keywords[arg] 
-            if limit == 0: 
-                res[arg] = True 
-                cur_key = None 
-                limit = -1 
-            else: 
-                cur_key = arg 
-            continue 
-        if limit == 0: 
-            cur_key = None 
-            limit = -1 
-        if cur_key: 
-            if cur_key in res: 
-                res[cur_key].append(arg) 
-            else: 
-                res[cur_key] = [arg] 
-            limit -= 1 
-        else: 
-            flat.append(arg) 
-    return (flat, res) 
- 
- 
-def resolve_common_const(path): 
-    if path.startswith('${ARCADIA_ROOT}'): 
-        return path.replace('${ARCADIA_ROOT}', '$S', 1) 
-    if path.startswith('${ARCADIA_BUILD_ROOT}'): 
-        return path.replace('${ARCADIA_BUILD_ROOT}', '$B', 1) 
-    return path 
+
+def sort_by_keywords(keywords, args):
+    flat = []
+    res = {}
+
+    cur_key = None
+    limit = -1
+    for arg in args:
+        if arg in keywords:
+            limit = keywords[arg]
+            if limit == 0:
+                res[arg] = True
+                cur_key = None
+                limit = -1
+            else:
+                cur_key = arg
+            continue
+        if limit == 0:
+            cur_key = None
+            limit = -1
+        if cur_key:
+            if cur_key in res:
+                res[cur_key].append(arg)
+            else:
+                res[cur_key] = [arg]
+            limit -= 1
+        else:
+            flat.append(arg)
+    return (flat, res)
 
 
-def resolve_to_abs_path(path, source_root, build_root): 
-    if path.startswith('$S') and source_root is not None: 
-        return path.replace('$S', source_root, 1) 
-    if path.startswith('$B') and build_root is not None: 
-        return path.replace('$B', build_root, 1) 
-    return path 
+def resolve_common_const(path):
+    if path.startswith('${ARCADIA_ROOT}'):
+        return path.replace('${ARCADIA_ROOT}', '$S', 1)
+    if path.startswith('${ARCADIA_BUILD_ROOT}'):
+        return path.replace('${ARCADIA_BUILD_ROOT}', '$B', 1)
+    return path
+
+
+def resolve_to_abs_path(path, source_root, build_root):
+    if path.startswith('$S') and source_root is not None:
+        return path.replace('$S', source_root, 1)
+    if path.startswith('$B') and build_root is not None:
+        return path.replace('$B', build_root, 1)
+    return path
 
 
 def resolve_to_ymake_path(path):
@@ -121,20 +121,20 @@ def resolve_to_ymake_path(path):
 
 def join_intl_paths(*args):
     return '/'.join(args)
- 
- 
-def get(fun, num): 
-    return fun()[num][0] 
- 
- 
-def make_tuples(arg_list): 
-    def tpl(): 
-        for x in arg_list: 
-            yield (x, []) 
- 
-    return list(tpl()) 
- 
- 
+
+
+def get(fun, num):
+    return fun()[num][0]
+
+
+def make_tuples(arg_list):
+    def tpl():
+        for x in arg_list:
+            yield (x, [])
+
+    return list(tpl())
+
+
 def resolve_includes(unit, src, paths):
     return unit.resolve_include([src] + paths) if paths else []
 

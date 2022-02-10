@@ -51,16 +51,16 @@
 #endif
 
 #ifndef PKGDATADIR
-#define STR(a) XSTR(a) 
-#define XSTR(a) #a 
- 
+#define STR(a) XSTR(a)
+#define XSTR(a) #a
+
 const char*
 default_pkgdatadir()
 {
-    const char* arc_path  = getenv("ARCADIA_ROOT_DISTBUILD"); 
-    if (arc_path == NULL) 
+    const char* arc_path  = getenv("ARCADIA_ROOT_DISTBUILD");
+    if (arc_path == NULL)
         arc_path = ArcadiaRoot();
-    return uniqstr_vsprintf("%s/" STR(BISON_DATA_DIR), arc_path); 
+    return uniqstr_vsprintf("%s/" STR(BISON_DATA_DIR), arc_path);
 }
 #define PKGDATADIR (default_pkgdatadir())
 #endif

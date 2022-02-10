@@ -2,7 +2,7 @@ LIBRARY()
 
 NO_UTIL()
 
-OWNER(alzobnin) 
+OWNER(alzobnin)
 
 SRCS(
     generated/composition.cpp

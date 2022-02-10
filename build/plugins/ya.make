@@ -1,7 +1,7 @@
 OWNER(g:ymake)
- 
+
 PY2_LIBRARY()
- 
+
 PY_SRCS(
     code_generator.py
     ssqls.py
@@ -16,7 +16,7 @@ PY_SRCS(
 
 PEERDIR(build/plugins/lib)
 
-END() 
+END()
 
 RECURSE(
     tests

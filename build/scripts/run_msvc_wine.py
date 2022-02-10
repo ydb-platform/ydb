@@ -5,7 +5,7 @@ import subprocess
 import signal
 import time
 import json
-import argparse 
+import argparse
 import errno
 
 import process_command_files as pcf
@@ -52,7 +52,7 @@ def subst_path(l):
     return l
 
 
-def call_wine_cmd_once(wine, cmd, env, mode): 
+def call_wine_cmd_once(wine, cmd, env, mode):
     p = run_subprocess(wine + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, close_fds=True, shell=False)
 
     output = find_cmd_out(cmd)
@@ -76,14 +76,14 @@ def call_wine_cmd_once(wine, cmd, env, mode):
     return_code = p.returncode
     if not stdout_and_stderr:
         if return_code != 0:
-            raise Exception('wine did something strange') 
+            raise Exception('wine did something strange')
 
         return return_code
     elif ' : fatal error ' in stdout_and_stderr:
         return_code = 1
     elif ' : error ' in stdout_and_stderr:
         return_code = 2
- 
+
     lines = [x.strip() for x in stdout_and_stderr.split('\n')]
 
     prefixes = [
@@ -155,8 +155,8 @@ def prepare_vc(fr, to):
 
 
 def run_slave():
-    args = json.loads(sys.argv[3]) 
-    wine = sys.argv[1] 
+    args = json.loads(sys.argv[3])
+    wine = sys.argv[1]
 
     signal.signal(signal.SIGTERM, sig_term)
 
@@ -168,7 +168,7 @@ def run_slave():
 
     while True:
         try:
-            return call_wine_cmd_once([wine], args['cmd'], args['env'], args['mode']) 
+            return call_wine_cmd_once([wine], args['cmd'], args['env'], args['mode'])
         except Exception as e:
             print >>sys.stderr, '%s, will retry in %s' % (str(e), tout)
 
@@ -409,51 +409,51 @@ def process_free_args(args, wine, bld_root, mode):
     return pwa.ProcessWholeArchiveOption('WINDOWS', wa_peers, wa_libs).construct_cmd(result)
 
 def run_main():
-    parser = argparse.ArgumentParser() 
-    parser.add_argument('wine', action='store') 
-    parser.add_argument('-v', action='store', dest='version', default='120') 
-    parser.add_argument('-I', action='append', dest='incl_paths') 
-    parser.add_argument('mode', action='store') 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('wine', action='store')
+    parser.add_argument('-v', action='store', dest='version', default='120')
+    parser.add_argument('-I', action='append', dest='incl_paths')
+    parser.add_argument('mode', action='store')
     parser.add_argument('arcadia_root', action='store')
     parser.add_argument('arcadia_build_root', action='store')
-    parser.add_argument('binary', action='store') 
-    parser.add_argument('free_args', nargs=argparse.REMAINDER) 
+    parser.add_argument('binary', action='store')
+    parser.add_argument('free_args', nargs=argparse.REMAINDER)
     # By now just unpack. Ideally we should fix path and pack arguments back into command file
     args = parser.parse_args()
- 
-    wine = args.wine 
-    mode = args.mode 
-    binary = args.binary 
-    version = args.version 
-    incl_paths = args.incl_paths 
+
+    wine = args.wine
+    mode = args.mode
+    binary = args.binary
+    version = args.version
+    incl_paths = args.incl_paths
     bld_root = args.arcadia_build_root
     free_args = args.free_args
- 
+
     wine_dir = os.path.dirname(os.path.dirname(wine))
     bin_dir = os.path.dirname(binary)
-    tc_dir = os.path.dirname(os.path.dirname(os.path.dirname(bin_dir))) 
-    if not incl_paths: 
-        incl_paths = [tc_dir + '/VC/include', tc_dir + '/include'] 
+    tc_dir = os.path.dirname(os.path.dirname(os.path.dirname(bin_dir)))
+    if not incl_paths:
+        incl_paths = [tc_dir + '/VC/include', tc_dir + '/include']
 
     cmd_out = find_cmd_out(free_args)
- 
+
     env = os.environ.copy()
 
     env.pop('DISPLAY', None)
 
-    env['WINEDLLOVERRIDES'] = 'msvcr{}=n'.format(version) 
+    env['WINEDLLOVERRIDES'] = 'msvcr{}=n'.format(version)
     env['WINEDEBUG'] = 'fixme-all'
     env['INCLUDE'] = ';'.join(fix_path(p) for p in incl_paths)
     env['VSINSTALLDIR'] = fix_path(tc_dir)
     env['VCINSTALLDIR'] = fix_path(tc_dir + '/VC')
     env['WindowsSdkDir'] = fix_path(tc_dir)
-    env['LIBPATH'] = fix_path(tc_dir + '/VC/lib/amd64') 
-    env['LIB'] = fix_path(tc_dir + '/VC/lib/amd64') 
+    env['LIBPATH'] = fix_path(tc_dir + '/VC/lib/amd64')
+    env['LIB'] = fix_path(tc_dir + '/VC/lib/amd64')
     env['LD_LIBRARY_PATH'] = ':'.join(wine_dir + d for d in ['/lib', '/lib64', '/lib64/wine'])
 
     cmd = [binary] + process_free_args(free_args, wine, bld_root, mode)
 
-    for x in ('/NOLOGO', '/nologo', '/FD'): 
+    for x in ('/NOLOGO', '/nologo', '/FD'):
         try:
             cmd.remove(x)
         except ValueError:
@@ -490,7 +490,7 @@ def run_main():
         if rc in (-signal.SIGALRM, signal.SIGALRM):
             print_err_log(out)
             print >>sys.stderr, '##append_tag##time out'
-        elif out and ' stack overflow ' in out: 
+        elif out and ' stack overflow ' in out:
             print >>sys.stderr, '##append_tag##stack overflow'
         elif out and 'recvmsg: Connection reset by peer' in out:
             print >>sys.stderr, '##append_tag##wine gone'

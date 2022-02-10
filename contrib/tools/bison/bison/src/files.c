@@ -89,9 +89,9 @@ static char *header_extension = NULL;
 | STR1, and STR2.                                                  |
 `-----------------------------------------------------------------*/
 
-#if defined _win_ || defined _WIN64 || defined _WIN32 || defined __WIN32__ 
+#if defined _win_ || defined _WIN64 || defined _WIN32 || defined __WIN32__
 char *stpcpy(char *dst, const char *src);
-#endif 
+#endif
 
 static char *
 concat2 (char const *str1, char const *str2)

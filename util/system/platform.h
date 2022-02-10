@@ -93,8 +93,8 @@
 
 #if defined(__i386__) || defined(_M_IX86)
     #define _i386_
-#endif 
- 
+#endif
+
 #if defined(__ia64__) || defined(_M_IA64)
     #define _ia64_
 #endif

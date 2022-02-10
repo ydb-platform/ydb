@@ -1,6 +1,6 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 # coding=utf-8
- 
+
 from __future__ import print_function
 
 import base64
@@ -9,18 +9,18 @@ import json
 import logging
 import ntpath
 import optparse
-import os 
+import os
 import posixpath
-import re 
-import subprocess 
+import re
+import subprocess
 import sys
 import tempfile
- 
+
 import six
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
 
- 
+
 def init_logger(verbose):
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
@@ -34,9 +34,9 @@ class DebugString(object):
 
 
 class ConfigureError(Exception):
-    pass 
- 
- 
+    pass
+
+
 class Platform(object):
     def __init__(self, name, os, arch):
         """
@@ -77,17 +77,17 @@ class Platform(object):
         self.is_power8le = self.arch == 'ppc64le'
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
- 
+
         self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
- 
-        self.is_linux = self.os == 'linux' or 'yocto' in self.os 
+
+        self.is_linux = self.os == 'linux' or 'yocto' in self.os
         self.is_linux_x86_64 = self.is_linux and self.is_x86_64
         self.is_linux_armv8 = self.is_linux and self.is_armv8
-        self.is_linux_armv7 = self.is_linux and self.is_armv7 
+        self.is_linux_armv7 = self.is_linux and self.is_armv7
         self.is_linux_power8le = self.is_linux and self.is_power8le
         self.is_linux_power9le = self.is_linux and self.is_power9le
         self.is_linux_powerpc = self.is_linux_power8le or self.is_linux_power9le
@@ -98,10 +98,10 @@ class Platform(object):
         self.is_iossim = self.os == 'iossim' or (self.os == 'ios' and self.is_intel)
         self.is_ios = self.os == 'ios' or self.is_iossim
         self.is_apple = self.is_macos or self.is_ios
- 
+
         self.is_windows = self.os == 'windows'
         self.is_windows_x86_64 = self.is_windows and self.is_x86_64
- 
+
         self.is_android = self.os == 'android'
         if self.is_android:
             # This is default Android API level unless `ANDROID_API` is specified
@@ -116,20 +116,20 @@ class Platform(object):
         self.is_none = self.os == 'none'
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
- 
+
     @staticmethod
     def from_json(data):
         name = data.get('visible_name', data['toolchain'])
         return Platform(name, os=data['os'], arch=data['arch'])
- 
+
     @property
     def os_variables(self):
         # 'LINUX' variable, for backward compatibility
         yield self.os.upper()
- 
+
         # 'OS_LINUX' variable
         yield 'OS_{}'.format(self.os.upper())
- 
+
         # yocto is linux
         if 'yocto' in self.os:
             yield 'LINUX'
@@ -142,7 +142,7 @@ class Platform(object):
             yield 'IOS'
             yield 'OS_IOS'
             yield 'OS_IOSSIM'
- 
+
     @property
     def arch_variables(self):
         return select_multiple((
@@ -161,7 +161,7 @@ class Platform(object):
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
         ))
- 
+
     @property
     def library_path_variables(self):
         return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
@@ -213,11 +213,11 @@ class Platform(object):
 def which(prog):
     if os.path.exists(prog) and os.access(prog, os.X_OK):
         return prog
- 
+
     # Ищем в $PATH только простые команды, без путей.
     if os.path.dirname(prog) != '':
-        return None 
- 
+        return None
+
     path = os.getenv('PATH', '')
 
     pathext = os.environ.get('PATHEXT')
@@ -247,7 +247,7 @@ def get_stdout_and_code(command):
         return stdout, process.returncode
     except Exception:
         return None, None
- 
+
 
 def to_strings(o):
     if isinstance(o, (list, tuple)):
@@ -262,8 +262,8 @@ def to_strings(o):
                 yield str(o)
             else:
                 raise ConfigureError('Unexpected value {} {}'.format(type(o), o))
- 
- 
+
+
 def emit(key, *value):
     print('{0}={1}'.format(key, ' '.join(to_strings(value))))
 
@@ -279,7 +279,7 @@ def emit_with_ignore_comment(key, *value):
 
 def append(key, *value):
     print('{0}+={1}'.format(key, ' '.join(to_strings(value))))
- 
+
 
 def emit_big(text):
     prefix = None
@@ -347,18 +347,18 @@ def preset(key, default=None):
     return opts().presets.get(key, default)
 
 
-def is_positive(key): 
+def is_positive(key):
     return is_positive_str(preset(key, ''))
- 
- 
+
+
 def is_positive_str(s):
     return s.lower() in ('yes', 'true', 'on', '1')
 
 
-def is_negative(key): 
+def is_negative(key):
     return is_negative_str(preset(key, ''))
- 
- 
+
+
 def is_negative_str(s):
     return s.lower() in ('no', 'false', 'off', '0')
 
@@ -397,8 +397,8 @@ def unique(it):
             yield i
 
 
-class Options(object): 
-    def __init__(self, argv): 
+class Options(object):
+    def __init__(self, argv):
         def parse_presets(raw_presets):
             presets = {}
             for p in raw_presets:
@@ -409,14 +409,14 @@ class Options(object):
             return presets
 
         parser = optparse.OptionParser(add_help_option=False)
-        opt_group = optparse.OptionGroup(parser, 'Conf script options') 
+        opt_group = optparse.OptionGroup(parser, 'Conf script options')
         opt_group.add_option('--toolchain-params', dest='toolchain_params', action='store', help='Set toolchain params via file')
         opt_group.add_option('-D', '--preset', dest='presets', action='append', default=[], help='set or override presets')
         opt_group.add_option('-l', '--local-distbuild', dest='local_distbuild', action='store_true', default=False, help='conf for local distbuild')
-        parser.add_option_group(opt_group) 
- 
-        self.options, self.arguments = parser.parse_args(argv) 
- 
+        parser.add_option_group(opt_group)
+
+        self.options, self.arguments = parser.parse_args(argv)
+
         argv = self.arguments
         if len(argv) < 4:
             print('Usage: ArcRoot, --BuildType--, Verbosity, [Path to local.ymake]', file=sys.stderr)
@@ -429,57 +429,57 @@ class Options(object):
         self.build_type = argv[2].lower()
         self.local_distbuild = self.options.local_distbuild
         self.toolchain_params = self.options.toolchain_params
- 
+
         self.presets = parse_presets(self.options.presets)
         userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'USE_LOCAL_SWIG', 'SWIG_TOOL', 'SWIG_LIBRARY'))
- 
+
     Instance = None
- 
+
 
 def opts():
     if Options.Instance is None:
         Options.Instance = Options(sys.argv)
     return Options.Instance
 
- 
+
 class Profiler(object):
     Generic = 'generic'
     GProf = 'gprof'
- 
+
 
 class Arcadia(object):
     def __init__(self, root):
         self.root = root
- 
- 
+
+
 class Build(object):
     def __init__(self, arcadia, build_type, toolchain_params, force_ignore_local_files=False):
         self.arcadia = arcadia
         self.params = self._load_json_from_base64(toolchain_params)
         self.build_type = build_type
- 
+
         platform = self.params['platform']
         self.host = Platform.from_json(platform['host'])
         self.target = Platform.from_json(platform['target'])
- 
+
         self.tc = self._get_toolchain_options()
- 
+
         # TODO(somov): Удалить, когда перестанет использоваться.
         self.build_system = 'ymake'
 
         self.ignore_local_files = False
- 
+
         dist_prefix = 'dist-'
         if self.build_type.startswith(dist_prefix):
             self.build_system = 'distbuild'
             self.build_type = self.build_type[len(dist_prefix):]
- 
+
         if force_ignore_local_files:
             self.ignore_local_files = True
 
         if self.is_ide_build_type(self.build_type):
             self.ignore_local_files = True
- 
+
         self.pic = not is_positive('FORCE_NO_PIC')
 
     @property
@@ -499,19 +499,19 @@ class Build(object):
             emit('PIC', 'yes')
 
         emit('COMPILER_ID', self.tc.type.upper())
- 
+
         if self.is_valgrind:
             emit('WITH_VALGRIND', 'yes')
- 
+
         toolchain_type, compiler_type, linker_type = Compilers[self.tc.type]
         toolchain = toolchain_type(self.tc, self)
         compiler = compiler_type(self.tc, self)
         linker = linker_type(self.tc, self)
- 
+
         toolchain.print_toolchain()
         compiler.print_compiler()
         linker.print_linker()
- 
+
         self._print_other_settings(compiler)
 
     def _print_build_settings(self):
@@ -531,7 +531,7 @@ class Build(object):
     @property
     def is_release(self):
         # TODO(somov): Проверить, бывают ли тут суффиксы на самом деле
-        return self.build_type in ('release', 'relwithdebinfo', 'minsizerel', 'profile', 'gprof') or self.build_type.endswith('-release') 
+        return self.build_type in ('release', 'relwithdebinfo', 'minsizerel', 'profile', 'gprof') or self.build_type.endswith('-release')
 
     @property
     def is_debug(self):
@@ -557,7 +557,7 @@ class Build(object):
     @property
     def with_ndebug(self):
         return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts')
- 
+
     @property
     def is_valgrind(self):
         return self.build_type == 'valgrind' or self.build_type == 'valgrind-release'
@@ -565,7 +565,7 @@ class Build(object):
     @property
     def is_ide(self):
         return self.is_ide_build_type(self.build_type)
- 
+
     @property
     def profiler_type(self):
         if self.build_type == 'profile':
@@ -574,11 +574,11 @@ class Build(object):
             return Profiler.GProf
         else:
             return None
- 
+
     @staticmethod
     def is_ide_build_type(build_type):
         return build_type == 'nobuild'
- 
+
     def _configure_runtime_versions(self):
         res = subprocess.check_output(['xcrun', 'simctl', 'list', '--json', 'runtimes'])
         raw_object = json.loads(res)
@@ -590,7 +590,7 @@ class Build(object):
 
     def _get_toolchain_options(self):
         type_ = self.params['params']['type']
- 
+
         if self.params['params'].get('local') and type_ == 'xcode':
             detector = CompilerDetector()
             detector.detect(self.params['params']['c_compiler'], self.params['params']['cxx_compiler'])
@@ -610,7 +610,7 @@ class Build(object):
             return MSVCToolchainOptions(self, detector)
         else:
             return GnuToolchainOptions(self, detector)
- 
+
     def _print_other_settings(self, compiler):
         host = self.host
 
@@ -619,7 +619,7 @@ class Build(object):
         ragel = Ragel()
         ragel.configure_toolchain(self, compiler)
         ragel.print_variables()
- 
+
         perl = Perl()
         perl.configure_local()
         perl.print_variables('LOCAL_')
@@ -643,7 +643,7 @@ class Build(object):
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
             emit_with_ignore_comment('SVN_DEPENDS')
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__')
-        else: 
+        else:
             def find_svn():
                 for i in range(0, 3):
                     for path in (['.svn', 'wc.db'], ['.svn', 'entries'], ['.git', 'logs', 'HEAD']):
@@ -663,16 +663,16 @@ class Build(object):
                     return '${input;hide:"%s"}' % out_path
 
                 return ''
- 
+
             emit_with_ignore_comment('SVN_DEPENDS', find_svn())
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__', '${hide;kv:"disable_cache"}')
- 
-    @staticmethod 
+
+    @staticmethod
     def _load_json_from_base64(base64str):
         """
         :rtype: dict[str, Any]
         """
- 
+
         def un_unicode(o):
             if isinstance(o, six.text_type):
                 return six.ensure_str(o)
@@ -710,7 +710,7 @@ class YMake(object):
                     continue
                 else:
                     emit(key, opts().presets[key])
- 
+
     @staticmethod
     def _print_conf_content(path):
         with open(path, 'r') as fin:
@@ -730,7 +730,7 @@ class YMake(object):
         if os.path.exists(full_path):
             return full_path
         return None
- 
+
     def _find_core_conf(self):
         return self._find_conf('ymake.core.conf')
 
@@ -759,12 +759,12 @@ class System(object):
     @staticmethod
     def print_nix_host_const():
         emit('WRITE_COMMAND', '/bin/echo', '-e')
- 
+
         print('''
 when ($USE_PYTHON) {
     C_DEFINES+= -DUSE_PYTHON
 }''')
- 
+
     @staticmethod
     def print_linux_const():
         print('''
@@ -829,7 +829,7 @@ class CompilerDetector(object):
         except Exception as e:
             logger.debug('Preprocessing failed: %s', e)
             return None, None
- 
+
     @staticmethod
     def get_compiler_vars(compiler, names):
         prefix = '____YA_VAR_'
@@ -886,14 +886,14 @@ class CompilerDetector(object):
                 return list(iter_version())
             except Exception:
                 return None
- 
+
         clang_version = version(clang_vars)
         apple_build = apple_var in compiler_vars
         # TODO(somov): Учитывать номера версий сборки Apple компилятора Clang.
         _ = apple_build
         gcc_version = version(gcc_vars)
         msvc_version = version(msvc_vars)
- 
+
         if clang_version:
             logger.debug('Detected Clang version %s', clang_version)
             self.type = 'clang'
@@ -908,11 +908,11 @@ class CompilerDetector(object):
             raise ConfigureError('Could not determine custom compiler type: {}'.format(c_compiler))
 
         self.version_list = clang_version or gcc_version or msvc_version
- 
+
         self.c_compiler = c_compiler_path
         self.cxx_compiler = cxx_compiler and which(cxx_compiler) or c_compiler_path
 
- 
+
 class ToolchainOptions(object):
     def __init__(self, build, detector):
         """
@@ -922,11 +922,11 @@ class ToolchainOptions(object):
         self.target = build.target
 
         tc_json = build.params
- 
+
         logger.debug('Toolchain host %s', self.host)
         logger.debug('Toolchain target %s', self.target)
         logger.debug('Toolchain json %s', DebugString(lambda: json.dumps(tc_json, indent=4, sort_keys=True)))
- 
+
         self.params = tc_json['params']
         self._name = tc_json.get('name', 'theyknow')
 
@@ -938,7 +938,7 @@ class ToolchainOptions(object):
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
             self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
- 
+
         else:
             self.type = self.params['type']
             self.from_arcadia = True
@@ -949,22 +949,22 @@ class ToolchainOptions(object):
             # TODO(somov): Требовать номер версии всегда.
             self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
- 
+
         # TODO(somov): Посмотреть, можно ли спрятать это поле.
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
         self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {}) 
+        self.triplet_opt = self.params.get('triplet_opt', {})
         self.target_opt = self.params.get('target_opt', [])
- 
+
         # TODO(somov): Убрать чтение настройки из os.environ.
         self.werror_mode = preset('WERROR_MODE') or os.environ.get('WERROR_MODE') or self.params.get('werror_mode') or 'compiler_specific'
- 
+
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
         self._env = tc_json.get('env', {})
- 
+
         self.android_ndk_version = self.params.get('android_ndk_version', None)
 
         logger.debug('c_compiler=%s', self.c_compiler)
@@ -1022,10 +1022,10 @@ class GnuToolchainOptions(ToolchainOptions):
         self.inplace_tools = self.params.get('inplace_tools', False)
         self.strip = self.params.get('strip')
         self.objcopy = self.params.get('objcopy')
-        self.isystem = self.params.get('isystem') 
+        self.isystem = self.params.get('isystem')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
- 
+
         # TODO(somov): Унифицировать формат sys_lib
         self.sys_lib = self.params.get('sys_lib', {})
         if isinstance(self.sys_lib, dict):
@@ -1033,15 +1033,15 @@ class GnuToolchainOptions(ToolchainOptions):
 
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
         self.os_sdk_local = self.os_sdk == 'local'
- 
+
     def _default_os_sdk(self):
         if self.target.is_linux:
             if self.target.is_armv8:
                 return 'ubuntu-16'
 
             if self.target.is_armv7 and self.target.armv7_float_abi == 'hard':
-                return 'ubuntu-16' 
- 
+                return 'ubuntu-16'
+
             if self.target.is_armv7 and self.target.armv7_float_abi == 'softfp':
                 return 'ubuntu-18'
 
@@ -1155,19 +1155,19 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None) 
-            if not target_triple: 
-                target_triple = select(default=None, selectors=[ 
-                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'), 
-                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'), 
+            target_triple = self.tc.triplet_opt.get(target.arch, None)
+            if not target_triple:
+                target_triple = select(default=None, selectors=[
+                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
+                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'arm-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'arm-linux-gnueabi'),
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
                     (target.is_iossim and target.is_arm64, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
-                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'), 
-                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'), 
+                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
+                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
                     (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
-                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'), 
+                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
                     (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
                     (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
                     (target.is_android and target.is_x86, 'i686-linux-android'),
@@ -1184,10 +1184,10 @@ class GnuToolchain(Toolchain):
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
-        if self.tc.isystem: 
-            for root in list(self.tc.isystem): 
-                self.c_flags_platform.extend(['-isystem', root]) 
- 
+        if self.tc.isystem:
+            for root in list(self.tc.isystem):
+                self.c_flags_platform.extend(['-isystem', root])
+
         if target.is_android:
             self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
 
@@ -1263,7 +1263,7 @@ class GnuToolchain(Toolchain):
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
 
                 if target.is_yocto:
-                    self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}') 
+                    self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
             elif self.tc.params.get('local'):
                 if target.is_apple:
                     if not tc.os_sdk_local:
@@ -1319,7 +1319,7 @@ class GnuCompiler(Compiler):
         """
         compiler_variable = 'CLANG' if tc.is_clang else 'GCC'
         super(GnuCompiler, self).__init__(tc, compiler_variable)
- 
+
         self.build = build
         self.host = self.build.host
         self.target = self.build.target
@@ -1380,7 +1380,7 @@ class GnuCompiler(Compiler):
             '-D_THREAD_SAFE', '-D_PTHREADS', '-D_REENTRANT', '-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
             '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS',
         ])
- 
+
         if not self.target.is_android:
             # There is no usable _FILE_OFFSET_BITS=64 support in Androids until API 21. And it's incomplete until at least API 24.
             # https://android.googlesource.com/platform/bionic/+/master/docs/32-bit-abi.md
@@ -1389,7 +1389,7 @@ class GnuCompiler(Compiler):
 
         if self.target.is_linux or self.target.is_android or self.target.is_cygwin:
             self.c_defines.append('-D_GNU_SOURCE')
- 
+
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
@@ -1399,10 +1399,10 @@ class GnuCompiler(Compiler):
                 self.c_foptions.append('-fembed-bitcode')
 
         self.extra_compile_opts = []
- 
+
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
         self.c_flags += self.tc.arch_opt + ['-pipe']
- 
+
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
         if self.target.is_x86:
@@ -1459,7 +1459,7 @@ class GnuCompiler(Compiler):
 
         if self.build.is_debug:
             self.c_foptions.append('$FSTACK')
- 
+
         if self.build.is_fast_debug:
             self.c_flags.append('-Og')
 
@@ -1477,23 +1477,23 @@ class GnuCompiler(Compiler):
                 # Generate sections with address significance tables for ICF linker pass
                 if self.tc.is_clang:
                     self.c_foptions.extend(['-faddrsig'])
-            else: 
-                self.optimize = '-O3' 
- 
+            else:
+                self.optimize = '-O3'
+
         if self.build.with_ndebug:
             self.c_defines.append('-DNDEBUG')
         else:
             self.c_defines.append('-UNDEBUG')
- 
+
         if self.build.profiler_type in (Profiler.Generic, Profiler.GProf):
             self.c_foptions.append('-fno-omit-frame-pointer')
- 
+
         if self.build.profiler_type == Profiler.GProf:
             self.c_flags.append('-pg')
- 
+
     def print_compiler(self):
         super(GnuCompiler, self).print_compiler()
- 
+
         emit('C_COMPILER_UNQUOTED', self.tc.c_compiler)
         emit('C_COMPILER', '${quo:C_COMPILER_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
@@ -1504,7 +1504,7 @@ class GnuCompiler(Compiler):
         emit('GCC_PREPROCESSOR_OPTS', '$DUMP_DEPS', '$C_DEFINES')
         append('C_WARNING_OPTS', self.c_warnings)
         append('CXX_WARNING_OPTS', self.cxx_warnings)
- 
+
         # PIE is only valid for executables, while PIC implies a shared library
         # `-pie` with a shared library is either ignored or fails to link
         emit_big('''
@@ -1546,7 +1546,7 @@ class GnuCompiler(Compiler):
             when ($NOGCCSTACKCHECK != "yes") {
                 FSTACK += -fstack-check
             }''')
- 
+
         c_builtins = [
             "-Wno-builtin-macro-redefined",
             '-D__DATE__=\\""Sep 31 2019\\""',
@@ -1642,7 +1642,7 @@ class GnuCompiler(Compiler):
         append('BC_CXXFLAGS', '$CXXFLAGS')
 
         append('C_DEFINES', '-D__LONG_LONG_SUPPORTED')
- 
+
         emit('OBJ_CROSS_SUF', '$OBJ_SUF%s' % self.cross_suffix)
         emit('OBJECT_SUF', '$OBJ_SUF%s.o' % self.cross_suffix)
         emit('GCC_COMPILE_FLAGS', '$EXTRA_C_FLAGS -c -o $_COMPILE_OUTPUTS', '${pre=-I:_C__INCLUDE}')
@@ -1784,7 +1784,7 @@ class Linker(object):
 
     def print_linker(self):
         self._print_linker_selector()
- 
+
     def _print_linker_selector(self):
         # if self.type is None then _DEFAULT_LINKER is set to empty string value
         emit('_DEFAULT_LINKER_ID', self.type)
@@ -1802,7 +1802,7 @@ class LD(Linker):
         self.host = self.build.host
         self.target = self.build.target
         self.tc = tc
- 
+
         target = self.target
 
         self.ar = preset('AR') or self.tc.ar
@@ -1891,7 +1891,7 @@ class LD(Linker):
         self.thread_library = select([
             (target.is_linux or target.is_macos, '-lpthread'),
         ])
- 
+
         self.ld_export_dynamic_flag = None
         self.start_group = None
         self.end_group = None
@@ -1902,7 +1902,7 @@ class LD(Linker):
         self.soname_option = None
         self.dwarf_command = None
         self.libresolv = '-lresolv' if target.is_linux or target.is_macos or target.is_android else None
- 
+
         if target.is_linux or target.is_android:
             self.ld_export_dynamic_flag = '-rdynamic'
             self.use_stdlib = '-nodefaultlibs'
@@ -1926,11 +1926,11 @@ class LD(Linker):
 
         if self.build.profiler_type == Profiler.GProf:
             self.ld_flags.append('-pg')
- 
+
         # TODO(somov): Единое условие на coverage.
         if self.build.is_coverage or is_positive('GCOV_COVERAGE') or is_positive('CLANG_COVERAGE') or self.build.is_sanitized:
             self.use_stdlib = None
- 
+
         self.ld_sdk = select(default=None, selectors=[
             (target.is_macos_arm64, '-Wl,-sdk_version,11.0'),
             (target.is_macos, '-Wl,-sdk_version,10.15'),
@@ -1971,7 +1971,7 @@ class LD(Linker):
 
         emit('AR_TOOL', self.ar)
         emit('AR_TYPE', self.ar_type)
- 
+
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
 
@@ -1980,7 +1980,7 @@ class LD(Linker):
 
         emit('LD_STRIP_FLAG', self.ld_stripflag)
         emit('STRIP_FLAG')
- 
+
         emit('LD_DCE_FLAG', self.ld_dce_flag)
         emit('DCE_FLAG')
 
@@ -2298,7 +2298,7 @@ class MSVC(object):
         self.build = build
         self.tc = tc
 
- 
+
 class MSVCToolchain(MSVC, Toolchain):
     def __init__(self, tc, build):
         """
@@ -2599,7 +2599,7 @@ class MSVCCompiler(MSVC, Compiler):
             when ($NO_OPTIMIZE == "yes") {
                 OPTIMIZE = /Od
             }''')
- 
+
         emit('SFDL_FLAG', ['/E', '/C', '/P', '/TP', '/Fi$SFDL_TMP_OUT'])
         emit('WERROR_FLAG', '/WX')
         emit('WERROR_MODE', self.tc.werror_mode)
@@ -2660,7 +2660,7 @@ class MSVCLinker(MSVC, Linker):
         ignored_errors = [
             4221
         ]
- 
+
         flag_machine = '/MACHINE:{}'.format(arch.upper())
 
         flags_ignore = ['/IGNORE:{}'.format(code) for code in ignored_errors]
@@ -2823,7 +2823,7 @@ Compilers = {
     'msvc': (MSVCToolchain, MSVCCompiler, MSVCLinker),
 }
 
- 
+
 class Ragel(object):
     def __init__(self):
         self.rlgen_flags = []
@@ -2837,7 +2837,7 @@ class Ragel(object):
             self.set_default_flags(optimized=build.is_release and not build.is_sanitized)
         else:
             raise ConfigureError('Unexpected compiler {}'.format(compiler))
- 
+
     def set_default_flags(self, optimized):
         if optimized:
             self.rlgen_flags.append('-G2')
@@ -2845,13 +2845,13 @@ class Ragel(object):
         else:
             self.rlgen_flags.append('-T0')
             self.ragel6_flags.append('-CT0')
- 
+
     def print_variables(self):
         emit('RLGEN_FLAGS', self.rlgen_flags)
         emit('RAGEL_FLAGS', self.ragel_flags)
         emit('RAGEL6_FLAGS', self.ragel6_flags)
- 
- 
+
+
 class Python(object):
     def __init__(self, tc):
         self.python = None
@@ -2860,20 +2860,20 @@ class Python(object):
         self.libraries = None
         self.includes = None
         self.tc = tc
- 
+
     def configure_posix(self, python=None, python_config=None):
         python = python or preset('PYTHON_BIN') or which('python')
         python_config = python_config or preset('PYTHON_CONFIG') or which('python-config')
- 
+
         if python is None or python_config is None:
             return
- 
+
         # python-config dumps each option on one line in the specified order
         config = get_stdout([python_config, '--cflags', '--ldflags', '--includes']) or ''
         config = config.split('\n')
         if len(config) < 3:
             return
- 
+
         self.python = python
         self.flags = config[0]
         self.ldflags = config[1]
@@ -2884,7 +2884,7 @@ class Python(object):
         self.libraries = ''
         if preset('USE_ARCADIA_PYTHON') == 'no' and not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
             raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
- 
+
     def print_variables(self):
         variables = Variables({
             'PYTHON_BIN': self.python,
@@ -2893,33 +2893,33 @@ class Python(object):
             'PYTHON_LIBRARIES': self.libraries,
             'PYTHON_INCLUDE': self.includes
         })
- 
+
         variables.update_from_presets()
         variables.reset_if_any(reset_value='PYTHON-NOT-FOUND')
         variables.emit()
- 
- 
+
+
 class Perl(object):
     # Parse (key, value) from "version='5.26.0';" lines
     PERL_CONFIG_RE = re.compile(r"^(?P<key>\w+)='(?P<value>.*)';$", re.MULTILINE)
- 
+
     def __init__(self):
         self.perl = None
         self.version = None
         self.privlib = None
         self.archlib = None
- 
+
     def configure_local(self, perl=None):
         self.perl = perl or preset('PERL') or which('perl')
         if self.perl is None:
             return
- 
+
         # noinspection PyTypeChecker
         config = dict(self._iter_config(['version', 'privlibexp', 'archlibexp']))
         self.version = config.get('version')
         self.privlib = config.get('privlibexp')
         self.archlib = config.get('archlibexp')
- 
+
     def print_variables(self, prefix=''):
         variables = Variables({
             prefix + 'PERL': self.perl,
@@ -2927,15 +2927,15 @@ class Perl(object):
             prefix + 'PERL_PRIVLIB': self.privlib,
             prefix + 'PERL_ARCHLIB': self.archlib,
         })
- 
+
         variables.reset_if_any(reset_value='PERL-NOT-FOUND')
         variables.emit(with_ignore_comment=variables.keys())
- 
+
     def _iter_config(self, config_keys):
         # Run perl -V:version -V:etc...
         perl_config = [self.perl] + ['-V:{}'.format(key) for key in config_keys]
         config = six.ensure_str(get_stdout(perl_config) or '')
- 
+
         start = 0
         while True:
             match = Perl.PERL_CONFIG_RE.search(config, start)
@@ -2943,8 +2943,8 @@ class Perl(object):
                 break
             yield match.group('key', 'value')
             start = match.end()
- 
- 
+
+
 class Setting(object):
     def __init__(self, key, auto=None, convert=None, rewrite=False):
         self.key = key
@@ -3224,22 +3224,22 @@ def print_swig_config():
         emit('SWIG_LIBRARY', library)
 
 
-def main(): 
+def main():
     options = opts()
- 
+
     arcadia = Arcadia(options.arcadia_root)
- 
+
     ymake = YMake(arcadia)
- 
+
     ymake.print_core_conf()
     ymake.print_presets()
     ymake.print_settings()
- 
+
     build = Build(arcadia, options.build_type, options.toolchain_params, force_ignore_local_files=not options.local_distbuild)
     build.print_build()
 
     emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
 
- 
+
 if __name__ == '__main__':
-    main() 
+    main()

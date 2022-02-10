@@ -1,14 +1,14 @@
-#include "last_getopt.h" 
+#include "last_getopt.h"
 #include "last_getopt_support.h"
 #include "modchooser.h"
 #include "opt.h"
 #include "opt2.h"
 #include "posix_getopt.h"
 #include "ygetopt.h"
- 
+
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/build_info/build_info.h>
- 
+
 namespace NLastGetoptPrivate {
     TString InitVersionString() {
         TString ts = GetProgramSvnVersion();
@@ -20,7 +20,7 @@ namespace NLastGetoptPrivate {
             ts += sandboxTaskId;
         }
         return ts;
-    } 
+    }
 
     TString InitShortVersionString() {
         TString ts = GetProgramShortVersionData();
@@ -37,4 +37,4 @@ namespace NLastGetoptPrivate {
         }
     } Init;
 
-} 
+}

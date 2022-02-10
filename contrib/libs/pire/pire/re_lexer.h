@@ -143,9 +143,9 @@ public:
 	/// The main lexer function. Extracts and returns the next term in input sequence.
 	Term Lex();
 	/// Installs an additional lexer feature.
-	/// We declare both lvalue and rvalue reference types to fix some linker errors.
-	Lexer& AddFeature(THolder<Feature>& a);
-	Lexer& AddFeature(THolder<Feature>&& a);
+	/// We declare both lvalue and rvalue reference types to fix some linker errors. 
+	Lexer& AddFeature(THolder<Feature>& a); 
+	Lexer& AddFeature(THolder<Feature>&& a); 
 
 	const Pire::Encoding& Encoding() const { return *m_encoding; }
 	Lexer& SetEncoding(const Pire::Encoding& encoding) { m_encoding = &encoding; return *this; }
@@ -172,7 +172,7 @@ private:
 
 	TDeque<wchar32> m_input;
 	const Pire::Encoding* m_encoding;
-	TVector<THolder<Feature>> m_features;
+	TVector<THolder<Feature>> m_features; 
 	Any m_retval;
 	ystring errmsg;
 
@@ -188,7 +188,7 @@ private:
 */
 class Feature {
 public:
-	/// Precedence of features. The less the priority, the earlier
+	/// Precedence of features. The less the priority, the earlier 
 	/// will Lex() be called, and the later will Alter() and Parenthesized() be called.
 	virtual int Priority() const { return 50; }
 
@@ -208,10 +208,10 @@ public:
 	/// those perl-style (?@#$%:..) clauses).
 	virtual void Parenthesized(Fsm&) {}
 
-	using Ptr = THolder<Feature>;
+	using Ptr = THolder<Feature>; 
 
-	virtual ~Feature() = default;
-
+	virtual ~Feature() = default; 
+ 
 protected:
 
 	// These functions are exposed versions of the corresponding lexer functions.
@@ -229,14 +229,14 @@ private:
 
 namespace Features {
 	/// Disables case sensitivity
-	Feature::Ptr CaseInsensitive();
+	Feature::Ptr CaseInsensitive(); 
 
 	/**
 	* Adds two more operations:
 	*  (pattern1)&(pattern2) -- matches those strings which match both /pattern1/ and /pattern2/;
 	*  ~(pattern)            -- matches those strings which do not match /pattern/.
 	*/
-	Feature::Ptr AndNotSupport();
+	Feature::Ptr AndNotSupport(); 
 }
 
 }

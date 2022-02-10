@@ -66,7 +66,7 @@ public:
 	~Options() { Clear(); }
 	
 	void Add(const Pire::Encoding& encoding) { m_encoding = &encoding; }
-	void Add(Feature::Ptr&& feature) { m_features.push_back(std::move(feature)); }
+	void Add(Feature::Ptr&& feature) { m_features.push_back(std::move(feature)); } 
 	
 	struct Proxy {
 		Options* const o;
@@ -75,17 +75,17 @@ public:
 	operator Proxy() { return Proxy(this); }
 	
 	Options(Options& o): m_encoding(o.m_encoding) { m_features.swap(o.m_features); }
-	Options& operator = (Options& o) { m_encoding = o.m_encoding; m_features = std::move(o.m_features); o.Clear(); return *this; }
+	Options& operator = (Options& o) { m_encoding = o.m_encoding; m_features = std::move(o.m_features); o.Clear(); return *this; } 
 	
 	Options(Proxy p): m_encoding(p.o->m_encoding) { m_features.swap(p.o->m_features); }
-	Options& operator = (Proxy p) { m_encoding = p.o->m_encoding; m_features = std::move(p.o->m_features); p.o->Clear(); return *this; }
+	Options& operator = (Proxy p) { m_encoding = p.o->m_encoding; m_features = std::move(p.o->m_features); p.o->Clear(); return *this; } 
 	
 	void Apply(Lexer& lexer)
 	{
 		lexer.SetEncoding(*m_encoding);
-		for (auto&& i : m_features) {
-			lexer.AddFeature(i);
-			i = 0;
+		for (auto&& i : m_features) { 
+			lexer.AddFeature(i); 
+			i = 0; 
 		}
 		m_features.clear();
 	}
@@ -97,7 +97,7 @@ public:
 
 private:
 	const Pire::Encoding* m_encoding;
-	TVector<Feature::Ptr> m_features;
+	TVector<Feature::Ptr> m_features; 
 	
 	void Clear()
 	{
@@ -133,8 +133,8 @@ private:
 extern const Option<const Encoding&> UTF8;
 extern const Option<const Encoding&> LATIN1;
 
-extern const Option<Feature::Ptr> I;
-extern const Option<Feature::Ptr> ANDNOT;
+extern const Option<Feature::Ptr> I; 
+extern const Option<Feature::Ptr> ANDNOT; 
 
 
 class Regexp {
@@ -154,17 +154,17 @@ public:
 	explicit Regexp(Scanner sc): m_scanner(sc) {}
 	explicit Regexp(SlowScanner ssc): m_slow(ssc) {}
 	
-	bool Matches(TStringBuf buf) const
+	bool Matches(TStringBuf buf) const 
 	{
 		if (!m_scanner.Empty())
-			return Runner(m_scanner).Begin().Run(buf).End();
+			return Runner(m_scanner).Begin().Run(buf).End(); 
 		else
-			return Runner(m_slow).Begin().Run(buf).End();
+			return Runner(m_slow).Begin().Run(buf).End(); 
 	}
-
-	bool Matches(const char* begin, const char* end) const
+ 
+	bool Matches(const char* begin, const char* end) const 
 	{
-		return Matches(TStringBuf(begin, end));
+		return Matches(TStringBuf(begin, end)); 
 	}
 	
 	/// A helper class allowing '==~' operator for regexps
@@ -224,10 +224,10 @@ private:
 		
 		while (!queue.empty()) {
 			Set s = fsm.Destinations(queue.front(), SpecialChar::Epsilon);
-			for (auto&& i : s) {
-				if (!handled.Test(i)) {
-					handled.Set(i);
-					queue.push_back(i);
+			for (auto&& i : s) { 
+				if (!handled.Test(i)) { 
+					handled.Set(i); 
+					queue.push_back(i); 
 				}
 			}
 			

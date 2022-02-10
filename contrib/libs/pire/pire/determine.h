@@ -108,24 +108,24 @@ namespace Pire {
 				if (!task.IsRequired(states[stateIdx]))
 					continue;
 				TransitionTable::value_type row(task.Letters().Size());
-				for (auto&& letter : task.Letters()) {
-					State newState = task.Next(states[stateIdx], letter.first);
-					auto i = invstates.find(newState);
+				for (auto&& letter : task.Letters()) { 
+					State newState = task.Next(states[stateIdx], letter.first); 
+					auto i = invstates.find(newState); 
 					if (i == invstates.end()) {
 						if (!maxSize--)
 							return task.Failure();
 						i = invstates.insert(typename InvStates::value_type(newState, states.size())).first;
 						states.push_back(newState);
 					}
-					row[letter.second.first] = i->second;
+					row[letter.second.first] = i->second; 
 				}
 				transitions.push_back(row);
 				stateIndices.push_back(stateIdx);
 			}
 
 			TVector<Char> invletters(task.Letters().Size());
-			for (auto&& letter : task.Letters())
-				invletters[letter.second.first] = letter.first;
+			for (auto&& letter : task.Letters()) 
+				invletters[letter.second.first] = letter.first; 
 
 			task.AcceptStates(states);
 			size_t from = 0;

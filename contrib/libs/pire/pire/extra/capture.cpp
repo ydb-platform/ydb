@@ -94,7 +94,7 @@ namespace {
 
 		void SetRepetitionMark(Fsm& fsm, bool greedy)
 		{
-			fsm.Resize(fsm.Size() + 1);
+			fsm.Resize(fsm.Size() + 1); 
 			fsm.ConnectFinal(fsm.Size() - 1);
 
 			for (size_t state = 0; state < fsm.Size() - 1; ++state)
@@ -107,7 +107,7 @@ namespace {
 			fsm.SetFinal(fsm.Size() - 1, true);
 			fsm.SetIsDetermined(false);
 		}
-
+ 
 		void SetCaptureMark(Fsm& fsm)
 		{
 			fsm.Resize(fsm.Size() + 2);
@@ -130,6 +130,6 @@ namespace {
 }
 	
 namespace Features {
-	Feature::Ptr Capture(size_t pos) { return Feature::Ptr(new CaptureImpl(pos)); }
+	Feature::Ptr Capture(size_t pos) { return Feature::Ptr(new CaptureImpl(pos)); } 
 };
 }

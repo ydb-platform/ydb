@@ -66,27 +66,27 @@ public:
 		, mFilled(N, false)
 	{}
 
-	~GluedStateLookupTable() = default;
+	~GluedStateLookupTable() = default; 
 	
 	const_iterator end() const {
-		return mMap.Get() + MaxSize;
+		return mMap.Get() + MaxSize; 
 	}
 	// Note that in fact mMap is sparsed and traditional [begin,end)
 	// traversal is unavailable; hence no begin() method here.
 	// end() is only valid for comparing with find() result.
 	const_iterator find(const key_type& st) const {
 		size_t ind = Search(st);
-		return mFilled[ind] ? (mMap.Get() + ind) : end();
+		return mFilled[ind] ? (mMap.Get() + ind) : end(); 
 	}
 
 	ypair<iterator, bool> insert(const value_type& v) {
 		size_t ind = Search(v.first);
 		if (!mFilled[ind]) {
-			mMap[ind] = v;
+			mMap[ind] = v; 
 			mFilled[ind] = true;
-			return ymake_pair(mMap.Get() + ind, true);
+			return ymake_pair(mMap.Get() + ind, true); 
 		} else
-			return ymake_pair(mMap.Get() + ind, false);
+			return ymake_pair(mMap.Get() + ind, false); 
 	}
 
 private:
@@ -104,7 +104,7 @@ private:
 		return size_t((st.first >> 2) ^ (st.second >> 4) ^ (st.second << 10));
 	}
 
-	TArrayHolder<value_type> mMap;
+	TArrayHolder<value_type> mMap; 
 	TVector<bool> mFilled;
 
 	// Noncopyable
@@ -116,7 +116,7 @@ template<class Scanner>
 class ScannerGlueCommon {
 public:
 	typedef Partition< Char, Impl::LettersEquality<Scanner> > LettersTbl;
-
+ 
 	typedef ypair<typename Scanner::InternalState, typename Scanner::InternalState> State;
 	ScannerGlueCommon(const Scanner& lhs, const Scanner& rhs, const LettersTbl& letters)
 		: m_lhs(lhs)
@@ -130,7 +130,7 @@ public:
 	}
 
 	const LettersTbl& Letters() const { return m_letters; }
-
+ 
 	const Scanner& Lhs() const { return m_lhs; }
 	const Scanner& Rhs() const { return m_rhs; }
 
@@ -142,7 +142,7 @@ public:
 		Rhs().Next(state.second, letter);
 		return state;
 	}
-
+ 
 	bool IsRequired(const State& /*state*/) const { return true; }
 
 	typedef Scanner Result;
@@ -151,13 +151,13 @@ public:
 
 protected:
 	Scanner& Sc() { return *m_result; }
-	void SetSc(THolder<Scanner>&& sc) { m_result = std::move(sc); }
+	void SetSc(THolder<Scanner>&& sc) { m_result = std::move(sc); } 
 
 private:
 	const Scanner& m_lhs;
 	const Scanner& m_rhs;
 	LettersTbl m_letters;
-	THolder<Scanner> m_result;
+	THolder<Scanner> m_result; 
 };
 
 }	

@@ -105,15 +105,15 @@ public:
 	{
 		next.flags.Clear();
 		next.states.clear();
-		for (auto&& state : current.states) {
+		for (auto&& state : current.states) { 
 			const unsigned* begin = 0;
 			const unsigned* end = 0;
 			if (!m_vecptr) {
-				const size_t* pos = m_jumpPos + state * m.lettersCount + l;
+				const size_t* pos = m_jumpPos + state * m.lettersCount + l; 
 				begin = m_jumps + pos[0];
 				end = m_jumps + pos[1];
 			} else {
-				const auto& v = (*m_vecptr)[state * m.lettersCount + l];
+				const auto& v = (*m_vecptr)[state * m.lettersCount + l]; 
 				if (!v.empty()) {
 					begin = &v[0];
 					end = &v[0] + v.size();
@@ -152,8 +152,8 @@ public:
 
 	bool Final(const State& s) const
 	{
-		for (auto&& state : s.states)
-			if (m_finals[state])
+		for (auto&& state : s.states) 
+			if (m_finals[state]) 
 				return true;
 		return false;
 	}
@@ -275,9 +275,9 @@ public:
 
 		// Build letter translation table
 		Fill(m_letters, m_letters + MaxChar, 0);
-		for (auto&& letter : fsm.Letters())
-			for (auto&& character : letter.second.second)
-				m_letters[character] = letter.second.first;
+		for (auto&& letter : fsm.Letters()) 
+			for (auto&& character : letter.second.second) 
+				m_letters[character] = letter.second.first; 
 
 		m.start = fsm.Initial();
 		BuildScanner(fsm, *this);
@@ -288,8 +288,8 @@ public:
 
 	~SlowScanner()
 	{
-		for (auto&& i : m_pool)
-			free(i);
+		for (auto&& i : m_pool) 
+			free(i); 
 	}
 
 	void Save(yostream*) const;
@@ -431,7 +431,7 @@ inline const SlowScanner& SlowScanner::Null()
 /// A specialization of Run(), since its state is much heavier than other ones
 /// and we thus want to avoid copying states.
 template<>
-inline void Run<SlowScanner>(const SlowScanner& scanner, SlowScanner::State& state, TStringBuf str)
+inline void Run<SlowScanner>(const SlowScanner& scanner, SlowScanner::State& state, TStringBuf str) 
 {
 	SlowScanner::State temp;
 	scanner.Initialize(temp);
@@ -439,8 +439,8 @@ inline void Run<SlowScanner>(const SlowScanner& scanner, SlowScanner::State& sta
 	SlowScanner::State* src = &state;
 	SlowScanner::State* dest = &temp;
 
-	for (auto it = str.begin(); it != str.end(); ++it) {
-		scanner.Next(*src, *dest, static_cast<unsigned char>(*it));
+	for (auto it = str.begin(); it != str.end(); ++it) { 
+		scanner.Next(*src, *dest, static_cast<unsigned char>(*it)); 
 		DoSwap(src, dest);
 	}
 	if (src != &state)

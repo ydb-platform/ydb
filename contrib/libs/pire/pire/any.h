@@ -34,7 +34,7 @@ namespace Pire {
 class Any {
 
 public:
-	Any() = default;
+	Any() = default; 
 
 	Any(const Any& any)
 	{
@@ -89,7 +89,7 @@ private:
 	struct AbstractHolder {
 		virtual ~AbstractHolder() {
 		}
-		virtual THolder<AbstractHolder> Duplicate() const = 0;
+		virtual THolder<AbstractHolder> Duplicate() const = 0; 
 		virtual bool IsA(const std::type_info& id) const = 0;
 		virtual void* Ptr() = 0;
 		virtual const void* Ptr() const = 0;
@@ -101,8 +101,8 @@ private:
 			: d(t)
 		{
 		}
-		THolder<AbstractHolder> Duplicate() const {
-			return THolder<AbstractHolder>(new Holder<T>(d));
+		THolder<AbstractHolder> Duplicate() const { 
+			return THolder<AbstractHolder>(new Holder<T>(d)); 
 		}
 		bool IsA(const std::type_info& id) const {
 			return id == typeid(T);
@@ -117,7 +117,7 @@ private:
 		T d;
 	};
 
-	THolder<AbstractHolder> h;
+	THolder<AbstractHolder> h; 
 };
 
 }

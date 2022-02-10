@@ -56,15 +56,15 @@ public:
 	ConstIterator Begin() const {
 		return m_set.begin();
 	}
-	ConstIterator begin() const {
-		return m_set.begin();
-	}
+	ConstIterator begin() const { 
+		return m_set.begin(); 
+	} 
 	ConstIterator End() const {
 		return m_set.end();
 	}
-	ConstIterator end() const {
-		return m_set.end();
-	}
+	ConstIterator end() const { 
+		return m_set.end(); 
+	} 
 	size_t Size() const {
 		return m_set.size();
 	}
@@ -77,7 +77,7 @@ public:
 	/// - representative(a) is equivalent to a.
 	const T& Representative(const T& t) const
 	{
-		auto it = m_inv.find(t);
+		auto it = m_inv.find(t); 
 		if (it != m_inv.end())
 			return it->second;
 		else
@@ -94,10 +94,10 @@ public:
 	/// - 0 <= index(a) < size().
 	size_t Index(const T& t) const
 	{
-		auto it = m_inv.find(t);
+		auto it = m_inv.find(t); 
 		if (it == m_inv.end())
 			throw Error("Partition::index(): attempted to obtain an index of nonexistent item");
-		auto it2 = m_set.find(it->second);
+		auto it2 = m_set.find(it->second); 
 		Y_ASSERT(it2 != m_set.end());
 		return it2->second.first;
 	}
@@ -105,10 +105,10 @@ public:
 	/// is returned iff representative(i) == representative(t)).
 	const TVector<T>& Klass(const T& t) const
 	{
-		auto it = m_inv.find(t);
+		auto it = m_inv.find(t); 
 		if (it == m_inv.end())
 			throw Error("Partition::index(): attempted to obtain an index of nonexistent item");
-		auto it2 = m_set.find(it->second);
+		auto it2 = m_set.find(it->second); 
 		Y_ASSERT(it2 != m_set.end());
 		return it2->second.second;
 	}
@@ -124,15 +124,15 @@ public:
 	{
 		m_eq = eq;
 
-		for (auto&& element : m_set)
-			if (element.second.second.size() > 1) {
-				TVector<T>& v = element.second.second;
-				auto bound = std::partition(v.begin(), v.end(), std::bind2nd(m_eq, v[0]));
+		for (auto&& element : m_set) 
+			if (element.second.second.size() > 1) { 
+				TVector<T>& v = element.second.second; 
+				auto bound = std::partition(v.begin(), v.end(), std::bind2nd(m_eq, v[0])); 
 				if (bound == v.end())
 					continue;
 
 				Set delta;
-				for (auto it = bound, ie = v.end(); it != ie; ++it)
+				for (auto it = bound, ie = v.end(); it != ie; ++it) 
 					DoAppend(delta, *it);
 
 				v.erase(bound, v.end());
@@ -148,8 +148,8 @@ private:
 
 	void DoAppend(Set& set, const T& t)
 	{
-		auto it = set.begin();
-		auto end = set.end();
+		auto it = set.begin(); 
+		auto end = set.end(); 
 		for (; it != end; ++it)
 			if (m_eq(it->first, t)) {
 				it->second.second.push_back(t);
@@ -171,15 +171,15 @@ template<class T, class Eq>
 yostream& operator << (yostream& stream, const Partition<T, Eq>& partition)
 {
 	stream << "Partition {\n";
-	for (auto&& partitionElement : partition) {
-		stream << "    Class " << partitionElement.second.first << " \"" << partitionElement.first << "\" { ";
+	for (auto&& partitionElement : partition) { 
+		stream << "    Class " << partitionElement.second.first << " \"" << partitionElement.first << "\" { "; 
 		bool first = false;
-		for (auto&& element : partitionElement.second.second) {
+		for (auto&& element : partitionElement.second.second) { 
 			if (first)
 				stream << ", ";
 			else
 				first = true;
-			stream << element;
+			stream << element; 
 		}
 		stream << " }\n";
 	}

@@ -34,7 +34,7 @@ namespace Features {
 	 * and cyrillic letters having identical shapes
 	 * (e.g. latin A and cyrillic A).
 	 */
-	Feature::Ptr GlueSimilarGlyphs();
+	Feature::Ptr GlueSimilarGlyphs(); 
 }
 }
 

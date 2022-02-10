@@ -95,12 +95,12 @@ public:
 
 	void TakeAction(State& s, Action a) const
 	{
-		if ((a & BeginCapture) && !s.Captured())
-			s.m_begin = s.m_counter - 1;
-		else if (a & EndCapture) {
-			if (s.m_end == State::npos)
-				s.m_end = s.m_counter - 1;
-			}
+		if ((a & BeginCapture) && !s.Captured()) 
+			s.m_begin = s.m_counter - 1; 
+		else if (a & EndCapture) { 
+			if (s.m_end == State::npos) 
+				s.m_end = s.m_counter - 1; 
+			} 
 	}
 
 	Char Translate(Char ch) const
@@ -254,8 +254,8 @@ public:
 	class State {
 	public:
 		State()
-			: m_strpos(0)
-			, m_matched(false) {}
+			: m_strpos(0) 
+			, m_matched(false) {} 
 
 		size_t GetPos() const
 		{
@@ -332,8 +332,8 @@ public:
 		}
 
 		Transition(unsigned long state, Action act = 0)
-				: m_stateto(state)
-				, m_action(act)
+				: m_stateto(state) 
+				, m_action(act) 
 		{
 		}
 	};
@@ -377,11 +377,11 @@ public:
 
 	SlowScanner::State GetNextStates(const SingleState& cur, Char letter) const
 	{
-		SlowScanner::State st(GetSize());
-		st.states.push_back(cur.GetNum());
-		SlowScanner::State nextState(GetSize());
-		SlowScanner::NextTranslated(st, nextState, letter);
-		return nextState;
+		SlowScanner::State st(GetSize()); 
+		st.states.push_back(cur.GetNum()); 
+		SlowScanner::State nextState(GetSize()); 
+		SlowScanner::NextTranslated(st, nextState, letter); 
+		return nextState; 
 	}
 
 	size_t GetPosition(const SingleState& state, Char letter) const
@@ -416,7 +416,7 @@ public:
 	}
 
 	void NextAndGetToGroups(PriorityStates& states, const SingleState& cur,
-							Char letter, size_t pos, TVector<bool>& used) const
+							Char letter, size_t pos, TVector<bool>& used) const 
 	{
 		TVector<Transition> nextStates;
 		NextStates(cur, letter, nextStates);
@@ -575,15 +575,15 @@ public:
 		: SlowScanner(true)
 	{
 	}
-
+ 
 	SlowCapturingScanner(Fsm& fsm, size_t distance = 0)
 		: SlowScanner(fsm, true, false, distance)
 	{
 	}
 };
-
+ 
 namespace Features {
-	Feature::Ptr Capture(size_t pos);
+	Feature::Ptr Capture(size_t pos); 
 }
 
 }

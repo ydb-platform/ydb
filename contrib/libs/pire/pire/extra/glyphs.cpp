@@ -118,13 +118,13 @@ namespace {
 				typedef Term::CharacterRange::first_type CharSet;
 				const CharSet& old = range.first;
 				CharSet altered;
-				for (auto&& i : old) {
+				for (auto&& i : old) { 
 					const TVector<wchar32>* klass = 0;
-					if (i.size() == 1 && !(klass = &m_table->Klass(i[0]))->empty())
-						for (auto&& j : *klass)
-							altered.insert(Term::String(1, j));
+					if (i.size() == 1 && !(klass = &m_table->Klass(i[0]))->empty()) 
+						for (auto&& j : *klass) 
+							altered.insert(Term::String(1, j)); 
 					else
-						altered.insert(i);
+						altered.insert(i); 
 				}
 
 				t = Term(t.Type(), Term::CharacterRange(altered, range.second));
@@ -137,7 +137,7 @@ namespace {
 }
 
 namespace Features {
-	Feature::Ptr GlueSimilarGlyphs() { return Feature::Ptr(new GlueSimilarGlyphsImpl); }
+	Feature::Ptr GlueSimilarGlyphs() { return Feature::Ptr(new GlueSimilarGlyphsImpl); } 
 }
 
 }

@@ -101,7 +101,9 @@ private:
         if (errorMsg) {
             issues.AddIssue(errorMsg);
         }
-        Send(Sender, new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse(std::move(DatabaseId2Endpoint), Success, issues)));
+        Send(Sender,
+            new TEvents::TEvEndpointResponse(
+                TEvents::TDbResolverResponse(std::move(DatabaseId2Endpoint), Success, issues)));
         PassAway();
     }
 
@@ -297,9 +299,14 @@ private:
 
                 requests[httpRequest] = key;
             } catch (const std::exception& e) {
-                const TString msg = TStringBuilder() << " Error while preparing to resolve databaseId " << databaseId << ", details: " << e.what();
+                const TString msg = TStringBuilder() << " Error while preparing to resolve databaseId: " << databaseId << ", details: " << e.what();
                 LOG_E(msg);
-                Cache.Put(key, endpoint);
+                Cache.Put(key, msg);
+                NYql::TIssues issues;
+                issues.AddIssue(msg);
+                Send(ev->Sender,
+                    new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse{{}, /*success=*/false, issues}));
+                return;
             }
         }
 

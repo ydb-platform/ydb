@@ -5,7 +5,7 @@
 ## Виды нагрузки {#workload_types}
 
 Данный нагрузочный тест содержит 5 видов нагрузки:
-* [getCustomerHistory](#getCustomerHistory) - читает заданное количество заказов 10 000-го покупателя. Создается нагрузка на чтение одних и тех же строк из разных потоков.
+* [getCustomerHistory](#getCustomerHistory) - читает заданное количество заказов покупателя с id = 10 000. Создается нагрузка на чтение одних и тех же строк из разных потоков.
 * [getRandomCustomerHistory](#getRandomCustomerHistory) - читает заданное количество заказов у случайно выбранного покупателя. Создается нагрузка на чтение из разных потоков.
 * [insertRandomOrder](#insertRandomOrder) - создает случайно сгенерированный заказ. Например, клиент создал заказ из 2 товаров, но еще не оплатил его, поэтому остатки товаров не снижаются. В БД записывается информация о заказе и товарах. Создается нагрузка на запись и чтение (insert перед вставкой проверяет есть ли уже запись).
 * [submitRandomOrder](#submitRandomOrder) - создает и обрабатывает случайно сгенерированный заказ. Например, покупатель создал и оплатил заказ из 2 товаров. В БД записывается информация о заказе, товарах, проверяется их наличие и уменьшаются остатки. Создается смешанная нагрузка.
@@ -39,8 +39,8 @@
 Создаются 3 таблицы со следующими DDL:
 ```sql
 CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
-CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>);
-CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>);
+CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
+CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
 ```
 
 ### Примеры инициализации нагрузки {#init-stock-examples}
@@ -85,7 +85,7 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 
 ## Нагрузка getCustomerHistory {#getCustomerHistory}
 
-Данный вид нагрузки читает заданное количество заказов 10 000-го покупателя.
+Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
 
 YQL Запрос:
 ```sql

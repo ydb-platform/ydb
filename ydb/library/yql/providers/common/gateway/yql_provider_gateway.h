@@ -66,6 +66,14 @@ TResult ResultFromError(const TIssue& error) {
 }
 
 template<typename TResult>
+TResult ResultFromError(const TIssues& error) {
+    TResult result;
+    result.AddIssues(error);
+
+    return result;
+}
+
+template<typename TResult>
 TResult ResultFromError(const TString& error, TPosition pos = TPosition()) {
     return ResultFromError<TResult>(TIssue(pos, error));
 }

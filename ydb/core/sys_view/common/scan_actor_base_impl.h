@@ -74,7 +74,7 @@ protected:
                 << ", scan id: " << ScanId
                 << ", table id: " << TableId
                 << ", code: " << Ydb::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->Record.GetMessage());
+                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
 
         this->PassAway();
     }

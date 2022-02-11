@@ -905,10 +905,7 @@ private:
     void TerminateExpiredScan(const TActorId& actorId, TStringBuf msg) {
         CA_LOG_W(msg);
 
-        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>();
-        abortEv->Record.SetStatusCode(Ydb::StatusIds::CANCELLED);
-        abortEv->Record.SetMessage("Cancel unexpected/expired scan");
-
+        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::CANCELLED, "Cancel unexpected/expired scan");
         Send(actorId, abortEv.Release());
     }
 
@@ -995,7 +992,7 @@ private:
         }
     }
 
-    void TerminateSources(const TString& message, bool success) override {
+    void TerminateSources(const TIssues& issues, bool success) override {
         if (!ScanData || Shards.empty()) {
             return;
         }
@@ -1004,10 +1001,10 @@ private:
         auto& state = Shards.front();
         if (state.ActorId) {
             CA_LOG(prio, "Send abort execution event to scan over tablet: " << state.TabletId << ", table: "
-                << ScanData->TablePath << ", scan actor: " << state.ActorId << ", message: " << message);
+                << ScanData->TablePath << ", scan actor: " << state.ActorId << ", message: " << issues.ToOneLineString());
 
             Send(state.ActorId, new TEvKqp::TEvAbortExecution(
-                success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED, message));
+                success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED, issues));
         } else {
             CA_LOG(prio, "Table: " << ScanData->TablePath << ", scan has not been started yet");
         }

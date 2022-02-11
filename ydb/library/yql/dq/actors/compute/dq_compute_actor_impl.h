@@ -387,8 +387,7 @@ protected:
     }
 
 protected:
-    void Terminate(bool success, const TString& message) {
-
+    void Terminate(bool success, const TIssues& issues) {
         if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) {
             MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), MkqlMemoryLimit);
             MkqlMemoryLimit = 0;
@@ -425,17 +424,21 @@ protected:
         }
 
         if (RuntimeSettings.TerminateHandler) {
-            RuntimeSettings.TerminateHandler(success, message);
+            RuntimeSettings.TerminateHandler(success, issues);
         }
 
         this->PassAway();
+    }
+
+    void Terminate(bool success, const TString& message) {
+        Terminate(success, TIssues({TIssue(message)}));
     }
 
     void ReportStateAndMaybeDie(TIssue&& issue) {
         ReportStateAndMaybeDie(
             State == NDqProto::COMPUTE_STATE_FINISHED ?
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
-            : Ydb::StatusIds::ABORTED, TIssues({issue}));
+            : Ydb::StatusIds::ABORTED, TIssues({std::move(issue)}));
     }
 
     void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) {
@@ -459,8 +462,8 @@ protected:
 
         this->Send(ExecuterId, execEv.Release());
 
-        TerminateSources(issue.Message, state == NDqProto::COMPUTE_STATE_FINISHED);
-        Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, issue.Message);
+        TerminateSources(TIssues({issue}), state == NDqProto::COMPUTE_STATE_FINISHED);
+        Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, TIssues({std::move(issue)}));
     }
 
     void ReportStateAndMaybeDie(Ydb::StatusIds::StatusCode status, const TIssues& issues)
@@ -751,7 +754,11 @@ protected:
     virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) {
     }
 
-    virtual void TerminateSources(const TString& /* message */, bool /* success */) {
+    virtual void TerminateSources(const TIssues& /* issues */, bool /* success */) {
+    }
+
+    void TerminateSources(const TString& message, bool success) {
+        TerminateSources(TIssues({TIssue(message)}), success);
     }
 
     virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -906,20 +913,20 @@ protected:
     }
 
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
-        TString message = ev->Get()->Record.GetMessage();
+        TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
             << ", status: " << Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
-            << ", reason: " << message);
+            << ", reason: " << issues.ToOneLineString());
 
         bool success = ev->Get()->Record.GetStatusCode() == Ydb::StatusIds::SUCCESS;
 
-        this->TerminateSources(message, success);
+        this->TerminateSources(issues, success);
 
         if (ev->Sender != ExecuterId) {
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
-        Terminate(success, message);
+        Terminate(success, issues);
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

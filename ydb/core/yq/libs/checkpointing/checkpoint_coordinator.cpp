@@ -110,10 +110,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     CC_LOG_D("Got TEvRegisterCoordinatorResponse; issues: " << ev->Get()->Issues.ToOneLineString());
     const auto& issues = ev->Get()->Issues;
     if (issues) {
-        auto message = "Can't register in storage: " + issues.ToOneLineString();
-        CC_LOG_E(message);
+        CC_LOG_E("Can't register in storage: " + issues.ToOneLineString());
         ++*Metrics.StorageError;
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message));
+        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't register in storage", issues));
         return;
     }
 
@@ -167,9 +166,8 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
 
     if (event->Issues) {
         ++*Metrics.StorageError;
-        auto message = "Can't get checkpoints to restore: " + event->Issues.ToOneLineString();
-        CC_LOG_E(message);
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message));
+        CC_LOG_E("Can't get checkpoints to restore: " + event->Issues.ToOneLineString());
+        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't get checkpoints to restore", event->Issues));
         return;
     }
 
@@ -230,7 +228,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues.ToString()));
+        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues));
         return;
     }
 

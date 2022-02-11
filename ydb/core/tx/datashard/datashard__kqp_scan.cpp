@@ -143,7 +143,7 @@ private:
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
             << ", scanId: " << ScanId << ", table: " << TablePath
             << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", reason: " << msg.GetMessage());
+            << ", reason: " << ev->Get()->GetIssues().ToOneLineString());
 
         AbortEvent = ev->Release();
         Driver->Touch(EScan::Final);
@@ -342,7 +342,10 @@ private:
             if (AbortEvent) {
                 ev->Record.SetStatus(AbortEvent->Record.GetStatusCode());
                 auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
-                    << "Table " << TablePath << " scan failed, reason: " << AbortEvent->Record.GetMessage());
+                    << "Table " << TablePath << " scan failed");
+                for (const NYql::TIssue& i : AbortEvent->GetIssues()) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+                }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
                 ev->Record.SetStatus(Ydb::StatusIds::ABORTED);

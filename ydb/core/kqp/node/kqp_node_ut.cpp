@@ -204,7 +204,7 @@ public:
     void SendFinishTask(const TActorId& computeActorId, ui64 txId, ui64 taskId, bool success = true,
         const TString& message = "")
     {
-        auto ev = new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, message);
+        auto ev = new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, NYql::TIssues({NYql::TIssue(message)}));
         Runtime->Send(new IEventHandle(KqpNodeActorId, computeActorId, ev));
     }
 
@@ -618,7 +618,7 @@ void KqpNode::ExecuterLost() {
 
     for (auto& [taskId, computeActor] : CompFactory->Task2Actor) {
         auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
-        UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL("executer lost", abortEvent->Get()->Record.GetLegacyMessage());
     }
 
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 0);
@@ -668,7 +668,7 @@ void KqpNode::TerminateTx() {
 
         for (auto&[taskId, computeActor] : CompFactory->Task2Actor) {
             auto abortEvent = Runtime->GrabEdgeEvent<TEvKqp::TEvAbortExecution>(computeActor.ActorId);
-            UNIT_ASSERT_VALUES_EQUAL("terminate", abortEvent->Get()->Record.GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL("terminate", abortEvent->Get()->Record.GetLegacyMessage());
         }
     }
 

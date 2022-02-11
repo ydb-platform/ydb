@@ -442,13 +442,13 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
+        NYql::TIssues issues = ev->Get()->GetIssues();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Got abort execution event, from: "
             << ev->Sender << ", code: " << Ydb::StatusIds::StatusCode_Name(record.GetStatusCode())
-            << ", message: " << record.GetMessage());
+            << ", message: " << issues.ToOneLineString());
 
-        NYql::TIssue issue(record.GetMessage());
-        ReplyFinishStream(record.GetStatusCode(), issue, ctx);
+        ReplyFinishStream(record.GetStatusCode(), issues, ctx);
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {

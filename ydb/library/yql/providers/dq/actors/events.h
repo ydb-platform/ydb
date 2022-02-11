@@ -21,6 +21,7 @@ namespace NYql::NDqs {
 
     struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> {
         TEvDqFailure() = default;
+        explicit TEvDqFailure(const TIssues& issues, bool retriable = false, bool needFallback = false);
         explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
     };
 

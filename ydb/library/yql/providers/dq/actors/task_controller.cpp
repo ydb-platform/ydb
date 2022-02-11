@@ -105,9 +105,9 @@ private:
     void OnAbortExecution(NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
         YQL_LOG_CTX_SCOPE(TraceId);
         auto ydbStatusId = ev->Get()->Record.GetStatusCode();
-        auto message = ev->Get()->Record.GetMessage();
-        YQL_LOG(DEBUG) << "AbortExecution from " << ev->Sender << ":" << ydbStatusId << " " << message;
-        OnError(message, ydbStatusId == Ydb::StatusIds::UNAVAILABLE, false); // TODO: check fallback
+        TIssues issues = ev->Get()->GetIssues();
+        YQL_LOG(DEBUG) << "AbortExecution from " << ev->Sender << ":" << ydbStatusId << " " << issues.ToOneLineString();
+        OnError(issues, ydbStatusId == Ydb::StatusIds::UNAVAILABLE, false); // TODO: check fallback
     }
 
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {
@@ -139,7 +139,7 @@ private:
             case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
                 NYql::IssuesFromMessage(state.GetIssues(), Issues);
-                OnError(Issues.ToString(), false, false);
+                OnError(Issues, false, false);
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {
@@ -472,21 +472,25 @@ private:
         }
     }
 
-    void OnError(const TString& message, bool retriable, bool needFallback) {
+    void OnError(const TIssues& issues, bool retriable, bool needFallback) {
         YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "OnError " << message;
+        YQL_LOG(DEBUG) << "OnError " << issues.ToOneLineString();
         if (Finished) {
             YQL_LOG_CTX_SCOPE(TraceId);
             YQL_LOG(WARN) << "OnError IGNORED when Finished, Retriable=" << retriable << ", NeedFallback=" << needFallback;
         } else {
-            auto issueCode = needFallback
-                ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
-                : TIssuesIds::DQ_GATEWAY_ERROR;
-            auto req = MakeHolder<TEvDqFailure>(TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR), retriable, needFallback);
+            auto req = MakeHolder<TEvDqFailure>(issues, retriable, needFallback);
             FinalStat().FlushCounters(req->Record);
             Send(ExecuterId, req.Release());
             Finished = true;
         }
+    }
+
+    void OnError(const TString& message, bool retriable, bool needFallback) {
+        auto issueCode = needFallback
+            ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
+            : TIssuesIds::DQ_GATEWAY_ERROR;
+        OnError(TIssues({TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR)}), retriable, needFallback);
     }
 
     void Finish() {

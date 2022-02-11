@@ -5,6 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_pb.h>
@@ -40,13 +41,13 @@ struct TEvKqpNode {
         const ui64 TxId;
         const ui64 TaskId;
         const bool Success;
-        const TString Message;
+        const NYql::TIssues Issues;
 
-        TEvFinishKqpTask(ui64 txId, ui64 taskId, bool success, const TString& message = "")
+        TEvFinishKqpTask(ui64 txId, ui64 taskId, bool success, const NYql::TIssues& issues = {})
             : TxId(txId)
             , TaskId(taskId)
             , Success(success)
-            , Message(message) {}
+            , Issues(issues) {}
     };
 
     struct TEvCancelKqpTasksRequest : public TEventPB<TEvCancelKqpTasksRequest,

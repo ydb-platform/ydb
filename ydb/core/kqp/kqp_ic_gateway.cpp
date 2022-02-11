@@ -234,11 +234,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
+        const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << record.GetMessage());
+            << "Received abort execution event for scan query: " << msg);
 
-        TBase::HandleError(record.GetMessage(), ctx);
+        TBase::HandleError(msg, ctx);
     }
 
     using TBase::HandleResponse;
@@ -350,11 +350,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
+        const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, this->SelfId()
-            << "Received abort execution event for data query: " << record.GetMessage());
+            << "Received abort execution event for data query: " << msg);
 
-        TBase::HandleError(record.GetMessage(), ctx);
+        TBase::HandleError(msg, ctx);
     }
 
     using TBase::Handle;
@@ -437,11 +437,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
+        const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << record.GetMessage());
+            << "Received abort execution event for scan query: " << msg);
 
-        TBase::HandleError(record.GetMessage(), ctx);
+        TBase::HandleError(msg, ctx);
     }
 
     using TBase::HandleResponse;
@@ -892,14 +892,21 @@ private:
 
     void Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         auto& msg = ev->Get()->Record;
+        NYql::TIssues issues = ev->Get()->GetIssues();
 
         LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY,
             "TKqpExecPhysicalRequestHandler, got EvAbortExecution event."
              << " Code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
-             << ", reason: " << msg.GetMessage());
+             << ", reason: " << issues.ToOneLineString());
 
         auto issueCode = NYql::YqlStatusFromYdbStatus(msg.GetStatusCode());
-        Promise.SetValue(ResultFromError<TResult>(YqlIssue({}, issueCode, msg.GetMessage())));
+        NYql::TIssues resultIssues;
+        for (const auto& i : issues) {
+            NYql::TIssue issue(i);
+            NYql::SetIssueCode(issueCode, issue);
+            resultIssues.AddIssue(std::move(issue));
+        }
+        Promise.SetValue(ResultFromError<TResult>(std::move(resultIssues)));
 
         this->PassAway();
     }

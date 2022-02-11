@@ -7,10 +7,15 @@ namespace NYql::NDqs {
         *Record.MutableTask() = std::move(task);
     }
 
-    TEvDqFailure::TEvDqFailure(const TIssue& issue, bool retriable, bool needFallback) {
-        IssuesToMessage({issue}, Record.MutableIssues());
+    TEvDqFailure::TEvDqFailure(const TIssues& issues, bool retriable, bool needFallback) {
+        IssuesToMessage(issues, Record.MutableIssues());
         Record.SetRetriable(retriable);
         Record.SetNeedFallback(needFallback);
+    }
+
+    TEvDqFailure::TEvDqFailure(const TIssue& issue, bool retriable, bool needFallback)
+        : TEvDqFailure(TIssues({issue}), retriable, needFallback)
+    {
     }
 
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {

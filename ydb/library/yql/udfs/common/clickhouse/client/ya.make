@@ -388,7 +388,7 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
         contrib/restricted/boost/libs
         contrib/restricted/cityhash-1.0.2
         contrib/restricted/fast_float
-        contrib/libs/icu
+        #contrib/libs/icu
         contrib/libs/pdqsort
         contrib/libs/lz4
         contrib/restricted/dragonbox
@@ -406,8 +406,8 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
     ADDINCL(
         GLOBAL contrib/restricted/dragonbox
         contrib/restricted/fast_float/include
-        contrib/libs/icu/common
-        contrib/libs/icu/i18n
+        #contrib/libs/icu/common
+        #contrib/libs/icu/i18n
         contrib/libs/pdqsort
         contrib/libs/lz4
         contrib/libs/apache/arrow/src

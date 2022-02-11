@@ -298,9 +298,9 @@ int ColumnTuple::compareAtImpl(size_t n, size_t m, const IColumn & rhs, int nan_
     for (size_t i = 0; i < tuple_size; ++i)
     {
         int res;
-        if (collator && columns[i]->isCollationSupported())
-            res = columns[i]->compareAtWithCollation(n, m, *assert_cast<const ColumnTuple &>(rhs).columns[i], nan_direction_hint, *collator);
-        else
+        //if (collator && columns[i]->isCollationSupported())
+        //    res = columns[i]->compareAtWithCollation(n, m, *assert_cast<const ColumnTuple &>(rhs).columns[i], nan_direction_hint, *collator);
+        //else
             res = columns[i]->compareAt(n, m, *assert_cast<const ColumnTuple &>(rhs).columns[i], nan_direction_hint);
         if (res)
             return res;
@@ -321,10 +321,10 @@ void ColumnTuple::compareColumn(const IColumn & rhs, size_t rhs_row_num,
                                         compare_results, direction, nan_direction_hint);
 }
 
-int ColumnTuple::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs, int nan_direction_hint, const Collator & collator) const
+/*int ColumnTuple::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs, int nan_direction_hint, const Collator & collator) const
 {
     return compareAtImpl(n, m, rhs, nan_direction_hint, &collator);
-}
+}*/
 
 bool ColumnTuple::hasEqualValues() const
 {
@@ -348,9 +348,9 @@ struct ColumnTuple::Less
         for (const auto & column : columns)
         {
             int res;
-            if (collator && column->isCollationSupported())
-                res = column->compareAtWithCollation(a, b, *column, nan_direction_hint, *collator);
-            else
+            //if (collator && column->isCollationSupported())
+            //    res = column->compareAtWithCollation(a, b, *column, nan_direction_hint, *collator);
+            //else
                 res = column->compareAt(a, b, *column, nan_direction_hint);
             if (res < 0)
                 return positive;
@@ -385,9 +385,9 @@ void ColumnTuple::updatePermutationImpl(bool reverse, size_t limit, int nan_dire
 
     for (const auto & column : columns)
     {
-        if (collator && column->isCollationSupported())
-            column->updatePermutationWithCollation(*collator, reverse, limit, nan_direction_hint, res, equal_ranges);
-        else
+        //if (collator && column->isCollationSupported())
+        //    column->updatePermutationWithCollation(*collator, reverse, limit, nan_direction_hint, res, equal_ranges);
+        //else
             column->updatePermutation(reverse, limit, nan_direction_hint, res, equal_ranges);
 
         while (limit && !equal_ranges.empty() && limit <= equal_ranges.back().first)
@@ -411,7 +411,7 @@ void ColumnTuple::updatePermutation(bool reverse, size_t limit, int nan_directio
     updatePermutationImpl(reverse, limit, nan_direction_hint, res, equal_ranges);
 }
 
-void ColumnTuple::getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int nan_direction_hint, Permutation & res) const
+/*void ColumnTuple::getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int nan_direction_hint, Permutation & res) const
 {
     if (reverse)
         getPermutationImpl(limit, res, Less<false>(columns, nan_direction_hint, &collator));
@@ -422,7 +422,7 @@ void ColumnTuple::getPermutationWithCollation(const Collator & collator, bool re
 void ColumnTuple::updatePermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int nan_direction_hint, Permutation & res, EqualRanges & equal_ranges) const
 {
     updatePermutationImpl(reverse, limit, nan_direction_hint, res, equal_ranges, &collator);
-}
+}*/
 
 void ColumnTuple::gather(ColumnGathererStream & gatherer)
 {

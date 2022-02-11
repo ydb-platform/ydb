@@ -263,8 +263,8 @@ int ColumnNullable::compareAtImpl(size_t n, size_t m, const IColumn & rhs_, int 
     }
 
     const IColumn & nested_rhs = nullable_rhs.getNestedColumn();
-    if (collator)
-        return getNestedColumn().compareAtWithCollation(n, m, nested_rhs, null_direction_hint, *collator);
+    //if (collator)
+    //    return getNestedColumn().compareAtWithCollation(n, m, nested_rhs, null_direction_hint, *collator);
 
     return getNestedColumn().compareAt(n, m, nested_rhs, null_direction_hint);
 }
@@ -274,10 +274,10 @@ int ColumnNullable::compareAt(size_t n, size_t m, const IColumn & rhs_, int null
     return compareAtImpl(n, m, rhs_, null_direction_hint);
 }
 
-int ColumnNullable::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int null_direction_hint, const Collator & collator) const
+/*int ColumnNullable::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int null_direction_hint, const Collator & collator) const
 {
     return compareAtImpl(n, m, rhs_, null_direction_hint, &collator);
-}
+}*/
 
 void ColumnNullable::compareColumn(const IColumn & rhs, size_t rhs_row_num,
                                    PaddedPODArray<UInt64> * row_indexes, PaddedPODArray<Int8> & compare_results,
@@ -296,9 +296,9 @@ void ColumnNullable::getPermutationImpl(bool reverse, size_t limit, int null_dir
 {
     /// Cannot pass limit because of unknown amount of NULLs.
 
-    if (collator)
-        getNestedColumn().getPermutationWithCollation(*collator, reverse, 0, null_direction_hint, res);
-    else
+    //if (collator)
+    //    getNestedColumn().getPermutationWithCollation(*collator, reverse, 0, null_direction_hint, res);
+    //else
         getNestedColumn().getPermutation(reverse, 0, null_direction_hint, res);
 
     if ((null_direction_hint > 0) != reverse)
@@ -472,9 +472,9 @@ void ColumnNullable::updatePermutationImpl(bool reverse, size_t limit, int null_
         }
     }
 
-    if (collator)
-        getNestedColumn().updatePermutationWithCollation(*collator, reverse, limit, null_direction_hint, res, new_ranges);
-    else
+    //if (collator)
+    //    getNestedColumn().updatePermutationWithCollation(*collator, reverse, limit, null_direction_hint, res, new_ranges);
+    //else
         getNestedColumn().updatePermutation(reverse, limit, null_direction_hint, res, new_ranges);
 
     equal_ranges = std::move(new_ranges);
@@ -491,7 +491,7 @@ void ColumnNullable::updatePermutation(bool reverse, size_t limit, int null_dire
     updatePermutationImpl(reverse, limit, null_direction_hint, res, equal_ranges);
 }
 
-void ColumnNullable::getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int null_direction_hint, Permutation & res) const
+/*void ColumnNullable::getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int null_direction_hint, Permutation & res) const
 {
     getPermutationImpl(reverse, limit, null_direction_hint, res, &collator);
 }
@@ -499,7 +499,7 @@ void ColumnNullable::getPermutationWithCollation(const Collator & collator, bool
 void ColumnNullable::updatePermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int null_direction_hint, Permutation & res, EqualRanges & equal_range) const
 {
     updatePermutationImpl(reverse, limit, null_direction_hint, res, equal_range, &collator);
-}
+}*/
 
 void ColumnNullable::gather(ColumnGathererStream & gatherer)
 {

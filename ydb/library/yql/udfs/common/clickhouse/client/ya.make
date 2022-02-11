@@ -98,7 +98,7 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
         src/AggregateFunctions/AggregateFunctionCombinatorFactory.cpp
         src/AggregateFunctions/IAggregateFunction.cpp
 
-        src/Columns/Collator.cpp
+        #src/Columns/Collator.cpp
         src/Columns/ColumnAggregateFunction.cpp
         src/Columns/ColumnArray.cpp
         src/Columns/ColumnCompressed.cpp
@@ -385,7 +385,8 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
     PEERDIR(
         contrib/libs/cctz
         contrib/restricted/boost
-        contrib/restricted/boost/libs
+        #contrib/restricted/boost/libs
+        contrib/restricted/boost/libs/program_options
         contrib/restricted/cityhash-1.0.2
         contrib/restricted/fast_float
         #contrib/libs/icu

@@ -247,16 +247,16 @@ public:
     bool hasEqualValues() const override;
 
     /// Variant of compareAt for string comparison with respect of collation.
-    int compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int, const Collator & collator) const override;
+    //int compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int, const Collator & collator) const override;
 
     void getPermutation(bool reverse, size_t limit, int nan_direction_hint, Permutation & res) const override;
 
     void updatePermutation(bool reverse, size_t limit, int, Permutation & res, EqualRanges & equal_ranges) const override;
 
     /// Sorting with respect of collation.
-    void getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int, Permutation & res) const override;
+    //void getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int, Permutation & res) const override;
 
-    void updatePermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int, Permutation & res, EqualRanges & equal_ranges) const override;
+    //void updatePermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int, Permutation & res, EqualRanges & equal_ranges) const override;
 
     ColumnPtr replicate(const Offsets & replicate_offsets) const override;
 

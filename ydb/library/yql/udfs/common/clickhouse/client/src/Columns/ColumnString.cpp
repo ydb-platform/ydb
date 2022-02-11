@@ -1,6 +1,6 @@
 #include <Columns/ColumnString.h>
 
-#include <Columns/Collator.h>
+//#include <Columns/Collator.h>
 #include <Columns/ColumnsCommon.h>
 #include <Columns/ColumnCompressed.h>
 #include <Columns/MaskOperations.h>
@@ -468,6 +468,7 @@ void ColumnString::updatePermutation(bool reverse, size_t limit, int /*nan_direc
         updatePermutationImpl(limit, res, equal_ranges, Cmp<true>(*this));
 }
 
+/*
 template <bool positive>
 struct ColumnString::CmpWithCollation
 {
@@ -485,7 +486,9 @@ struct ColumnString::CmpWithCollation
         return positive ? res : -res;
     }
 };
+*/
 
+/*
 void ColumnString::getPermutationWithCollation(const Collator & collator, bool reverse, size_t limit, int, Permutation & res) const
 {
     if (reverse)
@@ -501,6 +504,7 @@ void ColumnString::updatePermutationWithCollation(const Collator & collator, boo
     else
         updatePermutationImpl(limit, res, equal_ranges, CmpWithCollation<true>(*this, collator));
 }
+*/
 
 ColumnPtr ColumnString::replicate(const Offsets & replicate_offsets) const
 {
@@ -625,14 +629,14 @@ ColumnPtr ColumnString::compress() const
 }
 
 
-int ColumnString::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int, const Collator & collator) const
+/*int ColumnString::compareAtWithCollation(size_t n, size_t m, const IColumn & rhs_, int, const Collator & collator) const
 {
     const ColumnString & rhs = assert_cast<const ColumnString &>(rhs_);
 
     return collator.compare(
         reinterpret_cast<const char *>(&chars[offsetAt(n)]), sizeAt(n),
         reinterpret_cast<const char *>(&rhs.chars[rhs.offsetAt(m)]), rhs.sizeAt(m));
-}
+}*/
 
 void ColumnString::protect()
 {

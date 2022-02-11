@@ -109,7 +109,7 @@ message TKqpPhyKeyRange {
 
 message TKqpPhyOpReadRange {
     TKqpPhyKeyRange KeyRange = 1;
-    TKqpPhyParamValue ItemsLimit = 2;
+    TKqpPhyValue ItemsLimit = 2;
     bool Reverse = 3;
     repeated bool SkipNullKeys = 4;
 }
@@ -132,7 +132,7 @@ message TKqpPhyOpReadOlapRanges {
     // Where KeyColumns is values of start/end of range for corresponding key column in table
     TKqpPhyParamValue KeyRanges = 1;
     // Limit value, shard may stop after reading limit rows
-    TKqpPhyParamValue ItemsLimit = 2;
+    TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
     // Program in NKikimrSSA.TProgram format
@@ -152,7 +152,7 @@ message TKqpPhyOpReadRanges {
     // Also it has special case - empty name. This means full scan.
     TKqpPhyParamValue KeyRanges = 1;
     // Limit value, shard may stop after reading limit rows
-    TKqpPhyParamValue ItemsLimit = 2;
+    TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
 }

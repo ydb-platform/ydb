@@ -76,12 +76,16 @@ struct TSerializerCtx {
     THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> PureTxResults;
 };
 
-TString GetExprStr(const TExprBase& scalar) {
+TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
         auto literal = TString(maybeData.Cast().Literal());
         CollapseText(literal, 32);
 
-        return TStringBuilder() << '"' << literal << '"';
+        if (quoteStr) {
+            return TStringBuilder() << '"' << literal << '"';
+        } else {
+            return literal;
+        }
     }
 
     if (auto maybeParam = scalar.Maybe<TCoParameter>()) {
@@ -1049,7 +1053,7 @@ private:
 
         auto settings = NYql::TKqpReadTableSettings::Parse(read);
         if (settings.ItemsLimit && !readInfo.Limit) {
-            auto limit = GetExprStr(TExprBase(settings.ItemsLimit));
+            auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
             if (auto maybeResultBinding = ContainResultBinding(limit)) {
                 const auto [txId, resId] = *maybeResultBinding;
                 if (auto result = GetResult(txId, resId)) {
@@ -1180,7 +1184,7 @@ private:
 
         auto settings = NYql::TKqpReadTableSettings::Parse(read);
         if (settings.ItemsLimit && !readInfo.Limit) {
-            auto limit = GetExprStr(TExprBase(settings.ItemsLimit));
+            auto limit = GetExprStr(TExprBase(settings.ItemsLimit), false);
             if (auto maybeResultBinding = ContainResultBinding(limit)) {
                 const auto [txId, resId] = *maybeResultBinding;
                 if (auto result = GetResult(txId, resId)) {

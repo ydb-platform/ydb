@@ -173,7 +173,7 @@ Y_UNIT_TEST(DeferredEffects) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 3);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());

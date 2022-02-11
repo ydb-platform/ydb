@@ -12,7 +12,7 @@ namespace NKikimr::NKqp::NOpt {
 static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
     const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx)
 {
-//#define KQP_ENABLE_DUMP_APPLIED_RULE
+// #define KQP_ENABLE_DUMP_APPLIED_RULE
 #ifdef KQP_ENABLE_DUMP_APPLIED_RULE
     if (input != output) {
         auto builder = TStringBuilder() << "Rule applied: " << name << Endl;

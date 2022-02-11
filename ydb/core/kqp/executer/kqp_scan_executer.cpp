@@ -494,7 +494,7 @@ private:
                     .ShardId = shardId,
                 };
 
-                if (itemsLimit && !task.Meta.Params.contains(itemsLimitParamName)) {
+                if (itemsLimitParamName && !task.Meta.Params.contains(itemsLimitParamName)) {
                     task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
                     task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
                 }
@@ -642,7 +642,7 @@ private:
 
                 FillReadInfo(task.Meta, itemsLimit, reverse, readRange);
 
-                if (itemsLimit) {
+                if (itemsLimitParamName) {
                     task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
                     task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
                 }

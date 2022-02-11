@@ -1980,7 +1980,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     auto result = session.ExplainDataQuery(query).GetValueSync();
                     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                         TStringBuilder() << query << Endl << "Failed with: " << result.GetIssues().ToString());
-                    UNIT_ASSERT_C(result.GetAst().Contains("('('\"ItemsLimit\" %kqp%tx_result_binding_0_0))"),
+                    UNIT_ASSERT_C(result.GetAst().Contains("('('\"ItemsLimit\""),
                         TStringBuilder() << query << Endl << "Failed with AST: " << result.GetAst());
 
                     NJson::TJsonValue plan;
@@ -1998,7 +1998,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                     }
 
                     auto readLimit = FindPlanNodeByKv(node, "ReadLimit", readLimitValue);
-                    UNIT_ASSERT(readLimit.IsDefined());
+                    UNIT_ASSERT_C(readLimit.IsDefined(), result.GetPlan());
                 }
             }
         }

@@ -381,6 +381,9 @@ private:
     void RegisterDependencies() const final {
         this->FlowDependsOn(FromNode);
         this->FlowDependsOn(ToNode);
+        if (ItemsLimit) {
+            this->FlowDependsOn(ItemsLimit);
+        }
     }
 
 private:
@@ -462,6 +465,9 @@ private:
 
     void RegisterDependencies() const final {
         this->FlowDependsOn(RangesNode);
+        if (ItemsLimit) {
+            this->FlowDependsOn(ItemsLimit);
+        }
     }
 
     TParseReadTableRangesResult ParseResult;

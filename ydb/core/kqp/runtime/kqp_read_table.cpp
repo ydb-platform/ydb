@@ -175,8 +175,12 @@ TParseReadTableResult ParseWideReadTable(TCallable& callable) {
             MKQL_ENSURE_S(AS_TYPE(TDataType, AS_TYPE(TCallableType, node->GetType())->GetReturnType())->GetSchemeType()
                 == NUdf::TDataType<ui64>::Id, "ItemsLimit must be () -> ui64");
             result.ItemsLimit = node;
+        } else if (node->GetType()->GetKind() == TType::EKind::Data) {
+            MKQL_ENSURE_S(AS_TYPE(TDataType, node->GetType())->GetSchemeType() == NUdf::TDataType<ui64>::Id,
+                "ItemsLimit must be ui64");
+            result.ItemsLimit = node;
         } else {
-            MKQL_ENSURE_S(node->GetType()->GetKind() == TType::EKind::Null, "ItemsLimit expected to be Callable or Null");
+            MKQL_ENSURE_S(node->GetType()->GetKind() == TType::EKind::Null, "ItemsLimit expected to be Callable, Uint64 or Null");
         }
     }
 
@@ -218,10 +222,15 @@ TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable) {
             );
             result.ItemsLimit = limitNode;
             break;
+        case TType::EKind::Data:
+            MKQL_ENSURE_S(AS_TYPE(TDataType, limitNode->GetType())->GetSchemeType() == NUdf::TDataType<ui64>::Id,
+                "ItemsLimit must be ui64");
+            result.ItemsLimit = limitNode;
+            break;
         case TType::EKind::Null:
             break;
         default:
-            MKQL_ENSURE(false, "ItemsLimit expected to be Callable or Null");
+            MKQL_ENSURE(false, "ItemsLimit expected to be Callable, Data or Null");
     }
 
     result.Reverse = AS_VALUE(TDataLiteral, reverse)->AsValue().Get<bool>();

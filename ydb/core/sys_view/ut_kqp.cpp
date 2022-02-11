@@ -1155,6 +1155,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(
+            "PRAGMA Kikimr.UseNewEngine='false'; "
             "SELECT * from `/Root/.sys/partition_stats`", TTxControl::BeginTx().CommitTx()
         ).GetValueSync();
 

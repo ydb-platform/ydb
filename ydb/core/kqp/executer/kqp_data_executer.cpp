@@ -930,8 +930,7 @@ private:
     }
 
 private:
-    void FillGeneralReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse)
-    {
+    void FillGeneralReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse) {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
             // Validate parameters
             YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit);
@@ -1012,7 +1011,7 @@ private:
                         readInfo.Ranges = std::move(*shardInfo.KeyReadRanges);
                         readInfo.Columns = columns;
 
-                        if (itemsLimit) {
+                        if (itemsLimitParamName) {
                             task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
                             task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
                         }

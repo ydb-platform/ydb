@@ -547,19 +547,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        if (UseNewEngine) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Tmp");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1001);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Tmp");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1001);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Tmp");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1001);
     }
 
     Y_UNIT_TEST(YqlSyntaxV0) {

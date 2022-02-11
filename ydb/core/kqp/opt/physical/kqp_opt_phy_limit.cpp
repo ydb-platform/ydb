@@ -38,19 +38,14 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     }
 
     TMaybeNode<TExprBase> limitValue;
-    if (auto maybeTakeCount = take.Count().Maybe<TCoUint64>()) {
-        ui64 totalLimit;
-        ui64 takeValue = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
+    auto maybeTakeCount = take.Count().Maybe<TCoUint64>();
+    auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>();
 
-        if (maybeSkip) {
-            if (auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>()) {
-                auto skipValue = FromString<ui64>(maybeSkipCount.Cast().Literal().Value());
-                totalLimit = takeValue + skipValue;
-            } else {
-                return node; // ???
-            }
-        } else {
-            totalLimit = takeValue;
+    if (maybeTakeCount && (!maybeSkip || maybeSkipCount)) {
+        ui64 totalLimit = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
+
+        if (maybeSkipCount) {
+            totalLimit += FromString<ui64>(maybeSkipCount.Cast().Literal().Value());
         }
 
         limitValue = Build<TCoUint64>(ctx, node.Pos())
@@ -69,9 +64,13 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
 
     YQL_CLOG(TRACE, ProviderKqp) << "-- set limit items value to " << limitValue.Cast().Ref().Dump();
 
-    settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
-        .Input(limitValue.Cast())
-        .Done().Ptr());
+    if (limitValue.Maybe<TCoUint64>()) {
+        settings.SetItemsLimit(limitValue.Cast().Ptr());
+    } else {
+        settings.SetItemsLimit(Build<TDqPrecompute>(ctx, node.Pos())
+            .Input(limitValue.Cast())
+            .Done().Ptr());
+    }
 
     input = BuildReadNode(node.Pos(), ctx, input, settings);
 

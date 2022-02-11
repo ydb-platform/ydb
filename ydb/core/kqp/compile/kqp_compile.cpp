@@ -139,8 +139,9 @@ void FillKeyRange(const TKqlKeyRange& range, NKqpProto::TKqpPhyKeyRange& rangePr
     FillKeyBound(range.To(), *rangeProto.MutableTo());
 }
 
-template <typename TReader, typename TProto>
-void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto) {
+void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& tableMeta,
+    NKqpProto::TKqpPhyOpReadRange& readProto)
+{
     FillKeyRange(read.Range(), *readProto.MutableKeyRange());
 
     auto settings = TKqpReadTableSettings::Parse(read);
@@ -154,8 +155,15 @@ void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, T
 
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
-        if (expr.template Maybe<TCoParameter>()) {
-            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value()));
+        if (expr.Maybe<TCoUint64>()) {
+            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
+
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
             YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
         }
@@ -165,15 +173,12 @@ void FillReadRange(const TReader& read, const TKikimrTableMetadata& tableMeta, T
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata& tableMeta, TProto& readProto)
-{
-    Y_UNUSED(tableMeta);
-
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& readProto) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
         auto& rangesParam = *readProto.MutableKeyRanges();
-        rangesParam.SetParamName(TString(ranges.Cast().Name()));
+        rangesParam.SetParamName(ranges.Cast().Name().StringValue());
     } else {
         YQL_ENSURE(
             TCoVoid::Match(read.Ranges().Raw()),
@@ -185,9 +190,15 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& tableMeta, 
 
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
+        if (expr.template Maybe<TCoUint64>()) {
+            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
 
-        if (expr.template Maybe<TCoParameter>()) {
-            readProto.MutableItemsLimit()->SetParamName(TString(expr.template Cast<TCoParameter>().Name().Value()));
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        } else if (expr.template Maybe<TCoParameter>()) {
+            readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
         } else {
             YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
         }

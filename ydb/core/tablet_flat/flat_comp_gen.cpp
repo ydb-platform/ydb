@@ -302,13 +302,15 @@ void TGenCompactionStrategy::Stop() {
     FinalCompactionId = 0;
     FinalCompactionLevel = 0;
     FinalCompactionTaken = 0;
-    ForcedMemCompactionId = 0;
     ForcedState = EForcedState::None;
+    ForcedMemCompactionId = 0;
+    ForcedGeneration = 0;
     MaxOverloadFactor = 0.0;
 
     CurrentForcedGenCompactionId = 0;
     NextForcedGenCompactionId = 0;
     FinishedForcedGenCompactionId = 0;
+    FinishedForcedGenCompactionTs = {};
 
     // Make it possible to Start again
     Generations.clear();
@@ -390,25 +392,14 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
         taskId,
         edge,
         /* generation */ 0,
-        /* full */ false,
         extra);
     Y_VERIFY(MemCompactionId != 0);
 
     if (forcedCompactionId != 0) {
-        if (!Generations.empty()) {
-            // We remember the last forced compaction we have started
-            ForcedMemCompactionId = MemCompactionId;
-        }
-
-        switch (ForcedState) {
-        case EForcedState::None:
-        case EForcedState::Pending:
-            CurrentForcedGenCompactionId = forcedCompactionId;
-            break;
-        case EForcedState::Compacting:
-            NextForcedGenCompactionId = forcedCompactionId;
-            break;
-        }
+        // We remember the last forced mem compaction we have started
+        ForcedMemCompactionId = MemCompactionId;
+        // We also remember the last user-provided forced compaction id
+        NextForcedGenCompactionId = forcedCompactionId;
     }
 
     return MemCompactionId;
@@ -467,6 +458,8 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     TCompactionChanges changes;
 
+    TVector<bool> checkNeeded(Generations.size());
+
     auto& sourceParts = params->Parts;
 
     if (compactionId == FinalCompactionId || generation == 255) {
@@ -496,10 +489,11 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
         sourceParts.erase(partStart, partEnd);
         FinalCompactionId = 0;
+        // Compaction policy may have increased the number of generations
+        for (ui32 index : xrange(size_t(generation), Generations.size())) {
+            checkNeeded[index] = true;
+        }
     }
-
-    TVector<bool> checkNeeded(Generations.size());
-    bool fullCompaction = false;
 
     if (generation < Generations.size()) {
         auto& nextGen = Generations[generation];
@@ -525,19 +519,20 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
     }
 
+    bool forcedCompactionContinue = false;
+
     if (generation == 0) {
         // This was a memtable compaction, we don't expect anything else
         Y_VERIFY(sourceParts.empty());
 
         // Check if we just finished the last forced mem compaction
         if (ForcedMemCompactionId && compactionId == ForcedMemCompactionId) {
-            if (KnownParts.empty() || Generations.empty()) {
-                // All we have are new parts, there's no point in recompacting
-                // everything again
-                ForcedMemCompactionId = 0;
-            } else if (ForcedState == EForcedState::Pending) {
-                // Forced compaction hasn't started yet, don't need to requeue
-                ForcedMemCompactionId = 0;
+            ForcedMemCompactionId = 0;
+
+            // Continue compaction when we don't have some other compaction running
+            if (ForcedState == EForcedState::None) {
+                CurrentForcedGenCompactionId = std::exchange(NextForcedGenCompactionId, 0);
+                forcedCompactionContinue = true;
             }
         }
     } else if (generation == 255) {
@@ -547,22 +542,19 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         ui32 sourceIndex = generation - 1;
         Y_VERIFY(sourceIndex < Generations.size());
 
-        // During full compaction all other generations are idle
-        fullCompaction = (ForcedState == EForcedState::Compacting);
+        if (ForcedState == EForcedState::Compacting && ForcedGeneration == generation) {
+            ForcedState = EForcedState::None;
+            forcedCompactionContinue = true;
+        }
 
         while (sourceParts) {
-            // Search back for the first generation that has non-empty parts
-            while (fullCompaction && sourceIndex > 0 && Generations[sourceIndex].Parts.empty()) {
-                --sourceIndex;
-            }
-
             auto& sourcePart = sourceParts.back();
             auto& sourceGen = Generations[sourceIndex];
             Y_VERIFY(sourceGen.Parts);
             auto& part = sourceGen.Parts.back();
             Y_VERIFY(part.Label == sourcePart->Label,
-                "Failed at gen=%u, sourceIndex=%u, full=%d, headTaken=%lu",
-                generation, sourceIndex, fullCompaction, sourceGen.TakenHeadParts);
+                "Failed at gen=%u, sourceIndex=%u, headTaken=%lu",
+                generation, sourceIndex, sourceGen.TakenHeadParts);
             Y_VERIFY(sourceGen.CompactingTailParts > 0);
             CachedGarbageBytes -= part.GarbageBytes;
             KnownParts.erase(part.Label);
@@ -572,20 +564,6 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
 
         Y_VERIFY(sourceParts.empty());
-
-        for (ui32 index : xrange(sourceIndex, generation)) {
-            Y_VERIFY(Generations[index].CompactingTailParts == 0);
-        }
-
-        if (fullCompaction) {
-            ForcedState = EForcedState::None;
-            OnForcedGenCompactionDone();
-
-            // Will have to recheck all parent generations
-            for (ui32 parent : xrange(1u, generation)) {
-                checkNeeded[parent - 1] = true;
-            }
-        }
 
         // Recheck compacted generation, it's free and may need a new compaction
         checkNeeded[generation - 1] = true;
@@ -601,8 +579,36 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         newStats += TStats(partView);
     }
 
+    // This will be an index where we place results
     ui32 target = generation != 255 ? generation : Generations.size();
-    while (newParts && target > 0) {
+
+    // After forced compaction we may want to place results as low as possible
+    if (forcedCompactionContinue) {
+        while (target < Generations.size()) {
+            auto& candidate = Generations[target];
+            if (!candidate.Parts.empty()) {
+                // Cannot pass non-empty generations
+                break;
+            }
+            // Try to move to the next generation
+            ++target;
+        }
+        if (target == Generations.size()) {
+            if (generation >= target || (FinalParts.empty() && ColdParts.empty())) {
+                // The forced compaction has finished, uplift logic will kick in below
+                forcedCompactionContinue = false;
+                if (target > generation) {
+                    target = generation;
+                }
+                OnForcedGenCompactionDone();
+            } else {
+                // We need to compact final parts, so we need to place results at the last generation
+                --target;
+            }
+        }
+    }
+
+    while (newParts && target > 0 && !forcedCompactionContinue) {
         auto& candidate = Generations[target - 1];
         if (candidate.CompactingTailParts > 0) {
             // Cannot uplift to busy generations
@@ -651,7 +657,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
             }
         } else {
             auto& newGen = Generations[target];
-            if (target != generation) {
+            if (target < generation) {
                 Y_VERIFY(!newGen.Parts || result->Epoch <= newGen.Parts.back().Epoch);
                 for (auto it = newParts.begin(); it != newParts.end(); ++it) {
                     auto& partView = *it;
@@ -680,24 +686,34 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     UpdateStats();
 
+    if (forcedCompactionContinue) {
+        Y_VERIFY(target < Generations.size());
+        ForcedState = EForcedState::Pending;
+        ForcedGeneration = target + 1;
+        checkNeeded[target] = true;
+    }
+
     if (Generations) {
-        bool needUpdateOverload = false;
+        // Check various conditions for starting a forced compaction
         if (ForcedState == EForcedState::None) {
-            if (ForcedMemCompactionId && ForcedMemCompactionId != MemCompactionId) {
-                // The forced memtable compaction has finished, start gen compaction
-                ForcedState = EForcedState::Pending;
-                ForcedMemCompactionId = 0;
-                needUpdateOverload = true;
+            bool startForcedCompaction = false;
+
+            if (NextForcedGenCompactionId && ForcedMemCompactionId == 0) {
+                // The previous forced compaction has finished, start gen compactions
+                CurrentForcedGenCompactionId = std::exchange(NextForcedGenCompactionId, 0);
+                startForcedCompaction = true;
             } else if (Stats.DroppedRowsPercent() >= Policy->DroppedRowsPercentToCompact && !Policy->KeepEraseMarkers) {
                 // Table has too many dropped rows, compact everything
-                ForcedState = EForcedState::Pending;
-                needUpdateOverload = true;
+                startForcedCompaction = true;
             } else if (CachedDroppedBytesPercent >= Policy->DroppedRowsPercentToCompact && !Policy->KeepEraseMarkers) {
                 // Table has too much garbage, compact everything
+                startForcedCompaction = true;
+            }
+
+            if (startForcedCompaction) {
                 ForcedState = EForcedState::Pending;
-                needUpdateOverload = true;
-            } else if (CurrentForcedGenCompactionId) {
-                OnForcedGenCompactionDone();
+                ForcedGeneration = 1;
+                checkNeeded[0] = true;
             }
         }
 
@@ -709,14 +725,6 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
                 CheckGeneration(index + 1);
             }
         }
-
-        if (needUpdateOverload && Generations.size() > 1 && !checkNeeded[1]) {
-            // in case of forced compaction we must recalculate overload
-            // to decrease it and upper reject threshold
-            CheckOverload(1);
-        }
-    } else {
-        OnForcedGenCompactionDone();
     }
 
     UpdateOverload();
@@ -725,45 +733,10 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 }
 
 void TGenCompactionStrategy::OnForcedGenCompactionDone() {
-    if (CurrentForcedGenCompactionId) {
-        FinishedForcedGenCompactionId = CurrentForcedGenCompactionId;
-        FinishedForcedGenCompactionTs = Time->Now();
-        CurrentForcedGenCompactionId = 0;
+    if (CurrentForcedGenCompactionId != 0) {
+        FinishedForcedGenCompactionId = std::exchange(CurrentForcedGenCompactionId, 0);
     }
-
-    if (NextForcedGenCompactionId) {
-        CurrentForcedGenCompactionId = NextForcedGenCompactionId;
-        NextForcedGenCompactionId = 0;
-    }
-
-    CheckForcedGenCompactionNeeded();
-}
-
-void TGenCompactionStrategy::CheckForcedGenCompactionNeeded() {
-    // we already planned compaction
-    if (ForcedState != EForcedState::None || ForcedMemCompactionId)
-        return;
-
-    if (CurrentForcedGenCompactionId <= FinishedForcedGenCompactionId) {
-        CurrentForcedGenCompactionId = 0;
-        return;
-    }
-
-    // note that CurrentForcedGenCompactionId != 0, because of check above
-    if (!Generations) {
-        FinishedForcedGenCompactionId = CurrentForcedGenCompactionId;
-        FinishedForcedGenCompactionTs = Time->Now();
-        CurrentForcedGenCompactionId = 0;
-        return;
-    }
-
-    ForcedState = EForcedState::Pending;
-    CheckGeneration(Generations.size());
-    if (Generations.size() > 1) {
-        // in case of forced compaction we must recalculate overload
-        // to decrease it and upper reject threshold
-        CheckOverload(1);
-    }
+    FinishedForcedGenCompactionTs = Time->Now();
 }
 
 void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
@@ -865,7 +838,7 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
                                 << ", Epochs count: " << gen.PartEpochCount
                                 << ", Overload factor: " << gen.OverloadFactor
                                 << ", Compaction state: " << gen.State; }
-            if (generation == Generations.size() && ForcedState != EForcedState::None) {
+            if (ForcedState != EForcedState::None && ForcedGeneration == generation) {
                 out << ", Forced compaction: " << ForcedState;
             }
             if (gen.Task.TaskId) {
@@ -964,7 +937,6 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
             taskId,
             /* edge */ { },
             generation,
-            /* full */ false,
             extra);
         FinalState.State = EState::Compacting;
         return;
@@ -977,7 +949,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
     Y_VERIFY(gen.State == EState::Pending || gen.State == EState::PendingBackground);
     Y_VERIFY(gen.Task.TaskId == taskId);
 
-    const bool full = NeedToForceCompact(generation);
+    const bool forced = NeedToForceCompact(generation);
 
     auto cancelCompaction = [&]() {
         Broker->FinishTask(taskId, EResourceStatus::Cancelled);
@@ -985,18 +957,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
 
         gen.State = EState::Free;
 
-        if (full) {
-            // We just cancelled a forced compaction
-            ForcedState = EForcedState::None;
-            CheckForcedGenCompactionNeeded();
-
-            // Make sure to kickstart all generations
-            for (ui32 index : xrange(Generations.size())) {
-                CheckGeneration(index + 1);
-            }
-
-            UpdateOverload();
-        }
+        Y_VERIFY(!forced, "Unexpected cancellation of a forced compaction");
     };
 
     if (DesiredMode(generation) == EDesiredMode::None) {
@@ -1005,41 +966,8 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         return;
     }
 
-    if (full) {
-        // We are going to start a forced compaction, cancel everything else
-        // except a possible ongoing memtable compaction
-        Y_VERIFY(FinalCompactionId == 0, "Full compaction while final compaction is running");
-        for (ui32 index : xrange(generation - 1)) {
-            auto& parent = Generations[index];
-            auto& next = Generations[index + 1];
-            switch (std::exchange(parent.State, EState::Free)) {
-                case EState::Free:
-                    break;
-                case EState::Pending:
-                case EState::PendingBackground:
-                    // Compaction is scheduled, but not started yet
-                    Y_VERIFY(parent.CompactingTailParts == 0);
-                    Y_VERIFY(next.TakenHeadParts == 0);
-                    Broker->CancelTask(parent.Task.TaskId);
-                    break;
-                case EState::Compacting:
-                    // Compaction is running right now, but we know it's
-                    // not a full compaction, so may only use parts between
-                    // parent and next.
-                    parent.CompactingTailParts = 0;
-                    next.TakenHeadParts = 0;
-                    next.TakenHeadBackingSize = 0;
-                    next.TakenHeadPartEpochCount = 0;
-                    Backend->CancelCompaction(parent.Task.CompactionId);
-                    break;
-            }
-            parent.Task.TaskId = 0;
-            parent.Task.CompactionId = 0;
-        }
-    }
-
     TExtraState extra;
-    if (!full && generation < Generations.size()) {
+    if (!forced && generation < Generations.size()) {
         extra.InitFromPolicy(Policy->Generations[generation]);
     }
 
@@ -1051,14 +979,14 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         taskId,
         /* edge */ { },
         generation,
-        full,
         extra);
 
     gen.State = EState::Compacting;
 
-    if (full) {
+    if (forced) {
         // We have just started a forced compaction
         ForcedState = EForcedState::Compacting;
+        Y_VERIFY(ForcedGeneration == generation);
     }
 }
 
@@ -1105,8 +1033,8 @@ ui32 TGenCompactionStrategy::ComputeBackgroundPriority(
     Y_VERIFY(generation > 0);
     Y_VERIFY(generation <= Generations.size());
 
-    if (generation == Generations.size() && ForcedState == EForcedState::Pending) {
-        // This background compaction will be used for the full compaction
+    if (NeedToForceCompact(generation)) {
+        // This background compaction will be used for the forced compaction
         // TODO: figure out which priority we should use for such compactions
         return Policy->DefaultTaskPriority;
     }
@@ -1164,10 +1092,6 @@ void TGenCompactionStrategy::CheckOverload(ui32 generation) {
     // TODO: make lo and hi watermarks configurable
     float loK = 1.5;
     float hiK = 3;
-    if (generation == 1 && ShouldIncreaseOverloadWhatermarts()) {
-        loK *= 3;
-        hiK *= 3;
-    }
     overloadFactor = Max(overloadFactor, mapToRange(genSize, genPolicy.ForceSizeToCompact*loK, genPolicy.ForceSizeToCompact*hiK));
     overloadFactor = Max(overloadFactor, mapToRange(genParts, genPolicy.ForceCountToCompact*loK, genPolicy.ForceCountToCompact*hiK));
     gen.OverloadFactor = overloadFactor;
@@ -1231,11 +1155,6 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
     Y_VERIFY(generation > 0);
     Y_VERIFY(generation <= Generations.size());
 
-    if (ForcedState == EForcedState::Compacting) {
-        // We cannot start new compactions during forced compaction
-        return EDesiredMode::None;
-    }
-
     auto& gen = Generations[generation - 1];
     ui64 genSize = gen.Stats.BackingSize - gen.TakenHeadBackingSize;
     ui32 genParts = gen.PartEpochCount - gen.TakenHeadPartEpochCount;
@@ -1294,7 +1213,6 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         TTaskId taskId,
         TSnapEdge edge,
         ui32 generation,
-        bool full,
         TExtraState& extra)
 {
     Y_VERIFY(generation <= Generations.size() || generation == 255);
@@ -1311,7 +1229,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
 
     if (generation > 0 && generation != 255) {
         bool first = true;
-        for (ui32 index : xrange(full ? 0u : generation - 1, generation)) {
+        for (ui32 index : xrange(generation - 1, generation)) {
             auto& gen = Generations.at(index);
             size_t skip = first ? gen.TakenHeadParts : 0;
             Y_VERIFY(gen.TakenHeadParts == skip);
@@ -1335,7 +1253,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         Y_VERIFY(nextGen.TakenHeadParts == 0);
         Y_VERIFY(nextGen.TakenHeadBackingSize == 0);
         Y_VERIFY(nextGen.TakenHeadPartEpochCount == 0);
-        if (extra.ExtrasAllowed()) {
+        if (extra.ExtrasAllowed() && !NeedToForceCompact(generation + 1)) {
             Y_VERIFY(nextGen.Parts.size() >= nextGen.CompactingTailParts);
             size_t available = nextGen.Parts.size() - nextGen.CompactingTailParts;
             TEpoch lastEpoch = TEpoch::Max();

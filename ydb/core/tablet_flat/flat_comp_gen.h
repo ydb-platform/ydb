@@ -213,7 +213,6 @@ namespace NCompGen {
         void BeginGenCompaction(TTaskId taskId, ui32 generation);
 
         void OnForcedGenCompactionDone();
-        void CheckForcedGenCompactionNeeded();
 
         ui32 ComputeBackgroundPriority(
             ui32 generation,
@@ -235,21 +234,13 @@ namespace NCompGen {
             TTaskId taskId,
             TSnapEdge edge,
             ui32 generation,
-            bool full,
             TExtraState& extra);
 
         void UpdateStats();
         void UpdateOverload();
 
         bool NeedToForceCompact(ui32 generation) const {
-            return (
-                generation == Generations.size() &&
-                ForcedState == EForcedState::Pending &&
-                ForcedMemCompactionId == 0);
-        }
-
-        bool ShouldIncreaseOverloadWhatermarts() const {
-            return ForcedState != EForcedState::None;
+            return (ForcedState == EForcedState::Pending && ForcedGeneration == generation);
         }
 
     private:
@@ -267,6 +258,7 @@ namespace NCompGen {
         size_t FinalCompactionTaken = 0;
         EForcedState ForcedState = EForcedState::None;
         ui64 ForcedMemCompactionId = 0;
+        ui32 ForcedGeneration = 0;
         float MaxOverloadFactor = 0.0;
 
         ui64 CurrentForcedGenCompactionId = 0;

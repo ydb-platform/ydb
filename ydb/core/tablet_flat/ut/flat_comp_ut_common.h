@@ -222,14 +222,15 @@ public:
         RunCompaction(&params);
     }
 
-    void SimpleMemCompaction(ICompactionStrategy* strategy, bool forced = false) {
-        ui64 forcedCompactionId = forced ? 1 : 0;
+    ui64 SimpleMemCompaction(ICompactionStrategy* strategy, bool forced = false) {
+        ui64 forcedCompactionId = forced ? NextForcedCompactionId_++ : 0;
         ui64 compactionId = strategy->BeginMemCompaction(0, { 0, TEpoch::Max() }, forcedCompactionId);
         auto outcome = RunCompaction(compactionId);
         const ui32 table = outcome.Params->Table;
         auto changes = strategy->CompactionFinished(
                 compactionId, std::move(outcome.Params), std::move(outcome.Result));
         ApplyChanges(table, std::move(changes));
+        return forcedCompactionId;
     }
 
     bool SimpleTableCompaction(ui32 table, IResourceBroker* broker, ICompactionStrategy* strategy) {
@@ -328,6 +329,7 @@ private:
 
     ui64 NextReadId_ = 1;
     ui64 NextCompactionId_ = 1;
+    ui64 NextForcedCompactionId_ = 1001;
 
     bool ChangesRequested_ = false;
 };

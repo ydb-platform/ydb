@@ -972,7 +972,7 @@ Y_UNIT_TEST_SUITE(TShardedCompactionScenarios) {
 
         // Start a memtable compaction using this strategy
         {
-            auto memCompactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, false);
+            auto memCompactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, 0);
             UNIT_ASSERT(memCompactionId != 0);
             auto outcome = backend.RunCompaction(memCompactionId);
 

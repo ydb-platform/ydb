@@ -98,6 +98,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             auto result = KqpRunTransaction(ctx, op->GetTxId(), dataTx->GetKqpTasks(), tasksRunner);
 
             if (result == NYql::NDq::ERunStatus::PendingInput && dataTx->GetKqpComputeCtx().IsTabletNotReady()) {
+                allocGuard.Release();
                 return OnTabletNotReady(*tx, *dataTx, txc, ctx);
             }
         }

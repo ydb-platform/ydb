@@ -136,6 +136,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), dataTx->GetKqpTasks(), tasksRunner, computeCtx);
 
         if (!result && computeCtx.IsTabletNotReady()) {
+            allocGuard.Release();
             return OnTabletNotReady(*tx, *dataTx, txc, ctx);
         }
 

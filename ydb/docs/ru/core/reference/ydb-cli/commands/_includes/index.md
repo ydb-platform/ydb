@@ -9,3 +9,4 @@
 * [Потоковое чтение таблицы](../../commands/readtable.md).
 * [Работа со вторичными индексами](../../commands/operations-index.md).
 * [Работа с директориями](../../commands/scheme-mkdir.md).
+* [Нагрузочное тестирование](../../commands/workload.md).

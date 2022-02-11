@@ -41,5 +41,11 @@ items:
     include: { mode: link, path: profile/toc_p.yaml }
   - name: Получение списка эндпоинтов для базы данных
     href: commands/discovery-list.md
+  - name: Нагрузочное тестирование
+    items:
+    - name: Обзор
+      href: commands/workload/index.md
+    - name: Stock нагрузка
+      href: commands/workload/stock.md
 
 

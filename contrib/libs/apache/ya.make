@@ -4,6 +4,7 @@ OWNER(
 )
 
 RECURSE(
+    apr
     apr-util
     arrow
     avro

@@ -13,4 +13,3 @@ View all the included components and their licenses:
 ```bash
 sudo docker run --rm -it --entrypoint cat cr.yandex/yc/yandex-docker-local-ydb THIRD_PARTY_LICENSES
 ```
-

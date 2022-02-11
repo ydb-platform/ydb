@@ -85,7 +85,7 @@ You can specify any column family parameters from the [`CREATE TABLE`](create_ta
 
 ## Changing additional table parameters {#additional-alter}
 
-Most of the table parameters in YDB described on the [описания таблицы]({{ concept_table }}) page can be changed with the ```ALTER``` command.
+Most of the table parameters in YDB described on the [table description]({{ concept_table }}) page can be changed with the ```ALTER``` command.
 
 In general, the command to change any table parameter looks like this:
 
@@ -103,7 +103,7 @@ ALTER TABLE series SET (AUTO_PARTITIONING_BY_SIZE = DISABLED);
 
 ## Resetting additional table parameters {#additional-reset}
 
-Some table parameters in YDB listed on the [описания таблицы]({{ concept_table }}) page can be reset with the ```ALTER``` command.
+Some table parameters in YDB listed on the [table description]({{ concept_table }}) page can be reset with the ```ALTER``` command.
 
 The command to reset the table parameter looks like this:
 

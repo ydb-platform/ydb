@@ -67,6 +67,7 @@ Creating an index is an asynchronous operation. If the client-server connection 
     --columns title \
     series
   ```
+
   * `--endpoint`: DB endpoint.
   * `--database`: Full DB path.
   * `-sync|-async`: Index type.
@@ -229,4 +230,3 @@ If you don't specify the index type, a synchronous index is created by default.
 #### What's next
 
 For other examples of working with secondary indexes, see the [recommendations](../../best_practices/secondary_indexes.md).
-

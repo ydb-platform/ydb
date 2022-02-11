@@ -4,8 +4,8 @@
 
 * ```Url::Normalize(String) -> String?```
 
-Normalizes the URL in a robot-friendly way: converts the hostname into lowercase, strips out certain fragments, and so on.
-The normalization result only depends on the URL itself. The normalization **DOES NOT** include operations depending on the external data: transformation based on duplicates, mirrors, etc.
+Normalizes the URL in a robot-friendly way: converts the hostname into lowercase, strips out certain fragments, etc.
+The normalization result depends only on the URL itself. The normalization **DOES NOT** include operations depending on the external data: transformation based on duplicates, mirrors, etc.
 
 Returned value:
 
@@ -41,7 +41,7 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ya.ru#foo"); -- "http://ya.ru
 
 Encode a UTF-8 string to the urlencoded format (`Url::Encode`) and back (`Url::Decode`).
 
-**List of functions **
+**List of functions**
 
 * ```Url::Encode(String?) -> String?```
 * ```Url::Decode(String?) -> String?```
@@ -85,7 +85,7 @@ SELECT Url::Parse(
 
 Get a component of the URL.
 
-**List of functions **
+**List of functions**
 
 * ```Url::GetScheme(String{Flags:AutoMap}) -> String```
 
@@ -118,10 +118,10 @@ Get a component of the URL.
 * ```Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64```
 
 * ```Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String```
-Возвращает домен второго уровня в большинстве случаев и домен третьего уровня для хостеймов вида: ***.XXX.YY, где XXX — одно из com, net, org, co, gov, edu. Этот список можно переопределить через опциональный второй аргумент
+  Returns a second-level domain in most cases and a third-level domain for the hostnames like: ***.XXX.YY, where XXX is com, net, org, co, gov, or edu. You can redefine this list using an optional second argument
 
 * ```Url::GetOwner(String{Flags:AutoMap}) -> String```
-Возвращает домен, которым с наибольшей вероятностью владеет отдельный человек или организация. В отличие от Url::GetSignificantDomain работает по специальному whitelist, и помимо доменов из серии ***.co.uk возвращает домен третьего уровня для, например, бесплатных хостингов и блогов, скажем something.livejournal.com
+  Returns the domain that's most likely owned by an individual or organization. Unlike Url::GetSignificantDomain, it uses a special whitelist. Besides the ***.co.uk domains, it can return a third-level domain used by free hosting sites and blogs (for example: something.livejournal.com)s
 
 **Examples**
 
@@ -133,16 +133,16 @@ SELECT Url::GetDomain("http://www.yandex.ru", 2); -- "yandex.ru"
 ## Cut... {#cut}
 
 * ```Url::CutScheme(String?) -> String?```
-Возвращает переданный URL уже без схемы (http://, https:// и т.п.).
+  Returns the passed URL without the schema (http://, https://, etc.).
 
 * ```Url::CutWWW(String?) -> String?```
-Возвращает переданный домен без префикса "www.", если он имелся.
+  Returns the passed domain without the "www." prefix (if any).
 
 * ```Url::CutWWW2(String?) -> String?```
-Возвращает переданный домен без префикса "www.", "www2.", "wwww777." и тому подобных, если он имелся.
+  Returns the passed domain without the prefixes like " www.", " www2.", " wwww777." (if any).
 
 * ```Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String```
-Возращает копию переданного URL с удаленными всеми CGI параметрами и фрагментами ("?foo=bar" и/или "#baz").
+  Returns a copy of the passed URL, stripping out all the CGI parameters and fragments ("?foo=bar" and/or "#baz").
 
 **Examples**
 
@@ -155,7 +155,7 @@ SELECT Url::CutWWW("www.yandex.ru");           -- "yandex.ru"
 
 [Punycode](https://en.wikipedia.org/wiki/Punycode) transformations.
 
-**List of functions **
+**List of functions**
 
 * ```Url::HostNameToPunycode(String{Flag:AutoMap}) -> String?```
 * ```Url::ForceHostNameToPunycode(String{Flag:AutoMap}) -> String```

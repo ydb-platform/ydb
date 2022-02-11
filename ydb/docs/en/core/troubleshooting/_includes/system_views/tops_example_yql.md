@@ -1,4 +1,4 @@
-Top queries by execution time for the last minute when queries were made
+  Top queries by execution time for the last minute when queries were made
 
   ```sql
   $last = (
@@ -27,4 +27,3 @@ Top queries by execution time for the last minute when queries were made
   FROM `/cluster/path/to/database/.sys/top_queries_by_read_bytes_one_minute`
   WHERE Rank = 1
   ```
-

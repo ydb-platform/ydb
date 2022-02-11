@@ -7,8 +7,7 @@ Construct an empty dictionary. Two arguments are passed: for a key and a value. 
 [Documentation for the type definition format](../../types/type_string.md).
 
 **Examples**
-
-```yql
+``` yql
 SELECT DictCreate(String, Tuple<String,Double?>);
 ```
 
@@ -23,8 +22,7 @@ Construct an empty set. An argument is passed: the key type that can be built by
 [Documentation for the type definition format](../../types/type_string.md).
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetCreate(String);
 ```
 
@@ -34,38 +32,29 @@ SELECT SetCreate(Tuple<Int32?,String>);
 
 ## DictLength {#dictlength}
 
-The count of items in the dictionary.
+The count of elements in the dictionary.
 
 **Examples**
-
-```yql
+``` yql
 SELECT DictLength(AsDict(AsTuple(1, AsList("foo", "bar"))));
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictLength(dict_column) FROM my_table;
 ```
-
 {% endif %}
-
 ## DictHasItems {#dicthasitems}
 
-Check that the dictionary contains at least one item.
+Check that the dictionary contains at least one element.
 
 **Examples**
-
-```yql
+``` yql
 SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictHasItems(dict_column) FROM my_table;
 ```
-
 {% endif %}
 
 ## DictItems {#dictitems}
@@ -74,58 +63,47 @@ Get dictionary contents as a list of tuples including key-value pairs (`List<Tup
 
 **Examples**
 
-```yql
+``` yql
 SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ ( 1, [ "foo", "bar" ] ) ]
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictItems(dict_column)
 FROM my_table;
 ```
-
 {% endif %}
-
 ## DictKeys {#dictkeys}
 
 Get a list of dictionary keys.
 
 **Examples**
 
-```yql
+``` yql
 SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ 1 ]
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictKeys(dict_column)
 FROM my_table;
 ```
-
 {% endif %}
-
 ## DictPayloads {#dictpayloads}
 
 Get a list of dictionary values.
 
 **Examples**
 
-```yql
+``` yql
 SELECT DictPayloads(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ [ "foo", "bar" ] ]
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictPayloads(dict_column)
 FROM my_table;
 ```
-
 {% endif %}
 
 ## DictLookup {#dictlookup}
@@ -134,21 +112,18 @@ Get a dictionary element by its key.
 
 **Examples**
 
-```yql
+``` yql
 SELECT DictLookup(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("bar", "baz"))
 ), 1);
 -- [ "foo", "bar" ]
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictLookup(dict_column, "foo")
 FROM my_table;
 ```
-
 {% endif %}
 
 ## DictContains {#dictcontains}
@@ -157,21 +132,18 @@ Checking if an element in the dictionary using its key. Returns true or false.
 
 **Examples**
 
-```yql
+``` yql
 SELECT DictContains(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("bar", "baz"))
 ), 42);
 -- false
 ```
-
 {% if feature_column_container_type %}
-
-```yql
+``` yql
 SELECT DictContains(dict_column, "foo")
 FROM my_table;
 ```
-
 {% endif %}
 
 ## DictAggregate {#dictaggregate}
@@ -194,6 +166,7 @@ SELECT DictAggregate(AsDict(
     AsTuple(2, AsList("baz", "qwe"))), 
     AggregationFactory("Max"));
 -- {1 : "foo", 2 : "qwe" }
+
 ```
 
 ## SetIsDisjoint {#setisjoint}
@@ -222,8 +195,7 @@ Arguments:
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1,V2) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetIntersection(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 3 }
 SELECT SetIntersection(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
@@ -242,8 +214,7 @@ So there are two options to make a call:
 * With the `Dict<K,V1>` and `Dict<K,V2>` arguments.
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), AsList(3, 4)); -- false
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), ToSet(AsList(2, 3))); -- true
 ```
@@ -258,8 +229,7 @@ Arguments:
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1?,V2?) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetUnion(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 3, 4 }
 SELECT SetUnion(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
@@ -273,8 +243,7 @@ SELECT SetUnion(
 Construct a dictionary containing all the keys with their values in the first dictionary with no matching key in the second dictionary.
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
 SELECT SetDifference(
     AsDict(AsTuple(1, "foo"), AsTuple(2, "bar")), 
@@ -292,8 +261,7 @@ Arguments:
 * An optional function that combines the values from the source dictionaries to construct the values of the output dictionary. If such a function has the `(K,V1?,V2?) -> U` type, the result type is `Dict<K,U>`. If the function is not specified, the result type is `Dict<K,Void>`, and the values from the source dictionaries are ignored.
 
 **Examples**
-
-```yql
+``` yql
 SELECT SetSymmetricDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 4 }
 SELECT SetSymmetricDifference(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
@@ -301,4 +269,3 @@ SELECT SetSymmetricDifference(
     ($k, $a, $b) -> { RETURN AsTuple($a, $b) });
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
-

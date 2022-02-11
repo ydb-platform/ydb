@@ -12,13 +12,13 @@ Here's the mechanism for putting part of the query into a separate attached file
 
 * `IMPORT my_library SYMBOLS $my_symbol1, $my_symbol2, ...;` makes the listed named expressions available for further use.
 
-{% note info "Примечание" %}
+{% note info %}
 
 You can use the library to include [lambdas](../expressions.md#lambda), [actions](../action.md){% if feature_subquery %}, [named subqueries](../subquery.md){% endif %}, constants and expressions, but __not subqueries or aggregate functions__.
 
 {% endnote %}
 
-{% note warning "Предупреждение" %}
+{% note warning %}
 
 The file linked by the [PRAGMA Library](../pragma.md#library) must be attached to the query. __You can't use a [PRAGMA File](../pragma.md#file) for this purpose__.
 

@@ -3,4 +3,3 @@
 Examples:
 
 {% include [example_yql](query_metrics_example_yql.md) %}
-

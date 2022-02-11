@@ -1,6 +1,6 @@
 # Test app
 
-This section describes the code of test apps implemented using YDB SDKs in different programming languages.
+This section describes the code of test apps implemented using YDB SDK in different programming languages.
 
 A test app performs the following steps:
 

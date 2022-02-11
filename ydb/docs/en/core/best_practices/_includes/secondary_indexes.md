@@ -5,7 +5,7 @@ This section describes how to use [secondary indexes](../../concepts/secondary_i
 In general, transactions using a global index are [distributed transactions](../../concepts/transactions.md#distributed-tx). A query can be executed as a single-shard transaction in the following cases:
 
 * Point read by primary key.
-* Point read by index column if requested data is a primary key, part of it, or there is a copy of the data in a [covering index](../../concepts/secondary_indexes.md#covering)).
+* Point read by index column if requested data is a primary key, part of it, or there is a copy of the data in a [covering index](../../concepts/secondary_indexes.md#covering).
 * Point blind write in a table with an [asynchronous index](../../concepts/secondary_indexes.md#async).
 
 {% note warning %}
@@ -127,4 +127,3 @@ SELECT series_id,
 FROM series view views_index
 WHERE views == 0;
 ```
-

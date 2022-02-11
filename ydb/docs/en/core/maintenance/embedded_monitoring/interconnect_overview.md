@@ -12,4 +12,3 @@ Shows, for every other node:
 * system clock difference
 * connection availability
 * last written error
-

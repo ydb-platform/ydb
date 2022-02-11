@@ -1,6 +1,6 @@
 ---
-title: "Термины и определения {{ ydb-full-name }}"
-description: "База данных (БД) {{ ydb-full-name }} — это изолированное согласованное множество данных, доступ к которому осуществляется через сервис {{ ydb-full-name }}, обеспечивающий масштабируемость, отказоустойчивость, и автоматическую репликацию данных."
+title: "Terms and definitions {{ ydb-full-name }}"
+description: "A database (DB) {{ ydb-full-name }}: is an isolated, consistent set of data that is accessed through the {{ ydb-full-name }}, service, which provides scalability, fault tolerance, and automatic data replication."
 ---
-# Terms and definitions
 
+# Terms and definitions

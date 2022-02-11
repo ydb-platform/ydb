@@ -5,14 +5,12 @@ Both the [console](../../../interfaces/cli.md) and [web](../../../interfaces/web
 The `FileContent` and `FilePath` argument is a string with an alias.
 
 **Examples**
-
-```yql
+``` yql
 SELECT "Content of "
   || FilePath("my_file.txt")
   || ":\n"
   || FileContent("my_file.txt");
 ```
-
 ## FolderPath {#folderpath}
 
 Getting the path to the root of a directory with several "attached" files with the common prefix specified.
@@ -22,8 +20,7 @@ The argument is a string with a prefix among aliases.
 See also [PRAGMA File](../../../syntax/pragma.md#file) and [PRAGMA Folder](../../../syntax/pragma.md#folder).
 
 **Examples**
-
-```yql
+``` yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
 PRAGMA File("foo/2.txt", "http://url/to/somewhere/else");
 PRAGMA File("bar/3.txt", "http://url/to/some/other/place");
@@ -43,20 +40,17 @@ Two required arguments:
 1. List cell type: only strings and numeric types are supported.
 2. The name of the attached file.
 
-{% note info "Примечание" %}
+{% note info %}
 
 The return value is a lazy list. For repeat use, wrap it in the function [ListCollect](../../list.md#listcollect)
 
 {% endnote %}
 
 **Examples:**
-
-```yql
+``` yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
 ```
-
-```yql
+``` yql
 SELECT * FROM my_table
 WHERE int_column IN ParseFile("Int64", "my_file.txt"));
 ```
-

@@ -5,8 +5,7 @@
 `Unpickle()` is the inverse operation (deserialization), where with the first argument being the data type of the result and the second argument is the string with the result of `Pickle()` or `StablePickle()`.
 
 Examples:
-
-```yql
+``` yql
 SELECT *
 FROM my_table
 WHERE Digest::MurMurHash32(
@@ -16,4 +15,3 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
-

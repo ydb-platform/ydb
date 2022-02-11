@@ -1,6 +1,6 @@
 # Re2
 
-**List of functions **
+**List of functions**
 
 * ```Re2::Grep(String) -> (String?) -> Bool```
 * ```Re2::Match(String) -> (String?) -> Bool```
@@ -55,7 +55,8 @@ If you leave out the details of implementation and syntax of regular expressions
 
 ## Re2::Capture {#capture}
 
-Unlike [Pire::Capture](pire.md#capture), `Re2::Capture` supports multiple and named capturing groups.
+Unlike [Pire::Capture](pire.md#capture) ,  `Re2:Capture` supports multiple and named capturing groups.
+
 Result type: a structure with the fields of the type `String?`.
 
 * Each field corresponds to a capturing group with the applicable name.

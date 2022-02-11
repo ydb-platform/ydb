@@ -6,17 +6,16 @@ Data source for `SELECT`. The argument can accept the table name, the result of 
 
 **Examples**
 
-```yql
+``` yql
 SELECT key FROM my_table;
 ```
 
-```yql
+``` yql
 SELECT * FROM
   (SELECT value FROM my_table);
 ```
 
-```yql
+``` yql
 $table_name = "my_table";
 SELECT * FROM $table_name;
 ```
-

@@ -8,11 +8,9 @@ Arguments:
 2. Index: `Uint32`.
 
 **Examples**
-
-```yql
+``` yql
 SELECT
     ByteAt("foo", 0), -- 102
     ByteAt("foo", 1), -- 111
     ByteAt("foo", 9); -- NULL
 ```
-

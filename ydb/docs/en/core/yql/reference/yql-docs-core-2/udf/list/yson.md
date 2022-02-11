@@ -18,7 +18,7 @@ Implementation specifics and functionality of the module:
     * `Yson::Parse***`: Getting a resource with a DOM object from serialized data, with all further operations performed on the obtained resource.
     * `Yson::From`: Getting a resource with a DOM object from simple YQL data types or containers (lists or dictionaries).
     * `Yson::ConvertTo***`: Converting a resource to [primitive data types](../../types/primitive.md) or [containers](../../types/containers.md).
-    * `Yson::Lookup***`: Getting a single list item or a dictionary with optional conversion to the relevant data type.
+    * `Yson::Lookup***`: Getting a single list element or a dictionary with optional conversion to the relevant data type.
     * `Yson::YPath***`: Getting one element from the document tree based on the relative path specified, optionally converting it to the relevant data type.
     * `Yson::Serialize***`: Getting a copy of data from the resource and serializing the data in one of the formats.
 * For convenience, when serialized Yson and Json are passed to functions expecting a resource with a DOM object, implicit conversion using `Yson::Parse` or `Yson::ParseJson` is done automatically. In SQL syntax, the dot or square brackets operator automatically adds a `Yson::Lookup` call. To serialize a resource, you still need to call `Yson::ConvertTo***` ([here's the ticket about CAST syntax support](https://st.yandex-team.ru/YQL-2610)) or `Yson::Serialize***`. It means that, for example, to get the "foo" element as a string from the Yson column named mycolumn and serialized as a dictionary, you can write: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` or `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. In the variant with a dot, special characters can be escaped by [general rules for IDs](../../syntax/expressions.md#escape).
@@ -28,7 +28,7 @@ The module's functions must be considered as "building blocks" from which you ca
 
 * `Yson::Parse*** -> Yson::Serialize***`: Converting from one format to other.
 * `Yson::Parse*** -> Yson::Lookup -> Yson::Serialize***`: Extracting the value of the specified subtree in the source YSON tree.
-* `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***`: Extracting items by a key from the YSON list.
+* `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***`: Extracting elements by a key from the YSON list.
 
 See also examples of combining YSON functions in the [tutorial](https://yql.yandex-team.ru/Tutorial/yt_17_Yson_and_Json).
 
@@ -77,7 +77,7 @@ Yson::ParseJsonDecodeUtf8(String{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 
 The result of all three functions is non-serializable: it can only be passed as the input to other function from the Yson library. However, you can't save it to a table or return to the client as a result of the operation: such an attempt results in a typing error. You also can't return it outside [subqueries](../../syntax/select.md): if you need to do this, call [Yson::Serialize](#ysonserialize), and the optimizer will remove unnecessary serialization and deserialization if materialization isn't needed in the end.
 
-{% note info "Примечание" %}
+{% note info "Note" %}
 
 The `Yson::ParseJsonDecodeUtf8` expects that characters outside the ASCII range must be additionally escaped. For detailed escaping rules, see the [YT code](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/core/misc/utf8_decoder.cpp).
 
@@ -161,7 +161,7 @@ Yson::ConvertToDoubleDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,String>
 ```
 
-{% note warning "Внимание" %}
+{% note warning "Attention" %}
 
 These functions do not do implicit type casting by default, that is, the value in the argument must exactly match the function called.
 
@@ -176,6 +176,7 @@ Yson::Contains(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Bool?
 ```
 
 Checks for a key in the dictionary. If the object type is a map, then it searches among the keys.
+
 If the object type is a list, then the key must be a decimal number, i.e., an index in the list.
 
 ## Yson::Lookup... {#ysonlookup}

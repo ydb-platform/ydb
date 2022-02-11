@@ -10,7 +10,7 @@ Arguments:
 The result is a table with three fixed columns:
 
 1. **Path** (`String`): The full name of the table.
-2. **Type** (`String`): The node type (table, map_node, file, document, and others).;
+2. **Type** (`String`): The node type (table, map_node, file, document, and others).
 3. **Attributes** (`Yson`) is a Yson dictionary with meta attributes ordered in the second argument.
 
 Recommendations for use:
@@ -19,7 +19,7 @@ Recommendations for use:
 * Since the Path column is output in the same format as the result of the function [TablePath()](../../../builtins/basic.md#tablepath), then they can be used to JOIN table attributes to its rows.
 * We recommend that you work with the Attributes column using [Yson UDF](../../../udf/list/yson.md).
 
-{% note warning "Внимание" %}
+{% note warning %}
 
 Use FOLDER with attributes containing large values with caution (`schema` could be one of those). A query with FOLDER applied to a folder with a large number of tables and a heavy attribute can create a heavy load on the YT wizard.
 
@@ -27,7 +27,7 @@ Use FOLDER with attributes containing large values with caution (`schema` could 
 
 **Examples:**
 
-```yql
+``` yql
 USE hahn;
 
 $table_paths = (
@@ -41,4 +41,3 @@ $table_paths = (
 
 SELECT COUNT(*) FROM EACH($table_paths);
 ```
-

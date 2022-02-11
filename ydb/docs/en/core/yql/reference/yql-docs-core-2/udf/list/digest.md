@@ -2,7 +2,7 @@
 
 A set of commonly used hash functions.
 
-**List of functions **
+**List of functions**
 
 * ```Digest::Crc32c(String{Flags::AutoMap}) -> Uint32```
 * ```Digest::Fnv32(String{Flags::AutoMap}) -> Uint32```

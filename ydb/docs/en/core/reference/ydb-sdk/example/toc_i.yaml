@@ -4,7 +4,7 @@ items:
 - name: C++
   href: example-cpp.md
   when: oss
-- name: C # (.NET)
+- name: C# (.NET)
   href: example-dotnet.md
 - name: Go
   href: example-go.md

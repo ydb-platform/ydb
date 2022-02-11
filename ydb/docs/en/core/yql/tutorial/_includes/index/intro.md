@@ -1,11 +1,12 @@
 ---
-title: Туториал по YQL. Базовые операции
-description: Из этого туториала вы узнаете, как выполнять базовые операции с данными и познакомитесь с синтаксисом YQL.
+title: YQL tutorial. Basic operations
+description: From this tutorial, you will learn how to perform basic operations with data and get familiar with the YQL syntax.
 keywords:
   - yql
-  - туториал yql
-  - базовые операции yql
+  - yql tutorial
+  - yql basic operations
 ---
+
 # Overview
 
 From this tutorial, you will learn how to perform basic operations with data in {{ ydb-short-name }} and get familiar with the YQL syntax.

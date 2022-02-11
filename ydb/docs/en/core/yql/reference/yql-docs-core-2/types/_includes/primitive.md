@@ -26,7 +26,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
 | Type | Bool | Int | Uint | Float | Double | Decimal |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Bool ** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No | Yes | No |
+| **Bool** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No | Yes | No |
 | **INT** | Yes<sup>2</sup> | — | Yes<sup>3</sup> | Yes | Yes | Yes |
 | **Uint** | Yes<sup>2</sup> | Yes | — | Yes | Yes | Yes |
 | **Float** | Yes<sup>2</sup> | Yes | Yes | — | Yes | No |
@@ -42,16 +42,18 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 | **Timestamp** | No | Yes | Yes | Yes | Yes | No |
 | **Interval** | No | Yes | Yes | Yes | Yes | No |
 
-<sup>1</sup> `True` is converted to `1` and `False` to `0`.
+<sup>1</sup> `True` is converted to `1`, `False` is converted to `0`.
+
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
-<sup>3</sup> Possible only in the case of a non-negative value.
+
+<sup>3</sup> his is possible only in the case of a non-negative value.
 <sup>4</sup> Using the built-in function [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
 ### Converting to date and time data types
 
 | Type | Date | Datetime | Timestamp | Interval |
 | --- | --- | --- | --- | --- |
-| **Bool ** | No | No | No | No |
+| **Bool** | No | No | No | No |
 | **INT** | Yes | Yes | Yes | Yes |
 | **Uint** | Yes | Yes | Yes | Yes |
 | **Float** | No | No | No | No |
@@ -71,7 +73,7 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 
 | Type | String | Utf8 | Json | Yson | Uuid |
 | --- | --- | --- | --- | --- | --- |
-| **Bool ** | Yes | No | No | No | No |
+| **Bool** | Yes | No | No | No | No |
 | **INT** | Yes | No | No | No | No |
 | **Uint** | Yes | No | No | No | No |
 | **Float** | Yes | No | No | No | No |

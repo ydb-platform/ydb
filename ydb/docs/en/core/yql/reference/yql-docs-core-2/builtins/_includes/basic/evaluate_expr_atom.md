@@ -17,12 +17,10 @@ Restrictions:
 * This functionality is fully locked in YQL over YDB.
 
 **Examples:**
-
-```yql
+``` yql
 $now = CurrentUtcDate();
 SELECT EvaluateExpr(
     DateTime::MakeDate(DateTime::StartOfWeek($now)
     )
 );
 ```
-

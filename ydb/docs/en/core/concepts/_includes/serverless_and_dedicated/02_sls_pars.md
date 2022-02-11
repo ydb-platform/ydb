@@ -39,4 +39,3 @@ The **Maximum amount of data** limit for a serverless database limits the amount
 You can change the **Maximum amount of data** limit interactively at any time, both via the graphical console and the CLI and raise or reduce it without limitations. This allows you to quickly adjust it as needed.
 
 We don't recommend setting the **Maximum amount of data** limit below the current actual amount because in this state, all data modification operations, including DELETE, become unavailable. You will only be able to reduce the amount of data with the DROP TABLE or DROP INDEX commands. If the limit is accidentally set below the actual volume, we recommend returning it to the operating value exceeding the actual volume with some redundancy.
-

@@ -2,7 +2,7 @@
 
 Functions for ASCII strings:
 
-**List of functions **
+**List of functions**
 
 * ```String::Base64Encode(String{Flags:AutoMap}) -> String```
 
@@ -63,12 +63,12 @@ Functions for ASCII strings:
 * ```String::AsciiToTitle(String{Flags:AutoMap}) -> String```: Changes only Latin characters. For working with other alphabets, see Unicode::ToTitle
 
 * ```String::SplitToList( String?, String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>```
-Первый аргумент -- исходная строка
-Второй аргумент -- разделитель
-Третий аргумент -- параметры:
+  The first argument is the source string
+  The second argument is a delimiter
+  The third argument includes the following parameters:
     - DelimeterString:Bool? — treating a delimiter as a string (true, by default) or a set of characters "any of" (false)
-    - SkipEmpty:Bool? - whether to skip empty strings in the result, is false by default
-    - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last item
+    - SkipEmpty:Bool? — whether to skip empty strings in the result, is false by default
+    - Limit:Uint64? — Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last element
 
 * ```String::JoinFromList(List<String>{Flags:AutoMap}, String) -> String```
 

@@ -16,13 +16,13 @@ An example of the page layout is shown in the screenshot below.
 
 In the upper-right corner of the page, you can see details about the node that created the current page:
 
-* host
-* node uptime
-* ydb version run by the node
+* host.
+* node uptime.
+* ydb version run by the node.
 
 Below is the cluster summary:
 
-* cluster name, list of running tablets
+* cluster name, list of running tablets.
 * **Nodes**: The number of nodes.
 * **Load**: The total CPU utilization level on all nodes.
 * **Storage**: The used/total storage space.
@@ -77,6 +77,7 @@ http://<endpoint>:8765/monitoring/node/<node-id>/
 Information about the node is presented in the following sections:
 
 * **Pools**: CPU utilization broken down by the internal stream pools, with roughly the following pool functions:
+
   * **System**: The tasks of critical system components.
   * **User**: User tasks, queries executed by tablets.
   * **Batch**: Long-running background tasks.
@@ -86,12 +87,14 @@ Information about the node is presented in the following sections:
   High pool utilization might degrade performance and increase the system response time.
 
 * **Common info**: Basic information about the node:
+
   * **Version**: The {{ ydb-short-name }} version.
   * **Uptime**: The node uptime.
   * **DC**: The availability zone where the node resides.
   * **Rack**: The ID of the rack where the node resides.
 
 * **Load average**: Average host CPU utilization for different time intervals:
+
   * 1 minute.
   * 5 minutes.
   * 15 minutes.
@@ -149,6 +152,7 @@ In the `Tenant Info` section, you can see the following information:
 * **Pools**: The total CPU utilization by the tenant nodes broken down by internal stream pools (for more information about pools, see the [tenant page](#tenant_page)).
 
 * **Metrics**: Data about tablet utilization for this tenant:
+
   * **Memory**: The RAM utilized by tablets.
   * **CPU**: CPU utilized by tablets.
   * **Storage**: The amount of data stored by tablets.
@@ -223,4 +227,3 @@ The indicator colors have the following meaning:
 * **Red**: There are critical problems, the component is down (or runs with limitations).
 
 If a component includes other components, then in the absence of its own issues, the state is determined by aggregating the states of its parts.
-

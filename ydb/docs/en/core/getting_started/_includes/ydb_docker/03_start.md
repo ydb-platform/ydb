@@ -34,4 +34,3 @@ It may take several minutes to initialize the Docker container, depending on the
 * `YDB_LOCAL_SURVIVE_RESTART=true` enables you to restart a container without losing data.
 * `YDB_USE_IN_MEMORY_PDISKS=true` enables you to store all your data in memory. If this option is enabled, restarting the container with a local {{ ydb-short-name }} instance will result in complete data loss.
 * `YDB_DEFAULT_LOG_LEVEL=<level>` enables you to set the logging level.. Valid levels: `CRIT`, `ERROR`, `WARN`, `NOTICE`, `INFO`.
-

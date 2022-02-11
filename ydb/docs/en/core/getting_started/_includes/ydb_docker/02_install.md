@@ -18,4 +18,3 @@ Output:
 REPOSITORY                             TAG       IMAGE ID       CREATED        SIZE
 cr.yandex/yc/yandex-docker-local-ydb   latest    b73c5c1441af   2 months ago   793MB
 ```
-

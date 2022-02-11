@@ -1,7 +1,8 @@
 ---
-title: "Yandex Database. Ответы на вопросы"
-description: "Что такое Yandex Database? Для каких задач стоит использовать Yandex Database, а для каких виртуальные машины с базами данных? Какую часть работы по управлению и сопровождению баз данных берет на себя Yandex Database? Ответы на эти и другие вопросы в данной статье."
+title: "Yandex Database. FAQ"
+description: "What is Yandex Database? For what tasks is it worth using Yandex Database, and for which virtual machines with databases? What part of the management and maintenance of databases does Yandex Database take on? Answers to these and other questions in this article."
 ---
+
 # General questions about {{ ydb-name }}
 
 #### What is {{ ydb-short-name }}? {#what-is-ydb}

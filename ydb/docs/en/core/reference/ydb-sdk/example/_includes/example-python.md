@@ -1,10 +1,10 @@
-# Приложение на Python
+# App in Python
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1), доступного в составе [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk) {{ ydb-short-name }}.
+This page contains a detailed description of the code of a [test app](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk).
 
 {% include [init.md](steps/01_init.md) %}
 
-Фрагмент кода приложения для инициализации драйвера:
+App code snippet for driver initialization:
 
 ```python
 def run(endpoint, database, path):
@@ -22,7 +22,7 @@ def run(endpoint, database, path):
             exit(1)
 ```
 
-Фрагмент кода приложения для создания сессии:
+App code snippet for creating a session:
 
 ```python
 session = driver.table_client.session().create()
@@ -30,7 +30,7 @@ session = driver.table_client.session().create()
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `session.create_table()`:
+To create tables, use the `session.create_table()` method:
 
 ```python
 def create_tables(session, path):
@@ -45,7 +45,7 @@ def create_tables(session, path):
     )
 ```
 
-С помощью метода `session.describe_table()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+You can use the `session.describe_table()` method to output information about the table structure and make sure that it was properly created:
 
 ```python
 def describe_table(session, path, name):
@@ -55,7 +55,7 @@ def describe_table(session, path, name):
         print("column, name:", column.name, ",", str(column.type.item).strip())
 ```
 
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+The given code snippet outputs the following text to the console at startup:
 
 ```bash
 > describe table: series
@@ -69,10 +69,10 @@ def describe_table(session, path, name):
 
 {% include [create_table.md](steps/03_query_processing.md) %}
 
-Для выполнения YQL-запросов используется метод `session.transaction().execute()`.
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
+To execute YQL queries, use the `session.transaction().execute()` method.
+The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
 
-В фрагменте кода, приведенном ниже, транзакция выполняется с помощью метода `transaction().execute()`. Устанавливается режим выполнения транзакции `ydb.SerializableReadWrite()`. После завершения всех запросов транзакции она будет автоматически завершена с помощью явного указания флага: `commit_tx=True`. Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `execute`.
+In the code snippet below, the transaction is executed using the `transaction().execute()` method. The transaction execution mode set is `ydb.SerializableReadWrite()`. When all the queries in the transaction are completed, the transaction is automatically committed by explicitly setting the flag: `commit_tx=True`. The query body is described using the YQL syntax and is passed to the `execute` method as a parameter.
 
 ```python
 def select_simple(session, path):
@@ -98,7 +98,7 @@ def select_simple(session, path):
 
 {% include [results_processing.md](steps/04_results_processing.md) %}
 
-В качестве результата выполнения запроса возвращается `result_set`:
+When the query is executed, `result_set` is returned:
 
 ```python
 print("\n> select_simple_transaction:")
@@ -106,7 +106,7 @@ for row in result_sets[0].rows:
     print("series, id: ", row.series_id, ", title: ", row.title, ", release date: ", row.release_date)
 ```
 
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+The given code snippet outputs the following text to the console at startup:
 
 ```bash
 > SelectSimple:
@@ -115,7 +115,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 {% include [write_queries.md](steps/05_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
+Code snippet for inserting and updating data:
 
 ```python
 def upsert_simple(session, path):
@@ -162,7 +162,7 @@ def select_prepared(session, path, series_id, season_id, episode_id):
     return result_sets[0]
 ```
 
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+The given code snippet outputs the following text to the console at startup:
 
 ```bash
 > select_prepared_transaction:
@@ -192,7 +192,7 @@ def executeScanQuery(driver):
 
 {% include [transaction_control.md](steps/10_transaction_control.md) %}
 
-Фрагмент кода, демонстрирующий явное использование вызовов `transaction().begin()` и `tx.Commit()`:
+Code snippet for `transaction().begin()` and `tx.Commit()` calls:
 
 ```python
 def explicit_tcl(session, path, series_id, season_id, episode_id):

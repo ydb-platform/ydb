@@ -50,7 +50,7 @@ SELECT * FROM $union
 ORDER BY city, number LIMIT $limit;
 ```
 
-{% note warning "Значение NULL в ключевой колонке" %}
+{% note warning "NULL value in key column" %}
 
 In YDB, all columns, including key ones, may have a NULL value. Despite this, using NULL as key column values is highly discouraged, since the SQL standard doesn't allow NULL to be compared. As a result, concise SQL statements with simple comparison operators won't work correctly. Instead, you'll have to use cumbersome statements with IS NULL/IS NOT NULL expressions.
 
@@ -59,7 +59,6 @@ In YDB, all columns, including key ones, may have a NULL value. Despite this, us
 ## Examples of paginated output implementation
 
 {% if oss %}
-
 * [C++](https://a.yandex-team.ru/arc/trunk/arcadia/kikimr/public/sdk/cpp/examples/pagination)
 {% endif %}
 * [Java](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/src/main/java/com/yandex/ydb/examples/pagination)

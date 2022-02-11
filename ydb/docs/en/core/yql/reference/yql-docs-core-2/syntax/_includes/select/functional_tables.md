@@ -18,7 +18,7 @@ The following functions are defined for these purposes:
 
 ```FILTER(`prefix`, `callable`, `suffix`, `view`)```: The `callable` argument must be a callable expression with the `(String)->Bool` signature that will be called for each table/subdirectory in the prefix folder. The query will only include those tables for which the callable value returned `true`. It is most convenient to use, as callable values, [lambda functions](../../expressions.md#lambda){% if yql == true %} or user-defined functions (UDF) written in [Python](../../../udf/python.md) or [JavaScript](../../../udf/javascript.md){% endif %}.
 
-{% note warning "Внимание" %}
+{% note warning %}
 
 All of the above functions don't guarantee the order of the table union.
 
@@ -36,7 +36,7 @@ To get the name of the source table from which you originally obtained each row,
 
 **Examples:**
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM CONCAT(
   `table1`,
@@ -44,7 +44,7 @@ SELECT * FROM CONCAT(
   `table3`);
 ```
 
-```yql
+``` yql
 USE some_cluster;
 $indices = ListFromRange(1, 4);
 $tables = ListMap($indices, ($index) -> {
@@ -53,19 +53,19 @@ $tables = ListMap($indices, ($index) -> {
 SELECT * FROM EACH($tables); -- Identical to the previous example
 ```
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM RANGE(`my_folder`);
 ```
 
-```yql
+``` yql
 SELECT * FROM some_cluster.RANGE( -- You can specify the cluster before the function name
   `my_folder`,
   `from_table`,
   `to_table`);
 ```
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -74,7 +74,7 @@ SELECT * FROM RANGE(
   `my_table`);
 ```
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
@@ -84,7 +84,7 @@ SELECT * FROM RANGE(
   `my_view`);
 ```
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM LIKE(
   `my_folder`,
@@ -92,7 +92,7 @@ SELECT * FROM LIKE(
 );
 ```
 
-```yql
+``` yql
 USE some_cluster;
 SELECT * FROM REGEXP(
   `my_folder`,
@@ -100,7 +100,7 @@ SELECT * FROM REGEXP(
 );
 ```
 
-```yql
+``` yql
 $callable = ($table_name) -> {
     return $table_name > "2017-03-13";
 };
@@ -111,4 +111,3 @@ SELECT * FROM FILTER(
   $callable
 );
 ```
-

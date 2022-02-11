@@ -2,7 +2,7 @@
 
 The `Ip`  module supports both the IPv4 and IPv6 addresses. By default, they are represented as binary strings of 4 and 16 bytes, respectively.
 
-**List of functions **
+**List of functions**
 
 * ```Ip::FromString(String{Flags:AutoMap}) -> String?``` - From a human-readable representation to a binary representation.
 * ```Ip::ToString(String{Flags:AutoMap}) -> String?``` - From a binary representation to a human-readable representation.

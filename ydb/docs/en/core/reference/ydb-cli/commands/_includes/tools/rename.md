@@ -22,7 +22,7 @@ ydb tools rename --help
 | Parameter name | Parameter description |
 | --- | --- |
 | `--timeout <value>` | Operation timeout, ms. |
-| `--item <свойство>=<value>,...` | Operation parameters. Possible values:<br/><ul><li>`destination`, `dst`, or `d`: Required parameter, the path to the destination table. If the destination path contains directories, they must be created in advance.</li> <li>`source`, `src`, or `s`: Required parameter, the path of the source table.</li><li>`replace`, `force`: Optional parameter. If the value is `True`, the destination table must exist and will be overwritten. `False`: The destination table must not exist. Default value: `False`.</li></ul> |
+| `--item <value>=<value>,...` | Operation parameters. Possible values:<br/><ul><li>`destination`, `dst`, or `d`: Required parameter, the path to the destination table. If the destination path contains directories, they must be created in advance.</li> <li>`source`, `src`, or `s`: Required parameter, the path of the source table.</li><li>`replace`, `force`: Optional parameter. If the value is `True`, the destination table must exist and will be overwritten. `False`: The destination table must not exist. Default value: `False`.</li></ul> |
 
 ## Examples {#examples}
 

@@ -56,7 +56,7 @@ You can enable running read replicas for each shard of the table in the table da
 
 The internal state of each of the followers is restored exactly and fully consistently from the leader state.
 
-Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions#modes) `StaleReadOnly()`.
+Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions.md#modes) `StaleReadOnly()`.
 
 If there are multiple followers, their delay from the leader may vary: although each follower of each of the shards retains internal consistency, artifacts may be observed between different shards. Please allow for this in your application code. For that same reason, it's currently impossible to perform cross-shard transactions from followers.
 

@@ -9,4 +9,3 @@ YDB can be used as an alternative solution in the following cases:
 * In systems with unpredictable or seasonally fluctuating load (you can add/reduce computing resources on request and/or in serverless mode).
 * In high-load systems that shard load across relational DB instances.
 * When developing a new product that has no reliable forecast of expected load or is natively designed for an expected high load beyond the capabilities of traditional relational databases.
-

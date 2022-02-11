@@ -35,7 +35,7 @@ items:
         href: commands/scan-query.md
       - name: Utilities
         items:
-        # - name: Копирование таблиц
+        # - name: Copy tables
         #   href: commands/tools/copy.md
         - name: Renaming tables
           href: commands/tools/rename.md

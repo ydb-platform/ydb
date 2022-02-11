@@ -21,7 +21,7 @@ WHERE  ...
 
 At each JOIN step, rules are used to establish correspondences between rows in the left-hand and right-hand data selections, creating a new selection that includes every combination of rows that meet the JOIN conditions.
 
-{% note warning "Внимание" %}
+{% note warning %}
 
 Since columns in YQL are identified by their names, and you can't have two columns with the same name in the selection, `SELECT * FROM ... JOIN ...` can't be executed if there are columns with identical names in the joined tables.
 
@@ -38,11 +38,11 @@ Since columns in YQL are identified by their names, and you can't have two colum
 * `CROSS`: A full cartesian product of two tables without specifying key columns and no explicit `ON/USING`.
 * `EXCLUSION`: Both sides minus the intersection.
 
-(../_assets/join-YQL-06.png)
+![](../_assets/join-YQL-06.png)
 
-{% note info "Примечание" %}
+{% note info %}
 
-`NULL` is a special value to denote nothing. Hence, `NULL` values on both sides are **НЕ** treated as equal to each other. This eliminates ambiguity in some types of `JOIN` and avoids a giant Cartesian product otherwise created.
+`NULL` is a special value to denote nothing. Hence, `NULL` values on both sides are **NOT** treated as equal to each other. This eliminates ambiguity in some types of `JOIN` and avoids a giant Cartesian product otherwise created.
 
 {% endnote %}
 

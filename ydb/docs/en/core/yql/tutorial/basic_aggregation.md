@@ -8,7 +8,7 @@ Find out the number of unique episodes within every season of every series.
 SELECT
     series_id,
     season_id,
-    COUNT(*) AS cnt     -- Aggregation function COUNT returns the number of rows
+    COUNT(*) AS cnt  -- Aggregation function COUNT returns the number of rows
                      -- output by the query.
                      -- Asterisk (*) specifies that COUNT
                      -- counts the total number of rows in the table.
@@ -19,8 +19,8 @@ SELECT
 FROM episodes
 
 GROUP BY
-    series_id,          -- The query result will follow the listed order of columns
-    season_id -- Multiple columns are separated by a comma.
+    series_id,       -- The query result will follow the listed order of columns.
+    season_id        -- Multiple columns are separated by a comma.
                      -- Other columns can be listed after a SELECT only if
                      -- they are passed to an aggregate function.
 ORDER BY
@@ -30,4 +30,3 @@ ORDER BY
 
 COMMIT;
 ```
-

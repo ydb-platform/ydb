@@ -1,6 +1,6 @@
 # Updating data with UPDATE
 
-Update data in the table using the [UPDATE](../reference/syntax/update.md) operator:
+Update data in the table using the [UPDATE](../reference/syntax/update.md) operator.
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
@@ -45,4 +45,3 @@ SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
 
 COMMIT;
 ```
-

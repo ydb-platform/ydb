@@ -1,13 +1,13 @@
 | Type | Description | Notes |
 | ----- | ----- | ----- |
 | `String` | A string that can contain any binary data |
-| `Utf8` | Text encoded in[UTF-8](https://en.wikipedia.org/wiki/UTF-8) |
+| `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) |
 | `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Yson` | [YSON](https://yt.yandex-team.ru/docs/description/common/yson.html) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) | Not supported for table columns |
 
-{% note info "Ограничения на размер" %}
+{% note info "Cell size restrictions" %}
 
 The maximum value size for a {% if feature_map_tables %}non-key {% endif %} column cell with any string data type is 8 MB.
 

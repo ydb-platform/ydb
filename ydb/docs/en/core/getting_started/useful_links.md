@@ -10,5 +10,5 @@
 * [ydb-announces@](https://ml.yandex-team.ru/lists/ydb-announces/): newsletter for announcements
 * [st/YDBREQUESTS](https://st.yandex-team.ru/YDBREQUESTS/): Tracker queue for user requests
 * [st/YDBOPS](https://st.yandex-team.ru/YDBOPS/): Tracker queue for service operation issues and resolving incidents
-* [st/KIKIMR](https://st.yandex-team.ru/KIKIMR/): Tracker queue for YandexDB/KiKiMR development tasks {% endif %}
-
+* [st/KIKIMR](https://st.yandex-team.ru/KIKIMR/): Tracker queue for YandexDB/KiKiMR development tasks
+{% endif %}

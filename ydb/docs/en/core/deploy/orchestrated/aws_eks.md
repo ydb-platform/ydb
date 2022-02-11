@@ -18,7 +18,7 @@ To create a [{{ ydb-name }}](https://cloud.yandex.ru/docs/ydb/) cluster using [{
 
     {% endnote %}
 
-    {% cut "Как создать кластер {{ k8s }}" %}
+    {% cut "How to create a {{ k8s }} cluster" %}
 
     {% list tabs %}
 

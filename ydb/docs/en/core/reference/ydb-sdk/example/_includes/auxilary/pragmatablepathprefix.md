@@ -6,4 +6,3 @@ SELECT * FROM episodes;
 ```
 
 For more information about PRAGMA YQL, see the [YQL documentation](../../../../../yql/reference/index.md).
-

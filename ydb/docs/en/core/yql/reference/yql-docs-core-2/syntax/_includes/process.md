@@ -24,7 +24,7 @@ In the list of function arguments after the `USING` keyword, you can pass one of
 * `TableRow()`: The entire current row in the form of a structure.
 * `TableRows()`: A lazy iterator by strings, in terms of the types `Stream<Struct...>>`. In this case, the output type of the function can only be `Stream<OutputType>` or `List<OutputType>`.
 
-{% note info "Примечание" %}
+{% note info %}
 
 After executing `{{ process_command }}`, within the same query, on the resulting table (or tables), you can perform {% if select_command != "SELECT STREAM" %}[SELECT](../select.md), [REDUCE](../reduce.md){% else %}[SELECT STREAM](../select_stream.md){% endif %}, [INSERT INTO](../insert_into.md), other `{{ process_command }}` and so on, depending on the intended result.
 

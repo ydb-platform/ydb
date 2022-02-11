@@ -7,11 +7,10 @@ To commit in the same way automatically after each expression in the query, you 
 
 **Examples:**
 
-```yql
+``` yql
 INSERT INTO result1 SELECT * FROM my_table;
 INSERT INTO result2 SELECT * FROM my_table;
 COMMIT;
 -- result2 will already include the SELECT contents from the second line:
 INSERT INTO result3 SELECT * FROM result2;
 ```
-

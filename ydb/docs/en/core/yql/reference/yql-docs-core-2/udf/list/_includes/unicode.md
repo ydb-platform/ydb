@@ -2,20 +2,20 @@
 
 Functions for Unicode strings.
 
-**List of functions **
+**List of functions**
 
 * ```Unicode::IsUtf(String) -> Bool```
-Проверяет является ли строка валидной utf-8 последовательностью. Например, строка ```"\xF0"``` isn't a valid UTF-8 sequence, but the ```"\xF0\x9F\x90\xB1"```  string correctly describes a UTF-8 cat emoji.
+Checks whether a string is a valid UTF-8 sequence. For example, the string ```"\xF0"``` isn't a valid UTF-8 sequence, but the string ```"\xF0\x9F\x90\xB1"```  correctly describes a UTF-8 cat emoji.
 
 * ```Unicode::GetLength(Utf8{Flags:AutoMap}) -> Uint64```
-Возвращает длину utf-8 строки в символах (unicode code points). Суррогатные пары учитываются как один символ.
+Returns the length of a utf-8 string in unicode code points. Surrogate pairs are counted as one character.
 
 * ```Unicode::Find(Utf8{Flags:AutoMap}, Utf8, [Uint64?]) -> Uint64?```
 
 * ```Unicode::RFind(Utf8{Flags:AutoMap}, Utf8, [Uint64?]) -> Uint64?```
 
 * ```Unicode::Substring(Utf8{Flags:AutoMap}, from:Uint64?, len:Uint64?) -> Utf8```
-Возвращает подстроку начиная с символа ```from``` with the length of ```len``` characters. If the ```len``` argument is omitted, the substring is taken to the end of the source string.
+Returns a substring starting with ```from``` with the length of ```len``` characters. If the ```len``` argument is omitted, the substring is moved to the end of the source string.
 
 * The ```Unicode::Normalize...``` functions convert the passed UTF-8 string to a [normalization form](https://unicode.org/reports/tr15/#Norm_Forms):
   * ```Unicode::Normalize(Utf8{Flags:AutoMap}) -> Utf8``` -- NFC
@@ -25,31 +25,31 @@ Functions for Unicode strings.
   * ```Unicode::NormalizeNFKC(Utf8{Flags:AutoMap}) -> Utf8```
 
 * ```Unicode::Translit(Utf8{Flags:AutoMap}, [String?]) -> Utf8```
-Транслитерирует в латинский алфавит слова переданной строки, целиком состоящие из символов алфавита языка, переданного вторым аргументом. Если язык не указан, то транслитерация ведется с русского. Доступные языки: "kaz", "rus", "tur", "ukr".
+  Transliterates with Latin letters the words from the passed string, consisting entirely of characters of the alphabet of the language passed by the second argument. If no language is specified, the words are transliterated from Russian. Available languages: "kaz", "rus", "tur", and "ukr".
 
 * ```Unicode::LevensteinDistance(Utf8{Flags:AutoMap}, Utf8{Flags:AutoMap}) -> Uint64```
-Вычисляет расстояние Левенштейна для переданных строк.
+  Calculates the Levenshtein distance for the passed strings.
 
 * ```Unicode::Fold(Utf8{Flags:AutoMap}, [ Language:String?, DoLowerCase:Bool?, DoRenyxa:Bool?, DoSimpleCyr:Bool?, FillOffset:Bool? ]) -> Utf8```
-Выполняет [A case folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) on the passed string. ```Language``` is set according to the same rules as in ```Unicode::Translit()```. ```DoLowerCase``` converts a string to lowercase letters, defaults to ```true```.
+  [A case folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) is performed on the passed string. ```Language``` is set according to the same rules as in ```Unicode::Translit()```. ```DoLowerCase``` converts a string to lowercase letters, defaults to ```true```.
 
 * ```Unicode::ReplaceAll(Utf8{Flags:AutoMap}, Utf8, Utf8) -> Utf8```
-Aргументы: ```input```, ```find```, ```replacement```. Replaces all occurrences of the ```find``` string in the ```input``` with ```replacement```.
+  Arguments: ```input```, ```find```, ```replacement```. Replaces all occurrences of the ```find``` string in the ```input``` with ```replacement```.
 
 * ```Unicode::ReplaceFirst(Utf8{Flags:AutoMap}, Utf8, Utf8) -> Utf8```
-Aргументы: ```input```, ```findSymbol```, ```replacementSymbol```. Replaces the first occurrence of the ```findSymbol``` character in the  ```input``` with ```replacementSymbol```. The character can't be a surrogate pair.
+  Arguments: ```input```, ```findSymbol```, ```replacementSymbol```. Replaces the first occurrence of the ```findSymbol``` character in the  ```input``` with ```replacementSymbol```. The character can't be a surrogate pair.
 
 * ```Unicode::ReplaceLast(Utf8{Flags:AutoMap}, Utf8, Utf8) -> Utf8```
-Aргументы: ```input```, ```findSymbol```, ```replacementSymbol```. Replaces the last occurrence of the ```findSymbol``` character in the ```input``` with ```replacementSymbol```. The character can't be a surrogate pair.
+  Arguments: ```input```, ```findSymbol```, ```replacementSymbol```. Replaces the last occurrence of the ```findSymbol``` character in the ```input``` with ```replacementSymbol```. The character can't be a surrogate pair.
 
 * ```Unicode::RemoveAll(Utf8{Flags:AutoMap}, Utf8) -> Utf8```
-Второй аргумент интерпретируется как неупорядоченный набор символов для удаления. Удаляются все вхождения.
+  The second argument is interpreted as an unordered set of characters to be removed. Removes all occurrences.
 
 * ```Unicode::RemoveFirst(Utf8{Flags:AutoMap}, Utf8) -> Utf8```
-Второй аргумент интерпретируется как неупорядоченный набор символов для удаления. Удаляется первое вхождение.
+  The second argument is interpreted as an unordered set of characters to be removed. Removes the first occurrence.
 
 * ```Unicode::RemoveLast(Utf8{Flags:AutoMap}, Utf8) -> Utf8```
-Второй аргумент интерпретируется как неупорядоченный набор символов для удаления. Удаляется последнее вхождение.
+  The second argument is interpreted as an unordered set of characters to be removed. Removes the last occurrence.
 
 * ```Unicode::ToCodePointList(Utf8{Flags:AutoMap}) -> List<Uint32>```
 
@@ -64,12 +64,12 @@ Aргументы: ```input```, ```findSymbol```, ```replacementSymbol```. Repla
 * ```Unicode::ToTitle(Utf8{Flags:AutoMap}) -> Utf8```
 
 * ```Unicode::SplitToList( Utf8?, Utf8, [ DelimeterString:Bool?,  SkipEmpty:Bool?, Limit:Uint64? ]) -> List<Utf8>```
-Первый аргумент -- исходная строка
-Второй аргумент -- разделитель
-Третий аргумент -- параметры:
+  The first argument is the source string
+  The second argument is a delimiter
+  The third argument includes the following parameters:
     - DelimeterString:Bool? — treating a delimiter as a string (true, by default) or a set of characters "any of" (false)
     - SkipEmpty:Bool? - whether to skip empty strings in the result, is false by default
-    - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last item
+    - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last element
 
 * ```Unicode::JoinFromList(List<Utf8>{Flags:AutoMap}, Utf8) -> Utf8```
 

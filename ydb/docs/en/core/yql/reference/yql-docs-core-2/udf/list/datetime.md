@@ -20,7 +20,7 @@ If the timezone is not GMT, the components store the local time for the relevant
 
 Conversion from a primitive type to an internal representation. It's always successful on a non-empty input.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::Split(Date{Flags:AutoMap}) -> Resource<TM>```
 * ```DateTime::Split(Datetime{Flags:AutoMap}) -> Resource<TM>```
@@ -35,7 +35,7 @@ Functions that accept `Resource<TM>` as input, can be called directly from the p
 
 Making a primitive type from an internal representation. It's always successful on a non-empty input.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date```
 * ```DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime```
@@ -62,7 +62,7 @@ SELECT
 
 Extracting a component from an internal representation.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::GetYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
 * ```DateTime::GetDayOfYear(Resource<TM>{Flags:AutoMap}) -> Uint16```
@@ -97,7 +97,7 @@ SELECT
 
 Updating one or more components in the internal representation. Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::Update( Resource<TM>{Flags:AutoMap}, [ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?```
 
@@ -121,7 +121,7 @@ SELECT
 
 Getting a Timestamp from the number of seconds/milliseconds/microseconds since the UTC epoch. When the Timestamp limits are exceeded, NULL is returned.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp```
 * ```DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp```
@@ -131,7 +131,7 @@ Getting a Timestamp from the number of seconds/milliseconds/microseconds since t
 
 Getting a number of seconds/milliseconds/microseconds since the UTC Epoch from a primitive type.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32```
 * ```DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64```
@@ -149,7 +149,7 @@ SELECT
 
 Conversions between ```Interval``` and various time units.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::ToDays(Interval{Flags:AutoMap}) -> Int16```
 * ```DateTime::ToHours(Interval{Flags:AutoMap}) -> Int32```
@@ -181,7 +181,7 @@ SELECT
 
 Get the start of the period including the date/time. If the result is invalid, NULL is returned. If the timezone is different from GMT, then the period start is in the specified time zone.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::StartOfYear(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::StartOfQuarter(Resource<TM>{Flags:AutoMap}) -> Resource<TM>?```
@@ -226,10 +226,11 @@ SELECT
 
 ## Shift... {#shift}
 
-Add/subtract the specified number of units to/from the component in the internal representation and update the other fields.
+Add/subtract the specified number of units to the component in the internal representation and update the other fields.
+
 Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::ShiftYears(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
 * ```DateTime::ShiftQuarters(Resource<TM>{Flags:AutoMap}, Int32) -> Resource<TM>?```
@@ -256,7 +257,7 @@ SELECT
 
 Get a string representation of a time using an arbitrary formatting string.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::Format(String) -> (Resource<TM>{Flags:AutoMap}) -> String```
 
@@ -290,7 +291,7 @@ SELECT
 
 Parse a string into an internal representation using an arbitrary formatting string. Default values are used for empty fields. If errors are raised, NULL is returned.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?```
 
@@ -324,7 +325,7 @@ SELECT
 
 For the common formats, wrappers around the corresponding util methods are supported. You can only get TM with components in the UTC timezone.
 
-**List of functions **
+**List of functions**
 
 * ```DateTime::ParseRfc822(String{Flags:AutoMap}) -> Resource<TM>?```
 * ```DateTime::ParseIso8601(String{Flags:AutoMap}) -> Resource<TM>?```

@@ -21,26 +21,25 @@ Use cases:
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` or `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;`: Two columns, with different numbers in both.
 
 **Examples**
-
-```yql
+``` yql
 SELECT
     Random(key) -- [0, 1)
 FROM my_table;
 ```
 
-```yql
+``` yql
 SELECT
     RandomNumber(key) -- [0, Max<Uint64>)
 FROM my_table;
 ```
 
-```yql
+``` yql
 SELECT
     RandomUuid(key) -- Uuid version 4
 FROM my_table;
 ```
 
-```yql
+``` yql
 SELECT
     RANDOM(column) AS rand1,
     RANDOM(column) AS rand2, -- same as rand1
@@ -48,4 +47,3 @@ SELECT
     RANDOM(column, 2) AS randAnd2 -- different from randAnd1
 FROM my_table;
 ```
-

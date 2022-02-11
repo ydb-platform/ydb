@@ -10,20 +10,15 @@ Required arguments:
 The arguments can be of the `String` or `Utf8` type and can be optional.
 
 **Examples**
-
-```yql
+``` yql
 SELECT StartsWith("abc_efg", "abc") AND EndsWith("abc_efg", "efg"); -- true
 ```
-
-```yql
+``` yql
 SELECT StartsWith("abc_efg", "efg") OR EndsWith("abc_efg", "abc"); -- false
 ```
-
-```yql
+``` yql
 SELECT StartsWith("abcd", NULL); -- null
 ```
-
-```yql
+``` yql
 SELECT EndsWith(NULL, Utf8("")); -- null
 ```
-

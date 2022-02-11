@@ -15,4 +15,3 @@ The command below checks that all tables saved in the `my_backup_of_basic_exampl
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH tools restore  -p $YDB_DB_PATH/restored_basic_example -i my_backup_of_basic_example/ --dry-run
 ```
-

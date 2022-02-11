@@ -3,8 +3,6 @@
 The absolute value of the number.
 
 **Examples**
-
-```yql
+``` yql
 SELECT Abs(-123); -- 123
 ```
-

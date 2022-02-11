@@ -11,7 +11,7 @@ When choosing N, we recommend that you don't exceed several hundreds or thousand
 
 If your task needs absolutely all values, and their number is measured in dozens of thousands or more, then instead of those aggregate functions better use `JOIN` on the source table with a subquery doing `GROUP BY + MIN/MAX` on the desired columns of this table.
 
-{% note warning "Внимание" %}
+{% note warning "Attention" %}
 
 If the second argument is always NULL, the aggregation result is NULL.
 

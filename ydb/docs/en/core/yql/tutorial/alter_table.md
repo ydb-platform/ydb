@@ -6,7 +6,7 @@ Add a new column to the table and then delete it.
 
 ## Adding a column {#add-column}
 
-Add a non-key column to the existing table
+Add a non-key column to the existing table:
 
 ```sql
 ALTER TABLE episodes ADD COLUMN viewers Uint64;
@@ -19,4 +19,3 @@ Delete the column you added from the table:
 ```sql
 ALTER TABLE episodes DROP COLUMN viewers;
 ```
-

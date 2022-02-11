@@ -19,6 +19,11 @@ default:
   concept_table: ../../../../concepts/datamodel#table
   ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
   ydb_local_docker_image_tag: latest
+  managed-k8s-full-name: Yandex Managed Service for Kubernetes
+  managed-k8s-name: Managed Service for Kubernetes
+  link-console-main: https://console.cloud.yandex.ru
+  s3-storage-host: s3.mds.yandex.net
+  objstorage-name: Object Storage
 
   ydb-cli: ydb
   k8s: Kubernetes

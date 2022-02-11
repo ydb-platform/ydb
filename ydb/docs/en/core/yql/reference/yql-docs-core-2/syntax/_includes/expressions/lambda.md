@@ -12,7 +12,7 @@ One or more of the last lambda parameters can be marked with a question mark as 
 
 **Examples**
 
-```yql
+``` yql
 $f = ($y) -> {
     $prefix = "x";
     RETURN $prefix || $y;
@@ -25,9 +25,8 @@ $h = ($x, $y?) -> ($x + ($y ?? 0));
 SELECT $f("y"), $g("z"), $h(1), $h(2, 3); -- "xy", "xz", 1, 5
 ```
 
-```yql
+``` yql
 -- if the lambda result is calculated by a single expression, then you can use a more compact syntax:
 $f = ($x, $_) -> ($x || "suffix"); -- the second argument is not used
 SELECT $f("prefix_", "whatever");
 ```
-

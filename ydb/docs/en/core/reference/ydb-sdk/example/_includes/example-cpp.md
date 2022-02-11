@@ -430,4 +430,3 @@ static TStatus ExplicitTclTransaction(TSession session, const TString& path, con
 ```
 
 {% include [error_handling.md](steps/50_error_handling.md) %}
-

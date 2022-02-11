@@ -20,14 +20,13 @@ GROUP BY
 * `CUBE` groups the values for every possible combination of columns, generates the subtotals for each group and the overall total.
 * `GROUPING SETS` sets the groups for subtotals.
 
-`You can combine ROLLUP`, `CUBE` and `GROUPING SETS`, separating them by commas.
+You can combine `ROLLUP`, `CUBE` and `GROUPING SETS`, separating them by commas.
 
 ### GROUPING {#grouping}
 
 The values of columns not used in calculations are replaced with `NULL` in the subtotal. In the overall total, the values of all columns are replaced by `NULL`. `GROUPING`: A function that allows you to distinguish the source `NULL` values from the `NULL` values added while calculating subtotals and overall totals.
 
 `GROUPING` returns a bit mask:
-
 * `0`: If `NULL` is used for the original empty value.
 * `1`: If `NULL` is added for a subtotal or overall total.
 

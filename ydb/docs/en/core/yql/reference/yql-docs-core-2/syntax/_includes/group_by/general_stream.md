@@ -14,11 +14,9 @@ You can group by the result of calculating an arbitrary expression from the sour
 Aggregate functions automatically skip `NULL` in their arguments.
 
 Among the columns by which grouping is performed, make sure to use the `HOP` construct to define the time window for grouping.
-
-```yql
+``` yql
 HOP(time_extractor, hop, interval, delay)
 ```
-
 The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the stream's columns and must have the `Timestamp` type. It indicates where exactly to get the time value from input events.
 
 In each stream defined by the values of all the grouping columns, the window moves forward independently of other streams. Advancement of the window is totally dependent on the latest event of the stream. Since records in streams get somewhat mixed in time, the `delay` parameter has been added so you can delay the closing of the window by a specified period. Events arriving before the current window are ignored.
@@ -32,8 +30,7 @@ Functions with omitted `HOP_START` and `HOP_END` parameters, return a value of t
 The **tumbling window** known in other systems is a special case of a **hopping window** when `interval` == `hop`.
 
 **Examples:**
-
-```yql
+``` yql
 SELECT STREAM
     key,
     COUNT(*)
@@ -46,7 +43,7 @@ GROUP BY
 -- delay = 30 seconds
 ```
 
-```yql
+``` yql
 SELECT STREAM
     double_key,
     HOP_END() as time,
@@ -54,6 +51,5 @@ SELECT STREAM
 FROM my_stream
 GROUP BY
     key + key AS double_key,
-    HOP(ts, "PT1М", "PT1M", "PT1M");
+    HOP(ts, "PT1M", "PT1M", "PT1M");
 ```
-

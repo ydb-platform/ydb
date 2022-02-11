@@ -13,4 +13,3 @@ To save the database state locally, mount the `/ydb_data` directory on the host 
 When a local database is running, some tasks may require a significant portion of the host system resources.
 
 {% endnote %}
-

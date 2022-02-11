@@ -7,9 +7,8 @@ For structures and tuples, it deletes elements that are omitted in the target ty
 For more information about casting rules, see [here](../../../types/cast.md).
 {% endif %}
 
-{% include notitle [Десятичные типы](../../../_includes/decimal_args.md) %}
+{% include notitle [Decimal types](../../../_includes/decimal_args.md) %}
 
 **Examples**
 
 {% include [cast_examples](../../../_includes/cast_examples.md) %}
-

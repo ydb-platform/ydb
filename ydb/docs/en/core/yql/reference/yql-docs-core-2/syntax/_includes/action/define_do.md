@@ -4,7 +4,7 @@ Specifies a named action that is a parameterizable block of multiple top-level e
 
 **Syntax**
 
-1. `DEFINE ACTION`: action definition.
+1. `DEFINE ACTION`: Action definition.
 1. [Action name](../../expressions.md#named-nodes) that will be used to access the defined action further in the query.
 1. The values of parameter names are listed in parentheses.
 1. `AS` keyword.
@@ -27,7 +27,7 @@ Executes an `ACTION` with the specified parameters.
 
 {% if feature_mapreduce %} <!-- In fact, if user file system integration is supported in the product. YQL service over YDB may also be here. -->
 
-{% note info "Примечание" %}
+{% note info %}
 
 In large queries, you can use separate files for action definition and include them to the main query using [EXPORT](../../export_import.md#export) + [IMPORT](../../export_import.md#import) so that instead of one long text you can have several logical parts that are easier to navigate. An important nuance: the `USE my_cluster;` directive in the import query does not affect behavior of actions declared in other files.
 
@@ -48,4 +48,3 @@ DO $hello_world(NULL);
 DO $hello_world("John");
 DO $hello_world(NULL, "Earth");
 ```
-

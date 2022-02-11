@@ -6,7 +6,7 @@ The table is created automatically during the first [INSERT INTO](insert_into.md
 
 {% else %}
 
-The `CREATE TABLE` call creates a {% if concept_table %}[таблицу]({{ concept_table }}){% else %}table{% endif %} with the specified data schema{% if feature_map_tables %} and key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It lets you define secondary indexes on the created table.{% endif %}
+The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} with the specified data schema{% if feature_map_tables %} and key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It lets you define secondary indexes on the created table.{% endif %}
 
     CREATE TABLE table_name (
         column1 type1,
@@ -62,7 +62,7 @@ PRIMARY KEY (b, a)
 
 ## Secondary indexes {#secondary_index}
 
-The INDEX construct is used to define a {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
+The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
 ```sql
 CREATE TABLE table_name ( 
@@ -112,7 +112,7 @@ WITH (
 
 Here, key is the name of the parameter and value is its value.
 
-For a list of possible parameter names and their values, see [описания таблицы {{ backend_name }}]({{ concept_table }}).
+For a list of possible parameter names and their values, see [{{ backend_name }} table description]({{ concept_table }}).
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 

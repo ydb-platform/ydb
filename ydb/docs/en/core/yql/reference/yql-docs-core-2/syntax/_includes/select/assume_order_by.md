@@ -6,9 +6,8 @@ As in case of `ORDER BY`, it supports setting the sort order using the keywords 
 
 **Examples:**
 
-```yql
+``` yql
 SELECT key || "suffix" as key, -CAST(subkey as Int32) as subkey
 FROM my_table
 ASSUME ORDER BY key, subkey DESC;
 ```
-

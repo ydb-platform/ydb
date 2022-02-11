@@ -17,7 +17,7 @@ One or more of the last subquery parameters can be marked with a question as opt
 
 {% if feature_mapreduce %}
 
-{% note info "Примечание" %}
+{% note info %}
 
 In large queries, you can use separate files for action definition and include them to the main query using [EXPORT](../export_import.md#export) + [IMPORT](../export_import.md#import) so that instead of one long text you can have several logical parts that are easier to navigate. An important nuance: the `USE my_cluster;` directive in the import query doesn't affect behavior of actions declared in other subquery files.
 

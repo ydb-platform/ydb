@@ -35,4 +35,3 @@ sudo docker exec <CONTAINER-ID> /ydb -e localhost:2135 -d /local table query exe
 | 1       |
 └─────────┘
 ```
-

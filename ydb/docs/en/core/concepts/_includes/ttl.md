@@ -49,7 +49,7 @@ Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two
   - `Uint32`
   - `Uint64`
   - `DyNumber`
-* The value of the TTL column of the numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a value from the [Unix era](https://ru.wikipedia.org/wiki/Unix-время) set in:
+* The value of the TTL column of the numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a value from the [Unix era](https://en.wikipedia.org/wiki/Unix_time) set in:
   - Seconds
   - Milliseconds
   - Microseconds
@@ -62,7 +62,7 @@ Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two
 Currently, you can manage TTL settings using:
 
 * [YQL](../../yql/reference/index.md)
-* [Консольного клиента {{ ydb-short-name }}]{% if audience != "external" %}(https://cloud.yandex.ru/docs/ydb/quickstart/yql-api/ydb-cli){% else %}(../../quickstart/yql-api/ydb-cli.md){% endif %}.
+* [Console client {{ ydb-short-name }}]{% if audience != "external" %}(https://cloud.yandex.com/en-ru/docs/ydb/quickstart/yql-api/ydb-cli){% else %}(../../quickstart/yql-api/ydb-cli.md){% endif %}.
 * {{ ydb-short-name }} {% if oss %}C++ and{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md)
 
 {% note info %}
@@ -241,4 +241,3 @@ The current TTL settings can be obtained from the table description:
   ```
 
 {% endlist %}
-

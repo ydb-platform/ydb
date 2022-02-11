@@ -50,7 +50,7 @@ aws --endpoint-url=https://{{ s3-storage-host }} s3 ls testdbbackups/20200601/
                            PRE series/
 ```
 
-{% note info "Работа с директориями" %}
+{% note info %}
 
 To back up all tables in the YDB directory, specify the path to the directory as the source.
 

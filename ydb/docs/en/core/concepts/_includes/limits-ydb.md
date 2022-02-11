@@ -41,4 +41,3 @@ The table below lists the limits that apply to query execution. The _Call_ colum
 | Maximum number of sessions per cluster node | 1000 | CreateSession | Using the library for working with YDB, an application can create sessions within a connection. Sessions are linked to a node. You can create a limited number of sessions with a single node | OVERLOADED |
 | Maximum query text length | 10 KB | ExecuteDataQuery | Limit on the length of YQL query text | BAD_REQUEST |
 | Maximum size of parameter values | 50 MB | ExecuteDataQuery | Limit on the total size of parameters passed when executing a previously prepared query | BAD_REQUEST |
-

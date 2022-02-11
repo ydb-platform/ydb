@@ -13,31 +13,30 @@ The following values are supported:
 * `COLUMNS` type: Hints that the specified types should be used for columns whose names match the table's column names in the metadata, as well as which columns are additionally present in the table.
 * `IGNORETYPEV3`, `IGNORE_TYPE_V3`: Sets the flag to ignore type_v3 types in the table. The behavior is similar to the [yt.IgnoreTypeV3 pragma](../../pragma.md#ignoretypev3), but for a specific data source.
 
-When setting the `SCHEMA` and `COLUMNS` hints, the type must be a[structure](../../../types/containers.md).
+When setting the `SCHEMA` and `COLUMNS` hints, the type must be a [structure](../../../types/containers.md).
 If you use the `SCHEMA` hint, then with the table functions [EACH](#each), [RANGE](#range), [LIKE](#like), [REGEXP](#regexp), [FILTER](#filter) you can use an empty list of tables that is treated as an empty table with columns defined in the `SCHEMA`.
 
 **Examples:**
 
-```yql
+``` yql
 SELECT key FROM my_table WITH INFER_SCHEMA;
 ```
 
-```yql
+``` yql
 $s = (SELECT COUNT(*) FROM my_table WITH XLOCK);
 
 INSERT INTO my_table WITH TRUNCATE
 SELECT EvaluateExpr($s) AS a;
 ```
 
-```yql
+``` yql
 SELECT key, value FROM my_table WITH SCHEMA Struct<key:String, value:Int32>;
 ```
 
-```yql
+``` yql
 SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 ```
 
-```yql
+``` yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
-

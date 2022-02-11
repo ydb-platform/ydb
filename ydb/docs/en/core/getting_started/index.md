@@ -1,5 +1,6 @@
 ---
-title: Начало работы с Yandex Database (YDB). Обзор
+title: Getting started with Yandex Database (YDB). Overview
 ---
+
 # Getting started with {{ ydb-name }}
 

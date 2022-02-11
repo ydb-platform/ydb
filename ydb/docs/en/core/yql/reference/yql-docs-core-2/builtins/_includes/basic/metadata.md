@@ -11,11 +11,9 @@ No arguments.
 If this data is missing, for example, when you run operations in the embedded mode, the functions return an empty string.
 
 **Examples**
-
-```yql
+``` yql
 SELECT
     CurrentOperationId(),
     CurrentOperationSharedId(),
     CurrentAuthenticatedUser();
 ```
-

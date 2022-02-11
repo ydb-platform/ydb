@@ -6,7 +6,7 @@ The library includes 4 implementations that use different sets of processor inst
 
 By default, all functions work in the single-byte mode. However, if the regular expression is a valid UTF-8 string but is not a valid ASCII string, the UTF-8 mode is enabled automatically.
 
-**List of functions **
+**List of functions**
 
 * ```Hyperscan::Grep(String) -> (String?) -> Bool```
 * ```Hyperscan::Match(String) -> (String?) -> Bool```
@@ -28,6 +28,7 @@ SELECT * FROM table WHERE $re(key); -- use it to filter the table
 
 **Please note** escaping of special characters in regular expressions. Be sure to use the second slash, since all the standard string literals in SQL can accept C-escaped strings, and the `\d` sequence is not valid sequence (even if it were, it wouldn't search for numbers as intended).
 
+
 You can enable the case-insensitive mode by specifying, at the beginning of the regular expression, the flag `(?i)`.
 
 ## Grep {#grep}
@@ -45,6 +46,7 @@ For example, the following two queries are equivalent (also in terms of computin
 
 Matches **the whole string** against the regular expression.
 
+
 To get a result similar to `Grep` (where substring matching is included), enclose the regular expression in `.*` (`.*foo.*` instead of `foo`). However, in terms of code readability, it's usually better to change the function.
 
 ## BacktrackingGrep/BacktrackingMatch {#backtrackinggrep}
@@ -56,6 +58,7 @@ Those functions are currently called in the binary operators [REGEXP](../../synt
 ## MultiGrep/MultiMatch {#multigrep}
 
 Hyperscan lets you match against multiple regular expressions in a single pass through the text, and get a separate response for each match.
+
 
 However, if you want to match a string against any of the listed expressions (the results would be joined with "or"), it would be more efficient to combine the query parts in a single regular expression with `|` and match it with regular `Grep` or `Match`.
 

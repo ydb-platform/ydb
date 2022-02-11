@@ -105,6 +105,7 @@ PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) {
         error->cursorpos = error_data->cursorpos;
 
         result.error = error;
+        FlushErrorState();
     }
     PG_END_TRY();
 
@@ -154,18 +155,16 @@ void* MyAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
 
     void* ret = MyAllocSetAlloc(context, size);
     if (pointer) {
-        memcpy(ret, pointer, size);
+        memmove(ret, pointer, size);
     }
 
     return ret;
 }
 
 void MyAllocSetReset(MemoryContext context) {
-    Y_FAIL("MyAllocSetReset");
 }
 
 void MyAllocSetDelete(MemoryContext context) {
-    Y_FAIL("MyAllocSetDelete");
 }
 
 Size MyAllocSetGetChunkSpace(MemoryContext context, void* pointer) {

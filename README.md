@@ -76,12 +76,7 @@ For development purposes we test that YDB could be built and run under latest ve
 In order to build ydbd you should have following tools installed on your system:
 
 1. Git command line tool
-1. clang 11 or higher
-1. python
-1. cmake
-1. antlr3
-1. libantlr3c
-1. libantlr3c-dev
+1. Python
 
 ### Build process
 

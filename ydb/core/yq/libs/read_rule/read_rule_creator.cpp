@@ -110,6 +110,7 @@ public:
                 .ReadRule(
                     NYdb::NPersQueue::TReadRuleSettings()
                         .ConsumerName(Topic.GetConsumerName())
+                        .ServiceType("yandex-query")
                         .SupportedCodecs({
                             NYdb::NPersQueue::ECodec::RAW,
                             NYdb::NPersQueue::ECodec::GZIP,

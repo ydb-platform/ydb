@@ -12,6 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--ydb-working-dir", action="store")
     parser.add_argument("--debug-logging", nargs='*')
     parser.add_argument("--enable-pq", action='store_true', default=False)
+    parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
     parsed, _ = parser.parse_known_args()
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     if parsed.debug_logging:
         arguments.debug_logging = parsed.debug_logging
     arguments.enable_pq = parsed.enable_pq
+    arguments.pq_client_service_types = parsed.pq_client_service_type
     arguments.enable_datastreams = parsed.enable_datastreams
     arguments.enable_pqcd = parsed.enable_pqcd
     declare_recipe(

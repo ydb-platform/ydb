@@ -316,4 +316,29 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
 
         UNIT_ASSERT(samples.SamplesSize() == 0);
     }
+
+    Y_UNIT_TEST(AssignNewRegistry) {
+        TMetricRegistry registry;
+        registry.Gauge({{"some", "label"}})->Add(1);
+
+        NProto::TSingleSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+        registry.Accept(TInstant::Now(), encoder.Get());
+
+        UNIT_ASSERT(samples.CommonLabelsSize() == 0);
+        UNIT_ASSERT(samples.SamplesSize() == 1);
+
+        samples = {};
+        auto newRegistry = TMetricRegistry{{{"common", "label"}}};
+        registry = std::move(newRegistry);
+
+        registry.Accept(TInstant::Now(), encoder.Get());
+
+        const auto& commonLabels = samples.GetCommonLabels();
+
+        UNIT_ASSERT(samples.GetSamples().size() == 0);
+        UNIT_ASSERT(commonLabels.size() == 1);
+        UNIT_ASSERT(commonLabels[0].GetName() == "common");
+        UNIT_ASSERT(commonLabels[0].GetValue() == "label");
+    }
 }

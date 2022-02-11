@@ -58,6 +58,11 @@ namespace NMonitoring {
         explicit TMetricRegistry(const TLabels& commonLabels);
 
         /**
+         * Not thread-safe. There should be no concurrent operations in the registry.
+         */
+        TMetricRegistry& operator=(TMetricRegistry&& other);
+
+        /**
          * Get a global metrics registry instance.
          */
         static TMetricRegistry* Instance();
@@ -116,7 +121,7 @@ namespace NMonitoring {
                 IHistogramCollectorPtr collector) override;
 
     private:
-        TRWMutex Lock_;
+        THolder<TRWMutex> Lock_ = MakeHolder<TRWMutex>();
         THashMap<ILabelsPtr, IMetricPtr> Metrics_;
 
         template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>

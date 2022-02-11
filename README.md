@@ -83,30 +83,11 @@ In order to build ydbd you should have following tools installed on your system:
 1. libantlr3c
 1. libantlr3c-dev
 
-Building YDB Embedded UI requires following tools:
-
-1. [NVM](https://github.com/nvm-sh/nvm) – a version manager for node.js
-1. [NPM](https://www.npmjs.com/) – node package manager
-
 ### Build process
 
-#### Build embedded UI
-
-1. `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash`
-2. `nvm install 14`
-3. `git clone https://github.yandex-team.ru/data-ui/ydb-embedded-ui-opensource`
-4. `cd ydb-embedded-ui-opensource`
-5. `npm ci`
-6. `npm run build:embedded`
-7. `cd ../`
-
-
-#### Build ydbd
-
 1. `git clone https://github.com/ydb-platform/ydb.git`
-1. `cp -r ../ydb-embedded-ui-opensource/build/* ydb/core/viewer/monitoring/`
 1. `cd ydb/apps/ydbd`
-1. `cmake ../ && make`
+1. `../../../ya make -r -DOPENSOURCE`
 
 ## How to deploy
 

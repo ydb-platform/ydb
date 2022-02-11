@@ -17,15 +17,15 @@ TDatabaseAsyncResolver::TDatabaseAsyncResolver(
 
 NThreading::TFuture<TEvents::TDbResolverResponse> TDatabaseAsyncResolver::ResolveIds(const TResolveParams& params) const {
     auto promise = NThreading::NewPromise<TEvents::TDbResolverResponse>();
+    TDuration timeout = TDuration::Seconds(20);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
             promise.SetValue(std::move(event->Get()->DbResolverResponse));
         },
-        [promise] () mutable {
-            //TODO add logs
-            promise.SetException("Error occurred on resolving ids. Message was undelivered.");
+        [promise, timeout] () mutable {
+            promise.SetException("Couldn't resolve database ids for " + timeout.ToString() + " seconds");
         },
-        TDuration::Seconds(10)
+        timeout
     );
 
     NActors::TActorId callbackId = ActorSystem->Register(callback.Release());

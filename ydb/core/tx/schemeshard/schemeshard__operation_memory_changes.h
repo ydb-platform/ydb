@@ -53,6 +53,7 @@ public:
     void GrabDomain(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
+    void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
 

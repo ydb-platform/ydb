@@ -2135,6 +2135,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Columns { Name: "add_2"  Type: "Uint64"}
         )", {TEvSchemeShard::EStatus::StatusNameConflict});
 
+        TestAlterTable(runtime, ++txId, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0", R"(
+              Name: "indexImplTable"
+              DropColumns { Name: "key"  Type: "Uint64"}
+        )", {TEvSchemeShard::EStatus::StatusNameConflict});
+
         TestCopyTable(runtime, ++txId, "/MyRoot/DirA", "copy_is_ok", "/MyRoot/DirA/Table1");
         env.TestWaitNotification(runtime, txId);
 
@@ -9747,7 +9752,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(7),
+                            NLs::PathVersionEqual(8),
                             NLs::CheckColumns("Table1", {"key", "value"}, {}, {"key"}),
                             NLs::IndexesCount(0)});
 
@@ -9776,7 +9781,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(7),
+                            NLs::PathVersionEqual(8),
                             NLs::IndexesCount(0)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy1"),
@@ -9846,5 +9851,228 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             WaitForSuppressed(runtime, supressed, 3, defOberver);
         }
 
+    }
+
+    Y_UNIT_TEST(AlterIndexTableDirectly) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        runtime.GetAppData().AdministrationAllowedSIDs.push_back("true-root@builtin");
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, {txId, txId-1});
+
+        {
+            auto fnWriteRow = [&] (ui64 tabletId, ui32 key, TString value, const char* table) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key   '( '('key   (Uint32 '%u ) ) ) )
+                        (let row   '( '('value (Utf8 '%s) ) ) )
+                        (return (AsList (UpdateRow '__user__%s key row) ))
+                    )
+                )", key, value.c_str(), table);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            };
+
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 1, "A", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 2, "B", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 3, "C", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 4, "D", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 5, "E", "table");
+
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 6, "F", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 7, "G", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 8, "H", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 9, "I", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 10, "J", "table");
+
+
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 11, "K", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 12, "L", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 13, "M", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 14, "N", "table");
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, 15, "O", "table");
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3)});
+
+        {
+            TestBuilIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", "indexByValue", {"value"});
+            ui64 builIndexId = txId;
+
+            auto listing = TestListBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Y_ASSERT(listing.EntriesSize() == 1);
+
+            env.TestWaitNotification(runtime, builIndexId, TTestTxConfig::SchemeShard);
+
+            auto descr = TestGetBuilIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", builIndexId);
+            Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(1),
+                            NLs::PathVersionEqual(6)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue", true, true, true),
+                           {NLs::PathExist,
+                            NLs::PathVersionEqual(3)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true),
+                           {NLs::PathExist,
+                            NLs::PathVersionEqual(4),
+                            NLs::PartitionCount(1),
+                            NLs::MinPartitionsCountEqual(0),
+                            NLs::MaxPartitionsCountEqual(100)});
+
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/table/indexByValue/indexImplTable", R"(
+                            SourceTabletId: 9437195
+                            SplitBoundary {
+                                KeyPrefix {
+                                    Tuple { Optional { Text: "B" } }
+                                }
+                            }
+                            SplitBoundary {
+                                KeyPrefix {
+                                    Tuple { Optional { Text: "D" } } Tuple {}
+                                }
+                            })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true),
+                           {NLs::PathExist,
+                            NLs::PathVersionEqual(5),
+                            NLs::PartitionCount(3),
+                            NLs::MinPartitionsCountEqual(0),
+                            NLs::MaxPartitionsCountEqual(100)});
+
+        // request without token
+        TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
+                        Name: "indexImplTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 1
+                                SizeToSplit: 100502
+                                FastSplitSettings {
+                                    SizeThreshold: 100502
+                                    RowCountThreshold: 100502
+                                }
+                            }
+                        }
+                    )", {NKikimrScheme::StatusNameConflict});
+
+        {  // request with not a super user token
+            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
+                        Name: "indexImplTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 1
+                                SizeToSplit: 100501
+                                FastSplitSettings {
+                                    SizeThreshold: 100501
+                                    RowCountThreshold: 100501
+                                }
+                            }
+                        }
+               )");
+
+            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"not-a-root@builtin"});
+            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
+            TActorId sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusNameConflict});
+        }
+
+        {
+            auto request = AlterTableRequest(++txId, "/MyRoot/table/indexByValue/", R"(
+                        Name: "indexImplTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 1
+                                SizeToSplit: 100500
+                                FastSplitSettings {
+                                    SizeThreshold: 100500
+                                    RowCountThreshold: 100500
+                                }
+                            }
+                        }
+               )");
+            auto wellCookedToken = NACLib::TUserToken(TVector<TString>{"true-root@builtin"});
+            request->Record.SetUserToken(wellCookedToken.SerializeAsString());
+            TActorId sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusAccepted});
+
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        while (true) {
+            TVector<THolder<IEventHandle>> suppressed;
+            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+
+            WaitForSuppressed(runtime, suppressed, 10, prevObserver);
+            for (auto &msg : suppressed) {
+                runtime.Send(msg.Release());
+            }
+            suppressed.clear();
+
+            bool itIsEnough = false;
+
+            auto desrc = DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true);
+
+            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                if (record.GetPathDescription().TablePartitionsSize() == 1) {
+                    itIsEnough = true;
+                }
+            };
+
+            auto pathVersion = TestDescribeResult(desrc, {checkPartitionCount});
+
+            if (itIsEnough) {
+                break;
+            }
+
+            for (const auto& tPart: desrc.GetPathDescription().GetTablePartitions()) {
+                TActorId sender = runtime.AllocateEdgeActor();
+                auto evTx = new TEvDataShard::TEvCompactBorrowed(pathVersion.PathId);
+                ForwardToTablet(runtime, tPart.GetDatashardId(), sender, evTx);
+            }
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue", true, true, true),
+                           {NLs::PathExist,
+                            NLs::PathVersionEqual(4)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true),
+                           {NLs::PathExist,
+                            NLs::PathVersionOneOf({8}),
+                            NLs::PartitionCount(1),
+                            NLs::MinPartitionsCountEqual(1),
+                            NLs::MaxPartitionsCountEqual(100)});
     }
 }

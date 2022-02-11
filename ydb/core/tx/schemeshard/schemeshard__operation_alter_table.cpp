@@ -46,8 +46,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
-        Y_VERIFY_DEBUG(IsSuperUser(context.UserToken.Get()) || context.IsAllowedPrivateTables, "Only superuser can alter index impl table");
-
         if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) {
             errStr = "Adding or dropping columns in index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
@@ -512,8 +510,8 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (!context.IsAllowedPrivateTables && !IsSuperUser(context.UserToken.Get())) {
-                checks.IsCommonSensePath(); //forbid alter impl index tables
+            if (!context.IsAllowedPrivateTables) {
+                checks.IsCommonSensePath(); //forbid alter impl index tables outside consistent operation
             }
 
             if (!checks) {
@@ -640,6 +638,65 @@ ISubOperationBase::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxSt
     auto obj = MakeHolder<TAlterTable>(id, state);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
+}
+
+TVector<ISubOperationBase::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+    auto alter = tx.GetAlterTable();
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const TString& name = alter.GetName();
+
+    TPathId pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId()) : InvalidPathId;
+
+    if (!alter.HasName() && !pathId) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    TPath path = pathId
+        ? TPath::Init(pathId, context.SS)
+        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+
+    if (!path.IsResolved()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    if (!path->IsTable()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    if (path.IsCommonSensePath()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    TPath parent = path.Parent();
+
+    if (!parent.IsTableIndex()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    TVector<ISubOperationBase::TPtr> result;
+
+    // only for super user use
+    // until correct and safe altering index api is released
+    if (!IsSuperUser(context.UserToken.Get())) {
+        return {CreateAlterTable(id, tx)};
+    }
+
+    {
+        auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
+        alterIndex->SetName(parent.LeafName());
+        alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(id, result), tableIndexAltering));
+    }
+
+    result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+
+
+    return result;
 }
 
 }

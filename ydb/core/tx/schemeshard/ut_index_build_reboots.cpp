@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
                                    {NLs::PathExist,
                                     NLs::IndexesCount(1),
-                                    NLs::PathVersionEqual(5)});
+                                    NLs::PathVersionEqual(6)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table/index1", true, true, true),
                                    {NLs::PathExist});

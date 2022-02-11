@@ -449,7 +449,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasCrossDataCenterFollowerCount()) {
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option";
+            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the HasCrossDataCenterFollowerCount option";
             return false;
         }
 
@@ -464,12 +464,12 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasFollowerCount()) {
         if (result.HasCrossDataCenterFollowerCount()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option";
+            errDesr = TStringBuilder() << "Forbidded downgrade from CrossDataCenterFollowerCount option to the FollowerGroup option";
             return false;
         }
 
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the FollowerGroup option";
+            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the FollowerGroup option";
             return false;
         }
 
@@ -478,7 +478,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasAllowFollowerPromotion()) {
         if (result.FollowerGroupsSize()) {
-            errDesr = TStringBuilder() << "Forbided downgrade from FollowerGroup option to the AllowFollowerPromotion option";
+            errDesr = TStringBuilder() << "Forbidded downgrade from FollowerGroup option to the AllowFollowerPromotion option";
             return false;
         }
 

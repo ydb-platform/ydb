@@ -932,7 +932,7 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return CreateNewTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        return CreateAlterTable(NextPartId(), tx);
+        Y_FAIL("in general, alter table is multipart operation now due table indexes");
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
         return CreateSplitMerge(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
@@ -1130,6 +1130,9 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
         return CreateDropCdcStream(NextPartId(), tx, context);
     case  NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
         return CreateConsistentMoveTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+        return CreateConsistentAlterTable(NextPartId(), tx, context);
+
     default:
         return {ConstructPart(opType, tx)};
     }

@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(5)});
+                            NLs::PathVersionEqual(6)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
                            {NLs::PathExist,
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(7)});
+                            NLs::PathVersionEqual(8)});
 
         // Test that index build succeeds on recreated columns
 
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(5)});
+                            NLs::PathVersionEqual(6)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers/UserDefinedIndexByValue0", true, true, true),
                            {NLs::PathExist,
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(7)});
+                            NLs::PathVersionEqual(8)});
     }
 
     Y_UNIT_TEST(RejectsCreate) {
@@ -992,7 +992,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(5)});
+                            NLs::PathVersionEqual(6)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/index1", true, true, true),
                            {NLs::PathExist});

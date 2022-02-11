@@ -211,6 +211,7 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
 
 ISubOperationBase::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperationBase::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state);

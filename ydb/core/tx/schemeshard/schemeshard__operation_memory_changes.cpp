@@ -63,6 +63,13 @@ void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
     Indexes.emplace(pathId, nullptr);
 }
 
+void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
+    Y_VERIFY(ss->Indexes.contains(pathId));
+
+    TTableIndexInfo::TPtr copy = new TTableIndexInfo(*ss->Indexes.at(pathId));
+    Indexes.emplace(pathId, copy);
+}
+
 void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
     Y_VERIFY(!ss->CdcStreams.contains(pathId));
 

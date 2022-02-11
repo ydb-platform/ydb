@@ -52,6 +52,12 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 
+        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
+        ++parentDir->DirAlterVersion;
+        context.SS->PersistPathDirAlterVersion(db, parentDir);
+        context.SS->ClearDescribePathCaches(parentDir);
+        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
@@ -206,17 +212,21 @@ public:
             return result;
         }
 
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
-        TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
-        if (!newIndexData) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, errMsg);
-            return result;
-        }
-        newIndexData->State = tableIndexAlter.GetState();
-
-        NIceDb::TNiceDb db(context.Txc.DB);
-        // store table index description
         auto indexPath = dstPath.Base();
+
+        context.MemChanges.GrabPath(context.SS, indexPath->PathId);
+        context.MemChanges.GrabPath(context.SS, indexPath->ParentPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabIndex(context.SS, indexPath->PathId);
+
+        context.DbChanges.PersistPath(indexPath->PathId);
+        context.DbChanges.PersistAlterIndex(indexPath->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPath->PathId);
+        TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
+        Y_VERIFY(newIndexData);
+        newIndexData->State = tableIndexAlter.GetState();
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterTableIndex, indexPath->PathId);
@@ -224,11 +234,6 @@ public:
 
         indexPath->PathState = NKikimrSchemeOp::EPathStateAlter;
         indexPath->LastTxId = OperationId.GetTxId();
-        context.SS->PersistLastTxId(db, indexPath);
-
-        context.SS->PersistTableIndexAlterData(db, indexPath->PathId);
-
-        context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -237,8 +242,11 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterTableIndex");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterTableIndex AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

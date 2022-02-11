@@ -162,8 +162,11 @@ public:
 
         bool IsInitCommand() {
             TString lastArg = ArgV[ArgC - 1];
-            if (lastArg == "init") {
-                return true;
+            if (lastArg == "init" && ArgC > 1) {
+                TString penultimateArg = ArgV[ArgC - 2];
+                if (penultimateArg.StartsWith("ydb")) {
+                    return true;
+                }
             }
             return false;
         }

@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         TQueue::TConfig config;
         config.IsCircular = true;
         config.InflightLimit = 2;
-        config.Rate = 1.0;
+        config.MaxRate = 1.0;
         config.Timeout = Timeout;
         TOperationStarter starter;
 
@@ -816,6 +816,74 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         queue.OnDone(2);
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 2UL);
+    }
+
+    Y_UNIT_TEST(BasicRPSCheckWithRound) {
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.MaxRate = 10.0;
+        config.RoundInterval = TDuration::Seconds(100);
+        config.Timeout = Timeout;
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        // no items yet, thus rate by MaxRate
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), config.MaxRate);
+
+        queue.Enqueue(1);
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), 1.0 / 100);
+
+        queue.Enqueue(2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), 2.0 / 100);
+
+        queue.Enqueue(3);
+        queue.Enqueue(4);
+        queue.Enqueue(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), 5.0 / 100);
+
+        // Note that remove should affect rate as well
+        queue.Remove(5);
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), 4.0 / 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+
+        // OnDone should not affect the rate
+        queue.OnDone(1);
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRate(), 4.0 / 100);
+
+        // should start another one because RPS smoothing
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+
+        queue.OnDone(2);
+
+        // Queue should start items every 25 seconds,
+        // thus now no items should be running
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL);
+
+        // some spurious wakeup1
+        starter.TimeProvider.Move(TDuration::Seconds(10));
+        queue.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL);
+
+        // some spurious wakeup1
+        starter.TimeProvider.Move(TDuration::Seconds(10));
+        queue.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL);
+
+        // wakeup3
+        starter.TimeProvider.Move(TDuration::Seconds(6));
+        queue.Wakeup();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
     }
 
     Y_UNIT_TEST(CheckWakeupAfterStop) {

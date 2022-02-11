@@ -49,7 +49,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     // move shard to the end of all queues
     TInstant now = AppData(ctx)->TimeProvider->Now();
     TTableInfo::TPartitionStats stats;
-    stats.FullCompactionTs = now.Seconds(); 
+    stats.FullCompactionTs = now.Seconds();
     auto duration = CompactionQueue->OnDone(TShardCompactionInfo(shardIdx, stats));
 
     if (shardIdx == InvalidShardIdx) {

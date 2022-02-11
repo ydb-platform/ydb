@@ -348,13 +348,13 @@ public:
     TString DumpQueueFronts() const {
         TStringStream ss;
         ss << "LastCompaction: {";
-        if (!QueueLastCompaction.Empty()) 
+        if (!QueueLastCompaction.Empty())
             ss << QueueLastCompaction.Front();
         ss << "}, SearchHeight: {";
-        if (!QueueSearchHeight.Empty()) 
+        if (!QueueSearchHeight.Empty())
             ss << QueueSearchHeight.Front();
         ss << "}, RowDeletes: {";
-        if (!QueueRowDeletes.Empty()) 
+        if (!QueueRowDeletes.Empty())
             ss << QueueRowDeletes.Front();
         ss << "}";
         return ss.Str();

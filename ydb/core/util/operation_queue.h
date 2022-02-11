@@ -53,8 +53,10 @@ struct TConfig {
     // shuffle added items on Start()
     bool ShuffleOnStart = false;
 
+    TDuration RoundInterval;
+
     ui32 InflightLimit = 1;
-    double Rate = 0.0; // max rate operations/s
+    double MaxRate = 0.0; // max rate operations/s
 
     // In case of circular queue start done operation
     // again only after this interval of time
@@ -155,7 +157,7 @@ public:
         if (it == Items.end())
             return false;
 
-        auto& ref = const_cast<THeapItem&>(*it); 
+        auto& ref = const_cast<THeapItem&>(*it);
         ref.Item = item;
         Heap.Update(&ref);
         return true;
@@ -219,7 +221,7 @@ public:
                 // but in other places we want.
                 // Though in UpdateIfFound rhs.Timestamp should
                 // be always missing while in other cases it
-                // always presents 
+                // always presents
                 Timestamp = rhs.Timestamp;
             }
             return *this;
@@ -254,12 +256,16 @@ private:
     TWaitingItems WaitingItems;
 
     TTokenBucket TokenBucket;
+    bool HasRateLimit = false;
 
     TInstant NextWakeup;
     bool Running = false;
     bool WasRunning = false;
 
     ui64 TimeoutCount = 0;
+
+    // operations / s
+    double Rate = 0;
 
 public:
     TOperationQueue(const TConfig& config,
@@ -294,12 +300,33 @@ public:
         if (&Config != &config)
             Config = config;
 
-        if (Config.Rate) {
+        UpdateRate();
+    }
+
+    void UpdateRate() {
+        if (!Config.MaxRate && !Config.RoundInterval) {
+            HasRateLimit = false;
+            Rate = 0;
+            TokenBucket.SetUnlimited();
+            return;
+        }
+
+        Rate = Config.MaxRate;
+        if (Config.RoundInterval && TotalQueueSize() > 0) {
+            double rateByInterval = TotalQueueSize() / (double)Config.RoundInterval.Seconds();
+            if (Config.MaxRate)
+                rateByInterval = Min(rateByInterval, Config.MaxRate);
+            Rate = rateByInterval;
+        }
+
+        HasRateLimit = false;
+        if (Rate) {
             // by default token bucket is unlimitted, so
             // configure only when rate is limited
             TokenBucket.SetCapacity(Config.InflightLimit);
-            TokenBucket.SetRate(Config.Rate);
+            TokenBucket.SetRate(Rate);
             TokenBucket.Fill(Timer.Now());
+            HasRateLimit = true;
         }
     }
 
@@ -353,6 +380,14 @@ public:
 
     size_t WaitingSize() const { return WaitingItems.Size(); }
     bool WaitingEmpty() const { return WaitingItems.Empty(); }
+
+    size_t TotalQueueSize() const {
+        if (Config.IsCircular)
+            return Size() + RunningSize();
+        return Size();
+    }
+
+    double GetRate() const { return Rate; }
 
     ui64 ResetTimeoutCount() { return TimeoutCount; TimeoutCount = 0; }
 
@@ -419,7 +454,11 @@ bool TOperationQueue<T, TQueue>::Enqueue(const T& item) {
 template <typename T, typename TQueue>
 template <typename T2>
 bool TOperationQueue<T, TQueue>::EnqueueNoStart(T2&& item) {
-    return ReadyQueue.Enqueue(std::forward<T2>(item));
+    bool res = ReadyQueue.Enqueue(std::forward<T2>(item));
+    if (res)
+        UpdateRate();
+
+    return res;
 }
 
 template <typename T, typename TQueue>
@@ -451,6 +490,9 @@ bool TOperationQueue<T, TQueue>::Remove(const T& item) {
             return true;
         }
     }
+
+    if (removed)
+        UpdateRate();
 
     return removed;
 }
@@ -599,7 +641,7 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
         return;
 
     // no sense to wakeup earlier that rate limit allows
-    if (Config.Rate) {
+    if (HasRateLimit) {
         wakeup = Max(wakeup, now + TokenBucket.NextAvailableDelay());
     }
 

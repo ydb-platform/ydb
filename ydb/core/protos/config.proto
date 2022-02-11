@@ -1300,11 +1300,24 @@ message TDataShardConfig {
 
 message TCompactionConfig {
     message TBackgroundCompactionConfig {
-        optional double Rate = 1 [default = 1]; // 1 compaction / s
+        optional double MaxRate = 1 [default = 1]; // 1 compaction / s
         optional uint64 InflightLimit = 2 [default = 1];
+
+        // After this interval started compaction is considered as finished,
+        // retry is possible only within MinCompactionRepeatDelaySeconds
         optional uint64 TimeoutSeconds = 3 [default = 600];
+
+        // How often schemeshard is waken up to check if it should
+        // start any compaction. It is used only when there are no
+        // running compactions, otherwise compaction queue logic
+        // is triggered either by finished compactions (event from DS)
+        // or by timeouts (set via TimeoutSeconds)
         optional uint64 WakeupIntervalSeconds = 4 [default = 60];
-        optional uint64 MinCompactionRepeatDelay = 5 [default = 600];
+
+        // When shard has been compacted, it will be considered for
+        // compaction only after this amount of time
+        optional uint64 MinCompactionRepeatDelaySeconds = 5 [default = 600];
+
         optional uint32 SearchHeightThreshold = 6 [default = 10];
 
         // TODO: enable, when schemeshard receive proper stat
@@ -1315,6 +1328,11 @@ message TCompactionConfig {
         // at all even when searchHeight or deleted rows match
         // corresponding thresholds
         optional uint32 RowCountThreshold = 8 [default = 1];
+
+        // When this option specified, schemeshard calculates compaction rate so
+        // that the queue is compacted within this interval.
+        // CompactionRate = Min(QueueSize / RoundSeconds, MaxRate).
+        optional uint64 RoundSeconds = 9 [default = 86400];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

@@ -5992,14 +5992,16 @@ void TSchemeShard::ConfigureCompactionQueue(
     compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
     compactionConfig.WakeupInterval = TDuration::Seconds(config.GetWakeupIntervalSeconds());
     compactionConfig.InflightLimit = config.GetInflightLimit();
-    compactionConfig.Rate = config.GetRate();
-    compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelay());
+    compactionConfig.RoundInterval = TDuration::Seconds(config.GetRoundSeconds());
+    compactionConfig.MaxRate = config.GetMaxRate();
+    compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelaySeconds());
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "CompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
+                 << ", RoundInterval# " << compactionConfig.RoundInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
-                 << ", Rate# " << compactionConfig.Rate);
+                 << ", MaxRate# " << compactionConfig.MaxRate);
 
     if (CompactionQueue) {
         CompactionQueue->UpdateConfig(compactionConfig, queueConfig);

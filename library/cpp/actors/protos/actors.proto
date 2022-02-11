@@ -11,3 +11,23 @@ message TCallbackException {
     required TActorId ActorId = 1;
     required string ExceptionMessage = 2;
 }
+
+message TRemoteHttpInfo {
+    message TQueryParam {
+        optional string Key = 1;
+        optional string Value = 2;
+    }
+
+    message THeader {
+        optional string Name = 1;
+        optional string Value = 2;
+    }
+
+    optional uint32 Method = 1; // HTTP_METHOD enum
+    optional string Path = 2;
+    repeated TQueryParam QueryParams = 3;
+    repeated TQueryParam PostParams = 4;
+    repeated bytes PostContent = 5;
+    optional THeader Headers = 6;
+    optional string RemoteAddr = 7;
+}

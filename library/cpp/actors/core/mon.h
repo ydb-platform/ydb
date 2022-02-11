@@ -80,31 +80,54 @@ namespace NActors {
         };
 
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
-            TEvRemoteHttpInfo() {
-            }
+            TEvRemoteHttpInfo() = default;
 
-            TEvRemoteHttpInfo(const TString& query)
-                : Query(query)
-            {
-            }
-
-            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method)
+            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method = HTTP_METHOD_UNDEFINED)
                 : Query(query)
                 , Method(method)
             {
             }
 
+            TEvRemoteHttpInfo(NActorsProto::TRemoteHttpInfo info)
+                : Query(MakeSerializedQuery(info))
+                , ExtendedQuery(std::move(info))
+            {}
+
+            static TString MakeSerializedQuery(const NActorsProto::TRemoteHttpInfo& info) {
+                TString s(1, '\0');
+                const bool success = info.AppendToString(&s);
+                Y_VERIFY(success);
+                return s;
+            }
+
             TString Query;
-            HTTP_METHOD Method;
+            HTTP_METHOD Method = HTTP_METHOD_UNDEFINED;
+            std::optional<NActorsProto::TRemoteHttpInfo> ExtendedQuery;
 
             TString PathInfo() const {
-                const size_t pos = Query.find('?');
-                return (pos == TString::npos) ? TString() : Query.substr(0, pos);
+                if (ExtendedQuery) {
+                    return ExtendedQuery->GetPath();
+                } else {
+                    const size_t pos = Query.find('?');
+                    return (pos == TString::npos) ? TString() : Query.substr(0, pos);
+                }
             }
 
             TCgiParameters Cgi() const {
-                const size_t pos = Query.find('?');
-                return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1));
+                if (ExtendedQuery) {
+                    TCgiParameters params;
+                    for (const auto& kv : ExtendedQuery->GetQueryParams()) {
+                        params.emplace(kv.GetKey(), kv.GetValue());
+                    }
+                    return params;
+                } else {
+                    const size_t pos = Query.find('?');
+                    return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1));
+                }
+            }
+
+            HTTP_METHOD GetMethod() const {
+                return ExtendedQuery ? static_cast<HTTP_METHOD>(ExtendedQuery->GetMethod()) : Method;
             }
 
             TString ToStringHeader() const override {
@@ -124,12 +147,22 @@ namespace NActors {
             }
 
             static IEventBase* Load(TEventSerializedData* bufs) {
-                return new TEvRemoteHttpInfo(bufs->GetString());
-            }
+                TString s = bufs->GetString();
+                if (s.size() && s[0] == '\0') {
+                    TRope::TConstIterator iter = bufs->GetBeginIter();
+                    ui64 size = bufs->GetSize();
+                    iter += 1, --size; // skip '\0'
+                    TRopeStream stream(iter, size);
 
-            HTTP_METHOD GetMethod() const
-            {
-                return Method;
+                    auto res = std::make_unique<TEvRemoteHttpInfo>();
+                    res->Query = s;
+                    res->ExtendedQuery.emplace();
+                    const bool success = res->ExtendedQuery->ParseFromZeroCopyStream(&stream);
+                    Y_VERIFY(success);
+                    return res.release();
+                } else {
+                    return new TEvRemoteHttpInfo(s);
+                }
             }
         };
 

@@ -18,6 +18,7 @@ PEERDIR(
     library/cpp/messagebus
     library/cpp/messagebus/test/helper
     library/cpp/messagebus/www
+    library/cpp/resource
 )
 
 SRCS(
@@ -29,6 +30,7 @@ SRCS(
     starter_ut.cpp
     sync_client_ut.cpp
     locator_uniq_ut.cpp
+    www_ut.cpp
     ../../actor/actor_ut.cpp
     ../../actor/ring_buffer_ut.cpp
     ../../actor/tasks_ut.cpp

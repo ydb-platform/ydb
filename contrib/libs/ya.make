@@ -270,6 +270,7 @@ RECURSE(
     poco
     portaudio
     porto_api
+    postgresql
     proj
     protobuf
     protobuf/python

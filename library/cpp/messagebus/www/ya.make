@@ -7,14 +7,13 @@ SRCS(
     www.cpp
 )
 
-ARCHIVE(
-    NAME www_static.inc
-    messagebus.js
-    bus-ico.png
+RESOURCE(
+    messagebus.js /messagebus.js
+    bus-ico.png /bus-ico.png
 )
 
 PEERDIR(
-    library/cpp/archive
+    library/cpp/resource
     library/cpp/cgiparam
     library/cpp/html/pcdata
     library/cpp/http/fetch

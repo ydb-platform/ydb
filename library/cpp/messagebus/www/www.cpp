@@ -6,11 +6,11 @@
 #include <library/cpp/messagebus/remote_connection_status.h>
 #include <library/cpp/monlib/deprecated/json/writer.h>
 
-#include <library/cpp/archive/yarchive.h>
 #include <library/cpp/http/fetch/httpfsm.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/uri/http_url.h>
 
 #include <util/string/cast.h>
@@ -164,18 +164,6 @@ namespace {
     }
 
 }
-
-const unsigned char WWW_STATIC_DATA[] = {
-#include "www_static.inc"
-};
-
-class TWwwStaticLoader: public TArchiveReader {
-public:
-    TWwwStaticLoader()
-        : TArchiveReader(TBlob::NoCopy(WWW_STATIC_DATA, sizeof(WWW_STATIC_DATA)))
-    {
-    }
-};
 
 struct TBusWww::TImpl {
     // TODO: use weak pointers
@@ -728,7 +716,7 @@ struct TBusWww::TImpl {
             } else {
                 os << HTTP_OK_BIN;
             }
-            TBlob blob = Singleton<TWwwStaticLoader>()->ObjectBlobByKey(TString("/") + TString(path));
+            auto blob = NResource::Find(TString("/") + TString(path));
             os.Write(blob.Data(), blob.Size());
         }
 

@@ -2125,7 +2125,10 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         NIceDb::TUpdate<Schema::TablePartitionStats::ReadThroughput>(stats.ReadThroughput),
         NIceDb::TUpdate<Schema::TablePartitionStats::WriteThroughput>(stats.WriteThroughput),
         NIceDb::TUpdate<Schema::TablePartitionStats::ReadIops>(stats.ReadIops),
-        NIceDb::TUpdate<Schema::TablePartitionStats::WriteIops>(stats.WriteIops)
+        NIceDb::TUpdate<Schema::TablePartitionStats::WriteIops>(stats.WriteIops),
+
+        NIceDb::TUpdate<Schema::TablePartitionStats::SearchHeight>(stats.SearchHeight),
+        NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs)
     );
 }
 

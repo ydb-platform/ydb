@@ -344,6 +344,9 @@ struct Schema : NIceDb::Schema {
         struct ReadIops: Column<28, NScheme::NTypeIds::Uint64> {};
         struct WriteIops: Column<29, NScheme::NTypeIds::Uint64> {};
 
+        struct SearchHeight: Column<30, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct FullCompactionTs: Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+
         // PartCount, PartOwners & ShardState are volatile data
 
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
@@ -376,7 +379,9 @@ struct Schema : NIceDb::Schema {
             ReadThroughput,
             WriteThroughput,
             ReadIops,
-            WriteIops
+            WriteIops,
+            SearchHeight,
+            FullCompactionTs
         >;
     };
 

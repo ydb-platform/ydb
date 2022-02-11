@@ -6383,11 +6383,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "WriteIops",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TableOwnerId",
                 "ColumnType": "Uint64"
@@ -6526,13 +6521,27 @@
                 "ColumnId": 28,
                 "ColumnName": "ReadIops",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "WriteIops",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "SearchHeight",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "FullCompactionTs",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
                     3,
@@ -6560,7 +6569,10 @@
                     25,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30,
+                    31
                 ],
                 "RoomID": 0,
                 "Codec": 0,

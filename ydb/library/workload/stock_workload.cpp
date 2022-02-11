@@ -41,9 +41,9 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
 
         StockPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " + partsNum + ")";
         OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " 
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ")";
+            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
         OrderLinesPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " 
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ")";
+            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
     }
 
     static const char TablesDdl[] = R"(--!syntax_v1

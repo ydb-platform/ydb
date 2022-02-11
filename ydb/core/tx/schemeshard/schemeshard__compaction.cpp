@@ -46,8 +46,11 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         record.GetPathId().GetLocalId());
 
     // it's OK to OnDone InvalidShardIdx
-    // note, that we set 0 search height to move shard to the end of queue
-    auto duration = CompactionQueue->OnDone(TShardCompactionInfo(shardIdx, 0));
+    // move shard to the end of all queues
+    TInstant now = AppData(ctx)->TimeProvider->Now();
+    TTableInfo::TPartitionStats stats;
+    stats.FullCompactionTs = now.Seconds(); 
+    auto duration = CompactionQueue->OnDone(TShardCompactionInfo(shardIdx, stats));
 
     if (shardIdx == InvalidShardIdx) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished background compaction of unknown shard "

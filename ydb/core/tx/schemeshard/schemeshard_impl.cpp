@@ -5781,14 +5781,10 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
 
     if (!tableInfo->IsBackup) {
         for (const auto& p: newPartitioning) {
-            ui64 searchHeight = 0;
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
-            if (it != partitionStats.end())
-                searchHeight = it->second.SearchHeight;
-
-            if (searchHeight >= CompactionSearchHeightThreshold) {
-                CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, searchHeight));
+            if (it != partitionStats.end()) {
+                CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, it->second));
             }
         }
     }
@@ -5978,7 +5974,12 @@ void TSchemeShard::ConfigureCompactionQueue(
     const NKikimrConfig::TCompactionConfig::TBackgroundCompactionConfig& config,
     const TActorContext &ctx)
 {
-    CompactionSearchHeightThreshold = config.GetSearchHeightThreshold();
+    // note that we use TCompactionQueueImpl::TConfig
+    // instead of its base NOperationQueue::TConfig
+    TCompactionQueueImpl::TConfig queueConfig;
+    queueConfig.SearchHeightThreshold = config.GetSearchHeightThreshold();
+    queueConfig.RowDeletesThreshold = config.GetRowDeletesThreshold();
+    queueConfig.RowCountThreshold = config.GetRowCountThreshold();
 
     TCompactionQueue::TConfig compactionConfig;
 
@@ -5998,10 +5999,11 @@ void TSchemeShard::ConfigureCompactionQueue(
                  << ", Rate# " << compactionConfig.Rate);
 
     if (CompactionQueue) {
-        CompactionQueue->UpdateConfig(compactionConfig);
+        CompactionQueue->UpdateConfig(compactionConfig, queueConfig);
     } else {
         CompactionQueue = new TCompactionQueue(
             compactionConfig,
+            queueConfig,
             CompactionStarter);
     }
 }

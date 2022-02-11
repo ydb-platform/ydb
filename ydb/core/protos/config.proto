@@ -1306,6 +1306,15 @@ message TCompactionConfig {
         optional uint64 WakeupIntervalSeconds = 4 [default = 60];
         optional uint64 MinCompactionRepeatDelay = 5 [default = 600];
         optional uint32 SearchHeightThreshold = 6 [default = 10];
+
+        // TODO: enable, when schemeshard receive proper stat
+        optional uint32 RowDeletesThreshold = 7 [default = 4294967295];
+
+        // for tests: to allow compaction requests to empty shards
+        // shards below this threshold are not background compacted
+        // at all even when searchHeight or deleted rows match
+        // corresponding thresholds
+        optional uint32 RowCountThreshold = 8 [default = 1];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

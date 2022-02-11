@@ -242,6 +242,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         THashSet<TTabletId> PartOwners;
         ui64 PartCount = 0;
         ui64 SearchHeight = 0;
+        ui64 FullCompactionTs = 0;
         ui32 ShardState = NKikimrTxDataShard::Unknown;
 
         // True when PartOwners has parts from other tablets

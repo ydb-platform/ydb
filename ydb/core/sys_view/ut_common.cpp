@@ -41,6 +41,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     Settings->SetDynamicNodeCount(dynamicNodes);
     Settings->SetKqpSettings(kqpSettings);
 
+    // in some tests we check data size, which depends on compaction,
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableBackgroundCompaction(false);
+    Settings->SetFeatureFlags(featureFlags);
+
     if (enableSVP) {
         Settings->SetEnablePersistentQueryStats(true);
         Settings->SetEnableDbCounters(true);

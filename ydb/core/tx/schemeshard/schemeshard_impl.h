@@ -75,13 +75,9 @@ private:
         TSchemeShard* Self;
     };
 
-    using TCompactionBackendQueue = NOperationQueue::TQueueWithPriority<
-        TShardCompactionInfo,
-        TShardCompactionInfo::TLessBySearchHeight>;
-
     using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardCompactionInfo,
-        TCompactionBackendQueue,
+        TCompactionQueueImpl,
         TEvPrivate::EvRunBackgroundCompaction>;
 
     class TCompactionStarter : public TCompactionQueue::IStarter {
@@ -199,7 +195,6 @@ public:
     TCompactionQueue* CompactionQueue = nullptr;
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
-    ui32 CompactionSearchHeightThreshold = 0;
 
     TShardDeleter ShardDeleter;
 

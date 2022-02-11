@@ -249,7 +249,6 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                 columnTags.push_back(column.Column);
             }
         }
-        Y_VERIFY_DEBUG(!columnTags.empty());
 
         bool ready = Database->Precharge(localTid,
                                          from,

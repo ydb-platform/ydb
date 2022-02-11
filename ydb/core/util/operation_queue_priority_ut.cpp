@@ -15,11 +15,14 @@ struct TPriorityItem {
     int Id = 0;
     int Priority = 0;
 
+    explicit TPriorityItem(int id)
+        : Id(id)
+    {}
+
     TPriorityItem(int id, int priority)
         : Id(id)
         , Priority(priority)
-    {
-    }
+    {}
 
     TPriorityItem(const TPriorityItem&) = default;
 
@@ -28,13 +31,7 @@ struct TPriorityItem {
         return Id == rhs.Id;
     }
 
-    TPriorityItem& operator =(const TPriorityItem& rhs) {
-        // TODO: assert that ID's are the same, because we
-        // use it as update rather than real assignment
-        Id = rhs.Id;
-        Priority = rhs.Priority;
-        return *this;
-    }
+    TPriorityItem& operator =(const TPriorityItem& rhs) = default;
 
     size_t Hash() const {
         return THash<int>()(Id);
@@ -113,6 +110,36 @@ struct TOperationStarter : public TPriorityQueue::IStarter, public NOperationQue
 };
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(TPriorityQueueTest) {
+    Y_UNIT_TEST(TestOrder) {
+        TQueueWithPriority<TPriorityItem, TPriorityItem::TLessByPriority> queue;
+        queue.Enqueue(TPriorityItem(2, 50));
+        queue.Enqueue(TPriorityItem(3, 100));
+        queue.Enqueue(TPriorityItem(6, 90));
+        queue.Enqueue(TPriorityItem(8, 80));
+        queue.Enqueue(TPriorityItem(1, 100));
+
+        UNIT_ASSERT(queue.Remove(TPriorityItem(1)));
+        UNIT_ASSERT(queue.Remove(TPriorityItem(2)));
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.Front(), TPriorityItem(3, 100));
+        queue.PopFront();
+
+        UNIT_ASSERT(!queue.Remove(TPriorityItem(4)));
+        UNIT_ASSERT(!queue.Remove(TPriorityItem(5)));
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.Front(), TPriorityItem(6, 90));
+        queue.PopFront();
+
+        UNIT_ASSERT(!queue.Remove(TPriorityItem(7)));
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.Front(), TPriorityItem(8, 80));
+        queue.PopFront();
+
+        UNIT_ASSERT(queue.Empty());
+    }
+};
 
 Y_UNIT_TEST_SUITE(TPriorityOperationQueueTest) {
     Y_UNIT_TEST(ShouldStartEmpty) {
@@ -335,6 +362,9 @@ void Out<TSomeQueue::TItemWithTs>(IOutputStream& o, const TSomeQueue::TItemWithT
 }
 
 template<>
-void Out<NKikimr::NOperationQueue::TPriorityItem>(IOutputStream& o, const NKikimr::NOperationQueue::TPriorityItem& item) {
+void Out<NKikimr::NOperationQueue::TPriorityItem>(
+    IOutputStream& o,
+    const NKikimr::NOperationQueue::TPriorityItem& item)
+{
     o << item.ToString();
 }

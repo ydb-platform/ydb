@@ -113,6 +113,13 @@ private:
     TIntrusiveHeap<THeapItem, typename THeapItem::THeapIndex, typename THeapItem::THeapItemCompare> Heap;
 
 public:
+    TQueueWithPriority() = default;
+
+    bool Contains(const T& item) const {
+        THeapItem heapItem(item);
+        return Items.find(heapItem) != Items.end();
+    }
+
     template<typename T2>
     bool Enqueue(T2&& item) {
         THeapItem heapItem(std::forward<T2>(item));
@@ -262,7 +269,25 @@ public:
         , Starter(starter)
         , Timer(timer)
     {
-        UpdateConfig(Config);
+        UpdateConfig(config);
+    }
+
+    template <typename TReadyQueueConfig>
+    TOperationQueue(const TConfig& config,
+                    const TReadyQueueConfig& queueConfig,
+                    IStarter& starter,
+                    ITimer& timer)
+        : Config(config)
+        , Starter(starter)
+        , Timer(timer)
+    {
+        UpdateConfig(config, queueConfig);
+    }
+
+    template <typename TReadyQueueConfig>
+    void UpdateConfig(const TConfig& config, const TReadyQueueConfig& queueConfig) {
+        UpdateConfig(config);
+        ReadyQueue.UpdateConfig(queueConfig);
     }
 
     void UpdateConfig(const TConfig& config) {

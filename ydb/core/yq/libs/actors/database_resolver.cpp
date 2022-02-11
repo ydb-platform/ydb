@@ -264,6 +264,20 @@ private:
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
     });
 
+    void SendResponse(
+        const NActors::TActorId& recipient,
+        THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& ready,
+        bool success = true,
+        const TString& errorMessage = "")
+    {
+        LOG_D("Reply: Success: " << success << ", Errors: " << (errorMessage ? errorMessage : "no"));
+        NYql::TIssues issues;
+        if (errorMessage)
+            issues.AddIssue(errorMessage);
+        Send(recipient,
+            new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse{std::move(ready), success, issues}));
+    }
+
     void Handle(TEvents::TEvEndpointRequest::TPtr ev, const TActorContext& ctx)
     {
         TraceId = ev->Get()->TraceId;
@@ -272,13 +286,21 @@ private:
         THashMap<std::pair<TString, DatabaseType>, TEndpoint> ready;
         for (const auto& [p, info] : ev->Get()->DatabaseIds) {
             const auto& [databaseId, type] = p;
-            TMaybe<std::variant<TEndpoint, TString>> endpoint;
+            TMaybe<std::variant<TEndpoint, TString>> cacheVal;
             auto key = std::make_tuple(databaseId, type, info);
-            if (Cache.Get(key, &endpoint)) {
-                if (endpoint) {
-                    ready.insert(std::make_pair(p,
-                        (endpoint->index() == 0 ? std::get<0>(*endpoint) : TEndpoint{})
-                    ));
+            if (Cache.Get(key, &cacheVal)) {
+                switch(cacheVal->index()) {
+                    case 0U: {
+                        ready.insert(std::make_pair(p, std::get<0U>(*cacheVal)));
+                        break;
+                    }
+                    case 1U: {
+                        SendResponse(ev->Sender, {}, false, std::get<1U>(*cacheVal));
+                        return;
+                    }
+                    default: {
+                        LOG_E("Unsupported cache's value type");
+                    }
                 }
                 continue;
             }
@@ -302,10 +324,7 @@ private:
                 const TString msg = TStringBuilder() << " Error while preparing to resolve databaseId: " << databaseId << ", details: " << e.what();
                 LOG_E(msg);
                 Cache.Put(key, msg);
-                NYql::TIssues issues;
-                issues.AddIssue(msg);
-                Send(ev->Sender,
-                    new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse{{}, /*success=*/false, issues}));
+                SendResponse(ev->Sender, {}, /*success=*/false, msg);
                 return;
             }
         }
@@ -318,7 +337,7 @@ private:
                 ctx.Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));
             }
         } else {
-            Send(ev->Sender, new TEvents::TEvEndpointResponse(TEvents::TDbResolverResponse{std::move(ready), /*success=*/true}));
+            SendResponse(ev->Sender, std::move(ready));
         }
     }
 

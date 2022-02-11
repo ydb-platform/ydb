@@ -17,13 +17,13 @@ TDatabaseAsyncResolver::TDatabaseAsyncResolver(
 
 NThreading::TFuture<TEvents::TDbResolverResponse> TDatabaseAsyncResolver::ResolveIds(const TResolveParams& params) const {
     auto promise = NThreading::NewPromise<TEvents::TDbResolverResponse>();
-    TDuration timeout = TDuration::Seconds(20);
+    TDuration timeout = TDuration::Seconds(40);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
             promise.SetValue(std::move(event->Get()->DbResolverResponse));
         },
         [promise, timeout] () mutable {
-            promise.SetException("Couldn't resolve database ids for " + timeout.ToString() + " seconds");
+            promise.SetException("Couldn't resolve database ids for " + timeout.ToString());
         },
         timeout
     );

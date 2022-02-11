@@ -245,6 +245,17 @@ struct TEvents {
         NProto::TGraphParams GraphParams;
         NThreading::TPromise<NYql::IDqGateway::TResult> Result;
     };
+
+    struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, TEventIds::EvRaiseTransientIssues> {
+        TEvRaiseTransientIssues() = default;
+
+        explicit TEvRaiseTransientIssues(NYql::TIssues issues)
+            : TransientIssues(std::move(issues))
+        {
+        }
+
+        NYql::TIssues TransientIssues;
+    };
 };
 
 } // namespace NYq

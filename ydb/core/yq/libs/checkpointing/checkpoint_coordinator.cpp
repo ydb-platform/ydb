@@ -3,6 +3,7 @@
 #include "checkpoint_coordinator.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
+#include <ydb/core/yq/libs/events/events.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -124,7 +125,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
 
     const bool needCheckpointMetadata = StateLoadMode == YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
     if (needCheckpointMetadata) {
-        const bool loadGraphDescription = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint();
+        const bool loadGraphDescription = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
         CC_LOG_I("Send TEvGetCheckpointsMetadataRequest; state load mode: " << YandexQuery::StateLoadMode_Name(StateLoadMode) << "; load graph: " << loadGraphDescription);
         Send(StorageProxy,
             new TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
@@ -230,6 +231,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     if (!result) {
         Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues));
         return;
+    } else { // Report as transient issues
+        Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
     }
 
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);

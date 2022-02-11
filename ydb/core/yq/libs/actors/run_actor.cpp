@@ -180,16 +180,17 @@ private:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvents::TEvAsyncContinue, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NYq::TEvents::TEvGraphParams, Handle);
-        hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
+        hFunc(TEvents::TEvGraphParams, Handle);
+        hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
         hFunc(NYql::NDqs::TEvQueryResponse, Handle);
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
+        hFunc(TEvents::TEvRaiseTransientIssues, Handle);
     )
 
     STRICT_STFUNC(FinishStateFunc,
-        hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
+        hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
         hFunc(TEvents::TEvDataStreamsReadRulesDeletionResult, HandleFinish);
         hFunc(NYql::NDqs::TEvQueryResponse, HandleFinish);
         hFunc(TEvents::TEvForwardPingResponse, HandleFinish);
@@ -197,9 +198,10 @@ private:
         // Ignore tail of action events after normal work.
         IgnoreFunc(TEvents::TEvAsyncContinue);
         IgnoreFunc(NActors::TEvents::TEvUndelivered);
-        IgnoreFunc(NYq::TEvents::TEvGraphParams);
+        IgnoreFunc(TEvents::TEvGraphParams);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
+        IgnoreFunc(TEvents::TEvRaiseTransientIssues);
     )
 
     void KillExecuter() {
@@ -496,7 +498,7 @@ private:
         return false;
     }
 
-    void Handle(NYq::TEvents::TEvGraphParams::TPtr& ev) {
+    void Handle(TEvents::TEvGraphParams::TPtr& ev) {
         LOG_D("Graph params with tasks: " << ev->Get()->GraphParams.TasksSize());
         DqGraphParams.push_back(ev->Get()->GraphParams);
     }
@@ -505,6 +507,14 @@ private:
         LOG_D("Coordinator saved zero checkpoint");
         Y_VERIFY(CheckpointCoordinatorId);
         SetLoadFromCheckpointMode();
+    }
+
+    void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
+        Yq::Private::PingTaskRequest request;
+
+        NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
+
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
     }
 
     i32 UpdateResultIndices() {
@@ -733,7 +743,7 @@ private:
         ContinueFinish();
     }
 
-    void Handle(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
+    void Handle(TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
         LOG_D("Read rules creation finished. Issues: " << ev->Get()->Issues.Size());
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
@@ -745,7 +755,7 @@ private:
         }
     }
 
-    void HandleFinish(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
+    void HandleFinish(TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
             TransientIssues.AddIssues(ev->Get()->Issues);
@@ -1364,6 +1374,7 @@ private:
         UpdateQueryInfoCookie,
         SaveFinalizingStatusCookie,
         SetLoadFromCheckpointModeCookie,
+        RaiseTransientIssuesCookie,
     };
 };
 

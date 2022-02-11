@@ -8,7 +8,6 @@ RECURSE(
     antlr4_cpp_runtime
     apache
     apr
-    apr-util
     asio
     asmlib
     authparser

@@ -19,8 +19,8 @@ YDB is an open-source Distributed SQL Database that combines high availability a
 
 ## Main YDB Advantages
 
-YDB was designed from scratch as a response to growing demand for scalable interactive web services. Scalability, strict consistency and effective cross-row transactions were a must for such OLTP-like workload. YDB was built by people with strong background in databases and distributed systems, who had an experience of developing No-SQL database and the Map-Reduce system for the one of the largest search engine in the world.
-We found that YDB's flexibles design allows us to build more services on top of it including persistent queues and virtual block devices.
+YDB was designed from scratch as a response to growing demand for scalable interactive web services. Scalability, strict consistency and effective cross-row transactions were a must for such OLTP-like workload. YDB was built by people with strong background in databases and distributed systems, who had an experience of developing No-SQL database and the Map-Reduce system for one of the largest search engines in the world.
+We found that YDB's flexible design allows us to build more services on top of it including persistent queues and virtual block devices.
 
 Basic YDB features:
 
@@ -32,20 +32,19 @@ Basic YDB features:
 
 ### Fault-tolerant configurations
 
-YDB could be deployed in three different availability zones. Cluster remains both read and write available during complete outage of a single zone.
+YDB could be deployed in three availability zones. Cluster remains available for both reads and writes during complete outage of a single zone.
 
 Availability zones and regions are covered in more detail [in documentation](docs/en/core/concepts/databases.md#regions-az).
 
 ### Horizontal scalability
 
-Unlike traditional RDMBS YDB [scales out](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out) providing developers with capability to simply extends cluster with computation or storage resources to handle increasing load.
+Unlike traditional relational databases YDB [scales out](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out) providing developers with capability to simply extend cluster with computation or storage resources to handle increasing load.
 
 Current production installations have more than 10,000 nodes, store petabytes of data and handle more than 100,000 distributed transactions per second.
 
 ### Automatic disaster recovery
 
-YDB Platform has built-in automatic recovery in case of a hardware failure. After unpredictable disk, node, rack or even datacenter failure YDB platform remains fully available for read and write load. No manual intervention required.
-
+YDB Platform has built-in automatic recovery support to survive a hardware failure. After unpredictable disk, node, rack or even datacenter failure YDB platform remains fully available for reads and writes and restores required data redundancy automatically.
 
 ## Supported platforms
 
@@ -73,7 +72,7 @@ For development purposes we test that YDB could be built and run under latest ve
 
 ### Prerequisites
 
-In order to build ydbd you should have following tools installed on your system:
+In order to build `ydbd` you should have following tools installed on your system:
 
 1. Git command line tool
 1. Python
@@ -91,11 +90,13 @@ In order to build ydbd you should have following tools installed on your system:
 
 ## How to contribute
 
-We are glad to welcome new contributors to YDB Platform project!
+We are glad to welcome new contributors!
 
 1. Please read [contributor's guide](CONTRIBUTING).
-2. We can accept your work to YDB Platform after you have read CLA text.
-3. Please don't forget to add a note to your pull request, that you agree to the terms of the CLA. More information can be found in [CONTRIBUTING](CONTRIBUTING) file.
+2. We can accept your work to YDB Platform after you have read contributor's license agreement (aka CLA).
+3. Please don't forget to add a note to your pull request, that you agree to the terms of the CLA.
+
+More information can be found in [CONTRIBUTING](CONTRIBUTING) file.
 
 ## Success stories
 

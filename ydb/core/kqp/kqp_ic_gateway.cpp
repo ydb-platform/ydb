@@ -1523,12 +1523,13 @@ public:
                 );
 
                 SendSchemeRequest(ev.Release()).Apply(
-                    [alterGroupPromise, sendRoleWrapper, groupName = std::move(groupName), action, restOfRoles = std::move(restOfRoles)]
+                    [alterGroupPromise, &sendRoleWrapper, groupName = std::move(groupName), action, restOfRoles = std::move(restOfRoles)]
                         (const TFuture<TGenericResult>& future) mutable
                     {
                         auto result = future.GetValue();
                         if (!result.Success()) {
                             alterGroupPromise.SetValue(result);
+                            sendRoleWrapper.Reset();
                             return;
                         }
                         if (restOfRoles.size()) {
@@ -1536,9 +1537,11 @@ public:
                                 sendRoleWrapper->SendNextRole(std::move(groupName), action, std::move(restOfRoles));
                             }
                             catch (yexception& e) {
+                                sendRoleWrapper.Reset();
                                 return alterGroupPromise.SetValue(ResultFromException<TGenericResult>(e));
                             }
                         } else {
+                            sendRoleWrapper.Reset();
                             alterGroupPromise.SetValue(result);
                         }
                     }

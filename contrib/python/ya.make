@@ -919,6 +919,7 @@ RECURSE(
     pytils
     pytracemalloc
     pytz
+    pytz-deprecation-shim
     pyudev
     pyusb
     PyWavelets
@@ -1100,6 +1101,7 @@ RECURSE(
     typing
     typing-extensions
     typing-inspect
+    tzdata
     tzlocal
     ua-parser
     udatetime

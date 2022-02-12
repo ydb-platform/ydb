@@ -5172,6 +5172,95 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[#];[[3]];[[7]]])", FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
+
+    Y_UNIT_TEST_QUAD(UpdateIndexSubsetPk, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TScriptingClient client(kikimr.GetDriver());
+        auto scriptResult = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            CREATE TABLE TestTable (
+                Key1 Int32,
+                Key2 Uint64,
+                Key3 String,
+                Value String,
+                PRIMARY KEY (Key1, Key2, Key3),
+                INDEX SecondaryIndex GLOBAL ON (Key1, Key3)
+            );
+
+            COMMIT;
+
+            UPSERT INTO TestTable (Key1, Key2, Key3, Value) VALUES
+                (1, 10, "One", "Value1"),
+                (1, 20, "Two", "Value2"),
+                (2, 30, "One", "Value3"),
+                (2, 40, "Two", "Value4");
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptResult.GetStatus(), EStatus::SUCCESS, scriptResult.GetIssues().ToString());
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            UPDATE TestTable ON
+            SELECT Key1, Key2, Key3, "Updated" AS Value
+            FROM TestTable VIEW SecondaryIndex
+            WHERE Key1 = 1 AND Key3 = "Two";
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/TestTable", {
+            .ExpectedReads = 1,
+            .ExpectedUpdates = 1
+        });
+
+        AssertTableStats(result, "/Root/TestTable/SecondaryIndex/indexImplTable", {
+            .ExpectedReads = 1,
+            .ExpectedUpdates = 0
+        });
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM TestTable VIEW SecondaryIndex WHERE Key1 = 1 ORDER BY Key1, Key2, Key3;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        CompareYson(R"([
+            [[1];[10u];["One"];["Value1"]];
+            [[1];[20u];["Two"];["Updated"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            UPDATE TestTable SET Value = "Updated2"
+            WHERE Key1 = 2 AND Key2 = 30;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/TestTable", {
+            .ExpectedReads = 1,
+            .ExpectedUpdates = 1
+        });
+
+        AssertTableStats(result, "/Root/TestTable/SecondaryIndex/indexImplTable", {
+            .ExpectedReads = 0,
+            .ExpectedUpdates = 0
+        });
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM TestTable VIEW SecondaryIndex WHERE Key1 = 2 ORDER BY Key1, Key2, Key3;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        CompareYson(R"([
+            [[2];[30u];["One"];["Updated2"]];
+            [[2];[40u];["Two"];["Value4"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 }

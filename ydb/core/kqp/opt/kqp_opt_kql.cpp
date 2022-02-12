@@ -463,8 +463,8 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
         for (const auto& column : indexDesc->KeyColumns) {
             YQL_ENSURE(keyColumns.emplace(column).second);
 
-            // Check if user specified one of index columns - can't skip index update in this case
-            if (updateColumns.contains(column)) {
+            // Table PK cannot be updated, so don't consider PK columns update as index update
+            if (updateColumns.contains(column) && !tableData.GetKeyColumnIndex(column)) {
                 indexKeyColumnsUpdated = true;
             }
 

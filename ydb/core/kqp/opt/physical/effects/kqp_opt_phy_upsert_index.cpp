@@ -324,6 +324,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         for (const auto& column : indexDesc->KeyColumns) {
             YQL_ENSURE(indexTableColumns.emplace(column).second);
 
+            if (mode == TKqpPhyUpsertIndexMode::UpdateOn && table.GetKeyColumnIndex(column)) {
+                // Table PK cannot be updated, so don't consider PK columns update as index update
+                continue;
+            }
+
             if (inputColumnsSet.contains(column)) {
                 indexKeyColumnsUpdated = true;
             }

@@ -416,6 +416,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
+    Y_VERIFY(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& description = entry.PQGroupInfo->Description;
     Y_VERIFY(description.PartitionsSize() > 0);
     Y_VERIFY(description.HasPQTabletConfig());
@@ -467,6 +468,13 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         return CloseSession(
                 TStringBuilder() << "Failed to read ACL for '" << TopicConverter->GetClientsideName()
                                  << "' Scheme cache error : " << status,
+                PersQueue::ErrorCode::ERROR, ctx
+        );
+    }
+    if (!navigate->ResultSet.front().PQGroupInfo) {
+        return CloseSession(
+                TStringBuilder() << "topic '" << TopicConverter->GetClientsideName() << "' describe error"
+                                 << ", reason: could not retrieve topic description",
                 PersQueue::ErrorCode::ERROR, ctx
         );
     }

@@ -2634,8 +2634,8 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
+    Y_VERIFY(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
-    Y_VERIFY(entry.PQGroupInfo);
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }

@@ -322,7 +322,7 @@ bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
     for (const auto& child : SchemeCacheResponse->ResultSet) {
-        if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
+        if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic && child.PQGroupInfo) {
             TString name = child.PQGroupInfo->Description.GetName();
             if (name.empty()) {
                 name = child.Path.back();

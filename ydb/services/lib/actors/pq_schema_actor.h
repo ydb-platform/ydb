@@ -157,6 +157,15 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             switch (response.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
+                if (!result->ResultSet.front().PQGroupInfo) {
+                    this->Request_->RaiseIssue(
+                        FillIssue(
+                            TStringBuilder() << "path '" << path << "' creation is not completed",
+                            Ydb::PersQueue::ErrorCode::ERROR
+                        )
+                    );
+                    return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                }
                 return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev, ctx);
             }
             break;

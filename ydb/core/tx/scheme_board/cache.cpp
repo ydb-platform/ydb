@@ -1400,7 +1400,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
                 Kind = TNavigate::KindTopic;
                 IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
-                FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                if (Created) {
+                    FillInfo(Kind, PQGroupInfo, std::move(*pathDesc.MutablePersQueueGroup()));
+                }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:
                 Kind = TNavigate::KindCdcStream;

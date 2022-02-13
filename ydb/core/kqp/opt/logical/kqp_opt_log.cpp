@@ -31,6 +31,7 @@ public:
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ApplyExtractMembersToReadTable));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ApplyExtractMembersToReadTableRanges));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ApplyExtractMembersToReadOlapTable));
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(ApplyExtractMembersToLookupTable));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
@@ -84,6 +85,12 @@ protected:
     TMaybeNode<TExprBase> ApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpApplyExtractMembersToReadOlapTable(node, ctx);
         DumpAppliedRule("ApplyExtractMembersToReadOlapTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpApplyExtractMembersToLookupTable(node, ctx);
+        DumpAppliedRule("ApplyExtractMembersToLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

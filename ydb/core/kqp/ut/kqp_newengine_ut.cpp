@@ -3019,6 +3019,31 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(3)));
         CompareYson(R"([[[3500u];["None"];[1u];["Anna"]];[[300u];["None"];[1u];["Paul"]];[[7200u];["None"];[2u];["Tony"]]])", FormatResultSetYson(result.GetResultSet(4)));
     }
+
+    Y_UNIT_TEST(LookupColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            $current_value = SELECT Fk21 FROM Join1 WHERE Key = 2;
+
+            UPDATE Join1 SET Fk22 = "New" WHERE Key = 1 AND Fk21 = 100;
+
+            SELECT $current_value;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto reads = plan["tables"][0]["reads"].GetArraySafe();
+        for (auto& read : reads) {
+            UNIT_ASSERT(read["columns"].GetArraySafe().size() <= 2);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

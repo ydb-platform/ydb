@@ -111,5 +111,38 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
         .Done();
 }
 
+TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx) {
+    if (!node.Maybe<TCoExtractMembers>()) {
+        return node;
+    }
+
+    auto extract = node.Cast<TCoExtractMembers>();
+    auto input = extract.Input();
+
+    if (!input.Maybe<TKqlLookupTableBase>()) {
+        return node;
+    }
+
+    auto lookup = extract.Input().Cast<TKqlLookupTableBase>();
+
+    if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndex>()) {
+        auto indexLookup = maybeIndexLookup.Cast();
+
+        return Build<TKqlLookupIndex>(ctx, lookup.Pos())
+            .Table(indexLookup.Table())
+            .LookupKeys(indexLookup.LookupKeys())
+            .Columns(extract.Members())
+            .Index(indexLookup.Index())
+            .Done();
+    }
+
+    return Build<TKqlLookupTableBase>(ctx, lookup.Pos())
+        .CallableName(lookup.CallableName())
+        .Table(lookup.Table())
+        .LookupKeys(lookup.LookupKeys())
+        .Columns(extract.Members())
+        .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt
 

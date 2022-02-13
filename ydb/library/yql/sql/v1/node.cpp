@@ -1839,17 +1839,17 @@ TNodePtr BuildFrameNode(const TFrameBound& frame) {
     TNodePtr node = frame.Bound;
     TPosition pos = frame.Pos;
     if (frame.Settings == FrameCurrentRow) {
-        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, "0", TNodeFlags::Default) });
+        node = BuildQuotedAtom(pos, "currentRow", TNodeFlags::Default);
     } else if (!node) {
         node = BuildLiteralVoid(pos);
     } else if (node->IsLiteral()) {
         YQL_ENSURE(node->GetLiteralType() == "Int32");
-        auto value = node->GetLiteralValue();
-        YQL_ENSURE(!value.StartsWith('-'));
+        i32 value = FromString<i32>(node->GetLiteralValue());
+        YQL_ENSURE(value >= 0);
         if (frame.Settings == FramePreceding) {
-            value = "-" + value;
+            value = -value;
         }
-        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, value, TNodeFlags::Default) });
+        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, ToString(value), TNodeFlags::Default) });
     } else {
         if (frame.Settings == FramePreceding) {
             node = new TCallNodeImpl(pos, "Minus", { node->Clone() });

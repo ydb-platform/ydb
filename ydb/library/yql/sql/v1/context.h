@@ -254,6 +254,8 @@ namespace NSQLTranslationV1 {
         ui32 PragmaGroupByCubeLimit = 5;
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
         bool FlexibleTypes = false;
+        // see YQL-10265
+        bool AnsiCurrentRow = false;
         THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;

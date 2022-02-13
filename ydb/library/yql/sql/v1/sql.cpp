@@ -6909,6 +6909,22 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
         return false;
     }
 
+    if (frameSpec->FrameType != EFrameType::FrameByRange) {
+        // replace FrameCurrentRow for ROWS/GROUPS with 0 preceding/following
+        // FrameCurrentRow has special meaning ( = first/last peer row)
+        auto replaceCurrent = [](TFrameBound& frame, bool preceding) {
+            frame.Settings = preceding ? EFrameSettings::FramePreceding : EFrameSettings::FrameFollowing;
+            frame.Bound = new TLiteralNumberNode<i32>(frame.Pos, "Int32", "0");
+        };
+        if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
+            replaceCurrent(*frameSpec->FrameBegin, true);
+        }
+
+        if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
+            replaceCurrent(*frameSpec->FrameEnd, false);
+        }
+    }
+
     return true;
 }
 
@@ -6961,21 +6977,27 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameType = EFrameType::FrameByRows;
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
+        // BETWEEN UNBOUNDED PRECEDING AND ...
         winSpecPtr->Frame->FrameBegin = new TFrameBound;
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
 
         const bool ordered = !winSpecPtr->OrderBy.empty();
         winSpecPtr->Frame->FrameEnd = new TFrameBound;
+        winSpecPtr->Frame->FrameBegin->Pos = winSpecPtr->Frame->FrameEnd->Pos = Ctx.Pos();
         if (ordered) {
-            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
+            if (Ctx.AnsiCurrentRow) {
+                // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                // We emit FrameByRows here, but FrameCurrentRow works specially for ROWS
+                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
+            } else {
+                // ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING
+                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
+                winSpecPtr->Frame->FrameEnd->Bound = new TLiteralNumberNode<i32>(Ctx.Pos(), "Int32", "0");
+            }
         } else {
             // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
         }
-
-        // TODO: According to standard this should be RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW with order by clause
-        // TODO: and RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING without order by
     }
     return winSpecPtr;
 }
@@ -9575,6 +9597,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableflexibletypes") {
             Ctx.FlexibleTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableFlexibleTypes");
+        } else if (normalizedPragma == "ansicurrentrow") {
+            Ctx.AnsiCurrentRow = true;
+            Ctx.IncrementMonCounter("sql_pragma", "AnsiCurrentRow");
+        } else if (normalizedPragma == "disableansicurrentrow") {
+            Ctx.AnsiCurrentRow = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

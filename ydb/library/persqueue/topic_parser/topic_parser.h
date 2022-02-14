@@ -53,6 +53,8 @@ protected:
 
         TStringBuf topicNormalized = topic;
         topicNormalized.SkipPrefix("/");
+        CHECK_SET_VALID(!topicNormalized.StartsWith("/"), "Multiple leading '/' in topic name", return *this);
+        CHECK_SET_VALID(!topicNormalized.empty(), "Empty topic name", return *this);
 
         TStringBuf dbNormalized = database;
         dbNormalized.SkipPrefix("/");
@@ -166,6 +168,25 @@ public:
             fst = buf;
         }
         return TString{fst};
+    }
+    TString GetTopicForSrcId() const {
+        if (!IsValid())
+            return {};
+        if (NoDcMode) {
+            return FullModernPath;
+        } else {
+            return FullLegacyName;
+        }
+    }
+
+    TString GetTopicForSrcIdHash() const {
+        if (!IsValid())
+            return {};
+        if (NoDcMode) {
+            return FullModernPath;
+        } else {
+            return LegacyName;
+        }
     }
 
 private:

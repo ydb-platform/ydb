@@ -490,6 +490,7 @@ private:
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+public:
     TMaybe<NYdb::TResultSet> RunYqlDataQueryWithParams(TString query, const NYdb::TParams& params) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
         TMaybe<NYdb::TResultSet> rs;
@@ -514,7 +515,6 @@ private:
     }
 
 
-public:
     TFlatMsgBusPQClient(
             const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing()
     )

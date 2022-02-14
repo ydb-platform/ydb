@@ -361,7 +361,6 @@ private:
         auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(++RequestId);
         for (const auto& path : topics) {
             auto split = NKikimr::SplitPath(path);
-            Y_VERIFY(!split.empty());
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             if (addDefaultPathPrefix) {
                 entry.Path.insert(entry.Path.end(), PathPrefixParts.begin(), PathPrefixParts.end());

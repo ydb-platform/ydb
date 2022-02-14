@@ -278,7 +278,6 @@ private:
     void HandleConnections() {
         LOG_D("HandleConnections");
 
-        THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth> databaseIds;
         for (const auto& connection : Params.Connections) {
             if (!connection.content().name()) {
                 LOG_D("Connection with empty name " << connection.meta().id());

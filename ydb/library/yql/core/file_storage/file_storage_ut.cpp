@@ -3,13 +3,16 @@
 #include <ydb/library/yql/core/file_storage/ut/test_http_server.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
+#include <ydb/library/yql/core/file_storage/http_download/proto/http_download.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/protobuf/util/pb_io.h>
 
 #include <util/stream/file.h>
+#include <util/stream/str.h>
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
 
@@ -22,7 +25,13 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         return TIFStream(path).ReadAll();
     }
 
-    static TFileStoragePtr CreateTestFS(const TFileStorageConfig& params = {}, const std::vector<TString>& extraPatterns = {}) {
+    static TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const THttpDownloaderConfig* httpCfg = nullptr, const std::vector<TString>& extraPatterns = {}) {
+        if (httpCfg) {
+            TStringStream strCfg;
+            SerializeToTextFormat(*httpCfg, strCfg);
+            (*params.MutableDownloaderConfig())["http"] = strCfg.Str();
+        }
+
         TFileStoragePtr fs = CreateFileStorage(params);
         fs->AddDownloader(MakeHttpDownloader(false, params, extraPatterns));
         return fs;
@@ -478,19 +487,21 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         {
             // not in whitelist
+            THttpDownloaderConfig httpCfg;
+            httpCfg.AddAllowedUrlPatterns("^XXXX$");
             TFileStorageConfig params;
-            params.AddAllowedUrlPatterns("^XXXX$");
-            TFileStoragePtr fs = CreateTestFS(params);
+            TFileStoragePtr fs = CreateTestFS(params, &httpCfg);
 
             UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "It is not allowed to download url http://localhost:");
         }
 
         {
             // have in whitelist
+            THttpDownloaderConfig httpCfg;
+            httpCfg.SetSocketTimeoutMs(4000);
+            httpCfg.AddAllowedUrlPatterns("^http://localhost:");
             TFileStorageConfig params;
-            params.SetSocketTimeoutMs(4000);
-            params.AddAllowedUrlPatterns("^http://localhost:");
-            TFileStoragePtr fs = CreateTestFS(params);
+            TFileStoragePtr fs = CreateTestFS(params, &httpCfg);
 
             auto link = fs->PutUrl(url, {});
             UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link->GetPath()));
@@ -498,10 +509,11 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
         {
             // have eaxtra url in whitelist
+            THttpDownloaderConfig httpCfg;
+            httpCfg.SetSocketTimeoutMs(4000);
+            httpCfg.AddAllowedUrlPatterns("^XXXX$");
             TFileStorageConfig params;
-            params.SetSocketTimeoutMs(4000);
-            params.AddAllowedUrlPatterns("^XXXX$");
-            TFileStoragePtr fs = CreateTestFS(params, std::vector{TString{"^http://localhost:"}});
+            TFileStoragePtr fs = CreateTestFS(params, &httpCfg, std::vector{TString{"^http://localhost:"}});
 
             auto link = fs->PutUrl(url, {});
             UNIT_ASSERT_VALUES_EQUAL(currentContent, ReadFileContent(link->GetPath()));
@@ -516,9 +528,10 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
             return TTestHttpServer::TReply::Ok("ABC");
         });
 
+        THttpDownloaderConfig httpCfg;
+        httpCfg.SetSocketTimeoutMs(1000);
         TFileStorageConfig params;
-        params.SetSocketTimeoutMs(1000);
-        TFileStoragePtr fs = CreateTestFS(params);
+        TFileStoragePtr fs = CreateTestFS(params, &httpCfg);
 
         auto url = server->GetUrl();
         UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "can not read from socket input stream");

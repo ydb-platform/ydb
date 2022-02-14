@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/yql/core/file_storage/defs/provider.h>
+
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -38,10 +40,6 @@ TFileLinkPtr CreateFakeFileLink(const TFsPath& path, const TString& md5 = "", bo
 */
 class TStorage {
 public:
-    // This function is called by the storage to transfer user data to the provided temporary file path
-    // Returns content size and md5
-    using TDataPuller = std::function<std::pair<ui64, TString> (const TFsPath& dstPath)>;
-
     /* Constructs the storage with the specified limits.
        storagePath can be empty - a temporary directory will be used in this case.
     */
@@ -56,7 +54,7 @@ public:
     // The second argument outFileName specifies a name of temporary link returned from the Put(). If empty, then random guid is used.
     // Provide valid md5 if it is known in advance, otherwise pass "". It will be overridden by puller result
     // The provided puller does the actual transfer of the data to a storage file. It can take a long time.
-    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TDataPuller& puller);
+    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NYql::NFS::TDataProvider& puller);
     // Returns nullptr on error
     TFileLinkPtr HardlinkFromStorage(const TString& existingStorageFileName, const TString& storageFileMd5, const TString& outFileName);
     void MoveToStorage(const TFsPath& src, const TString& dstStorageFileName);

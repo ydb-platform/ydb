@@ -2,6 +2,8 @@
 
 #include "storage.h"
 
+#include <ydb/library/yql/core/file_storage/defs/downloader.h>
+
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/uri/http_url.h>
 
@@ -16,14 +18,8 @@ namespace NYql {
 class TFileStorageConfig;
 
 struct IFileStorage: public TThrRefBase {
-    struct IDownloader : public TThrRefBase {
-        virtual bool Accept(const THttpURL& url) = 0;
-        virtual std::tuple<TStorage::TDataPuller, TString, TString> Download(const THttpURL& url, const TString& oauthToken, const TString& etag, const TString& lastModified) = 0;
-    };
-    using IDownloaderPtr = TIntrusivePtr<IDownloader>;
-
     virtual ~IFileStorage() = default;
-    virtual void AddDownloader(IDownloaderPtr downloader) = 0;
+    virtual void AddDownloader(NYql::NFS::IDownloaderPtr downloader) = 0;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
     virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
     virtual TFileLinkPtr PutInline(const TString& data) = 0;
@@ -42,5 +38,8 @@ using TFileStoragePtr = TIntrusivePtr<IFileStorage>;
 
 // Will use auto-cleaned temporary directory if storagePath is empty
 TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params);
+
+void LoadFsConfigFromFile(TStringBuf path, TFileStorageConfig& params);
+void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params);
 
 } // NYql

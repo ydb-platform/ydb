@@ -13,10 +13,6 @@ message TFileStorageConfig {
     optional uint32 Threads = 5 [default = 1]; // Number of download threads for async downloading
     optional uint32 RetryCount = 6 [default = 0]; // Number of additional attempts to download file
     optional uint32 RetryDelayMs = 7 [default = 1000]; // Delay in ms between attempts to download file
-    repeated string AllowedUrlPatterns = 8; // Whitelist of url regexps; disabled if empty
-    repeated string ExternalAllowedUrlPatterns = 12; // Whitelist of url regexps for external users; disabled if empty
-    optional uint32 SocketTimeoutMs = 9 [default = 300000];
-    optional string ArcSshUser = 10;
-    optional string ArcSshPkPath = 11;
-    optional string ArcTokenPath = 13;
+
+    map<string, string> DownloaderConfig = 14;
 }

@@ -198,7 +198,7 @@ public:
         return ProcessTempDir;
     }
 
-    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TStorage::TDataPuller& puller) {
+    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NYql::NFS::TDataProvider& puller) {
         bool newFileAdded = false;
         TFileLinkPtr result = HardlinkFromStorage(storageFileName, md5, outFileName);
         if (!result) {
@@ -465,7 +465,7 @@ TFsPath TStorage::GetTemp() const
     return Impl->GetTemp();
 }
 
-TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TDataPuller& puller)
+TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NFS::TDataProvider& puller)
 {
     return Impl->Put(storageFileName, outFileName, md5, puller);
 }

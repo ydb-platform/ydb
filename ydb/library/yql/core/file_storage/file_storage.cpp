@@ -2,9 +2,10 @@
 #include "storage.h"
 #include "url_mapper.h"
 #include "url_meta.h"
-#include "download_stream.h"
 
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
+#include <ydb/library/yql/core/file_storage/download/download_stream.h>
+#include <ydb/library/yql/core/file_storage/defs/provider.h>
 
 #include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -17,10 +18,13 @@
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/threading/future/async.h>
+#include <library/cpp/resource/resource.h>
+#include <library/cpp/protobuf/util/pb_io.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/yexception.h>
 
+#include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/stream/null.h>
 #include <util/system/fs.h>
@@ -29,6 +33,8 @@
 #include <util/system/shellcommand.h>
 #include <util/system/sysstat.h>
 #include <util/system/utime.h>
+#include <util/folder/path.h>
+
 
 namespace NYql {
 
@@ -61,7 +67,7 @@ public:
         MtpQueue->Stop();
     }
 
-    void AddDownloader(IDownloaderPtr downloader) override {
+    void AddDownloader(NFS::IDownloaderPtr downloader) override {
         Downloaders.push_back(std::move(downloader));
     }
 
@@ -173,21 +179,27 @@ public:
 
     NThreading::TFuture<TFileLinkPtr> PutFileAsync(const TString& file, const TString& outFileName = {}) override  {
         StartQueueOnce();
+        auto logCtx = NLog::CurrentLogContextPath();
         return NThreading::Async([=]() {
+            YQL_LOG_CTX_ROOT_SCOPE(logCtx);
             return this->PutFile(file, outFileName);
         }, *MtpQueue);
     }
 
     NThreading::TFuture<TFileLinkPtr> PutInlineAsync(const TString& data) override {
         StartQueueOnce();
+        auto logCtx = NLog::CurrentLogContextPath();
         return NThreading::Async([=]() {
+            YQL_LOG_CTX_ROOT_SCOPE(logCtx);
             return this->PutInline(data);
         }, *MtpQueue);
     }
 
     NThreading::TFuture<TFileLinkPtr> PutUrlAsync(const TString& url, const TString& oauthToken) override  {
         StartQueueOnce();
+        auto logCtx = NLog::CurrentLogContextPath();
         return NThreading::Async([=]() {
+            YQL_LOG_CTX_ROOT_SCOPE(logCtx);
             return this->PutUrl(url, oauthToken);
         }, *MtpQueue);
     }
@@ -212,7 +224,7 @@ private:
         }
     }
 
-    TFileLinkPtr PutUrl(const THttpURL& url, const TString& oauthToken, const IDownloaderPtr& downloader) {
+    TFileLinkPtr PutUrl(const THttpURL& url, const TString& oauthToken, const NFS::IDownloaderPtr& downloader) {
         return WithRetry<TDownloadError>(Config.GetRetryCount(), [&, this]() {
             return this->DoPutUrl(url, oauthToken, downloader);
         }, [&](const auto& e, int attempt, int attemptCount) {
@@ -221,7 +233,7 @@ private:
         });
     }
 
-    TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& oauthToken, const IDownloaderPtr& downloader) {
+    TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& oauthToken, const NFS::IDownloaderPtr& downloader) {
         const auto urlMetaFile = BuildUrlMetaFileName(url);
         auto lock = MultiResourceLock.Acquire(urlMetaFile); // let's use meta file as lock name
 
@@ -241,7 +253,7 @@ private:
             << ", ContentFile=" << urlMeta.ContentFile << ", Md5=" << urlMeta.Md5
             << ", LastModified=" << urlMeta.LastModified;
 
-        TStorage::TDataPuller puller;
+        NFS::TDataProvider puller;
         TString etag;
         TString lastModified;
         std::tie(puller, etag, lastModified) = downloader->Download(url, oauthToken, urlMeta.ETag, urlMeta.LastModified);
@@ -292,7 +304,7 @@ private:
 private:
     TStorage Storage;
     const TFileStorageConfig Config;
-    std::vector<IDownloaderPtr> Downloaders;
+    std::vector<NFS::IDownloaderPtr> Downloaders;
     TUrlMapper Mapper;
     TAtomic QueueStarted;
     THolder<IThreadPool> MtpQueue;
@@ -303,6 +315,63 @@ TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params) {
     Y_ENSURE(0 != params.GetMaxFiles(), "FileStorage: MaxFiles must be greater than 0");
     Y_ENSURE(0 != params.GetMaxSizeMb(), "FileStorage: MaxSizeMb must be greater than 0");
     return new TFileStorageImpl(params);
+}
+
+void LoadFsConfigFromFile(TStringBuf path, TFileStorageConfig& params) {
+    auto fs = TFsPath(path);
+    try {
+        ParseFromTextFormat(fs, params, EParseFromTextFormatOption::AllowUnknownField);
+    } catch (const yexception& e) {
+        ythrow yexception() << "Bad format of file storage settings: " << e;
+    }
+
+    TString prefix = fs.GetName();
+    TString ext = fs.GetExtension();
+    if (ext) {
+        ext.prepend('.');
+        prefix = prefix.substr(0, prefix.length() - ext.length());
+    }
+    prefix.append('_');
+    TVector<TFsPath> children;
+    fs.Parent().List(children);
+    for (auto c: children) {
+        if (c.IsFile()) {
+            const auto name = c.GetName();
+            TStringBuf key(name);
+            if (key.SkipPrefix(prefix) && (!ext || key.ChopSuffix(ext))) {
+                auto configData = TIFStream(c).ReadAll();
+                (*params.MutableDownloaderConfig())[key] = configData;
+            }
+        }
+    }
+}
+
+void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params) {
+    TString configData = NResource::Find(path);
+
+    try {
+        TStringInput in(configData);
+        ParseFromTextFormat(in, params, EParseFromTextFormatOption::AllowUnknownField);
+    } catch (const yexception& e) {
+        ythrow yexception() << "Bad format of file storage settings: " << e;
+    }
+
+    auto fs = TFsPath(path);
+    TString prefix = fs;
+    TString ext = fs.GetExtension();
+    if (ext) {
+        ext.prepend('.');
+        prefix = prefix.substr(0, prefix.length() - ext.length());
+    }
+    prefix.append('_');
+
+    for (auto res: NResource::ListAllKeys()) {
+        TStringBuf key{res};
+        if (key.SkipPrefix(prefix) && (!ext || key.ChopSuffix(ext))) {
+            configData = NResource::Find(res);
+            (*params.MutableDownloaderConfig())[key] = configData;
+        }
+    }
 }
 
 } // NYql

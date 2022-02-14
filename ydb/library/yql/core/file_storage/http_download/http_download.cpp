@@ -2,8 +2,10 @@
 #include "pattern_group.h"
 
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/core/file_storage/download_stream.h>
-
+#include <ydb/library/yql/core/file_storage/http_download/proto/http_download.pb.h>
+#include <ydb/library/yql/core/file_storage/download/download_stream.h>
+#include <ydb/library/yql/core/file_storage/download/download_config.h>
+#include <ydb/library/yql/core/file_storage/defs/downloader.h>
 #include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/log/context.h>
@@ -23,19 +25,25 @@
 
 namespace NYql {
 
-class THttpDownloader: public IFileStorage::IDownloader {
+class THttpDownloader: public TDownloadConfig<THttpDownloader, THttpDownloaderConfig>, public NYql::NFS::IDownloader {
 public:
     THttpDownloader(bool restictedUser, const TFileStorageConfig& config, const std::vector<TString>& extraAllowedUrls)
-        : SocketTimeoutMs(config.GetSocketTimeoutMs())
+        : RestictedUser(restictedUser)
     {
-        for (const auto& p : restictedUser ? config.GetExternalAllowedUrlPatterns() : config.GetAllowedUrlPatterns()) {
-            AllowedUrls.Add(p);
-        }
+        Configure(config, "http");
         for (auto p: extraAllowedUrls) {
             AllowedUrls.Add(p);
         }
     }
     ~THttpDownloader() = default;
+
+    void DoConfigure(const THttpDownloaderConfig& cfg) {
+        SocketTimeoutMs = cfg.GetSocketTimeoutMs();
+
+        for (const auto& p : RestictedUser ? cfg.GetExternalAllowedUrlPatterns() : cfg.GetAllowedUrlPatterns()) {
+            AllowedUrls.Add(p);
+        }
+    }
 
     bool Accept(const THttpURL& url) final {
         switch (url.GetScheme()) {
@@ -48,7 +56,7 @@ public:
         return false;
     }
 
-    std::tuple<TStorage::TDataPuller, TString, TString> Download(const THttpURL& url, const TString& oauthToken, const TString& oldEtag, const TString& oldLastModified) final {
+    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& oauthToken, const TString& oldEtag, const TString& oldLastModified) final {
         if (!AllowedUrls.IsEmpty()) {
             if (auto strUrl = url.PrintS(); !AllowedUrls.Match(strUrl)) {
                 YQL_LOG(WARN) << "FileStorage: url " << strUrl << " is not in whitelist, reject downloading";
@@ -59,7 +67,7 @@ public:
         TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, oauthToken, oldEtag, oldLastModified, SocketTimeoutMs);
         switch (fr1->GetRetCode()) {
         case HTTP_NOT_MODIFIED:
-            return std::make_tuple(TStorage::TDataPuller{}, TString{}, TString{});
+            return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
         case HTTP_OK:
             break;
         default:
@@ -150,11 +158,12 @@ private:
     }
 
 private:
-    ui32 SocketTimeoutMs;
+    const bool RestictedUser;
+    ui32 SocketTimeoutMs = 300000;
     TPatternGroup AllowedUrls;
 };
 
-IFileStorage::IDownloaderPtr MakeHttpDownloader(bool restictedUser, const TFileStorageConfig& config, const std::vector<TString>& extraAllowedUrls) {
+NYql::NFS::IDownloaderPtr MakeHttpDownloader(bool restictedUser, const TFileStorageConfig& config, const std::vector<TString>& extraAllowedUrls) {
     return MakeIntrusive<THttpDownloader>(restictedUser, config, extraAllowedUrls);
 }
 

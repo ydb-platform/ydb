@@ -363,6 +363,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         bool preventEnqueueing = true;
         TVector<THolder<IEventHandle>> enqueued;
         THashMap<ui64, ui32> splitAcks;
+        ui32 allowedRejects = Max<ui32>();
 
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -373,6 +374,15 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                 } else {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
+
+            case TEvChangeExchange::EvStatus:
+                if (ev->Get<TEvChangeExchange::TEvStatus>()->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_REJECT) {
+                    if (!allowedRejects) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    --allowedRejects;
+                }
+                break;
 
             case TEvDataShard::EvSplitAck:
                 ++splitAcks[ev->Get<TEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
@@ -468,6 +478,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         // merge of index table
         preventEnqueueing = true;
+        allowedRejects = 1; // skip 2nd reject from index shard
         ExecSQL(server, sender, R"(
             UPSERT INTO `/Root/Table` (pkey, ikey) VALUES
             (1, 15),

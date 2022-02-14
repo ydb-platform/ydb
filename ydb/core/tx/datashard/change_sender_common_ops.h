@@ -88,7 +88,7 @@ class TBaseChangeSender: public IChangeSender {
         TVector<TEnqueuedRecord> Pending;
     };
 
-    void RequestRecords();
+    bool RequestRecords();
     void SendRecords();
 
 protected:

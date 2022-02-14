@@ -34,7 +34,7 @@ public:
         const TString scope = GetPeerMetaValues("x-yq-scope").GetOrElse("");
         if (scope.StartsWith("yandexcloud://")) {
             const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
-            if (path.size() == 2) {
+            if (path.size() == 2 || path.size() == 3) {
                 const TString& folderId = path.back();
                 TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                     Permissions,

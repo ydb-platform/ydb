@@ -73,7 +73,7 @@ public:
         }
 
         const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
-        if (path.size() != 2) {
+        if (path.size() != 2 && path.size() != 3) {
             ReplyWithStatus("x-yq-scope format is invalid. Must be yandexcloud://folder_id, but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }

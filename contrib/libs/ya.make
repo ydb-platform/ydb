@@ -271,6 +271,7 @@ RECURSE(
     portaudio
     porto_api
     postgresql
+    postgresql/bin/postgresql
     proj
     protobuf
     protobuf/python

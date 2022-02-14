@@ -15,6 +15,7 @@ THolder<NActors::IActor> MakeResultReceiver(
 //    const Yql::DqsProto::TFullResultTable& resultTable,
     const THashMap<TString, TString>& secureParams,
     const TString& resultBuilder,
+    const NActors::TActorId& graphExecutionEventsId,
     bool discard
 );
 

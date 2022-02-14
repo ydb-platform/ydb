@@ -3,12 +3,10 @@
 
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/result_actor_base.h>
 
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
@@ -34,77 +32,45 @@ using namespace NDqs;
 
 namespace {
 
-class TResultReceiver: public TRichActor<TResultReceiver> {
+class TResultReceiver: public NYql::NDqs::NExecutionHelpers::TResultActorBase<TResultReceiver> {
 public:
     static constexpr char ActorName[] = "YQL_DQ_RESULT_RECEIVER";
 
     explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings,
-        const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard)
-        : TRichActor<TResultReceiver>(&TResultReceiver::Handler)
-        , ExecuterId(executerId)
-        , TraceId(traceId)
-        , Settings(settings)
-        , SecureParams(std::move(secureParams))
-        , ResultBuilder(
-            resultType
-            ? MakeHolder<TProtoBuilder>(resultType, columns)
-            : nullptr)
-        , Discard(discard)
-    {
-        if (Settings) {
-            if (Settings->_AllResultsBytesLimit.Get()) {
-                YQL_LOG(DEBUG) << "_AllResultsBytesLimit = " << *Settings->_AllResultsBytesLimit.Get();
-            }
-            if (Settings->_RowsLimitPerWrite.Get()) {
-                YQL_LOG(DEBUG) << "_RowsLimitPerWrite = " << *Settings->_RowsLimitPerWrite.Get();
-            }
-        }
-
-        Y_UNUSED(Size);
-        Y_UNUSED(Rows);
+        const THashMap<TString, TString>& /*secureParams*/, const TString& resultType, const NActors::TActorId& graphExecutionEventsId, bool discard)
+        : TResultActorBase<TResultReceiver>(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard) {
     }
 
-private:
+public:
     STRICT_STFUNC(Handler, {
         HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
         HFunc(TEvReadyState, OnReadyState);
         HFunc(TEvQueryResponse, OnQueryResult);
-        cFunc(TEvents::TEvPoison::EventType, PassAway)
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+        HFunc(TEvDqFailure, OnFullResultWriterResponse);
+        hFunc(TEvents::TEvUndelivered, OnUndelivered);
+        cFunc(TEvents::TEvGone::EventType, OnFullResultWriterShutdown);
+        sFunc(TEvResultReceiverFinish, Finish);
     })
 
+private:
     void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG(DEBUG) << __FUNCTION__;
 
-        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
-
-        if (!Discard) {
-            if (!Finished && ev->Get()->Record.GetChannelData().GetData().GetRaw().size() > 0) {
-                DataParts.emplace_back(std::move(ev->Get()->Record.GetChannelData().GetData()));
-                Size += DataParts.back().GetRaw().size();
-                Rows += DataParts.back().GetRows();
-                YQL_LOG(DEBUG) << "Size: " << Size;
-                YQL_LOG(DEBUG) << "Rows: " << Rows;
-            }
-
-            if (Size > 64000000 /* grpc limit*/) {
-                OnError("Too big result (grpc limit reached: " + ToString(Size) + " > 64000000)" , false, true);
-            } else if (Settings && Settings->_AllResultsBytesLimit.Get() && Size > *Settings->_AllResultsBytesLimit.Get()) {
-                TIssue issue("Size limit reached: " + ToString(Size) + ">" + ToString(Settings->_AllResultsBytesLimit.Get()));
-                issue.Severity = TSeverityIds::S_WARNING;
-                Issues.AddIssue(issue);
-                Finish(/*truncated = */ true);
-            } else if (Settings && Settings->_RowsLimitPerWrite.Get() && Rows > *Settings->_RowsLimitPerWrite.Get()) {
-                TIssue issue("Rows limit reached: " + ToString(Rows) + ">" + ToString(Settings->_RowsLimitPerWrite.Get()));
-                issue.Severity = TSeverityIds::S_WARNING;
-                Issues.AddIssue(issue);
-                Finish(/*truncated = */ true);
-            }
+        if (!FinishCalled) {
+            OnReceiveData(std::move(*ev->Get()->Record.MutableChannelData()->MutableData()));
+        }
+        if (!FinishCalled && ev->Get()->Record.GetChannelData().GetFinished()) {
+            Send(SelfId(), MakeHolder<TEvResultReceiverFinish>());  // postpone finish until TFullResultWriterActor is instaniated
         }
 
+        // todo: ack after data is stored to yt?
+        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
         res->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
         res->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         res->Record.SetFreeSpace(256_MB);
-        res->Record.SetFinish(Finished);
+        res->Record.SetFinish(FinishCalled);  // set if premature finish started (when response limit reached and FullResultTable not enabled)
         Send(ev->Sender, res.Release());
 
         YQL_LOG(DEBUG) << "Finished: " << ev->Get()->Record.GetChannelData().GetFinished();
@@ -113,70 +79,20 @@ private:
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) {
         // do nothing
     }
-
-    void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        NDqProto::TQueryResponse result(ev->Get()->Record);
-        YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
-
-        if (ResultBuilder) {
-            try {
-                TString yson = Discard ? "" : ResultBuilder->BuildYson(
-                    DataParts,
-                    Settings && Settings->_AllResultsBytesLimit.Get()
-                        ? *Settings->_AllResultsBytesLimit.Get()
-                        : 64000000 /* grpc limit*/);
-                *result.MutableYson() = yson;
-            } catch (...) {
-                Issues.AddIssue(TIssue(CurrentExceptionMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING));
-                result.SetNeedFallback(true);
-            }
-        } else {
-            if (Rows > 0) {
-                Issues.AddIssue(TIssue("Non empty rows: " + ToString(Rows)).SetCode(0, TSeverityIds::S_WARNING));
-            }
-        }
-
-        if (!Issues.Empty()) {
-            IssuesToMessage(Issues, result.MutableIssues());
-        }
-        result.SetTruncated(Truncated);
-        Send(ExecuterId, new TEvQueryResponse(std::move(result)));
-    }
-
-    void OnError(const TString& message, bool retriable, bool needFallback) {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "OnError " << message;
-        auto req = MakeHolder<TEvDqFailure>(TIssue(message).SetCode(-1, TSeverityIds::S_ERROR), retriable, needFallback);
-        Send(ExecuterId, req.Release());
-        Finished = true;
-    }
-
-    void Finish(bool truncated = false) {
-        Send(ExecuterId, new TEvGraphFinished());
-        Finished = true;
-        Truncated = truncated;
-    }
-
-    const NActors::TActorId ExecuterId;
-    TVector<NDqProto::TData> DataParts;
-    const TString TraceId;
-    TDqConfiguration::TPtr Settings;
-    bool Finished = false;
-    bool Truncated = false;
-    TIssues Issues;
-    ui64 Size = 0;
-    ui64 Rows = 0;
-    // const Yql::DqsProto::TFullResultTable FullResultTable;
-    const THashMap<TString, TString> SecureParams;
-    // THolder<IFullResultWriter> FullResultWriter;
-    THolder<TProtoBuilder> ResultBuilder;
-    bool Discard = false;
 };
 
 } /* namespace */
 
-THolder<NActors::IActor> MakeResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings, const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard) {
-    return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, discard);
+THolder<NActors::IActor> MakeResultReceiver(
+    const TVector<TString>& columns, 
+    const NActors::TActorId& executerId, 
+    const TString& traceId, 
+    const TDqConfiguration::TPtr& settings, 
+    const THashMap<TString, TString>& secureParams, 
+    const TString& resultType,
+    const NActors::TActorId& graphExecutionEventsId, 
+    bool discard) {
+    return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, graphExecutionEventsId, discard);
 }
 
 } /* namespace NYql */

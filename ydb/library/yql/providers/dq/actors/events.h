@@ -92,4 +92,6 @@ namespace NYql::NDqs {
     struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
     };
+
+    using TEvResultReceiverFinish = TEvGraphFinished;
 }

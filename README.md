@@ -81,7 +81,7 @@ In order to build `ydbd` you should have following tools installed on your syste
 
 1. `git clone https://github.com/ydb-platform/ydb.git`
 1. `cd ydb/apps/ydbd`
-1. `../../../ya make -r -DOPENSOURCE`
+1. `../../../ya make -r`
 
 ## How to deploy
 

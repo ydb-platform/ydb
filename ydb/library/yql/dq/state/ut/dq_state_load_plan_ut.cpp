@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
         AssertTaskPlanIsEmpty(2);
     }
 
-    Y_UNIT_TEST(NotMappedAllPartitionsIsOk) {
+    Y_UNIT_TEST(NotMappedAllPartitions) {
         SrcGraph
             .Task()
                 .Input().TopicSource("t", 5, 1, 0).Build()
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
                 .Input().TopicSource("t", 10, 2, 1).Build()
                 .Build();
 
-        UNIT_ASSERT(MakePlan(false));
+        UNIT_ASSERT(!MakePlan(false));
         UNIT_ASSERT_UNEQUAL(Issues.Size(), 0);
         UNIT_ASSERT(MakePlan(true));
         UNIT_ASSERT_UNEQUAL(Issues.Size(), 0);

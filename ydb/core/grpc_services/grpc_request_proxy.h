@@ -21,6 +21,7 @@ namespace NGRpcService {
 
 TString DatabaseFromDomain(const TAppData* appdata);
 IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
+IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
 class TGRpcRequestProxy : public IFacilityProvider {
 public:

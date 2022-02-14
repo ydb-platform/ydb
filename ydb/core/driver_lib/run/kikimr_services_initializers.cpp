@@ -1507,7 +1507,9 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
-        auto grpcReqProxy = NGRpcService::CreateGRpcRequestProxy(Config);
+        auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck() 
+            ? NGRpcService::CreateGRpcRequestProxySimple(Config)
+            : NGRpcService::CreateGRpcRequestProxy(Config);
         setup->LocalServices.push_back(std::pair<TActorId,
                                        TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(),
                                                        TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,

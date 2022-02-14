@@ -588,6 +588,8 @@ message TGRpcConfig {
     repeated string ServicesEnabled = 22;
     repeated string ServicesDisabled = 23;
 
+    optional bool SkipSchemeCheck = 24 [default = false];
+
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE

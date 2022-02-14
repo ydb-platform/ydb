@@ -93,7 +93,7 @@ SRCS(
     dsymutil.cpp
 )
 
-IF (OS_DARWIN AND ARCH_AARCH64)
+IF (OS_DARWIN)
     LDFLAGS(
         -framework
         CoreFoundation

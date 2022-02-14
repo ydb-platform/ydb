@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: charset-normalizer
-Version: 2.0.11
+Version: 2.0.12
 Summary: The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet.
 Home-page: https://github.com/ousret/charset_normalizer
 Author: Ahmed TAHRI @Ousret

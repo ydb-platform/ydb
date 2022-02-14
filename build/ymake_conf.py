@@ -1129,7 +1129,7 @@ class GnuToolchain(Toolchain):
             for lib_path in build.host.library_path_variables:
                 self.env.setdefault(lib_path, []).append('{}/lib'.format(self.tc.name_marker))
 
-        macos_version_min = '10.11'
+        macos_version_min = '10.12'
         macos_arm64_version_min = '11.0'
         ios_version_min = '11.0'
         # min ios simulator version for Metal App is 13.0
@@ -2465,7 +2465,6 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-ignored-pragma-optimize',
                 '-Wno-inconsistent-dllimport',
                 '-Wno-int-conversion',
-                '-Wno-int-to-void-pointer-cast',
                 '-Wno-invalid-noreturn',
                 '-Wno-logical-op-parentheses',
                 '-Wno-macro-redefined',
@@ -2630,10 +2629,9 @@ class MSVCCompiler(MSVC, Compiler):
              '${TOOLCHAIN_ENV} ${CL_WRAPPER} ${C_COMPILER} /c /Fo${OUTFILE} ${SRC} ${EXTRA_C_FLAGS} ${pre=/I :INC} '
              '${CFLAGS} ${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"soe"} ${hide;kv:"p CC"} ${hide;kv:"pc yellow"}'
              )
-        lang_cflags_value = '${_LANG_CFLAGS_VALUE} ' if self.tc.use_clang else ''
         emit('_SRC_CPP_CMD',
              '${TOOLCHAIN_ENV} ${CL_WRAPPER} ${CXX_COMPILER} /c /Fo$_COMPILE_OUTPUTS ${input;msvs_source:SRC} '
-             '${EXTRA_C_FLAGS} ${pre=/I :_C__INCLUDE} ${CXXFLAGS} ${SRCFLAGS} ' + lang_cflags_value + '${requirements;hide:CC_REQUIREMENTS} '
+             '${EXTRA_C_FLAGS} ${pre=/I :_C__INCLUDE} ${CXXFLAGS} ${SRCFLAGS} ${_LANG_CFLAGS_VALUE} ${requirements;hide:CC_REQUIREMENTS} '
              '${hide;kv:"soe"} ${hide;kv:"p CC"} ${hide;kv:"pc yellow"}'
              )
         emit('_SRC_C_CMD',

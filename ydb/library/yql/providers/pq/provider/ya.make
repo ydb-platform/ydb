@@ -29,11 +29,11 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/core/yq/libs/db_resolver
     ydb/library/yql/ast
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/minikql/computation
+    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/structured_token
     ydb/library/yql/public/udf
     ydb/public/sdk/cpp/client/ydb_driver

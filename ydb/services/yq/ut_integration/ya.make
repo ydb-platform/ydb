@@ -22,11 +22,11 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/testlib
     ydb/core/yq/libs/control_plane_storage
-    ydb/core/yq/libs/db_resolver
     ydb/core/yq/libs/db_schema
     ydb/core/yq/libs/private_client
     ydb/services/ydb
     ydb/services/yq
+    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/utils
 )

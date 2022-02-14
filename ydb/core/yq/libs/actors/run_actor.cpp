@@ -68,7 +68,7 @@
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/yq/libs/db_resolver/db_async_resolver_impl.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/common/database_token_builder.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 

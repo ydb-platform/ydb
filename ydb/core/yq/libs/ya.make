@@ -10,7 +10,6 @@ RECURSE(
     config
     control_plane_proxy
     control_plane_storage
-    db_resolver
     db_schema
     events
     gateway

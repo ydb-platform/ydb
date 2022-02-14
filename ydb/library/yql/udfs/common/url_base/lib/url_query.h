@@ -12,18 +12,30 @@ namespace NUrlUdf {
         using TQueryStr = char*;
         using TSeparatorNArg = TNamedArg<TQueryStr, Separator>;
 
-        static inline TType* GetListType(const IFunctionTypeInfoBuilder& builder) {
-            auto tupleType = builder.Tuple()->Add<TQueryStr>().Add<TQueryStr>().Build();
+        static inline TType* GetListType(const IFunctionTypeInfoBuilder& builder,
+                                         bool optional = false)
+        {
+            auto tupleType = optional ?
+                             builder.Tuple()->Add<TQueryStr>().Add(builder.Optional()->Item<TQueryStr>().Build()).Build()
+                           : builder.Tuple()->Add<TQueryStr>().Add<TQueryStr>().Build();
             return builder.List()->Item(tupleType).Build();
         }
 
-        static inline TType* GetDictType(const IFunctionTypeInfoBuilder& builder) {
-            auto listType = builder.List()->Item<TQueryStr>().Build();
+        static inline TType* GetDictType(const IFunctionTypeInfoBuilder& builder,
+                                         bool optional = false)
+        {
+            auto listType = optional ?
+                            builder.List()->Item(builder.Optional()->Item<TQueryStr>().Build()).Build()
+                          : builder.List()->Item<TQueryStr>().Build();
             return builder.Dict()->Key<TQueryStr>().Value(listType).Build();
         }
 
-        static inline TType* GetFlattenDictType(const IFunctionTypeInfoBuilder& builder) {
-            return builder.Dict()->Key<TQueryStr>().Value<TQueryStr>().Build();
+        static inline TType* GetFlattenDictType(const IFunctionTypeInfoBuilder& builder,
+                                                bool optional = false)
+        {
+            return optional ?
+                    builder.Dict()->Key<TQueryStr>().Value(builder.Optional()->Item<TQueryStr>().Build()).Build()
+                  : builder.Dict()->Key<TQueryStr>().Value<TQueryStr>().Build();
         }
     };
 
@@ -39,7 +51,7 @@ namespace NUrlUdf {
         using TStrictNArg = TNamedArg<bool, Strict>;
         using TMaxFieldsNArg = TNamedArg<ui32, MaxFields>;
 
-        static void MakeSignature(IFunctionTypeInfoBuilder& builder, TType* retType);
+        static void MakeSignature(IFunctionTypeInfoBuilder& builder, const TType* retType);
 
         std::vector<std::pair<TString, TString>>
         RunImpl(const TUnboxedValuePod* args) const;
@@ -99,6 +111,8 @@ namespace NUrlUdf {
         } FirstArgTypeId_;
 
     public:
+        typedef bool TTypeAwareMarker;
+
         explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
             : Pos_(std::move(pos))
             , FirstArgTypeId_(firstArgTypeId)

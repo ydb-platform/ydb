@@ -237,6 +237,14 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         STLOG(PRI_DEBUG, BS_NODE, NW17, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)", (Msg, record));
         ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true);
     }
+
+    for (const auto& item : record.GetGroupMetadata()) {
+        const ui32 groupId = item.GetGroupId();
+        const ui32 generation = item.GetCurrentGeneration();
+        if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
+            ApplyGroupInfo(groupId, generation, nullptr, true, false);
+        }
+    }
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {

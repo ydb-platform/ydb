@@ -76,7 +76,6 @@ migrations:
     - aurora/aurora/core/toloka
     - aurora/xpath/api/utils
     - aurora/xpath/applier
-    - balancer/test/functional/admin/admin
     - balancer/test/functional/regexp_host
     - balancer/test/util
     - balancer/test/util/dnsfake
@@ -3634,7 +3633,6 @@ migrations:
     - balancer/test/functional/antirobot
     - balancer/test/functional/h100
     - balancer/test/functional/errordocument
-    - balancer/test/functional/active_check_reply
     - balancer/test/functional/rendezvous_hashing
     - balancer/test/functional/consistent_hashing
     - balancer/test/functional/pingerprocess

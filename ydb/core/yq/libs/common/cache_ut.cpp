@@ -55,4 +55,14 @@ Y_UNIT_TEST_SUITE(Cache) {
         cache.Put(102, TMaybe<int>());
         UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 2);
     }
+
+    Y_UNIT_TEST(Test5) {
+        TCache cache(TTtlCacheSettings().SetTtl(TDuration::Seconds(1)).SetMaxSize(3));
+        cache.Put(100, 10);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 1);
+        Sleep(TDuration::Seconds(1));
+        TMaybe<int> t;
+        UNIT_ASSERT_VALUES_EQUAL(cache.Get(100, &t), false);
+        UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 0);
+    }
 }

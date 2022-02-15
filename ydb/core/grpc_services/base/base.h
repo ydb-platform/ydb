@@ -360,6 +360,11 @@ public:
     virtual void AddServerHint(const TString& hint) = 0;
     virtual void SetCostInfo(float consumed_units) = 0;
 
+    virtual void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) = 0;
+    virtual void FinishStream() = 0;
+
+    virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
+
 private:
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 };
@@ -378,6 +383,7 @@ public:
 };
 
 class IRequestNoOpCtx : public IRequestCtx {
+
 };
 
 struct TCommonResponseFillerImpl {
@@ -914,7 +920,7 @@ public:
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
         // res->data() pointer is used inside grpc code.
         // So this object should be destroyed during grpc_slice destroying routine
         auto res = new TString;
@@ -954,9 +960,8 @@ public:
         return google::protobuf::Arena::CreateMessage<TResult>(ctx->GetArena());
     }
 
-    template<typename Tcb>
-    void SetStreamingNotify(Tcb&& cb) {
-        Ctx_->SetNextReplyCallback(cb);
+    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) override {
+        Ctx_->SetNextReplyCallback(std::move(cb));
     }
 
     void SetClientLostAction(std::function<void()>&& cb) override {
@@ -969,7 +974,7 @@ public:
         Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
     }
 
-    void FinishStream() {
+    void FinishStream() override {
         Ctx_->FinishStreamingOk();
     }
 
@@ -1033,6 +1038,8 @@ class TGrpcRequestCall
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestIface;
 public:
     static constexpr bool IsOp = IsOperation;
+    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
+
     TGrpcRequestCall(NGrpc::IRequestContextBase* ctx,
         void (*cb)(std::unique_ptr<TRequestIface>, const IFacilityProvider&), TRequestAuxSettings auxSettings = {})
         : TGRpcRequestWrapperImpl<

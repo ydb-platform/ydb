@@ -223,7 +223,8 @@ private:
             }
         };
         using namespace NGRpcService;
-        using TEvCreateSessionRequest = TGRpcRequestWrapper<TRpcServices::EvCreateSession, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse, true, TRateLimiterMode::Rps>;
+        using TEvCreateSessionRequest = TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
+            Ydb::Table::CreateSessionResponse>;
         NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvCreateSessionRequest>(
             std::move(request), std::move(cb), WorkingDir, TString(), ctx
         );
@@ -247,7 +248,8 @@ private:
             }
         };
         using namespace NGRpcService;
-        using TEvExecuteSchemeQueryRequest = TGRpcRequestWrapper<TRpcServices::EvExecuteSchemeQuery, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse, true, TRateLimiterMode::Rps>;
+        using TEvExecuteSchemeQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteSchemeQueryRequest,
+            Ydb::Table::ExecuteSchemeQueryResponse>;
         NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvExecuteSchemeQueryRequest>(
             std::move(request), std::move(cb), WorkingDir, TString(), ctx
         );

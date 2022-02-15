@@ -1,8 +1,10 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
+#include "service_table.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -14,11 +16,14 @@ using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
 
+using TEvCommitTransactionRequest = TGrpcRequestOperationCall<Ydb::Table::CommitTransactionRequest,
+Ydb::Table::CommitTransactionResponse>;
+
 class TCommitTransactionRPC : public TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest> {
     using TBase = TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest>;
 
 public:
-    TCommitTransactionRPC(TEvCommitTransactionRequest* msg)
+    TCommitTransactionRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -92,8 +97,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TCommitTransactionRPC(ev->Release().Release()));
+void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TCommitTransactionRPC(p.release()));
 }
 
 } // namespace NGRpcService

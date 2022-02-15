@@ -1,9 +1,11 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "operation_helpers.h"
 #include "table_settings.h"
+#include "service_table.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -76,6 +78,9 @@ static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Ta
 
     return {StatusIds::SUCCESS, ""};
 }
+
+using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
+    Ydb::Table::AlterTableResponse>;
 
 class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest> {
     using TBase = TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest>;
@@ -537,15 +542,14 @@ private:
     TTableProfiles Profiles;
 };
 
-void TGRpcRequestProxy::Handle(TEvAlterTableRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TAlterTableRPC(ev->Release().Release()));
+void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TAlterTableRPC(p.release()));
 }
 
 template<>
 IActor* TEvAlterTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TAlterTableRPC(msg);
 }
-
 
 } // namespace NKikimr
 } // namespace NGRpcService

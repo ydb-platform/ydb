@@ -1,9 +1,11 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common.h"
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "local_rate_limiter.h"
+#include "service_table.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -26,6 +28,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
+
+using TEvReadTableRequest = TGrpcRequestNoOperationCall<Ydb::Table::ReadTableRequest,
+    Ydb::Table::ReadTableResponse>;
 
 static const TDuration RlMaxDuration = TDuration::Minutes(1);
 
@@ -107,7 +112,7 @@ public:
         return NKikimrServices::TActivity::GRPC_STREAM_REQ;
     }
 
-    TReadTableRPC(TEvReadTableRequest* msg)
+    TReadTableRPC(IRequestNoOpCtx* msg)
         : Request_(msg)
         , QuotaLimit_(10)
         , QuotaReserved_(0)
@@ -431,7 +436,7 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = Request_->GetProtoRequest();
+        const auto req = TEvReadTableRequest::GetProtoRequest(Request_.get());
         auto actorId = SelfId();
         const TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
         auto cb = [actorId, as](size_t left) {
@@ -721,7 +726,7 @@ private:
         TryToAllocateQuota();
     }
 
-    std::unique_ptr<TEvReadTableRequest> Request_;
+    std::unique_ptr<IRequestNoOpCtx> Request_;
 
     TActorId ReadTableActor;
 
@@ -754,8 +759,8 @@ private:
     bool HasPendingSuccess = false;
 };
 
-void TGRpcRequestProxy::Handle(TEvReadTableRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TReadTableRPC(ev->Release().Release()));
+void DoReadTableRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TReadTableRPC(p.release()));
 }
 
 } // namespace NGRpcService

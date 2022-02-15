@@ -1,5 +1,5 @@
-#include "grpc_request_proxy.h"
-
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
@@ -21,11 +21,14 @@ using namespace NConsole;
 using namespace Ydb;
 using namespace Ydb::Table;
 
+using TEvCreateTableRequest = TGrpcRequestOperationCall<Ydb::Table::CreateTableRequest,
+    Ydb::Table::CreateTableResponse>;
+
 class TCreateTableRPC : public TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest> {
     using TBase = TRpcSchemeRequestActor<TCreateTableRPC, TEvCreateTableRequest>;
 
 public:
-    TCreateTableRPC(TEvCreateTableRequest* msg)
+    TCreateTableRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -226,8 +229,8 @@ private:
     TTableProfiles Profiles;
 };
 
-void TGRpcRequestProxy::Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TCreateTableRPC(ev->Release().Release()));
+void DoCreateTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TCreateTableRPC(p.release()));
 }
 
 } // namespace NGRpcService

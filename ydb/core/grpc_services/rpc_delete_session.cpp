@@ -1,7 +1,9 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
+#include "service_table.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -12,6 +14,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
+
+using TEvDeleteSessionRequest = TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
+    Ydb::Table::DeleteSessionResponse>;
 
 class TDeleteSessionRPC : public TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest> {
     using TBase = TRpcKqpRequestActor<TDeleteSessionRPC, TEvDeleteSessionRequest>;
@@ -46,8 +51,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvDeleteSessionRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TDeleteSessionRPC(ev->Release().Release()));
+void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TDeleteSessionRPC(p.release()));
 }
 
 template<>

@@ -1,8 +1,10 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
+#include "service_table.h"
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -19,11 +21,15 @@ using namespace NOperationId;
 using namespace Ydb;
 using namespace NKqp;
 
+using TEvPrepareDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::PrepareDataQueryRequest,
+    Ydb::Table::PrepareDataQueryResponse>;
+
+
 class TPrepareDataQueryRPC : public TRpcKqpRequestActor<TPrepareDataQueryRPC, TEvPrepareDataQueryRequest> {
     using TBase = TRpcKqpRequestActor<TPrepareDataQueryRPC, TEvPrepareDataQueryRequest>;
 
 public:
-    TPrepareDataQueryRPC(TEvPrepareDataQueryRequest* msg)
+    TPrepareDataQueryRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -104,8 +110,8 @@ public:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvPrepareDataQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TPrepareDataQueryRPC(ev->Release().Release()));
+void DoPrepareDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TPrepareDataQueryRPC(p.release()));
 }
 
 } // namespace NGRpcService

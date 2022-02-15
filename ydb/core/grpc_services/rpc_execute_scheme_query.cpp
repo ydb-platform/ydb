@@ -1,8 +1,10 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
+#include "service_table.h"
 
 #include <ydb/core/protos/console_config.pb.h>
 
@@ -15,6 +17,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
+
+using TEvExecuteSchemeQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteSchemeQueryRequest,
+    Ydb::Table::ExecuteSchemeQueryResponse>;
 
 class TExecuteSchemeQueryRPC : public TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest> {
     using TBase = TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest>;
@@ -87,8 +92,8 @@ public:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TExecuteSchemeQueryRPC(ev->Release().Release()));
+void DoExecuteSchemeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TExecuteSchemeQueryRPC(p.release()));
 }
 
 template<>

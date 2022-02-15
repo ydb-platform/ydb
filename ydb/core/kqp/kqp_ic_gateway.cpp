@@ -1229,7 +1229,8 @@ public:
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
-            using TEvAlterTableRequest = TGRpcRequestValidationWrapper<TRpcServices::EvAlterTable, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, true, TRateLimiterMode::Rps>;
+            using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
+                Ydb::Table::AlterTableResponse>;
 
             return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
         }
@@ -1283,7 +1284,8 @@ public:
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
-            using TEvDropTableRequest = TGRpcRequestWrapper<TRpcServices::EvDropTable, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, true, TRateLimiterMode::Rps>;
+            using TEvDropTableRequest = TGrpcRequestOperationCall<Ydb::Table::DropTableRequest,
+                Ydb::Table::DropTableResponse>;
 
             return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat());
         }

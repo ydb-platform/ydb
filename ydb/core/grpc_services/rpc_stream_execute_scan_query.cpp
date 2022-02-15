@@ -1,7 +1,9 @@
-#include "grpc_request_proxy.h"
+#include "service_table.h"
+#include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common.h"
 #include "rpc_kqp_base.h"
+#include "service_table.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -239,6 +241,9 @@ bool FillProfile(Ydb::Table::ExecuteScanQueryPartialResponse& response,
     Y_UNUSED(profile);
     return false;
 }
+
+using TEvStreamExecuteScanQueryRequest = TGrpcRequestNoOperationCall<Ydb::Table::ExecuteScanQueryRequest,
+    Ydb::Table::ExecuteScanQueryPartialResponse>;
 
 template<typename TRequestEv, typename TResponse>
 class TStreamExecuteScanQueryRPC : public TActorBootstrapped<TStreamExecuteScanQueryRPC<TRequestEv, TResponse>> {
@@ -629,10 +634,12 @@ void TGRpcRequestProxy::Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, cons
         Ydb::Experimental::ExecuteStreamQueryResponse>(ev->Release().Release(), rpcBufferSize));
 }
 
-void TGRpcRequestProxy::Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    ui64 rpcBufferSize = GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
-    ctx.Register(new TStreamExecuteScanQueryRPC<TEvStreamExecuteScanQueryRequest,
-        Ydb::Table::ExecuteScanQueryPartialResponse>(ev->Release().Release(), rpcBufferSize));
+void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    ui64 rpcBufferSize = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TStreamExecuteScanQueryRPC<TEvStreamExecuteScanQueryRequest,
+        Ydb::Table::ExecuteScanQueryPartialResponse>(req, rpcBufferSize));
 }
 
 } // namespace NGRpcService

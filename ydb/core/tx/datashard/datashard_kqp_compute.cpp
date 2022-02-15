@@ -274,5 +274,9 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
     return ret;
 }
 
+void TKqpDatashardComputeContext::AddKeyAccessSample(const TTableId& tableId, const TArrayRef<const TCell>& key) {
+    Shard->GetKeyAccessSampler()->AddSample(tableId, key);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

@@ -195,9 +195,10 @@ void CreateRangePoints(ui64 localTid, const TSerializedTableRange& serializedTab
 template <bool IsReverse>
 class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> {
 public:
-    TKqpWideReadTableWrapperBase(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
-        const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
+    TKqpWideReadTableWrapperBase(const TTableId& tableId, TKqpDatashardComputeContext& computeCtx,
+        const TTypeEnvironment& typeEnv, const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
         : TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>>(this)
+        , TableId(tableId)
         , ComputeCtx(computeCtx)
         , TypeEnv(typeEnv)
         , SystemColumnTags(systemColumnTags)
@@ -227,6 +228,8 @@ protected:
                 ComputeCtx.BreakSetLocks();
             }
             TDbTupleRef rowKey = Iterator->GetKey();
+
+            ComputeCtx.AddKeyAccessSample(TableId, rowKey.Cells());
 
             ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
             ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
@@ -314,6 +317,7 @@ protected:
     }
 
 protected:
+    const TTableId TableId;
     TKqpDatashardComputeContext& ComputeCtx;
     const TTypeEnvironment& TypeEnv;
     TSmallVec<TTag> SystemColumnTags;
@@ -331,7 +335,8 @@ public:
     TKqpWideReadTableWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
         const TParseReadTableResult& parseResult, IComputationNode* fromNode, IComputationNode* toNode,
         IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
+        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
+            ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , FromNode(fromNode)
         , ToNode(toNode)
@@ -401,7 +406,8 @@ class TKqpWideReadTableRangesWrapper : public TKqpWideReadTableWrapperBase<IsRev
 public:
     TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
         const TParseReadTableRangesResult& parseResult, IComputationNode* rangesNode, IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
+        : TKqpWideReadTableWrapperBase<IsReverse>(parseResult.TableId, computeCtx, typeEnv,
+            ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
         , ParseResult(parseResult)
         , RangesNode(rangesNode)
         , ItemsLimit(itemsLimit)
@@ -513,12 +519,13 @@ void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationCo
 }
 
 template <typename TTableIterator>
-bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
+bool TryFetchRowImpl(const TTableId& tableId, TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx,
+    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
     const TSmallVec<bool>& skipNullKeys)
 {
     while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
         TDbTupleRef rowKey = iterator.GetKey();
+        computeCtx.AddKeyAccessSample(tableId, rowKey.Cells());
 
         Y_VERIFY(skipNullKeys.size() <= rowKey.ColumnCount);
         bool skipRow = false;
@@ -543,18 +550,18 @@ bool TryFetchRowImpl(TTableIterator& iterator, TUnboxedValue& row, TComputationC
 
 } // namespace
 
-bool TryFetchRow(TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
+bool TryFetchRow(const TTableId& tableId, TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx,
+    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
     const TSmallVec<bool>& skipNullKeys)
 {
-    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
+    return TryFetchRowImpl(tableId, iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
 }
 
-bool TryFetchRow(TTableReverseIt& iterator, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
+bool TryFetchRow(const TTableId& tableId, TTableReverseIt& iterator, TUnboxedValue& row, TComputationContext& ctx,
+    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
     const TSmallVec<bool>& skipNullKeys)
 {
-    return TryFetchRowImpl(iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
+    return TryFetchRowImpl(tableId, iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
 }
 
 void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,

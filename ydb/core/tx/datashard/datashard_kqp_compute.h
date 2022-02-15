@@ -58,6 +58,8 @@ public:
     void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
     bool IsTabletNotReady() const { return TabletNotReady; }
 
+    void AddKeyAccessSample(const TTableId& tableId, const TArrayRef<const TCell>& key);
+
 public:
     NTable::TDatabase* Database = nullptr;
 
@@ -80,12 +82,12 @@ public:
 
 TSmallVec<NTable::TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns);
 
-bool TryFetchRow(NTable::TTableIt& iterator, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
+bool TryFetchRow(const TTableId& tableId, NTable::TTableIt& iterator, NYql::NUdf::TUnboxedValue& row,
+    TComputationContext& ctx, TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx,
     const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
 
-bool TryFetchRow(NTable::TTableReverseIt& iterator, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
+bool TryFetchRow(const TTableId& tableId, NTable::TTableReverseIt& iterator, NYql::NUdf::TUnboxedValue& row,
+    TComputationContext& ctx, TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx,
     const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
 
 void FetchRow(const TDbTupleRef& dbTuple, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,

@@ -125,6 +125,7 @@ public:
                     }
 
                     ComputeCtx.ReadTable(ParseResult.TableId, keyCells);
+                    ComputeCtx.AddKeyAccessSample(ParseResult.TableId, keyCells);
 
                     NTable::TRowState dbRow;
                     NTable::TSelectStats stats;
@@ -262,7 +263,8 @@ public:
 
             TUnboxedValue result;
             TKqpTableStats tableStats;
-            auto fetched = TryFetchRow(*Iterator, result, ctx, tableStats, ComputeCtx, SystemColumnTags, ParseResult.SkipNullKeys);
+            auto fetched = TryFetchRow(ParseResult.TableId, *Iterator, result, ctx, tableStats, ComputeCtx,
+                SystemColumnTags, ParseResult.SkipNullKeys);
 
             if (Iterator->Stats.InvisibleRowSkips) {
                 ComputeCtx.BreakSetLocks();

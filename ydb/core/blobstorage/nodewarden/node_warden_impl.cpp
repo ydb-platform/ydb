@@ -242,7 +242,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         const ui32 groupId = item.GetGroupId();
         const ui32 generation = item.GetCurrentGeneration();
         if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.MaxKnownGeneration < generation) {
-            ApplyGroupInfo(groupId, generation, nullptr, true, false);
+            ApplyGroupInfo(groupId, generation, nullptr, false, false);
         }
     }
 }

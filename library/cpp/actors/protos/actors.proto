@@ -27,7 +27,11 @@ message TRemoteHttpInfo {
     optional string Path = 2;
     repeated TQueryParam QueryParams = 3;
     repeated TQueryParam PostParams = 4;
-    repeated bytes PostContent = 5;
-    optional THeader Headers = 6;
+    optional bytes PostContent = 8;
+    repeated THeader Headers = 9;
     optional string RemoteAddr = 7;
+
+    // for compatibility reasons (incorrect field types merged in 21-4)
+    reserved 5;
+    reserved 6;
 }

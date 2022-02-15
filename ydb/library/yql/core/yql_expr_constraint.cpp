@@ -124,6 +124,7 @@ public:
         Functions["WideFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["OrderedMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;
         Functions["Map"] = &TCallableConstraintTransformer::MapWrap<false, false>;
+        Functions["MapNext"] = &TCallableConstraintTransformer::MapWrap<true, false>;
         Functions["OrderedFlatMap"] = &TCallableConstraintTransformer::MapWrap<true, true>;
         Functions["FlatMap"] = &TCallableConstraintTransformer::MapWrap<false, true>;
         Functions["OrderedMultiMap"] = &TCallableConstraintTransformer::MapWrap<true, false>;

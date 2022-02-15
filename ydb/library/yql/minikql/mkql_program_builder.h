@@ -325,6 +325,7 @@ public:
     TRuntimeNode Discard(TRuntimeNode stream);
     TRuntimeNode Map(TRuntimeNode list, const TUnaryLambda& handler);
     TRuntimeNode OrderedMap(TRuntimeNode list, const TUnaryLambda& handler);
+    TRuntimeNode MapNext(TRuntimeNode list, const TBinaryLambda& handler);
     TRuntimeNode Extract(TRuntimeNode list, const std::string_view& name);
     TRuntimeNode OrderedExtract(TRuntimeNode list, const std::string_view& name);
     TRuntimeNode ChainMap(TRuntimeNode list, TRuntimeNode state, const TBinaryLambda& handler);

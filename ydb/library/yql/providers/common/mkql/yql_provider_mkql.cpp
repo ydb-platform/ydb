@@ -1019,6 +1019,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         });
     });
 
+    AddCallable("MapNext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto list = MkqlBuildExpr(node.Head(), ctx);
+        return ctx.ProgramBuilder.MapNext(list, [&](TRuntimeNode item, TRuntimeNode nextItem) {
+            return MkqlBuildLambda(node.Tail(), ctx, {item, nextItem});
+        });
+    });
+
     AddCallable("Fold1", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         return ctx.ProgramBuilder.Fold1(list, [&](TRuntimeNode item) {

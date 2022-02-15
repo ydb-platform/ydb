@@ -12807,6 +12807,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Likely"] = &BoolOpt1Wrapper;
         Functions["Map"] = &MapWrapper;
         Functions["OrderedMap"] = &MapWrapper;
+        Functions["MapNext"] = &MapNextWrapper;
         Functions["FoldMap"] = &FoldMapWrapper;
         Functions["Fold1Map"] = &Fold1MapWrapper;
         Functions["Chain1Map"] = &Chain1MapWrapper;

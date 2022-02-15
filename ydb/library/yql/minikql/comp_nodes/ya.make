@@ -110,6 +110,8 @@ SRCS(
     mkql_lookup.h
     mkql_map.cpp
     mkql_map.h
+    mkql_mapnext.cpp
+    mkql_mapnext.h
     mkql_map_join.cpp
     mkql_map_join.h
     mkql_multihopping.cpp

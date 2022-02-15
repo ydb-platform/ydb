@@ -734,6 +734,35 @@ TRuntimeNode TProgramBuilder::OrderedMap(TRuntimeNode list, const TUnaryLambda& 
     return BuildMap(__func__, list, handler);
 }
 
+TRuntimeNode TProgramBuilder::MapNext(TRuntimeNode list, const TBinaryLambda& handler) {
+    const auto listType = list.GetStaticType();
+    MKQL_ENSURE(listType->IsStream() || listType->IsFlow(), "Expected stream or flow");
+
+    const auto itemType = listType->IsFlow() ?
+        AS_TYPE(TFlowType, listType)->GetItemType():
+        AS_TYPE(TStreamType, listType)->GetItemType();
+
+    ThrowIfListOfVoid(itemType);
+
+    TType* nextItemType = TOptionalType::Create(itemType, Env);
+
+    const auto itemArg = Arg(itemType);
+    const auto nextItemArg = Arg(nextItemType);
+
+    const auto newItem = handler(itemArg, nextItemArg);
+
+    const auto resultListType = listType->IsFlow() ?
+        (TType*)TFlowType::Create(newItem.GetStaticType(), Env):
+        (TType*)TStreamType::Create(newItem.GetStaticType(), Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resultListType);
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(nextItemArg);
+    callableBuilder.Add(newItem);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 template <bool Ordered>
 TRuntimeNode TProgramBuilder::BuildExtract(TRuntimeNode list, const std::string_view& name) {
     const auto listType = list.GetStaticType();

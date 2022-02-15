@@ -858,6 +858,7 @@ RECURSE(
     pysyncobj
     pyTelegramBotAPI
     pytest
+    pytest-aiohttp
     pytest-allure-adaptor
     pytest-asyncio
     pytest-bdd

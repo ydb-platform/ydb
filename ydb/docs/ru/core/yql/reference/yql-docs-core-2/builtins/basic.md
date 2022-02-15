@@ -81,6 +81,8 @@
 
 {% include [x](_includes/basic/staticmap.md) %}
 
+{% include [x](_includes/basic/staticzip.md) %}
+
 {% include [x](_includes/basic/aggr_factory.md) %}
 
 {% if tech %}

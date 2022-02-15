@@ -1,4 +1,5 @@
 items:
+- { name: Обзор,                        href: index.md }
 - { name: Базовые,                      href: basic.md }
 - { name: Агрегатные,                   href: aggregation.md }
 - { name: Оконные,                      href: window.md,            when: feature_window_functions }

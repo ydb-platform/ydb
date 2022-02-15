@@ -1,2 +1,2 @@
 
-{% include [x](_includes/dict.md) %}
+{% include [dict.md](_includes/dict.md) %}

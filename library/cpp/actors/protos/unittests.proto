@@ -16,5 +16,5 @@ message TBigMessage {
 message TMessageWithPayload {
     optional string Meta = 1;
     repeated uint32 PayloadId = 2;
-    repeated string SomeData = 3;
+    repeated bytes SomeData = 3;
 }

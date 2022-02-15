@@ -128,8 +128,16 @@ namespace NActors {
         void Configure(const TBalancingConfig& cfg, const TString& poolName) {
             Config = cfg;
             // Enforce constraints
-            Config.MinCpus = std::clamp<ui32>(Config.MinCpus, 1, Config.Cpus);
-            Config.MaxCpus = Max<ui32>(Config.MaxCpus, Config.Cpus);
+            if (Config.Cpus > 0) {
+                Config.MinCpus = std::clamp<ui32>(Config.MinCpus, 1, Config.Cpus);
+                Config.MaxCpus = Max<ui32>(Config.MaxCpus, Config.Cpus);
+            } else {
+                Y_VERIFY(Config.Cpus == 0,
+                        "Unexpected negative Config.Cpus# %" PRIi64,
+                        (i64)Config.Cpus);
+                Config.MinCpus = 0;
+                Config.MaxCpus = 0;
+            }
             PoolName = poolName;
         }
     };

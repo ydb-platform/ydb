@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EmptyMailboxActivation, 0);
         //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuNs, 0); // depends on total duration of test, so undefined
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
-        UNIT_ASSERT(stats[0].ParkedTicks == 0); // per-pool parked time does not make sense for united pools
+        //UNIT_ASSERT(stats[0].ParkedTicks == 0); // per-pool parked time does not make sense for united pools
         UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);
         UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, msgCount);

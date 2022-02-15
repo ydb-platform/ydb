@@ -87,7 +87,7 @@ namespace NActors {
         ui64 MailboxPushedOutByTime = 0;
         ui64 MailboxPushedOutByEventCount = 0;
 
-        TExecutorThreadStats(size_t activityVecSize = 1) // must be not empty as 0 used as default
+        TExecutorThreadStats(size_t activityVecSize = 5) // must be not empty as 0 used as default
             : ElapsedTicksByActivity(activityVecSize)
             , ReceivedEventsByActivity(activityVecSize)
             , ActorsAliveByActivity(activityVecSize)

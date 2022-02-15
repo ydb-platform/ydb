@@ -927,8 +927,11 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
         return TabletRebuildGraph();
     default:
         {
-            BLOG_ERROR("HandleBlockBlobStorageResult, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status)
-                << (DiscoveredLastBlocked == Max<ui32>()) ? "not discovered" : Sprintf("discovered gen was: %u", DiscoveredLastBlocked).c_str());
+            BLOG_ERROR("HandleBlockBlobStorageResult, msg->Status: "
+                    << NKikimrProto::EReplyStatus_Name(msg->Status)
+                    << (DiscoveredLastBlocked == Max<ui32>()
+                        ? ", not discovered"
+                        : Sprintf(", discovered gen was: %u", DiscoveredLastBlocked).c_str()));
 
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
         }

@@ -20,7 +20,7 @@ bool TYdbConfiguration::HasCluster(TStringBuf cluster) const {
 void TYdbConfiguration::Init(
     const TYdbGatewayConfig& config,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
+    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver,
     THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds)
 {
     TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
@@ -37,9 +37,14 @@ void TYdbConfiguration::Init(
     for (const auto& cluster : config.GetClusterMapping()) {
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
 
+        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken());
+        const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        Tokens[cluster.GetName()] = structuredTokenJson;
+
         if (dbResolver) {
-            dbResolver->TryAddDbIdToResolve(cluster.HasEndpoint(), cluster.GetName(), cluster.GetId(), NYq::DatabaseType::Ydb, databaseIds);
             if (cluster.GetId()) {
+                databaseIds[std::make_pair(cluster.GetId(), NYq::DatabaseType::Ydb)] =
+                    NYq::TEvents::TDatabaseAuth{structuredTokenJson, cluster.GetAddBearerToToken()};
                 DbId2Clusters[cluster.GetId()].emplace_back(cluster.GetName());
             }
         }
@@ -54,8 +59,6 @@ void TYdbConfiguration::Init(
         if (cluster.HasAddBearerToToken())
             settings.AddBearerToToken = cluster.GetAddBearerToToken();
 
-        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken());
-        Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         settings.Raw = cluster;
 
     }

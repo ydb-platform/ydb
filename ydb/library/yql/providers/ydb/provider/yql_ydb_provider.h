@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver_with_meta.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NKikimr::NMiniKQL {
    class IFunctionRegistry;
@@ -34,13 +34,13 @@ struct TYdbState : public TThrRefBase
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver;
+    std::shared_ptr<NYq::IDatabaseAsyncResolver> DbResolver;
 };
 
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr,
-    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
+    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver = nullptr
 );
 
 TIntrusivePtr<IDataProvider> CreateYdbDataSource(

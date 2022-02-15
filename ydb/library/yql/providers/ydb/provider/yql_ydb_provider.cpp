@@ -7,8 +7,8 @@ namespace NYql {
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta) {
-    return [driver, credentialsFactory, dbResolverWithMeta] (
+    std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver) {
+    return [driver, credentialsFactory, dbResolver] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -30,7 +30,7 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
         state->CredentialsFactory = credentialsFactory;
-        state->DbResolver = dbResolverWithMeta;
+        state->DbResolver = dbResolver;
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetYdb(), typeCtx, state->DbResolver, state->DatabaseIds);
         }

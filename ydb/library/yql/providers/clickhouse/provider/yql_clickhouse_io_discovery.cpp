@@ -66,7 +66,7 @@ public:
         }
 
         const std::weak_ptr<NYq::TEvents::TDbResolverResponse> response = DbResolverResponse_;
-        AsyncFuture_ = State_->DbResolver->ResolveIds({ids, State_->DbResolver->GetTraceId()}).Apply([response](auto future) {
+        AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
             if (const auto res = response.lock())
                 *res = std::move(future.ExtractValue());
         });

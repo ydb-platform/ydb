@@ -69,7 +69,6 @@
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver_impl.h>
-#include <ydb/core/yq/libs/common/database_token_builder.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
 #define LOG_E(stream) \
@@ -283,7 +282,6 @@ private:
                 LOG_D("Connection with empty name " << connection.meta().id());
                 continue;
             }
-            Connections[connection.content().name()] = connection; // Necessary for TDatabaseAsyncResolverWithMeta
             YqConnections.emplace(connection.meta().id(), connection);
         }
     }
@@ -1138,8 +1136,8 @@ private:
             clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
-        const auto dbResolver = std::make_shared<TDatabaseAsyncResolverWithMeta>(TDatabaseAsyncResolverWithMeta(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
-            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId, Params.AuthToken, Params.AccountIdSignatures, Connections));
+        const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
+            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId);
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
@@ -1350,7 +1348,6 @@ private:
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
-    THashMap<TString, YandexQuery::Connection> Connections; // Necessary for DbAsyncResolver
 
     const ui64 MaxTasksPerOperation = 100;
 

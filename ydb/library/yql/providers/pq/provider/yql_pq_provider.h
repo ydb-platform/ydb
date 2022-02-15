@@ -5,7 +5,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver_with_meta.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
@@ -53,13 +53,13 @@ public:
     IPqGateway::TPtr Gateway;
     THolder<IDqIntegration> DqIntegration;
     THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver;
+    std::shared_ptr<NYq::IDatabaseAsyncResolver> DbResolver;
 };
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode = false,
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
+    std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver = nullptr
 );
 
 } // namespace NYql

@@ -67,6 +67,7 @@
 namespace NYq {
 
 using namespace NActors;
+using namespace NYql;
 
 namespace {
 

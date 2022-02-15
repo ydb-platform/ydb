@@ -17,7 +17,7 @@ TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
 void TPqConfiguration::Init(
     const TPqGatewayConfig& config,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
+    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver,
     THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds)
 {
     TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
@@ -43,19 +43,21 @@ void TPqConfiguration::Init(
         clusterSettings.UseSsl = cluster.GetUseSsl();
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
 
+        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
+        clusterSettings.AuthToken = authToken;
+        const auto structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        Tokens[clusterSettings.ClusterName] = structuredTokenJson;
+
         if (dbResolver) {
             YQL_CLOG(DEBUG, ProviderPq) << "Settings: clusterName = " << cluster.GetName()
                 << ", clusterDbId = "  << cluster.GetDatabaseId() << ", cluster.GetEndpoint(): " << cluster.GetEndpoint() << ", HasEndpoint = " << (cluster.HasEndpoint() ? "TRUE" : "FALSE") ;
-            dbResolver->TryAddDbIdToResolve(cluster.HasEndpoint(), cluster.GetName(), cluster.GetDatabaseId(), NYq::DatabaseType::DataStreams, databaseIds);
             if (cluster.GetDatabaseId()) {
+                databaseIds[std::make_pair(cluster.GetDatabaseId(), NYq::DatabaseType::DataStreams)] =
+                    NYq::TEvents::TDatabaseAuth{structuredTokenJson, cluster.GetAddBearerToToken()};
                 DbId2Clusters[cluster.GetDatabaseId()].emplace_back(cluster.GetName());
                 YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";
             }
         }
-
-        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
-        clusterSettings.AuthToken = authToken;
-        Tokens[clusterSettings.ClusterName] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
     }
     FreezeDefaults();
 }

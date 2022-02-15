@@ -6,9 +6,9 @@ namespace NYql {
 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
     IHTTPGateway::TPtr gateway,
-    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta)
+    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver)
 {
-    return [gateway, dbResolverWithMeta] (
+    return [gateway, dbResolver] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -29,7 +29,7 @@ TDataProviderInitializer GetClickHouseDataProviderInitializer(
 
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
-        state->DbResolver = dbResolverWithMeta;
+        state->DbResolver = dbResolver;
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetClickHouse(), state->DbResolver, state->DatabaseIds);
         }

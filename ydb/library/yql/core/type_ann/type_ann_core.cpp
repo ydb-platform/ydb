@@ -5002,12 +5002,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if constexpr (ContainsOrLookup) {
-            if (IsDataOrOptionalOfData(input->Head().GetTypeAnn())) {
-                return WithWrapper(input, output, ctx);
-            }
-        }
-
         if (IsNull(input->Head())) {
             output = ContainsOrLookup ? MakeBool(input->Pos(), false, ctx.Expr) : input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;

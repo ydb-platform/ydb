@@ -1,4 +1,4 @@
-LIBRARY(commands)
+LIBRARY(clicommands)
 
 OWNER(g:kikimr)
 

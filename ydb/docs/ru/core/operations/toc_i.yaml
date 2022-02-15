@@ -3,5 +3,31 @@ items:
   href: crud.md
   hidden: true
 - name: Обслуживание дисковой подсистемы кластера
-  href: manual/operation.md
   when: audience == "tech"
+  items:
+  - name: Обзор
+    href: manual/index.md
+  - name: Расширение кластера
+    href: manual/cluster_expasion.md
+  - name: Декоммиссия узлов и дисков
+    href: manual/cluster_decomision.md
+  - name: Добавление групп хранения
+    href: manual/adding_storage_groups.md
+  - name: Изменение количествa слотов для вдисков на пдисках
+    href: manual/change_vslot_count.md
+  - name: Безопасные рестарт и выключение узлов
+    href: manual/node_restarting.md
+  - name: Решение проблем неработоспособности кластера
+    href: manual/solving_disk_issues.md
+  - name: Включение/выключение SelfHeal
+    href: manual/selfheal.md
+  - name: Включение/выключение Scrubbing
+    href: manual/scrubbing.md
+  - name: Перевоз ВДисков
+    href: manual/moving_vdisks.md
+  - name: Изменение конфигураций через CMS
+    href: manual/cms.md
+  - name: Изменение конфигурации акторсистемы
+    href: manual/change_actorsystem_configs.md
+
+   

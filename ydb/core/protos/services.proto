@@ -295,6 +295,10 @@ enum EServiceKikimr {
     YQ_CONTROL_PLANE_STORAGE = 1021;
     YQ_CONTROL_PLANE_PROXY= 1022;
     YQ_TEST_CONNECTION = 1023;
+    YQ_AUDIT = 1150;
+    YQ_AUDIT_EVENT_SENDER = 1151;
+
+    // 1024 - 1099 is reserved for nbs
 
     // Change exchange (async indexes & CDC)
     CHANGE_EXCHANGE = 1100;
@@ -867,5 +871,7 @@ message TActivity {
         YQ_TEST_CONNECTION_ACTOR = 560;
         REPLICATION_CONTROLLER_DST_CREATOR = 562;
         BLOCKSTORE_STATS_SERVICE = 563;
+        YQ_AUDIT_ACTOR = 564;
+        YQ_AUDIT_EVENT_SENDER_ACTOR = 565;
     };
 };

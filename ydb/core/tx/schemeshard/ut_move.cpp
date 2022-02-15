@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             )
             )", result, err);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(static_cast<NKikimrProto::EReplyStatus>(status), NKikimrProto::OK, err);
             UNIT_ASSERT_VALUES_EQUAL(err, "");
 
             NKqp::CompareYson(R"([[[[[["111"];["1"]]];%false]]])", result);

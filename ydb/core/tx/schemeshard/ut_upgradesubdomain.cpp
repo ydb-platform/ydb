@@ -855,7 +855,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                         (return (AsList (SetResult 'Data result) ))
                     )
                 )", result, err);
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<NKikimrProto::EReplyStatus>(status), NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             // Cerr << result << Endl;
             // { Type { Kind: Struct Struct { Member { Name: "Data" Type { Kind: Optional Optional { Item { Kind: Struct Struct { Member { Name: "List" Type { Kind: List List { Item { Kind: Struct Struct { Member { Name: "Id" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } Member { Name: "Uint64" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } } } } } } Member { Name: "Truncated" Type { Kind: Data Data { Scheme: 6 } } } } } } } } } } Value { Struct { Optional { Struct { List { Struct { Optional { Uint64: 33 } } Struct { Optional { Uint64: 9437199 } } } List { Struct { Optional { Uint64: 34 } } Struct { Optional { Uint64: 1 } } } } Struct { Bool: false } } } } }

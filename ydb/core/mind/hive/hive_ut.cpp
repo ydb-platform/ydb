@@ -949,7 +949,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
@@ -1011,7 +1011,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
@@ -1123,7 +1123,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
@@ -1352,7 +1352,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
@@ -1445,7 +1445,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
                 if (reply) {
                     subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                     break;
                 }
             } while (true);
@@ -1546,7 +1546,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
                 if (reply) {
                     subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), (ui32)NKikimrScheme::EStatus::StatusAccepted);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                     break;
                 }
             } while (true);

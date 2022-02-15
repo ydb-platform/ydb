@@ -213,7 +213,7 @@ void EraseRows(
     server->GetRuntime()->Register(new TEraser(sender, tabletIDs[0], tableId, std::move(keyTags), std::move(keys)));
 
     auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetStatus()), status);
     if (error) {
         UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
     }
@@ -305,7 +305,7 @@ void ConditionalEraseRows(
     server->GetRuntime()->Register(new TEraser(sender, tabletIDs[0], tableId, columnId, threshold, unit, limits, indexes));
 
     auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetStatus()), status);
     if (error) {
         UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
     }
@@ -345,7 +345,7 @@ void DistributedEraseTx(
     server->GetRuntime()->Register(new TEraser(sender, tabletIds[0], txId, tx));
 
     auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetStatus()), status);
     if (error) {
         UNIT_ASSERT(ev->Get()->Record.ErrorSize());
         UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetError(0).GetReason(), error);

@@ -29,7 +29,6 @@ PEERDIR(
     library/cpp/json
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/core/yq/libs/common
     ydb/library/yql/ast
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes

@@ -104,7 +104,7 @@ public:
 
 private:
     std::pair<ui64, ui64> StepTxId;
-    THolder<NMiniKQL::IEngineFlatHost> EngineHost;
+    THolder<NMiniKQL::TEngineHost> EngineHost;
     THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
     THolder<NMiniKQL::IEngineFlat> Engine;
     TValidationInfo Info;

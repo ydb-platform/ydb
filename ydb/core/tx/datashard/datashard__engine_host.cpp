@@ -541,7 +541,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
             << ": " << message);
     };
 
-    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, EngineHostCounters, now);
+    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, *EngineHost, now);
     ComputeCtx->Database = &txc.DB;
 
     auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();

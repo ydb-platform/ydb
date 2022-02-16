@@ -123,6 +123,7 @@ public:
     void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} }
 
     TEngineHostCounters& GetCounters() const { return Counters; }
+    const TEngineHostSettings& GetSettings() const { return Settings; }
 
     virtual TRowVersion GetWriteVersion(const TTableId& tableId) const = 0;
     virtual TRowVersion GetReadVersion(const TTableId& tableId) const = 0;

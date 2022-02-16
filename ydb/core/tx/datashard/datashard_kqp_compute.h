@@ -22,19 +22,16 @@ using TKqpTableStats = TEngineHostCounters;
 
 class TKqpDatashardComputeContext : public TKqpComputeContextBase {
 public:
-    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHostCounters& counters, TInstant now)
+    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHost& engineHost, TInstant now)
         : Shard(shard)
-        , DatashardCounters(counters)
+        , EngineHost(engineHost)
         , Now(now) {}
 
     ui64 GetLocalTableId(const TTableId& tableId) const;
     TString GetTablePath(const TTableId& tableId) const;
     const NDataShard::TUserTable* GetTable(const TTableId& tableId) const;
-    void ReadTable(const TTableId& tableId, const TTableRange& range) const;
-    void ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
     void BreakSetLocks() const;
     void SetLockTxId(ui64 lockTxId);
-    ui64 GetShardId() const;
 
     TVector<std::pair<NScheme::TTypeId, TString>> GetKeyColumnsInfo(const TTableId &tableId) const;
     THashMap<TString, NScheme::TTypeId> GetKeyColumnsMap(const TTableId &tableId) const;
@@ -53,12 +50,51 @@ public:
     TRowVersion GetReadVersion() const;
 
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
-    TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; }
+    TEngineHostCounters& GetDatashardCounters() { return EngineHost.GetCounters(); }
 
-    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
     bool IsTabletNotReady() const { return TabletNotReady; }
 
-    void AddKeyAccessSample(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    bool ReadRow(const TTableId& tableId, TArrayRef<const TCell> key, const TSmallVec<NTable::TTag>& columnTags,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const THolderFactory& holderFactory,
+        NUdf::TUnboxedValue& result, TKqpTableStats& stats);
+
+    TAutoPtr<NTable::TTableIt> CreateIterator(const TTableId& tableId, const TTableRange& range,
+        const TSmallVec<NTable::TTag>& columnTags);
+
+    TAutoPtr<NTable::TTableReverseIt> CreateReverseIterator(const TTableId& tableId, const TTableRange& range,
+        const TSmallVec<NTable::TTag>& columnTags);
+
+    bool ReadRow(const TTableId& tableId, NTable::TTableIt& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
+
+    bool ReadRow(const TTableId& tableId, NTable::TTableReverseIt& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
+
+    bool ReadRowWide(const TTableId& tableId, NTable::TTableIt& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
+
+    bool ReadRowWide(const TTableId& tableId, NTable::TTableReverseIt& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
+
+private:
+    void TouchTableRange(const TTableId& tableId, const TTableRange& range) const;
+    void TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
+
+    template <typename TReadTableIterator>
+    bool ReadRowImpl(const TTableId& tableId, TReadTableIterator& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
+
+    template <typename TReadTableIterator>
+    bool ReadRowWideImpl(const TTableId& tableId, TReadTableIterator& iterator,
+        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
+        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
+
+    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
 
 public:
     NTable::TDatabase* Database = nullptr;
@@ -66,7 +102,7 @@ public:
 private:
     NDataShard::TDataShard* Shard;
     std::unordered_map<ui64, TEngineHostCounters> TaskCounters;
-    TEngineHostCounters& DatashardCounters;
+    TEngineHost& EngineHost;
     TInstant Now;
     ui64 LockTxId = 0;
     bool PersistentChannels = false;
@@ -81,18 +117,6 @@ public:
 };
 
 TSmallVec<NTable::TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns);
-
-bool TryFetchRow(const TTableId& tableId, NTable::TTableIt& iterator, NYql::NUdf::TUnboxedValue& row,
-    TComputationContext& ctx, TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
-
-bool TryFetchRow(const TTableId& tableId, NTable::TTableReverseIt& iterator, NYql::NUdf::TUnboxedValue& row,
-    TComputationContext& ctx, TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
-
-void FetchRow(const TDbTupleRef& dbTuple, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
-    const TSmallVec<NTable::TTag>& systemColumnTags);
 
 IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);

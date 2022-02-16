@@ -74,18 +74,6 @@ TMaybe<TKeyRangesType> ParseKeyRangesType(const TTupleType* rangeTupleType) {
     };
 }
 
-TSerializedTableRange CreateTableRange(const TParseReadTableResult& parseResult, const IComputationNode* fromNode,
-    const IComputationNode* toNode, const TTypeEnvironment& typeEnv, TComputationContext& ctx)
-{
-    TVector<TCell> fromCells;
-    BuildKeyTupleCells(parseResult.FromTuple->GetType(), fromNode->GetValue(ctx), fromCells, typeEnv);
-
-    TVector<TCell> toCells;
-    BuildKeyTupleCells(parseResult.ToTuple->GetType(), toNode->GetValue(ctx), toCells, typeEnv);
-
-    return TSerializedTableRange(fromCells, parseResult.FromInclusive, toCells, parseResult.ToInclusive);
-}
-
 TSerializedTableRange BuildFullRange(ui32 keyColumnsSize) {
     /* Build range from NULL, ... NULL to +inf, ... +inf */
     TVector<TCell> fromKeyValues(keyColumnsSize);
@@ -183,15 +171,6 @@ TVector<TSerializedTableRange> CreateTableRanges(const TParseReadTableRangesResu
     return ranges;
 }
 
-void CreateRangePoints(ui64 localTid, const TSerializedTableRange& serializedTableRange, TSmallVec<TRawTypeValue>& from,
-    TSmallVec<TRawTypeValue>& to, TKqpDatashardComputeContext& computeCtx)
-{
-    const auto* tableInfo = computeCtx.Database->GetScheme().GetTableInfo(localTid);
-    auto tableRange = serializedTableRange.ToTableRange();
-    ConvertTableKeys(computeCtx.Database->GetScheme(), tableInfo, tableRange.From, from, nullptr);
-    ConvertTableKeys(computeCtx.Database->GetScheme(), tableInfo, tableRange.To, to, nullptr);
-}
-
 template <bool IsReverse>
 class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> {
 public:
@@ -222,94 +201,25 @@ protected:
     virtual EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const = 0;
 
     EFetchResult ReadNext(NUdf::TUnboxedValue* const* output) const {
-        bool breakLocks = false;
-        while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-            if (!breakLocks && (breakLocks = bool(Iterator->Stats.InvisibleRowSkips))) {
-                ComputeCtx.BreakSetLocks();
-            }
-            TDbTupleRef rowKey = Iterator->GetKey();
+        TKqpTableStats stats;
+        bool fetched = ComputeCtx.ReadRowWide(TableId, *Iterator, SystemColumnTags, SkipNullKeys, output, stats);
 
-            ComputeCtx.AddKeyAccessSample(TableId, rowKey.Cells());
+        if (stats.InvisibleRowSkips) {
+            ComputeCtx.BreakSetLocks();
+        }
 
-            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
+        ShardTableStats += stats;
+        TaskTableStats += stats;
 
-            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            ShardTableStats.InvisibleRowSkips +=  invisibleRowSkips;
-
-            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            TaskTableStats.InvisibleRowSkips +=  invisibleRowSkips;
-
-            Y_VERIFY(SkipNullKeys.size() <= rowKey.ColumnCount);
-            bool skipRow = false;
-            for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
-                if (SkipNullKeys[i] && rowKey.Columns[i].IsNull()) {
-                    skipRow = true;
-                    break;
-                }
-            }
-            if (skipRow) {
-                continue;
-            }
-
-            TDbTupleRef rowValues = Iterator->GetValues();
-
-            size_t columnsCount = rowValues.ColumnCount + SystemColumnTags.size();
-
-            ui64 rowSize = 0;
-            for (ui32 i = 0; i < rowValues.ColumnCount; ++i) {
-                rowSize += rowValues.Columns[i].IsNull() ? 1 : rowValues.Columns[i].Size();
-                if (auto out = *output++) {
-                    *out = GetCellValue(rowValues.Cells()[i], rowValues.Types[i]);
-                }
-            }
-
-            // Some per-row overhead to deal with the case when no columns were requested
-            rowSize = std::max(rowSize, (ui64) 8);
-
-            for (ui32 i = rowValues.ColumnCount, j = 0; i < columnsCount; ++i, ++j) {
-                auto out = *output++;
-                if (!out) {
-                    continue;
-                }
-
-                switch (SystemColumnTags[j]) {
-                    case TKeyDesc::EColumnIdDataShard:
-                        *out = TUnboxedValue(TUnboxedValuePod(ComputeCtx.GetShardId()));
-                        break;
-                    default:
-                        throw TSchemeErrorTabletException();
-                }
-            }
-
+        if (fetched) {
             if (Remains) {
                 Remains = *Remains - 1;
             }
 
-            ShardTableStats.SelectRangeRows++;
-            ShardTableStats.SelectRangeBytes += rowSize;
-
-            TaskTableStats.SelectRangeRows++;
-            TaskTableStats.SelectRangeBytes += rowSize;
-
             return EFetchResult::One;
         }
 
-        if (!breakLocks && bool(Iterator->Stats.InvisibleRowSkips)) {
-            ComputeCtx.BreakSetLocks();
-        }
-
-        auto deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-        auto invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
-
-        ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-        ShardTableStats.InvisibleRowSkips += invisibleRowSkips;
-
-        TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-        TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
-
-        if (Iterator->Last() == NTable::EReady::Page) {
-            ComputeCtx.SetTabletNotReady();
+        if (ComputeCtx.IsTabletNotReady()) {
             return EFetchResult::Yield;
         }
 
@@ -341,7 +251,6 @@ public:
         , FromNode(fromNode)
         , ToNode(toNode)
         , ItemsLimit(itemsLimit)
-        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId))
         , ColumnTags(ExtractTags(parseResult.Columns))
     {
         this->ShardTableStats.NSelectRange++;
@@ -351,27 +260,22 @@ public:
 private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
         if (!this->Iterator) {
-            auto serializedTableRange = CreateTableRange(ParseResult, FromNode, ToNode, this->TypeEnv, ctx);
-            auto tableRange = serializedTableRange.ToTableRange();
-            this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange);
+            TVector<TCell> fromCells;
+            BuildKeyTupleCells(ParseResult.FromTuple->GetType(), FromNode->GetValue(ctx), fromCells, this->TypeEnv);
 
-            TSmallVec<TRawTypeValue> from, to;
-            CreateRangePoints(LocalTid, serializedTableRange, from, to, this->ComputeCtx);
+            TVector<TCell> toCells;
+            BuildKeyTupleCells(ParseResult.ToTuple->GetType(), ToNode->GetValue(ctx), toCells, this->TypeEnv);
 
-            NTable::TKeyRange keyRange;
-            keyRange.MinKey = from;
-            keyRange.MaxKey = to;
-            keyRange.MinInclusive = tableRange.InclusiveFrom;
-            keyRange.MaxInclusive = tableRange.InclusiveTo;
+            auto range = TTableRange(fromCells, ParseResult.FromInclusive, toCells, ParseResult.ToInclusive);
 
             if (ItemsLimit) {
                 this->Remains = ItemsLimit->GetValue(ctx).Get<ui64>();
             }
 
             if constexpr (IsReverse) {
-                this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
+                this->Iterator = this->ComputeCtx.CreateReverseIterator(ParseResult.TableId, range, ColumnTags);
             } else {
-                this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
+                this->Iterator = this->ComputeCtx.CreateIterator(ParseResult.TableId, range, ColumnTags);
             }
         }
 
@@ -396,9 +300,7 @@ private:
     IComputationNode* FromNode;
     IComputationNode* ToNode;
     IComputationNode* ItemsLimit;
-    ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
-    ui64 TaskId;
 };
 
 template <bool IsReverse>
@@ -411,14 +313,13 @@ public:
         , ParseResult(parseResult)
         , RangesNode(rangesNode)
         , ItemsLimit(itemsLimit)
-        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId))
-        , ColumnTags(ExtractTags(parseResult.Columns)) {
-    }
+        , ColumnTags(ExtractTags(parseResult.Columns)) {}
 
 private:
     EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
         if (!RangeId) {
-            const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid);
+            const auto localTid = this->ComputeCtx.GetLocalTableId(ParseResult.TableId);
+            const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
             Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, this->TypeEnv, ctx, tableInfo->KeyColumns.size());
             RangeId = 0;
 
@@ -433,23 +334,12 @@ private:
             this->TaskTableStats.NSelectRange++;
 
             if (!this->Iterator) {
-                auto& range = Ranges[*RangeId];
-                auto tableRange = range.ToTableRange();
-                this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange);
-
-                TSmallVec<TRawTypeValue> from, to;
-                CreateRangePoints(LocalTid, range, from, to, this->ComputeCtx);
-
-                NTable::TKeyRange keyRange;
-                keyRange.MinKey = from;
-                keyRange.MaxKey = to;
-                keyRange.MinInclusive = tableRange.InclusiveFrom;
-                keyRange.MaxInclusive = tableRange.InclusiveTo;
+                auto range = Ranges[*RangeId].ToTableRange();
 
                 if constexpr (IsReverse) {
-                    this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
+                    this->Iterator = this->ComputeCtx.CreateReverseIterator(ParseResult.TableId, range, ColumnTags);
                 } else {
-                    this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
+                    this->Iterator = this->ComputeCtx.CreateIterator(ParseResult.TableId, range, ColumnTags);
                 }
             }
 
@@ -479,95 +369,11 @@ private:
     TParseReadTableRangesResult ParseResult;
     IComputationNode* RangesNode;
     IComputationNode* ItemsLimit;
-    ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
-    ui64 TaskId;
     mutable TVector<TSerializedTableRange> Ranges;
     mutable std::optional<ui32> RangeId;
 };
 
-void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
-{
-    size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size();
-
-    TUnboxedValue* rowItems = nullptr;
-    row = ctx.HolderFactory.CreateDirectArrayHolder(columnsCount, rowItems);
-
-    ui64 rowSize = 0;
-    for (ui32 i = 0; i < dbTuple.ColumnCount; ++i) {
-        rowSize += dbTuple.Columns[i].IsNull() ? 1 : dbTuple.Columns[i].Size();
-        rowItems[i] = GetCellValue(dbTuple.Cells()[i], dbTuple.Types[i]);
-    }
-
-    // Some per-row overhead to deal with the case when no columns were requested
-    rowSize = std::max(rowSize, (ui64)8);
-
-    for (ui32 i = dbTuple.ColumnCount, j = 0; i < columnsCount; ++i, ++j) {
-        switch (systemColumnTags[j]) {
-            case TKeyDesc::EColumnIdDataShard:
-                rowItems[i] = TUnboxedValue(TUnboxedValuePod(computeCtx.GetShardId()));
-                break;
-            default:
-                throw TSchemeErrorTabletException();
-        }
-    }
-
-    tableStats.NSelectRow++;
-    tableStats.SelectRowRows++;
-    tableStats.SelectRowBytes += rowSize;
-}
-
-template <typename TTableIterator>
-bool TryFetchRowImpl(const TTableId& tableId, TTableIterator& iterator, TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
-    const TSmallVec<bool>& skipNullKeys)
-{
-    while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
-        TDbTupleRef rowKey = iterator.GetKey();
-        computeCtx.AddKeyAccessSample(tableId, rowKey.Cells());
-
-        Y_VERIFY(skipNullKeys.size() <= rowKey.ColumnCount);
-        bool skipRow = false;
-        for (ui32 i = 0; i < skipNullKeys.size(); ++i) {
-            if (skipNullKeys[i] && rowKey.Columns[i].IsNull()) {
-                skipRow = true;
-                break;
-            }
-        }
-
-        if (skipRow) {
-            continue;
-        }
-
-        TDbTupleRef rowValues = iterator.GetValues();
-        FetchRowImpl(rowValues, row, ctx, tableStats, computeCtx, systemColumnTags);
-        return true;
-    }
-
-    return false;
-}
-
-} // namespace
-
-bool TryFetchRow(const TTableId& tableId, TTableIt& iterator, TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
-    const TSmallVec<bool>& skipNullKeys)
-{
-    return TryFetchRowImpl(tableId, iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
-}
-
-bool TryFetchRow(const TTableId& tableId, TTableReverseIt& iterator, TUnboxedValue& row, TComputationContext& ctx,
-    TKqpTableStats& tableStats, TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags,
-    const TSmallVec<bool>& skipNullKeys)
-{
-    return TryFetchRowImpl(tableId, iterator, row, ctx, tableStats, computeCtx, systemColumnTags, skipNullKeys);
-}
-
-void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
-    const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
-{
-    return FetchRowImpl(dbTuple, row, ctx, tableStats, computeCtx, systemColumnTags);
 }
 
 IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,

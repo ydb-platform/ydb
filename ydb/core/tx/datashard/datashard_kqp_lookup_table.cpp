@@ -88,94 +88,62 @@ public:
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
-        , LocalTid(ComputeCtx.GetLocalTableId(ParseResult.TableId))
         , ColumnTags(ExtractTags(ParseResult.Columns))
         , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
         , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId()))
-        , TableInfo(ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid))
     {
-        MKQL_ENSURE_S(TableInfo);
-
-        MKQL_ENSURE_S(TableInfo->KeyColumns.size() == ParseResult.KeyIndices.size(),
+        auto localTid = ComputeCtx.GetLocalTableId(ParseResult.TableId);
+        auto tableInfo = ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
+        MKQL_ENSURE_S(tableInfo, "Unknown table " << ParseResult.TableId);
+        MKQL_ENSURE_S(tableInfo->KeyColumns.size() == ParseResult.KeyIndices.size(),
             "Incomplete row key in LookupRows.");
-
-        CellTypes.reserve(ColumnTags.size());
-        for (size_t i = 0; i < ColumnTags.size(); ++i) {
-            CellTypes.emplace_back(TableInfo->Columns.at(ColumnTags[i]).PType);
-        }
     }
 
     TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto keysValues = LookupKeysNode->GetValue(ctx);
 
-        while (!Finished) {
+        while (true) {
             NUdf::TUnboxedValue key;
-            auto status = keysValues.Fetch(key);
-            switch (status) {
+
+            switch (keysValues.Fetch(key)) {
                 case NUdf::EFetchStatus::Ok: {
-                    TVector<TCell> keyCells(TableInfo->KeyColumns.size());
+                    TVector<TCell> keyCells(ParseResult.KeyIndices.size());
                     FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, keyCells, TypeEnv);
 
-                    TSmallVec<TRawTypeValue> keyValues;
-                    ConvertTableKeys(ComputeCtx.Database->GetScheme(), TableInfo, keyCells, keyValues, nullptr);
+                    NUdf::TUnboxedValue result;
+                    TKqpTableStats stats;
+                    bool fetched = ComputeCtx.ReadRow(ParseResult.TableId, keyCells, ColumnTags, SystemColumnTags,
+                        ctx.HolderFactory, result, stats);
 
-                    if (keyValues.size() != TableInfo->KeyColumns.size()) {
-                        throw TSchemeErrorTabletException();
+                    if (stats.InvisibleRowSkips) {
+                        ComputeCtx.BreakSetLocks();
                     }
 
-                    ComputeCtx.ReadTable(ParseResult.TableId, keyCells);
-                    ComputeCtx.AddKeyAccessSample(ParseResult.TableId, keyCells);
+                    ShardTableStats += stats;
+                    TaskTableStats += stats;
 
-                    NTable::TRowState dbRow;
-                    NTable::TSelectStats stats;
-                    ui64 flags = 0; // TODO: Check DisableByKeyFilter
-                    auto ready = ComputeCtx.Database->Select(LocalTid, keyValues, ColumnTags, dbRow, stats, flags, ComputeCtx.GetReadVersion());
-                    if (stats.Invisible)
-                        ComputeCtx.BreakSetLocks();
+                    if (fetched) {
+                        return std::move(result);
+                    }
 
-                    switch (ready) {
-                        case EReady::Page:
-                            ComputeCtx.SetTabletNotReady();
-                            return TUnboxedValue::MakeYield();
-                        case EReady::Gone:
-                            continue;
-                        case EReady::Data:
-                            break;
-                        default:
-                            MKQL_ENSURE_S(false, "Unexpected local db select status: " << (ui32)ready);
-                    };
+                    if (ComputeCtx.IsTabletNotReady()) {
+                        return NUdf::TUnboxedValue::MakeYield();
+                    }
 
-                    MKQL_ENSURE_S(CellTypes.size() == dbRow.Size(), "Invalid local db row size.");
-
-                    TDbTupleRef dbTuple(CellTypes.data(), (*dbRow).data(), dbRow.Size());
-                    TUnboxedValue result;
-                    TKqpTableStats tableStats;
-                    FetchRow(dbTuple, result, ctx, tableStats, ComputeCtx, SystemColumnTags);
-
-                    ShardTableStats.NSelectRow++;
-                    ShardTableStats.SelectRowRows++;
-                    ShardTableStats.SelectRowBytes += tableStats.SelectRowBytes;
-
-                    TaskTableStats.NSelectRow++;
-                    TaskTableStats.SelectRowRows++;
-                    TaskTableStats.SelectRowBytes += tableStats.SelectRowBytes;
-
-                    return result;
+                    continue;
                 }
 
                 case NUdf::EFetchStatus::Finish:
-                    Finished = true;
                     return TUnboxedValue::MakeFinish();
 
                 case NUdf::EFetchStatus::Yield:
+                    MKQL_ENSURE_S(false);
                     return TUnboxedValue::MakeYield();
             }
-
-            MKQL_ENSURE_S(false, "Unexpected key fetch status: " << (ui32)status);
         }
 
-        return TUnboxedValue::MakeFinish();
+        Y_UNREACHABLE();
     }
 
 private:
@@ -188,14 +156,10 @@ private:
     const TTypeEnvironment& TypeEnv;
     TParseLookupTableResult ParseResult;
     IComputationNode* LookupKeysNode;
-    ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
     TSmallVec<TTag> SystemColumnTags;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
-    const NTable::TScheme::TTableInfo* TableInfo;
-    TSmallVec<NScheme::TTypeId> CellTypes;
-    mutable bool Finished = false;
 };
 
 class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTableWrapper> {
@@ -209,18 +173,13 @@ public:
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
-        , LocalTid(ComputeCtx.GetLocalTableId(ParseResult.TableId))
         , ColumnTags(ExtractTags(ParseResult.Columns))
         , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
-        , TaskTableStats(ComputeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId()))
-        , TableInfo(ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid))
-    {
-        MKQL_ENSURE_S(TableInfo);
-    }
+        , TaskTableStats(ComputeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
 
     TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        while (!Finished) {
+        while (true) {
             if (!Iterator) {
                 auto keysValues = LookupKeysNode->GetValue(ctx);
 
@@ -229,7 +188,11 @@ public:
 
                 switch (status) {
                     case NUdf::EFetchStatus::Ok: {
-                        TVector<TCell> fromCells(TableInfo->KeyColumns.size());
+                        auto localTid = ComputeCtx.GetLocalTableId(ParseResult.TableId);
+                        auto tableInfo = ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
+                        MKQL_ENSURE_S(tableInfo);
+
+                        TVector<TCell> fromCells(tableInfo->KeyColumns.size());
                         FillKeyTupleValue(key, ParseResult.KeyIndices, ParseResult.KeyTypes, fromCells, TypeEnv);
 
                         TVector<TCell> toCells(ParseResult.KeyIndices.size());
@@ -237,64 +200,48 @@ public:
 
                         auto range = TTableRange(fromCells, true, toCells, true);
 
-                        TSmallVec<TRawTypeValue> from, to;
-                        ConvertTableKeys(ComputeCtx.Database->GetScheme(), TableInfo, range.From, from, nullptr);
-                        ConvertTableKeys(ComputeCtx.Database->GetScheme(), TableInfo, range.To, to, nullptr);
+                        Iterator = ComputeCtx.CreateIterator(ParseResult.TableId, range, ColumnTags);
 
-                        NTable::TKeyRange keyRange;
-                        keyRange.MinKey = from;
-                        keyRange.MaxKey = to;
-                        keyRange.MinInclusive = range.InclusiveFrom;
-                        keyRange.MaxInclusive = range.InclusiveTo;
-
-                        ComputeCtx.ReadTable(ParseResult.TableId, range);
-                        Iterator = ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, ComputeCtx.GetReadVersion());
+                        ShardTableStats.NSelectRange++;
+                        TaskTableStats.NSelectRange++;
                         break;
                     }
 
                     case NUdf::EFetchStatus::Finish:
-                        Finished = true;
                         return TUnboxedValue::MakeFinish();
 
                     case NUdf::EFetchStatus::Yield:
+                        MKQL_ENSURE_S(false);
                         return TUnboxedValue::MakeYield();
                 }
             }
 
             TUnboxedValue result;
-            TKqpTableStats tableStats;
-            auto fetched = TryFetchRow(ParseResult.TableId, *Iterator, result, ctx, tableStats, ComputeCtx,
-                SystemColumnTags, ParseResult.SkipNullKeys);
+            TKqpTableStats stats;
 
-            if (Iterator->Stats.InvisibleRowSkips) {
+            bool fetched = ComputeCtx.ReadRow(ParseResult.TableId, *Iterator, SystemColumnTags,
+                ParseResult.SkipNullKeys, ctx.HolderFactory, result, stats);
+
+
+            if (stats.InvisibleRowSkips) {
                 ComputeCtx.BreakSetLocks();
             }
 
-            ShardTableStats += tableStats;
-            TaskTableStats += tableStats;
-
-            ui64 deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
-            ui64 invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
-
-            ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            ShardTableStats.InvisibleRowSkips += invisibleRowSkips;
-
-            TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
-            TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
+            ShardTableStats += stats;
+            TaskTableStats += stats;
 
             if (fetched) {
                 return result;
             }
 
-            if (Iterator->Last() == NTable::EReady::Page) {
-                ComputeCtx.SetTabletNotReady();
-                return TUnboxedValue::MakeYield();
+            if (ComputeCtx.IsTabletNotReady()) {
+                return NUdf::TUnboxedValue::MakeYield();
             }
 
             Iterator = nullptr;
         }
 
-        return TUnboxedValue::MakeFinish();
+        Y_UNREACHABLE();
     }
 
 private:
@@ -307,14 +254,11 @@ private:
     const TTypeEnvironment& TypeEnv;
     TParseLookupTableResult ParseResult;
     IComputationNode* LookupKeysNode;
-    ui64 LocalTid;
     TSmallVec<TTag> ColumnTags;
     TSmallVec<TTag> SystemColumnTags;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
-    const NTable::TScheme::TTableInfo* TableInfo;
     mutable TAutoPtr<NTable::TTableIt> Iterator;
-    mutable bool Finished = false;
 };
 
 IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx,

@@ -100,6 +100,7 @@ namespace Tests {
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
         NFake::TStorage CustomDiskParams;
+        NFake::TCaches CacheParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
         TIntrusivePtr<TFormatFactory> Formats;
@@ -136,6 +137,7 @@ namespace Tests {
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
+        TServerSettings& SetCacheParams(const NFake::TCaches& value) { CacheParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }

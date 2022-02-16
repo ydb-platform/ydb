@@ -20,15 +20,7 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
         ui64 tabletId,
         ui64 ownerId)
 {
-    auto &runtime = *server->GetRuntime();
-
-    auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(ownerId, userTable.GetPathId());
-    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(handle);
-    return response->Record;
+    return CompactTable(*server->GetRuntime(), tabletId, TTableId(ownerId, userTable.GetPathId()));
 }
 
 } // namespace

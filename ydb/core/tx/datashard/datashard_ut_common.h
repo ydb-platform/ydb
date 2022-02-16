@@ -417,6 +417,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(ui64, Followers, 0);
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
+    TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL
@@ -469,6 +470,9 @@ void CreateShardedTable(Tests::TServer::TPtr server,
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                              TActorId sender,
                              const TString &path);
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
 
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 

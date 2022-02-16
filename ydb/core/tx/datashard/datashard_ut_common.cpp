@@ -1168,6 +1168,10 @@ void CreateShardedTable(Tests::TServer::TPtr server,
             family.SetStorage(NKikimrSchemeOp::ColumnStorageTest_1_2_1k);
         }
 
+        if (opts.ExecutorCacheSize_) {
+            desc->MutablePartitionConfig()->SetExecutorCacheSize(*opts.ExecutorCacheSize_);
+        }
+
         runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
@@ -1226,6 +1230,18 @@ TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
         shards.push_back(part.GetDatashardId());
 
     return shards;
+}
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    request->Record.SetCompactBorrowed(compactBorrowed);
+    runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    return ev->Get()->Record;
 }
 
 std::pair<TTableInfoMap, ui64> GetTables(

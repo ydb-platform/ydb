@@ -82,17 +82,6 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
-    void CompactTable(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-        auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId.OwnerId, tableId.PathId.LocalPathId);
-        request->Record.SetCompactBorrowed(true);
-        runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
-        // auto& result = ev->Get()->Record;
-        // UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK);
-    }
-
     void DoSplitMergeChanges(bool withMvcc, bool withReboots) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -140,7 +129,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         // Compact tables so we can merge them later
         for (ui64 shardId : shards1) {
-            CompactTable(runtime, shardId, tableId1);
+            CompactTable(runtime, shardId, tableId1, true);
         }
 
         if (withReboots) {

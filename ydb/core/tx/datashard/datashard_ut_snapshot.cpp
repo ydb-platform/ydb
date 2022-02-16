@@ -885,16 +885,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
-    void CompactTable(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-        auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId.OwnerId, tableId.PathId.LocalPathId);
-        runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
-        auto& result = ev->Get()->Record;
-        UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK);
-    }
-
     Y_UNIT_TEST(SwitchMvccSnapshots) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -940,8 +930,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         auto snapshot3 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
 
-        CompactTable(runtime, shards1.at(0), tableId1);
-        CompactTable(runtime, shards2.at(0), tableId2);
+        {
+            const auto result = CompactTable(runtime, shards1.at(0), tableId1);
+            UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
+        {
+            const auto result = CompactTable(runtime, shards2.at(0), tableId2);
+            UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
 
         // None of created snapshots should be removed
         auto removed1 = GetRemovedRowVersions(server, shards1.at(0));

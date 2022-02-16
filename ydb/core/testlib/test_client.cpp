@@ -204,7 +204,8 @@ namespace Tests {
         Runtime->SetupMonitoring();
         Runtime->SetLogBackend(Settings->LogBackend);
 
-        SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
+        const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams);
 
         CreateBootstrapTablets();
         SetupStorage();

@@ -527,7 +527,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             }},
         });
     }
-}
+
+} // AsyncIndexChangeCollector
 
 Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     using TCdcStream = TShardedTableOptions::TCdcStream;
@@ -538,7 +539,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         return pqConfig;
     }
 
-    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
+    void Run(const NFake::TCaches& cacheParams, const TString& path,
+            const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
@@ -554,7 +556,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             .SetDomainName(domainName)
             .SetUseRealThreads(false)
             .SetEnableDataColumnForIndexTable(true)
-            .SetEnableAsyncIndexes(true);
+            .SetEnableAsyncIndexes(true)
+            .SetCacheParams(cacheParams);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -579,12 +582,21 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             WaitTxNotification(server, sender, AsyncAlterAddStream(server, workingDir, tableName, stream));
         }
 
-        for (const auto& query : queries) {
-            ExecSQL(server, sender, query);
-        }
-
         auto desc = Navigate(runtime, sender, path);
         const auto& entry = desc->ResultSet.at(0);
+
+        const auto tabletIds = GetTableShards(server, sender, path);
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        for (const auto& query : queries) {
+            if (query.StartsWith("COMPACT TABLE")) {
+                const auto result = CompactTable(runtime, tabletIds[0], entry.TableId);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+                RebootTablet(runtime, tabletIds[0], sender);
+            } else {
+                ExecSQL(server, sender, query);
+            }
+        }
 
         THashMap<NTable::TTag, TString> tagToName;
         for (const auto& [tag, column] : entry.Columns) {
@@ -605,9 +617,6 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             streamPathIdToName.emplace(pathId, name);
         }
 
-        const auto tabletIds = GetTableShards(server, sender, path);
-        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
-
         for (const auto& [pathId, actual] : GetChangeRecordsWithDetails(runtime, sender, tabletIds[0])) {
             TString name;
             if (streamPathIdToName.contains(pathId)) {
@@ -626,6 +635,22 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
             }
         }
+    }
+
+    NFake::TCaches DefaultCacheParams() {
+        return {};
+    }
+
+    NFake::TCaches TinyCacheParams() {
+        auto params = DefaultCacheParams();
+        params.Shared = 1; // byte
+        return params;
+    }
+
+    void Run(const TString& path, const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
+            const TVector<TString>& queries, const TStructRecords& expectedRecords)
+    {
+        Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
     }
 
     void Run(const TString& path, const TShardedTableOptions& opts, const TCdcStream& stream,
@@ -757,7 +782,30 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
         });
     }
-}
+
+    TShardedTableOptions TinyCacheTable() {
+        return TShardedTableOptions()
+            .ExecutorCacheSize(1)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+            });
+    }
+
+    Y_UNIT_TEST(PageFaults) {
+        Run(TinyCacheParams(), "/Root/path", TinyCacheTable(), TVector<TCdcStream>{KeysOnly()}, TVector<TString>{
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
+            "COMPACT TABLE `/Root/path`;",
+            "UPDATE `/Root/path` SET value = 20 WHERE key = 1;",
+        }, {
+            {"keys_stream", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
+            }},
+        });
+    }
+
+} // CdcStreamChangeCollector
 
 } // NKikimr
 

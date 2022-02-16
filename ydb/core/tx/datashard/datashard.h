@@ -1377,6 +1377,9 @@ struct TEvDataShard {
             Record.MutablePathId()->SetOwnerId(ownerId);
             Record.MutablePathId()->SetLocalId(localId);
         }
+        TEvCompactTable(const TPathId& pathId)
+            : TEvCompactTable(pathId.OwnerId, pathId.LocalPathId)
+        { }
     };
 
     struct TEvCompactTableResult : public TEventPB<TEvCompactTableResult, NKikimrTxDataShard::TEvCompactTableResult,

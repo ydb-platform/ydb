@@ -4,7 +4,7 @@
 
 namespace NYdb::NPersQueue {
 
-IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
+ERetryErrorClass GetRetryErrorClass(EStatus status) {
     switch (status) {
     case EStatus::SUCCESS:
     case EStatus::INTERNAL_ERROR:
@@ -19,7 +19,7 @@ IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::CLIENT_INTERNAL_ERROR:
     case EStatus::CLIENT_CANCELLED:
     case EStatus::CLIENT_OUT_OF_RANGE:
-        return IRetryPolicy::ERetryErrorClass::ShortRetry;
+        return ERetryErrorClass::ShortRetry;
 
     case EStatus::OVERLOADED:
     case EStatus::TIMEOUT:
@@ -28,7 +28,7 @@ IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::CLIENT_DEADLINE_EXCEEDED:
     case EStatus::CLIENT_LIMITS_REACHED:
     case EStatus::CLIENT_DISCOVERY_FAILED:
-        return IRetryPolicy::ERetryErrorClass::LongRetry;
+        return ERetryErrorClass::LongRetry;
 
     case EStatus::SCHEME_ERROR:
     case EStatus::STATUS_UNDEFINED:
@@ -40,14 +40,14 @@ IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::NOT_FOUND:
     case EStatus::CLIENT_UNAUTHENTICATED:
     case EStatus::CLIENT_CALL_UNIMPLEMENTED:
-        return IRetryPolicy::ERetryErrorClass::NoRetry;
+        return ERetryErrorClass::NoRetry;
     }
 }
 
-IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status) {
+ERetryErrorClass GetRetryErrorClassV2(EStatus status) {
     switch (status) {
         case EStatus::SCHEME_ERROR:
-            return IRetryPolicy::ERetryErrorClass::NoRetry;
+            return ERetryErrorClass::NoRetry;
         default:
             return GetRetryErrorClass(status);
 

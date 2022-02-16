@@ -25,7 +25,7 @@ namespace NKikimr::NPersQueueTests {
     ) {
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
-        settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? IRetryPolicy::GetDefaultPolicy() : IRetryPolicy::GetNoRetryPolicy());
+        settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? NYdb::NPersQueue::IRetryPolicy::GetDefaultPolicy() : NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
         if (codec) {
             if (*codec == "raw")
                 settings.Codec(ECodec::RAW);
@@ -55,7 +55,7 @@ namespace NKikimr::NPersQueueTests {
         Y_UNUSED(codec);
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
-        settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? IRetryPolicy::GetDefaultPolicy() : IRetryPolicy::GetNoRetryPolicy());
+        settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? NYdb::NPersQueue::IRetryPolicy::GetDefaultPolicy() : NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
         return CreateSimpleWriter(driver, settings);
     }
 

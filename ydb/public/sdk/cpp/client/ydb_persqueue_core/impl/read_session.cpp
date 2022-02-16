@@ -233,7 +233,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             if (!ClusterDiscoveryRetryState) {
                 ClusterDiscoveryRetryState = Settings.RetryPolicy_->CreateRetryState();
             }
-            TMaybe<TDuration> retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status);
+            TMaybe<TDuration> retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
             if (retryDelay) {
                 Log << TLOG_INFO << "Cluster discovery request failed. Status: " << status.GetStatus()
                                    << ". Issues: \"" << IssuesSingleLineString(status.GetIssues()) << "\"";
@@ -724,7 +724,7 @@ bool TSingleClusterReadSessionImpl::Reconnect(const TPlainStatus& status) {
         ServerMessage = std::make_shared<Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>();
         ++ConnectionGeneration;
         if (RetryState) {
-            TMaybe<TDuration> nextDelay = RetryState->GetNextRetryDelay(TPlainStatus(status));
+            TMaybe<TDuration> nextDelay = RetryState->GetNextRetryDelay(status.Status);
             if (nextDelay) {
                 delay = *nextDelay;
                 delayContext = ClientContext->CreateContext();

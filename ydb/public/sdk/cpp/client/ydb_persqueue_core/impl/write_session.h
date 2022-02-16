@@ -387,7 +387,7 @@ private:
     size_t ConnectionAttemptsDone = 0;
     TAdaptiveLock Lock;
     IProcessor::TPtr Processor;
-    IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
+    IRetryPolicy::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to.
 
     TString SessionId;

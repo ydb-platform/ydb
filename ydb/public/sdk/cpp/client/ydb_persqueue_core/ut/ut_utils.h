@@ -163,7 +163,7 @@ public:
     }
 };
 
-struct TYdbPqTestRetryState : IRetryState {
+struct TYdbPqTestRetryState : NYdb::NPersQueue::IRetryPolicy::IRetryState {
     TYdbPqTestRetryState(
             std::function<void ()> retryCallback, std::function<void ()> destroyCallback, const TDuration& delay
     )
@@ -172,7 +172,7 @@ struct TYdbPqTestRetryState : IRetryState {
         , Delay(delay)
     {}
 
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override {
+    TMaybe<TDuration> GetNextRetryDelay(NYdb::EStatus) override {
         Cerr << "Test retry state: get retry delay\n";
         RetryDone();
         return Delay;
@@ -185,9 +185,9 @@ struct TYdbPqTestRetryState : IRetryState {
         DestroyDone();
     }
 };
-struct TYdbPqNoRetryState : IRetryState {
+struct TYdbPqNoRetryState : NYdb::NPersQueue::IRetryPolicy::IRetryState {
     TAtomic DelayCalled = 0;
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override {
+    TMaybe<TDuration> GetNextRetryDelay(NYdb::EStatus) override {
         auto res = AtomicSwap(&DelayCalled, 0);
         UNIT_ASSERT(!res);
         return Nothing();

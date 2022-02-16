@@ -11,8 +11,8 @@
 
 namespace NYdb::NPersQueue {
 
-IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status);
-IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status);
+ERetryErrorClass GetRetryErrorClass(EStatus status);
+ERetryErrorClass GetRetryErrorClassV2(EStatus status);
 
 void Cancel(NGrpc::IQueueClientContextPtr& context);
 

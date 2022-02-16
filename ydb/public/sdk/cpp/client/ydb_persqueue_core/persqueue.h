@@ -4,6 +4,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/log.h>
+#include <library/cpp/retry/retry_policy.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -885,46 +886,14 @@ TString DebugString(const TReadSessionEvent::TEvent& event);
 //! - exponential backoff policy;
 //! - retries with fixed interval;
 //! - no retries.
-//! TODO: move to common header (not persqueue).
 
-//! Retry state of single request.
-struct IRetryState {
-    using TPtr = std::unique_ptr<IRetryState>;
-
-    virtual ~IRetryState() = default;
-
-    //! Calculate delay before next retry if next retry is allowed.
-    //! Returns empty maybe if retry is not allowed anymore.
-    virtual TMaybe<TDuration> GetNextRetryDelay(const TStatus& status) = 0;
-};
-
-struct IRetryPolicy {
-    using TPtr = std::shared_ptr<IRetryPolicy>;
-
-    virtual ~IRetryPolicy() = default;
-
-    //! Function that is called after first error
-    //! to find out a futher retry behaviour.
-    //! Retry state is expected to be created for the whole single retry session.
-    virtual IRetryState::TPtr CreateRetryState() const = 0;
-
+struct IRetryPolicy : ::IRetryPolicy<EStatus> {
     //!
     //! Default implementations.
     //!
 
     static TPtr GetDefaultPolicy(); // Exponential backoff with infinite retry attempts.
     static TPtr GetNoRetryPolicy(); // Denies all kind of retries.
-
-    enum class ERetryErrorClass {
-        // This error shouldn't be retried.
-        NoRetry,
-
-        // This error could be retried in short period of time.
-        ShortRetry,
-
-        // This error requires waiting before it could be retried.
-        LongRetry,
-    };
 
     //! Randomized exponential backoff policy.
     static TPtr GetExponentialBackoffPolicy(TDuration minDelay = TDuration::MilliSeconds(10),

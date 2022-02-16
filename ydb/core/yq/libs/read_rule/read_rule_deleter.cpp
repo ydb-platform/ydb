@@ -129,7 +129,7 @@ public:
                         2.0 // scaleFactor
                     )->CreateRetryState();
             }
-            TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status);
+            TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status.GetStatus());
             if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
                 nextRetryDelay = Nothing(); // No topic => OK. Leave just transient issues.
             }
@@ -173,7 +173,7 @@ private:
     NYdb::NPersQueue::TPersQueueClient PqClient;
     ui64 Index = 0;
     const size_t MaxRetries;
-    NYdb::NPersQueue::IRetryState::TPtr RetryState;
+    NYdb::NPersQueue::IRetryPolicy::IRetryState::TPtr RetryState;
 };
 
 // Actor for deletion of read rules for all topics in the query.

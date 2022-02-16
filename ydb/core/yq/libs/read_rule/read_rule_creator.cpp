@@ -136,7 +136,7 @@ public:
             if (!RetryState) {
                 RetryState = NYdb::NPersQueue::IRetryPolicy::GetExponentialBackoffPolicy()->CreateRetryState();
             }
-            TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status);
+            TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status.GetStatus());
             if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
                 nextRetryDelay = Nothing(); // Not retryable
             }
@@ -198,7 +198,7 @@ private:
     NYdb::TDriver YdbDriver;
     NYdb::NPersQueue::TPersQueueClient PqClient;
     ui64 Index = 0;
-    NYdb::NPersQueue::IRetryState::TPtr RetryState;
+    NYdb::NPersQueue::IRetryPolicy::IRetryState::TPtr RetryState;
     bool RequestInFlight = false;
     bool Finishing = false;
 };

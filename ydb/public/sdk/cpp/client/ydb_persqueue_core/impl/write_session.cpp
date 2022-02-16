@@ -94,7 +94,7 @@ TWriteSession::THandleResult TWriteSession::RestartImpl(const TPlainStatus& stat
     if (!RetryState) {
         RetryState = Settings.RetryPolicy_->CreateRetryState();
     }
-    nextDelay = RetryState->GetNextRetryDelay(TPlainStatus(status));
+    nextDelay = RetryState->GetNextRetryDelay(status.Status);
 
     if (nextDelay) {
         result.StartDelay = *nextDelay;

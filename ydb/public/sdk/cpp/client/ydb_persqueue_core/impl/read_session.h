@@ -970,7 +970,7 @@ private:
     size_t ConnectionGeneration = 0;
     TAdaptiveLock Lock;
     IProcessor::TPtr Processor;
-    IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
+    IRetryPolicy::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
 
     // Memory usage.
@@ -1103,7 +1103,7 @@ private:
     std::shared_ptr<TReadSessionEventsQueue> EventsQueue;
     THashMap<TString, TClusterSessionInfo> ClusterSessions; // Cluster name (in lower case) -> TClusterSessionInfo
     NGrpc::IQueueClientContextPtr ClusterDiscoveryDelayContext;
-    IRetryState::TPtr ClusterDiscoveryRetryState;
+    IRetryPolicy::IRetryState::TPtr ClusterDiscoveryRetryState;
     bool DataReadingSuspended = false;
 
     NGrpc::IQueueClientContextPtr DumpCountersContext;

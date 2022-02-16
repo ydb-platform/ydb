@@ -578,7 +578,7 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
     Settings
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
-        .RetryPolicy(IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
+        .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
         .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
 
         TReadSessionSettings settings = setup.GetReadSessionSettings();
         // Set policy with max retries == 3.
-        settings.RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(TDuration::MilliSeconds(10), TDuration::MilliSeconds(10), TDuration::MilliSeconds(100), 3));
+        settings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetExponentialBackoffPolicy(TDuration::MilliSeconds(10), TDuration::MilliSeconds(10), TDuration::MilliSeconds(100), 3));
         std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
         TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
         UNIT_ASSERT(event);
@@ -1002,7 +1002,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     void StopsRetryAfterFailedAttemptImpl(bool timeout) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+        setup.Settings.RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
         EXPECT_CALL(*setup.MockProcessorFactory, OnCreateProcessor(_))
             .WillOnce([&]() {
                 if (timeout)
@@ -1026,26 +1026,26 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     }
 
     Y_UNIT_TEST(UsesOnRetryStateDuringRetries) {
-        class TTestRetryState : public IRetryState {
+        class TTestRetryState : public NYdb::NPersQueue::IRetryPolicy::IRetryState {
             TDuration Delay;
 
-            TMaybe<TDuration> GetNextRetryDelay(const NYdb::TStatus&) override {
+            TMaybe<TDuration> GetNextRetryDelay(NYdb::EStatus) override {
                 Delay += TDuration::Seconds(1);
                 return Delay;
             }
         };
 
-        class TTestRetryPolicy : public IRetryPolicy {
+        class TTestRetryPolicy : public NYdb::NPersQueue::IRetryPolicy {
             IRetryState::TPtr CreateRetryState() const override {
                 return IRetryState::TPtr(new TTestRetryState());
             }
         };
 
-        std::shared_ptr<IRetryState> state(new TTestRetryState());
+        std::shared_ptr<NYdb::NPersQueue::IRetryPolicy::IRetryState> state(new TTestRetryState());
         TReadSessionImplTestSetup setup;
         ON_CALL(*setup.MockProcessorFactory, ValidateConnectTimeout(_))
             .WillByDefault([state](TDuration timeout) mutable {
-                UNIT_ASSERT_VALUES_EQUAL(timeout, *state->GetNextRetryDelay(NYdb::TStatus(TPlainStatus())));
+                    UNIT_ASSERT_VALUES_EQUAL(timeout, *state->GetNextRetryDelay(NYdb::EStatus::INTERNAL_ERROR));
             });
 
         auto failCreation = [&]() {

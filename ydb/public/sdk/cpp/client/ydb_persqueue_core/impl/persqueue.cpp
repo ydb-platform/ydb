@@ -170,189 +170,13 @@ TAsyncDescribeTopicResult TPersQueueClient::DescribeTopic(const TString& path, c
     return Impl_->DescribeTopic(path, settings);
 }
 
-namespace {
-
-struct TNoRetryState : IRetryState {
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus&) override {
-        return Nothing();
-    }
-};
-
-struct TNoRetryPolicy : IRetryPolicy {
-    IRetryState::TPtr CreateRetryState() const override {
-        return std::make_unique<TNoRetryState>();
-    }
-};
-
-TDuration RandomizeDelay(TDuration baseDelay) {
-    const TDuration::TValue half = baseDelay.GetValue() / 2;
-    return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
-}
-
-struct TExponentialBackoffState : IRetryState {
-    TExponentialBackoffState(TDuration minDelay,
-                             TDuration minLongRetryDelay,
-                             TDuration maxDelay,
-                             size_t maxRetries,
-                             TDuration maxTime,
-                             double scaleFactor,
-                             std::function<IRetryPolicy::ERetryErrorClass(EStatus)> retryErrorClassFunction)
-        : MinLongRetryDelay(minLongRetryDelay)
-        , MaxDelay(maxDelay)
-        , MaxRetries(maxRetries)
-        , MaxTime(maxTime)
-        , ScaleFactor(scaleFactor)
-        , StartTime(maxTime != TDuration::Max() ? TInstant::Now() : TInstant::Zero())
-        , CurrentDelay(minDelay)
-        , AttemptsDone(0)
-        , RetryErrorClassFunction(retryErrorClassFunction)
-    {
-    }
-
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus& status) override {
-        const IRetryPolicy::ERetryErrorClass errorClass = RetryErrorClassFunction(status.GetStatus());
-        if (AttemptsDone >= MaxRetries || StartTime && TInstant::Now() - StartTime >= MaxTime || errorClass == IRetryPolicy::ERetryErrorClass::NoRetry) {
-            return Nothing();
-        }
-
-        if (errorClass == IRetryPolicy::ERetryErrorClass::LongRetry) {
-            CurrentDelay = Max(CurrentDelay, MinLongRetryDelay);
-        }
-
-        const TDuration delay = RandomizeDelay(CurrentDelay);
-
-        if (CurrentDelay < MaxDelay) {
-            CurrentDelay = Min(CurrentDelay * ScaleFactor, MaxDelay);
-        }
-
-        ++AttemptsDone;
-        return delay;
-    }
-
-    const TDuration MinLongRetryDelay;
-    const TDuration MaxDelay;
-    const size_t MaxRetries;
-    const TDuration MaxTime;
-    const double ScaleFactor;
-    const TInstant StartTime;
-    TDuration CurrentDelay;
-    size_t AttemptsDone;
-    std::function<IRetryPolicy::ERetryErrorClass(EStatus)> RetryErrorClassFunction;
-};
-
-struct TExponentialBackoffPolicy : IRetryPolicy {
-    TExponentialBackoffPolicy(TDuration minDelay,
-                              TDuration minLongRetryDelay,
-                              TDuration maxDelay,
-                              size_t maxRetries,
-                              TDuration maxTime,
-                              double scaleFactor,
-                              std::function<IRetryPolicy::ERetryErrorClass(EStatus)> customRetryClassFunction)
-        : MinDelay(minDelay)
-        , MinLongRetryDelay(minLongRetryDelay)
-        , MaxDelay(maxDelay)
-        , MaxRetries(maxRetries)
-        , MaxTime(maxTime)
-        , ScaleFactor(scaleFactor)
-        , RetryErrorClassFunction(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass)
-    {
-        Y_ASSERT(MinDelay < MaxDelay);
-        Y_ASSERT(MinLongRetryDelay < MaxDelay);
-        Y_ASSERT(MinLongRetryDelay >= MinDelay);
-        Y_ASSERT(ScaleFactor > 1.0);
-        Y_ASSERT(MaxRetries > 0);
-        Y_ASSERT(MaxTime > MinDelay);
-    }
-
-    IRetryState::TPtr CreateRetryState() const override {
-        return std::make_unique<TExponentialBackoffState>(MinDelay, MinLongRetryDelay, MaxDelay, MaxRetries, MaxTime, ScaleFactor, RetryErrorClassFunction);
-    }
-
-    const TDuration MinDelay;
-    const TDuration MinLongRetryDelay;
-    const TDuration MaxDelay;
-    const size_t MaxRetries;
-    const TDuration MaxTime;
-    const double ScaleFactor;
-    std::function<IRetryPolicy::ERetryErrorClass(EStatus)> RetryErrorClassFunction;
-};
-
-struct TFixedIntervalState : IRetryState {
-    TFixedIntervalState(TDuration delay,
-                        TDuration longRetryDelay,
-                        size_t maxRetries,
-                        TDuration maxTime,
-                        std::function<IRetryPolicy::ERetryErrorClass(EStatus)> retryErrorClassFunction)
-        : Delay(delay)
-        , LongRetryDelay(longRetryDelay)
-        , MaxRetries(maxRetries)
-        , MaxTime(maxTime)
-        , StartTime(maxTime != TDuration::Max() ? TInstant::Now() : TInstant::Zero())
-        , AttemptsDone(0)
-        , RetryErrorClassFunction(retryErrorClassFunction)
-    {
-    }
-
-    TMaybe<TDuration> GetNextRetryDelay(const TStatus& status) override {
-        const IRetryPolicy::ERetryErrorClass errorClass = RetryErrorClassFunction(status.GetStatus());
-        if (AttemptsDone >= MaxRetries || StartTime && TInstant::Now() - StartTime >= MaxTime || errorClass == IRetryPolicy::ERetryErrorClass::NoRetry) {
-            return Nothing();
-        }
-
-        const TDuration delay = RandomizeDelay(errorClass == IRetryPolicy::ERetryErrorClass::LongRetry ? LongRetryDelay : Delay);
-
-        ++AttemptsDone;
-        return delay;
-    }
-
-    const TDuration Delay;
-    const TDuration LongRetryDelay;
-    const size_t MaxRetries;
-    const TDuration MaxTime;
-    const TInstant StartTime;
-    size_t AttemptsDone;
-    std::function<IRetryPolicy::ERetryErrorClass(EStatus)> RetryErrorClassFunction;
-};
-
-struct TFixedIntervalPolicy : IRetryPolicy {
-    TFixedIntervalPolicy(TDuration delay,
-                         TDuration longRetryDelay,
-                         size_t maxRetries,
-                         TDuration maxTime,
-                         std::function<IRetryPolicy::ERetryErrorClass(EStatus)> customRetryClassFunction)
-        : Delay(delay)
-        , LongRetryDelay(longRetryDelay)
-        , MaxRetries(maxRetries)
-        , MaxTime(maxTime)
-        , RetryErrorClassFunction(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass)
-    {
-        Y_ASSERT(MaxRetries > 0);
-        Y_ASSERT(MaxTime > Delay);
-        Y_ASSERT(MaxTime > LongRetryDelay);
-        Y_ASSERT(LongRetryDelay >= Delay);
-    }
-
-    IRetryState::TPtr CreateRetryState() const override {
-        return std::make_unique<TFixedIntervalState>(Delay, LongRetryDelay, MaxRetries, MaxTime, RetryErrorClassFunction);
-    }
-
-    const TDuration Delay;
-    const TDuration LongRetryDelay;
-    const size_t MaxRetries;
-    const TDuration MaxTime;
-    std::function<IRetryPolicy::ERetryErrorClass(EStatus)> RetryErrorClassFunction;
-};
-
-} // namespace
-
 IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {
     static IRetryPolicy::TPtr policy = GetExponentialBackoffPolicy();
     return policy;
 }
 
 IRetryPolicy::TPtr IRetryPolicy::GetNoRetryPolicy() {
-    static IRetryPolicy::TPtr policy = std::make_shared<TNoRetryPolicy>();
-    return policy;
+    return ::IRetryPolicy<EStatus>::GetNoRetryPolicy();
 }
 
 IRetryPolicy::TPtr IRetryPolicy::GetExponentialBackoffPolicy(TDuration minDelay,
@@ -361,18 +185,18 @@ IRetryPolicy::TPtr IRetryPolicy::GetExponentialBackoffPolicy(TDuration minDelay,
                                                              size_t maxRetries,
                                                              TDuration maxTime,
                                                              double scaleFactor,
-                                                             std::function<IRetryPolicy::ERetryErrorClass(EStatus)> customRetryClassFunction)
+                                                             std::function<ERetryErrorClass(EStatus)> customRetryClassFunction)
 {
-    return std::make_shared<TExponentialBackoffPolicy>(minDelay, minLongRetryDelay, maxDelay, maxRetries, maxTime, scaleFactor, customRetryClassFunction);
+    return ::IRetryPolicy<EStatus>::GetExponentialBackoffPolicy(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass, minDelay, minLongRetryDelay, maxDelay, maxRetries, maxTime, scaleFactor);
 }
 
 IRetryPolicy::TPtr IRetryPolicy::GetFixedIntervalPolicy(TDuration delay,
                                                         TDuration longRetryDelay,
                                                         size_t maxRetries,
                                                         TDuration maxTime,
-                                                        std::function<IRetryPolicy::ERetryErrorClass(EStatus)> customRetryClassFunction)
+                                                        std::function<ERetryErrorClass(EStatus)> customRetryClassFunction)
 {
-    return std::make_shared<TFixedIntervalPolicy>(delay, longRetryDelay, maxRetries, maxTime, customRetryClassFunction);
+    return ::IRetryPolicy<EStatus>::GetFixedIntervalPolicy(customRetryClassFunction ? customRetryClassFunction : GetRetryErrorClass, delay, longRetryDelay, maxRetries, maxTime);
 }
 
 std::shared_ptr<IReadSession> TPersQueueClient::CreateReadSession(const TReadSessionSettings& settings) {

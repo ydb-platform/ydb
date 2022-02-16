@@ -8,7 +8,6 @@ OWNER(
 )
 
 LICENSE(
-    BSD-3-Clause AND
     BSL-1.0 AND
     Custom-Punycode
 )

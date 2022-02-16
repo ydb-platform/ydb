@@ -7,10 +7,7 @@ OWNER(
     g:cpp-contrib
 )
 
-LICENSE(
-    BSD-3-Clause AND
-    BSL-1.0
-)
+LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 

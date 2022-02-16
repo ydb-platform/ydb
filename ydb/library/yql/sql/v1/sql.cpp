@@ -2945,18 +2945,23 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints) {
     // table_hint:
-    //      an_id_hint
+    //      an_id_hint (EQUALS type_name_tag)?
     //    | (SCHEMA | COLUMNS) type_name_or_bind
     //    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
-        const TString id = Id(rule.GetAlt_table_hint1().GetRule_an_id_hint1(), *this);
+        const auto& alt = rule.GetAlt_table_hint1();
+        const TString id = Id(alt.GetRule_an_id_hint1(), *this);
         const auto idLower = to_lower(id);
         if (idLower == "schema" || idLower == "columns") {
             Error() << "Expected type after " << to_upper(id);
             return false;
         }
-        hints[id] = {};
+        TVector<TNodePtr> hint_val;
+        if (alt.HasBlock2()) {
+            hint_val.push_back(TypeNameTag(alt.GetBlock2().GetRule_type_name_tag2()));
+        }
+        hints[id] = hint_val;
         break;
     }
 
@@ -8023,21 +8028,20 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
 
     bool withTruncate = false;
+    TTableHints tableHints;
     if (tableRef.HasBlock2()) {
         auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1());
         if (!hints) {
             Ctx.Error() << "Failed to parse table hints";
             return nullptr;
         }
-
         for (const auto& hint : *hints) {
             if (to_upper(hint.first) == "TRUNCATE") {
                 withTruncate = true;
-            } else {
-                Ctx.Error() << "Unsupported hint: " << hint.first;
-                return nullptr;
             }
         }
+        std::erase_if(*hints, [](const auto &hint) { return to_upper(hint.first) == "TRUNCATE"; });
+        tableHints = std::move(*hints);
     }
 
     TVector<TString> eraseColumns;
@@ -8068,6 +8072,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     TNodePtr tableKey = BuildTableKey(pos, service, cluster, nameOrAt.second, nameOrAt.first ? "@" : "");
 
     TTableRef table(Ctx.MakeName("table"), service, cluster, tableKey);
+
     Ctx.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
     auto values = TSqlIntoValues(Ctx, Mode).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr);
@@ -8079,12 +8084,9 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
     Ctx.IncrementMonCounter("sql_features", SqlIntoModeStr);
 
-    TNodePtr options;
-    if (eraseColumns) {
-        options = BuildEraseColumns(pos, std::move(eraseColumns));
-    }
-
-    return BuildWriteColumns(pos, Ctx.Scoped, table, ToWriteColumnsMode(SqlIntoMode), std::move(values), std::move(options));
+    return BuildWriteColumns(pos, Ctx.Scoped, table,
+                             ToWriteColumnsMode(SqlIntoMode), std::move(values),
+                             BuildIntoTableOptions(pos, eraseColumns, tableHints));
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,

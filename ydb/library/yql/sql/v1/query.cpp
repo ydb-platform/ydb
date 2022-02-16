@@ -505,6 +505,61 @@ TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints) {
     return new TInputOptions(pos, hints);
 }
 
+class TIntoTableOptions: public TAstListNode {
+public:
+    TIntoTableOptions(TPosition pos, const TVector<TString>& columns, const TTableHints& hints)
+        : TAstListNode(pos)
+        , Columns(columns)
+        , Hints(hints)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(src);
+
+        TNodePtr options = Y();
+        for (const auto& column: Columns) {
+            options->Add(Q(column));
+        }
+        if (Columns) {
+            Add(Q(Y(Q("erase_columns"), Q(options))));
+        }
+
+        for (const auto& hint : Hints) {
+            TString hintName = hint.first;
+            TMaybe<TIssue> normalizeError = NormalizeName(Pos, hintName);
+            if (!normalizeError.Empty()) {
+                ctx.Error() << normalizeError->Message;
+                ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
+                return false;
+            }
+            TNodePtr option = Y(BuildQuotedAtom(Pos, hintName));
+            for (auto& x : hint.second) {
+                if (!x->Init(ctx, src)) {
+                    return false;
+                }
+                option = L(option, x);
+            }
+            Add(Q(option));
+        }
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TIntoTableOptions(GetPos(), Columns, Hints);
+    }
+
+private:
+    TVector<TString> Columns;
+    TTableHints Hints;
+};
+
+TNodePtr BuildIntoTableOptions(TPosition pos, const TVector<TString>& eraseColumns, const TTableHints& hints) {
+    return new TIntoTableOptions(pos, eraseColumns, hints);
+}
+
 class TInputTablesNode final: public TAstListNode {
 public:
     TInputTablesNode(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped)

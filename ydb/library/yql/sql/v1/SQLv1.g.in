@@ -575,7 +575,7 @@ table_key: id_table_or_type (VIEW an_id)?;
 table_arg: AT? named_expr (VIEW an_id)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
-      an_id_hint
+      an_id_hint (EQUALS type_name_tag)?
     | (SCHEMA | COLUMNS) type_name_or_bind
     | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
 ;

@@ -609,13 +609,8 @@ public:
 
         TAstNode* limit = nullptr;
         TAstNode* offset = nullptr;
-        if (value->limitOption != LIMIT_OPTION_DEFAULT) {
-            if (value->limitOption == LIMIT_OPTION_COUNT) {
-                if (!value->limitCount) {
-                    AddError("Expected limitCount");
-                    return nullptr;
-                }
-
+        if (value->limitOption == LIMIT_OPTION_COUNT || value->limitOption == LIMIT_OPTION_DEFAULT) {
+            if (value->limitCount) {
                 TExprSettings settings;
                 settings.AllowColumns = false;
                 settings.Scope = "LIMIT";
@@ -623,18 +618,20 @@ public:
                 if (!limit) {
                     return nullptr;
                 }
-
-                if (value->limitOffset) {
-                    settings.Scope = "OFFSET";
-                    offset = ParseExpr(value->limitOffset, settings);
-                    if (!offset) {
-                        return nullptr;
-                    }
-                }
-            } else {
-                AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)value->limitOption);
-                return nullptr;
             }
+
+            if (value->limitOffset) {
+                TExprSettings settings;
+                settings.AllowColumns = false;
+                settings.Scope = "OFFSET";
+                offset = ParseExpr(value->limitOffset, settings);
+                if (!offset) {
+                    return nullptr;
+                }
+            }
+        } else {
+            AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)value->limitOption);
+            return nullptr;
         }
 
         TVector<TAstNode*> selectOptions;

@@ -96,7 +96,7 @@ namespace NWilson {
         }
 
         // Check if request tracing is enabled
-        operator bool() const {
+        explicit operator bool() const {
             return TraceId != 0;
         }
 
@@ -151,7 +151,7 @@ namespace NWilson {
             return TraceId == other.TraceId;
         }
 
-        void Serialize(TSerializedTraceId* out) {
+        void Serialize(TSerializedTraceId* out) const {
             ui64* p = reinterpret_cast<ui64*>(*out);
             p[0] = TraceId;
             p[1] = SpanId;

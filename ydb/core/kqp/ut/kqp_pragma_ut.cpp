@@ -96,6 +96,21 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             [[3u];[2u];[1u]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(Warning) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            PRAGMA Warning("disable", "1108");
+
+            SELECT * FROM `/Root/KeyValue` WHERE Key IN (1, 2);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+    }
 }
 
 } // namspace NKqp

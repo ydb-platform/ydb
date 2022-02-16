@@ -1065,7 +1065,10 @@ public:
         // Config provider
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
         auto allowSettings = [](TStringBuf settingName) {
-            return settingName == "OrderedColumns" || settingName == "DisableOrderedColumns";
+            return
+                settingName == "OrderedColumns" ||
+                settingName == "DisableOrderedColumns" ||
+                settingName == "Warning";
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);

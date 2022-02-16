@@ -118,6 +118,7 @@ class TLocalSessionsRegistry {
     THashSet<TString> ShutdownInFlightSessions;
     TList<TString> RecentUsedSessions;
     THashMap<TString, TList<TString>::iterator> Links;
+    THashMap<TString, ui32> SessionsCountPerDatabase;
 
 public:
     TLocalSessionsRegistry()  = default;
@@ -127,6 +128,7 @@ public:
     {
         RecentUsedSessions.push_front(sessionId);
         auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters));
+        SessionsCountPerDatabase[database]++;
         Links.emplace(sessionId, RecentUsedSessions.begin());
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
@@ -172,6 +174,13 @@ public:
     void Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
         if (it != LocalSessions.end()) {
+            auto counter = SessionsCountPerDatabase.find(it->second.Database);
+            if (counter != SessionsCountPerDatabase.end()) {
+                counter->second--;
+                if (counter->second == 0) {
+                    SessionsCountPerDatabase.erase(counter);
+                }
+            }
             auto lnk = Links.find(sessionId);
             RecentUsedSessions.erase(lnk->second);
             Links.erase(sessionId);
@@ -179,6 +188,19 @@ public:
             TargetIdIndex.erase(it->second.WorkerId);
             LocalSessions.erase(it);
         }
+    }
+
+    bool CheckDatabaseLimits(const TString& database, ui32 databaseLimit) {
+        auto it = SessionsCountPerDatabase.find(database);
+        if (it == SessionsCountPerDatabase.end()){
+            return true;
+        }
+
+        if (it->second + 1 <= databaseLimit) {
+            return true;
+        }
+
+        return false;
     }
 
     size_t size() const {
@@ -1113,20 +1135,6 @@ private:
                 result.Error = error;
                 return false;
             }
-
-            /*
-             * TODO: disabled due to SLYDB-42. Remove (or rework) it after KIKIMR-9650 & KIKIMR-9652
-            if (!Tenants.contains(database)) {
-                TString error = TStringBuilder() << "Unexpected node for database: " << database;
-
-                LOG_ERROR_S(ctx, NKikimrServices::KQP_PROXY, requestInfo << error
-                    << ", known databases: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
-
-                result.YdbStatus = Ydb::StatusIds::INTERNAL_ERROR;
-                result.Error = error;
-                return false;
-            }
-            */
         }
 
         if (ShutdownRequested) {
@@ -1135,15 +1143,13 @@ private:
             KQP_PROXY_LOG_N(requestInfo << error);
 
             result.ResourceExhausted = true;
-            // we can possibly make a better status here.
             result.YdbStatus = Ydb::StatusIds::OVERLOADED;
             result.Error = error;
-
             return false;
         }
 
         auto sessionsLimitPerNode = TableServiceConfig.GetSessionsLimitPerNode();
-        if (sessionsLimitPerNode && LocalSessions.size() >= sessionsLimitPerNode) {
+        if (sessionsLimitPerNode && !LocalSessions.CheckDatabaseLimits(database, sessionsLimitPerNode)) {
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
             KQP_PROXY_LOG_W(requestInfo << error);

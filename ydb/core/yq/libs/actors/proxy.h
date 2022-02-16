@@ -31,7 +31,7 @@ namespace NKikimr  {
 namespace NYq {
 
 NActors::TActorId MakeYqlAnalyticsHttpProxyId();
-NActors::TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId);
+NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
@@ -52,6 +52,7 @@ NActors::IActor* CreatePendingFetcher(
     );
 
 NActors::IActor* CreateRunActor(
+    const NActors::TActorId& fetcherId,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
     );

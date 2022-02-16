@@ -59,6 +59,8 @@
 
 #define LOG_E(stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
+#define LOG_W(stream) \
+    LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 #define LOG_I(stream) \
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 #define LOG_D(stream) \
@@ -93,9 +95,14 @@ TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TEl
 
 } // namespace
 
-class TYqlPendingFetcher : public NActors::TActorBootstrapped<TYqlPendingFetcher> {
+constexpr auto WAKEUP_TAG_FETCH = 1;
+constexpr auto WAKEUP_TAG_CLEANUP = 2;
+
+constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
+
+class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
 public:
-    TYqlPendingFetcher(
+    TPendingFetcher(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
         const ::NYq::NConfig::TCommonConfig& commonConfig,
         const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
@@ -147,12 +154,12 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TYqlPendingFetcher::StateFunc);
+        Become(&TPendingFetcher::StateFunc);
 
         Y_UNUSED(ctx);
 
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
-        Send(SelfId(), new NActors::TEvents::TEvWakeup());
+        Send(SelfId(), new NActors::TEvents::TEvWakeup(WAKEUP_TAG_FETCH));
 
         LOG_I("STARTED");
         LogScope.ConstructInPlace(NActors::TActivationContext::ActorSystem(), NKikimrServices::YQL_PROXY, Guid);
@@ -165,12 +172,33 @@ private:
         HasRunningRequest = false;
     }
 
-    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&, const NActors::TActorContext&) {
-        Schedule(PendingFetchPeriod, new NActors::TEvents::TEvWakeup());
-
-        if (!HasRunningRequest) {
-            HasRunningRequest = true;
-            GetPendingTask();
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        switch(ev->Get()->Tag) { 
+        case WAKEUP_TAG_FETCH:
+            Schedule(PendingFetchPeriod, new NActors::TEvents::TEvWakeup(WAKEUP_TAG_FETCH));
+            if (!HasRunningRequest) {
+                HasRunningRequest = true;
+                GetPendingTask();
+            }
+            break;
+        case WAKEUP_TAG_CLEANUP:
+            auto now = Now();
+            std::vector<TString> erased;
+            for (auto& [queryId, counters] : CountersMap) {
+                if (counters.RunActorId == TActorId() && counters.CleanupDeadline <= now) {
+                    if (counters.RootCountersParent) {
+                        counters.RootCountersParent->RemoveSubgroup("query_id", queryId);
+                    }
+                    if (counters.PublicCountersParent) {
+                        counters.PublicCountersParent->RemoveSubgroup("query_id", queryId);
+                    }
+                    erased.push_back(queryId);
+                }
+            }
+            for (auto q : erased) {
+                CountersMap.erase(q);
+            }
+            break;
         }
     }
 
@@ -189,6 +217,29 @@ private:
             ProcessTask(res);
             HasRunningRequest = true;
             GetPendingTask();
+        }
+    }
+
+    void HandlePoisonTaken(NActors::TEvents::TEvPoisonTaken::TPtr& ev) {
+        auto runActorId = ev->Sender;
+
+        auto itA = RunActorMap.find(runActorId);
+        if (itA == RunActorMap.end()) {
+            LOG_W("Unknown RunActor " << runActorId << " destroyed");
+            return;
+        }
+        auto queryId = itA->second;
+        RunActorMap.erase(itA);
+        
+        auto itC = CountersMap.find(queryId);
+        if (itC != CountersMap.end()) {
+            auto& info = itC->second;
+            if (info.RunActorId == runActorId) 
+            {
+                info.RunActorId = TActorId();
+                info.CleanupDeadline = Now() + CLEANUP_PERIOD;
+                Schedule(CLEANUP_PERIOD, new NActors::TEvents::TEvWakeup(WAKEUP_TAG_CLEANUP));
+            }
         }
     }
 
@@ -265,16 +316,39 @@ private:
             ClientCounters);
 
         NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
-        Register(CreateRunActor(ServiceCounters, std::move(params)));
+
+        const TVector<TString> path = StringSplitter(params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
+        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
+                            ? path.back() : TString{};
+
+        ::NYq::NCommon::TServiceCounters queryCounters(ServiceCounters);
+        auto publicCountersParent = ServiceCounters.PublicCounters;
+
+        if (params.CloudId && folderId) {
+            publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", params.CloudId)->GetSubgroup("folder_id", folderId);
+        }
+        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
+            params.Automatic ? (params.QueryName ? params.QueryName : "automatic") : params.QueryId);
+
+        auto rootCountersParent = ServiceCounters.RootCounters;
+        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
+            params.Automatic ? (folderId ? "automatic_" + folderId : "automatic") : params.QueryId);
+        queryCounters.Counters = queryCounters.RootCounters;
+
+        auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
+
+        RunActorMap[runActorId] = params.QueryId;
+        if (!params.Automatic) {
+            CountersMap[params.QueryId] = { rootCountersParent, publicCountersParent, runActorId, TInstant::Zero() };
+        }
     }
 
-    STRICT_STFUNC(
-        StateFunc,
-
-        HFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
         HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(TEvGetTaskInternalResponse, HandleResponse)
-        );
+        hFunc(NActors::TEvents::TEvPoisonTaken, HandlePoisonTaken)
+    );
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
     NYq::NConfig::TCommonConfig CommonConfig;
@@ -306,6 +380,16 @@ private:
     TPrivateClient Client;
 
     TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;
+
+    struct TQueryCountersInfo {
+        NMonitoring::TDynamicCounterPtr RootCountersParent;
+        NMonitoring::TDynamicCounterPtr PublicCountersParent;
+        TActorId RunActorId;
+        TInstant CleanupDeadline;
+    };
+
+    TMap<TString, TQueryCountersInfo> CountersMap;
+    TMap<TActorId, TString> RunActorMap;
 };
 
 
@@ -326,7 +410,7 @@ NActors::IActor* CreatePendingFetcher(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
 {
-    return new TYqlPendingFetcher(
+    return new TPendingFetcher(
         yqSharedResources,
         commonConfig,
         checkpointCoordinatorConfig,
@@ -344,7 +428,7 @@ NActors::IActor* CreatePendingFetcher(
         clientCounters);
 }
 
-TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId) {
+TActorId MakePendingFetcherId(ui32 nodeId) {
     constexpr TStringBuf name = "YQLFETCHER";
     return NActors::TActorId(nodeId, name);
 }

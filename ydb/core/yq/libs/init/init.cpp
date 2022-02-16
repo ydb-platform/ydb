@@ -256,7 +256,7 @@ void Init(
             clientCounters
             );
 
-        actorRegistrator(MakeYqlAnalyticsFetcherId(nodeId), fetcher);
+        actorRegistrator(MakePendingFetcherId(nodeId), fetcher);
     }
 
     if (protoConfig.GetPrivateProxy().GetEnabled()) {

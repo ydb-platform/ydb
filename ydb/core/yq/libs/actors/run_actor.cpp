@@ -83,53 +83,16 @@ using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
 
-class TDeferredCountersCleanupActor : public NActors::TActorBootstrapped<TDeferredCountersCleanupActor> {
-public:
-     TDeferredCountersCleanupActor(
-         const NMonitoring::TDynamicCounterPtr& rootCountersParent,
-         const NMonitoring::TDynamicCounterPtr& publicCountersParent,
-         const TString& queryId)
-        : RootCountersParent(rootCountersParent)
-        , PublicCountersParent(publicCountersParent)
-        , QueryId(queryId)
-    {
-    }
-
-    static constexpr char ActorName[] = "YQ_DEFERRED_COUNTERS_CLEANUP";
-
-    void Bootstrap() {
-        Become(&TDeferredCountersCleanupActor::StateFunc, TDuration::Seconds(60), new NActors::TEvents::TEvWakeup());
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(NActors::TEvents::TEvWakeup, Handle)
-    )
-
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-        if (RootCountersParent) {
-            RootCountersParent->RemoveSubgroup("query_id", QueryId);
-        }
-        if (PublicCountersParent) {
-            PublicCountersParent->RemoveSubgroup("query_id", QueryId);
-        }
-        PassAway();
-    }
-
-private:
-    const NMonitoring::TDynamicCounterPtr RootCountersParent;
-    const NMonitoring::TDynamicCounterPtr PublicCountersParent;
-    const TString QueryId;
-};
-
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
 public:
     explicit TRunActor(
-        const ::NYq::NCommon::TServiceCounters& serviceCounters
+        const NActors::TActorId& fetcherId
+        , const ::NYq::NCommon::TServiceCounters& queryCounters
         , TRunActorParams&& params)
-        : Params(std::move(params))
+        : FetcherId(fetcherId)
+        , Params(std::move(params))
         , CreatedAt(TInstant::Now())
-        , ServiceCounters(serviceCounters)
-        , QueryCounters(serviceCounters)
+        , QueryCounters(queryCounters)
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
     {
@@ -237,13 +200,8 @@ private:
     }
 
     void PassAway() override {
-        if (!Params.Automatic) {
-            // Cleanup non-automatic counters only
-            Register(new TDeferredCountersCleanupActor(RootCountersParent, PublicCountersParent, Params.QueryId));
-        }
-
+        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         KillChildrenActors();
-
         NActors::TActorBootstrapped<TRunActor>::PassAway();
     }
 
@@ -833,29 +791,7 @@ private:
             return;
         }
 */
-        PrepareQueryCounters();
         RunNextDqGraph();
-    }
-
-    void PrepareQueryCounters() {
-        const TVector<TString> path = StringSplitter(Params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
-        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
-                            ? path.back() : TString{};
-
-
-        QueryCounters = ServiceCounters;
-        PublicCountersParent = ServiceCounters.PublicCounters;
-
-        if (Params.CloudId && folderId) {
-            PublicCountersParent = PublicCountersParent->GetSubgroup("cloud_id", Params.CloudId)->GetSubgroup("folder_id", folderId);
-        }
-        QueryCounters.PublicCounters = PublicCountersParent->GetSubgroup("query_id",
-            Params.Automatic ? (Params.QueryName ? Params.QueryName : "automatic") : Params.QueryId);
-
-        RootCountersParent = ServiceCounters.RootCounters;
-        QueryCounters.RootCounters = RootCountersParent->GetSubgroup("query_id",
-            Params.Automatic ? (folderId ? "automatic_" + folderId : "automatic") : Params.QueryId);
-        QueryCounters.Counters = QueryCounters.RootCounters;
     }
 
     void RunNextDqGraph() {
@@ -865,7 +801,7 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = "never";
 
-        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, ServiceCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 
         NActors::TActorId resultId;
         if (dqGraphParams.GetResultType()) {
@@ -1112,7 +1048,6 @@ private:
         }
         DqGraphIndex = Params.DqGraphIndex;
         UpdateResultIndices();
-        PrepareQueryCounters();
         RunNextDqGraph();
     }
 
@@ -1323,6 +1258,7 @@ private:
     }
 
 private:
+    TActorId FetcherId;
     TRunActorParams Params;
     THashMap<TString, YandexQuery::Connection> YqConnections;
 
@@ -1337,13 +1273,10 @@ private:
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;
-    NMonitoring::TDynamicCounterPtr RootCountersParent;
-    NMonitoring::TDynamicCounterPtr PublicCountersParent;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
     NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
-    ::NYq::NCommon::TServiceCounters ServiceCounters;
     ::NYq::NCommon::TServiceCounters QueryCounters;
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
@@ -1376,10 +1309,11 @@ private:
 
 
 IActor* CreateRunActor(
+    const NActors::TActorId& fetcherId,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
-    return new TRunActor(serviceCounters, std::move(params));
+    return new TRunActor(fetcherId, serviceCounters, std::move(params));
 }
 
 } /* NYq */

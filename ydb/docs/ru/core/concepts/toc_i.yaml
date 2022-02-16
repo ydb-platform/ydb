@@ -10,4 +10,12 @@ items:
 - { name: Time to Live (TTL),                     href: ttl.md }
 - { name: Скан запросы,                           href: scan_query.md }
 - { name: Ограничения базы данных,                href: limits-ydb.md }
-- { name: Дисковая подсистема кластера,           href: distributed_storage.md,        when: audience == "tech" }
+- name: Кластер YDB
+  when: audience == "tech"
+  items:
+  - name: Обзор
+    href: cluster/index.md
+  - name: Общая схема YDB
+    href: cluster/common_scheme_ydb.md
+  - name: Дисковая подсистема кластера
+    href: cluster/distributed_storage.md

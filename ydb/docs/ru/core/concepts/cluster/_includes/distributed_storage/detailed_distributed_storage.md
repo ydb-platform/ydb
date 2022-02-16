@@ -26,7 +26,6 @@
 
 ## BS_CONTROLLER
 
-
 ### Связь с NodeWarden
 
 ### Box и Storage Pool

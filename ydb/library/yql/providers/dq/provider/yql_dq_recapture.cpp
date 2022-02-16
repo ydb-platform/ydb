@@ -145,6 +145,7 @@ private:
             hasJoin = true;
         }
 
+
         if (TCoCommit::Match(&node)) {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 if (i != TCoCommit::idx_DataSink) {
@@ -180,11 +181,19 @@ private:
             if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
                 auto datasource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(datasource);
-                if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
-                    if (auto size = dqIntegration->CanRead(*State_->Settings, node, ctx, /*skipIssues = */ false)) {
+                auto dqIntegration = (*datasource)->GetDqIntegration();
+                if (dqIntegration) {
+                    TMaybe<ui64> size;
+                    bool pragmas = true;
+                    if ((pragmas = dqIntegration->CheckPragmas(node, ctx, false)) && (size = dqIntegration->CanRead(*State_->Settings, node, ctx, /*skipIssues = */ false))) {
                         dataSize += *size;
                     } else {
                         good = false;
+                        if (!pragmas) {
+                            State_->TypeCtx->PureResultDataSource.clear();
+                            std::erase_if(State_->TypeCtx->AvailablePureResultDataSources,
+                                          [&](const auto& name) { return name == DqProviderName; });
+                        }
                     }
                 } else {
                     AddInfo(ctx, TStringBuilder() << "source '" << dataSourceName << "' is not supported by DQ");

@@ -27,6 +27,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/sql/pg_dummy
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security

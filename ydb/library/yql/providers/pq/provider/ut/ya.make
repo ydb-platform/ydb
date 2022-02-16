@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core/facade
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/services/mounts

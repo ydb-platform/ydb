@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/utils
+    ydb/library/yql/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

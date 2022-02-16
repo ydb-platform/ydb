@@ -58,6 +58,7 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
     ydb/library/yql/sql/settings
+    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/yq

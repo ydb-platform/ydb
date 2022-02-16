@@ -28,6 +28,7 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
     ydb/library/yql/sql/settings
+    ydb/library/yql/sql/pg_dummy
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/ydb_table
     ydb/library/yql/providers/clickhouse/provider

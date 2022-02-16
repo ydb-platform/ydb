@@ -7,7 +7,6 @@ OWNER(
 
 PEERDIR(
     library/cpp/deprecated/split
-    ydb/library/yql/sql/pg
     ydb/library/yql/sql/settings
     ydb/library/yql/sql/v0
     ydb/library/yql/sql/v0/lexer

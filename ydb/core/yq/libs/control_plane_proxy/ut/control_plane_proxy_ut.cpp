@@ -101,109 +101,109 @@ struct TTestBootstrap {
         TestConnectionGrab->Runtime.reset();
     }
 
-    void SendCreateQueryRequest(const TVector<TString>& permissions = {})
+    void SendCreateQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::CreateQueryRequest proto;
         proto.mutable_content()->set_name("my_query_name");
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>("", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>("", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendListQueriesRequest(const TVector<TString>& permissions = {})
+    void SendListQueriesRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ListQueriesRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvListQueriesRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvListQueriesRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDescribeQueryRequest(const TVector<TString>& permissions = {})
+    void SendDescribeQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DescribeQueryRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeQueryRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendGetQueryStatusRequest(const TVector<TString>& permissions = {})
+    void SendGetQueryStatusRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::GetQueryStatusRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvGetQueryStatusRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvGetQueryStatusRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendModifyQueryRequest(const TVector<TString>& permissions = {})
+    void SendModifyQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ModifyQueryRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyQueryRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDeleteQueryRequest(const TVector<TString>& permissions = {})
+    void SendDeleteQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DeleteQueryRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteQueryRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendControlQueryRequest(const TVector<TString>& permissions = {})
+    void SendControlQueryRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ControlQueryRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvControlQueryRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvControlQueryRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendGetResultDataRequest(const TVector<TString>& permissions = {})
+    void SendGetResultDataRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::GetResultDataRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvGetResultDataRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvGetResultDataRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendListJobsRequest(const TVector<TString>& permissions = {})
+    void SendListJobsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ListJobsRequest proto;
         proto.set_query_id("my_query_id");
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvListJobsRequest>("", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvListJobsRequest>("", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDescribeJobRequest(const TVector<TString>& permissions = {})
+    void SendDescribeJobRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DescribeJobRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeJobRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeJobRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendCreateConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {})
+    void SendCreateConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::CreateConnectionRequest proto;
@@ -216,32 +216,32 @@ struct TTestBootstrap {
                 ->set_id(serviceAccountId);
         }
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateConnectionRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendListConnectionsRequest(const TVector<TString>& permissions = {})
+    void SendListConnectionsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ListConnectionsRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvListConnectionsRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvListConnectionsRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDescribeConnectionRequest(const TVector<TString>& permissions = {})
+    void SendDescribeConnectionRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DescribeConnectionRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeConnectionRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendModifyConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {})
+    void SendModifyConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ModifyConnectionRequest proto;
@@ -254,22 +254,22 @@ struct TTestBootstrap {
                 ->set_id(serviceAccountId);
         }
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyConnectionRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDeleteConnectionRequest(const TVector<TString>& permissions = {})
+    void SendDeleteConnectionRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DeleteConnectionRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteConnectionRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendTestConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {})
+    void SendTestConnectionRequest(const TVector<TString>& permissions = {}, const TString& serviceAccountId = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::TestConnectionRequest proto;
@@ -281,57 +281,57 @@ struct TTestBootstrap {
                 ->set_id(serviceAccountId);
         }
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvTestConnectionRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvTestConnectionRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendCreateBindingRequest(const TVector<TString>& permissions = {})
+    void SendCreateBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::CreateBindingRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateBindingRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendListBindingsRequest(const TVector<TString>& permissions = {})
+    void SendListBindingsRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ListBindingsRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvListBindingsRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvListBindingsRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDescribeBindingRequest(const TVector<TString>& permissions = {})
+    void SendDescribeBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DescribeBindingRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeBindingRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDescribeBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendModifyBindingRequest(const TVector<TString>& permissions = {})
+    void SendModifyBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::ModifyBindingRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvModifyBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
 
-    void SendDeleteBindingRequest(const TVector<TString>& permissions = {})
+    void SendDeleteBindingRequest(const TVector<TString>& permissions = {}, const TString& user = "test_user@staff")
     {
         TActorId sender = Runtime->AllocateEdgeActor();
         YandexQuery::DeleteBindingRequest proto;
 
-        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteBindingRequest>("my_folder", proto, "test_user@staff", "", permissions);
+        auto request = std::make_unique<TEvControlPlaneProxy::TEvDeleteBindingRequest>("my_folder", proto, user, "", permissions);
         Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release()));
         Runtime->DispatchEvents({}, TDuration::Zero());
     }
@@ -382,6 +382,51 @@ private:
         return runtime;
     }
 };
+
+TVector<TString> AllPermissions() {
+    return {
+        "yq.queries.create@as",
+        "yq.queries.invoke@as",
+        "yq.connections.use@as",
+        "yq.bindings.use@as",
+        "yq.queries.get@as",
+        "yq.queries.viewAst@as",
+        "yq.queries.getStatus@as",
+        "yq.queries.update@as",
+        "yq.queries.invoke@as",
+        "yq.connections.use@as",
+        "yq.bindings.use@as",
+        "yq.queries.delete@as",
+        "yq.queries.control@as",
+        "yq.queries.getData@as",
+        "yq.jobs.get@as",
+        "yq.connections.create@as",
+        "yq.connections.get@as",
+        "yq.connections.update@as",
+        "yq.connections.delete@as",
+        "yq.bindings.create@as",
+        "yq.bindings.get@as",
+        "yq.bindings.update@as",
+        "yq.bindings.delete@as",
+        "yq.resources.viewPublic@as",
+        "yq.resources.viewPrivate@as",
+        "yq.resources.managePublic@as",
+        "yq.resources.managePrivate@as",
+        "iam.serviceAccounts.use@as"
+    };
+}
+
+TVector<TString> AllPermissionsExcept(const TVector<TString>& exceptItems) {
+    auto permissions = AllPermissions();
+    for (const auto& item: exceptItems) {
+        auto it = std::remove_if(
+                            permissions.begin(),
+                            permissions.end(),
+                            [item](const TString& permission) { return permission == item; });
+        permissions.erase(it, permissions.end());
+    }
+    return permissions;
+}
 
 } // namespace
 
@@ -1699,8 +1744,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
         bootstrap.SendTestConnectionRequest({
-            "yq.connections.create@as",
-            "yq.resources.managePublic@as"
+            "yq.connections.create@as"
         });
 
         auto request = bootstrap.TestConnectionGrab->GetRequest();
@@ -1710,7 +1754,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
-        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
@@ -1724,8 +1768,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         TTestBootstrap bootstrap(config);
         bootstrap.SendTestConnectionRequest({
             "yq.connections.create@as",
-            "iam.serviceAccounts.use@as",
-            "yq.resources.managePublic@as"
+            "iam.serviceAccounts.use@as"
         }, "my_sa_id");
 
         auto request = bootstrap.TestConnectionGrab->GetRequest();
@@ -1735,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
-        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
@@ -1861,5 +1904,2134 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
     }
 };
+
+Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsFailed) {
+    Y_UNIT_TEST(ShouldSendCreateQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.create@as"});
+        bootstrap.SendCreateQueryRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendListQueries)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.get@as"});
+        bootstrap.SendListQueriesRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListQueriesResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.get@as"});
+        bootstrap.SendDescribeQueryRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendGetQueryStatus)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.getStatus@as"});
+        bootstrap.SendGetQueryStatusRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvGetQueryStatusResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.update@as"});
+        bootstrap.SendModifyQueryRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.delete@as"});
+        bootstrap.SendDeleteQueryRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendControlQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.control@as"});
+        bootstrap.SendControlQueryRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvControlQueryResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendGetResultData)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.queries.getData@as"});
+        bootstrap.SendGetResultDataRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvGetResultDataResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendListJobs)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.jobs.get@as"});
+        bootstrap.SendListJobsRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListJobsResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeJob)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.jobs.get@as"});
+        bootstrap.SendDescribeJobRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeJobResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.create@as"});
+        bootstrap.SendCreateConnectionRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"iam.serviceAccounts.use@as"});
+        bootstrap.SendCreateConnectionRequest(permissions, "my_sa_id");
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendListConnections)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.get@as"});
+        bootstrap.SendListConnectionsRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListConnectionsResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.get@as"});
+        bootstrap.SendDescribeConnectionRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.update@as"});
+        bootstrap.SendModifyConnectionRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"iam.serviceAccounts.use@as"});
+        bootstrap.SendModifyConnectionRequest(permissions, "my_sa_id");
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.delete@as"});
+        bootstrap.SendDeleteConnectionRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendTestConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.connections.create@as"});
+        bootstrap.SendTestConnectionRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvTestConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendTestConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"iam.serviceAccounts.use@as"});
+        bootstrap.SendTestConnectionRequest(permissions, "my_sa_id");
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvTestConnectionResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.bindings.create@as"});
+        bootstrap.SendCreateBindingRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateBindingResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendListBindings)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.bindings.get@as"});
+        bootstrap.SendListBindingsRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListBindingsResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.bindings.get@as"});
+        bootstrap.SendDescribeBindingRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeBindingResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.bindings.update@as"});
+        bootstrap.SendModifyBindingRequest(permissions);
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyBindingResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        auto permissions = AllPermissionsExcept({"yq.bindings.delete@as"});
+        bootstrap.SendDeleteBindingRequest();
+        const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteBindingResponse>();
+        UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+    }
+};
+
+Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
+    Y_UNIT_TEST(ShouldSendCreateQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendCreateQueryRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Request.content().name(), "my_query_name");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendListQueries)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendListQueriesRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvListQueriesRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDescribeQueryRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDescribeQueryRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendGetQueryStatus)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendGetQueryStatusRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvGetQueryStatusRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendModifyQueryRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvModifyQueryRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDeleteQueryRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDeleteQueryRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendControlQuery)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendControlQueryRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvControlQueryRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendGetResultData)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendGetResultDataRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvGetResultDataRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendListJobs)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendListJobsRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvListJobsRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Request.query_id(), "my_query_id");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeJob)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDescribeJobRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDescribeJobRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendCreateConnectionRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendCreateConnectionRequest(AllPermissions(), "my_sa_id");
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendListConnections)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendListConnectionsRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvListConnectionsRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDescribeConnectionRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDescribeConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendModifyConnectionRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvModifyConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendModifyConnectionRequest(AllPermissions(), "my_sa_id");
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvModifyConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDeleteConnectionRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDeleteConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendTestConnection)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendTestConnectionRequest(AllPermissions());
+        auto request = bootstrap.TestConnectionGrab->GetRequest();
+        auto event = request->Get<TEvTestConnection::TEvTestConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendTestConnectionWithServiceAccount)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendTestConnectionRequest(AllPermissions(), "my_sa_id");
+        auto request = bootstrap.TestConnectionGrab->GetRequest();
+        auto event = request->Get<TEvTestConnection::TEvTestConnectionRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendCreateBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendCreateBindingRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendListBindings)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendListBindingsRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvListBindingsRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDescribeBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDescribeBindingRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDescribeBindingRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendModifyBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendModifyBindingRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvModifyBindingRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+
+    Y_UNIT_TEST(ShouldSendDeleteBinding)
+    {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+        bootstrap.SendDeleteBindingRequest(AllPermissions());
+        auto request = bootstrap.MetaStorageGrab->GetRequest();
+        auto event = request->Get<TEvControlPlaneStorage::TEvDeleteBindingRequest>();
+        auto permissions = event->Permissions;
+        UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+    }
+};
+
+Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
+    Y_UNIT_TEST(ShouldCheckScenraio) {
+        NConfig::TControlPlaneProxyConfig config;
+        config.SetEnablePermissions(true);
+        TTestBootstrap bootstrap(config);
+
+        const TVector<TString> testUser1Permissions {
+            "yq.resources.viewPrivate@as",
+            "yq.resources.managePrivate@as",
+
+            // yq.connections.*
+            "yq.connections.create@as",
+            "yq.connections.update@as",
+            "yq.connections.delete@as",
+
+            // yq.bindings.*
+            "yq.bindings.create@as",
+            "yq.bindings.update@as",
+            "yq.bindings.delete@as",
+
+            // yq.queries.*
+            "yq.queries.create@as",
+            "yq.queries.update@as",
+            "yq.queries.delete@as",
+            "yq.queries.control@as",
+
+            // yq.jobs.*
+
+            "yq.resources.managePublic@as",
+            "yq.connections.use@as",
+            "yq.bindings.use@as",
+            "yq.queries.invoke@as",
+            "yq.queries.getData@as",
+            "yq.queries.getStatus@as",
+            "yq.connections.get@as",
+            "yq.bindings.get@as",
+            "yq.queries.get@as",
+            "yq.jobs.get@as",
+            "yq.resources.viewPublic@as",
+        };
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateQueryRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.content().name(), "my_query_name");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListQueriesRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListQueriesRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeQueryRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetQueryStatusRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetQueryStatusRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyQueryRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteQueryRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendControlQueryRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvControlQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetResultDataRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetResultDataRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListJobsRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListJobsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.query_id(), "my_query_id");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeJobRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeJobRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateConnectionRequest(testUser1Permissions, {}, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListConnectionsRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListConnectionsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeConnectionRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyConnectionRequest(testUser1Permissions, {}, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteConnectionRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendTestConnectionRequest(testUser1Permissions, {}, "test_user_1@staff");
+            auto request = bootstrap.TestConnectionGrab->GetRequest();
+            auto event = request->Get<TEvTestConnection::TEvTestConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateBindingRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListBindingsRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListBindingsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeBindingRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyBindingRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteBindingRequest(testUser1Permissions, "test_user_1@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        const TVector<TString> testUser2Permissions {
+            // yq.connections.*
+            "yq.connections.create@as",
+            "yq.connections.update@as",
+            "yq.connections.delete@as",
+
+            // yq.bindings.*
+            "yq.bindings.create@as",
+            "yq.bindings.update@as",
+            "yq.bindings.delete@as",
+
+            // yq.queries.*
+            "yq.queries.create@as",
+            "yq.queries.update@as",
+            "yq.queries.delete@as",
+            "yq.queries.control@as",
+
+            // yq.jobs.*
+
+            "yq.resources.managePublic@as",
+            "yq.connections.use@as",
+            "yq.bindings.use@as",
+            "yq.queries.invoke@as",
+            "yq.queries.getData@as",
+            "yq.queries.getStatus@as",
+            "yq.connections.get@as",
+            "yq.bindings.get@as",
+            "yq.queries.get@as",
+            "yq.jobs.get@as",
+            "yq.resources.viewPublic@as",
+        };
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateQueryRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.content().name(), "my_query_name");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListQueriesRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListQueriesRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeQueryRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetQueryStatusRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetQueryStatusRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyQueryRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteQueryRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendControlQueryRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvControlQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetResultDataRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetResultDataRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListJobsRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListJobsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.query_id(), "my_query_id");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeJobRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeJobRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateConnectionRequest(testUser2Permissions, {}, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListConnectionsRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListConnectionsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeConnectionRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyConnectionRequest(testUser2Permissions, {}, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteConnectionRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendTestConnectionRequest(testUser2Permissions, {}, "test_user_2@staff");
+            auto request = bootstrap.TestConnectionGrab->GetRequest();
+            auto event = request->Get<TEvTestConnection::TEvTestConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateBindingRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListBindingsRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListBindingsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeBindingRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyBindingRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvModifyBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteBindingRequest(testUser2Permissions, "test_user_2@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDeleteBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        const TVector<TString> testUser3Permissions {
+            "yq.connections.get@as",
+            "yq.bindings.get@as",
+            "yq.queries.get@as",
+            "yq.jobs.get@as",
+            "yq.resources.viewPublic@as",
+        };
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateQueryRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListQueriesRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListQueriesRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeQueryRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetQueryStatusRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvGetQueryStatusResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyQueryRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteQueryRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendControlQueryRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvControlQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetResultDataRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvGetResultDataResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListJobsRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListJobsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.query_id(), "my_query_id");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeJobRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeJobRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateConnectionRequest(testUser3Permissions, {}, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListConnectionsRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListConnectionsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeConnectionRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeConnectionRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyConnectionRequest(testUser3Permissions, {}, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteConnectionRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendTestConnectionRequest(testUser3Permissions, {}, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvTestConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateBindingRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListBindingsRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvListBindingsRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeBindingRequest(testUser3Permissions, "test_user_3@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvDescribeBindingRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyBindingRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteBindingRequest(testUser3Permissions, "test_user_3@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        const TVector<TString> testUser4Permissions {
+            "yq.connections.use@as",
+            "yq.bindings.use@as",
+            "yq.queries.invoke@as",
+            "yq.queries.create@as",
+            "yq.queries.getData@as",
+            "yq.queries.getStatus@as",
+            "yq.resources.viewPublic@as",
+        };
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateQueryRequest(testUser4Permissions, "test_user_4@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Request.content().name(), "my_query_name");
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListQueriesRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListQueriesResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeQueryRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetQueryStatusRequest(testUser4Permissions, "test_user_4@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetQueryStatusRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyQueryRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteQueryRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendControlQueryRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvControlQueryResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendGetResultDataRequest(testUser4Permissions, "test_user_4@staff");
+            auto request = bootstrap.MetaStorageGrab->GetRequest();
+            auto event = request->Get<TEvControlPlaneStorage::TEvGetResultDataRequest>();
+            auto permissions = event->Permissions;
+            UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PUBLIC));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListJobsRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListJobsResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeJobRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeJobResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateConnectionRequest(testUser4Permissions, {}, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListConnectionsRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListConnectionsResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeConnectionRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyConnectionRequest(testUser4Permissions, {}, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteConnectionRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendTestConnectionRequest(testUser4Permissions, {}, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvTestConnectionResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendCreateBindingRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvCreateBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendListBindingsRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvListBindingsResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDescribeBindingRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDescribeBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendModifyBindingRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvModifyBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+
+        {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            TTestBootstrap bootstrap(config);
+            bootstrap.SendDeleteBindingRequest(testUser4Permissions, "test_user_4@staff");
+            const auto [_, response] = bootstrap.Grab<TEvControlPlaneProxy::TEvDeleteBindingResponse>();
+            UNIT_ASSERT_STRING_CONTAINS(response->Issues.ToString(), "Error: No permission");
+        }
+    }
+};
+
+
 
 } // namespace NYq

@@ -52,14 +52,14 @@ public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IPqGateway::TPtr Gateway;
     THolder<IDqIntegration> DqIntegration;
-    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYq::IDatabaseAsyncResolver> DbResolver;
+    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
 };
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode = false,
-    std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver = nullptr
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
 );
 
 } // namespace NYql

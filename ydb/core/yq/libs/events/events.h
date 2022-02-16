@@ -2,6 +2,7 @@
 #include "event_ids.h"
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -17,13 +18,6 @@
 namespace NYq {
 
 using NYdb::NYq::TScope;
-
-enum class DatabaseType {
-    Ydb,
-    ClickHouse,
-    DataStreams,
-    ObjectStorage
-};
 
 struct TQueryResult {
     TVector<Ydb::ResultSet> Sets;
@@ -126,54 +120,21 @@ struct TEvents {
         {}
     };
 
-    struct TDbResolverResponse {
-        struct TEndpoint {
-            TString Endpoint;
-            TString Database;
-            bool Secure = false;
-        };
-
-        TDbResolverResponse() = default;
-
-        TDbResolverResponse(
-            THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& databaseId2Endpoint,
-            bool success = false,
-            const NYql::TIssues& issues = {})
-            : DatabaseId2Endpoint(databaseId2Endpoint)
-            , Success(success)
-            , Issues(issues) {}
-
-        THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
-        bool Success = false;
-        NYql::TIssues Issues;
-    };
-
     struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
-        TDbResolverResponse DbResolverResponse;
-        explicit TEvEndpointResponse(TDbResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}
+        NYql::TDbResolverResponse DbResolverResponse;
+        explicit TEvEndpointResponse(NYql::TDbResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}
     };
 
-    struct TDatabaseAuth {
-        TString StructuredToken;
-        bool AddBearerToToken = false;
-
-        bool operator==(const TDatabaseAuth& other) const {
-            return std::tie(StructuredToken, AddBearerToToken) == std::tie(other.StructuredToken, other.AddBearerToToken);
-        }
-        bool operator!=(const TDatabaseAuth& other) const {
-            return !(*this == other);
-        }
-    };
 
     struct TEvEndpointRequest : NActors::TEventLocal<TEvEndpointRequest, TEventIds::EvEndpointRequest> {
-        THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth> DatabaseIds; // DbId, DatabaseType => database auth
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds; // DbId, DatabaseType => database auth
         TString YdbMvpEndpoint;
         TString MdbGateway;
         TString TraceId;
         bool MdbTransformHost;
 
         TEvEndpointRequest(
-            const THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth>& databaseIds,
+            const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds,
             const TString& ydbMvpEndpoint,
             const TString& mdbGateway,
             const TString& traceId,
@@ -193,6 +154,7 @@ struct TEvents {
         }
 
         NYql::TIssues Issues;
+        NYql::TIssues TransientIssues;
     };
 
     struct TEvDataStreamsReadRulesDeletionResult : NActors::TEventLocal<TEvDataStreamsReadRulesDeletionResult, TEventIds::EvDataStreamsReadRulesDeletionResult> {
@@ -261,8 +223,8 @@ struct TEvents {
 } // namespace NYq
 
 template<>
-struct THash<NYq::TEvents::TDatabaseAuth> {
-    inline ui64 operator()(const NYq::TEvents::TDatabaseAuth& x) const noexcept {
+struct THash<NYql::TDatabaseAuth> {
+    inline ui64 operator()(const NYql::TDatabaseAuth& x) const noexcept {
         return MultiHash(x.StructuredToken, x.AddBearerToToken);
     }
 };

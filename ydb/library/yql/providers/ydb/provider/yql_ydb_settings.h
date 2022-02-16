@@ -5,7 +5,6 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/core/yq/libs/events/events.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 
@@ -34,8 +33,8 @@ struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatch
     void Init(
         const TYdbGatewayConfig& config,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds
+        const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds
     );
 
     bool HasCluster(TStringBuf cluster) const;

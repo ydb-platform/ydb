@@ -6,8 +6,6 @@
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/core/yq/libs/events/events.h>
-
 
 namespace NYql {
 
@@ -24,8 +22,8 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
     template <typename TProtoConfig>
     void Init(
         const TProtoConfig& config,
-        const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds)
+        const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
     {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
@@ -41,8 +39,8 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
             if (dbResolver) {
                 YQL_CLOG(DEBUG, ProviderClickHouse) << "Settings: clusterName = " << cluster.GetName()
                     << ", clusterDbId = "  << cluster.GetId() << ", cluster.GetCluster(): " << cluster.GetCluster() << ", HasCluster: " << (cluster.HasCluster() ? "TRUE" : "FALSE") ;
-                databaseIds[std::make_pair(cluster.GetId(), NYq::DatabaseType::ClickHouse)] =
-                    NYq::TEvents::TDatabaseAuth{cluster.GetCHToken(), /*AddBearer=*/false};
+                databaseIds[std::make_pair(cluster.GetId(), NYql::DatabaseType::ClickHouse)] =
+                    NYql::TDatabaseAuth{cluster.GetCHToken(), /*AddBearer=*/false};
                 if (cluster.GetId()) {
                     DbId2Clusters[cluster.GetId()].emplace_back(cluster.GetName());
                     YQL_CLOG(DEBUG, ProviderClickHouse) << "Add dbId: " << cluster.GetId() << " to DbId2Clusters";

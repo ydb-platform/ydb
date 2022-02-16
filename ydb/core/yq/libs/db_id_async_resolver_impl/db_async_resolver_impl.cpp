@@ -18,10 +18,10 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
     , TraceId(traceId)
 {}
 
-TFuture<TEvents::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
-    const THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth>& ids) const
+TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
+    const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& ids) const
 {
-    auto promise = NewPromise<TEvents::TDbResolverResponse>();
+    auto promise = NewPromise<NYql::TDbResolverResponse>();
     TDuration timeout = TDuration::Seconds(40);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {

@@ -6,7 +6,6 @@
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
-#include <ydb/core/yq/libs/events/events.h>
 
 namespace NYql {
 
@@ -16,7 +15,7 @@ using namespace NNodes;
 
 class TClickHouseIODiscoveryTransformer : public TGraphTransformerBase {
 
-using TDbId2Endpoint = THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>;
 
 public:
     TClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state)
@@ -32,7 +31,7 @@ public:
         if (!State_->DbResolver)
             return TStatus::Ok;
 
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> ids;
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
         if (auto reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
             const TExprBase nodeExpr(node);
             if (!nodeExpr.Maybe<TClRead>())
@@ -51,7 +50,7 @@ public:
                 auto dbId = State_->Configuration->Endpoints[cluster].first;
                 dbId = dbId.substr(0, dbId.find(':'));
                 YQL_CLOG(DEBUG, ProviderClickHouse) << "Found dbId: " << dbId;
-                const auto idKey = std::make_pair(dbId, NYq::DatabaseType::ClickHouse);
+                const auto idKey = std::make_pair(dbId, NYql::DatabaseType::ClickHouse);
                 const auto iter = State_->DatabaseIds.find(idKey);
                 if (iter != State_->DatabaseIds.end()) {
                     YQL_CLOG(DEBUG, ProviderClickHouse) << "Resolve CH id: " << dbId;
@@ -65,7 +64,7 @@ public:
             return TStatus::Ok;
         }
 
-        const std::weak_ptr<NYq::TEvents::TDbResolverResponse> response = DbResolverResponse_;
+        const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
         AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
             if (const auto res = response.lock())
                 *res = std::move(future.ExtractValue());
@@ -85,7 +84,7 @@ public:
             return TStatus::Error;
         }
         FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
-        DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
         YQL_CLOG(DEBUG, ProviderClickHouse) << "ResolvedIds: " << FullResolvedIds_.size();
         auto& endpoints = State_->Configuration->Endpoints;
         const auto& id2Clusters = State_->Configuration->DbId2Clusters;
@@ -115,7 +114,7 @@ private:
 
     NThreading::TFuture<void> AsyncFuture_;
     TDbId2Endpoint FullResolvedIds_;
-    std::shared_ptr<NYq::TEvents::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+    std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
 };
 }
 

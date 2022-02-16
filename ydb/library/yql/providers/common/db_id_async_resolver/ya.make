@@ -3,13 +3,12 @@ OWNER(g:yq)
 LIBRARY()
 
 SRCS(
-    db_async_resolver_impl.cpp
+    db_async_resolver.h
 )
 
 PEERDIR(
     library/cpp/threading/future
-    ydb/core/yq/libs/events
-    ydb/library/yql/providers/dq/actors
+    ydb/library/yql/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

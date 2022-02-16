@@ -12,7 +12,7 @@ namespace {
 using namespace NNodes;
 
 class TPqDataSinkIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>;
 public:
     explicit TPqDataSinkIODiscoveryTransformer(TPqState::TPtr state)
         : State_(state)
@@ -28,13 +28,13 @@ public:
         if (!State_->DbResolver)
             return TStatus::Ok;
 
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> ids;
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
         FindYdsDbIdsForResolving(State_, input, ids);
 
         if (ids.empty())
             return TStatus::Ok;
 
-        const std::weak_ptr<NYq::TEvents::TDbResolverResponse> response = DbResolverResponse_;
+        const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
         AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
         {
             if (const auto res = response.lock())
@@ -55,7 +55,7 @@ public:
             return TStatus::Error;
         }
         FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
-        DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
         FillSettingsWithResolvedYdsIds(State_, FullResolvedIds_);
         return TStatus::Ok;
     }
@@ -64,7 +64,7 @@ private:
     const TPqState::TPtr State_;
     NThreading::TFuture<void> AsyncFuture_;
     TDbId2Endpoint FullResolvedIds_;
-    std::shared_ptr<NYq::TEvents::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+    std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
 };
 }
 

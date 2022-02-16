@@ -7,7 +7,7 @@ namespace NYql {
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver) {
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver) {
     return [driver, credentialsFactory, dbResolver] (
         const TString& userName,
         const TString& sessionId,

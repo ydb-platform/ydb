@@ -6,7 +6,7 @@ namespace NYql {
 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
     IHTTPGateway::TPtr gateway,
-    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver)
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver)
 {
     return [gateway, dbResolver] (
         const TString& userName,

@@ -3,7 +3,6 @@ OWNER(g:yq)
 LIBRARY()
 
 SRCS(
-    database_token_builder.cpp
     entity_id.cpp
     rows_proto_splitter.cpp
 )

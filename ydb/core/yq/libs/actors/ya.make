@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/yq/libs/actors/logging
     ydb/core/yq/libs/checkpointing
     ydb/core/yq/libs/checkpointing_common
+    ydb/core/yq/libs/db_id_async_resolver_impl
     ydb/core/yq/libs/common
     ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/control_plane_storage/events

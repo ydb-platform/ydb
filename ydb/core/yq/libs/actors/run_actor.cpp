@@ -51,6 +51,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
+#include <ydb/core/yq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/actors/nodes_manager.h>
 #include <ydb/core/yq/libs/gateway/empty_gateway.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_creator.h>
@@ -68,7 +69,6 @@
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
 #define LOG_E(stream) \

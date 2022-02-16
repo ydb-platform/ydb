@@ -33,14 +33,14 @@ struct TYdbState : public TThrRefBase
     TYdbConfiguration::TPtr Configuration = MakeIntrusive<TYdbConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYq::IDatabaseAsyncResolver> DbResolver;
+    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
 };
 
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr,
-    const std::shared_ptr<NYq::IDatabaseAsyncResolver> dbResolver = nullptr
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
 );
 
 TIntrusivePtr<IDataProvider> CreateYdbDataSource(

@@ -1,5 +1,4 @@
 #include "yql_ydb_provider_impl.h"
-#include <ydb/core/yq/libs/events/events.h>
 
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -10,7 +9,6 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/core/yq/libs/events/events.h>
 
 namespace NYql {
 
@@ -19,7 +17,7 @@ namespace {
 using namespace NNodes;
 
 class TYdbIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDbResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>;
 public:
     TYdbIODiscoveryTransformer(TYdbState::TPtr state)
         : State_(std::move(state))
@@ -34,7 +32,7 @@ public:
         if (!State_->DbResolver)
             return TStatus::Ok;
 
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> ids;
+        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
         if (auto reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
             const TExprBase nodeExpr(node);
             if (!nodeExpr.Maybe<TYdbRead>())
@@ -49,7 +47,7 @@ public:
                 const TYdbRead read(node);
                 const auto& cluster = read.DataSource().Cluster().StringValue();
                 const auto& dbId = State_->Configuration->Clusters[cluster].DatabaseId;
-                const auto idKey = std::make_pair(dbId, NYq::DatabaseType::Ydb);
+                const auto idKey = std::make_pair(dbId, NYql::DatabaseType::Ydb);
                 const auto iter = State_->DatabaseIds.find(idKey);
                 if (iter != State_->DatabaseIds.end()) {
                     ids[idKey] = iter->second;
@@ -59,7 +57,7 @@ public:
         if (ids.empty()) {
             return TStatus::Ok;
         }
-        const std::weak_ptr<NYq::TEvents::TDbResolverResponse> response = DbResolverResponse_;
+        const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
         AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
         {
             if (const auto res = response.lock())
@@ -80,7 +78,7 @@ public:
             return TStatus::Error;
         }
         FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
-        DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
         auto& clusters = State_->Configuration->Clusters;
         const auto& id2Clusters = State_->Configuration->DbId2Clusters;
         for (const auto& [dbIdWithType, info] : FullResolvedIds_) {
@@ -103,7 +101,7 @@ private:
 
     NThreading::TFuture<void> AsyncFuture_;
     TDbId2Endpoint FullResolvedIds_;
-    std::shared_ptr<NYq::TEvents::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYq::TEvents::TDbResolverResponse>();
+    std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
 };
 }
 

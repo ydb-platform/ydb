@@ -11,6 +11,12 @@ VERSION(1.16.1)
 
 ORIGINAL_SOURCE(https://c-ares.haxx.se/download/c-ares-1.16.1.tar.gz)
 
+OPENSOURCE_EXPORT_REPLACEMENT(
+    CMAKE c-ares
+    CMAKE_TARGET c-ares::c-ares
+    CONAN c-ares/1.16.1
+)
+
 LICENSE(
     BSD-3-Clause AND
     ISC AND
@@ -108,7 +114,9 @@ SRCS(
     windows_port.c
 )
 
-CHECK_CONFIG_H(ares_setup.h)
+IF (NOT EXPORT_CMAKE)
+    CHECK_CONFIG_H(ares_setup.h)
+ENDIF()
 
 END()
 

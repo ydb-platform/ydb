@@ -12,6 +12,12 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+OPENSOURCE_EXPORT_REPLACEMENT(
+    CMAKE OpenSSL
+    CMAKE_TARGET OpenSSL::OpenSSL
+    CONAN openssl/1.1.1l
+)
+
 OWNER(
     somov
     g:cpp-contrib
@@ -22,11 +28,13 @@ VERSION(1.1.1l)
 PEERDIR(
     contrib/libs/openssl/crypto
 )
-
+    
 ADDINCL(
     GLOBAL contrib/libs/openssl/include
     contrib/libs/openssl
 )
+
+IF (NOT EXPORT_CMAKE)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -355,6 +363,8 @@ IF (ARCADIA_OPENSSL_DISABLE_ARMV7_TICK)
     CFLAGS(
         -DARCADIA_OPENSSL_DISABLE_ARMV7_TICK
     )
+ENDIF()
+
 ENDIF()
 
 END()

@@ -3,10 +3,6 @@
 
 
 ====================BSL-1.0====================
-- Changed license to Boost license
-
-
-====================BSL-1.0====================
 // SPDX-License-Identifier:	BSL-1.0
 
 

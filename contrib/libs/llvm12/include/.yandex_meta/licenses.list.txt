@@ -107,12 +107,6 @@
 
 
 ====================COPYRIGHT====================
-//   if (c)                   if (c)
-//     X1 = ...                 X1 = ...
-//   else                     else
-
-
-====================COPYRIGHT====================
 Copyright (c) 2004 eXtensible Systems, Inc.
 
 ====================File: LICENSE.TXT====================

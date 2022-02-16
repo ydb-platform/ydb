@@ -16,18 +16,6 @@
 /// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 
-====================COPYRIGHT====================
-    // Fix (C).
-    if (Restore && (MLI->getLoopFor(Save) || MLI->getLoopFor(Restore))) {
-      if (MLI->getLoopDepth(Save) > MLI->getLoopDepth(Restore)) {
-
-
-====================COPYRIGHT====================
-  IntegerType *WordType = DL.getIntPtrType(C);
-  PointerType *InitPtrType = InitValue ?
-      PointerType::getUnqual(InitValue->getType()) : VoidPtrType;
-
-
 ====================File: LICENSE.TXT====================
 ==============================================================================
 The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:

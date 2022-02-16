@@ -5,15 +5,3 @@
 
 ====================Apache-2.0 WITH LLVM-exception====================
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-
-====================COPYRIGHT====================
-    // The instruction has the form "(A op' B) op (C)".  Try to factorize common
-    // term.
-    if (Op0)
-
-
-====================COPYRIGHT====================
-    Value *NotC = Builder.CreateNot(C);
-    Value *RHS = Builder.CreateAnd(B, NotC);
-    return BinaryOperator::CreateOr(LHS, RHS);

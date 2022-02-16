@@ -5,9 +5,3 @@
 
 ====================Apache-2.0 WITH LLVM-exception====================
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-
-====================COPYRIGHT====================
-//   if (c)                   if (c)
-//     X1 = ...                 X1 = ...
-//   else                     else

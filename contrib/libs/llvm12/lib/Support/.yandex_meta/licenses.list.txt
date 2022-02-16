@@ -72,14 +72,6 @@
 
 
 ====================COPYRIGHT====================
-    : Code(C) {
-  ErrMsg = "Stream Error: ";
-  switch (C) {
-  case stream_error_code::unspecified:
-    ErrMsg += "An unspecified error has occurred.";
-
-
-====================COPYRIGHT====================
    Copyright (C) 2012-2016, Yann Collet.
 
 

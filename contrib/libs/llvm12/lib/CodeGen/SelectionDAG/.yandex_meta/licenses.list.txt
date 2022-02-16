@@ -5,8 +5,3 @@
 
 ====================Apache-2.0 WITH LLVM-exception====================
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-
-====================COPYRIGHT====================
-    Type *Ty = MemOps[0].getTypeForEVT(C);
-    Align NewAlign = DL.getABITypeAlign(Ty);

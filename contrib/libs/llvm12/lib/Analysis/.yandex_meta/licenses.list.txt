@@ -7,49 +7,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 
-====================COPYRIGHT====================
-        // into sext(%x) + sext(c). We'll sext the Offset ourselves:
-        unsigned OldWidth = Offset.getBitWidth();
-        Offset = Offset.trunc(SmallWidth).sext(NewWidth).zextOrSelf(OldWidth);
-
-
-====================COPYRIGHT====================
-        // sext(%x) + sext(c)
-        Scale = 1;
-        Offset = 0;
-
-
-====================COPYRIGHT====================
-      // |X| < |C| --> X > -abs(C) and X < abs(C)
-      Constant *PosDivisorC = ConstantInt::get(Ty, C->abs());
-      Constant *NegDivisorC = ConstantInt::get(Ty, -C->abs());
-
-
-====================COPYRIGHT====================
-    // {(a)->(b), (b)->(c), (c)->(d), ...} and the worklist is initially {b, a},
-    // then after merging (a) and (b) together, we need to put (a,b) back in
-    // the worklist so that (c) can get merged in as well resulting in
-    // {(a,b,c) -> d}
-    // We also need to remove the old target (b), from the worklist. We first
-
-
-====================COPYRIGHT====================
-    if (match(BO.getOperand(0), m_APInt(C))) {
-      if (IIQ.hasNoUnsignedWrap(&BO)) {
-        // 'shl nuw C, x' produces [C, C << CLZ(C)]
-        Lower = *C;
-        Upper = Lower.shl(Lower.countLeadingZeros()) + 1;
-
-
-====================COPYRIGHT====================
-    if (match(X, m_APInt(C)) && !C->isMinSignedValue()) {
-      // Is the variable divisor magnitude always greater than the constant
-      // dividend magnitude?
-      // |Y| > |C| --> Y < -abs(C) or Y > abs(C)
-      Constant *PosDividendC = ConstantInt::get(Ty, C->abs());
-      Constant *NegDividendC = ConstantInt::get(Ty, -C->abs());
-
-
 ====================File: LICENSE.TXT====================
 ==============================================================================
 The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:

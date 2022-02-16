@@ -5,15 +5,3 @@
 
 ====================Apache-2.0 WITH LLVM-exception====================
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
-
-====================COPYRIGHT====================
-      Type *I32Ty = Type::getInt32Ty(C);
-      Value *Elt0 = Builder.CreateExtractElement(CI->getArgOperand(0),
-                                                 ConstantInt::get(I32Ty, 0));
-
-
-====================COPYRIGHT====================
-  LLVMContext &Context = *unwrap(C);
-  SmallVector<Metadata *, 8> MDs;
-  for (auto *OV : makeArrayRef(Vals, Count)) {

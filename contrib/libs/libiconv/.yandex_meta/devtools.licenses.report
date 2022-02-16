@@ -42,8 +42,9 @@ BELONGS ya.make
     Files with this license:
         hz.h [17:17]
 
-KEEP     LGPL-2.0-or-later    252277e82341968ad29569d94bcb87df
+SKIP     LGPL-2.0-or-later    252277e82341968ad29569d94bcb87df
 BELONGS ya.make
+    # not a license
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later
@@ -53,8 +54,9 @@ BELONGS ya.make
     Files with this license:
         gentranslit.c [42:45]
 
-KEEP     LGPL-2.0-or-later    3d8f516d639ae04ff39e90eb4c2bc9bc
+SKIP     LGPL-2.0-or-later    3d8f516d639ae04ff39e90eb4c2bc9bc
 BELONGS ya.make
+    # not a license
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later

@@ -651,7 +651,7 @@ BELONGS ya.make
     Files with this license:
         iconv.h [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL e57dec028410cc0b788f43aacfba2799
+SKIP     COPYRIGHT_SERVICE_LABEL e57dec028410cc0b788f43aacfba2799
 BELONGS ya.make
     License text:
           printf(" * Copyright (C) 1999-2003 Free Software Foundation, Inc.\n");

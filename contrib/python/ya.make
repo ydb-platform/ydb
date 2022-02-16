@@ -914,6 +914,7 @@ RECURSE(
     python-rapidjson
     python-saml
     python-slugify
+    python-snappy
     python-socks
     python-telegram-bot
     python-utils
@@ -1008,7 +1009,6 @@ RECURSE(
     slackclient
     smart-open
     smmap
-    snappy
     sniffio
     snowballstemmer
     sobol-seq

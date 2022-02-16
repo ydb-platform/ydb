@@ -54,12 +54,23 @@ auto token = jwt::create()
 	.sign(jwt::algorithm::hs256{"secret"});
 ```
 
+Here is a simple example of creating a token that will expire in one hour:
+
+```c++
+auto token = jwt::create()
+	.set_issuer("auth0")
+	.set_issued_at(std::chrono::system_clock::now())
+	.set_expires_at(std::chrono::system_clock::now() + std::chrono::seconds{3600})
+	.sign(jwt::algorithm::hs256{"secret"});
+```
+
 ## Contributing
 If you have an improvement or found a bug feel free to [open an issue](https://github.com/Thalhammer/jwt-cpp/issues/new) or add the change and create a pull request. If you file a bug please make sure to include as much information about your environment (compiler version, etc.) as possible to help reproduce the issue. If you add a new feature please make sure to also include test cases for it.
 
 ## Dependencies
 In order to use jwt-cpp you need the following tools.
 * libcrypto (openssl or compatible)
+* libssl-dev (for the header files)
 * a compiler supporting at least c++11
 * basic stl support
 
@@ -68,9 +79,15 @@ In order to build the test cases you also need
 * pthread
 
 ## Troubleshooting
+#### Expired tokens
+If you are generating tokens that seem to immediately expire, you are likely not using UTC. Specifically,
+if you use `get_time` to get the current time, it likely uses localtime, while this library uses UTC,
+which may be why your token is immediately expiring. Please see example above on the right way to use current time.
+
 #### Missing _HMAC amd _EVP_sha256 symbols on Mac
 There seems to exists a problem with the included openssl library of MacOS. Make sure you link to one provided by brew.
 See [here](https://github.com/Thalhammer/jwt-cpp/issues/6) for more details.
+
 #### Building on windows fails with syntax errors
 The header "Windows.h", which is often included in windowsprojects, defines macros for MIN and MAX which screw up std::numeric_limits.
 See [here](https://github.com/Thalhammer/jwt-cpp/issues/5) for more details. To fix this do one of the following things:

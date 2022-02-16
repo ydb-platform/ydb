@@ -914,6 +914,7 @@ RECURSE(
     python-rapidjson
     python-saml
     python-slugify
+    python-socks
     python-telegram-bot
     python-utils
     python3-saml

@@ -488,6 +488,16 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     map["AggrNotEquals"] = map["AggrLess"] = map["AggrGreater"] = std::bind(&CheckCompareSame<false, true>, _1, _2);
 
     map["IfPresent"] = std::bind(&IfPresentSubsetFields, _1, _2, _3);
+
+    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+        auto collection = node->HeadPtr();
+        if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && collection->GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << "IN over sorted collection";
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(collection->Pos(), "Unordered", {collection}));
+        }
+
+        return node;
+    };
 }
 
 }

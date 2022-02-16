@@ -3713,11 +3713,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (collectionKind == ETypeAnnotationKind::List && collection->GetConstraint<TSortedConstraintNode>()) {
-            YQL_CLOG(DEBUG, Core) << "IN over sorted collection";
-            return ctx.ChangeChild(*node, 0, ctx.NewCallable(collection->Pos(), "Unordered", {collection}));
-        }
-
         return node;
     };
 

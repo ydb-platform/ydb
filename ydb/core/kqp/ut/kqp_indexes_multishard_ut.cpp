@@ -15,6 +15,11 @@ using namespace NYdb::NScripting;
 
 namespace {
 
+NYdb::NTable::TDataQueryResult ExecuteDataQuery(NYdb::NTable::TSession& session, const TString& query) {
+    const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+    return session.ExecuteDataQuery(query, txSettings).ExtractValueSync();
+}
+
 void CreateTableWithMultishardIndex(Tests::TClient& client) {
     const TString scheme =  R"(Name: "MultiShardIndexed"
         Columns { Name: "key"    Type: "Uint64" }
@@ -30,6 +35,20 @@ void CreateTableWithMultishardIndex(Tests::TClient& client) {
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 }
 
+template<bool UseNewEngine>
+void FillTable(NYdb::NTable::TSession& session) {
+    const TString query(Q_(R"(
+        UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+        (1, 1000000000, "v1"),
+        (2, 2000000000, "v2"),
+        (3, 3000000000, "v3"),
+        (4, 4294967295, "v4");
+    )"));
+
+    auto result = ExecuteDataQuery(session, query);
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 }
 
 Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
@@ -38,58 +57,179 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         CreateTableWithMultishardIndex(kikimr.GetTestClient());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            const TString query(Q_(R"(
-                UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
-                (1, 1000000000, "v1"),
-                (2, 2000000000, "v2"),
-                (3, 3000000000, "v3"),
-                (4, 4294967295, "v4");
-            )"));
-
-            auto result = session.ExecuteDataQuery(
-                query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        FillTable<UseNewEngine>(session);
 
         {
             const TString query(Q_(R"(
                 SELECT * FROM `/Root/MultiShardIndexed` VIEW index ORDER BY fk DESC LIMIT 1;
             )"));
 
-            auto result = session.ExecuteDataQuery(
-                                     query,
-                                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                              .ExtractValueSync();
+            auto result = ExecuteDataQuery(session, query);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[4294967295u];[4u];[\"v4\"]]]");
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(YqWorksFineAfterAlterIndexTableDirectly) {
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexSelect) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable<UseNewEngine>(session);
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key, fk FROM `/Root/MultiShardIndexed` VIEW index WHERE fk > 1000000000 ORDER BY fk LIMIT 1;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u];[2000000000u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT value FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT fk, value FROM `/Root/MultiShardIndexed` VIEW index WHERE fk > 1000000000 ORDER BY fk LIMIT 1;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2000000000u];[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000 AND key = 2;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT value FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000 AND key = 2;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT value FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000 AND value = "v2";
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000 AND value = "v2";
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT key, fk, value FROM `/Root/MultiShardIndexed` VIEW index WHERE fk = 2000000000 AND value = "v2" ORDER BY fk, key;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2u];[2000000000u];[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT value FROM `/Root/MultiShardIndexed` VIEW index WHERE key = 2;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            if (UseNewEngine) {
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                    [](const NYql::TIssue& issue) {
+                        return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                    }), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                    [](const NYql::TIssue& issue) {
+                        return issue.Message.Contains("Given predicate is not suitable for used index");
+                    }), result.GetIssues().ToString());
+            }
+
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v2\"]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT fk FROM `/Root/MultiShardIndexed` VIEW index WHERE key = 2;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            if (UseNewEngine) {
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                    [](const NYql::TIssue& issue) {
+                        return issue.Message.Contains("Given predicate is not suitable for used index: index");
+                    }), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[2000000000u]]]");
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT value, key FROM `/Root/MultiShardIndexed` VIEW index WHERE key > 2 ORDER BY key DESC;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v4\"];[4u]];[[\"v3\"];[3u]]]");
+        }
+    }
+
+    Y_UNIT_TEST(YqWorksFineAfterAlterIndexTableDirectly) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        {
-            const TString query(Q_(R"(
-                UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
-                (1, 1000000000, "v1"),
-                (2, 2000000000, "v2"),
-                (3, 3000000000, "v3"),
-                (4, 4294967295, "v4");
-            )"));
-
-            auto result = session.ExecuteDataQuery(
-                query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        FillTable<false>(session);
 
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
 
@@ -133,9 +273,9 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
 
         { // after alter yql works fine
-            const TString query(Q_(R"(
+            const TString query(R"(
                 SELECT * FROM `/Root/MultiShardIndexed` VIEW index ORDER BY fk DESC LIMIT 1;
-            )"));
+            )");
 
             auto result = session.ExecuteDataQuery(
                                      query,
@@ -145,21 +285,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[4294967295u];[4u];[\"v4\"]]]");
         }
 
-        { // write request works well too
-            const TString query(Q_(R"(
-                UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
-                (1, 1000000000, "v1"),
-                (2, 2000000000, "v2"),
-                (3, 3000000000, "v3"),
-                (4, 4294967295, "v4");
-            )"));
-
-            auto result = session.ExecuteDataQuery(
-                query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        FillTable<false>(session);
 
         { // just for sure, public api got error when alter index
             auto settings = NYdb::NTable::TAlterTableSettings()

@@ -996,7 +996,7 @@ message TTableServiceConfig {
         optional TQueryPhaseLimits PhaseLimits = 1;
         optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000];
         optional uint32 DataQueryTimeoutMs = 3 [default = 300000];
-        optional uint32 ScanQueryTimeoutMs = 4 [default = 300000];
+        optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
         optional uint32 ResultRowsLimit = 5;
     }
 

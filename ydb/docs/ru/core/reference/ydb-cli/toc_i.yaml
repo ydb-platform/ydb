@@ -11,9 +11,9 @@ items:
     href: commands/global-options.md
   - name: Работа со схемой БД
     items:
-    - name: Листинг объектов
+    - name: Список объектов
       href: commands/scheme-ls.md
-    - name: Получение информации об объекте схемы
+    - name: Информация об объекте
       href: commands/scheme-describe.md
     - name: Переименование таблиц
       href: commands/tools/rename.md
@@ -39,8 +39,12 @@ items:
     #   href: commands/tools/restore.md
   - name: Управление профилями
     include: { mode: link, path: profile/toc_p.yaml }
-  - name: Получение списка эндпоинтов для базы данных
-    href: commands/discovery-list.md
+  - name: Информационные сервисы
+    items:
+    - name: Список эндпоинтов
+      href: commands/discovery-list.md
+    - name: Проверка аутентификации
+      href: commands/discovery-whoami.md
   - name: Нагрузочное тестирование
     items:
     - name: Обзор

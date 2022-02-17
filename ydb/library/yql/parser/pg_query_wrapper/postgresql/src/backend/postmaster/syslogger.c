@@ -66,25 +66,25 @@
  * GUC parameters.  Logging_collector cannot be changed after postmaster
  * start, but the rest can change at SIGHUP.
  */
-bool		Logging_collector = false;
-int			Log_RotationAge = HOURS_PER_DAY * MINS_PER_HOUR;
-int			Log_RotationSize = 10 * 1024;
+__thread bool		Logging_collector = false;
+__thread int			Log_RotationAge = HOURS_PER_DAY * MINS_PER_HOUR;
+__thread int			Log_RotationSize = 10 * 1024;
 char	   *Log_directory = NULL;
 char	   *Log_filename = NULL;
-bool		Log_truncate_on_rotation = false;
-int			Log_file_mode = S_IRUSR | S_IWUSR;
+__thread bool		Log_truncate_on_rotation = false;
+__thread int			Log_file_mode = S_IRUSR | S_IWUSR;
 
-extern bool redirection_done;
+extern __thread bool redirection_done;
 
 /*
  * Private state
  */
-static pg_time_t next_rotation_time;
-static bool pipe_eof_seen = false;
-static bool rotation_disabled = false;
+static __thread pg_time_t next_rotation_time;
+static __thread bool pipe_eof_seen = false;
+static __thread bool rotation_disabled = false;
 static FILE *syslogFile = NULL;
 static FILE *csvlogFile = NULL;
-NON_EXEC_STATIC pg_time_t first_syslogger_file_time = 0;
+__thread NON_EXEC_STATIC pg_time_t first_syslogger_file_time = 0;
 static char *last_file_name = NULL;
 static char *last_csv_file_name = NULL;
 
@@ -123,8 +123,8 @@ static CRITICAL_SECTION sysloggerSection;
 /*
  * Flags set by interrupt handlers for later service in the main loop.
  */
-static volatile sig_atomic_t got_SIGHUP = false;
-static volatile sig_atomic_t rotation_requested = false;
+static __thread volatile sig_atomic_t got_SIGHUP = false;
+static __thread volatile sig_atomic_t rotation_requested = false;
 
 
 /* Local subroutines */

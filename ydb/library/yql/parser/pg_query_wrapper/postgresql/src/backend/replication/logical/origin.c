@@ -151,9 +151,9 @@ typedef struct ReplicationStateCtl
 } ReplicationStateCtl;
 
 /* external variables */
-RepOriginId replorigin_session_origin = InvalidRepOriginId; /* assumed identity */
-XLogRecPtr	replorigin_session_origin_lsn = InvalidXLogRecPtr;
-TimestampTz replorigin_session_origin_timestamp = 0;
+__thread RepOriginId replorigin_session_origin = InvalidRepOriginId; /* assumed identity */
+__thread XLogRecPtr	replorigin_session_origin_lsn = InvalidXLogRecPtr;
+__thread TimestampTz replorigin_session_origin_timestamp = 0;
 
 /*
  * Base address into a shared memory array of replication states of size

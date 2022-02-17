@@ -33,7 +33,7 @@
 #include "utils/syscache.h"
 
 /* Potentially set by pg_upgrade_support functions */
-Oid			binary_upgrade_next_pg_enum_oid = InvalidOid;
+__thread Oid			binary_upgrade_next_pg_enum_oid = InvalidOid;
 
 /*
  * Hash table of enum value OIDs created during the current transaction by

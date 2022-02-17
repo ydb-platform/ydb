@@ -131,14 +131,14 @@ struct WaitEventSet
 
 #ifndef WIN32
 /* Are we currently in WaitLatch? The signal handler would like to know. */
-static volatile sig_atomic_t waiting = false;
+static __thread volatile sig_atomic_t waiting = false;
 
 /* Read and write ends of the self-pipe */
-static int	selfpipe_readfd = -1;
-static int	selfpipe_writefd = -1;
+static __thread int	selfpipe_readfd = -1;
+static __thread int	selfpipe_writefd = -1;
 
 /* Process owning the self-pipe --- needed for checking purposes */
-static int	selfpipe_owner_pid = 0;
+static __thread int	selfpipe_owner_pid = 0;
 
 /* Private function prototypes */
 static void sendSelfPipeByte(void);

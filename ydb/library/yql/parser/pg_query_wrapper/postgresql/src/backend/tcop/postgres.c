@@ -88,18 +88,18 @@
 const char *debug_query_string; /* client-supplied query string */
 
 /* Note: whereToSendOutput is initialized for the bootstrap/standalone case */
-CommandDest whereToSendOutput = DestDebug;
+__thread CommandDest whereToSendOutput = DestDebug;
 
 /* flag for logging end of session */
-bool		Log_disconnections = false;
+__thread bool		Log_disconnections = false;
 
-int			log_statement = LOGSTMT_NONE;
+__thread int			log_statement = LOGSTMT_NONE;
 
 /* GUC variable for maximum stack depth (measured in kilobytes) */
-int			max_stack_depth = 100;
+__thread int			max_stack_depth = 100;
 
 /* wait N seconds to allow attach from a debugger */
-int			PostAuthDelay = 0;
+__thread int			PostAuthDelay = 0;
 
 
 
@@ -109,7 +109,7 @@ int			PostAuthDelay = 0;
  */
 
 /* max_stack_depth converted to bytes for speed of checking */
-static long max_stack_depth_bytes = 100 * 1024L;
+static __thread long max_stack_depth_bytes = 100 * 1024L;
 
 /*
  * Stack base pointer -- initialized by PostmasterMain and inherited by
@@ -130,21 +130,21 @@ char	   *register_stack_base_ptr = NULL;
  * Flag to keep track of whether we have started a transaction.
  * For extended query protocol this has to be remembered across messages.
  */
-static bool xact_started = false;
+static __thread bool xact_started = false;
 
 /*
  * Flag to indicate that we are doing the outer loop's read-from-client,
  * as opposed to any random read from client that might happen within
  * commands like COPY FROM STDIN.
  */
-static bool DoingCommandRead = false;
+static __thread bool DoingCommandRead = false;
 
 /*
  * Flags to implement skip-till-Sync-after-error behavior for messages of
  * the extended query protocol.
  */
-static bool doing_extended_query_message = false;
-static bool ignore_till_sync = false;
+static __thread bool doing_extended_query_message = false;
+static __thread bool ignore_till_sync = false;
 
 /*
  * If an unnamed prepared statement exists, it's stored here.
@@ -155,17 +155,17 @@ static CachedPlanSource *unnamed_stmt_psrc = NULL;
 
 /* assorted command-line switches */
 static const char *userDoption = NULL;	/* -D switch */
-static bool EchoQuery = false;	/* -E switch */
-static bool UseSemiNewlineNewline = false;	/* -j switch */
+static __thread bool EchoQuery = false;	/* -E switch */
+static __thread bool UseSemiNewlineNewline = false;	/* -j switch */
 
 /* whether or not, and why, we were canceled by conflict with recovery */
-static bool RecoveryConflictPending = false;
-static bool RecoveryConflictRetryable = true;
-static ProcSignalReason RecoveryConflictReason;
+static __thread bool RecoveryConflictPending = false;
+static __thread bool RecoveryConflictRetryable = true;
+static __thread ProcSignalReason RecoveryConflictReason;
 
 /* reused buffer to pass to SendRowDescriptionMessage() */
-static MemoryContext row_description_context = NULL;
-static StringInfoData row_description_buf;
+static __thread MemoryContext row_description_context = NULL;
+static __thread StringInfoData row_description_buf;
 
 /* ----------------------------------------------------------------
  *		decls for routines only used in this file
@@ -4626,8 +4626,8 @@ get_stack_depth_rlimit(void)
 }
 
 
-static struct rusage Save_r;
-static struct timeval Save_t;
+static __thread struct rusage Save_r;
+static __thread struct timeval Save_t;
 
 void
 ResetUsage(void)

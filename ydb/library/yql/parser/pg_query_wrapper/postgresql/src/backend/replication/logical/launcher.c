@@ -51,8 +51,8 @@
 /* max sleep time between cycles (3min) */
 #define DEFAULT_NAPTIME_PER_CYCLE 180000L
 
-int			max_logical_replication_workers = 4;
-int			max_sync_workers_per_subscription = 2;
+__thread int			max_logical_replication_workers = 4;
+__thread int			max_sync_workers_per_subscription = 2;
 
 LogicalRepWorker *MyLogicalRepWorker = NULL;
 
@@ -93,7 +93,7 @@ static void logicalrep_worker_onexit(int code, Datum arg);
 static void logicalrep_worker_detach(void);
 static void logicalrep_worker_cleanup(LogicalRepWorker *worker);
 
-static bool on_commit_launcher_wakeup = false;
+static __thread bool on_commit_launcher_wakeup = false;
 
 Datum		pg_stat_get_subscription(PG_FUNCTION_ARGS);
 

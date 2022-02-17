@@ -58,15 +58,15 @@
 /*
  * GUC parameters
  */
-int			vacuum_freeze_min_age;
-int			vacuum_freeze_table_age;
-int			vacuum_multixact_freeze_min_age;
-int			vacuum_multixact_freeze_table_age;
+__thread int			vacuum_freeze_min_age;
+__thread int			vacuum_freeze_table_age;
+__thread int			vacuum_multixact_freeze_min_age;
+__thread int			vacuum_multixact_freeze_table_age;
 
 
 /* A few variables that don't seem worth passing around as parameters */
-static MemoryContext vac_context = NULL;
-static BufferAccessStrategy vac_strategy;
+static __thread MemoryContext vac_context = NULL;
+static __thread BufferAccessStrategy vac_strategy;
 
 
 /*
@@ -75,7 +75,7 @@ static BufferAccessStrategy vac_strategy;
  */
 pg_atomic_uint32 *VacuumSharedCostBalance = NULL;
 pg_atomic_uint32 *VacuumActiveNWorkers = NULL;
-int			VacuumCostBalanceLocal = 0;
+__thread int			VacuumCostBalanceLocal = 0;
 
 /* non-export function prototypes */
 static List *expand_vacuum_rel(VacuumRelation *vrel, int options);

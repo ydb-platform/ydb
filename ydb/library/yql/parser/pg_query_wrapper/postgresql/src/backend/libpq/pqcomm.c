@@ -116,7 +116,7 @@
 /*
  * Configuration options
  */
-int			Unix_socket_permissions;
+__thread int			Unix_socket_permissions;
 char	   *Unix_socket_group;
 
 /* Where the Unix socket files are (list of palloc'd strings) */
@@ -133,20 +133,20 @@ static List *sock_paths = NIL;
 #define PQ_RECV_BUFFER_SIZE 8192
 
 static char *PqSendBuffer;
-static int	PqSendBufferSize;	/* Size send buffer */
-static int	PqSendPointer;		/* Next index to store a byte in PqSendBuffer */
-static int	PqSendStart;		/* Next index to send a byte in PqSendBuffer */
+static __thread int	PqSendBufferSize;	/* Size send buffer */
+static __thread int	PqSendPointer;		/* Next index to store a byte in PqSendBuffer */
+static __thread int	PqSendStart;		/* Next index to send a byte in PqSendBuffer */
 
 static char PqRecvBuffer[PQ_RECV_BUFFER_SIZE];
-static int	PqRecvPointer;		/* Next index to read a byte from PqRecvBuffer */
-static int	PqRecvLength;		/* End of data available in PqRecvBuffer */
+static __thread int	PqRecvPointer;		/* Next index to read a byte from PqRecvBuffer */
+static __thread int	PqRecvLength;		/* End of data available in PqRecvBuffer */
 
 /*
  * Message status
  */
-static bool PqCommBusy;			/* busy sending data to the client */
-static bool PqCommReadingMsg;	/* in the middle of reading a message */
-static bool DoingCopyOut;		/* in old-protocol COPY OUT processing */
+static __thread bool PqCommBusy;			/* busy sending data to the client */
+static __thread bool PqCommReadingMsg;	/* in the middle of reading a message */
+static __thread bool DoingCopyOut;		/* in old-protocol COPY OUT processing */
 
 
 /* Internal functions */

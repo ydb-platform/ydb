@@ -45,7 +45,7 @@
 #define EarlyPruningEnabled(rel) (old_snapshot_threshold >= 0 && RelationAllowsEarlyPruning(rel))
 
 /* GUC variables */
-extern PGDLLIMPORT int old_snapshot_threshold;
+extern __thread PGDLLIMPORT int old_snapshot_threshold;
 
 
 extern Size SnapMgrShmemSize(void);
@@ -53,17 +53,17 @@ extern void SnapMgrInit(void);
 extern TimestampTz GetSnapshotCurrentTimestamp(void);
 extern TimestampTz GetOldSnapshotThresholdTimestamp(void);
 
-extern bool FirstSnapshotSet;
+extern __thread bool FirstSnapshotSet;
 
-extern PGDLLIMPORT TransactionId TransactionXmin;
-extern PGDLLIMPORT TransactionId RecentXmin;
-extern PGDLLIMPORT TransactionId RecentGlobalXmin;
-extern PGDLLIMPORT TransactionId RecentGlobalDataXmin;
+extern __thread PGDLLIMPORT TransactionId TransactionXmin;
+extern __thread PGDLLIMPORT TransactionId RecentXmin;
+extern __thread PGDLLIMPORT TransactionId RecentGlobalXmin;
+extern __thread PGDLLIMPORT TransactionId RecentGlobalDataXmin;
 
 /* Variables representing various special snapshot semantics */
-extern PGDLLIMPORT SnapshotData SnapshotSelfData;
-extern PGDLLIMPORT SnapshotData SnapshotAnyData;
-extern PGDLLIMPORT SnapshotData CatalogSnapshotData;
+extern __thread PGDLLIMPORT SnapshotData SnapshotSelfData;
+extern __thread PGDLLIMPORT SnapshotData SnapshotAnyData;
+extern __thread PGDLLIMPORT SnapshotData CatalogSnapshotData;
 
 #define SnapshotSelf		(&SnapshotSelfData)
 #define SnapshotAny			(&SnapshotAnyData)

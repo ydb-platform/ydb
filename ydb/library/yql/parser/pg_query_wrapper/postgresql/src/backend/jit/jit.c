@@ -29,20 +29,20 @@
 #include "utils/resowner_private.h"
 
 /* GUCs */
-bool		jit_enabled = true;
+__thread bool		jit_enabled = true;
 char	   *jit_provider = NULL;
-bool		jit_debugging_support = false;
-bool		jit_dump_bitcode = false;
-bool		jit_expressions = true;
-bool		jit_profiling_support = false;
-bool		jit_tuple_deforming = true;
-double		jit_above_cost = 100000;
-double		jit_inline_above_cost = 500000;
-double		jit_optimize_above_cost = 500000;
+__thread bool		jit_debugging_support = false;
+__thread bool		jit_dump_bitcode = false;
+__thread bool		jit_expressions = true;
+__thread bool		jit_profiling_support = false;
+__thread bool		jit_tuple_deforming = true;
+__thread double		jit_above_cost = 100000;
+__thread double		jit_inline_above_cost = 500000;
+__thread double		jit_optimize_above_cost = 500000;
 
-static JitProviderCallbacks provider;
-static bool provider_successfully_loaded = false;
-static bool provider_failed_loading = false;
+static __thread JitProviderCallbacks provider;
+static __thread bool provider_successfully_loaded = false;
+static __thread bool provider_failed_loading = false;
 
 
 static bool provider_init(void);

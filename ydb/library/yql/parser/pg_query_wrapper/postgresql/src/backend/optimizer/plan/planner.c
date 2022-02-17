@@ -66,15 +66,15 @@
 #include "utils/syscache.h"
 
 /* GUC parameters */
-double		cursor_tuple_fraction = DEFAULT_CURSOR_TUPLE_FRACTION;
-int			force_parallel_mode = FORCE_PARALLEL_OFF;
-bool		parallel_leader_participation = true;
+__thread double		cursor_tuple_fraction = DEFAULT_CURSOR_TUPLE_FRACTION;
+__thread int			force_parallel_mode = FORCE_PARALLEL_OFF;
+__thread bool		parallel_leader_participation = true;
 
 /* Hook for plugins to get control in planner() */
-planner_hook_type planner_hook = NULL;
+__thread planner_hook_type planner_hook = NULL;
 
 /* Hook for plugins to get control when grouping_planner() plans upper rels */
-create_upper_paths_hook_type create_upper_paths_hook = NULL;
+__thread create_upper_paths_hook_type create_upper_paths_hook = NULL;
 
 
 /* Expression kind codes for preprocess_expression */

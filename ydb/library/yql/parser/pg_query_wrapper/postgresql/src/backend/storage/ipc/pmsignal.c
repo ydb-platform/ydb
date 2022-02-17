@@ -79,7 +79,7 @@ NON_EXEC_STATIC volatile PMSignalData *PMSignalState = NULL;
  * Signal handler to be notified if postmaster dies.
  */
 #ifdef USE_POSTMASTER_DEATH_SIGNAL
-volatile sig_atomic_t postmaster_possibly_dead = false;
+__thread volatile sig_atomic_t postmaster_possibly_dead = false;
 
 static void
 postmaster_death_handler(int signo)

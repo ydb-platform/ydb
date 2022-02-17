@@ -331,9 +331,9 @@ extern void GetOldestRestartPoint(XLogRecPtr *oldrecptr, TimeLineID *oldtli);
  * Exported for the functions in timeline.c and xlogarchive.c.  Only valid
  * in the startup process.
  */
-extern bool ArchiveRecoveryRequested;
-extern bool InArchiveRecovery;
-extern bool StandbyMode;
+extern __thread bool ArchiveRecoveryRequested;
+extern __thread bool InArchiveRecovery;
+extern __thread bool StandbyMode;
 extern char *recoveryRestoreCommand;
 
 #endif							/* XLOG_INTERNAL_H */

@@ -93,10 +93,10 @@ typedef enum
 } IpcMemoryState;
 
 
-unsigned long UsedShmemSegID = 0;
+__thread unsigned long UsedShmemSegID = 0;
 void	   *UsedShmemSegAddr = NULL;
 
-static Size AnonymousShmemSize;
+static __thread Size AnonymousShmemSize;
 static void *AnonymousShmem = NULL;
 
 static void *InternalIpcMemoryCreate(IpcMemoryKey memKey, Size size);

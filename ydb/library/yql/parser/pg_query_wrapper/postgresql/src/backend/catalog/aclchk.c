@@ -98,7 +98,7 @@ typedef struct
  * this variable to let us know that we need to populate the pg_init_privs
  * table for the GRANT/REVOKE commands while this variable is set to true.
  */
-bool		binary_upgrade_record_init_privs = false;
+__thread bool		binary_upgrade_record_init_privs = false;
 
 static void ExecGrantStmt_oids(InternalGrant *istmt);
 static void ExecGrant_Relation(InternalGrant *grantStmt);

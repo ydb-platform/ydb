@@ -14,21 +14,21 @@
 #define _POSTMASTER_H
 
 /* GUC options */
-extern bool EnableSSL;
-extern int	ReservedBackends;
-extern PGDLLIMPORT int PostPortNumber;
-extern int	Unix_socket_permissions;
+extern __thread bool EnableSSL;
+extern __thread int	ReservedBackends;
+extern __thread PGDLLIMPORT int PostPortNumber;
+extern __thread int	Unix_socket_permissions;
 extern char *Unix_socket_group;
 extern char *Unix_socket_directories;
 extern char *ListenAddresses;
-extern bool ClientAuthInProgress;
-extern int	PreAuthDelay;
-extern int	AuthenticationTimeout;
-extern bool Log_connections;
-extern bool log_hostname;
-extern bool enable_bonjour;
+extern __thread bool ClientAuthInProgress;
+extern __thread int	PreAuthDelay;
+extern __thread int	AuthenticationTimeout;
+extern __thread bool Log_connections;
+extern __thread bool log_hostname;
+extern __thread bool enable_bonjour;
 extern char *bonjour_name;
-extern bool restart_after_crash;
+extern __thread bool restart_after_crash;
 
 #ifdef WIN32
 extern HANDLE PostmasterHandle;

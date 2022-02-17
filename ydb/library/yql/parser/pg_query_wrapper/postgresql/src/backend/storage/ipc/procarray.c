@@ -109,14 +109,14 @@ static PGXACT *allPgXact;
  */
 static TransactionId *KnownAssignedXids;
 static bool *KnownAssignedXidsValid;
-static TransactionId latestObservedXid = InvalidTransactionId;
+static __thread TransactionId latestObservedXid = InvalidTransactionId;
 
 /*
  * If we're in STANDBY_SNAPSHOT_PENDING state, standbySnapshotPendingXmin is
  * the highest xid that might still be running that we don't have in
  * KnownAssignedXids.
  */
-static TransactionId standbySnapshotPendingXmin;
+static __thread TransactionId standbySnapshotPendingXmin;
 
 #ifdef XIDCACHE_DEBUG
 

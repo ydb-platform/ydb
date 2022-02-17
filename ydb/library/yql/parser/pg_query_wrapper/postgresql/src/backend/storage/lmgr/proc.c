@@ -57,11 +57,11 @@
 #include "utils/timestamp.h"
 
 /* GUC variables */
-int			DeadlockTimeout = 1000;
-int			StatementTimeout = 0;
-int			LockTimeout = 0;
-int			IdleInTransactionSessionTimeout = 0;
-bool		log_lock_waits = false;
+__thread int			DeadlockTimeout = 1000;
+__thread int			StatementTimeout = 0;
+__thread int			LockTimeout = 0;
+__thread int			IdleInTransactionSessionTimeout = 0;
+__thread bool		log_lock_waits = false;
 
 /* Pointer to this process's PGPROC and PGXACT structs, if any */
 PGPROC	   *MyProc = NULL;
@@ -84,10 +84,10 @@ PGPROC	   *PreparedXactProcs = NULL;
 /* If we are waiting for a lock, this points to the associated LOCALLOCK */
 static LOCALLOCK *lockAwaited = NULL;
 
-static DeadLockState deadlock_state = DS_NOT_YET_CHECKED;
+static __thread DeadLockState deadlock_state = DS_NOT_YET_CHECKED;
 
 /* Is a deadlock check pending? */
-static volatile sig_atomic_t got_deadlock_timeout;
+static __thread volatile sig_atomic_t got_deadlock_timeout;
 
 static void RemoveProcFromArray(int code, Datum arg);
 static void ProcKill(int code, Datum arg);

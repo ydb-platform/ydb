@@ -106,7 +106,7 @@ typedef struct cached_re_str
 	regex_t		cre_re;			/* the compiled regular expression */
 } cached_re_str;
 
-static int	num_res = 0;		/* # of cached re's */
+static __thread int	num_res = 0;		/* # of cached re's */
 static cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
 
 

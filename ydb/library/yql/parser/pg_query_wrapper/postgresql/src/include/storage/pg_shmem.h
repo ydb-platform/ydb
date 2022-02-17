@@ -42,8 +42,8 @@ typedef struct PGShmemHeader	/* standard header for all Postgres shmem */
 } PGShmemHeader;
 
 /* GUC variables */
-extern int	shared_memory_type;
-extern int	huge_pages;
+extern __thread int	shared_memory_type;
+extern __thread int	huge_pages;
 
 /* Possible values for huge_pages */
 typedef enum
@@ -62,9 +62,9 @@ typedef enum
 }			PGShmemType;
 
 #ifndef WIN32
-extern unsigned long UsedShmemSegID;
+extern __thread unsigned long UsedShmemSegID;
 #else
-extern HANDLE UsedShmemSegID;
+extern __thread HANDLE UsedShmemSegID;
 extern void *ShmemProtectiveRegion;
 #endif
 extern void *UsedShmemSegAddr;

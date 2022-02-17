@@ -17,10 +17,10 @@
 
 #include "executor/instrument.h"
 
-BufferUsage pgBufferUsage;
-static BufferUsage save_pgBufferUsage;
-WalUsage	pgWalUsage;
-static WalUsage save_pgWalUsage;
+__thread BufferUsage pgBufferUsage;
+static __thread BufferUsage save_pgBufferUsage;
+__thread WalUsage	pgWalUsage;
+static __thread WalUsage save_pgWalUsage;
 
 static void BufferUsageAdd(BufferUsage *dst, const BufferUsage *add);
 static void WalUsageAdd(WalUsage *dst, WalUsage *add);

@@ -274,15 +274,15 @@ static HTAB *RecordCacheHash = NULL;
 /* arrays of info about registered record types, indexed by assigned typmod */
 static TupleDesc *RecordCacheArray = NULL;
 static uint64 *RecordIdentifierArray = NULL;
-static int32 RecordCacheArrayLen = 0;	/* allocated length of above arrays */
-static int32 NextRecordTypmod = 0;	/* number of entries used */
+static __thread int32 RecordCacheArrayLen = 0;	/* allocated length of above arrays */
+static __thread int32 NextRecordTypmod = 0;	/* number of entries used */
 
 /*
  * Process-wide counter for generating unique tupledesc identifiers.
  * Zero and one (INVALID_TUPLEDESC_IDENTIFIER) aren't allowed to be chosen
  * as identifiers, so we start the counter at INVALID_TUPLEDESC_IDENTIFIER.
  */
-static uint64 tupledesc_id_counter = INVALID_TUPLEDESC_IDENTIFIER;
+static __thread uint64 tupledesc_id_counter = INVALID_TUPLEDESC_IDENTIFIER;
 
 static void load_typcache_tupdesc(TypeCacheEntry *typentry);
 static void load_rangetype_info(TypeCacheEntry *typentry);

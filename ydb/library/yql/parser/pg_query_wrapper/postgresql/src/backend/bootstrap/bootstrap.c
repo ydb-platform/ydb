@@ -50,7 +50,7 @@
 #include "utils/rel.h"
 #include "utils/relmapper.h"
 
-uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
+__thread uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
 
 #define ALLOC(t, c) \
@@ -69,12 +69,12 @@ static void cleanup(void);
  * ----------------
  */
 
-AuxProcType MyAuxProcType = NotAnAuxProcess;	/* declared in miscadmin.h */
+__thread AuxProcType MyAuxProcType = NotAnAuxProcess;	/* declared in miscadmin.h */
 
-Relation	boot_reldesc;		/* current relation descriptor */
+__thread Relation	boot_reldesc;		/* current relation descriptor */
 
 Form_pg_attribute attrtypes[MAXATTR];	/* points to attribute info */
-int			numattr;			/* number of attributes for cur. rel */
+__thread int			numattr;			/* number of attributes for cur. rel */
 
 
 /*
@@ -164,10 +164,10 @@ struct typmap
 static struct typmap **Typ = NULL;
 static struct typmap *Ap = NULL;
 
-static Datum values[MAXATTR];	/* current row's attribute values */
+static __thread Datum values[MAXATTR];	/* current row's attribute values */
 static bool Nulls[MAXATTR];
 
-static MemoryContext nogc = NULL;	/* special no-gc mem context */
+static __thread MemoryContext nogc = NULL;	/* special no-gc mem context */
 
 /*
  *	At bootstrap time, we first declare all the indices to be built, and

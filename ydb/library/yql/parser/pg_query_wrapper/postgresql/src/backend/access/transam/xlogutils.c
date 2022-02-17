@@ -32,7 +32,7 @@
 
 
 /* GUC variable */
-bool		ignore_invalid_pages = false;
+__thread bool		ignore_invalid_pages = false;
 
 /*
  * During XLOG replay, we may see XLOG records for incremental updates of

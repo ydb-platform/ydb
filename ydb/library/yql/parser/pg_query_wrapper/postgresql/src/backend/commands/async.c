@@ -308,7 +308,7 @@ static AsyncQueueControl *asyncQueueControl;
 /*
  * The SLRU buffer area through which we access the notification queue
  */
-static SlruCtlData NotifyCtlData;
+static __thread SlruCtlData NotifyCtlData;
 
 #define NotifyCtl					(&NotifyCtlData)
 #define QUEUE_PAGESIZE				BLCKSZ
@@ -431,19 +431,19 @@ static NotificationList *pendingNotifies = NULL;
  * latch. ProcessNotifyInterrupt() will then be called whenever it's safe to
  * actually deal with the interrupt.
  */
-volatile sig_atomic_t notifyInterruptPending = false;
+__thread volatile sig_atomic_t notifyInterruptPending = false;
 
 /* True if we've registered an on_shmem_exit cleanup */
-static bool unlistenExitRegistered = false;
+static __thread bool unlistenExitRegistered = false;
 
 /* True if we're currently registered as a listener in asyncQueueControl */
-static bool amRegisteredListener = false;
+static __thread bool amRegisteredListener = false;
 
 /* have we advanced to a page that's a multiple of QUEUE_CLEANUP_DELAY? */
-static bool tryAdvanceTail = false;
+static __thread bool tryAdvanceTail = false;
 
 /* GUC parameter */
-bool		Trace_notify = false;
+__thread bool		Trace_notify = false;
 
 /* local function prototypes */
 static int	asyncQueuePageDiff(int p, int q);

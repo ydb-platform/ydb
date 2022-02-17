@@ -48,7 +48,7 @@
 
 
 /* Hook for plugins to get control at end of parse analysis */
-post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
+__thread post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
 
 static Query *transformOptionalSelectInto(ParseState *pstate, Node *parseTree);
 static Query *transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt);

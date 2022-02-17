@@ -137,7 +137,7 @@
 
 /* GUC variables */
 #ifdef TRACE_SORT
-bool		trace_sort = false;
+__thread bool		trace_sort = false;
 #endif
 
 #ifdef DEBUG_BOUNDED_SORT

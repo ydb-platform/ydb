@@ -187,8 +187,8 @@ typedef struct TransInvalidationInfo
 static TransInvalidationInfo *transInvalInfo = NULL;
 
 static SharedInvalidationMessage *SharedInvalidMessagesArray;
-static int	numSharedInvalidMessagesArray;
-static int	maxSharedInvalidMessagesArray;
+static __thread int	numSharedInvalidMessagesArray;
+static __thread int	maxSharedInvalidMessagesArray;
 
 
 /*
@@ -214,7 +214,7 @@ static struct SYSCACHECALLBACK
 
 static int16 syscache_callback_links[SysCacheSize];
 
-static int	syscache_callback_count = 0;
+static __thread int	syscache_callback_count = 0;
 
 static struct RELCACHECALLBACK
 {
@@ -222,7 +222,7 @@ static struct RELCACHECALLBACK
 	Datum		arg;
 }			relcache_callback_list[MAX_RELCACHE_CALLBACKS];
 
-static int	relcache_callback_count = 0;
+static __thread int	relcache_callback_count = 0;
 
 /* ----------------------------------------------------------------
  *				Invalidation list support functions

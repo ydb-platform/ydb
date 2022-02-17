@@ -58,7 +58,7 @@
 /*
  * Link to shared-memory data structures for SUBTRANS control
  */
-static SlruCtlData SubTransCtlData;
+static __thread SlruCtlData SubTransCtlData;
 
 #define SubTransCtl  (&SubTransCtlData)
 

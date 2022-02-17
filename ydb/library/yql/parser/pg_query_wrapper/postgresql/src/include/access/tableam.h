@@ -28,7 +28,7 @@
 
 /* GUCs */
 extern char *default_table_access_method;
-extern bool synchronize_seqscans;
+extern __thread bool synchronize_seqscans;
 
 
 struct BulkInsertStateData;

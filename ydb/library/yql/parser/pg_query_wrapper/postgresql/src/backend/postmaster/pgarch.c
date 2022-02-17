@@ -78,14 +78,14 @@
  * Local data
  * ----------
  */
-static time_t last_pgarch_start_time;
-static time_t last_sigterm_time = 0;
+static __thread time_t last_pgarch_start_time;
+static __thread time_t last_sigterm_time = 0;
 
 /*
  * Flags set by interrupt handlers for later service in the main loop.
  */
-static volatile sig_atomic_t wakened = false;
-static volatile sig_atomic_t ready_to_stop = false;
+static __thread volatile sig_atomic_t wakened = false;
+static __thread volatile sig_atomic_t ready_to_stop = false;
 
 /* ----------
  * Local function forward declarations

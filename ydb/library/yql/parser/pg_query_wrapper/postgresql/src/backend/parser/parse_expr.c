@@ -39,8 +39,8 @@
 #include "utils/xml.h"
 
 /* GUC parameters */
-bool		operator_precedence_warning = false;
-bool		Transform_null_equals = false;
+__thread bool		operator_precedence_warning = false;
+__thread bool		Transform_null_equals = false;
 
 /*
  * Node-type groups for operator precedence warnings

@@ -57,10 +57,10 @@
 
 
 /* Set at postmaster start */
-extern TimestampTz PgStartTime;
+extern __thread TimestampTz PgStartTime;
 
 /* Set at configuration reload */
-extern TimestampTz PgReloadTime;
+extern __thread TimestampTz PgReloadTime;
 
 
 /* Internal routines (not fmgr-callable) */

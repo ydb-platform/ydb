@@ -17,7 +17,7 @@
 #include "utils/snapshot.h"
 #include "utils/timestamp.h"
 
-extern PGDLLIMPORT int logical_decoding_work_mem;
+extern __thread PGDLLIMPORT int logical_decoding_work_mem;
 
 /* an individual tuple, stored in one chunk of memory */
 typedef struct ReorderBufferTupleBuf

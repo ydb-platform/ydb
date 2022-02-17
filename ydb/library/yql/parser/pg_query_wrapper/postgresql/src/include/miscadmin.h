@@ -87,18 +87,18 @@
 
 /* in globals.c */
 /* these are marked volatile because they are set by signal handlers: */
-extern PGDLLIMPORT volatile sig_atomic_t InterruptPending;
-extern PGDLLIMPORT volatile sig_atomic_t QueryCancelPending;
-extern PGDLLIMPORT volatile sig_atomic_t ProcDiePending;
-extern PGDLLIMPORT volatile sig_atomic_t IdleInTransactionSessionTimeoutPending;
-extern PGDLLIMPORT volatile sig_atomic_t ProcSignalBarrierPending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t InterruptPending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t QueryCancelPending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t ProcDiePending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t IdleInTransactionSessionTimeoutPending;
+extern __thread PGDLLIMPORT volatile sig_atomic_t ProcSignalBarrierPending;
 
-extern PGDLLIMPORT volatile sig_atomic_t ClientConnectionLost;
+extern __thread PGDLLIMPORT volatile sig_atomic_t ClientConnectionLost;
 
 /* these are marked volatile because they are examined by signal handlers: */
-extern PGDLLIMPORT volatile uint32 InterruptHoldoffCount;
-extern PGDLLIMPORT volatile uint32 QueryCancelHoldoffCount;
-extern PGDLLIMPORT volatile uint32 CritSectionCount;
+extern __thread PGDLLIMPORT volatile uint32 InterruptHoldoffCount;
+extern __thread PGDLLIMPORT volatile uint32 QueryCancelHoldoffCount;
+extern __thread PGDLLIMPORT volatile uint32 CritSectionCount;
 
 /* in tcop/postgres.c */
 extern void ProcessInterrupts(void);
@@ -157,30 +157,30 @@ do { \
 /*
  * from utils/init/globals.c
  */
-extern PGDLLIMPORT pid_t PostmasterPid;
-extern PGDLLIMPORT bool IsPostmasterEnvironment;
-extern PGDLLIMPORT bool IsUnderPostmaster;
-extern PGDLLIMPORT bool IsBackgroundWorker;
-extern PGDLLIMPORT bool IsBinaryUpgrade;
+extern __thread PGDLLIMPORT pid_t PostmasterPid;
+extern __thread PGDLLIMPORT bool IsPostmasterEnvironment;
+extern __thread PGDLLIMPORT bool IsUnderPostmaster;
+extern __thread PGDLLIMPORT bool IsBackgroundWorker;
+extern __thread PGDLLIMPORT bool IsBinaryUpgrade;
 
-extern PGDLLIMPORT bool ExitOnAnyError;
+extern __thread PGDLLIMPORT bool ExitOnAnyError;
 
 extern PGDLLIMPORT char *DataDir;
-extern PGDLLIMPORT int data_directory_mode;
+extern __thread PGDLLIMPORT int data_directory_mode;
 
-extern PGDLLIMPORT int NBuffers;
-extern PGDLLIMPORT int MaxBackends;
-extern PGDLLIMPORT int MaxConnections;
-extern PGDLLIMPORT int max_worker_processes;
-extern PGDLLIMPORT int max_parallel_workers;
+extern __thread PGDLLIMPORT int NBuffers;
+extern __thread PGDLLIMPORT int MaxBackends;
+extern __thread PGDLLIMPORT int MaxConnections;
+extern __thread PGDLLIMPORT int max_worker_processes;
+extern __thread PGDLLIMPORT int max_parallel_workers;
 
-extern PGDLLIMPORT int MyProcPid;
-extern PGDLLIMPORT pg_time_t MyStartTime;
-extern PGDLLIMPORT TimestampTz MyStartTimestamp;
+extern __thread PGDLLIMPORT int MyProcPid;
+extern __thread PGDLLIMPORT pg_time_t MyStartTime;
+extern __thread PGDLLIMPORT TimestampTz MyStartTimestamp;
 extern PGDLLIMPORT struct Port *MyProcPort;
 extern PGDLLIMPORT struct Latch *MyLatch;
-extern int32 MyCancelKey;
-extern int	MyPMChildSlot;
+extern __thread int32 MyCancelKey;
+extern __thread int	MyPMChildSlot;
 
 extern char OutputFileName[];
 extern PGDLLIMPORT char my_exec_path[];
@@ -195,9 +195,9 @@ extern char postgres_exec_path[];
  *
  * extern BackendId    MyBackendId;
  */
-extern PGDLLIMPORT Oid MyDatabaseId;
+extern __thread PGDLLIMPORT Oid MyDatabaseId;
 
-extern PGDLLIMPORT Oid MyDatabaseTableSpace;
+extern __thread PGDLLIMPORT Oid MyDatabaseTableSpace;
 
 /*
  * Date/Time Configuration
@@ -233,8 +233,8 @@ extern PGDLLIMPORT Oid MyDatabaseTableSpace;
 #define DATEORDER_DMY			1
 #define DATEORDER_MDY			2
 
-extern PGDLLIMPORT int DateStyle;
-extern PGDLLIMPORT int DateOrder;
+extern __thread PGDLLIMPORT int DateStyle;
+extern __thread PGDLLIMPORT int DateOrder;
 
 /*
  * IntervalStyles
@@ -248,31 +248,31 @@ extern PGDLLIMPORT int DateOrder;
 #define INTSTYLE_SQL_STANDARD		2
 #define INTSTYLE_ISO_8601			3
 
-extern PGDLLIMPORT int IntervalStyle;
+extern __thread PGDLLIMPORT int IntervalStyle;
 
 #define MAXTZLEN		10		/* max TZ name len, not counting tr. null */
 
-extern bool enableFsync;
-extern PGDLLIMPORT bool allowSystemTableMods;
-extern PGDLLIMPORT int work_mem;
-extern PGDLLIMPORT double hash_mem_multiplier;
-extern PGDLLIMPORT int maintenance_work_mem;
-extern PGDLLIMPORT int max_parallel_maintenance_workers;
+extern __thread bool enableFsync;
+extern __thread PGDLLIMPORT bool allowSystemTableMods;
+extern __thread PGDLLIMPORT int work_mem;
+extern __thread PGDLLIMPORT double hash_mem_multiplier;
+extern __thread PGDLLIMPORT int maintenance_work_mem;
+extern __thread PGDLLIMPORT int max_parallel_maintenance_workers;
 
-extern int	VacuumCostPageHit;
-extern int	VacuumCostPageMiss;
-extern int	VacuumCostPageDirty;
-extern int	VacuumCostLimit;
-extern double VacuumCostDelay;
+extern __thread int	VacuumCostPageHit;
+extern __thread int	VacuumCostPageMiss;
+extern __thread int	VacuumCostPageDirty;
+extern __thread int	VacuumCostLimit;
+extern __thread double VacuumCostDelay;
 
-extern int64 VacuumPageHit;
-extern int64 VacuumPageMiss;
-extern int64 VacuumPageDirty;
+extern __thread int64 VacuumPageHit;
+extern __thread int64 VacuumPageMiss;
+extern __thread int64 VacuumPageDirty;
 
-extern int	VacuumCostBalance;
-extern bool VacuumCostActive;
+extern __thread int	VacuumCostBalance;
+extern __thread bool VacuumCostActive;
 
-extern double vacuum_cleanup_index_scale_factor;
+extern __thread double vacuum_cleanup_index_scale_factor;
 
 
 /* in tcop/postgres.c */
@@ -298,7 +298,7 @@ extern void PreventCommandIfParallelMode(const char *cmdname);
 extern void PreventCommandDuringRecovery(const char *cmdname);
 
 /* in utils/misc/guc.c */
-extern int	trace_recovery_messages;
+extern __thread int	trace_recovery_messages;
 extern int	trace_recovery(int trace_level);
 
 /*****************************************************************************
@@ -337,7 +337,7 @@ typedef enum BackendType
 	B_LOGGER,
 } BackendType;
 
-extern BackendType MyBackendType;
+extern __thread BackendType MyBackendType;
 
 extern const char *GetBackendTypeDesc(BackendType backendType);
 
@@ -400,7 +400,7 @@ typedef enum ProcessingMode
 	NormalProcessing			/* normal processing */
 } ProcessingMode;
 
-extern ProcessingMode Mode;
+extern __thread ProcessingMode Mode;
 
 #define IsBootstrapProcessingMode() (Mode == BootstrapProcessing)
 #define IsInitProcessingMode()		(Mode == InitProcessing)
@@ -437,7 +437,7 @@ typedef enum
 	NUM_AUXPROCTYPES			/* Must be last! */
 } AuxProcType;
 
-extern AuxProcType MyAuxProcType;
+extern __thread AuxProcType MyAuxProcType;
 
 #define AmBootstrapProcess()		(MyAuxProcType == BootstrapProcess)
 #define AmStartupProcess()			(MyAuxProcType == StartupProcess)
@@ -460,8 +460,8 @@ extern void InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 extern void BaseInit(void);
 
 /* in utils/init/miscinit.c */
-extern bool IgnoreSystemIndexes;
-extern PGDLLIMPORT bool process_shared_preload_libraries_in_progress;
+extern __thread bool IgnoreSystemIndexes;
+extern __thread PGDLLIMPORT bool process_shared_preload_libraries_in_progress;
 extern char *session_preload_libraries_string;
 extern char *shared_preload_libraries_string;
 extern char *local_preload_libraries_string;

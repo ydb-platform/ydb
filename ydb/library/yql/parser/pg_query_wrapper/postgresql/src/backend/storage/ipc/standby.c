@@ -36,15 +36,15 @@
 #include "utils/timestamp.h"
 
 /* User-settable GUC parameters */
-int			vacuum_defer_cleanup_age;
-int			max_standby_archive_delay = 30 * 1000;
-int			max_standby_streaming_delay = 30 * 1000;
+__thread int			vacuum_defer_cleanup_age;
+__thread int			max_standby_archive_delay = 30 * 1000;
+__thread int			max_standby_streaming_delay = 30 * 1000;
 
 static HTAB *RecoveryLockLists;
 
 /* Flags set by timeout handlers */
-static volatile sig_atomic_t got_standby_deadlock_timeout = false;
-static volatile sig_atomic_t got_standby_lock_timeout = false;
+static __thread volatile sig_atomic_t got_standby_deadlock_timeout = false;
+static __thread volatile sig_atomic_t got_standby_lock_timeout = false;
 
 static void ResolveRecoveryConflictWithVirtualXIDs(VirtualTransactionId *waitlist,
 												   ProcSignalReason reason,
@@ -197,7 +197,7 @@ GetStandbyLimitTime(void)
 }
 
 #define STANDBY_INITIAL_WAIT_US  1000
-static int	standbyWait_us = STANDBY_INITIAL_WAIT_US;
+static __thread int	standbyWait_us = STANDBY_INITIAL_WAIT_US;
 
 /*
  * Standby wait logic for ResolveRecoveryConflictWithVirtualXIDs.

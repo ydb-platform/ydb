@@ -212,7 +212,7 @@ typedef union YYSTYPE YYSTYPE;
 #endif
 
 
-extern YYSTYPE replication_yylval;
+extern __thread YYSTYPE replication_yylval;
 
 int replication_yyparse (void);
 
@@ -1102,7 +1102,7 @@ yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep)
 int yychar;
 
 /* The semantic value of the lookahead symbol.  */
-YYSTYPE yylval;
+__thread YYSTYPE replication_yylval;
 /* Number of syntax errors so far.  */
 int yynerrs;
 

@@ -88,7 +88,7 @@ typedef struct FlushPosition
 	XLogRecPtr	remote_end;
 } FlushPosition;
 
-static dlist_head lsn_mapping = DLIST_STATIC_INIT(lsn_mapping);
+static __thread dlist_head lsn_mapping ;void lsn_mapping_init(void) { dlist_init(&lsn_mapping); }
 
 typedef struct SlotErrCallbackArg
 {
@@ -108,16 +108,16 @@ typedef struct ApplyExecutionData
 	PartitionTupleRouting *proute;	/* partition routing info */
 } ApplyExecutionData;
 
-static MemoryContext ApplyMessageContext = NULL;
-MemoryContext ApplyContext = NULL;
+static __thread MemoryContext ApplyMessageContext = NULL;
+__thread MemoryContext ApplyContext = NULL;
 
 WalReceiverConn *LogRepWorkerWalRcvConn = NULL;
 
 Subscription *MySubscription = NULL;
-bool		MySubscriptionValid = false;
+__thread bool		MySubscriptionValid = false;
 
-bool		in_remote_transaction = false;
-static XLogRecPtr remote_final_lsn = InvalidXLogRecPtr;
+__thread bool		in_remote_transaction = false;
+static __thread XLogRecPtr remote_final_lsn = InvalidXLogRecPtr;
 
 static void send_feedback(XLogRecPtr recvpos, bool force, bool requestReply);
 

@@ -120,10 +120,10 @@ typedef struct SMgrSortArray
 } SMgrSortArray;
 
 /* GUC variables */
-bool		zero_damaged_pages = false;
-int			bgwriter_lru_maxpages = 100;
-double		bgwriter_lru_multiplier = 2.0;
-bool		track_io_timing = false;
+__thread bool		zero_damaged_pages = false;
+__thread int			bgwriter_lru_maxpages = 100;
+__thread double		bgwriter_lru_multiplier = 2.0;
+__thread bool		track_io_timing = false;
 
 /*
  * How many buffers PrefetchBuffer callers should try to stay ahead of their
@@ -131,26 +131,26 @@ bool		track_io_timing = false;
  * for buffers not belonging to tablespaces that have their
  * effective_io_concurrency parameter set.
  */
-int			effective_io_concurrency = 0;
+__thread int			effective_io_concurrency = 0;
 
 /*
  * Like effective_io_concurrency, but used by maintenance code paths that might
  * benefit from a higher setting because they work on behalf of many sessions.
  * Overridden by the tablespace setting of the same name.
  */
-int			maintenance_io_concurrency = 0;
+__thread int			maintenance_io_concurrency = 0;
 
 /*
  * GUC variables about triggering kernel writeback for buffers written; OS
  * dependent defaults are set via the GUC mechanism.
  */
-int			checkpoint_flush_after = 0;
-int			bgwriter_flush_after = 0;
-int			backend_flush_after = 0;
+__thread int			checkpoint_flush_after = 0;
+__thread int			bgwriter_flush_after = 0;
+__thread int			backend_flush_after = 0;
 
 /* local state for StartBufferIO and related functions */
 static BufferDesc *InProgressBuf = NULL;
-static bool IsForInput;
+static __thread bool IsForInput;
 
 /* local state for LockBufferForCleanup */
 static BufferDesc *PinCountWaitBuf = NULL;
@@ -187,8 +187,8 @@ static BufferDesc *PinCountWaitBuf = NULL;
  */
 static struct PrivateRefCountEntry PrivateRefCountArray[REFCOUNT_ARRAY_ENTRIES];
 static HTAB *PrivateRefCountHash = NULL;
-static int32 PrivateRefCountOverflowed = 0;
-static uint32 PrivateRefCountClock = 0;
+static __thread int32 PrivateRefCountOverflowed = 0;
+static __thread uint32 PrivateRefCountClock = 0;
 static PrivateRefCountEntry *ReservedRefCountEntry = NULL;
 
 static void ReservePrivateRefCountEntry(void);

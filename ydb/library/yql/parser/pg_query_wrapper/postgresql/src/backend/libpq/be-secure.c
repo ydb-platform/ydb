@@ -44,10 +44,10 @@ char	   *ssl_ca_file;
 char	   *ssl_crl_file;
 char	   *ssl_dh_params_file;
 char	   *ssl_passphrase_command;
-bool		ssl_passphrase_command_supports_reload;
+__thread bool		ssl_passphrase_command_supports_reload;
 
 #ifdef USE_SSL
-bool		ssl_loaded_verify_locations = false;
+__thread bool		ssl_loaded_verify_locations = false;
 #endif
 
 /* GUC variable controlling SSL cipher list */
@@ -57,10 +57,10 @@ char	   *SSLCipherSuites = NULL;
 char	   *SSLECDHCurve;
 
 /* GUC variable: if false, prefer client ciphers */
-bool		SSLPreferServerCiphers;
+__thread bool		SSLPreferServerCiphers;
 
-int			ssl_min_protocol_version;
-int			ssl_max_protocol_version;
+__thread int			ssl_min_protocol_version;
+__thread int			ssl_max_protocol_version;
 
 /* ------------------------------------------------------------ */
 /*			 Procedures common to all secure sessions			*/

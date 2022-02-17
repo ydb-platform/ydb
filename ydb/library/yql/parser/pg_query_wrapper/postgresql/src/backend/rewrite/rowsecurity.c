@@ -93,8 +93,8 @@ static bool check_role_for_policy(ArrayType *policy_roles, Oid user_id);
  * row_security_policy_hook_restrictive can be used to add policies which
  * are enforced, regardless of other policies (they are combined using AND).
  */
-row_security_policy_hook_type row_security_policy_hook_permissive = NULL;
-row_security_policy_hook_type row_security_policy_hook_restrictive = NULL;
+__thread row_security_policy_hook_type row_security_policy_hook_permissive = NULL;
+__thread row_security_policy_hook_type row_security_policy_hook_restrictive = NULL;
 
 /*
  * Get any row security quals and WithCheckOption checks that should be

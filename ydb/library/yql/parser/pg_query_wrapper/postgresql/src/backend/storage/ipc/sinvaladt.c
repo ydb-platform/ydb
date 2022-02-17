@@ -191,7 +191,7 @@ typedef struct SISeg
 static SISeg *shmInvalBuffer;	/* pointer to the shared inval buffer */
 
 
-static LocalTransactionId nextLocalTransactionId;
+static __thread LocalTransactionId nextLocalTransactionId;
 
 static void CleanupInvalidationState(int status, Datum arg);
 

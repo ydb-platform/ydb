@@ -38,8 +38,8 @@
 #define XACT_REPEATABLE_READ	2
 #define XACT_SERIALIZABLE		3
 
-extern int	DefaultXactIsoLevel;
-extern PGDLLIMPORT int XactIsoLevel;
+extern __thread int	DefaultXactIsoLevel;
+extern __thread PGDLLIMPORT int XactIsoLevel;
 
 /*
  * We implement three isolation levels internally.
@@ -52,18 +52,18 @@ extern PGDLLIMPORT int XactIsoLevel;
 #define IsolationIsSerializable() (XactIsoLevel == XACT_SERIALIZABLE)
 
 /* Xact read-only state */
-extern bool DefaultXactReadOnly;
-extern bool XactReadOnly;
+extern __thread bool DefaultXactReadOnly;
+extern __thread bool XactReadOnly;
 
 /* flag for logging statements in this transaction */
-extern bool xact_is_sampled;
+extern __thread bool xact_is_sampled;
 
 /*
  * Xact is deferrable -- only meaningful (currently) for read only
  * SERIALIZABLE transactions
  */
-extern bool DefaultXactDeferrable;
-extern bool XactDeferrable;
+extern __thread bool DefaultXactDeferrable;
+extern __thread bool XactDeferrable;
 
 typedef enum
 {
@@ -80,7 +80,7 @@ typedef enum
 #define SYNCHRONOUS_COMMIT_ON	SYNCHRONOUS_COMMIT_REMOTE_FLUSH
 
 /* Synchronous commit level */
-extern int	synchronous_commit;
+extern __thread int	synchronous_commit;
 
 /*
  * Miscellaneous flag bits to record events which occur on the top level
@@ -89,7 +89,7 @@ extern int	synchronous_commit;
  * globally accessible, so can be set from anywhere in the code which requires
  * recording flags.
  */
-extern int	MyXactFlags;
+extern __thread int	MyXactFlags;
 
 /*
  * XACT_FLAGS_ACCESSEDTEMPNAMESPACE - set when a temporary object is accessed.

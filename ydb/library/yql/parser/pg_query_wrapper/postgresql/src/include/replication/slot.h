@@ -183,7 +183,7 @@ extern PGDLLIMPORT ReplicationSlotCtlData *ReplicationSlotCtl;
 extern PGDLLIMPORT ReplicationSlot *MyReplicationSlot;
 
 /* GUCs */
-extern PGDLLIMPORT int max_replication_slots;
+extern __thread PGDLLIMPORT int max_replication_slots;
 
 /* shmem initialization functions */
 extern Size ReplicationSlotsShmemSize(void);

@@ -109,8 +109,8 @@ char	   *localized_abbrev_months[12 + 1];
 char	   *localized_full_months[12 + 1];
 
 /* indicates whether locale information cache is valid */
-static bool CurrentLocaleConvValid = false;
-static bool CurrentLCTimeValid = false;
+static __thread bool CurrentLocaleConvValid = false;
+static __thread bool CurrentLCTimeValid = false;
 
 /* Environment variable storage area */
 

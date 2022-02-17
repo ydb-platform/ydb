@@ -138,7 +138,7 @@
  * This GUC parameter lets the DBA limit max_safe_fds to something less than
  * what the postmaster's initial probe suggests will work.
  */
-int			max_files_per_process = 1000;
+__thread int			max_files_per_process = 1000;
 
 /*
  * Maximum number of file descriptors to open for operations that fd.c knows
@@ -151,10 +151,10 @@ int			max_files_per_process = 1000;
  * Note: the value of max_files_per_process is taken into account while
  * setting this variable, and so need not be tested separately.
  */
-int			max_safe_fds = FD_MINFREE;	/* default if not changed */
+__thread int			max_safe_fds = FD_MINFREE;	/* default if not changed */
 
 /* Whether it is safe to continue running after fsync() fails. */
-bool		data_sync_retry = false;
+__thread bool		data_sync_retry = false;
 
 /* Debugging.... */
 
@@ -203,18 +203,18 @@ typedef struct vfd
  * Note that VfdCache[0] is not a usable VFD, just a list header.
  */
 static Vfd *VfdCache;
-static Size SizeVfdCache = 0;
+static __thread Size SizeVfdCache = 0;
 
 /*
  * Number of file descriptors known to be in use by VFD entries.
  */
-static int	nfile = 0;
+static __thread int	nfile = 0;
 
 /*
  * Flag to tell whether it's worth scanning VfdCache looking for temp files
  * to close
  */
-static bool have_xact_temporary_files = false;
+static __thread bool have_xact_temporary_files = false;
 
 /*
  * Tracks the total size of all temporary files.  Note: when temp_file_limit
@@ -222,7 +222,7 @@ static bool have_xact_temporary_files = false;
  * than INT_MAX kilobytes.  When not enforcing, it could theoretically
  * overflow, but we don't care.
  */
-static uint64 temporary_files_size = 0;
+static __thread uint64 temporary_files_size = 0;
 
 /*
  * List of OS handles opened with AllocateFile, AllocateDir and
@@ -248,20 +248,20 @@ typedef struct
 	}			desc;
 } AllocateDesc;
 
-static int	numAllocatedDescs = 0;
-static int	maxAllocatedDescs = 0;
+static __thread int	numAllocatedDescs = 0;
+static __thread int	maxAllocatedDescs = 0;
 static AllocateDesc *allocatedDescs = NULL;
 
 /*
  * Number of open "external" FDs reported to Reserve/ReleaseExternalFD.
  */
-static int	numExternalFDs = 0;
+static __thread int	numExternalFDs = 0;
 
 /*
  * Number of temporary files opened during the current session;
  * this is used in generation of tempfile names.
  */
-static long tempFileCounter = 0;
+static __thread long tempFileCounter = 0;
 
 /*
  * Array of OIDs of temp tablespaces.  (Some entries may be InvalidOid,
@@ -270,8 +270,8 @@ static long tempFileCounter = 0;
  * transaction.
  */
 static Oid *tempTableSpaces = NULL;
-static int	numTempTableSpaces = -1;
-static int	nextTempTableSpace = 0;
+static __thread int	numTempTableSpaces = -1;
+static __thread int	nextTempTableSpace = 0;
 
 
 /*--------------------

@@ -85,9 +85,9 @@ extern char *ssl_ca_file;
 extern char *ssl_crl_file;
 extern char *ssl_dh_params_file;
 extern PGDLLIMPORT char *ssl_passphrase_command;
-extern PGDLLIMPORT bool ssl_passphrase_command_supports_reload;
+extern __thread PGDLLIMPORT bool ssl_passphrase_command_supports_reload;
 #ifdef USE_SSL
-extern bool ssl_loaded_verify_locations;
+extern __thread bool ssl_loaded_verify_locations;
 #endif
 
 extern int	secure_initialize(bool isServerStart);
@@ -110,9 +110,9 @@ extern ssize_t secure_open_gssapi(Port *port);
 /* GUCs */
 extern char *SSLCipherSuites;
 extern char *SSLECDHCurve;
-extern bool SSLPreferServerCiphers;
-extern int	ssl_min_protocol_version;
-extern int	ssl_max_protocol_version;
+extern __thread bool SSLPreferServerCiphers;
+extern __thread int	ssl_min_protocol_version;
+extern __thread int	ssl_max_protocol_version;
 
 enum ssl_protocol_versions
 {

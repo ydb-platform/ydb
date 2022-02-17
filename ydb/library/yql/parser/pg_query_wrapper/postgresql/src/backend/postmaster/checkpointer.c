@@ -143,22 +143,22 @@ static CheckpointerShmemStruct *CheckpointerShmem;
 /*
  * GUC parameters
  */
-int			CheckPointTimeout = 300;
-int			CheckPointWarning = 30;
-double		CheckPointCompletionTarget = 0.5;
+__thread int			CheckPointTimeout = 300;
+__thread int			CheckPointWarning = 30;
+__thread double		CheckPointCompletionTarget = 0.5;
 
 /*
  * Private state
  */
-static bool ckpt_active = false;
+static __thread bool ckpt_active = false;
 
 /* these values are valid when ckpt_active is true: */
-static pg_time_t ckpt_start_time;
-static XLogRecPtr ckpt_start_recptr;
-static double ckpt_cached_elapsed;
+static __thread pg_time_t ckpt_start_time;
+static __thread XLogRecPtr ckpt_start_recptr;
+static __thread double ckpt_cached_elapsed;
 
-static pg_time_t last_checkpoint_time;
-static pg_time_t last_xlog_switch_time;
+static __thread pg_time_t last_checkpoint_time;
+static __thread pg_time_t last_xlog_switch_time;
 
 /* Prototypes for private functions */
 

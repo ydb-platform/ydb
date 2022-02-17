@@ -25,15 +25,15 @@ typedef enum
 } CRSSnapshotAction;
 
 /* global state */
-extern bool am_walsender;
-extern bool am_cascading_walsender;
-extern bool am_db_walsender;
-extern bool wake_wal_senders;
+extern __thread bool am_walsender;
+extern __thread bool am_cascading_walsender;
+extern __thread bool am_db_walsender;
+extern __thread bool wake_wal_senders;
 
 /* user-settable parameters */
-extern int	max_wal_senders;
-extern int	wal_sender_timeout;
-extern bool log_replication_commands;
+extern __thread int	max_wal_senders;
+extern __thread int	wal_sender_timeout;
+extern __thread bool log_replication_commands;
 
 extern void InitWalSender(void);
 extern bool exec_replication_command(const char *query_string);

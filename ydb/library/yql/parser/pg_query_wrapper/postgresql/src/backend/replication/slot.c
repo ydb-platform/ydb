@@ -96,7 +96,7 @@ ReplicationSlotCtlData *ReplicationSlotCtl = NULL;
 ReplicationSlot *MyReplicationSlot = NULL;
 
 /* GUCs */
-int			max_replication_slots = 0;	/* the maximum number of replication
+__thread int			max_replication_slots = 0;	/* the maximum number of replication
 										 * slots */
 
 static ReplicationSlot *SearchNamedReplicationSlot(const char *name);

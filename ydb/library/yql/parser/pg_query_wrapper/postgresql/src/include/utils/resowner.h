@@ -30,10 +30,10 @@ typedef struct ResourceOwnerData *ResourceOwner;
 /*
  * Globally known ResourceOwners
  */
-extern PGDLLIMPORT ResourceOwner CurrentResourceOwner;
-extern PGDLLIMPORT ResourceOwner CurTransactionResourceOwner;
-extern PGDLLIMPORT ResourceOwner TopTransactionResourceOwner;
-extern PGDLLIMPORT ResourceOwner AuxProcessResourceOwner;
+extern __thread PGDLLIMPORT ResourceOwner CurrentResourceOwner;
+extern __thread PGDLLIMPORT ResourceOwner CurTransactionResourceOwner;
+extern __thread PGDLLIMPORT ResourceOwner TopTransactionResourceOwner;
+extern __thread PGDLLIMPORT ResourceOwner AuxProcessResourceOwner;
 
 /*
  * Resource releasing is done in three phases: pre-locks, locks, and

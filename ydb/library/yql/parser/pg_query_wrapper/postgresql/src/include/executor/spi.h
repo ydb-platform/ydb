@@ -77,9 +77,9 @@ typedef struct _SPI_plan *SPIPlanPtr;
 #define SPI_pop_conditional(pushed) ((void) 0)
 #define SPI_restore_connection()	((void) 0)
 
-extern PGDLLIMPORT uint64 SPI_processed;
+extern __thread PGDLLIMPORT uint64 SPI_processed;
 extern PGDLLIMPORT SPITupleTable *SPI_tuptable;
-extern PGDLLIMPORT int SPI_result;
+extern __thread PGDLLIMPORT int SPI_result;
 
 extern int	SPI_connect(void);
 extern int	SPI_connect_ext(int options);

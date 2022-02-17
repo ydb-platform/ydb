@@ -111,38 +111,38 @@
 #define APPEND_CPU_COST_MULTIPLIER 0.5
 
 
-double		seq_page_cost = DEFAULT_SEQ_PAGE_COST;
-double		random_page_cost = DEFAULT_RANDOM_PAGE_COST;
-double		cpu_tuple_cost = DEFAULT_CPU_TUPLE_COST;
-double		cpu_index_tuple_cost = DEFAULT_CPU_INDEX_TUPLE_COST;
-double		cpu_operator_cost = DEFAULT_CPU_OPERATOR_COST;
-double		parallel_tuple_cost = DEFAULT_PARALLEL_TUPLE_COST;
-double		parallel_setup_cost = DEFAULT_PARALLEL_SETUP_COST;
+__thread double		seq_page_cost = DEFAULT_SEQ_PAGE_COST;
+__thread double		random_page_cost = DEFAULT_RANDOM_PAGE_COST;
+__thread double		cpu_tuple_cost = DEFAULT_CPU_TUPLE_COST;
+__thread double		cpu_index_tuple_cost = DEFAULT_CPU_INDEX_TUPLE_COST;
+__thread double		cpu_operator_cost = DEFAULT_CPU_OPERATOR_COST;
+__thread double		parallel_tuple_cost = DEFAULT_PARALLEL_TUPLE_COST;
+__thread double		parallel_setup_cost = DEFAULT_PARALLEL_SETUP_COST;
 
-int			effective_cache_size = DEFAULT_EFFECTIVE_CACHE_SIZE;
+__thread int			effective_cache_size = DEFAULT_EFFECTIVE_CACHE_SIZE;
 
-Cost		disable_cost = 1.0e10;
+__thread Cost		disable_cost = 1.0e10;
 
-int			max_parallel_workers_per_gather = 2;
+__thread int			max_parallel_workers_per_gather = 2;
 
-bool		enable_seqscan = true;
-bool		enable_indexscan = true;
-bool		enable_indexonlyscan = true;
-bool		enable_bitmapscan = true;
-bool		enable_tidscan = true;
-bool		enable_sort = true;
-bool		enable_incremental_sort = true;
-bool		enable_hashagg = true;
-bool		enable_nestloop = true;
-bool		enable_material = true;
-bool		enable_mergejoin = true;
-bool		enable_hashjoin = true;
-bool		enable_gathermerge = true;
-bool		enable_partitionwise_join = false;
-bool		enable_partitionwise_aggregate = false;
-bool		enable_parallel_append = true;
-bool		enable_parallel_hash = true;
-bool		enable_partition_pruning = true;
+__thread bool		enable_seqscan = true;
+__thread bool		enable_indexscan = true;
+__thread bool		enable_indexonlyscan = true;
+__thread bool		enable_bitmapscan = true;
+__thread bool		enable_tidscan = true;
+__thread bool		enable_sort = true;
+__thread bool		enable_incremental_sort = true;
+__thread bool		enable_hashagg = true;
+__thread bool		enable_nestloop = true;
+__thread bool		enable_material = true;
+__thread bool		enable_mergejoin = true;
+__thread bool		enable_hashjoin = true;
+__thread bool		enable_gathermerge = true;
+__thread bool		enable_partitionwise_join = false;
+__thread bool		enable_partitionwise_aggregate = false;
+__thread bool		enable_parallel_append = true;
+__thread bool		enable_parallel_hash = true;
+__thread bool		enable_partition_pruning = true;
 
 typedef struct
 {

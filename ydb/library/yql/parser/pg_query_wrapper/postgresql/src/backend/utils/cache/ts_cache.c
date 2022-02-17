@@ -74,7 +74,7 @@ static TSConfigCacheEntry *lastUsedConfig = NULL;
  */
 char	   *TSCurrentConfig = NULL;
 
-static Oid	TSCurrentConfigCache = InvalidOid;
+static __thread Oid	TSCurrentConfigCache = InvalidOid;
 
 
 /*

@@ -45,27 +45,27 @@ typedef enum
  */
 
 /* parameter variables and flags (see also optimizer.h) */
-extern PGDLLIMPORT Cost disable_cost;
-extern PGDLLIMPORT int max_parallel_workers_per_gather;
-extern PGDLLIMPORT bool enable_seqscan;
-extern PGDLLIMPORT bool enable_indexscan;
-extern PGDLLIMPORT bool enable_indexonlyscan;
-extern PGDLLIMPORT bool enable_bitmapscan;
-extern PGDLLIMPORT bool enable_tidscan;
-extern PGDLLIMPORT bool enable_sort;
-extern PGDLLIMPORT bool enable_incremental_sort;
-extern PGDLLIMPORT bool enable_hashagg;
-extern PGDLLIMPORT bool enable_nestloop;
-extern PGDLLIMPORT bool enable_material;
-extern PGDLLIMPORT bool enable_mergejoin;
-extern PGDLLIMPORT bool enable_hashjoin;
-extern PGDLLIMPORT bool enable_gathermerge;
-extern PGDLLIMPORT bool enable_partitionwise_join;
-extern PGDLLIMPORT bool enable_partitionwise_aggregate;
-extern PGDLLIMPORT bool enable_parallel_append;
-extern PGDLLIMPORT bool enable_parallel_hash;
-extern PGDLLIMPORT bool enable_partition_pruning;
-extern PGDLLIMPORT int constraint_exclusion;
+extern __thread PGDLLIMPORT Cost disable_cost;
+extern __thread PGDLLIMPORT int max_parallel_workers_per_gather;
+extern __thread PGDLLIMPORT bool enable_seqscan;
+extern __thread PGDLLIMPORT bool enable_indexscan;
+extern __thread PGDLLIMPORT bool enable_indexonlyscan;
+extern __thread PGDLLIMPORT bool enable_bitmapscan;
+extern __thread PGDLLIMPORT bool enable_tidscan;
+extern __thread PGDLLIMPORT bool enable_sort;
+extern __thread PGDLLIMPORT bool enable_incremental_sort;
+extern __thread PGDLLIMPORT bool enable_hashagg;
+extern __thread PGDLLIMPORT bool enable_nestloop;
+extern __thread PGDLLIMPORT bool enable_material;
+extern __thread PGDLLIMPORT bool enable_mergejoin;
+extern __thread PGDLLIMPORT bool enable_hashjoin;
+extern __thread PGDLLIMPORT bool enable_gathermerge;
+extern __thread PGDLLIMPORT bool enable_partitionwise_join;
+extern __thread PGDLLIMPORT bool enable_partitionwise_aggregate;
+extern __thread PGDLLIMPORT bool enable_parallel_append;
+extern __thread PGDLLIMPORT bool enable_parallel_hash;
+extern __thread PGDLLIMPORT bool enable_partition_pruning;
+extern __thread PGDLLIMPORT int constraint_exclusion;
 
 extern double index_pages_fetched(double tuples_fetched, BlockNumber pages,
 								  double index_pages, PlannerInfo *root);

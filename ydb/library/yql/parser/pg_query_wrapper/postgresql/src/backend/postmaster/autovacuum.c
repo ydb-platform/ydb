@@ -111,23 +111,23 @@
 /*
  * GUC parameters
  */
-bool		autovacuum_start_daemon = false;
-int			autovacuum_max_workers;
-int			autovacuum_work_mem = -1;
-int			autovacuum_naptime;
-int			autovacuum_vac_thresh;
-double		autovacuum_vac_scale;
-int			autovacuum_vac_ins_thresh;
-double		autovacuum_vac_ins_scale;
-int			autovacuum_anl_thresh;
-double		autovacuum_anl_scale;
-int			autovacuum_freeze_max_age;
-int			autovacuum_multixact_freeze_max_age;
+__thread bool		autovacuum_start_daemon = false;
+__thread int			autovacuum_max_workers;
+__thread int			autovacuum_work_mem = -1;
+__thread int			autovacuum_naptime;
+__thread int			autovacuum_vac_thresh;
+__thread double		autovacuum_vac_scale;
+__thread int			autovacuum_vac_ins_thresh;
+__thread double		autovacuum_vac_ins_scale;
+__thread int			autovacuum_anl_thresh;
+__thread double		autovacuum_anl_scale;
+__thread int			autovacuum_freeze_max_age;
+__thread int			autovacuum_multixact_freeze_max_age;
 
-double		autovacuum_vac_cost_delay;
-int			autovacuum_vac_cost_limit;
+__thread double		autovacuum_vac_cost_delay;
+__thread int			autovacuum_vac_cost_limit;
 
-int			Log_autovacuum_min_duration = -1;
+__thread int			Log_autovacuum_min_duration = -1;
 
 /* how long to keep pgstat data in the launcher, in milliseconds */
 #define STATS_READ_DELAY 1000
@@ -137,24 +137,24 @@ int			Log_autovacuum_min_duration = -1;
 #define MAX_AUTOVAC_SLEEPTIME 300	/* seconds */
 
 /* Flags to tell if we are in an autovacuum process */
-static bool am_autovacuum_launcher = false;
-static bool am_autovacuum_worker = false;
+static __thread bool am_autovacuum_launcher = false;
+static __thread bool am_autovacuum_worker = false;
 
 /* Flags set by signal handlers */
-static volatile sig_atomic_t got_SIGUSR2 = false;
+static __thread volatile sig_atomic_t got_SIGUSR2 = false;
 
 /* Comparison points for determining whether freeze_max_age is exceeded */
-static TransactionId recentXid;
-static MultiXactId recentMulti;
+static __thread TransactionId recentXid;
+static __thread MultiXactId recentMulti;
 
 /* Default freeze ages to use for autovacuum (varies by database) */
-static int	default_freeze_min_age;
-static int	default_freeze_table_age;
-static int	default_multixact_freeze_min_age;
-static int	default_multixact_freeze_table_age;
+static __thread int	default_freeze_min_age;
+static __thread int	default_freeze_table_age;
+static __thread int	default_multixact_freeze_min_age;
+static __thread int	default_multixact_freeze_table_age;
 
 /* Memory context for long-lived data */
-static MemoryContext AutovacMemCxt;
+static __thread MemoryContext AutovacMemCxt;
 
 /* struct to keep track of databases in launcher */
 typedef struct avl_dbase
@@ -295,14 +295,14 @@ static AutoVacuumShmemStruct *AutoVacuumShmem;
  * the database list (of avl_dbase elements) in the launcher, and the context
  * that contains it
  */
-static dlist_head DatabaseList = DLIST_STATIC_INIT(DatabaseList);
-static MemoryContext DatabaseListCxt = NULL;
+static __thread dlist_head DatabaseList ;void DatabaseList_init(void) { dlist_init(&DatabaseList); }
+static __thread MemoryContext DatabaseListCxt = NULL;
 
 /* Pointer to my own WorkerInfo, valid on each worker */
-static WorkerInfo MyWorkerInfo = NULL;
+static __thread WorkerInfo MyWorkerInfo = NULL;
 
 /* PID of launcher, valid only in worker while shutting down */
-int			AutovacuumLauncherPid = 0;
+__thread int			AutovacuumLauncherPid = 0;
 
 #ifdef EXEC_BACKEND
 static pid_t avlauncher_forkexec(void);

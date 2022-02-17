@@ -72,9 +72,9 @@ typedef struct
  *		is a member of (always including itself).
  * The cache is valid if cached_member_role is not InvalidOid.
  */
-static Oid	cached_privs_role = InvalidOid;
+static __thread Oid	cached_privs_role = InvalidOid;
 static List *cached_privs_roles = NIL;
-static Oid	cached_member_role = InvalidOid;
+static __thread Oid	cached_member_role = InvalidOid;
 static List *cached_membership_roles = NIL;
 
 

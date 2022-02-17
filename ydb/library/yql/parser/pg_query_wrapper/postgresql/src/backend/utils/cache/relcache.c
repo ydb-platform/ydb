@@ -134,13 +134,13 @@ static HTAB *RelationIdCache;
  * This flag is false until we have prepared the critical relcache entries
  * that are needed to do indexscans on the tables read by relcache building.
  */
-bool		criticalRelcachesBuilt = false;
+__thread bool		criticalRelcachesBuilt = false;
 
 /*
  * This flag is false until we have prepared the critical relcache entries
  * for shared catalogs (which are the tables needed for login).
  */
-bool		criticalSharedRelcachesBuilt = false;
+__thread bool		criticalSharedRelcachesBuilt = false;
 
 /*
  * This counter counts relcache inval events received since backend startup
@@ -148,7 +148,7 @@ bool		criticalSharedRelcachesBuilt = false;
  * to detect whether data about to be written by write_relcache_init_file()
  * might already be obsolete.
  */
-static long relcacheInvalsReceived = 0L;
+static __thread long relcacheInvalsReceived = 0L;
 
 /*
  * in_progress_list is a stack of ongoing RelationBuildDesc() calls.  CREATE
@@ -165,8 +165,8 @@ typedef struct inprogressent
 } InProgressEnt;
 
 static InProgressEnt *in_progress_list;
-static int	in_progress_list_len;
-static int	in_progress_list_maxlen;
+static __thread int	in_progress_list_len;
+static __thread int	in_progress_list_maxlen;
 
 /*
  * eoxact_list[] stores the OIDs of relations that (might) need AtEOXact
@@ -180,8 +180,8 @@ static int	in_progress_list_maxlen;
  */
 #define MAX_EOXACT_LIST 32
 static Oid	eoxact_list[MAX_EOXACT_LIST];
-static int	eoxact_list_len = 0;
-static bool eoxact_list_overflowed = false;
+static __thread int	eoxact_list_len = 0;
+static __thread bool eoxact_list_overflowed = false;
 
 #define EOXactListAdd(rel) \
 	do { \
@@ -197,8 +197,8 @@ static bool eoxact_list_overflowed = false;
  * we don't need to access individual items except at EOXact.
  */
 static TupleDesc *EOXactTupleDescArray;
-static int	NextEOXactTupleDescNum = 0;
-static int	EOXactTupleDescArrayLen = 0;
+static __thread int	NextEOXactTupleDescNum = 0;
+static __thread int	EOXactTupleDescArrayLen = 0;
 
 /*
  *		macros to manipulate the lookup hashtable

@@ -47,10 +47,10 @@
 #define SAMESIGN(a,b)	(((a) < 0) == ((b) < 0))
 
 /* Set at postmaster start */
-TimestampTz PgStartTime;
+__thread TimestampTz PgStartTime;
 
 /* Set at configuration reload */
-TimestampTz PgReloadTime;
+__thread TimestampTz PgReloadTime;
 
 typedef struct
 {

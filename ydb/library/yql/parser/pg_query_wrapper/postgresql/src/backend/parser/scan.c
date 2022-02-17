@@ -5137,8 +5137,8 @@ fprintf_to_ereport(const char *fmt, const char *msg)
  * But we shall have to live with it until we can remove these variables.
  */
 int			backslash_quote = BACKSLASH_QUOTE_SAFE_ENCODING;
-bool		escape_string_warning = true;
-bool		standard_conforming_strings = true;
+__thread bool		escape_string_warning = true;
+__thread bool		standard_conforming_strings = true;
 
 /*
  * Constant data exported from this file.  This array maps from the

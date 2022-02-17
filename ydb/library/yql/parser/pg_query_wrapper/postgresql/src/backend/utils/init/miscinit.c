@@ -55,14 +55,14 @@
 
 #define DIRECTORY_LOCK_FILE		"postmaster.pid"
 
-ProcessingMode Mode = InitProcessing;
+__thread ProcessingMode Mode = InitProcessing;
 
-BackendType MyBackendType;
+__thread BackendType MyBackendType;
 
 /* List of lock files to be removed at proc exit */
 static List *lock_files = NIL;
 
-static Latch LocalLatchData;
+static __thread Latch LocalLatchData;
 
 /* ----------------------------------------------------------------
  *		ignoring system indexes support stuff
@@ -74,7 +74,7 @@ static Latch LocalLatchData;
  * ----------------------------------------------------------------
  */
 
-bool		IgnoreSystemIndexes = false;
+__thread bool		IgnoreSystemIndexes = false;
 
 
 /* ----------------------------------------------------------------
@@ -425,19 +425,19 @@ ChangeToDataDir(void)
  * convenient way to do it.
  * ----------------------------------------------------------------
  */
-static Oid	AuthenticatedUserId = InvalidOid;
-static Oid	SessionUserId = InvalidOid;
-static Oid	OuterUserId = InvalidOid;
-static Oid	CurrentUserId = InvalidOid;
+static __thread Oid	AuthenticatedUserId = InvalidOid;
+static __thread Oid	SessionUserId = InvalidOid;
+static __thread Oid	OuterUserId = InvalidOid;
+static __thread Oid	CurrentUserId = InvalidOid;
 
 /* We also have to remember the superuser state of some of these levels */
-static bool AuthenticatedUserIsSuperuser = false;
-static bool SessionUserIsSuperuser = false;
+static __thread bool AuthenticatedUserIsSuperuser = false;
+static __thread bool SessionUserIsSuperuser = false;
 
-static int	SecurityRestrictionContext = 0;
+static __thread int	SecurityRestrictionContext = 0;
 
 /* We also remember if a SET ROLE is currently active */
-static bool SetRoleIsActive = false;
+static __thread bool SetRoleIsActive = false;
 
 /*
  * GetUserId - get the current effective user ID.
@@ -1565,7 +1565,7 @@ char	   *shared_preload_libraries_string = NULL;
 char	   *local_preload_libraries_string = NULL;
 
 /* Flag telling that we are loading shared_preload_libraries */
-bool		process_shared_preload_libraries_in_progress = false;
+__thread bool		process_shared_preload_libraries_in_progress = false;
 
 /*
  * load the shared libraries listed in 'libraries'

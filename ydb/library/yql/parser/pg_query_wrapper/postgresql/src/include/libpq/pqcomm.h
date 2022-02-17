@@ -149,7 +149,7 @@ typedef struct StartupPacket
 	char		tty[SM_TTY];	/* Tty for debug output */
 } StartupPacket;
 
-extern bool Db_user_namespace;
+extern __thread bool Db_user_namespace;
 
 /*
  * In protocol 3.0 and later, the startup packet length is not fixed, but

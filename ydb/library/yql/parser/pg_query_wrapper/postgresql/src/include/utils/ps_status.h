@@ -12,7 +12,7 @@
 #ifndef PS_STATUS_H
 #define PS_STATUS_H
 
-extern bool update_process_title;
+extern __thread bool update_process_title;
 
 extern char **save_ps_display_args(int argc, char **argv);
 

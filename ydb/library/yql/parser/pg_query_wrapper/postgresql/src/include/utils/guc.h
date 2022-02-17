@@ -233,37 +233,37 @@ typedef enum
 
 
 /* GUC vars that are actually declared in guc.c, rather than elsewhere */
-extern bool Debug_print_plan;
-extern bool Debug_print_parse;
-extern bool Debug_print_rewritten;
-extern bool Debug_pretty_print;
+extern __thread bool Debug_print_plan;
+extern __thread bool Debug_print_parse;
+extern __thread bool Debug_print_rewritten;
+extern __thread bool Debug_pretty_print;
 
-extern bool log_parser_stats;
-extern bool log_planner_stats;
-extern bool log_executor_stats;
-extern bool log_statement_stats;
-extern bool log_btree_build_stats;
+extern __thread bool log_parser_stats;
+extern __thread bool log_planner_stats;
+extern __thread bool log_executor_stats;
+extern __thread bool log_statement_stats;
+extern __thread bool log_btree_build_stats;
 
-extern PGDLLIMPORT bool check_function_bodies;
-extern bool session_auth_is_superuser;
+extern __thread PGDLLIMPORT bool check_function_bodies;
+extern __thread bool session_auth_is_superuser;
 
-extern bool log_duration;
-extern int	log_parameter_max_length;
-extern int	log_parameter_max_length_on_error;
-extern int	log_min_error_statement;
-extern PGDLLIMPORT int log_min_messages;
-extern PGDLLIMPORT int client_min_messages;
-extern int	log_min_duration_sample;
-extern int	log_min_duration_statement;
-extern int	log_temp_files;
-extern double log_statement_sample_rate;
-extern double log_xact_sample_rate;
+extern __thread bool log_duration;
+extern __thread int	log_parameter_max_length;
+extern __thread int	log_parameter_max_length_on_error;
+extern __thread int	log_min_error_statement;
+extern __thread PGDLLIMPORT int log_min_messages;
+extern __thread PGDLLIMPORT int client_min_messages;
+extern __thread int	log_min_duration_sample;
+extern __thread int	log_min_duration_statement;
+extern __thread int	log_temp_files;
+extern __thread double log_statement_sample_rate;
+extern __thread double log_xact_sample_rate;
 extern char *backtrace_functions;
 extern char *backtrace_symbol_list;
 
-extern int	temp_file_limit;
+extern __thread int	temp_file_limit;
 
-extern int	num_temp_buffers;
+extern __thread int	num_temp_buffers;
 
 extern char *cluster_name;
 extern PGDLLIMPORT char *ConfigFileName;
@@ -273,13 +273,13 @@ extern char *external_pid_file;
 
 extern PGDLLIMPORT char *application_name;
 
-extern int	tcp_keepalives_idle;
-extern int	tcp_keepalives_interval;
-extern int	tcp_keepalives_count;
-extern int	tcp_user_timeout;
+extern __thread int	tcp_keepalives_idle;
+extern __thread int	tcp_keepalives_interval;
+extern __thread int	tcp_keepalives_count;
+extern __thread int	tcp_user_timeout;
 
 #ifdef TRACE_SORT
-extern bool trace_sort;
+extern __thread bool trace_sort;
 #endif
 
 /*

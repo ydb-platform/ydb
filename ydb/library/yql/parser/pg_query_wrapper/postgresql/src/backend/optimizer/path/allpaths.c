@@ -59,16 +59,16 @@ typedef struct pushdown_safety_info
 } pushdown_safety_info;
 
 /* These parameters are set by GUC */
-bool		enable_geqo = false;	/* just in case GUC doesn't set it */
-int			geqo_threshold;
-int			min_parallel_table_scan_size;
-int			min_parallel_index_scan_size;
+__thread bool		enable_geqo = false;	/* just in case GUC doesn't set it */
+__thread int			geqo_threshold;
+__thread int			min_parallel_table_scan_size;
+__thread int			min_parallel_index_scan_size;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
-set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
+__thread set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
 
 /* Hook for plugins to replace standard_join_search() */
-join_search_hook_type join_search_hook = NULL;
+__thread join_search_hook_type join_search_hook = NULL;
 
 
 static void set_base_rel_consider_startup(PlannerInfo *root);

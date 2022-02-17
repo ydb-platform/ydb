@@ -24,7 +24,7 @@
 #include "storage/procarray.h"
 #include "utils/memutils.h"
 
-static MemoryContext opCtx;		/* working memory for operations */
+static __thread MemoryContext opCtx;		/* working memory for operations */
 
 /*
  * _bt_restore_page -- re-enter all the index tuples on a page

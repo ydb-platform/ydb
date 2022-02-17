@@ -39,7 +39,7 @@
 /*
  * The postmaster's list of registered background workers, in private memory.
  */
-slist_head	BackgroundWorkerList = SLIST_STATIC_INIT(BackgroundWorkerList);
+__thread slist_head	BackgroundWorkerList = SLIST_STATIC_INIT(BackgroundWorkerList);
 
 /*
  * BackgroundWorkerSlots exist in shared memory and can be accessed (via

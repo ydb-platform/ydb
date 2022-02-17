@@ -62,25 +62,25 @@ struct WritebackContext;
 struct SMgrRelationData;
 
 /* in globals.c ... this duplicates miscadmin.h */
-extern PGDLLIMPORT int NBuffers;
+extern __thread PGDLLIMPORT int NBuffers;
 
 /* in bufmgr.c */
-extern bool zero_damaged_pages;
-extern int	bgwriter_lru_maxpages;
-extern double bgwriter_lru_multiplier;
-extern bool track_io_timing;
-extern int	effective_io_concurrency;
-extern int	maintenance_io_concurrency;
+extern __thread bool zero_damaged_pages;
+extern __thread int	bgwriter_lru_maxpages;
+extern __thread double bgwriter_lru_multiplier;
+extern __thread bool track_io_timing;
+extern __thread int	effective_io_concurrency;
+extern __thread int	maintenance_io_concurrency;
 
-extern int	checkpoint_flush_after;
-extern int	backend_flush_after;
-extern int	bgwriter_flush_after;
+extern __thread int	checkpoint_flush_after;
+extern __thread int	backend_flush_after;
+extern __thread int	bgwriter_flush_after;
 
 /* in buf_init.c */
 extern PGDLLIMPORT char *BufferBlocks;
 
 /* in localbuf.c */
-extern PGDLLIMPORT int NLocBuffer;
+extern __thread PGDLLIMPORT int NLocBuffer;
 extern PGDLLIMPORT Block *LocalBufferBlockPointers;
 extern PGDLLIMPORT int32 *LocalRefCount;
 

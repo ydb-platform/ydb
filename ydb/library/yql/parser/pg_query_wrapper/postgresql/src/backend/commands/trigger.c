@@ -64,10 +64,10 @@
 
 
 /* GUC variables */
-int			SessionReplicationRole = SESSION_REPLICATION_ROLE_ORIGIN;
+__thread int			SessionReplicationRole = SESSION_REPLICATION_ROLE_ORIGIN;
 
 /* How many levels deep into trigger execution are we? */
-static int	MyTriggerDepth = 0;
+static __thread int	MyTriggerDepth = 0;
 
 /* Local function prototypes */
 static void SetTriggerFlags(TriggerDesc *trigdesc, Trigger *trigger);
@@ -3466,7 +3466,7 @@ struct AfterTriggersTableData
 	TupleTableSlot *storeslot;	/* for converting to tuplestore's format */
 };
 
-static AfterTriggersData afterTriggers;
+static __thread AfterTriggersData afterTriggers;
 
 static void AfterTriggerExecute(EState *estate,
 								AfterTriggerEvent event,

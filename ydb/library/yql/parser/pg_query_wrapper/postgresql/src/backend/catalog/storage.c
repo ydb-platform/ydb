@@ -35,7 +35,7 @@
 #include "utils/rel.h"
 
 /* GUC variables */
-int			wal_skip_threshold = 2048;	/* in kilobytes */
+__thread int			wal_skip_threshold = 2048;	/* in kilobytes */
 
 /*
  * We keep a list of all relations (represented as RelFileNode values)

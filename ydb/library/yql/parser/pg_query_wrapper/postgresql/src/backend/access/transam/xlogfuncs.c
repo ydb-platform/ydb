@@ -41,8 +41,8 @@
 /*
  * Store label file and tablespace map during non-exclusive backups.
  */
-static StringInfo label_file;
-static StringInfo tblspc_map_file;
+static __thread StringInfo label_file;
+static __thread StringInfo tblspc_map_file;
 
 /*
  * pg_start_backup: set up for taking an on-line backup dump

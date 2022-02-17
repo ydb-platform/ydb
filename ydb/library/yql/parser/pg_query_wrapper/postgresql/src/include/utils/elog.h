@@ -395,7 +395,7 @@ extern char *GetErrorContextStack(void);
 
 /* Hook for intercepting messages before they are sent to the server log */
 typedef void (*emit_log_hook_type) (ErrorData *edata);
-extern PGDLLIMPORT emit_log_hook_type emit_log_hook;
+extern __thread PGDLLIMPORT emit_log_hook_type emit_log_hook;
 
 
 /* GUC-configurable parameters */
@@ -407,12 +407,12 @@ typedef enum
 	PGERROR_VERBOSE				/* all the facts, ma'am */
 }			PGErrorVerbosity;
 
-extern int	Log_error_verbosity;
+extern __thread int	Log_error_verbosity;
 extern char *Log_line_prefix;
-extern int	Log_destination;
+extern __thread int	Log_destination;
 extern char *Log_destination_string;
-extern bool syslog_sequence_numbers;
-extern bool syslog_split_messages;
+extern __thread bool syslog_sequence_numbers;
+extern __thread bool syslog_split_messages;
 
 /* Log destination bitmap */
 #define LOG_DESTINATION_STDERR	 1

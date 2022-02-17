@@ -94,8 +94,8 @@
 
 
 /* GUC variables */
-int			xmlbinary;
-int			xmloption;
+__thread int			xmlbinary;
+__thread int			xmloption;
 
 #ifdef USE_LIBXML
 

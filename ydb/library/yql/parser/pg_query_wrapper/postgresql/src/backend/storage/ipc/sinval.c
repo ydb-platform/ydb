@@ -23,7 +23,7 @@
 #include "utils/inval.h"
 
 
-uint64		SharedInvalidMessageCounter;
+__thread uint64		SharedInvalidMessageCounter;
 
 
 /*
@@ -38,7 +38,7 @@ uint64		SharedInvalidMessageCounter;
  * interrupted while doing so, ProcessClientReadInterrupt() will call
  * ProcessCatchupEvent().
  */
-volatile sig_atomic_t catchupInterruptPending = false;
+__thread volatile sig_atomic_t catchupInterruptPending = false;
 
 
 /*

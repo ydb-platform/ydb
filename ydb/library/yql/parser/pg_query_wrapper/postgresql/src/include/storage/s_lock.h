@@ -1025,7 +1025,7 @@ extern int	tas(volatile slock_t *lock);		/* in port/.../tas.s, or
 #define TAS_SPIN(lock)	TAS(lock)
 #endif	 /* TAS_SPIN */
 
-extern slock_t dummy_spinlock;
+extern __thread slock_t dummy_spinlock;
 
 /*
  * Platform-independent out-of-line support routines

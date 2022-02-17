@@ -74,7 +74,7 @@ typedef struct CommitTimestampEntry
 /*
  * Link to shared-memory data structures for CommitTs control
  */
-static SlruCtlData CommitTsCtlData;
+static __thread SlruCtlData CommitTsCtlData;
 
 #define CommitTsCtl (&CommitTsCtlData)
 
@@ -100,7 +100,7 @@ CommitTimestampShared *commitTsShared;
 
 
 /* GUC variable */
-bool		track_commit_timestamp;
+__thread bool		track_commit_timestamp;
 
 static void SetXidCommitTsInPage(TransactionId xid, int nsubxids,
 								 TransactionId *subxids, TimestampTz ts,

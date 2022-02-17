@@ -35,8 +35,8 @@
 /*
  * Hooks for function calls
  */
-PGDLLIMPORT needs_fmgr_hook_type needs_fmgr_hook = NULL;
-PGDLLIMPORT fmgr_hook_type fmgr_hook = NULL;
+__thread PGDLLIMPORT needs_fmgr_hook_type needs_fmgr_hook = NULL;
+__thread PGDLLIMPORT fmgr_hook_type fmgr_hook = NULL;
 
 /*
  * Hashtable for fast lookup of external C functions

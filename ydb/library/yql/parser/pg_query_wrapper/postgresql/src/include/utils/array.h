@@ -334,7 +334,7 @@ typedef struct ArrayIteratorData *ArrayIterator;
 /*
  * GUC parameter
  */
-extern bool Array_nulls;
+extern __thread bool Array_nulls;
 
 /*
  * prototypes for functions defined in arrayfuncs.c

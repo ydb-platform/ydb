@@ -20,17 +20,17 @@
 /*
  * allpaths.c
  */
-extern PGDLLIMPORT bool enable_geqo;
-extern PGDLLIMPORT int geqo_threshold;
-extern PGDLLIMPORT int min_parallel_table_scan_size;
-extern PGDLLIMPORT int min_parallel_index_scan_size;
+extern __thread PGDLLIMPORT bool enable_geqo;
+extern __thread PGDLLIMPORT int geqo_threshold;
+extern __thread PGDLLIMPORT int min_parallel_table_scan_size;
+extern __thread PGDLLIMPORT int min_parallel_index_scan_size;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 typedef void (*set_rel_pathlist_hook_type) (PlannerInfo *root,
 											RelOptInfo *rel,
 											Index rti,
 											RangeTblEntry *rte);
-extern PGDLLIMPORT set_rel_pathlist_hook_type set_rel_pathlist_hook;
+extern __thread PGDLLIMPORT set_rel_pathlist_hook_type set_rel_pathlist_hook;
 
 /* Hook for plugins to get control in add_paths_to_joinrel() */
 typedef void (*set_join_pathlist_hook_type) (PlannerInfo *root,
@@ -39,13 +39,13 @@ typedef void (*set_join_pathlist_hook_type) (PlannerInfo *root,
 											 RelOptInfo *innerrel,
 											 JoinType jointype,
 											 JoinPathExtraData *extra);
-extern PGDLLIMPORT set_join_pathlist_hook_type set_join_pathlist_hook;
+extern __thread PGDLLIMPORT set_join_pathlist_hook_type set_join_pathlist_hook;
 
 /* Hook for plugins to replace standard_join_search() */
 typedef RelOptInfo *(*join_search_hook_type) (PlannerInfo *root,
 											  int levels_needed,
 											  List *initial_rels);
-extern PGDLLIMPORT join_search_hook_type join_search_hook;
+extern __thread PGDLLIMPORT join_search_hook_type join_search_hook;
 
 
 extern RelOptInfo *make_one_rel(PlannerInfo *root, List *joinlist);

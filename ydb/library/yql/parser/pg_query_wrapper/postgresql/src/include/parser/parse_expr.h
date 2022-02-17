@@ -16,8 +16,8 @@
 #include "parser/parse_node.h"
 
 /* GUC parameters */
-extern bool operator_precedence_warning;
-extern bool Transform_null_equals;
+extern __thread bool operator_precedence_warning;
+extern __thread bool Transform_null_equals;
 
 extern Node *transformExpr(ParseState *pstate, Node *expr, ParseExprKind exprKind);
 

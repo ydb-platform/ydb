@@ -20,9 +20,9 @@
 #include "storage/standbydefs.h"
 
 /* User-settable GUC parameters */
-extern int	vacuum_defer_cleanup_age;
-extern int	max_standby_archive_delay;
-extern int	max_standby_streaming_delay;
+extern __thread int	vacuum_defer_cleanup_age;
+extern __thread int	max_standby_archive_delay;
+extern __thread int	max_standby_streaming_delay;
 
 extern void InitRecoveryTransactionEnvironment(void);
 extern void ShutdownRecoveryTransactionEnvironment(void);

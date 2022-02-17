@@ -83,7 +83,7 @@
 #include "utils/tuplesort.h"
 
 /* Potentially set by pg_upgrade_support functions */
-Oid			binary_upgrade_next_index_pg_class_oid = InvalidOid;
+__thread Oid			binary_upgrade_next_index_pg_class_oid = InvalidOid;
 
 /*
  * Pointer-free representation of variables used when reindexing system
@@ -3860,10 +3860,10 @@ reindex_relation(Oid relid, int flags, int options)
  * ----------------------------------------------------------------
  */
 
-static Oid	currentlyReindexedHeap = InvalidOid;
-static Oid	currentlyReindexedIndex = InvalidOid;
+static __thread Oid	currentlyReindexedHeap = InvalidOid;
+static __thread Oid	currentlyReindexedIndex = InvalidOid;
 static List *pendingReindexedIndexes = NIL;
-static int	reindexingNestLevel = 0;
+static __thread int	reindexingNestLevel = 0;
 
 /*
  * ReindexIsProcessingHeap

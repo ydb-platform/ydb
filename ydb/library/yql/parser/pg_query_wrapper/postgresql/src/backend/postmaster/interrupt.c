@@ -23,8 +23,8 @@
 #include "storage/procsignal.h"
 #include "utils/guc.h"
 
-volatile sig_atomic_t ConfigReloadPending = false;
-volatile sig_atomic_t ShutdownRequestPending = false;
+__thread volatile sig_atomic_t ConfigReloadPending = false;
+__thread volatile sig_atomic_t ShutdownRequestPending = false;
 
 /*
  * Simple interrupt handler for main loops of background processes.

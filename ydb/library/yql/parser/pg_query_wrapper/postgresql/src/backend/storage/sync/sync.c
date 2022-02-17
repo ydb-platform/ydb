@@ -32,7 +32,7 @@
 #include "utils/inval.h"
 #include "utils/memutils.h"
 
-static MemoryContext pendingOpsCxt; /* context for the pending ops state  */
+static __thread MemoryContext pendingOpsCxt; /* context for the pending ops state  */
 
 /*
  * In some contexts (currently, standalone backends and the checkpointer)
@@ -71,10 +71,10 @@ typedef struct
 
 static HTAB *pendingOps = NULL;
 static List *pendingUnlinks = NIL;
-static MemoryContext pendingOpsCxt; /* context for the above  */
+static __thread MemoryContext pendingOpsCxt; /* context for the above  */
 
-static CycleCtr sync_cycle_ctr = 0;
-static CycleCtr checkpoint_cycle_ctr = 0;
+static __thread CycleCtr sync_cycle_ctr = 0;
+static __thread CycleCtr checkpoint_cycle_ctr = 0;
 
 /* Intervals for calling AbsorbSyncRequests */
 #define FSYNCS_PER_ABSORB		10

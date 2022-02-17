@@ -100,7 +100,7 @@ static void PrintLockQueue(LOCK *lock, const char *info);
 
 /* Workspace for FindLockCycle */
 static PGPROC **visitedProcs;	/* Array of visited procs */
-static int	nVisitedProcs;
+static __thread int	nVisitedProcs;
 
 /* Workspace for TopoSort */
 static PGPROC **topoProcs;		/* Array of not-yet-output procs */
@@ -109,20 +109,20 @@ static int *afterConstraints;	/* List head for after-constraints */
 
 /* Output area for ExpandConstraints */
 static WAIT_ORDER *waitOrders;	/* Array of proposed queue rearrangements */
-static int	nWaitOrders;
-static PGPROC **waitOrderProcs; /* Space for waitOrders queue contents */
+static __thread int	nWaitOrders;
+static __thread PGPROC **waitOrderProcs; /* Space for waitOrders queue contents */
 
 /* Current list of constraints being considered */
 static EDGE *curConstraints;
-static int	nCurConstraints;
-static int	maxCurConstraints;
+static __thread int	nCurConstraints;
+static __thread int	maxCurConstraints;
 
 /* Storage space for results from FindLockCycle */
 static EDGE *possibleConstraints;
-static int	nPossibleConstraints;
-static int	maxPossibleConstraints;
+static __thread int	nPossibleConstraints;
+static __thread int	maxPossibleConstraints;
 static DEADLOCK_INFO *deadlockDetails;
-static int	nDeadlockDetails;
+static __thread int	nDeadlockDetails;
 
 /* PGPROC pointer of any blocking autovacuum worker found */
 static PGPROC *blocking_autovacuum_proc = NULL;

@@ -60,9 +60,9 @@
 #define MAX_DELAY_USEC		1000000L
 
 
-slock_t		dummy_spinlock;
+__thread slock_t		dummy_spinlock;
 
-static int	spins_per_delay = DEFAULT_SPINS_PER_DELAY;
+static __thread int	spins_per_delay = DEFAULT_SPINS_PER_DELAY;
 
 
 /*

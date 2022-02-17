@@ -24,7 +24,7 @@
 #include "utils/memutils.h"
 
 
-static MemoryContext opCtx;		/* working memory for operations */
+static __thread MemoryContext opCtx;		/* working memory for operations */
 
 
 /*

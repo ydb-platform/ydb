@@ -72,9 +72,9 @@ typedef enum
 	PG_REGEX_LOCALE_ICU			/* Use ICU uchar.h functions */
 } PG_Locale_Strategy;
 
-static PG_Locale_Strategy pg_regex_strategy;
-static pg_locale_t pg_regex_locale;
-static Oid	pg_regex_collation;
+static __thread PG_Locale_Strategy pg_regex_strategy;
+static __thread pg_locale_t pg_regex_locale;
+static __thread Oid	pg_regex_collation;
 
 /*
  * Hard-wired character properties for C locale

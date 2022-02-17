@@ -25,24 +25,24 @@
 #include "storage/backendid.h"
 
 
-ProtocolVersion FrontendProtocol;
+__thread ProtocolVersion FrontendProtocol;
 
-volatile sig_atomic_t InterruptPending = false;
-volatile sig_atomic_t QueryCancelPending = false;
-volatile sig_atomic_t ProcDiePending = false;
-volatile sig_atomic_t ClientConnectionLost = false;
-volatile sig_atomic_t IdleInTransactionSessionTimeoutPending = false;
-volatile sig_atomic_t ProcSignalBarrierPending = false;
-volatile uint32 InterruptHoldoffCount = 0;
-volatile uint32 QueryCancelHoldoffCount = 0;
-volatile uint32 CritSectionCount = 0;
+__thread volatile sig_atomic_t InterruptPending = false;
+__thread volatile sig_atomic_t QueryCancelPending = false;
+__thread volatile sig_atomic_t ProcDiePending = false;
+__thread volatile sig_atomic_t ClientConnectionLost = false;
+__thread volatile sig_atomic_t IdleInTransactionSessionTimeoutPending = false;
+__thread volatile sig_atomic_t ProcSignalBarrierPending = false;
+__thread volatile uint32 InterruptHoldoffCount = 0;
+__thread volatile uint32 QueryCancelHoldoffCount = 0;
+__thread volatile uint32 CritSectionCount = 0;
 
-int			MyProcPid;
-pg_time_t	MyStartTime;
-TimestampTz MyStartTimestamp;
+__thread int			MyProcPid;
+__thread pg_time_t	MyStartTime;
+__thread TimestampTz MyStartTimestamp;
 struct Port *MyProcPort;
-int32		MyCancelKey;
-int			MyPMChildSlot;
+__thread int32		MyCancelKey;
+__thread int			MyPMChildSlot;
 
 /*
  * MyLatch points to the latch that should be used for signal handling by the
@@ -65,7 +65,7 @@ char	   *DataDir = NULL;
  * Mode of the data directory.  The default is 0700 but it may be changed in
  * checkDataDir() to 0750 if the data directory actually has that mode.
  */
-int			data_directory_mode = PG_DIR_MODE_OWNER;
+__thread int			data_directory_mode = PG_DIR_MODE_OWNER;
 
 char		OutputFileName[MAXPGPATH];	/* debugging output file */
 
@@ -78,13 +78,13 @@ char		postgres_exec_path[MAXPGPATH];	/* full path to backend */
 /* note: currently this is not valid in backend processes */
 #endif
 
-BackendId	MyBackendId = InvalidBackendId;
+__thread BackendId	MyBackendId = InvalidBackendId;
 
-BackendId	ParallelMasterBackendId = InvalidBackendId;
+__thread BackendId	ParallelMasterBackendId = InvalidBackendId;
 
-Oid			MyDatabaseId = InvalidOid;
+__thread Oid			MyDatabaseId = InvalidOid;
 
-Oid			MyDatabaseTableSpace = InvalidOid;
+__thread Oid			MyDatabaseTableSpace = InvalidOid;
 
 /*
  * DatabasePath is the path (relative to DataDir) of my database's
@@ -92,7 +92,7 @@ Oid			MyDatabaseTableSpace = InvalidOid;
  */
 char	   *DatabasePath = NULL;
 
-pid_t		PostmasterPid = 0;
+__thread pid_t		PostmasterPid = 0;
 
 /*
  * IsPostmasterEnvironment is true in a postmaster process and any postmaster
@@ -105,23 +105,23 @@ pid_t		PostmasterPid = 0;
  *
  * These are initialized for the bootstrap/standalone case.
  */
-bool		IsPostmasterEnvironment = false;
-bool		IsUnderPostmaster = false;
-bool		IsBinaryUpgrade = false;
-bool		IsBackgroundWorker = false;
+__thread bool		IsPostmasterEnvironment = false;
+__thread bool		IsUnderPostmaster = false;
+__thread bool		IsBinaryUpgrade = false;
+__thread bool		IsBackgroundWorker = false;
 
-bool		ExitOnAnyError = false;
+__thread bool		ExitOnAnyError = false;
 
-int			DateStyle = USE_ISO_DATES;
-int			DateOrder = DATEORDER_MDY;
-int			IntervalStyle = INTSTYLE_POSTGRES;
+__thread int			DateStyle = USE_ISO_DATES;
+__thread int			DateOrder = DATEORDER_MDY;
+__thread int			IntervalStyle = INTSTYLE_POSTGRES;
 
-bool		enableFsync = true;
-bool		allowSystemTableMods = false;
-int			work_mem = 1024;
-double		hash_mem_multiplier = 1.0;
-int			maintenance_work_mem = 16384;
-int			max_parallel_maintenance_workers = 2;
+__thread bool		enableFsync = true;
+__thread bool		allowSystemTableMods = false;
+__thread int			work_mem = 1024;
+__thread double		hash_mem_multiplier = 1.0;
+__thread int			maintenance_work_mem = 16384;
+__thread int			max_parallel_maintenance_workers = 2;
 
 /*
  * Primary determinants of sizes of shared-memory structures.
@@ -129,23 +129,23 @@ int			max_parallel_maintenance_workers = 2;
  * MaxBackends is computed by PostmasterMain after modules have had a chance to
  * register background workers.
  */
-int			NBuffers = 1000;
-int			MaxConnections = 90;
-int			max_worker_processes = 8;
-int			max_parallel_workers = 8;
-int			MaxBackends = 0;
+__thread int			NBuffers = 1000;
+__thread int			MaxConnections = 90;
+__thread int			max_worker_processes = 8;
+__thread int			max_parallel_workers = 8;
+__thread int			MaxBackends = 0;
 
-int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
-int			VacuumCostPageMiss = 10;
-int			VacuumCostPageDirty = 20;
-int			VacuumCostLimit = 200;
-double		VacuumCostDelay = 0;
+__thread int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
+__thread int			VacuumCostPageMiss = 10;
+__thread int			VacuumCostPageDirty = 20;
+__thread int			VacuumCostLimit = 200;
+__thread double		VacuumCostDelay = 0;
 
-int64		VacuumPageHit = 0;
-int64		VacuumPageMiss = 0;
-int64		VacuumPageDirty = 0;
+__thread int64		VacuumPageHit = 0;
+__thread int64		VacuumPageMiss = 0;
+__thread int64		VacuumPageDirty = 0;
 
-int			VacuumCostBalance = 0;	/* working state for vacuum */
-bool		VacuumCostActive = false;
+__thread int			VacuumCostBalance = 0;	/* working state for vacuum */
+__thread bool		VacuumCostActive = false;
 
-double		vacuum_cleanup_index_scale_factor;
+__thread double		vacuum_cleanup_index_scale_factor;

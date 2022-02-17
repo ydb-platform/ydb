@@ -85,9 +85,9 @@
  * because they're passed down from the startup process, for better
  * synchronization.)
  */
-int			wal_receiver_status_interval;
-int			wal_receiver_timeout;
-bool		hot_standby_feedback;
+__thread int			wal_receiver_status_interval;
+__thread int			wal_receiver_timeout;
+__thread bool		hot_standby_feedback;
 
 /* libpqwalreceiver connection */
 static WalReceiverConn *wrconn = NULL;
@@ -100,16 +100,16 @@ WalReceiverFunctionsType *WalReceiverFunctions = NULL;
  * but for walreceiver to write the XLOG. recvFileTLI is the TimeLineID
  * corresponding the filename of recvFile.
  */
-static int	recvFile = -1;
-static TimeLineID recvFileTLI = 0;
-static XLogSegNo recvSegNo = 0;
+static __thread int	recvFile = -1;
+static __thread TimeLineID recvFileTLI = 0;
+static __thread XLogSegNo recvSegNo = 0;
 
 /*
  * Flags set by interrupt handlers of walreceiver for later service in the
  * main loop.
  */
-static volatile sig_atomic_t got_SIGHUP = false;
-static volatile sig_atomic_t got_SIGTERM = false;
+static __thread volatile sig_atomic_t got_SIGHUP = false;
+static __thread volatile sig_atomic_t got_SIGTERM = false;
 
 /*
  * LogstreamResult indicates the byte positions that we have already
@@ -121,8 +121,8 @@ static struct
 	XLogRecPtr	Flush;			/* last byte + 1 flushed in the standby */
 }			LogstreamResult;
 
-static StringInfoData reply_message;
-static StringInfoData incoming_message;
+static __thread StringInfoData reply_message;
+static __thread StringInfoData incoming_message;
 
 /* Prototypes for private functions */
 static void WalRcvFetchTimeLineHistoryFiles(TimeLineID first, TimeLineID last);

@@ -27,7 +27,7 @@ typedef PlannedStmt *(*planner_hook_type) (Query *parse,
 										   const char *query_string,
 										   int cursorOptions,
 										   ParamListInfo boundParams);
-extern PGDLLIMPORT planner_hook_type planner_hook;
+extern __thread PGDLLIMPORT planner_hook_type planner_hook;
 
 /* Hook for plugins to get control when grouping_planner() plans upper rels */
 typedef void (*create_upper_paths_hook_type) (PlannerInfo *root,
@@ -35,7 +35,7 @@ typedef void (*create_upper_paths_hook_type) (PlannerInfo *root,
 											  RelOptInfo *input_rel,
 											  RelOptInfo *output_rel,
 											  void *extra);
-extern PGDLLIMPORT create_upper_paths_hook_type create_upper_paths_hook;
+extern __thread PGDLLIMPORT create_upper_paths_hook_type create_upper_paths_hook;
 
 
 extern PlannedStmt *standard_planner(Query *parse, const char *query_string,

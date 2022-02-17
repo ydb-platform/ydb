@@ -61,7 +61,7 @@
 /*
  * GUC parameters
  */
-int			BgWriterDelay = 200;
+__thread int			BgWriterDelay = 200;
 
 /*
  * Multiplier to apply to BgWriterDelay when we decide to hibernate.
@@ -80,8 +80,8 @@ int			BgWriterDelay = 200;
  * doing so too often or repeatedly if there has been no other write activity
  * in the system.
  */
-static TimestampTz last_snapshot_ts;
-static XLogRecPtr last_snapshot_lsn = InvalidXLogRecPtr;
+static __thread TimestampTz last_snapshot_ts;
+static __thread XLogRecPtr last_snapshot_lsn = InvalidXLogRecPtr;
 
 
 /*

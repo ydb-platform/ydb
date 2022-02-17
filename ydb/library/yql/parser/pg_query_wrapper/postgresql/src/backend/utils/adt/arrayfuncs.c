@@ -38,7 +38,7 @@
 /*
  * GUC parameter
  */
-bool		Array_nulls = true;
+__thread bool		Array_nulls = true;
 
 /*
  * Local definitions

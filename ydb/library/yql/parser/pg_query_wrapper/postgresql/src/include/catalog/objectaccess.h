@@ -129,7 +129,7 @@ typedef void (*object_access_hook_type) (ObjectAccessType access,
 										 void *arg);
 
 /* Plugin sets this variable to a suitable hook function. */
-extern PGDLLIMPORT object_access_hook_type object_access_hook;
+extern __thread PGDLLIMPORT object_access_hook_type object_access_hook;
 
 /* Core code uses these functions to call the hook (see macros below). */
 extern void RunObjectPostCreateHook(Oid classId, Oid objectId, int subId,

@@ -290,11 +290,11 @@ extern PGPROC *PreparedXactProcs;
 #define NUM_AUXILIARY_PROCS		4
 
 /* configurable options */
-extern PGDLLIMPORT int DeadlockTimeout;
-extern PGDLLIMPORT int StatementTimeout;
-extern PGDLLIMPORT int LockTimeout;
-extern PGDLLIMPORT int IdleInTransactionSessionTimeout;
-extern bool log_lock_waits;
+extern __thread PGDLLIMPORT int DeadlockTimeout;
+extern __thread PGDLLIMPORT int StatementTimeout;
+extern __thread PGDLLIMPORT int LockTimeout;
+extern __thread PGDLLIMPORT int IdleInTransactionSessionTimeout;
+extern __thread bool log_lock_waits;
 
 
 /*

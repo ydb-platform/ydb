@@ -67,13 +67,13 @@
 
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
-ExecutorStart_hook_type ExecutorStart_hook = NULL;
-ExecutorRun_hook_type ExecutorRun_hook = NULL;
-ExecutorFinish_hook_type ExecutorFinish_hook = NULL;
-ExecutorEnd_hook_type ExecutorEnd_hook = NULL;
+__thread ExecutorStart_hook_type ExecutorStart_hook = NULL;
+__thread ExecutorRun_hook_type ExecutorRun_hook = NULL;
+__thread ExecutorFinish_hook_type ExecutorFinish_hook = NULL;
+__thread ExecutorEnd_hook_type ExecutorEnd_hook = NULL;
 
 /* Hook for plugin to get control in ExecCheckRTPerms() */
-ExecutorCheckPerms_hook_type ExecutorCheckPerms_hook = NULL;
+__thread ExecutorCheckPerms_hook_type ExecutorCheckPerms_hook = NULL;
 
 /* decls for local routines only used within this module */
 static void InitPlan(QueryDesc *queryDesc, int eflags);

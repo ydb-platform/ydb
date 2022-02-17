@@ -54,9 +54,9 @@ typedef struct ParallelWorkerContext
 	shm_toc    *toc;
 } ParallelWorkerContext;
 
-extern volatile bool ParallelMessagePending;
-extern PGDLLIMPORT int ParallelWorkerNumber;
-extern PGDLLIMPORT bool InitializingParallelWorker;
+extern __thread volatile bool ParallelMessagePending;
+extern __thread PGDLLIMPORT int ParallelWorkerNumber;
+extern __thread PGDLLIMPORT bool InitializingParallelWorker;
 
 #define		IsParallelWorker()		(ParallelWorkerNumber >= 0)
 

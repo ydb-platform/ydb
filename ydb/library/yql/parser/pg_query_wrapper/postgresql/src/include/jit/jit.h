@@ -79,16 +79,16 @@ struct JitProviderCallbacks
 
 
 /* GUCs */
-extern bool jit_enabled;
+extern __thread bool jit_enabled;
 extern char *jit_provider;
-extern bool jit_debugging_support;
-extern bool jit_dump_bitcode;
-extern bool jit_expressions;
-extern bool jit_profiling_support;
-extern bool jit_tuple_deforming;
-extern double jit_above_cost;
-extern double jit_inline_above_cost;
-extern double jit_optimize_above_cost;
+extern __thread bool jit_debugging_support;
+extern __thread bool jit_dump_bitcode;
+extern __thread bool jit_expressions;
+extern __thread bool jit_profiling_support;
+extern __thread bool jit_tuple_deforming;
+extern __thread double jit_above_cost;
+extern __thread double jit_inline_above_cost;
+extern __thread double jit_optimize_above_cost;
 
 
 extern void jit_reset_after_error(void);

@@ -32,7 +32,7 @@
  * ActivePortal is the currently executing Portal (the most closely nested,
  * if there are several).
  */
-Portal		ActivePortal = NULL;
+__thread Portal		ActivePortal = NULL;
 
 
 static void ProcessQuery(PlannedStmt *plan,

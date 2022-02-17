@@ -182,7 +182,7 @@ typedef struct bkend
 	dlist_node	elem;			/* list link in BackendList */
 } Backend;
 
-static dlist_head BackendList = DLIST_STATIC_INIT(BackendList);
+static __thread dlist_head BackendList ;void BackendList_init(void) { dlist_init(&BackendList); }
 
 #ifdef EXEC_BACKEND
 static Backend *ShmemBackendArray;
@@ -193,7 +193,7 @@ BackgroundWorker *MyBgworkerEntry = NULL;
 
 
 /* The socket number we are listening for connections on */
-int			PostPortNumber;
+__thread int			PostPortNumber;
 
 /* The directory names for Unix socket(s) */
 char	   *Unix_socket_directories;
@@ -210,7 +210,7 @@ char	   *ListenAddresses;
  * can make new connections" --- pre-existing superuser connections don't
  * count against the limit.
  */
-int			ReservedBackends;
+__thread int			ReservedBackends;
 
 /* The socket(s) we're listening to. */
 #define MAXLISTEN	64
@@ -228,25 +228,25 @@ static char ExtraOptions[MAXPGPATH];
  * the postmaster stop (rather than kill) peers and not reinitialize
  * shared data structures.  (Reinit is currently dead code, though.)
  */
-static bool Reinit = true;
-static int	SendStop = false;
+static __thread bool Reinit = true;
+static __thread int	SendStop = false;
 
 /* still more option variables */
-bool		EnableSSL = false;
+__thread bool		EnableSSL = false;
 
-int			PreAuthDelay = 0;
-int			AuthenticationTimeout = 60;
+__thread int			PreAuthDelay = 0;
+__thread int			AuthenticationTimeout = 60;
 
-bool		log_hostname;		/* for ps display and logging */
-bool		Log_connections = false;
-bool		Db_user_namespace = false;
+__thread bool		log_hostname;		/* for ps display and logging */
+__thread bool		Log_connections = false;
+__thread bool		Db_user_namespace = false;
 
-bool		enable_bonjour = false;
+__thread bool		enable_bonjour = false;
 char	   *bonjour_name;
-bool		restart_after_crash = true;
+__thread bool		restart_after_crash = true;
 
 /* PIDs of special child processes; 0 when not running */
-static pid_t StartupPID = 0,
+static __thread pid_t StartupPID = 0,
 			BgWriterPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
@@ -265,7 +265,7 @@ typedef enum
 	STARTUP_CRASHED
 } StartupStatusEnum;
 
-static StartupStatusEnum StartupStatus = STARTUP_NOT_RUNNING;
+static __thread StartupStatusEnum StartupStatus = STARTUP_NOT_RUNNING;
 
 /* Startup/shutdown state */
 #define			NoShutdown		0
@@ -273,9 +273,9 @@ static StartupStatusEnum StartupStatus = STARTUP_NOT_RUNNING;
 #define			FastShutdown	2
 #define			ImmediateShutdown	3
 
-static int	Shutdown = NoShutdown;
+static __thread int	Shutdown = NoShutdown;
 
-static bool FatalError = false; /* T if recovering from backend crash */
+static __thread bool FatalError = false; /* T if recovering from backend crash */
 
 /*
  * We use a simple state machine to control startup, shutdown, and
@@ -335,7 +335,7 @@ typedef enum
 	PM_NO_CHILDREN				/* all important children have exited */
 } PMState;
 
-static PMState pmState = PM_INIT;
+static __thread PMState pmState = PM_INIT;
 
 /*
  * While performing a "smart shutdown", we restrict new connections but stay
@@ -350,38 +350,38 @@ typedef enum
 	ALLOW_NO_CONNS				/* no new connections allowed, period */
 } ConnsAllowedState;
 
-static ConnsAllowedState connsAllowed = ALLOW_ALL_CONNS;
+static __thread ConnsAllowedState connsAllowed = ALLOW_ALL_CONNS;
 
 /* Start time of SIGKILL timeout during immediate shutdown or child crash */
 /* Zero means timeout is not running */
-static time_t AbortStartTime = 0;
+static __thread time_t AbortStartTime = 0;
 
 /* Length of said timeout */
 #define SIGKILL_CHILDREN_AFTER_SECS		5
 
-static bool ReachedNormalRunning = false;	/* T if we've reached PM_RUN */
+static __thread bool ReachedNormalRunning = false;	/* T if we've reached PM_RUN */
 
-bool		ClientAuthInProgress = false;	/* T during new-client
+__thread bool		ClientAuthInProgress = false;	/* T during new-client
 											 * authentication */
 
-bool		redirection_done = false;	/* stderr redirected for syslogger? */
+__thread bool		redirection_done = false;	/* stderr redirected for syslogger? */
 
 /* received START_AUTOVAC_LAUNCHER signal */
-static volatile sig_atomic_t start_autovac_launcher = false;
+static __thread volatile sig_atomic_t start_autovac_launcher = false;
 
 /* the launcher needs to be signaled to communicate some condition */
-static volatile bool avlauncher_needs_signal = false;
+static __thread volatile bool avlauncher_needs_signal = false;
 
 /* received START_WALRECEIVER signal */
-static volatile sig_atomic_t WalReceiverRequested = false;
+static __thread volatile sig_atomic_t WalReceiverRequested = false;
 
 /* set when there's a worker that needs to be started up */
-static volatile bool StartWorkerNeeded = true;
-static volatile bool HaveCrashedWorker = false;
+static __thread volatile bool StartWorkerNeeded = true;
+static __thread volatile bool HaveCrashedWorker = false;
 
 #ifdef USE_SSL
 /* Set when and if SSL has been initialized properly */
-static bool LoadedSSL = false;
+static __thread bool LoadedSSL = false;
 #endif
 
 #ifdef USE_BONJOUR
@@ -6170,8 +6170,8 @@ extern slock_t *ShmemLock;
 extern slock_t *ProcStructLock;
 extern PGPROC *AuxiliaryProcs;
 extern PMSignalData *PMSignalState;
-extern pgsocket pgStatSock;
-extern pg_time_t first_syslogger_file_time;
+extern __thread pgsocket pgStatSock;
+extern __thread pg_time_t first_syslogger_file_time;
 
 #ifndef WIN32
 #define write_inheritable_socket(dest, src, childpid) ((*(dest) = (src)), true)

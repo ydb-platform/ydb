@@ -68,8 +68,8 @@
 
 
 /* Globally visible state variables */
-bool		creating_extension = false;
-Oid			CurrentExtensionObject = InvalidOid;
+__thread bool		creating_extension = false;
+__thread Oid			CurrentExtensionObject = InvalidOid;
 
 /*
  * Internal data structure to hold the results of parsing a control file

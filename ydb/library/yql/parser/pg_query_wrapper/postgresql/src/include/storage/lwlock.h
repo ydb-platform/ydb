@@ -97,7 +97,7 @@ typedef struct NamedLWLockTranche
 } NamedLWLockTranche;
 
 extern PGDLLIMPORT NamedLWLockTranche *NamedLWLockTrancheArray;
-extern PGDLLIMPORT int NamedLWLockTrancheRequests;
+extern __thread PGDLLIMPORT int NamedLWLockTrancheRequests;
 
 /* Names for fixed lwlocks */
 #include "storage/lwlocknames.h"

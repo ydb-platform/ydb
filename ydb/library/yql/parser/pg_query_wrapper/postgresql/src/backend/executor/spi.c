@@ -42,14 +42,14 @@
  * interference between different SPI callers, we save and restore them
  * when entering/exiting a SPI nesting level.
  */
-uint64		SPI_processed = 0;
+__thread uint64		SPI_processed = 0;
 SPITupleTable *SPI_tuptable = NULL;
-int			SPI_result = 0;
+__thread int			SPI_result = 0;
 
 static _SPI_connection *_SPI_stack = NULL;
 static _SPI_connection *_SPI_current = NULL;
-static int	_SPI_stack_depth = 0;	/* allocated size of _SPI_stack */
-static int	_SPI_connected = -1;	/* current stack index */
+static __thread int	_SPI_stack_depth = 0;	/* allocated size of _SPI_stack */
+static __thread int	_SPI_connected = -1;	/* current stack index */
 
 static Portal SPI_cursor_open_internal(const char *name, SPIPlanPtr plan,
 									   ParamListInfo paramLI, bool read_only);

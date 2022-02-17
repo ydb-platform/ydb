@@ -119,8 +119,8 @@ typedef enum
 	SLRU_CLOSE_FAILED
 } SlruErrorCause;
 
-static SlruErrorCause slru_errcause;
-static int	slru_errno;
+static __thread SlruErrorCause slru_errcause;
+static __thread int	slru_errno;
 
 
 static void SimpleLruZeroLSNs(SlruCtl ctl, int slotno);

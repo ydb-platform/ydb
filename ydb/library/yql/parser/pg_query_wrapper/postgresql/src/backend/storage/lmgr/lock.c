@@ -51,7 +51,7 @@
 
 
 /* This configuration variable is used to set the lock table size */
-int			max_locks_per_xact; /* set by guc.c */
+__thread int			max_locks_per_xact; /* set by guc.c */
 
 #define NLOCKENTS() \
 	mul_size(max_locks_per_xact, add_size(MaxBackends, max_prepared_xacts))
@@ -168,7 +168,7 @@ typedef struct TwoPhaseLockRecord
  * our locks to the primary lock table, but it can never be lower than the
  * real value, since only we can acquire locks on our own behalf.
  */
-static int	FastPathLocalUseCount = 0;
+static __thread int	FastPathLocalUseCount = 0;
 
 /*
  * Flag to indicate if the relation extension lock is held by this backend.
@@ -285,7 +285,7 @@ static HTAB *LockMethodLocalHash;
 /* private state for error cleanup */
 static LOCALLOCK *StrongLockInProgress;
 static LOCALLOCK *awaitedLock;
-static ResourceOwner awaitedOwner;
+static __thread ResourceOwner awaitedOwner;
 
 
 #ifdef LOCK_DEBUG

@@ -138,26 +138,26 @@
 static List *activeSearchPath = NIL;
 
 /* default place to create stuff; if InvalidOid, no default */
-static Oid	activeCreationNamespace = InvalidOid;
+static __thread Oid	activeCreationNamespace = InvalidOid;
 
 /* if true, activeCreationNamespace is wrong, it should be temp namespace */
-static bool activeTempCreationPending = false;
+static __thread bool activeTempCreationPending = false;
 
 /* current generation counter; make sure this is never zero */
-static uint64 activePathGeneration = 1;
+static __thread uint64 activePathGeneration = 1;
 
 /* These variables are the values last derived from namespace_search_path: */
 
 static List *baseSearchPath = NIL;
 
-static Oid	baseCreationNamespace = InvalidOid;
+static __thread Oid	baseCreationNamespace = InvalidOid;
 
-static bool baseTempCreationPending = false;
+static __thread bool baseTempCreationPending = false;
 
-static Oid	namespaceUser = InvalidOid;
+static __thread Oid	namespaceUser = InvalidOid;
 
 /* The above four values are valid only if baseSearchPathValid */
-static bool baseSearchPathValid = true;
+static __thread bool baseSearchPathValid = true;
 
 /* Override requests are remembered in a stack of OverrideStackEntry structs */
 
@@ -185,11 +185,11 @@ static List *overrideStack = NIL;
  * we either haven't made the TEMP namespace yet, or have successfully
  * committed its creation, depending on whether myTempNamespace is valid.
  */
-static Oid	myTempNamespace = InvalidOid;
+static __thread Oid	myTempNamespace = InvalidOid;
 
-static Oid	myTempToastNamespace = InvalidOid;
+static __thread Oid	myTempToastNamespace = InvalidOid;
 
-static SubTransactionId myTempNamespaceSubID = InvalidSubTransactionId;
+static __thread SubTransactionId myTempNamespaceSubID = InvalidSubTransactionId;
 
 /*
  * This is the user's textual search path specification --- it's the value

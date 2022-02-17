@@ -33,9 +33,9 @@ typedef struct xl_replorigin_drop
 #define InvalidRepOriginId 0
 #define DoNotReplicateId PG_UINT16_MAX
 
-extern PGDLLIMPORT RepOriginId replorigin_session_origin;
-extern PGDLLIMPORT XLogRecPtr replorigin_session_origin_lsn;
-extern PGDLLIMPORT TimestampTz replorigin_session_origin_timestamp;
+extern __thread PGDLLIMPORT RepOriginId replorigin_session_origin;
+extern __thread PGDLLIMPORT XLogRecPtr replorigin_session_origin_lsn;
+extern __thread PGDLLIMPORT TimestampTz replorigin_session_origin_timestamp;
 
 /* API for querying & manipulating replication origins */
 extern RepOriginId replorigin_by_name(char *name, bool missing_ok);

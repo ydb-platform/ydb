@@ -72,16 +72,16 @@
 /*
  *	User-tweakable parameters
  */
-int			DefaultXactIsoLevel = XACT_READ_COMMITTED;
-int			XactIsoLevel;
+__thread int			DefaultXactIsoLevel = XACT_READ_COMMITTED;
+__thread int			XactIsoLevel;
 
-bool		DefaultXactReadOnly = false;
-bool		XactReadOnly;
+__thread bool		DefaultXactReadOnly = false;
+__thread bool		XactReadOnly;
 
-bool		DefaultXactDeferrable = false;
-bool		XactDeferrable;
+__thread bool		DefaultXactDeferrable = false;
+__thread bool		XactDeferrable;
 
-int			synchronous_commit = SYNCHRONOUS_COMMIT_ON;
+__thread int			synchronous_commit = SYNCHRONOUS_COMMIT_ON;
 
 /*
  * When running as a parallel worker, we place only a single
@@ -106,8 +106,8 @@ int			synchronous_commit = SYNCHRONOUS_COMMIT_ON;
  * The XIDs are stored sorted in numerical order (not logical order) to make
  * lookups as fast as possible.
  */
-FullTransactionId XactTopFullTransactionId = {InvalidTransactionId};
-int			nParallelCurrentXids = 0;
+__thread FullTransactionId XactTopFullTransactionId = {InvalidTransactionId};
+__thread int			nParallelCurrentXids = 0;
 TransactionId *ParallelCurrentXids;
 
 /*
@@ -117,7 +117,7 @@ TransactionId *ParallelCurrentXids;
  * globally accessible, so can be set from anywhere in the code that requires
  * recording flags.
  */
-int			MyXactFlags;
+__thread int			MyXactFlags;
 
 /*
  *	transaction states - transaction state from server perspective
@@ -221,7 +221,7 @@ typedef struct SerializedTransactionState
  * block.  It will point to TopTransactionStateData when not in a
  * transaction at all, or when in a top-level transaction.
  */
-static TransactionStateData TopTransactionStateData = {
+static __thread TransactionStateData TopTransactionStateData = {
 	.state = TRANS_DEFAULT,
 	.blockState = TBLOCK_DEFAULT,
 };
@@ -230,18 +230,19 @@ static TransactionStateData TopTransactionStateData = {
  * unreportedXids holds XIDs of all subtransactions that have not yet been
  * reported in an XLOG_XACT_ASSIGNMENT record.
  */
-static int	nUnreportedXids;
+static __thread int	nUnreportedXids;
 static TransactionId unreportedXids[PGPROC_MAX_CACHED_SUBXIDS];
 
-static TransactionState CurrentTransactionState = &TopTransactionStateData;
+static __thread TransactionState CurrentTransactionState ;void CurrentTransactionState_init(void) { CurrentTransactionState= &TopTransactionStateData;
+ };
 
 /*
  * The subtransaction ID and command ID assignment counters are global
  * to a whole transaction, so we do not keep them in the state stack.
  */
-static SubTransactionId currentSubTransactionId;
-static CommandId currentCommandId;
-static bool currentCommandIdUsed;
+static __thread SubTransactionId currentSubTransactionId;
+static __thread CommandId currentCommandId;
+static __thread bool currentCommandIdUsed;
 
 /*
  * xactStartTimestamp is the value of transaction_timestamp().
@@ -250,9 +251,9 @@ static bool currentCommandIdUsed;
  * These do not change as we enter and exit subtransactions, so we don't
  * keep them inside the TransactionState stack.
  */
-static TimestampTz xactStartTimestamp;
-static TimestampTz stmtStartTimestamp;
-static TimestampTz xactStopTimestamp;
+static __thread TimestampTz xactStartTimestamp;
+static __thread TimestampTz stmtStartTimestamp;
+static __thread TimestampTz xactStopTimestamp;
 
 /*
  * GID to be used for preparing the current transaction.  This is also
@@ -263,17 +264,17 @@ static char *prepareGID;
 /*
  * Some commands want to force synchronous commit.
  */
-static bool forceSyncCommit = false;
+static __thread bool forceSyncCommit = false;
 
 /* Flag for logging statements in a transaction. */
-bool		xact_is_sampled = false;
+__thread bool		xact_is_sampled = false;
 
 /*
  * Private context for transaction-abort work --- we reserve space for this
  * at startup to ensure that AbortTransaction and AbortSubTransaction can work
  * when we've run out of memory.
  */
-static MemoryContext TransactionAbortContext = NULL;
+static __thread MemoryContext TransactionAbortContext = NULL;
 
 /*
  * List of add-on start- and end-of-xact callbacks
@@ -2910,9 +2911,9 @@ StartTransactionCommand(void)
  * GUC system resets the characteristics at transaction end, so for example
  * just skipping the reset in StartTransaction() won't work.)
  */
-static int	save_XactIsoLevel;
-static bool save_XactReadOnly;
-static bool save_XactDeferrable;
+static __thread int	save_XactIsoLevel;
+static __thread bool save_XactReadOnly;
+static __thread bool save_XactDeferrable;
 
 void
 SaveTransactionCharacteristics(void)

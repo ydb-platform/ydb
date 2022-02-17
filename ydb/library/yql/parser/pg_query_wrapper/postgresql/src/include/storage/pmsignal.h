@@ -78,7 +78,7 @@ extern void PostmasterDeathSignalInit(void);
 #endif
 
 #ifdef USE_POSTMASTER_DEATH_SIGNAL
-extern volatile sig_atomic_t postmaster_possibly_dead;
+extern __thread volatile sig_atomic_t postmaster_possibly_dead;
 
 static inline bool
 PostmasterIsAlive(void)

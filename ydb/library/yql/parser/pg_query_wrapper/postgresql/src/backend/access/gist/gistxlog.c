@@ -25,7 +25,7 @@
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
-static MemoryContext opCtx;		/* working memory for operations */
+static __thread MemoryContext opCtx;		/* working memory for operations */
 
 /*
  * Replay the clearing of F_FOLLOW_RIGHT flag on a child page.

@@ -33,7 +33,7 @@ typedef struct PROC_QUEUE
 } PROC_QUEUE;
 
 /* GUC variables */
-extern int	max_locks_per_xact;
+extern __thread int	max_locks_per_xact;
 
 #ifdef LOCK_DEBUG
 extern int	Trace_lock_oidmin;

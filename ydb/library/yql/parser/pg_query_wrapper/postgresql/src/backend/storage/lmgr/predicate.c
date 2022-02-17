@@ -316,7 +316,7 @@
 /*
  * The SLRU buffer area through which we access the old xids.
  */
-static SlruCtlData SerialSlruCtlData;
+static __thread SlruCtlData SerialSlruCtlData;
 
 #define SerialSlruCtl			(&SerialSlruCtlData)
 
@@ -346,7 +346,7 @@ typedef struct SerialControlData
 
 typedef struct SerialControlData *SerialControl;
 
-static SerialControl serialControl;
+static __thread SerialControl serialControl;
 
 /*
  * When the oldest committed transaction on the "finished" list is moved to
@@ -363,9 +363,9 @@ static SERIALIZABLEXACT *OldCommittedSxact;
  * attempt to degrade performance (mostly as false positive serialization
  * failure) gracefully in the face of memory pressure.
  */
-int			max_predicate_locks_per_xact;	/* set by guc.c */
-int			max_predicate_locks_per_relation;	/* set by guc.c */
-int			max_predicate_locks_per_page;	/* set by guc.c */
+__thread int			max_predicate_locks_per_xact;	/* set by guc.c */
+__thread int			max_predicate_locks_per_relation;	/* set by guc.c */
+__thread int			max_predicate_locks_per_page;	/* set by guc.c */
 
 /*
  * This provides a list of objects in order to track transactions
@@ -376,13 +376,13 @@ int			max_predicate_locks_per_page;	/* set by guc.c */
  * number of entries in the list, and the size allowed for each entry is
  * fixed upon creation.
  */
-static PredXactList PredXact;
+static __thread PredXactList PredXact;
 
 /*
  * This provides a pool of RWConflict data elements to use in conflict lists
  * between transactions.
  */
-static RWConflictPoolHeader RWConflictPool;
+static __thread RWConflictPoolHeader RWConflictPool;
 
 /*
  * The predicate locking hash tables are in shared memory.
@@ -399,7 +399,7 @@ static SHM_QUEUE *FinishedSerializableTransactions;
  * inserting one entry in the hash table. This is an otherwise-invalid tag.
  */
 static const PREDICATELOCKTARGETTAG ScratchTargetTag = {0, 0, 0, 0};
-static uint32 ScratchTargetTagHash;
+static __thread uint32 ScratchTargetTagHash;
 static LWLock *ScratchPartitionLock;
 
 /*
@@ -414,7 +414,7 @@ static HTAB *LocalPredicateLockHash = NULL;
  * cause a rw-conflict.
  */
 static SERIALIZABLEXACT *MySerializableXact = InvalidSerializableXact;
-static bool MyXactDidWrite = false;
+static __thread bool MyXactDidWrite = false;
 
 /*
  * The SXACT_FLAG_RO_UNSAFE optimization might lead us to release

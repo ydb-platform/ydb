@@ -50,13 +50,13 @@ typedef int File;
 
 
 /* GUC parameter */
-extern PGDLLIMPORT int max_files_per_process;
-extern PGDLLIMPORT bool data_sync_retry;
+extern __thread PGDLLIMPORT int max_files_per_process;
+extern __thread PGDLLIMPORT bool data_sync_retry;
 
 /*
  * This is private to fd.c, but exported for save/restore_backend_variables()
  */
-extern int	max_safe_fds;
+extern __thread int	max_safe_fds;
 
 /*
  * On Windows, we have to interpret EACCES as possibly meaning the same as

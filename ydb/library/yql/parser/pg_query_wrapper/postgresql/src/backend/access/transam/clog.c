@@ -83,7 +83,7 @@
 /*
  * Link to shared-memory data structures for CLOG control
  */
-static SlruCtlData XactCtlData;
+static __thread SlruCtlData XactCtlData;
 
 #define XactCtl (&XactCtlData)
 

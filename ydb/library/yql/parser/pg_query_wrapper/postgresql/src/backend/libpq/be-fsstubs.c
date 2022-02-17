@@ -67,10 +67,10 @@
  * cookies_size entries, of which any unused entries will be NULL.
  */
 static LargeObjectDesc **cookies = NULL;
-static int	cookies_size = 0;
+static __thread int	cookies_size = 0;
 
-static bool lo_cleanup_needed = false;
-static MemoryContext fscxt = NULL;
+static __thread bool lo_cleanup_needed = false;
+static __thread MemoryContext fscxt = NULL;
 
 static int	newLOfd(void);
 static void closeLOfd(int fd);

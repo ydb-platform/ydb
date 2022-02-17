@@ -20,8 +20,8 @@
  */
 #define NUM_NOTIFY_BUFFERS	8
 
-extern bool Trace_notify;
-extern volatile sig_atomic_t notifyInterruptPending;
+extern __thread bool Trace_notify;
+extern __thread volatile sig_atomic_t notifyInterruptPending;
 
 extern Size AsyncShmemSize(void);
 extern void AsyncShmemInit(void);

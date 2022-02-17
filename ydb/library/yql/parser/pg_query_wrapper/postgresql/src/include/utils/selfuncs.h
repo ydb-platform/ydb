@@ -121,12 +121,12 @@ typedef bool (*get_relation_stats_hook_type) (PlannerInfo *root,
 											  RangeTblEntry *rte,
 											  AttrNumber attnum,
 											  VariableStatData *vardata);
-extern PGDLLIMPORT get_relation_stats_hook_type get_relation_stats_hook;
+extern __thread PGDLLIMPORT get_relation_stats_hook_type get_relation_stats_hook;
 typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
 										   Oid indexOid,
 										   AttrNumber indexattnum,
 										   VariableStatData *vardata);
-extern PGDLLIMPORT get_index_stats_hook_type get_index_stats_hook;
+extern __thread PGDLLIMPORT get_index_stats_hook_type get_index_stats_hook;
 
 /* Functions in selfuncs.c */
 

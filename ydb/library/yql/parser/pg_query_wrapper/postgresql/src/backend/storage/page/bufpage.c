@@ -24,7 +24,7 @@
 
 
 /* GUC variable */
-bool		ignore_checksum_failure = false;
+__thread bool		ignore_checksum_failure = false;
 
 
 /* ----------------------------------------------------------------

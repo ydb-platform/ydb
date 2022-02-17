@@ -20,7 +20,7 @@
 #include "utils/relcache.h"
 
 /* GUC variables */
-extern int	wal_skip_threshold;
+extern __thread int	wal_skip_threshold;
 
 extern SMgrRelation RelationCreateStorage(RelFileNode rnode, char relpersistence);
 extern void RelationDropStorage(Relation rel);

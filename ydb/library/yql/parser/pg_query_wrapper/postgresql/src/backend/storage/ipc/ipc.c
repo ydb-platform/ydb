@@ -37,18 +37,18 @@
  * so that an ereport() from an on_proc_exit routine cannot get us out
  * of the exit procedure.  We do NOT want to go back to the idle loop...
  */
-bool		proc_exit_inprogress = false;
+__thread bool		proc_exit_inprogress = false;
 
 /*
  * Set when shmem_exit() is in progress.
  */
-bool		shmem_exit_inprogress = false;
+__thread bool		shmem_exit_inprogress = false;
 
 /*
  * This flag tracks whether we've called atexit() in the current process
  * (or in the parent postmaster).
  */
-static bool atexit_callback_setup = false;
+static __thread bool atexit_callback_setup = false;
 
 /* local functions */
 static void proc_exit_prepare(int code);

@@ -103,9 +103,9 @@
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 
-static bool table_states_valid = false;
+static __thread bool table_states_valid = false;
 
-StringInfo	copybuf = NULL;
+__thread StringInfo	copybuf = NULL;
 
 /*
  * Exit routine for synchronization worker.

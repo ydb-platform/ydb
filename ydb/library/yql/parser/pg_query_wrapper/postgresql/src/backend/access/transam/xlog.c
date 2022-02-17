@@ -79,41 +79,41 @@
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
 
-extern uint32 bootstrap_data_checksum_version;
+extern __thread uint32 bootstrap_data_checksum_version;
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
 #define RECOVERY_COMMAND_DONE	"recovery.done"
 
 /* User-settable parameters */
-int			max_wal_size_mb = 1024; /* 1 GB */
-int			min_wal_size_mb = 80;	/* 80 MB */
-int			wal_keep_size_mb = 0;
-int			XLOGbuffers = -1;
-int			XLogArchiveTimeout = 0;
-int			XLogArchiveMode = ARCHIVE_MODE_OFF;
+__thread int			max_wal_size_mb = 1024; /* 1 GB */
+__thread int			min_wal_size_mb = 80;	/* 80 MB */
+__thread int			wal_keep_size_mb = 0;
+__thread int			XLOGbuffers = -1;
+__thread int			XLogArchiveTimeout = 0;
+__thread int			XLogArchiveMode = ARCHIVE_MODE_OFF;
 char	   *XLogArchiveCommand = NULL;
-bool		EnableHotStandby = false;
-bool		fullPageWrites = true;
-bool		wal_log_hints = false;
-bool		wal_compression = false;
+__thread bool		EnableHotStandby = false;
+__thread bool		fullPageWrites = true;
+__thread bool		wal_log_hints = false;
+__thread bool		wal_compression = false;
 char	   *wal_consistency_checking_string = NULL;
 bool	   *wal_consistency_checking = NULL;
-bool		wal_init_zero = true;
-bool		wal_recycle = true;
-bool		log_checkpoints = false;
-int			sync_method = DEFAULT_SYNC_METHOD;
-int			wal_level = WAL_LEVEL_MINIMAL;
-int			CommitDelay = 0;	/* precommit delay in microseconds */
-int			CommitSiblings = 5; /* # concurrent xacts needed to sleep */
-int			wal_retrieve_retry_interval = 5000;
-int			max_slot_wal_keep_size_mb = -1;
+__thread bool		wal_init_zero = true;
+__thread bool		wal_recycle = true;
+__thread bool		log_checkpoints = false;
+__thread int			sync_method = DEFAULT_SYNC_METHOD;
+__thread int			wal_level = WAL_LEVEL_MINIMAL;
+__thread int			CommitDelay = 0;	/* precommit delay in microseconds */
+__thread int			CommitSiblings = 5; /* # concurrent xacts needed to sleep */
+__thread int			wal_retrieve_retry_interval = 5000;
+__thread int			max_slot_wal_keep_size_mb = -1;
 
 #ifdef WAL_DEBUG
 bool		XLOG_DEBUG = false;
 #endif
 
-int			wal_segment_size = DEFAULT_XLOG_SEG_SIZE;
+__thread int			wal_segment_size = DEFAULT_XLOG_SEG_SIZE;
 
 /*
  * Number of WAL insertion locks to use. A higher value allows more insertions
@@ -126,11 +126,11 @@ int			wal_segment_size = DEFAULT_XLOG_SEG_SIZE;
  * Max distance from last checkpoint, before triggering a new xlog-based
  * checkpoint.
  */
-int			CheckPointSegments;
+__thread int			CheckPointSegments;
 
 /* Estimated distance between checkpoints, in bytes */
-static double CheckPointDistanceEstimate = 0;
-static double PrevCheckPointDistance = 0;
+static __thread double CheckPointDistanceEstimate = 0;
+static __thread double PrevCheckPointDistance = 0;
 
 /*
  * GUC support
@@ -182,13 +182,13 @@ const struct config_enum_entry recovery_target_action_options[] = {
  * Because only the checkpointer or a stand-alone backend can perform
  * checkpoints, this will be unused in normal backends.
  */
-CheckpointStatsData CheckpointStats;
+__thread CheckpointStatsData CheckpointStats;
 
 /*
  * ThisTimeLineID will be same in all backends --- it identifies current
  * WAL timeline for the database system.
  */
-TimeLineID	ThisTimeLineID = 0;
+__thread TimeLineID	ThisTimeLineID = 0;
 
 /*
  * Are we doing recovery from XLOG?
@@ -201,16 +201,16 @@ TimeLineID	ThisTimeLineID = 0;
  * process you're running in, use RecoveryInProgress() but only after shared
  * memory startup and lock initialization.
  */
-bool		InRecovery = false;
+__thread bool		InRecovery = false;
 
 /* Are we in Hot Standby mode? Only valid in startup process, see xlog.h */
-HotStandbyState standbyState = STANDBY_DISABLED;
+__thread HotStandbyState standbyState = STANDBY_DISABLED;
 
-static XLogRecPtr LastRec;
+static __thread XLogRecPtr LastRec;
 
 /* Local copy of WalRcv->flushedUpto */
-static XLogRecPtr flushedUpto = 0;
-static TimeLineID receiveTLI = 0;
+static __thread XLogRecPtr flushedUpto = 0;
+static __thread TimeLineID receiveTLI = 0;
 
 /*
  * abortedRecPtr is the start pointer of a broken record at end of WAL when
@@ -218,8 +218,8 @@ static TimeLineID receiveTLI = 0;
  * contrecord that went missing.  See CreateOverwriteContrecordRecord for
  * details.
  */
-static XLogRecPtr abortedRecPtr;
-static XLogRecPtr missingContrecPtr;
+static __thread XLogRecPtr abortedRecPtr;
+static __thread XLogRecPtr missingContrecPtr;
 
 /*
  * During recovery, lastFullPageWrites keeps track of full_page_writes that
@@ -227,26 +227,26 @@ static XLogRecPtr missingContrecPtr;
  * that the recovery starting checkpoint record indicates, and then updated
  * each time XLOG_FPW_CHANGE record is replayed.
  */
-static bool lastFullPageWrites;
+static __thread bool lastFullPageWrites;
 
 /*
  * Local copy of the state tracked by SharedRecoveryState in shared memory,
  * It is false if SharedRecoveryState is RECOVERY_STATE_DONE.  True actually
  * means "not known, need to check the shared state".
  */
-static bool LocalRecoveryInProgress = true;
+static __thread bool LocalRecoveryInProgress = true;
 
 /*
  * Local copy of SharedHotStandbyActive variable. False actually means "not
  * known, need to check the shared state".
  */
-static bool LocalHotStandbyActive = false;
+static __thread bool LocalHotStandbyActive = false;
 
 /*
  * Local copy of SharedPromoteIsTriggered variable. False actually means "not
  * known, need to check the shared state".
  */
-static bool LocalPromoteIsTriggered = false;
+static __thread bool LocalPromoteIsTriggered = false;
 
 /*
  * Local state for XLogInsertAllowed():
@@ -258,7 +258,7 @@ static bool LocalPromoteIsTriggered = false;
  * The coding in XLogInsertAllowed() depends on the first two of these states
  * being numerically the same as bool true and false.
  */
-static int	LocalXLogInsertAllowed = -1;
+static __thread int	LocalXLogInsertAllowed = -1;
 
 /*
  * When ArchiveRecoveryRequested is set, archive recovery was requested,
@@ -271,14 +271,14 @@ static int	LocalXLogInsertAllowed = -1;
  * will switch to using offline XLOG archives as soon as we reach the end of
  * WAL in pg_wal.
 */
-bool		ArchiveRecoveryRequested = false;
-bool		InArchiveRecovery = false;
+__thread bool		ArchiveRecoveryRequested = false;
+__thread bool		InArchiveRecovery = false;
 
-static bool standby_signal_file_found = false;
-static bool recovery_signal_file_found = false;
+static __thread bool standby_signal_file_found = false;
+static __thread bool recovery_signal_file_found = false;
 
 /* Was the last xlog file restored from archive, or local? */
-static bool restoredFromArchive = false;
+static __thread bool restoredFromArchive = false;
 
 /* Buffers dedicated to consistency checks of size BLCKSZ */
 static char *replay_image_masked = NULL;
@@ -288,38 +288,38 @@ static char *master_image_masked = NULL;
 char	   *recoveryRestoreCommand = NULL;
 char	   *recoveryEndCommand = NULL;
 char	   *archiveCleanupCommand = NULL;
-RecoveryTargetType recoveryTarget = RECOVERY_TARGET_UNSET;
-bool		recoveryTargetInclusive = true;
-int			recoveryTargetAction = RECOVERY_TARGET_ACTION_PAUSE;
-TransactionId recoveryTargetXid;
+__thread RecoveryTargetType recoveryTarget = RECOVERY_TARGET_UNSET;
+__thread bool		recoveryTargetInclusive = true;
+__thread int			recoveryTargetAction = RECOVERY_TARGET_ACTION_PAUSE;
+__thread TransactionId recoveryTargetXid;
 char	   *recovery_target_time_string;
-static TimestampTz recoveryTargetTime;
+static __thread TimestampTz recoveryTargetTime;
 const char *recoveryTargetName;
-XLogRecPtr	recoveryTargetLSN;
-int			recovery_min_apply_delay = 0;
+__thread XLogRecPtr	recoveryTargetLSN;
+__thread int			recovery_min_apply_delay = 0;
 
 /* options formerly taken from recovery.conf for XLOG streaming */
-bool		StandbyModeRequested = false;
+__thread bool		StandbyModeRequested = false;
 char	   *PrimaryConnInfo = NULL;
 char	   *PrimarySlotName = NULL;
 char	   *PromoteTriggerFile = NULL;
-bool		wal_receiver_create_temp_slot = false;
+__thread bool		wal_receiver_create_temp_slot = false;
 
 /* are we currently in standby mode? */
-bool		StandbyMode = false;
+__thread bool		StandbyMode = false;
 
 /* whether request for fast promotion has been made yet */
-static bool fast_promote = false;
+static __thread bool fast_promote = false;
 
 /*
  * if recoveryStopsBefore/After returns true, it saves information of the stop
  * point here
  */
-static TransactionId recoveryStopXid;
-static TimestampTz recoveryStopTime;
-static XLogRecPtr recoveryStopLSN;
+static __thread TransactionId recoveryStopXid;
+static __thread TimestampTz recoveryStopTime;
+static __thread XLogRecPtr recoveryStopLSN;
 static char recoveryStopName[MAXFNAMELEN];
-static bool recoveryStopAfter;
+static __thread bool recoveryStopAfter;
 
 /*
  * During normal operation, the only timeline we care about is ThisTimeLineID.
@@ -347,11 +347,11 @@ static bool recoveryStopAfter;
  * file was created.)  During a sequential scan we do not allow this value
  * to decrease.
  */
-RecoveryTargetTimeLineGoal recoveryTargetTimeLineGoal = RECOVERY_TARGET_TIMELINE_LATEST;
-TimeLineID	recoveryTargetTLIRequested = 0;
-TimeLineID	recoveryTargetTLI = 0;
+__thread RecoveryTargetTimeLineGoal recoveryTargetTimeLineGoal = RECOVERY_TARGET_TIMELINE_LATEST;
+__thread TimeLineID	recoveryTargetTLIRequested = 0;
+__thread TimeLineID	recoveryTargetTLI = 0;
 static List *expectedTLEs;
-static TimeLineID curFileTLI;
+static __thread TimeLineID curFileTLI;
 
 /*
  * ProcLastRecPtr points to the start of the last XLOG record inserted by the
@@ -368,9 +368,9 @@ static TimeLineID curFileTLI;
  * stored here.  The parallel leader advances its own copy, when necessary,
  * in WaitForParallelWorkersToFinish.
  */
-XLogRecPtr	ProcLastRecPtr = InvalidXLogRecPtr;
-XLogRecPtr	XactLastRecEnd = InvalidXLogRecPtr;
-XLogRecPtr	XactLastCommitEnd = InvalidXLogRecPtr;
+__thread XLogRecPtr	ProcLastRecPtr = InvalidXLogRecPtr;
+__thread XLogRecPtr	XactLastRecEnd = InvalidXLogRecPtr;
+__thread XLogRecPtr	XactLastCommitEnd = InvalidXLogRecPtr;
 
 /*
  * RedoRecPtr is this backend's local copy of the REDO record pointer
@@ -382,17 +382,17 @@ XLogRecPtr	XactLastCommitEnd = InvalidXLogRecPtr;
  * see GetRedoRecPtr.  A freshly spawned backend obtains the value during
  * InitXLOGAccess.
  */
-static XLogRecPtr RedoRecPtr;
+static __thread XLogRecPtr RedoRecPtr;
 
 /*
  * doPageWrites is this backend's local copy of (forcePageWrites ||
  * fullPageWrites).  It is used together with RedoRecPtr to decide whether
  * a full-page image of a page need to be taken.
  */
-static bool doPageWrites;
+static __thread bool doPageWrites;
 
 /* Has the recovery code requested a walreceiver wakeup? */
-static bool doRequestWalReceiverReply;
+static __thread bool doRequestWalReceiverReply;
 
 /*
  * RedoStartLSN points to the checkpoint's REDO location which is specified
@@ -404,7 +404,7 @@ static bool doRequestWalReceiverReply;
  * backwards to the REDO location after reading the checkpoint record,
  * because the REDO record can precede the checkpoint record.
  */
-static XLogRecPtr RedoStartLSN = InvalidXLogRecPtr;
+static __thread XLogRecPtr RedoStartLSN = InvalidXLogRecPtr;
 
 /*----------
  * Shared-memory data structures for XLOG control
@@ -542,7 +542,7 @@ typedef enum ExclusiveBackupState
  * Session status of running backup, used for sanity checks in SQL-callable
  * functions to start and stop backups.
  */
-static SessionBackupState sessionBackupState = SESSION_BACKUP_NONE;
+static __thread SessionBackupState sessionBackupState = SESSION_BACKUP_NONE;
 
 /*
  * Shared state data for WAL insertion.
@@ -776,13 +776,13 @@ static ControlFileData *ControlFile = NULL;
 #define ConvertToXSegs(x, segsize)	XLogMBVarToSegs((x), (segsize))
 
 /* The number of bytes in a WAL segment usable for WAL data. */
-static int	UsableBytesInSegment;
+static __thread int	UsableBytesInSegment;
 
 /*
  * Private, possibly out-of-date copy of shared LogwrtResult.
  * See discussion above.
  */
-static XLogwrtResult LogwrtResult = {0, 0};
+static __thread XLogwrtResult LogwrtResult = {0, 0};
 
 /*
  * Codes indicating where we got a WAL file from during recovery, or where
@@ -805,8 +805,8 @@ static const char *const xlogSourceNames[] = {"any", "archive", "pg_wal", "strea
  * write the XLOG, and so will normally refer to the active segment.
  * Note: call Reserve/ReleaseExternalFD to track consumption of this FD.
  */
-static int	openLogFile = -1;
-static XLogSegNo openLogSegNo = 0;
+static __thread int	openLogFile = -1;
+static __thread XLogSegNo openLogSegNo = 0;
 
 /*
  * These variables are used similarly to the ones above, but for reading
@@ -817,11 +817,11 @@ static XLogSegNo openLogSegNo = 0;
  * this FD too; but it doesn't currently seem worthwhile, since the XLOG is
  * not read by general-purpose sessions.
  */
-static int	readFile = -1;
-static XLogSegNo readSegNo = 0;
-static uint32 readOff = 0;
-static uint32 readLen = 0;
-static XLogSource readSource = XLOG_FROM_ANY;
+static __thread int	readFile = -1;
+static __thread XLogSegNo readSegNo = 0;
+static __thread uint32 readOff = 0;
+static __thread uint32 readLen = 0;
+static __thread XLogSource readSource = XLOG_FROM_ANY;
 
 /*
  * Keeps track of which source we're currently reading from. This is
@@ -833,9 +833,9 @@ static XLogSource readSource = XLOG_FROM_ANY;
  * pendingWalRcvRestart is set when a config change occurs that requires a
  * walreceiver restart.  This is only valid in XLOG_FROM_STREAM state.
  */
-static XLogSource currentSource = XLOG_FROM_ANY;
-static bool lastSourceFailed = false;
-static bool pendingWalRcvRestart = false;
+static __thread XLogSource currentSource = XLOG_FROM_ANY;
+static __thread bool lastSourceFailed = false;
+static __thread bool pendingWalRcvRestart = false;
 
 typedef struct XLogPageReadPrivate
 {
@@ -852,12 +852,12 @@ typedef struct XLogPageReadPrivate
  * also changes when we try to read from a source and fail, while
  * XLogReceiptSource tracks where we last successfully read some WAL.)
  */
-static TimestampTz XLogReceiptTime = 0;
-static XLogSource XLogReceiptSource = XLOG_FROM_ANY;
+static __thread TimestampTz XLogReceiptTime = 0;
+static __thread XLogSource XLogReceiptSource = XLOG_FROM_ANY;
 
 /* State information for XLOG reading */
-static XLogRecPtr ReadRecPtr;	/* start of last record read */
-static XLogRecPtr EndRecPtr;	/* end+1 of last record read */
+static __thread XLogRecPtr ReadRecPtr;	/* start of last record read */
+static __thread XLogRecPtr EndRecPtr;	/* end+1 of last record read */
 
 /*
  * Local copies of equivalent fields in the control file.  When running
@@ -866,25 +866,25 @@ static XLogRecPtr EndRecPtr;	/* end+1 of last record read */
  * switched to false to prevent any updates while replaying records.
  * Those values are kept consistent as long as crash recovery runs.
  */
-static XLogRecPtr minRecoveryPoint;
-static TimeLineID minRecoveryPointTLI;
-static bool updateMinRecoveryPoint = true;
+static __thread XLogRecPtr minRecoveryPoint;
+static __thread TimeLineID minRecoveryPointTLI;
+static __thread bool updateMinRecoveryPoint = true;
 
 /*
  * Have we reached a consistent database state? In crash recovery, we have
  * to replay all the WAL, so reachedConsistency is never set. During archive
  * recovery, the database is consistent once minRecoveryPoint is reached.
  */
-bool		reachedConsistency = false;
+__thread bool		reachedConsistency = false;
 
-static bool InRedo = false;
+static __thread bool InRedo = false;
 
 /* Have we launched bgwriter during recovery? */
-static bool bgwriterLaunched = false;
+static __thread bool bgwriterLaunched = false;
 
 /* For WALInsertLockAcquire/Release functions */
-static int	MyLockNo = 0;
-static bool holdingAllLocks = false;
+static __thread int	MyLockNo = 0;
+static __thread bool holdingAllLocks = false;
 
 #ifdef WAL_DEBUG
 static MemoryContext walDebugCxt = NULL;

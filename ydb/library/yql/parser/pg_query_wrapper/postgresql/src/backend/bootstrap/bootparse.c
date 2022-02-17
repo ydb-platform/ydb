@@ -140,7 +140,7 @@
 #define YYMALLOC palloc
 #define YYFREE   pfree
 
-static MemoryContext per_line_ctx = NULL;
+static __thread MemoryContext per_line_ctx = NULL;
 
 static void
 do_start(void)
@@ -170,7 +170,7 @@ do_end(void)
 }
 
 
-static int num_columns_read = 0;
+static __thread int num_columns_read = 0;
 
 
 #line 177 "bootparse.c" /* yacc.c:337  */
@@ -259,7 +259,7 @@ typedef union YYSTYPE YYSTYPE;
 #endif
 
 
-extern YYSTYPE boot_yylval;
+extern __thread YYSTYPE boot_yylval;
 
 int boot_yyparse (void);
 
@@ -1178,7 +1178,7 @@ yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep)
 int yychar;
 
 /* The semantic value of the lookahead symbol.  */
-YYSTYPE yylval;
+__thread YYSTYPE boot_yylval;
 /* Number of syntax errors so far.  */
 int yynerrs;
 

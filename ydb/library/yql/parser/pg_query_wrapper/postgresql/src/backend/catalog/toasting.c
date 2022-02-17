@@ -35,7 +35,7 @@
 #include "utils/syscache.h"
 
 /* Potentially set by pg_upgrade_support functions */
-Oid			binary_upgrade_next_toast_pg_type_oid = InvalidOid;
+__thread Oid			binary_upgrade_next_toast_pg_type_oid = InvalidOid;
 
 static void CheckAndCreateToastTable(Oid relOid, Datum reloptions,
 									 LOCKMODE lockmode, bool check,

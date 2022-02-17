@@ -24,7 +24,7 @@
 #include "optimizer/planmain.h"
 
 /* Hook for plugins to get control in add_paths_to_joinrel() */
-set_join_pathlist_hook_type set_join_pathlist_hook = NULL;
+__thread set_join_pathlist_hook_type set_join_pathlist_hook = NULL;
 
 /*
  * Paths parameterized by the parent can be considered to be parameterized by

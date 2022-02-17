@@ -39,17 +39,17 @@
  * get round-trip-accurate results. If 0 or less, then use the old, slow,
  * decimal rounding method.
  */
-int			extra_float_digits = 1;
+__thread int			extra_float_digits = 1;
 
 /* Cached constants for degree-based trig functions */
-static bool degree_consts_set = false;
-static float8 sin_30 = 0;
-static float8 one_minus_cos_60 = 0;
-static float8 asin_0_5 = 0;
-static float8 acos_0_5 = 0;
-static float8 atan_1_0 = 0;
-static float8 tan_45 = 0;
-static float8 cot_45 = 0;
+static __thread bool degree_consts_set = false;
+static __thread float8 sin_30 = 0;
+static __thread float8 one_minus_cos_60 = 0;
+static __thread float8 asin_0_5 = 0;
+static __thread float8 acos_0_5 = 0;
+static __thread float8 atan_1_0 = 0;
+static __thread float8 tan_45 = 0;
+static __thread float8 cot_45 = 0;
 
 /*
  * These are intentionally not static; don't "fix" them.  They will never
@@ -57,14 +57,14 @@ static float8 cot_45 = 0;
  * compiler to know that, else it might try to precompute expressions
  * involving them.  See comments for init_degree_constants().
  */
-float8		degree_c_thirty = 30.0;
-float8		degree_c_forty_five = 45.0;
-float8		degree_c_sixty = 60.0;
-float8		degree_c_one_half = 0.5;
-float8		degree_c_one = 1.0;
+__thread float8		degree_c_thirty = 30.0;
+__thread float8		degree_c_forty_five = 45.0;
+__thread float8		degree_c_sixty = 60.0;
+__thread float8		degree_c_one_half = 0.5;
+__thread float8		degree_c_one = 1.0;
 
 /* State for drandom() and setseed() */
-static bool drandom_seed_set = false;
+static __thread bool drandom_seed_set = false;
 static unsigned short drandom_seed[3] = {0, 0, 0};
 
 /* Local function prototypes */

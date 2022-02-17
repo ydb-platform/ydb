@@ -81,7 +81,7 @@ static void update_basebackup_progress(int64 delta);
 static bool is_checksummed_file(const char *fullpath, const char *filename);
 
 /* Was the backup currently in-progress initiated in recovery mode? */
-static bool backup_started_in_recovery = false;
+static __thread bool backup_started_in_recovery = false;
 
 /* Relative path of temporary statistics directory */
 static char *statrelpath = NULL;
@@ -109,34 +109,34 @@ do { \
 } while (0)
 
 /* The actual number of bytes, transfer of which may cause sleep. */
-static uint64 throttling_sample;
+static __thread uint64 throttling_sample;
 
 /* Amount of data already transferred but not yet throttled.  */
-static int64 throttling_counter;
+static __thread int64 throttling_counter;
 
 /* The minimum time required to transfer throttling_sample bytes. */
-static TimeOffset elapsed_min_unit;
+static __thread TimeOffset elapsed_min_unit;
 
 /* The last check of the transfer rate. */
-static TimestampTz throttled_last;
+static __thread TimestampTz throttled_last;
 
 /* The starting XLOG position of the base backup. */
-static XLogRecPtr startptr;
+static __thread XLogRecPtr startptr;
 
 /* Total number of checksum failures during base backup. */
-static long long int total_checksum_failures;
+static __thread long long int total_checksum_failures;
 
 /* Do not verify checksums. */
-static bool noverify_checksums = false;
+static __thread bool noverify_checksums = false;
 
 /*
  * Total amount of backup data that will be streamed.
  * -1 means that the size is not estimated.
  */
-static int64 backup_total = 0;
+static __thread int64 backup_total = 0;
 
 /* Amount of backup data already streamed */
-static int64 backup_streamed = 0;
+static __thread int64 backup_streamed = 0;
 
 /*
  * Definition of one element part of an exclusion list, used for paths part

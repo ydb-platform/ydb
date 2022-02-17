@@ -57,7 +57,7 @@ typedef struct LogicalRepWorker
 } LogicalRepWorker;
 
 /* Main memory context for apply worker. Permanent during worker lifetime. */
-extern MemoryContext ApplyContext;
+extern __thread MemoryContext ApplyContext;
 
 /* libpqreceiver connection */
 extern struct WalReceiverConn *LogRepWorkerWalRcvConn;
@@ -66,7 +66,7 @@ extern struct WalReceiverConn *LogRepWorkerWalRcvConn;
 extern Subscription *MySubscription;
 extern LogicalRepWorker *MyLogicalRepWorker;
 
-extern bool in_remote_transaction;
+extern __thread bool in_remote_transaction;
 
 extern void logicalrep_worker_attach(int slot);
 extern LogicalRepWorker *logicalrep_worker_find(Oid subid, Oid relid,

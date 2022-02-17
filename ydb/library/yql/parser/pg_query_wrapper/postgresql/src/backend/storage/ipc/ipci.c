@@ -47,12 +47,12 @@
 #include "utils/snapmgr.h"
 
 /* GUCs */
-int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
+__thread int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
 
-shmem_startup_hook_type shmem_startup_hook = NULL;
+__thread shmem_startup_hook_type shmem_startup_hook = NULL;
 
-static Size total_addin_request = 0;
-static bool addin_request_allowed = true;
+static __thread Size total_addin_request = 0;
+static __thread bool addin_request_allowed = true;
 
 
 /*

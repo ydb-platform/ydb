@@ -147,7 +147,7 @@ typedef struct TransitionCaptureState
 #define SESSION_REPLICATION_ROLE_ORIGIN		0
 #define SESSION_REPLICATION_ROLE_REPLICA	1
 #define SESSION_REPLICATION_ROLE_LOCAL		2
-extern PGDLLIMPORT int SessionReplicationRole;
+extern __thread PGDLLIMPORT int SessionReplicationRole;
 
 /*
  * States at which a trigger can be fired. These are the

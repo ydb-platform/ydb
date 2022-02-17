@@ -47,7 +47,7 @@
 
 /* default init hook can be overridden by a shared library */
 static void default_openssl_tls_init(SSL_CTX *context, bool isServerStart);
-openssl_tls_init_hook_typ openssl_tls_init_hook = default_openssl_tls_init;
+__thread openssl_tls_init_hook_typ openssl_tls_init_hook = default_openssl_tls_init;
 
 static int	my_sock_read(BIO *h, char *buf, int size);
 static int	my_sock_write(BIO *h, const char *buf, int size);
@@ -67,9 +67,9 @@ static const char *SSLerrmessage(unsigned long ecode);
 static char *X509_NAME_to_cstring(X509_NAME *name);
 
 static SSL_CTX *SSL_context = NULL;
-static bool SSL_initialized = false;
-static bool dummy_ssl_passwd_cb_called = false;
-static bool ssl_is_server_start;
+static __thread bool SSL_initialized = false;
+static __thread bool dummy_ssl_passwd_cb_called = false;
+static __thread bool ssl_is_server_start;
 
 static int	ssl_protocol_version_to_openssl(int v);
 static const char *ssl_protocol_version_to_string(int v);

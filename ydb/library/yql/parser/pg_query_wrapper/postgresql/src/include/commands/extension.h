@@ -27,8 +27,8 @@
  * scripts can drop member objects without having to explicitly dissociate
  * them from the extension first.
  */
-extern PGDLLIMPORT bool creating_extension;
-extern PGDLLIMPORT Oid CurrentExtensionObject;
+extern __thread PGDLLIMPORT bool creating_extension;
+extern __thread PGDLLIMPORT Oid CurrentExtensionObject;
 
 
 extern ObjectAddress CreateExtension(ParseState *pstate, CreateExtensionStmt *stmt);

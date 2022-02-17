@@ -20,7 +20,7 @@
 BufferDescPadded *BufferDescriptors;
 char	   *BufferBlocks;
 LWLockMinimallyPadded *BufferIOLWLockArray = NULL;
-WritebackContext BackendWritebackContext;
+__thread WritebackContext BackendWritebackContext;
 CkptSortItem *CkptBufferIds;
 
 

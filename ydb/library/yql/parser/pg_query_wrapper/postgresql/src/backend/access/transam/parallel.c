@@ -109,22 +109,22 @@ typedef struct FixedParallelState
  * and < the number of workers before any user code is invoked; each parallel
  * worker will get a different parallel worker number.
  */
-int			ParallelWorkerNumber = -1;
+__thread int			ParallelWorkerNumber = -1;
 
 /* Is there a parallel message pending which we need to receive? */
-volatile bool ParallelMessagePending = false;
+__thread volatile bool ParallelMessagePending = false;
 
 /* Are we initializing a parallel worker? */
-bool		InitializingParallelWorker = false;
+__thread bool		InitializingParallelWorker = false;
 
 /* Pointer to our fixed parallel state. */
 static FixedParallelState *MyFixedParallelState;
 
 /* List of active parallel contexts. */
-static dlist_head pcxt_list = DLIST_STATIC_INIT(pcxt_list);
+static __thread dlist_head pcxt_list ;void pcxt_list_init(void) { dlist_init(&pcxt_list); }
 
 /* Backend-local copy of data from FixedParallelState. */
-static pid_t ParallelMasterPid;
+static __thread pid_t ParallelMasterPid;
 
 /*
  * List of internal parallel worker entry points.  We need this for

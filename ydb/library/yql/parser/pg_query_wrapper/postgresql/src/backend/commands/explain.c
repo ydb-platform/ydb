@@ -41,10 +41,10 @@
 
 
 /* Hook for plugins to get control in ExplainOneQuery() */
-ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
+__thread ExplainOneQuery_hook_type ExplainOneQuery_hook = NULL;
 
 /* Hook for plugins to get control in explain_get_index_name() */
-explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
+__thread explain_get_index_name_hook_type explain_get_index_name_hook = NULL;
 
 
 /* OR-able flags for ExplainXMLTag() */

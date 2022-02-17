@@ -272,7 +272,7 @@ typedef struct WritebackContext
 
 /* in buf_init.c */
 extern PGDLLIMPORT BufferDescPadded *BufferDescriptors;
-extern PGDLLIMPORT WritebackContext BackendWritebackContext;
+extern __thread PGDLLIMPORT WritebackContext BackendWritebackContext;
 
 /* in localbuf.c */
 extern BufferDesc *LocalBufferDescriptors;

@@ -87,8 +87,8 @@ static const pg_enc2name *MessageEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
  * encoding yet either.  So SetClientEncoding() just accepts anything and
  * remembers it for InitializeClientEncoding() to apply later.
  */
-static bool backend_startup_complete = false;
-static int	pending_client_encoding = PG_SQL_ASCII;
+static __thread bool backend_startup_complete = false;
+static __thread int	pending_client_encoding = PG_SQL_ASCII;
 
 
 /* Internal functions */

@@ -97,7 +97,7 @@ static bool dsm_control_segment_sane(dsm_control_header *control,
 static uint64 dsm_control_bytes_needed(uint32 nitems);
 
 /* Has this backend initialized the dynamic shared memory system yet? */
-static bool dsm_init_done = false;
+static __thread bool dsm_init_done = false;
 
 /*
  * List of dynamic shared memory segments used by this backend.
@@ -116,7 +116,7 @@ static bool dsm_init_done = false;
  * each new mapping would require an update to the control segment,
  * which requires locking, in which the postmaster must not be involved.
  */
-static dlist_head dsm_segment_list = DLIST_STATIC_INIT(dsm_segment_list);
+static __thread dlist_head dsm_segment_list ;void dsm_segment_list_init(void) { dlist_init(&dsm_segment_list); }
 
 /*
  * Control segment information.
@@ -125,9 +125,9 @@ static dlist_head dsm_segment_list = DLIST_STATIC_INIT(dsm_segment_list);
  * reference counted; instead, it lasts for the postmaster's entire
  * life cycle.  For simplicity, it doesn't have a dsm_segment object either.
  */
-static dsm_handle dsm_control_handle;
+static __thread dsm_handle dsm_control_handle;
 static dsm_control_header *dsm_control;
-static Size dsm_control_mapped_size = 0;
+static __thread Size dsm_control_mapped_size = 0;
 static void *dsm_control_impl_private = NULL;
 
 /*

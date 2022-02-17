@@ -97,7 +97,7 @@ gtsvectorin(PG_FUNCTION_ARGS)
 #define ARROUTSTR	"%d unique words"
 #define EXTRALEN	( 2*13 )
 
-static int	outbuf_maxlen = 0;
+static __thread int	outbuf_maxlen = 0;
 
 Datum
 gtsvectorout(PG_FUNCTION_ARGS)

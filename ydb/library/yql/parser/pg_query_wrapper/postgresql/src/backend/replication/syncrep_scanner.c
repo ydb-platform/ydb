@@ -506,9 +506,9 @@ struct yy_buffer_state
 #endif /* !YY_STRUCT_YY_BUFFER_STATE */
 
 /* Stack of input buffers. */
-static size_t yy_buffer_stack_top = 0; /**< index of top of stack. */
-static size_t yy_buffer_stack_max = 0; /**< capacity of stack. */
-static YY_BUFFER_STATE * yy_buffer_stack = NULL; /**< Stack as an array. */
+static __thread size_t yy_buffer_stack_top = 0; /**< index of top of stack. */
+static __thread size_t yy_buffer_stack_max = 0; /**< capacity of stack. */
+static __thread YY_BUFFER_STATE * yy_buffer_stack = NULL; /**< Stack as an array. */
 
 /* We provide macros for accessing buffer states in case in the
  * future we want to put the buffer states in a more general
@@ -525,19 +525,19 @@ static YY_BUFFER_STATE * yy_buffer_stack = NULL; /**< Stack as an array. */
 #define YY_CURRENT_BUFFER_LVALUE (yy_buffer_stack)[(yy_buffer_stack_top)]
 
 /* yy_hold_char holds the character lost when yytext is formed. */
-static char yy_hold_char;
-static int yy_n_chars;		/* number of characters read into yy_ch_buf */
+static __thread char yy_hold_char;
+static __thread int yy_n_chars;		/* number of characters read into yy_ch_buf */
 int yyleng;
 
 /* Points to current character in buffer. */
 static char *yy_c_buf_p = NULL;
-static int yy_init = 0;		/* whether we need to initialize */
-static int yy_start = 0;	/* start state number */
+static __thread int yy_init = 0;		/* whether we need to initialize */
+static __thread int yy_start = 0;	/* start state number */
 
 /* Flag which is used to allow yywrap()'s to do buffer switches
  * instead of setting up a fresh yyin.  A bit of a hack ...
  */
-static int yy_did_buffer_switch_on_eof;
+static __thread int yy_did_buffer_switch_on_eof;
 
 void yyrestart ( FILE *input_file  );
 void yy_switch_to_buffer ( YY_BUFFER_STATE new_buffer  );
@@ -707,7 +707,7 @@ static const flex_int16_t yy_chk[64] =
        31,   31,   31
     } ;
 
-static yy_state_type yy_last_accepting_state;
+static __thread yy_state_type yy_last_accepting_state;
 static char *yy_last_accepting_cpos;
 
 extern int yy_flex_debug;
@@ -752,9 +752,9 @@ fprintf_to_ereport(const char *fmt, const char *msg)
 }
 
 /* Handles to the buffer that the lexer uses internally */
-static YY_BUFFER_STATE scanbufhandle;
+static __thread YY_BUFFER_STATE scanbufhandle;
 
-static StringInfoData xdbuf;
+static __thread StringInfoData xdbuf;
 
 /* LCOV_EXCL_START */
 

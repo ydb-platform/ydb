@@ -427,13 +427,13 @@ typedef struct
 
 /* global cache for date/time format pictures */
 static DCHCacheEntry *DCHCache[DCH_CACHE_ENTRIES];
-static int	n_DCHCache = 0;		/* current number of entries */
-static int	DCHCounter = 0;		/* aging-event counter */
+static __thread int	n_DCHCache = 0;		/* current number of entries */
+static __thread int	DCHCounter = 0;		/* aging-event counter */
 
 /* global cache for number format pictures */
 static NUMCacheEntry *NUMCache[NUM_CACHE_ENTRIES];
-static int	n_NUMCache = 0;		/* current number of entries */
-static int	NUMCounter = 0;		/* aging-event counter */
+static __thread int	n_NUMCache = 0;		/* current number of entries */
+static __thread int	NUMCounter = 0;		/* aging-event counter */
 
 /* ----------
  * For char->date/time conversion

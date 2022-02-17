@@ -190,7 +190,7 @@ StaticAssertDecl(lengthof(BuiltinTrancheNames) ==
  * process.  Any unused entries in the array will contain NULL.
  */
 static const char **LWLockTrancheNames = NULL;
-static int	LWLockTrancheNamesAllocated = 0;
+static __thread int	LWLockTrancheNamesAllocated = 0;
 
 /*
  * This points to the main array of LWLocks in shared memory.  Backends inherit
@@ -214,7 +214,7 @@ typedef struct LWLockHandle
 	LWLockMode	mode;
 } LWLockHandle;
 
-static int	num_held_lwlocks = 0;
+static __thread int	num_held_lwlocks = 0;
 static LWLockHandle held_lwlocks[MAX_SIMUL_LWLOCKS];
 
 /* struct representing the LWLock tranche request for named tranche */
@@ -225,7 +225,7 @@ typedef struct NamedLWLockTrancheRequest
 } NamedLWLockTrancheRequest;
 
 static NamedLWLockTrancheRequest *NamedLWLockTrancheRequestArray = NULL;
-static int	NamedLWLockTrancheRequestsAllocated = 0;
+static __thread int	NamedLWLockTrancheRequestsAllocated = 0;
 
 /*
  * NamedLWLockTrancheRequests is both the valid length of the request array,
@@ -233,12 +233,12 @@ static int	NamedLWLockTrancheRequestsAllocated = 0;
  * This variable and NamedLWLockTrancheArray are non-static so that
  * postmaster.c can copy them to child processes in EXEC_BACKEND builds.
  */
-int			NamedLWLockTrancheRequests = 0;
+__thread int			NamedLWLockTrancheRequests = 0;
 
 /* points to data in shared memory: */
 NamedLWLockTranche *NamedLWLockTrancheArray = NULL;
 
-static bool lock_named_request_allowed = true;
+static __thread bool lock_named_request_allowed = true;
 
 static void InitializeLWLocks(void);
 static inline void LWLockReportWaitStart(LWLock *lock);

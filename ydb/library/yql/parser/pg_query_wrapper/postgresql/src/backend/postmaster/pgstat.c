@@ -121,10 +121,10 @@
  * GUC parameters
  * ----------
  */
-bool		pgstat_track_activities = false;
-bool		pgstat_track_counts = false;
-int			pgstat_track_functions = TRACK_FUNC_OFF;
-int			pgstat_track_activity_query_size = 1024;
+__thread bool		pgstat_track_activities = false;
+__thread bool		pgstat_track_counts = false;
+__thread int			pgstat_track_functions = TRACK_FUNC_OFF;
+__thread int			pgstat_track_activity_query_size = 1024;
 
 /* ----------
  * Built from GUC parameter
@@ -139,7 +139,7 @@ char	   *pgstat_stat_tmpname = NULL;
  * Stored directly in a stats message structure so it can be sent
  * without needing to copy things around.  We assume this inits to zeroes.
  */
-PgStat_MsgBgWriter BgWriterStats;
+__thread PgStat_MsgBgWriter BgWriterStats;
 
 /*
  * List of SLRU names that we keep stats for.  There is no central registry of
@@ -171,13 +171,13 @@ static PgStat_MsgSLRU SLRUStats[SLRU_NUM_ELEMENTS];
  * Local data
  * ----------
  */
-NON_EXEC_STATIC pgsocket pgStatSock = PGINVALID_SOCKET;
+__thread NON_EXEC_STATIC pgsocket pgStatSock = PGINVALID_SOCKET;
 
-static struct sockaddr_storage pgStatAddr;
+static __thread struct sockaddr_storage pgStatAddr;
 
-static time_t last_pgstat_start_time;
+static __thread time_t last_pgstat_start_time;
 
-static bool pgStatRunningInCollector = false;
+static __thread bool pgStatRunningInCollector = false;
 
 /*
  * Structures in which backends store per-table info that's waiting to be
@@ -225,7 +225,7 @@ static HTAB *pgStatFunctions = NULL;
  * Indicates if backend has some function stats that it hasn't yet
  * sent to the collector.
  */
-static bool have_function_stats = false;
+static __thread bool have_function_stats = false;
 
 /*
  * Tuple insertion/deletion counts for an open transaction can't be propagated
@@ -243,10 +243,10 @@ typedef struct PgStat_SubXactStatus
 
 static PgStat_SubXactStatus *pgStatXactStack = NULL;
 
-static int	pgStatXactCommit = 0;
-static int	pgStatXactRollback = 0;
-PgStat_Counter pgStatBlockReadTime = 0;
-PgStat_Counter pgStatBlockWriteTime = 0;
+static __thread int	pgStatXactCommit = 0;
+static __thread int	pgStatXactRollback = 0;
+__thread PgStat_Counter pgStatBlockReadTime = 0;
+__thread PgStat_Counter pgStatBlockWriteTime = 0;
 
 /* Record that's written to 2PC state file when pgstat state is persisted */
 typedef struct TwoPhasePgStatRecord
@@ -265,22 +265,22 @@ typedef struct TwoPhasePgStatRecord
 /*
  * Info about current "snapshot" of stats file
  */
-static MemoryContext pgStatLocalContext = NULL;
+static __thread MemoryContext pgStatLocalContext = NULL;
 static HTAB *pgStatDBHash = NULL;
 
 /* Status for backends including auxiliary */
 static LocalPgBackendStatus *localBackendStatusTable = NULL;
 
 /* Total number of backends including auxiliary */
-static int	localNumBackends = 0;
+static __thread int	localNumBackends = 0;
 
 /*
  * Cluster wide statistics, kept in the stats collector.
  * Contains statistics that are not collected per database
  * or per table.
  */
-static PgStat_ArchiverStats archiverStats;
-static PgStat_GlobalStats globalStats;
+static __thread PgStat_ArchiverStats archiverStats;
+static __thread PgStat_GlobalStats globalStats;
 static PgStat_SLRUStats slruStats[SLRU_NUM_ELEMENTS];
 
 /*
@@ -295,7 +295,7 @@ static List *pending_write_requests = NIL;
  * We use this to help separate "self" and "other" time charges.
  * (We assume this initializes to zero.)
  */
-static instr_time total_func_time;
+static __thread instr_time total_func_time;
 
 
 /* ----------
@@ -2706,7 +2706,7 @@ static PgBackendStatus *MyBEEntry = NULL;
 static char *BackendAppnameBuffer = NULL;
 static char *BackendClientHostnameBuffer = NULL;
 static char *BackendActivityBuffer = NULL;
-static Size BackendActivityBufferSize = 0;
+static __thread Size BackendActivityBufferSize = 0;
 #ifdef USE_SSL
 static PgBackendSSLStatus *BackendSslStatusBuffer = NULL;
 #endif

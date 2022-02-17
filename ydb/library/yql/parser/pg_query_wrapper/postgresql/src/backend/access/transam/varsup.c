@@ -31,7 +31,7 @@
 #define VAR_OID_PREFETCH		8192
 
 /* pointer to "variable cache" in shared memory (set up by shmem.c) */
-VariableCache ShmemVariableCache = NULL;
+__thread VariableCache ShmemVariableCache = NULL;
 
 
 /*

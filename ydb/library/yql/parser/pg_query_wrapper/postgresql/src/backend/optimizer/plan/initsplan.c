@@ -39,8 +39,8 @@
 #define make_restrictinfo(a,b,c,d,e,f,g,h,i) make_restrictinfo_new(a,b,c,d,e,f,g,h,i)
 
 /* These parameters are set by GUC */
-int			from_collapse_limit;
-int			join_collapse_limit;
+__thread int			from_collapse_limit;
+__thread int			join_collapse_limit;
 
 
 /* Elements of the postponed_qual_list used during deconstruct_recurse */

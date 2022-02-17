@@ -99,7 +99,7 @@ typedef struct TokenizedLine
  * parsed_hba_context is the memory context where it lives.
  */
 static List *parsed_hba_lines = NIL;
-static MemoryContext parsed_hba_context = NULL;
+static __thread MemoryContext parsed_hba_context = NULL;
 
 /*
  * pre-parsed content of ident mapping file: list of IdentLine structs.
@@ -110,7 +110,7 @@ static MemoryContext parsed_hba_context = NULL;
  * memory context, they need to be explicitly free'd.
  */
 static List *parsed_ident_lines = NIL;
-static MemoryContext parsed_ident_context = NULL;
+static __thread MemoryContext parsed_ident_context = NULL;
 
 /*
  * The following character array represents the names of the authentication

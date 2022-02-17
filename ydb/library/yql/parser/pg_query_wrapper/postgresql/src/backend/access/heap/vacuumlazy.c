@@ -327,13 +327,13 @@ typedef struct LVSavedErrInfo
 } LVSavedErrInfo;
 
 /* A few variables that don't seem worth passing around as parameters */
-static int	elevel = -1;
+static __thread int	elevel = -1;
 
-static TransactionId OldestXmin;
-static TransactionId FreezeLimit;
-static MultiXactId MultiXactCutoff;
+static __thread TransactionId OldestXmin;
+static __thread TransactionId FreezeLimit;
+static __thread MultiXactId MultiXactCutoff;
 
-static BufferAccessStrategy vac_strategy;
+static __thread BufferAccessStrategy vac_strategy;
 
 
 /* non-export function prototypes */

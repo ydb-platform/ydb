@@ -114,7 +114,7 @@
 #define TWOPHASE_DIR "pg_twophase"
 
 /* GUC variable, can't be changed after startup */
-int			max_prepared_xacts = 0;
+__thread int			max_prepared_xacts = 0;
 
 /*
  * This struct describes one global transaction that is in prepared state
@@ -196,9 +196,9 @@ static TwoPhaseStateData *TwoPhaseState;
  * TwoPhaseStateLock, though obviously the pointer itself doesn't need to be
  * (since it's just local memory).
  */
-static GlobalTransaction MyLockedGxact = NULL;
+static __thread GlobalTransaction MyLockedGxact = NULL;
 
-static bool twophaseExitRegistered = false;
+static __thread bool twophaseExitRegistered = false;
 
 static void RecordTransactionCommitPrepared(TransactionId xid,
 											int nchildren,

@@ -15,14 +15,14 @@
 #include "common/file_perm.h"
 
 /* Modes for creating directories and files in the data directory */
-int			pg_dir_create_mode = PG_DIR_MODE_OWNER;
-int			pg_file_create_mode = PG_FILE_MODE_OWNER;
+__thread int			pg_dir_create_mode = PG_DIR_MODE_OWNER;
+__thread int			pg_file_create_mode = PG_FILE_MODE_OWNER;
 
 /*
  * Mode mask to pass to umask().  This is more of a preventative measure since
  * all file/directory creates should be performed using the create modes above.
  */
-int			pg_mode_mask = PG_MODE_MASK_OWNER;
+__thread int			pg_mode_mask = PG_MODE_MASK_OWNER;
 
 /*
  * Set create modes and mask to use when writing to PGDATA based on the data

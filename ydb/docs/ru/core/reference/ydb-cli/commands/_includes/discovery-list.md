@@ -6,7 +6,7 @@
 {{ ydb-cli }} [connection options] discovery list
 ```
 
-, где [connection options] - опции [соединения с БД](../../connect.md#command-line-pars)
+{% include [conn_options_ref.md](conn_options_ref.md) %}
 
 В выводимых в ответ строках содержится следующая информация:
 1. Эндпоинт, включая протокол и порт

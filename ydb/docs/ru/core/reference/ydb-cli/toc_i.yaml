@@ -15,6 +15,8 @@ items:
       href: commands/scheme-ls.md
     - name: Информация об объекте
       href: commands/scheme-describe.md
+    - name: Директории
+      href: commands/dir.md
     - name: Переименование таблиц
       href: commands/tools/rename.md
   - name: Работа с данными
@@ -25,8 +27,6 @@ items:
       href: commands/readtable.md
     - name: Работа со вторичными индексами
       href: commands/operations-index.md
-    - name: Работа с директориями
-      href: commands/scheme-mkdir.md
     - name: Скан запросы
       href: commands/scan-query.md
 #  - name: Утилиты

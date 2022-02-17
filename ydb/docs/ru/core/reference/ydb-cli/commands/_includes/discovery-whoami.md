@@ -6,7 +6,7 @@
 {{ ydb-cli }} [connection options] discovery whoami [-g]
 ```
 
-, где [connection options] - опции [соединения с БД](../../connect.md#command-line-pars)
+{% include [conn_options_ref.md](conn_options_ref.md) %}
 
 В ответ выводится имя учетной записи (User SID) и, если указана опция `-g`, то информация о принадлежности учетной записи группам.
 

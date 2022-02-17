@@ -10,11 +10,11 @@
 
 Полное описание команд {{ ydb-short-name }} CLI опубликовано в других статьях раздела, включая:
 
-* [Листинг объектов](../commands/scheme-ls.md).
+* [Список объектов](../commands/scheme-ls.md).
 * [Получение информации об объекте схемы](../commands/scheme-describe.md).
-* [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).
+* [Работа с директориями](../commands/dir.md).
 * [Выполнение запроса к данным](../commands/query.md).
 * [Потоковое чтение таблицы](../commands/readtable.md).
 * [Работа со вторичными индексами](../commands/operations-index.md).
-* [Работа с директориями](../commands/scheme-mkdir.md).
-* [Работа с профилями](../profile/index.md).
+* [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).
+* [Нагрузочное тестирование](../commands/workload/index.md).

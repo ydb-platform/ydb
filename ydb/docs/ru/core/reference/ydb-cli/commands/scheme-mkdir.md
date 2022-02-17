@@ -1,1 +1,1 @@
-{% include [intro.md](_includes/scheme-mkdir/intro.md) %}
+Данная страница удалена, контент перемещен в [новое размещение](dir.md).

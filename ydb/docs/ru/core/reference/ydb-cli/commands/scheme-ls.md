@@ -1,1 +1,1 @@
-{% include [intro.md](_includes/scheme-ls/intro.md) %}
+{% include [intro.md](_includes/scheme-ls.md) %}

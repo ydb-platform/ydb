@@ -142,18 +142,18 @@ public:
             const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
             if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
                 auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
-                tabletConfig->SetYcCloudId(cloudId);
+                alterConfig.SetYcCloudId(cloudId);
             }
             if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
                 auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
-                tabletConfig->SetYcFolderId(folderId);
+                alterConfig.SetYcFolderId(folderId);
             }
             if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
                 auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
-                tabletConfig->SetYdbDatabaseId(databaseId);
+                alterConfig.SetYdbDatabaseId(databaseId);
             }
             const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
-            tabletConfig->SetYdbDatabasePath(databasePath);
+            alterConfig.SetYdbDatabasePath(databasePath);
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);

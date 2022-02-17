@@ -2562,6 +2562,7 @@ namespace {
       Codecs: "zstd"
     }
     ReadRuleVersions: 567
+    YdbDatabasePath: "/Root"
   }
   ErrorCode: OK
 }

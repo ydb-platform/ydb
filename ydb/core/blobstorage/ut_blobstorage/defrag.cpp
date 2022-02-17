@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         const TVDiskID& vdiskId = info->GetVDiskId(orderNum);
         const TActorId& actorId = info->GetActorId(orderNum);
 
-        const ui32 targetNumChunks = 10;
+        const ui32 targetNumChunks = 20;
         std::map<ui32, std::vector<TLogoBlobID>> chunkToBlob;
 
         for (;;) {
@@ -88,6 +88,13 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         // wait for sync
         env.Sim(TDuration::Seconds(3));
 
+        // partition
+        for (const ui32 node : env.Runtime->GetNodes()) {
+            env.StopNode(node);
+        }
+        env.StartNode(actorId.NodeId());
+        env.Sim(TDuration::Seconds(30));
+
         for (;;) {
             // trigger compaction
             {
@@ -125,8 +132,9 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
         // defrag
         {
-            auto res = env.SyncQuery<TEvBlobStorage::TEvVDefragResult, TEvBlobStorage::TEvVDefrag>(actorId, vdiskId, true);
-            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus(), NKikimrProto::OK);
+            env.Sim(TDuration::Minutes(6)); // time enough to start defragmentation automatically
+            auto factory = []{ return std::unique_ptr<IEventBase>(TEvCompactVDisk::Create(EHullDbType::LogoBlobs)); };
+            env.SyncQueryFactory<TEvCompactVDiskResult>(actorId, factory, true);
         }
 
         // check layout again

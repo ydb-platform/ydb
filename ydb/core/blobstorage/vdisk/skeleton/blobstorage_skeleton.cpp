@@ -608,6 +608,11 @@ namespace NKikimr {
             }
         }
 
+        void HandlePutSyncGuidRecovery(TEvBlobStorage::TEvVPut::TPtr& ev, const TActorContext& ctx) {
+            Y_VERIFY(ev->Get()->RewriteBlob);
+            Handle(ev, ctx);
+        }
+
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
             const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
             if (!postpone) {
@@ -2276,10 +2281,11 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(StateSyncGuidRecovery,
-            // We should not get these requests while performing SyncGuidRecovery
-            // TEvBlobStorage::TEvVPut
+            HFunc(TEvBlobStorage::TEvVPut, HandlePutSyncGuidRecovery)
+            HFunc(TEvHullLogHugeBlob, Handle)
             HFunc(TEvDelLogoBlobDataSyncLog, Handle)
             HFunc(TEvAddBulkSst, Handle)
+            // We should not get these requests while performing SyncGuidRecovery
             // TEvBlobStorage::TEvVGet
             // TEvBlobStorage::TEvVBlock
             // TEvBlobStorage::TEvVGetBlock

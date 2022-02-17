@@ -250,6 +250,7 @@ namespace NKikimr {
                 Y_VERIFY(WriteRestoredParts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
                     NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
             }

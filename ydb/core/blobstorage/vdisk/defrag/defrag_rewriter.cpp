@@ -65,6 +65,7 @@ namespace NKikimr {
 
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                     SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+            writeEvent->RewriteBlob = true;
             Send(DCtx->SkeletonId, writeEvent.release());
         }
 

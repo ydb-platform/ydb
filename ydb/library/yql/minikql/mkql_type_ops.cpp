@@ -582,33 +582,6 @@ NUdf::TUnboxedValuePod NumberFromString(NUdf::TStringRef buf) {
     return NUdf::TUnboxedValuePod(value);
 }
 
-bool MakeDateUncached(ui32 year, ui32 month, ui32 day, ui16& value) {
-    if (year < NUdf::MIN_YEAR || year >= NUdf::MAX_YEAR) {
-        return false;
-    }
-
-    if (month < 1 || month > 12) {
-        return false;
-    }
-
-    const bool isLeap = IsLeapYear(year);
-    auto monthLength = GetMonthLength(month, isLeap);
-    if (day < 1 || day > monthLength) {
-        return false;
-    }
-
-    year -= NUdf::MIN_YEAR;
-    ui32 leapDaysCount = LeapDaysSinceEpoch(year);
-    value = year * 365 + leapDaysCount;
-    while (month > 1) {
-        --month;
-        value += GetMonthLength(month, isLeap);
-    }
-
-    value += day - 1;
-    return true;
-}
-
 bool MakeTime(ui32 hour, ui32 minute, ui32 second, ui32& value) {
     if (hour >= 24 || minute >= 60 || second >= 60) {
         return false;

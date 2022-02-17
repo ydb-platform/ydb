@@ -1737,7 +1737,7 @@ bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
 }
 
 TNodePtr ISource::BuildAggregation(const TString& label) {
-    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource()) {
+    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !HoppingWindowSpec) {
         return nullptr;
     }
 

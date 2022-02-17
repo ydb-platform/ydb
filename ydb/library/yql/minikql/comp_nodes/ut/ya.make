@@ -52,6 +52,7 @@ SRCS(
     mkql_wide_map_ut.cpp
     mkql_wide_nodes_ut.cpp
     mkql_listfromrange_ut.cpp
+    mkql_mapnext_ut.cpp
 )
 
 PEERDIR(

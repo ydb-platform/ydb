@@ -11,7 +11,6 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/tvmauth/unittest.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
@@ -31,18 +30,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseAccessService(false);
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
-    authConfig.MutableTVMConfig()->SetEnabled(true);
-    authConfig.MutableTVMConfig()->SetServiceTVMId(10);
-    authConfig.MutableTVMConfig()->SetPublicKeys(NTvmAuth::NUnittest::TVMKNIFE_PUBLIC_KEYS);
-    authConfig.MutableTVMConfig()->SetUpdatePublicKeys(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
-    const TString query = R"___(
-             DECLARE $userNameHint AS Utf8; DECLARE $uid AS Uint64;
-             SELECT DISTINCT(name) FROM (SELECT name FROM [/Root/PQ/Config/V2/Producer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = "")
-                                UNION ALL SELECT name FROM [/Root/PQ/Config/V2/Consumer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = ""));
-        )___";
-
-    authConfig.MutableUserRegistryConfig()->SetQuery(query);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -693,16 +681,6 @@ public:
             );
         )___");
 
-        RunYqlDataQuery(R"___(
-            UPSERT INTO [/Root/PQ/Config/V2/Consumer] (name, tvmClientId) VALUES
-                ("user1", "1"),
-                ("user2", "1"),
-                ("user5", "1"),
-                ("user3", "2");
-            UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES
-                ("user4", "2"),
-                ("topic1", "1");
-        )___");
     }
 
     void UpdateDC(const TString& name, bool local, bool enabled) {

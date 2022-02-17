@@ -115,11 +115,11 @@ static __thread volatile sig_atomic_t got_SIGTERM = false;
  * LogstreamResult indicates the byte positions that we have already
  * written/fsynced.
  */
-static struct
+typedef struct LogstreamResult_t
 {
 	XLogRecPtr	Write;			/* last byte + 1 written out in the standby */
 	XLogRecPtr	Flush;			/* last byte + 1 flushed in the standby */
-}			LogstreamResult;
+} LogstreamResult_t; static __thread LogstreamResult_t LogstreamResult;
 
 static __thread StringInfoData reply_message;
 static __thread StringInfoData incoming_message;

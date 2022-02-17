@@ -10,8 +10,10 @@ thread_funcs = []
 define_for_yylval = None
 skip_func = False
 split_def = False
+def_type = None
+def_var = None
 
-def fix_line(line):
+def fix_line(line, all_lines, pos):
     global define_for_yylval
     if line.startswith("#define yylval"):
         define_for_yylval=line[14:].strip()
@@ -22,13 +24,28 @@ def fix_line(line):
        return line
 
     global split_def
+    global def_type
+    global def_var
     if line.startswith("static struct xllist"):
        split_def = True
+       def_type = "xllist"
+       def_var = "records";
        return "typedef struct xllist\n";
 
     if split_def and line.startswith("}"):
        split_def = False;
-       return "} xllist; static __thread xllist records;\n"
+       return "} " + def_type + "; static __thread " + def_type + " " + def_var + ";\n"
+
+    if line.strip()=="static struct":
+       i = pos
+       while i < len(all_lines):
+          if all_lines[i].startswith("}"):
+             name = all_lines[i][1:].replace(";","").strip()
+             split_def = True
+             def_type = name + "_t"
+             def_var = name
+             return "typedef struct " + def_type + "\n";
+          i += 1
 
     if "ConfigureNames" in line and line.strip().endswith("[] ="):
        skip_func = True
@@ -103,8 +120,9 @@ def mycopy2(src, dst):
         return
     with open(src,"r") as fsrc:
         with open(dst,"w") as fdst:
-            for line in fsrc:
-                line = fix_line(line)
+            all_lines = list(fsrc)
+            for pos,line in enumerate(all_lines):
+                line = fix_line(line,all_lines,pos)
                 if line is not None:
                     fdst.write(line)
 

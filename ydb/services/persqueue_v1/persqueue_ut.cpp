@@ -3589,10 +3589,42 @@ namespace {
 
         ui64 time = (TInstant::Now() + TDuration::Hours(4)).MilliSeconds();
         runTest(legacyName, legacyName, topicName, srcId2, 7, time);
-
-
-
     }
 
+    Y_UNIT_TEST(TestReadPartitionStatus) {
+        NPersQueue::TTestServer server;
+
+        TString topic = "topic1";
+        TString topicFullName = "rt3.dc1--" + topic;
+
+        server.AnnoyingClient->CreateTopic(topicFullName, 1);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY});
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        auto reader = CreateReader(
+            *driver,
+            NYdb::NPersQueue::TReadSessionSettings()
+                .AppendTopics(topic)
+                .ConsumerName("shared/user")
+                .ReadOnlyOriginal(true)
+        );
+
+        {
+            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
+            UNIT_ASSERT(createStream);
+            Cerr << "Create stream event: " << createStream->DebugString() << Endl;
+            createStream->GetPartitionStream()->RequestStatus();
+        }
+        {
+            auto future = reader->WaitEvent();
+            UNIT_ASSERT(future.Wait(TDuration::Seconds(10)));
+            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            auto partitionStatus = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent>(&*event);
+            UNIT_ASSERT(partitionStatus);
+            Cerr << "partition status: " << partitionStatus->DebugString() << Endl;
+        }
+    }
 }
 }

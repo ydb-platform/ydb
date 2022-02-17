@@ -579,21 +579,13 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReleased::TPtr& ev, const TActorCo
 }
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr& ev, const TActorContext& ctx) {
-
     auto it = Partitions.find(ev->Get()->Partition.AssignId);
-    if (it == Partitions.end()) {
+    if (it == Partitions.end() || it->second.Releasing) {
         // Ignore request - client asking status after releasing of partition.
         return;
-    }
-    if (!it->second.Releasing) {
-        // Ignore request - client asking status after releasing of partition.
-        return;
-
     }
     ctx.Send(it->second.Actor, new TEvPQProxy::TEvGetStatus(ev->Get()->Partition));
 }
-
-
 
 void TReadSessionActor::DropPartition(THashMap<ui64, TPartitionActorInfo>::iterator it, const TActorContext& ctx) {
     ctx.Send(it->second.Actor, new TEvents::TEvPoisonPill());

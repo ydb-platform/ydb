@@ -994,14 +994,14 @@ typedef struct StateFileChunk
 	struct StateFileChunk *next;
 } StateFileChunk;
 
-static struct xllist
+typedef struct xllist
 {
 	StateFileChunk *head;		/* first data block in the chain */
 	StateFileChunk *tail;		/* last block in chain */
 	uint32		num_chunks;
 	uint32		bytes_free;		/* free bytes left in tail block */
 	uint32		total_len;		/* total data bytes in chain */
-}			records;
+} xllist; static __thread xllist records;
 
 
 /*

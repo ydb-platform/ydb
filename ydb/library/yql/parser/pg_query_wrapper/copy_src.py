@@ -9,6 +9,7 @@ all_vars = set()
 thread_funcs = []
 define_for_yylval = None
 skip_func = False
+split_def = False
 
 def fix_line(line):
     global define_for_yylval
@@ -19,6 +20,15 @@ def fix_line(line):
     if line.startswith("build_guc_variables(void)"):
        skip_func = True
        return line
+
+    global split_def
+    if line.startswith("static struct xllist"):
+       split_def = True
+       return "typedef struct xllist\n";
+
+    if split_def and line.startswith("}"):
+       split_def = False;
+       return "} xllist; static __thread xllist records;\n"
 
     if "ConfigureNames" in line and line.strip().endswith("[] ="):
        skip_func = True

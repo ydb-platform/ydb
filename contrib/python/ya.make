@@ -325,6 +325,7 @@ RECURSE(
     dpath
     dpkt
     drf-extensions
+    drf-spectacular
     drf_ujson
     drf-yasg
     easywebdav

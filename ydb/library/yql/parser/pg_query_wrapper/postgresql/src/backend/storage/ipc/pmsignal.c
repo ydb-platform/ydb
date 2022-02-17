@@ -73,7 +73,7 @@ struct PMSignalData
 	sig_atomic_t PMChildFlags[FLEXIBLE_ARRAY_MEMBER];
 };
 
-NON_EXEC_STATIC volatile PMSignalData *PMSignalState = NULL;
+__thread NON_EXEC_STATIC volatile PMSignalData *PMSignalState = NULL;
 
 /*
  * Signal handler to be notified if postmaster dies.

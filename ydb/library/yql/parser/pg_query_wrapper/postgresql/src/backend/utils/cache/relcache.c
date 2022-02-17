@@ -128,7 +128,7 @@ typedef struct relidcacheent
 	Relation	reldesc;
 } RelIdCacheEnt;
 
-static HTAB *RelationIdCache;
+static __thread HTAB *RelationIdCache;
 
 /*
  * This flag is false until we have prepared the critical relcache entries
@@ -164,7 +164,7 @@ typedef struct inprogressent
 	bool		invalidated;	/* whether an invalidation arrived for it */
 } InProgressEnt;
 
-static InProgressEnt *in_progress_list;
+static __thread InProgressEnt *in_progress_list;
 static __thread int	in_progress_list_len;
 static __thread int	in_progress_list_maxlen;
 
@@ -179,7 +179,7 @@ static __thread int	in_progress_list_maxlen;
  * cleanup processing must be idempotent.
  */
 #define MAX_EOXACT_LIST 32
-static Oid	eoxact_list[MAX_EOXACT_LIST];
+static __thread Oid	eoxact_list[MAX_EOXACT_LIST];
 static __thread int	eoxact_list_len = 0;
 static __thread bool eoxact_list_overflowed = false;
 
@@ -196,7 +196,7 @@ static __thread bool eoxact_list_overflowed = false;
  * cleanup work.  The array expands as needed; there is no hashtable because
  * we don't need to access individual items except at EOXact.
  */
-static TupleDesc *EOXactTupleDescArray;
+static __thread TupleDesc *EOXactTupleDescArray;
 static __thread int	NextEOXactTupleDescNum = 0;
 static __thread int	EOXactTupleDescArrayLen = 0;
 
@@ -265,7 +265,7 @@ typedef struct opclasscacheent
 	RegProcedure *supportProcs; /* OIDs of support procedures */
 } OpClassCacheEnt;
 
-static HTAB *OpClassCache = NULL;
+static __thread HTAB *OpClassCache = NULL;
 
 
 /* non-export function prototypes */

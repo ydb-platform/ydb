@@ -85,8 +85,8 @@
 #include "utils/varlena.h"
 
 /* GUC variables */
-char	   *default_tablespace = NULL;
-char	   *temp_tablespaces = NULL;
+__thread char	   *default_tablespace = NULL;
+__thread char	   *temp_tablespaces = NULL;
 
 
 static void create_tablespace_directories(const char *location,

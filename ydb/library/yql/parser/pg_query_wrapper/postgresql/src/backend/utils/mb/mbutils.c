@@ -58,28 +58,28 @@ typedef struct ConvProcInfo
 	FmgrInfo	to_client_info;
 } ConvProcInfo;
 
-static List *ConvProcList = NIL;	/* List of ConvProcInfo */
+static __thread List *ConvProcList = NIL;	/* List of ConvProcInfo */
 
 /*
  * These variables point to the currently active conversion functions,
  * or are NULL when no conversion is needed.
  */
-static FmgrInfo *ToServerConvProc = NULL;
-static FmgrInfo *ToClientConvProc = NULL;
+static __thread FmgrInfo *ToServerConvProc = NULL;
+static __thread FmgrInfo *ToClientConvProc = NULL;
 
 /*
  * This variable stores the conversion function to convert from UTF-8
  * to the server encoding.  It's NULL if the server encoding *is* UTF-8,
  * or if we lack a conversion function for this.
  */
-static FmgrInfo *Utf8ToServerConvProc = NULL;
+static __thread FmgrInfo *Utf8ToServerConvProc = NULL;
 
 /*
  * These variables track the currently-selected encodings.
  */
-static const pg_enc2name *ClientEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
-static const pg_enc2name *DatabaseEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
-static const pg_enc2name *MessageEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
+static __thread const pg_enc2name *ClientEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
+static __thread const pg_enc2name *DatabaseEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
+static __thread const pg_enc2name *MessageEncoding = &pg_enc2name_tbl[PG_SQL_ASCII];
 
 /*
  * During backend startup we can't set client encoding because we (a)

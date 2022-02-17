@@ -32,7 +32,7 @@
 
 
 /* Hash table for information about each tablespace */
-static HTAB *TableSpaceCacheHash = NULL;
+static __thread HTAB *TableSpaceCacheHash = NULL;
 
 typedef struct
 {

@@ -35,10 +35,14 @@ def fix_line(line):
         return line
 
     if not "=" in line:
-        if "(" in line or "{" in line or "}" in line:
+        line2=line  
+        if "//" in line2: line2 = line2[:line2.find("//")]
+        if "/*" in line2: line2 = line2[:line2.find("/*")]
+
+        if "(" in line2 or "{" in line2 or "}" in line2:
             return line
 
-        if ";" not in line:
+        if ";" not in line2:
             return line
 
     if line.startswith("YYSTYPE yylval;"):
@@ -49,7 +53,8 @@ def fix_line(line):
     ret = None
     found_v = None
     for v in all_vars:
-        if " " + v + " " in norm or " " + v + ";" in norm:
+        if " " + v + " " in norm or " " + v + ";" in norm or " " + v + "[" in norm or \
+           "*" + v + " " in norm or "*" + v + ";" in norm or "*" + v + "[" in norm:
            found_v = v
            if line.startswith("static"):
                ret = "static __thread" + line[6:]
@@ -70,7 +75,7 @@ def fix_line(line):
         ret+="\n";
         thread_funcs.append(found_v+"_init");
 
-    if "CurrentTransactionState" in ret:
+    if "CurrentTransactionState" in ret or "mainrdata_last" in ret:
         # rewrite with address of TLS var
         pos=ret.find("=");
         init_val=ret[pos+1:];
@@ -135,6 +140,14 @@ def get_vars():
 
     all_vars.remove("backslash_quote")
     all_vars.remove("sentinel") # rbtree.c
+
+    all_vars.remove("gistBufferingOptValues")
+    all_vars.remove("boolRelOpts")
+    all_vars.remove("intRelOpts")
+    all_vars.remove("realRelOpts")
+    all_vars.remove("viewCheckOptValues")
+    all_vars.remove("enumRelOpts")
+    all_vars.remove("stringRelOpts")
 
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):

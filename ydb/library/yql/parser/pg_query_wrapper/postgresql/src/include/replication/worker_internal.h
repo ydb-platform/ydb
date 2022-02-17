@@ -60,11 +60,11 @@ typedef struct LogicalRepWorker
 extern __thread MemoryContext ApplyContext;
 
 /* libpqreceiver connection */
-extern struct WalReceiverConn *LogRepWorkerWalRcvConn;
+extern __thread struct WalReceiverConn *LogRepWorkerWalRcvConn;
 
 /* Worker and subscription objects. */
-extern Subscription *MySubscription;
-extern LogicalRepWorker *MyLogicalRepWorker;
+extern __thread Subscription *MySubscription;
+extern __thread LogicalRepWorker *MyLogicalRepWorker;
 
 extern __thread bool in_remote_transaction;
 

@@ -111,9 +111,9 @@ typedef struct ApplyExecutionData
 static __thread MemoryContext ApplyMessageContext = NULL;
 __thread MemoryContext ApplyContext = NULL;
 
-WalReceiverConn *LogRepWorkerWalRcvConn = NULL;
+__thread WalReceiverConn *LogRepWorkerWalRcvConn = NULL;
 
-Subscription *MySubscription = NULL;
+__thread Subscription *MySubscription = NULL;
 __thread bool		MySubscriptionValid = false;
 
 __thread bool		in_remote_transaction = false;

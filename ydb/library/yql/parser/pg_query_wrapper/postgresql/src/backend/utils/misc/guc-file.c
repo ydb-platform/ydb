@@ -530,7 +530,7 @@ static __thread int yy_n_chars;		/* number of characters read into yy_ch_buf */
 int yyleng;
 
 /* Points to current character in buffer. */
-static char *yy_c_buf_p = NULL;
+static __thread char *yy_c_buf_p = NULL;
 static __thread int yy_init = 0;		/* whether we need to initialize */
 static __thread int yy_start = 0;	/* start state number */
 
@@ -732,7 +732,7 @@ static const flex_int16_t yy_chk[168] =
     } ;
 
 static __thread yy_state_type yy_last_accepting_state;
-static char *yy_last_accepting_cpos;
+static __thread char *yy_last_accepting_cpos;
 
 extern int yy_flex_debug;
 int yy_flex_debug = 0;
@@ -790,8 +790,8 @@ enum
 };
 
 static __thread unsigned int ConfigFileLineno;
-static const char *GUC_flex_fatal_errmsg;
-static sigjmp_buf *GUC_flex_fatal_jmp;
+static __thread const char *GUC_flex_fatal_errmsg;
+static __thread sigjmp_buf *GUC_flex_fatal_jmp;
 
 static void FreeConfigVariable(ConfigVariable *item);
 

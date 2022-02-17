@@ -16,7 +16,7 @@
 
 #include "libpq/libpq-be.h"
 
-extern char *pg_krb_server_keyfile;
+extern __thread char *pg_krb_server_keyfile;
 extern __thread bool pg_krb_caseins_users;
 extern char *pg_krb_realm;
 

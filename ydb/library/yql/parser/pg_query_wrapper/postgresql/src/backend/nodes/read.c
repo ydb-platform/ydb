@@ -28,7 +28,7 @@
 
 
 /* Static state for pg_strtok */
-static const char *pg_strtok_ptr = NULL;
+static __thread const char *pg_strtok_ptr = NULL;
 
 /* State flag that determines how readfuncs.c should treat location fields */
 #ifdef WRITE_READ_PARSE_PLAN_TREES

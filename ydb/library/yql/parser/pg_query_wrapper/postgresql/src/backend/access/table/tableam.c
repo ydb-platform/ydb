@@ -31,7 +31,7 @@
 
 
 /* GUC variables */
-char	   *default_table_access_method = DEFAULT_TABLE_ACCESS_METHOD;
+__thread char	   *default_table_access_method = DEFAULT_TABLE_ACCESS_METHOD;
 __thread bool		synchronize_seqscans = true;
 
 

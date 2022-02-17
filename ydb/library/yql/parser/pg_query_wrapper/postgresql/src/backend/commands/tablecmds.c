@@ -119,7 +119,7 @@ typedef struct OnCommitItem
 	SubTransactionId deleting_subid;
 } OnCommitItem;
 
-static List *on_commits = NIL;
+static __thread List *on_commits = NIL;
 
 
 /*

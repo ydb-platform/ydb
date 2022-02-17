@@ -54,7 +54,7 @@
 __thread int			max_logical_replication_workers = 4;
 __thread int			max_sync_workers_per_subscription = 2;
 
-LogicalRepWorker *MyLogicalRepWorker = NULL;
+__thread LogicalRepWorker *MyLogicalRepWorker = NULL;
 
 typedef struct LogicalRepCtxStruct
 {
@@ -65,7 +65,7 @@ typedef struct LogicalRepCtxStruct
 	LogicalRepWorker workers[FLEXIBLE_ARRAY_MEMBER];
 } LogicalRepCtxStruct;
 
-LogicalRepCtxStruct *LogicalRepCtx;
+__thread LogicalRepCtxStruct *LogicalRepCtx;
 
 typedef struct LogicalRepWorkerId
 {
@@ -85,7 +85,7 @@ typedef struct StopWorkersData
  * Stack of StopWorkersData elements. Each stack element contains the workers
  * to be stopped for that subtransaction.
  */
-static StopWorkersData *on_commit_stop_workers = NULL;
+static __thread StopWorkersData *on_commit_stop_workers = NULL;
 
 static void ApplyLauncherWakeup(void);
 static void logicalrep_launcher_onexit(int code, Datum arg);

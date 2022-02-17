@@ -179,8 +179,8 @@ typedef struct ReplicationSlotCtlData
 /*
  * Pointers to shared memory
  */
-extern PGDLLIMPORT ReplicationSlotCtlData *ReplicationSlotCtl;
-extern PGDLLIMPORT ReplicationSlot *MyReplicationSlot;
+extern __thread PGDLLIMPORT ReplicationSlotCtlData *ReplicationSlotCtl;
+extern __thread PGDLLIMPORT ReplicationSlot *MyReplicationSlot;
 
 /* GUCs */
 extern __thread PGDLLIMPORT int max_replication_slots;

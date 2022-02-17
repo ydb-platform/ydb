@@ -226,7 +226,7 @@ typedef union BufferDescPadded
 #define BufferDescriptorGetContentLock(bdesc) \
 	((LWLock*) (&(bdesc)->content_lock))
 
-extern PGDLLIMPORT LWLockMinimallyPadded *BufferIOLWLockArray;
+extern __thread PGDLLIMPORT LWLockMinimallyPadded *BufferIOLWLockArray;
 
 /*
  * The freeNext field is either the index of the next freelist entry,
@@ -271,11 +271,11 @@ typedef struct WritebackContext
 } WritebackContext;
 
 /* in buf_init.c */
-extern PGDLLIMPORT BufferDescPadded *BufferDescriptors;
+extern __thread PGDLLIMPORT BufferDescPadded *BufferDescriptors;
 extern __thread PGDLLIMPORT WritebackContext BackendWritebackContext;
 
 /* in localbuf.c */
-extern BufferDesc *LocalBufferDescriptors;
+extern __thread BufferDesc *LocalBufferDescriptors;
 
 /* in bufmgr.c */
 
@@ -294,7 +294,7 @@ typedef struct CkptSortItem
 	int			buf_id;
 } CkptSortItem;
 
-extern CkptSortItem *CkptBufferIds;
+extern __thread CkptSortItem *CkptBufferIds;
 
 /*
  * Internal buffer management routines

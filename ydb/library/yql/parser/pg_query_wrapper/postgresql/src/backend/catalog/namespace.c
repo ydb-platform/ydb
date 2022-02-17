@@ -135,7 +135,7 @@
 
 /* These variables define the actually active state: */
 
-static List *activeSearchPath = NIL;
+static __thread List *activeSearchPath = NIL;
 
 /* default place to create stuff; if InvalidOid, no default */
 static __thread Oid	activeCreationNamespace = InvalidOid;
@@ -148,7 +148,7 @@ static __thread uint64 activePathGeneration = 1;
 
 /* These variables are the values last derived from namespace_search_path: */
 
-static List *baseSearchPath = NIL;
+static __thread List *baseSearchPath = NIL;
 
 static __thread Oid	baseCreationNamespace = InvalidOid;
 
@@ -168,7 +168,7 @@ typedef struct
 	int			nestLevel;		/* subtransaction nesting level */
 } OverrideStackEntry;
 
-static List *overrideStack = NIL;
+static __thread List *overrideStack = NIL;
 
 /*
  * myTempNamespace is InvalidOid until and unless a TEMP namespace is set up
@@ -195,7 +195,7 @@ static __thread SubTransactionId myTempNamespaceSubID = InvalidSubTransactionId;
  * This is the user's textual search path specification --- it's the value
  * of the GUC variable 'search_path'.
  */
-char	   *namespace_search_path = NULL;
+__thread char	   *namespace_search_path = NULL;
 
 
 /* Local functions */

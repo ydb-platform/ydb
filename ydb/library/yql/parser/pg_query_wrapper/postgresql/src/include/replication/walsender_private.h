@@ -80,7 +80,7 @@ typedef struct WalSnd
 	TimestampTz replyTime;
 } WalSnd;
 
-extern WalSnd *MyWalSnd;
+extern __thread WalSnd *MyWalSnd;
 
 /* There is one WalSndCtl struct for the whole database cluster */
 typedef struct
@@ -107,7 +107,7 @@ typedef struct
 	WalSnd		walsnds[FLEXIBLE_ARRAY_MEMBER];
 } WalSndCtlData;
 
-extern WalSndCtlData *WalSndCtl;
+extern __thread WalSndCtlData *WalSndCtl;
 
 
 extern void WalSndSetState(WalSndState state);
@@ -122,6 +122,6 @@ extern void replication_yyerror(const char *str) pg_attribute_noreturn();
 extern void replication_scanner_init(const char *query_string);
 extern void replication_scanner_finish(void);
 
-extern Node *replication_parse_result;
+extern __thread Node *replication_parse_result;
 
 #endif							/* _WALSENDER_PRIVATE_H */

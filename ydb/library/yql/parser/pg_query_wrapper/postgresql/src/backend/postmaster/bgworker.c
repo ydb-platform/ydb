@@ -107,7 +107,7 @@ struct BackgroundWorkerHandle
 	uint64		generation;
 };
 
-static BackgroundWorkerArray *BackgroundWorkerData;
+static __thread BackgroundWorkerArray *BackgroundWorkerData;
 
 /*
  * List of internal background worker entry points.  We need this for

@@ -41,7 +41,7 @@ typedef struct timeout_params
 /*
  * List of possible timeout reasons in the order of enum TimeoutId.
  */
-static timeout_params all_timeouts[MAX_TIMEOUTS];
+static __thread timeout_params all_timeouts[MAX_TIMEOUTS];
 static __thread bool all_timeouts_initialized = false;
 
 /*
@@ -49,7 +49,7 @@ static __thread bool all_timeouts_initialized = false;
  * This list is subject to change by the interrupt handler, so it's volatile.
  */
 static __thread volatile int num_active_timeouts = 0;
-static timeout_params *volatile active_timeouts[MAX_TIMEOUTS];
+static __thread timeout_params *volatile active_timeouts[MAX_TIMEOUTS];
 
 /*
  * Flag controlling whether the signal handler is allowed to do anything.

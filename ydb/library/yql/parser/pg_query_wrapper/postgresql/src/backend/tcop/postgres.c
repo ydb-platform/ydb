@@ -85,7 +85,7 @@
  *		global variables
  * ----------------
  */
-const char *debug_query_string; /* client-supplied query string */
+__thread const char *debug_query_string; /* client-supplied query string */
 
 /* Note: whereToSendOutput is initialized for the bootstrap/standalone case */
 __thread CommandDest whereToSendOutput = DestDebug;
@@ -117,7 +117,7 @@ static __thread long max_stack_depth_bytes = 100 * 1024L;
  * it directly. Newer versions use set_stack_base(), but we want to stay
  * binary-compatible for the time being.
  */
-char	   *stack_base_ptr = NULL;
+__thread char	   *stack_base_ptr = NULL;
 
 /*
  * On IA64 we also have to remember the register stack base.
@@ -151,10 +151,10 @@ static __thread bool ignore_till_sync = false;
  * We keep it separate from the hashtable kept by commands/prepare.c
  * in order to reduce overhead for short-lived queries.
  */
-static CachedPlanSource *unnamed_stmt_psrc = NULL;
+static __thread CachedPlanSource *unnamed_stmt_psrc = NULL;
 
 /* assorted command-line switches */
-static const char *userDoption = NULL;	/* -D switch */
+static __thread const char *userDoption = NULL;	/* -D switch */
 static __thread bool EchoQuery = false;	/* -E switch */
 static __thread bool UseSemiNewlineNewline = false;	/* -j switch */
 

@@ -40,7 +40,7 @@ __thread int			vacuum_defer_cleanup_age;
 __thread int			max_standby_archive_delay = 30 * 1000;
 __thread int			max_standby_streaming_delay = 30 * 1000;
 
-static HTAB *RecoveryLockLists;
+static __thread HTAB *RecoveryLockLists;
 
 /* Flags set by timeout handlers */
 static __thread volatile sig_atomic_t got_standby_deadlock_timeout = false;

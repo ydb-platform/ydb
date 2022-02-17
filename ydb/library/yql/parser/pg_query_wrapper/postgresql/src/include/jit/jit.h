@@ -80,7 +80,7 @@ struct JitProviderCallbacks
 
 /* GUCs */
 extern __thread bool jit_enabled;
-extern char *jit_provider;
+extern __thread char *jit_provider;
 extern __thread bool jit_debugging_support;
 extern __thread bool jit_dump_bitcode;
 extern __thread bool jit_expressions;

@@ -108,7 +108,7 @@ __thread int			synchronous_commit = SYNCHRONOUS_COMMIT_ON;
  */
 __thread FullTransactionId XactTopFullTransactionId = {InvalidTransactionId};
 __thread int			nParallelCurrentXids = 0;
-TransactionId *ParallelCurrentXids;
+__thread TransactionId *ParallelCurrentXids;
 
 /*
  * Miscellaneous flag bits to record events which occur on the top level
@@ -231,7 +231,7 @@ static __thread TransactionStateData TopTransactionStateData = {
  * reported in an XLOG_XACT_ASSIGNMENT record.
  */
 static __thread int	nUnreportedXids;
-static TransactionId unreportedXids[PGPROC_MAX_CACHED_SUBXIDS];
+static __thread TransactionId unreportedXids[PGPROC_MAX_CACHED_SUBXIDS];
 
 static __thread TransactionState CurrentTransactionState ;void CurrentTransactionState_init(void) { CurrentTransactionState= &TopTransactionStateData;
  };
@@ -259,7 +259,7 @@ static __thread TimestampTz xactStopTimestamp;
  * GID to be used for preparing the current transaction.  This is also
  * global to a whole transaction, so we don't keep it in the state stack.
  */
-static char *prepareGID;
+static __thread char *prepareGID;
 
 /*
  * Some commands want to force synchronous commit.
@@ -286,7 +286,7 @@ typedef struct XactCallbackItem
 	void	   *arg;
 } XactCallbackItem;
 
-static XactCallbackItem *Xact_callbacks = NULL;
+static __thread XactCallbackItem *Xact_callbacks = NULL;
 
 /*
  * List of add-on start- and end-of-subxact callbacks
@@ -298,7 +298,7 @@ typedef struct SubXactCallbackItem
 	void	   *arg;
 } SubXactCallbackItem;
 
-static SubXactCallbackItem *SubXact_callbacks = NULL;
+static __thread SubXactCallbackItem *SubXact_callbacks = NULL;
 
 
 /* local function prototypes */

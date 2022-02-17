@@ -50,7 +50,7 @@
 #include "utils/memutils.h"
 
 /* Hash table to lookup combo cids by cmin and cmax */
-static HTAB *comboHash = NULL;
+static __thread HTAB *comboHash = NULL;
 
 /* Key and entry structures for the hash table */
 typedef struct

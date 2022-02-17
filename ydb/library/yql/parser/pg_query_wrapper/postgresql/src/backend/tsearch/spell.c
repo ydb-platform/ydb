@@ -190,7 +190,7 @@ lowerstr_ctx(IspellDict *Conf, const char *src)
 #define GETWCHAR(W,L,N,T) ( ((const uint8*)(W))[ ((T)==FF_PREFIX) ? (N) : ( (L) - 1 - (N) ) ] )
 #define GETCHAR(A,N,T)	  GETWCHAR( (A)->repl, (A)->replen, N, T )
 
-static char *VoidString = "";
+static __thread char *VoidString = "";
 
 static int
 cmpspell(const void *s1, const void *s2)

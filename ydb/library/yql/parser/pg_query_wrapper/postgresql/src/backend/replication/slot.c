@@ -90,10 +90,10 @@ typedef struct ReplicationSlotOnDisk
 #define SLOT_VERSION	2		/* version for new files */
 
 /* Control array for replication slot management */
-ReplicationSlotCtlData *ReplicationSlotCtl = NULL;
+__thread ReplicationSlotCtlData *ReplicationSlotCtl = NULL;
 
 /* My backend's replication slot in the shared memory array */
-ReplicationSlot *MyReplicationSlot = NULL;
+__thread ReplicationSlot *MyReplicationSlot = NULL;
 
 /* GUCs */
 __thread int			max_replication_slots = 0;	/* the maximum number of replication

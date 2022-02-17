@@ -17,11 +17,11 @@
 #include "storage/buf_internals.h"
 #include "storage/bufmgr.h"
 
-BufferDescPadded *BufferDescriptors;
-char	   *BufferBlocks;
-LWLockMinimallyPadded *BufferIOLWLockArray = NULL;
+__thread BufferDescPadded *BufferDescriptors;
+__thread char	   *BufferBlocks;
+__thread LWLockMinimallyPadded *BufferIOLWLockArray = NULL;
 __thread WritebackContext BackendWritebackContext;
-CkptSortItem *CkptBufferIds;
+__thread CkptSortItem *CkptBufferIds;
 
 
 /*

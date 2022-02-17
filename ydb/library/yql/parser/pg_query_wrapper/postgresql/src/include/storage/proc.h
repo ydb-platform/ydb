@@ -208,8 +208,8 @@ struct PGPROC
 /* NOTE: "typedef struct PGPROC PGPROC" appears in storage/lock.h. */
 
 
-extern PGDLLIMPORT PGPROC *MyProc;
-extern PGDLLIMPORT struct PGXACT *MyPgXact;
+extern __thread PGDLLIMPORT PGPROC *MyProc;
+extern __thread PGDLLIMPORT struct PGXACT *MyPgXact;
 
 /*
  * Prior to PostgreSQL 9.2, the fields below were stored as part of the
@@ -272,9 +272,9 @@ typedef struct PROC_HDR
 	int			startupBufferPinWaitBufId;
 } PROC_HDR;
 
-extern PGDLLIMPORT PROC_HDR *ProcGlobal;
+extern __thread PGDLLIMPORT PROC_HDR *ProcGlobal;
 
-extern PGPROC *PreparedXactProcs;
+extern __thread PGPROC *PreparedXactProcs;
 
 /* Accessor for PGPROC given a pgprocno. */
 #define GetPGProcByNumber(n) (&ProcGlobal->allProcs[(n)])

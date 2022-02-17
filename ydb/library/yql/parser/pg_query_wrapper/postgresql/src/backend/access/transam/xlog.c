@@ -92,13 +92,13 @@ __thread int			wal_keep_size_mb = 0;
 __thread int			XLOGbuffers = -1;
 __thread int			XLogArchiveTimeout = 0;
 __thread int			XLogArchiveMode = ARCHIVE_MODE_OFF;
-char	   *XLogArchiveCommand = NULL;
+__thread char	   *XLogArchiveCommand = NULL;
 __thread bool		EnableHotStandby = false;
 __thread bool		fullPageWrites = true;
 __thread bool		wal_log_hints = false;
 __thread bool		wal_compression = false;
-char	   *wal_consistency_checking_string = NULL;
-bool	   *wal_consistency_checking = NULL;
+__thread char	   *wal_consistency_checking_string = NULL;
+__thread bool	   *wal_consistency_checking = NULL;
 __thread bool		wal_init_zero = true;
 __thread bool		wal_recycle = true;
 __thread bool		log_checkpoints = false;
@@ -281,28 +281,28 @@ static __thread bool recovery_signal_file_found = false;
 static __thread bool restoredFromArchive = false;
 
 /* Buffers dedicated to consistency checks of size BLCKSZ */
-static char *replay_image_masked = NULL;
-static char *master_image_masked = NULL;
+static __thread char *replay_image_masked = NULL;
+static __thread char *master_image_masked = NULL;
 
 /* options formerly taken from recovery.conf for archive recovery */
-char	   *recoveryRestoreCommand = NULL;
-char	   *recoveryEndCommand = NULL;
-char	   *archiveCleanupCommand = NULL;
+__thread char	   *recoveryRestoreCommand = NULL;
+__thread char	   *recoveryEndCommand = NULL;
+__thread char	   *archiveCleanupCommand = NULL;
 __thread RecoveryTargetType recoveryTarget = RECOVERY_TARGET_UNSET;
 __thread bool		recoveryTargetInclusive = true;
 __thread int			recoveryTargetAction = RECOVERY_TARGET_ACTION_PAUSE;
 __thread TransactionId recoveryTargetXid;
-char	   *recovery_target_time_string;
+__thread char	   *recovery_target_time_string;
 static __thread TimestampTz recoveryTargetTime;
-const char *recoveryTargetName;
+__thread const char *recoveryTargetName;
 __thread XLogRecPtr	recoveryTargetLSN;
 __thread int			recovery_min_apply_delay = 0;
 
 /* options formerly taken from recovery.conf for XLOG streaming */
 __thread bool		StandbyModeRequested = false;
-char	   *PrimaryConnInfo = NULL;
-char	   *PrimarySlotName = NULL;
-char	   *PromoteTriggerFile = NULL;
+__thread char	   *PrimaryConnInfo = NULL;
+__thread char	   *PrimarySlotName = NULL;
+__thread char	   *PromoteTriggerFile = NULL;
 __thread bool		wal_receiver_create_temp_slot = false;
 
 /* are we currently in standby mode? */
@@ -318,7 +318,7 @@ static __thread bool fast_promote = false;
 static __thread TransactionId recoveryStopXid;
 static __thread TimestampTz recoveryStopTime;
 static __thread XLogRecPtr recoveryStopLSN;
-static char recoveryStopName[MAXFNAMELEN];
+static __thread char recoveryStopName[MAXFNAMELEN];
 static __thread bool recoveryStopAfter;
 
 /*
@@ -350,7 +350,7 @@ static __thread bool recoveryStopAfter;
 __thread RecoveryTargetTimeLineGoal recoveryTargetTimeLineGoal = RECOVERY_TARGET_TIMELINE_LATEST;
 __thread TimeLineID	recoveryTargetTLIRequested = 0;
 __thread TimeLineID	recoveryTargetTLI = 0;
-static List *expectedTLEs;
+static __thread List *expectedTLEs;
 static __thread TimeLineID curFileTLI;
 
 /*
@@ -736,15 +736,15 @@ typedef struct XLogCtlData
 	slock_t		info_lck;		/* locks shared variables shown above */
 } XLogCtlData;
 
-static XLogCtlData *XLogCtl = NULL;
+static __thread XLogCtlData *XLogCtl = NULL;
 
 /* a private copy of XLogCtl->Insert.WALInsertLocks, for convenience */
-static WALInsertLockPadded *WALInsertLocks = NULL;
+static __thread WALInsertLockPadded *WALInsertLocks = NULL;
 
 /*
  * We maintain an image of pg_control in shared memory.
  */
-static ControlFileData *ControlFile = NULL;
+static __thread ControlFileData *ControlFile = NULL;
 
 /*
  * Calculate the amount of space left on the page after 'endptr'. Beware

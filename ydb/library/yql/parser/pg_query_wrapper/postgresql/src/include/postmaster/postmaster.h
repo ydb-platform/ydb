@@ -18,22 +18,22 @@ extern __thread bool EnableSSL;
 extern __thread int	ReservedBackends;
 extern __thread PGDLLIMPORT int PostPortNumber;
 extern __thread int	Unix_socket_permissions;
-extern char *Unix_socket_group;
-extern char *Unix_socket_directories;
-extern char *ListenAddresses;
+extern __thread char *Unix_socket_group;
+extern __thread char *Unix_socket_directories;
+extern __thread char *ListenAddresses;
 extern __thread bool ClientAuthInProgress;
 extern __thread int	PreAuthDelay;
 extern __thread int	AuthenticationTimeout;
 extern __thread bool Log_connections;
 extern __thread bool log_hostname;
 extern __thread bool enable_bonjour;
-extern char *bonjour_name;
+extern __thread char *bonjour_name;
 extern __thread bool restart_after_crash;
 
 #ifdef WIN32
 extern HANDLE PostmasterHandle;
 #else
-extern int	postmaster_alive_fds[2];
+extern __thread int	postmaster_alive_fds[2];
 
 /*
  * Constants that represent which of postmaster_alive_fds is held by

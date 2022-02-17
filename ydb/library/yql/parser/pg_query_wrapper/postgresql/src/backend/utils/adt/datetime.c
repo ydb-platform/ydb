@@ -234,15 +234,15 @@ static const datetkn deltatktbl[] = {
 
 static const int szdeltatktbl = sizeof deltatktbl / sizeof deltatktbl[0];
 
-static TimeZoneAbbrevTable *zoneabbrevtbl = NULL;
+static __thread TimeZoneAbbrevTable *zoneabbrevtbl = NULL;
 
 /* Caches of recent lookup results in the above tables */
 
-static const datetkn *datecache[MAXDATEFIELDS] = {NULL};
+static __thread const datetkn *datecache[MAXDATEFIELDS] = {NULL};
 
-static const datetkn *deltacache[MAXDATEFIELDS] = {NULL};
+static __thread const datetkn *deltacache[MAXDATEFIELDS] = {NULL};
 
-static const datetkn *abbrevcache[MAXDATEFIELDS] = {NULL};
+static __thread const datetkn *abbrevcache[MAXDATEFIELDS] = {NULL};
 
 
 /*

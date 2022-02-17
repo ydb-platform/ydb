@@ -117,10 +117,10 @@
  * Configuration options
  */
 __thread int			Unix_socket_permissions;
-char	   *Unix_socket_group;
+__thread char	   *Unix_socket_group;
 
 /* Where the Unix socket files are (list of palloc'd strings) */
-static List *sock_paths = NIL;
+static __thread List *sock_paths = NIL;
 
 /*
  * Buffers for low-level I/O.
@@ -132,12 +132,12 @@ static List *sock_paths = NIL;
 #define PQ_SEND_BUFFER_SIZE 8192
 #define PQ_RECV_BUFFER_SIZE 8192
 
-static char *PqSendBuffer;
+static __thread char *PqSendBuffer;
 static __thread int	PqSendBufferSize;	/* Size send buffer */
 static __thread int	PqSendPointer;		/* Next index to store a byte in PqSendBuffer */
 static __thread int	PqSendStart;		/* Next index to send a byte in PqSendBuffer */
 
-static char PqRecvBuffer[PQ_RECV_BUFFER_SIZE];
+static __thread char PqRecvBuffer[PQ_RECV_BUFFER_SIZE];
 static __thread int	PqRecvPointer;		/* Next index to read a byte from PqRecvBuffer */
 static __thread int	PqRecvLength;		/* End of data available in PqRecvBuffer */
 
@@ -179,9 +179,9 @@ static const PQcommMethods PqCommSocketMethods = {
 	socket_endcopyout
 };
 
-const PQcommMethods *PqCommMethods = &PqCommSocketMethods;
+__thread const PQcommMethods *PqCommMethods = &PqCommSocketMethods;
 
-WaitEventSet *FeBeWaitSet;
+__thread WaitEventSet *FeBeWaitSet;
 
 
 /* --------------------------------

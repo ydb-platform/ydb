@@ -334,6 +334,6 @@ extern void GetOldestRestartPoint(XLogRecPtr *oldrecptr, TimeLineID *oldtli);
 extern __thread bool ArchiveRecoveryRequested;
 extern __thread bool InArchiveRecovery;
 extern __thread bool StandbyMode;
-extern char *recoveryRestoreCommand;
+extern __thread char *recoveryRestoreCommand;
 
 #endif							/* XLOG_INTERNAL_H */

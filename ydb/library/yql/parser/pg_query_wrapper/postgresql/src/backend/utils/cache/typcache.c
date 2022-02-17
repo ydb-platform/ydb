@@ -75,10 +75,10 @@
 
 
 /* The main type cache hashtable searched by lookup_type_cache */
-static HTAB *TypeCacheHash = NULL;
+static __thread HTAB *TypeCacheHash = NULL;
 
 /* List of type cache entries for domain types */
-static TypeCacheEntry *firstDomainTypeEntry = NULL;
+static __thread TypeCacheEntry *firstDomainTypeEntry = NULL;
 
 /* Private flag bits in the TypeCacheEntry.flags field */
 #define TCFLAGS_HAVE_PG_TYPE_DATA			0x000001
@@ -269,11 +269,11 @@ static const dshash_parameters srtr_typmod_table_params = {
 };
 
 /* hashtable for recognizing registered record types */
-static HTAB *RecordCacheHash = NULL;
+static __thread HTAB *RecordCacheHash = NULL;
 
 /* arrays of info about registered record types, indexed by assigned typmod */
-static TupleDesc *RecordCacheArray = NULL;
-static uint64 *RecordIdentifierArray = NULL;
+static __thread TupleDesc *RecordCacheArray = NULL;
+static __thread uint64 *RecordIdentifierArray = NULL;
 static __thread int32 RecordCacheArrayLen = 0;	/* allocated length of above arrays */
 static __thread int32 NextRecordTypmod = 0;	/* number of entries used */
 

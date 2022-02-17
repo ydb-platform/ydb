@@ -43,11 +43,11 @@
  * when entering/exiting a SPI nesting level.
  */
 __thread uint64		SPI_processed = 0;
-SPITupleTable *SPI_tuptable = NULL;
+__thread SPITupleTable *SPI_tuptable = NULL;
 __thread int			SPI_result = 0;
 
-static _SPI_connection *_SPI_stack = NULL;
-static _SPI_connection *_SPI_current = NULL;
+static __thread _SPI_connection *_SPI_stack = NULL;
+static __thread _SPI_connection *_SPI_current = NULL;
 static __thread int	_SPI_stack_depth = 0;	/* allocated size of _SPI_stack */
 static __thread int	_SPI_connected = -1;	/* current stack index */
 

@@ -258,20 +258,20 @@ extern __thread int	log_min_duration_statement;
 extern __thread int	log_temp_files;
 extern __thread double log_statement_sample_rate;
 extern __thread double log_xact_sample_rate;
-extern char *backtrace_functions;
-extern char *backtrace_symbol_list;
+extern __thread char *backtrace_functions;
+extern __thread char *backtrace_symbol_list;
 
 extern __thread int	temp_file_limit;
 
 extern __thread int	num_temp_buffers;
 
-extern char *cluster_name;
-extern PGDLLIMPORT char *ConfigFileName;
-extern char *HbaFileName;
-extern char *IdentFileName;
-extern char *external_pid_file;
+extern __thread char *cluster_name;
+extern __thread PGDLLIMPORT char *ConfigFileName;
+extern __thread char *HbaFileName;
+extern __thread char *IdentFileName;
+extern __thread char *external_pid_file;
 
-extern PGDLLIMPORT char *application_name;
+extern __thread PGDLLIMPORT char *application_name;
 
 extern __thread int	tcp_keepalives_idle;
 extern __thread int	tcp_keepalives_interval;
@@ -402,9 +402,9 @@ extern void RestoreGUCState(void *gucstate);
 
 /* Support for messages reported from GUC check hooks */
 
-extern PGDLLIMPORT char *GUC_check_errmsg_string;
-extern PGDLLIMPORT char *GUC_check_errdetail_string;
-extern PGDLLIMPORT char *GUC_check_errhint_string;
+extern __thread PGDLLIMPORT char *GUC_check_errmsg_string;
+extern __thread PGDLLIMPORT char *GUC_check_errdetail_string;
+extern __thread PGDLLIMPORT char *GUC_check_errhint_string;
 
 extern void GUC_check_errcode(int sqlerrcode);
 

@@ -40,13 +40,13 @@ typedef struct
 
 __thread int			NLocBuffer = 0;		/* until buffers are initialized */
 
-BufferDesc *LocalBufferDescriptors = NULL;
-Block	   *LocalBufferBlockPointers = NULL;
-int32	   *LocalRefCount = NULL;
+__thread BufferDesc *LocalBufferDescriptors = NULL;
+__thread Block	   *LocalBufferBlockPointers = NULL;
+__thread int32	   *LocalRefCount = NULL;
 
 static __thread int	nextFreeLocalBuf = 0;
 
-static HTAB *LocalBufHash = NULL;
+static __thread HTAB *LocalBufHash = NULL;
 
 
 static void InitLocalBuffers(void);

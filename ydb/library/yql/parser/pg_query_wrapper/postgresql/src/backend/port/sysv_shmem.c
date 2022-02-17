@@ -94,10 +94,10 @@ typedef enum
 
 
 __thread unsigned long UsedShmemSegID = 0;
-void	   *UsedShmemSegAddr = NULL;
+__thread void	   *UsedShmemSegAddr = NULL;
 
 static __thread Size AnonymousShmemSize;
-static void *AnonymousShmem = NULL;
+static __thread void *AnonymousShmem = NULL;
 
 static void *InternalIpcMemoryCreate(IpcMemoryKey memKey, Size size);
 static void IpcMemoryDetach(int status, Datum shmaddr);

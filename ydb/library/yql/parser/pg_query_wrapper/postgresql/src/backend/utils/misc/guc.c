@@ -122,8 +122,8 @@
 extern __thread bool Log_disconnections;
 extern __thread int	CommitDelay;
 extern __thread int	CommitSiblings;
-extern char *default_tablespace;
-extern char *temp_tablespaces;
+extern __thread char *default_tablespace;
+extern __thread char *temp_tablespaces;
 extern __thread bool ignore_checksum_failure;
 extern __thread bool ignore_invalid_pages;
 extern __thread bool synchronize_seqscans;
@@ -138,9 +138,9 @@ extern bool optimize_bounded_sort;
 static __thread int	GUC_check_errcode_value;
 
 /* global variables for check hook support */
-char	   *GUC_check_errmsg_string;
-char	   *GUC_check_errdetail_string;
-char	   *GUC_check_errhint_string;
+__thread char	   *GUC_check_errmsg_string;
+__thread char	   *GUC_check_errdetail_string;
+__thread char	   *GUC_check_errhint_string;
 
 static void do_serialize(char **destptr, Size *maxbytes, const char *fmt,...) pg_attribute_printf(3, 4);
 
@@ -490,7 +490,7 @@ const struct config_enum_entry ssl_protocol_versions_info[] = {
 StaticAssertDecl(lengthof(ssl_protocol_versions_info) == (PG_TLS1_3_VERSION + 2),
 				 "array length mismatch");
 
-static struct config_enum_entry shared_memory_options[] = {
+static __thread struct config_enum_entry shared_memory_options[] = {
 #ifndef WIN32
 	{"sysv", SHMEM_TYPE_SYSV, false},
 #endif
@@ -527,7 +527,7 @@ __thread bool		log_executor_stats = false;
 __thread bool		log_statement_stats = false;	/* this is sort of all three above
 											 * together */
 __thread bool		log_btree_build_stats = false;
-char	   *event_source;
+__thread char	   *event_source;
 
 __thread bool		row_security;
 __thread bool		check_function_bodies = true;
@@ -550,22 +550,22 @@ __thread int			log_temp_files = -1;
 __thread double		log_statement_sample_rate = 1.0;
 __thread double		log_xact_sample_rate = 0;
 __thread int			trace_recovery_messages = LOG;
-char	   *backtrace_functions;
-char	   *backtrace_symbol_list;
+__thread char	   *backtrace_functions;
+__thread char	   *backtrace_symbol_list;
 
 __thread int			temp_file_limit = -1;
 
 __thread int			num_temp_buffers = 1024;
 
-char	   *cluster_name = "";
-char	   *ConfigFileName;
-char	   *HbaFileName;
-char	   *IdentFileName;
-char	   *external_pid_file;
+__thread char	   *cluster_name = "";
+__thread char	   *ConfigFileName;
+__thread char	   *HbaFileName;
+__thread char	   *IdentFileName;
+__thread char	   *external_pid_file;
 
-char	   *pgstat_temp_directory;
+__thread char	   *pgstat_temp_directory;
 
-char	   *application_name;
+__thread char	   *application_name;
 
 __thread int			tcp_keepalives_idle;
 __thread int			tcp_keepalives_interval;
@@ -591,20 +591,20 @@ __thread int			huge_pages;
  * cases provide the value for SHOW to display.  The real state is elsewhere
  * and is kept in sync by assign_hooks.
  */
-static char *syslog_ident_str;
+static __thread char *syslog_ident_str;
 static __thread double phony_random_seed;
-static char *client_encoding_string;
-static char *datestyle_string;
-static char *locale_collate;
-static char *locale_ctype;
-static char *server_encoding_string;
-static char *server_version_string;
+static __thread char *client_encoding_string;
+static __thread char *datestyle_string;
+static __thread char *locale_collate;
+static __thread char *locale_ctype;
+static __thread char *server_encoding_string;
+static __thread char *server_version_string;
 static __thread int	server_version_num;
-static char *timezone_string;
-static char *log_timezone_string;
-static char *timezone_abbreviations_string;
-static char *data_directory;
-static char *session_authorization_string;
+static __thread char *timezone_string;
+static __thread char *log_timezone_string;
+static __thread char *timezone_abbreviations_string;
+static __thread char *data_directory;
+static __thread char *session_authorization_string;
 static __thread int	max_function_args;
 static __thread int	max_index_keys;
 static __thread int	max_identifier_length;
@@ -614,15 +614,15 @@ static __thread int	wal_block_size;
 static __thread bool data_checksums;
 static __thread bool integer_datetimes;
 static __thread bool assert_enabled;
-static char *recovery_target_timeline_string;
-static char *recovery_target_string;
-static char *recovery_target_xid_string;
-static char *recovery_target_name_string;
-static char *recovery_target_lsn_string;
+static __thread char *recovery_target_timeline_string;
+static __thread char *recovery_target_string;
+static __thread char *recovery_target_xid_string;
+static __thread char *recovery_target_name_string;
+static __thread char *recovery_target_lsn_string;
 
 
 /* should be static, but commands/variable.c needs to get at this */
-char	   *role_string;
+__thread char	   *role_string;
 
 
 /*
@@ -834,7 +834,7 @@ typedef struct
 #error XLOG_BLCKSZ must be between 1KB and 1MB
 #endif
 
-static const char *memory_units_hint = gettext_noop("Valid units for this parameter are \"B\", \"kB\", \"MB\", \"GB\", and \"TB\".");
+static __thread const char *memory_units_hint = gettext_noop("Valid units for this parameter are \"B\", \"kB\", \"MB\", \"GB\", and \"TB\".");
 
 static const unit_conversion memory_unit_conversion_table[] =
 {
@@ -871,7 +871,7 @@ static const unit_conversion memory_unit_conversion_table[] =
 	{""}						/* end of table marker */
 };
 
-static const char *time_units_hint = gettext_noop("Valid units for this parameter are \"us\", \"ms\", \"s\", \"min\", \"h\", and \"d\".");
+static __thread const char *time_units_hint = gettext_noop("Valid units for this parameter are \"us\", \"ms\", \"s\", \"min\", \"h\", and \"d\".");
 
 static const unit_conversion time_unit_conversion_table[] =
 {
@@ -972,7 +972,7 @@ static const char *const map_old_guc_names[] = {
 /*
  * Actual lookup of variables is done through this single, sorted array.
  */
-static struct config_generic **guc_variables;
+static __thread struct config_generic **guc_variables;
 
 /* Current number of variables contained in the vector */
 static __thread int	num_guc_variables;

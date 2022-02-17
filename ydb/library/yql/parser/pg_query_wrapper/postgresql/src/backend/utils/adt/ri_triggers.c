@@ -163,9 +163,9 @@ typedef struct RI_CompareHashEntry
 /*
  * Local data
  */
-static HTAB *ri_constraint_cache = NULL;
-static HTAB *ri_query_cache = NULL;
-static HTAB *ri_compare_cache = NULL;
+static __thread HTAB *ri_constraint_cache = NULL;
+static __thread HTAB *ri_query_cache = NULL;
+static __thread HTAB *ri_compare_cache = NULL;
 static __thread dlist_head ri_constraint_cache_valid_list;
 static __thread int	ri_constraint_cache_valid_count = 0;
 

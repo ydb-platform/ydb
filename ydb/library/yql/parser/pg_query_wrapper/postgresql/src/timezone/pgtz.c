@@ -25,10 +25,10 @@
 
 
 /* Current session timezone (controlled by TimeZone GUC) */
-pg_tz	   *session_timezone = NULL;
+__thread pg_tz	   *session_timezone = NULL;
 
 /* Current log timezone (controlled by log_timezone GUC) */
-pg_tz	   *log_timezone = NULL;
+__thread pg_tz	   *log_timezone = NULL;
 
 
 static bool scan_directory_ci(const char *dirname,
@@ -195,7 +195,7 @@ typedef struct
 	pg_tz		tz;
 } pg_tz_cache;
 
-static HTAB *timezone_cache = NULL;
+static __thread HTAB *timezone_cache = NULL;
 
 
 static bool

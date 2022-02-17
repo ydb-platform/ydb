@@ -77,12 +77,12 @@ extern __thread int	backend_flush_after;
 extern __thread int	bgwriter_flush_after;
 
 /* in buf_init.c */
-extern PGDLLIMPORT char *BufferBlocks;
+extern __thread PGDLLIMPORT char *BufferBlocks;
 
 /* in localbuf.c */
 extern __thread PGDLLIMPORT int NLocBuffer;
-extern PGDLLIMPORT Block *LocalBufferBlockPointers;
-extern PGDLLIMPORT int32 *LocalRefCount;
+extern __thread PGDLLIMPORT Block *LocalBufferBlockPointers;
+extern __thread PGDLLIMPORT int32 *LocalRefCount;
 
 /* upper limit for effective_io_concurrency */
 #define MAX_IO_CONCURRENCY 1000

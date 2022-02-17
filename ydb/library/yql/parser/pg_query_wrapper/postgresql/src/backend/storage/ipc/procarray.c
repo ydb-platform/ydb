@@ -99,16 +99,16 @@ typedef struct ProcArrayStruct
 	int			pgprocnos[FLEXIBLE_ARRAY_MEMBER];
 } ProcArrayStruct;
 
-static ProcArrayStruct *procArray;
+static __thread ProcArrayStruct *procArray;
 
-static PGPROC *allProcs;
-static PGXACT *allPgXact;
+static __thread PGPROC *allProcs;
+static __thread PGXACT *allPgXact;
 
 /*
  * Bookkeeping for tracking emulated transactions in recovery
  */
-static TransactionId *KnownAssignedXids;
-static bool *KnownAssignedXidsValid;
+static __thread TransactionId *KnownAssignedXids;
+static __thread bool *KnownAssignedXidsValid;
 static __thread TransactionId latestObservedXid = InvalidTransactionId;
 
 /*

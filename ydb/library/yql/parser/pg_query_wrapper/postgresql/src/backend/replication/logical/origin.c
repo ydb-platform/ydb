@@ -162,19 +162,19 @@ __thread TimestampTz replorigin_session_origin_timestamp = 0;
  * XXX: Should we use a separate variable to size this rather than
  * max_replication_slots?
  */
-static ReplicationState *replication_states;
+static __thread ReplicationState *replication_states;
 
 /*
  * Actual shared memory block (replication_states[] is now part of this).
  */
-static ReplicationStateCtl *replication_states_ctl;
+static __thread ReplicationStateCtl *replication_states_ctl;
 
 /*
  * Backend-local, cached element from ReplicationState for use in a backend
  * replaying remote commits, so we don't have to search ReplicationState for
  * the backends current RepOriginId.
  */
-static ReplicationState *session_replication_state = NULL;
+static __thread ReplicationState *session_replication_state = NULL;
 
 /* Magic for on disk files. */
 #define REPLICATION_STATE_MAGIC ((uint32) 0x1257DADE)

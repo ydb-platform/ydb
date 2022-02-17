@@ -65,7 +65,7 @@ __thread float8		degree_c_one = 1.0;
 
 /* State for drandom() and setseed() */
 static __thread bool drandom_seed_set = false;
-static unsigned short drandom_seed[3] = {0, 0, 0};
+static __thread unsigned short drandom_seed[3] = {0, 0, 0};
 
 /* Local function prototypes */
 static double sind_q1(double x);

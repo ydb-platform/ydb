@@ -33,7 +33,7 @@ typedef struct
 	void		(*endcopyout) (bool errorAbort);
 } PQcommMethods;
 
-extern const PGDLLIMPORT PQcommMethods *PqCommMethods;
+extern __thread const PGDLLIMPORT PQcommMethods *PqCommMethods;
 
 #define pq_comm_reset() (PqCommMethods->comm_reset())
 #define pq_flush() (PqCommMethods->flush())
@@ -53,7 +53,7 @@ extern const PGDLLIMPORT PQcommMethods *PqCommMethods;
 /*
  * prototypes for functions in pqcomm.c
  */
-extern WaitEventSet *FeBeWaitSet;
+extern __thread WaitEventSet *FeBeWaitSet;
 
 extern int	StreamServerPort(int family, const char *hostName,
 							 unsigned short portNumber, const char *unixSocketDir,
@@ -78,13 +78,13 @@ extern int	pq_putbytes(const char *s, size_t len);
 /*
  * prototypes for functions in be-secure.c
  */
-extern char *ssl_library;
-extern char *ssl_cert_file;
-extern char *ssl_key_file;
-extern char *ssl_ca_file;
-extern char *ssl_crl_file;
-extern char *ssl_dh_params_file;
-extern PGDLLIMPORT char *ssl_passphrase_command;
+extern __thread char *ssl_library;
+extern __thread char *ssl_cert_file;
+extern __thread char *ssl_key_file;
+extern __thread char *ssl_ca_file;
+extern __thread char *ssl_crl_file;
+extern __thread char *ssl_dh_params_file;
+extern __thread PGDLLIMPORT char *ssl_passphrase_command;
 extern __thread PGDLLIMPORT bool ssl_passphrase_command_supports_reload;
 #ifdef USE_SSL
 extern __thread bool ssl_loaded_verify_locations;
@@ -108,8 +108,8 @@ extern ssize_t secure_open_gssapi(Port *port);
 #endif
 
 /* GUCs */
-extern char *SSLCipherSuites;
-extern char *SSLECDHCurve;
+extern __thread char *SSLCipherSuites;
+extern __thread char *SSLECDHCurve;
 extern __thread bool SSLPreferServerCiphers;
 extern __thread int	ssl_min_protocol_version;
 extern __thread int	ssl_max_protocol_version;

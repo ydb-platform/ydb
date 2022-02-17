@@ -158,7 +158,7 @@ typedef struct
 	sig_atomic_t force_reply;	/* used as a bool */
 } WalRcvData;
 
-extern WalRcvData *WalRcv;
+extern __thread WalRcvData *WalRcv;
 
 typedef struct
 {
@@ -267,7 +267,7 @@ typedef struct WalReceiverFunctionsType
 	walrcv_disconnect_fn walrcv_disconnect;
 } WalReceiverFunctionsType;
 
-extern PGDLLIMPORT WalReceiverFunctionsType *WalReceiverFunctions;
+extern __thread PGDLLIMPORT WalReceiverFunctionsType *WalReceiverFunctions;
 
 #define walrcv_connect(conninfo, logical, appname, err) \
 	WalReceiverFunctions->walrcv_connect(conninfo, logical, appname, err)

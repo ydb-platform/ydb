@@ -28,7 +28,7 @@
 #define BOOTCOL_NULL_FORCE_NOT_NULL 3
 
 extern __thread Relation boot_reldesc;
-extern Form_pg_attribute attrtypes[MAXATTR];
+extern __thread Form_pg_attribute attrtypes[MAXATTR];
 extern __thread int	numattr;
 
 

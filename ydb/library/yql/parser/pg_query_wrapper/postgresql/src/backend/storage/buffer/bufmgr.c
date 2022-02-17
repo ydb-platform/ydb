@@ -149,11 +149,11 @@ __thread int			bgwriter_flush_after = 0;
 __thread int			backend_flush_after = 0;
 
 /* local state for StartBufferIO and related functions */
-static BufferDesc *InProgressBuf = NULL;
+static __thread BufferDesc *InProgressBuf = NULL;
 static __thread bool IsForInput;
 
 /* local state for LockBufferForCleanup */
-static BufferDesc *PinCountWaitBuf = NULL;
+static __thread BufferDesc *PinCountWaitBuf = NULL;
 
 /*
  * Backend-Private refcount management:
@@ -185,11 +185,11 @@ static BufferDesc *PinCountWaitBuf = NULL;
  * memory allocations in NewPrivateRefCountEntry() which can be important
  * because in some scenarios it's called with a spinlock held...
  */
-static struct PrivateRefCountEntry PrivateRefCountArray[REFCOUNT_ARRAY_ENTRIES];
-static HTAB *PrivateRefCountHash = NULL;
+static __thread struct PrivateRefCountEntry PrivateRefCountArray[REFCOUNT_ARRAY_ENTRIES];
+static __thread HTAB *PrivateRefCountHash = NULL;
 static __thread int32 PrivateRefCountOverflowed = 0;
 static __thread uint32 PrivateRefCountClock = 0;
-static PrivateRefCountEntry *ReservedRefCountEntry = NULL;
+static __thread PrivateRefCountEntry *ReservedRefCountEntry = NULL;
 
 static void ReservePrivateRefCountEntry(void);
 static PrivateRefCountEntry *NewPrivateRefCountEntry(Buffer buffer);

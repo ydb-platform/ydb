@@ -526,11 +526,11 @@ static relopt_string stringRelOpts[] =
 	{{NULL}}
 };
 
-static relopt_gen **relOpts = NULL;
+static __thread relopt_gen **relOpts = NULL;
 static __thread bits32 last_assigned_kind = RELOPT_KIND_LAST_DEFAULT;
 
 static __thread int	num_custom_options = 0;
-static relopt_gen **custom_options = NULL;
+static __thread relopt_gen **custom_options = NULL;
 static __thread bool need_initialization = true;
 
 static void initialize_reloptions(void);

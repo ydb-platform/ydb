@@ -37,13 +37,13 @@
 #include "tcop/tcopprot.h"
 #include "utils/memutils.h"
 
-char	   *ssl_library;
-char	   *ssl_cert_file;
-char	   *ssl_key_file;
-char	   *ssl_ca_file;
-char	   *ssl_crl_file;
-char	   *ssl_dh_params_file;
-char	   *ssl_passphrase_command;
+__thread char	   *ssl_library;
+__thread char	   *ssl_cert_file;
+__thread char	   *ssl_key_file;
+__thread char	   *ssl_ca_file;
+__thread char	   *ssl_crl_file;
+__thread char	   *ssl_dh_params_file;
+__thread char	   *ssl_passphrase_command;
 __thread bool		ssl_passphrase_command_supports_reload;
 
 #ifdef USE_SSL
@@ -51,10 +51,10 @@ __thread bool		ssl_loaded_verify_locations = false;
 #endif
 
 /* GUC variable controlling SSL cipher list */
-char	   *SSLCipherSuites = NULL;
+__thread char	   *SSLCipherSuites = NULL;
 
 /* GUC variable for default ECHD curve. */
-char	   *SSLECDHCurve;
+__thread char	   *SSLECDHCurve;
 
 /* GUC variable: if false, prefer client ciphers */
 __thread bool		SSLPreferServerCiphers;

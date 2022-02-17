@@ -64,8 +64,8 @@ typedef struct df_files
 	char		filename[FLEXIBLE_ARRAY_MEMBER];	/* Full pathname of file */
 } DynamicFileList;
 
-static DynamicFileList *file_list = NULL;
-static DynamicFileList *file_tail = NULL;
+static __thread DynamicFileList *file_list = NULL;
+static __thread DynamicFileList *file_tail = NULL;
 
 /* stat() call under Win32 returns an st_ino field, but it has no meaning */
 #ifndef WIN32
@@ -74,7 +74,7 @@ static DynamicFileList *file_tail = NULL;
 #define SAME_INODE(A,B) false
 #endif
 
-char	   *Dynamic_library_path;
+__thread char	   *Dynamic_library_path;
 
 static void *internal_load_library(const char *libname);
 static void incompatible_module_error(const char *libname,

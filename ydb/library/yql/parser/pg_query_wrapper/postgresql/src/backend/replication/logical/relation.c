@@ -29,7 +29,7 @@
 
 static __thread MemoryContext LogicalRepRelMapContext = NULL;
 
-static HTAB *LogicalRepRelMap = NULL;
+static __thread HTAB *LogicalRepRelMap = NULL;
 
 /*
  * Partition map (LogicalRepPartMap)
@@ -43,7 +43,7 @@ static HTAB *LogicalRepRelMap = NULL;
  * separately for each partition.
  */
 static __thread MemoryContext LogicalRepPartMapContext = NULL;
-static HTAB *LogicalRepPartMap = NULL;
+static __thread HTAB *LogicalRepPartMap = NULL;
 typedef struct LogicalRepPartMapEntry
 {
 	Oid			partoid;		/* LogicalRepPartMap's key */

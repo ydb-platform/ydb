@@ -239,8 +239,8 @@ extern __thread int	vacuum_multixact_freeze_min_age;
 extern __thread int	vacuum_multixact_freeze_table_age;
 
 /* Variables for cost-based parallel vacuum */
-extern pg_atomic_uint32 *VacuumSharedCostBalance;
-extern pg_atomic_uint32 *VacuumActiveNWorkers;
+extern __thread pg_atomic_uint32 *VacuumSharedCostBalance;
+extern __thread pg_atomic_uint32 *VacuumActiveNWorkers;
 extern __thread int	VacuumCostBalanceLocal;
 
 

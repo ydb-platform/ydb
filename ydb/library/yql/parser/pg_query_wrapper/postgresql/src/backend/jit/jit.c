@@ -30,7 +30,7 @@
 
 /* GUCs */
 __thread bool		jit_enabled = true;
-char	   *jit_provider = NULL;
+__thread char	   *jit_provider = NULL;
 __thread bool		jit_debugging_support = false;
 __thread bool		jit_dump_bitcode = false;
 __thread bool		jit_expressions = true;

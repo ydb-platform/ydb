@@ -354,7 +354,7 @@ static __thread SerialControl serialControl;
  * collapsing duplicate targets.  When a duplicate is found, the later
  * commitSeqNo is used.
  */
-static SERIALIZABLEXACT *OldCommittedSxact;
+static __thread SERIALIZABLEXACT *OldCommittedSxact;
 
 
 /*
@@ -388,10 +388,10 @@ static __thread RWConflictPoolHeader RWConflictPool;
  * The predicate locking hash tables are in shared memory.
  * Each backend keeps pointers to them.
  */
-static HTAB *SerializableXidHash;
-static HTAB *PredicateLockTargetHash;
-static HTAB *PredicateLockHash;
-static SHM_QUEUE *FinishedSerializableTransactions;
+static __thread HTAB *SerializableXidHash;
+static __thread HTAB *PredicateLockTargetHash;
+static __thread HTAB *PredicateLockHash;
+static __thread SHM_QUEUE *FinishedSerializableTransactions;
 
 /*
  * Tag for a dummy entry in PredicateLockTargetHash. By temporarily removing
@@ -400,20 +400,20 @@ static SHM_QUEUE *FinishedSerializableTransactions;
  */
 static const PREDICATELOCKTARGETTAG ScratchTargetTag = {0, 0, 0, 0};
 static __thread uint32 ScratchTargetTagHash;
-static LWLock *ScratchPartitionLock;
+static __thread LWLock *ScratchPartitionLock;
 
 /*
  * The local hash table used to determine when to combine multiple fine-
  * grained locks into a single courser-grained lock.
  */
-static HTAB *LocalPredicateLockHash = NULL;
+static __thread HTAB *LocalPredicateLockHash = NULL;
 
 /*
  * Keep a pointer to the currently-running serializable transaction (if any)
  * for quick reference. Also, remember if we have written anything that could
  * cause a rw-conflict.
  */
-static SERIALIZABLEXACT *MySerializableXact = InvalidSerializableXact;
+static __thread SERIALIZABLEXACT *MySerializableXact = InvalidSerializableXact;
 static __thread bool MyXactDidWrite = false;
 
 /*
@@ -423,7 +423,7 @@ static __thread bool MyXactDidWrite = false;
  * transaction, because the workers still have a reference to it.  In that
  * case, the leader stores it here.
  */
-static SERIALIZABLEXACT *SavedSerializableXact = InvalidSerializableXact;
+static __thread SERIALIZABLEXACT *SavedSerializableXact = InvalidSerializableXact;
 
 /* local functions */
 

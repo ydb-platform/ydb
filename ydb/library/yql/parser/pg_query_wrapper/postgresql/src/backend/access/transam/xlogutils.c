@@ -57,7 +57,7 @@ typedef struct xl_invalid_page
 	bool		present;		/* page existed but contained zeroes */
 } xl_invalid_page;
 
-static HTAB *invalid_page_tab = NULL;
+static __thread HTAB *invalid_page_tab = NULL;
 
 
 /* Report a reference to an invalid page */

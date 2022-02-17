@@ -28,4 +28,4 @@
  * loadable module being loaded into a GCC-built backend.
  */
 
-Node	   *newNodeMacroHolder;
+__thread Node	   *newNodeMacroHolder;

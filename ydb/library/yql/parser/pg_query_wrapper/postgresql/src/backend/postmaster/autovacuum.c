@@ -289,7 +289,7 @@ typedef struct
 	AutoVacuumWorkItem av_workItems[NUM_WORKITEMS];
 } AutoVacuumShmemStruct;
 
-static AutoVacuumShmemStruct *AutoVacuumShmem;
+static __thread AutoVacuumShmemStruct *AutoVacuumShmem;
 
 /*
  * the database list (of avl_dbase elements) in the launcher, and the context

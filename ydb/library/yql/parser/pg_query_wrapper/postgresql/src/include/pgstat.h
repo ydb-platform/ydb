@@ -1250,9 +1250,9 @@ extern __thread PGDLLIMPORT bool pgstat_track_activities;
 extern __thread PGDLLIMPORT bool pgstat_track_counts;
 extern __thread PGDLLIMPORT int pgstat_track_functions;
 extern __thread PGDLLIMPORT int pgstat_track_activity_query_size;
-extern char *pgstat_stat_directory;
-extern char *pgstat_stat_tmpname;
-extern char *pgstat_stat_filename;
+extern __thread char *pgstat_stat_directory;
+extern __thread char *pgstat_stat_tmpname;
+extern __thread char *pgstat_stat_filename;
 
 /*
  * BgWriter statistics counters are updated directly by bgwriter and bufmgr

@@ -69,8 +69,8 @@
 __thread bool		Logging_collector = false;
 __thread int			Log_RotationAge = HOURS_PER_DAY * MINS_PER_HOUR;
 __thread int			Log_RotationSize = 10 * 1024;
-char	   *Log_directory = NULL;
-char	   *Log_filename = NULL;
+__thread char	   *Log_directory = NULL;
+__thread char	   *Log_filename = NULL;
 __thread bool		Log_truncate_on_rotation = false;
 __thread int			Log_file_mode = S_IRUSR | S_IWUSR;
 
@@ -82,11 +82,11 @@ extern __thread bool redirection_done;
 static __thread pg_time_t next_rotation_time;
 static __thread bool pipe_eof_seen = false;
 static __thread bool rotation_disabled = false;
-static FILE *syslogFile = NULL;
-static FILE *csvlogFile = NULL;
+static __thread FILE *syslogFile = NULL;
+static __thread FILE *csvlogFile = NULL;
 __thread NON_EXEC_STATIC pg_time_t first_syslogger_file_time = 0;
-static char *last_file_name = NULL;
-static char *last_csv_file_name = NULL;
+static __thread char *last_file_name = NULL;
+static __thread char *last_csv_file_name = NULL;
 
 /*
  * Buffers for saving partial messages from different backends.
@@ -106,13 +106,13 @@ typedef struct
 } save_buffer;
 
 #define NBUFFER_LISTS 256
-static List *buffer_lists[NBUFFER_LISTS];
+static __thread List *buffer_lists[NBUFFER_LISTS];
 
 /* These must be exported for EXEC_BACKEND case ... annoying */
 #ifndef WIN32
-int			syslogPipe[2] = {-1, -1};
+__thread int			syslogPipe[2] = {-1, -1};
 #else
-HANDLE		syslogPipe[2] = {0, 0};
+__thread HANDLE		syslogPipe[2] = {0, 0};
 #endif
 
 #ifdef WIN32

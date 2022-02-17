@@ -106,10 +106,10 @@
 #define MAX_SEND_SIZE (XLOG_BLCKSZ * 16)
 
 /* Array of WalSnds in shared memory */
-WalSndCtlData *WalSndCtl = NULL;
+__thread WalSndCtlData *WalSndCtl = NULL;
 
 /* My slot in the shared memory array */
-WalSnd	   *MyWalSnd = NULL;
+__thread WalSnd	   *MyWalSnd = NULL;
 
 /* Global state */
 __thread bool		am_walsender = false;	/* Am I a walsender process? */
@@ -134,7 +134,7 @@ __thread bool		wake_wal_senders = false;
  * replication does not need xlogreader to read WAL, but it needs one to
  * keep a state of its work.
  */
-static XLogReaderState *xlogreader = NULL;
+static __thread XLogReaderState *xlogreader = NULL;
 
 /*
  * These variables keep track of the state of the timeline we're currently
@@ -194,7 +194,7 @@ static __thread volatile sig_atomic_t got_STOPPING = false;
  */
 static __thread volatile sig_atomic_t replication_active = false;
 
-static LogicalDecodingContext *logical_decoding_ctx = NULL;
+static __thread LogicalDecodingContext *logical_decoding_ctx = NULL;
 
 /* A sample associating a WAL location with the time it was written. */
 typedef struct
@@ -216,7 +216,7 @@ typedef struct
 	WalTimeSample last_read[NUM_SYNC_REP_WAIT_MODE];
 } LagTracker;
 
-static LagTracker *lag_tracker;
+static __thread LagTracker *lag_tracker;
 
 /* Signal handlers */
 static void WalSndLastCycleHandler(SIGNAL_ARGS);

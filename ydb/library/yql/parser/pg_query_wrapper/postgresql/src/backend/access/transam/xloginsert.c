@@ -61,7 +61,7 @@ typedef struct
 	char		compressed_page[PGLZ_MAX_BLCKSZ];
 } registered_buffer;
 
-static registered_buffer *registered_buffers;
+static __thread registered_buffer *registered_buffers;
 static __thread int	max_registered_buffers; /* allocated size */
 static __thread int	max_registered_block_id = 0;	/* highest block_id + 1 currently
 											 * registered */
@@ -70,8 +70,9 @@ static __thread int	max_registered_block_id = 0;	/* highest block_id + 1 current
  * A chain of XLogRecDatas to hold the "main data" of a WAL record, registered
  * with XLogRegisterData(...).
  */
-static XLogRecData *mainrdata_head;
-static XLogRecData *mainrdata_last = (XLogRecData *) &mainrdata_head;
+static __thread XLogRecData *mainrdata_head;
+static __thread XLogRecData *mainrdata_last ;void mainrdata_last_init(void) { mainrdata_last= (XLogRecData *) &mainrdata_head;
+ };
 static __thread uint32 mainrdata_len;	/* total # of bytes in chain */
 
 /* flags for the in-progress insertion */
@@ -86,7 +87,7 @@ static __thread uint8 curinsert_flags = 0;
  * WAL record.
  */
 static __thread XLogRecData hdr_rdt;
-static char *hdr_scratch = NULL;
+static __thread char *hdr_scratch = NULL;
 
 #define SizeOfXlogOrigin	(sizeof(RepOriginId) + sizeof(char))
 
@@ -98,7 +99,7 @@ static char *hdr_scratch = NULL;
 /*
  * An array of XLogRecData structs, to hold registered data.
  */
-static XLogRecData *rdatas;
+static __thread XLogRecData *rdatas;
 static __thread int	num_rdatas;			/* entries currently used */
 static __thread int	max_rdatas;			/* allocated size */
 

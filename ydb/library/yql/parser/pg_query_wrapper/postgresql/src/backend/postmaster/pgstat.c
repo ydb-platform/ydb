@@ -130,9 +130,9 @@ __thread int			pgstat_track_activity_query_size = 1024;
  * Built from GUC parameter
  * ----------
  */
-char	   *pgstat_stat_directory = NULL;
-char	   *pgstat_stat_filename = NULL;
-char	   *pgstat_stat_tmpname = NULL;
+__thread char	   *pgstat_stat_directory = NULL;
+__thread char	   *pgstat_stat_filename = NULL;
+__thread char	   *pgstat_stat_tmpname = NULL;
 
 /*
  * BgWriter global statistics counters (unused in other processes).
@@ -165,7 +165,7 @@ static const char *const slru_names[] = {
  * to copy things around.  We assume this variable inits to zeroes.  Entries
  * are one-to-one with slru_names[].
  */
-static PgStat_MsgSLRU SLRUStats[SLRU_NUM_ELEMENTS];
+static __thread PgStat_MsgSLRU SLRUStats[SLRU_NUM_ELEMENTS];
 
 /* ----------
  * Local data
@@ -199,7 +199,7 @@ typedef struct TabStatusArray
 	PgStat_TableStatus tsa_entries[TABSTAT_QUANTUM];	/* per-table data */
 } TabStatusArray;
 
-static TabStatusArray *pgStatTabList = NULL;
+static __thread TabStatusArray *pgStatTabList = NULL;
 
 /*
  * pgStatTabHash entry: map from relation OID to PgStat_TableStatus pointer
@@ -213,13 +213,13 @@ typedef struct TabStatHashEntry
 /*
  * Hash table for O(1) t_id -> tsa_entry lookup
  */
-static HTAB *pgStatTabHash = NULL;
+static __thread HTAB *pgStatTabHash = NULL;
 
 /*
  * Backends store per-function info that's waiting to be sent to the collector
  * in this hash table (indexed by function OID).
  */
-static HTAB *pgStatFunctions = NULL;
+static __thread HTAB *pgStatFunctions = NULL;
 
 /*
  * Indicates if backend has some function stats that it hasn't yet
@@ -241,7 +241,7 @@ typedef struct PgStat_SubXactStatus
 	PgStat_TableXactStatus *first;	/* head of list for this subxact */
 } PgStat_SubXactStatus;
 
-static PgStat_SubXactStatus *pgStatXactStack = NULL;
+static __thread PgStat_SubXactStatus *pgStatXactStack = NULL;
 
 static __thread int	pgStatXactCommit = 0;
 static __thread int	pgStatXactRollback = 0;
@@ -266,10 +266,10 @@ typedef struct TwoPhasePgStatRecord
  * Info about current "snapshot" of stats file
  */
 static __thread MemoryContext pgStatLocalContext = NULL;
-static HTAB *pgStatDBHash = NULL;
+static __thread HTAB *pgStatDBHash = NULL;
 
 /* Status for backends including auxiliary */
-static LocalPgBackendStatus *localBackendStatusTable = NULL;
+static __thread LocalPgBackendStatus *localBackendStatusTable = NULL;
 
 /* Total number of backends including auxiliary */
 static __thread int	localNumBackends = 0;
@@ -281,14 +281,14 @@ static __thread int	localNumBackends = 0;
  */
 static __thread PgStat_ArchiverStats archiverStats;
 static __thread PgStat_GlobalStats globalStats;
-static PgStat_SLRUStats slruStats[SLRU_NUM_ELEMENTS];
+static __thread PgStat_SLRUStats slruStats[SLRU_NUM_ELEMENTS];
 
 /*
  * List of OIDs of databases we need to write out.  If an entry is InvalidOid,
  * it means to write only the shared-catalog stats ("DB 0"); otherwise, we
  * will write both that DB's data and the shared stats.
  */
-static List *pending_write_requests = NIL;
+static __thread List *pending_write_requests = NIL;
 
 /*
  * Total time charged to functions so far in the current backend.
@@ -2701,14 +2701,14 @@ pgstat_fetch_slru(void)
  * ------------------------------------------------------------
  */
 
-static PgBackendStatus *BackendStatusArray = NULL;
-static PgBackendStatus *MyBEEntry = NULL;
-static char *BackendAppnameBuffer = NULL;
-static char *BackendClientHostnameBuffer = NULL;
-static char *BackendActivityBuffer = NULL;
+static __thread PgBackendStatus *BackendStatusArray = NULL;
+static __thread PgBackendStatus *MyBEEntry = NULL;
+static __thread char *BackendAppnameBuffer = NULL;
+static __thread char *BackendClientHostnameBuffer = NULL;
+static __thread char *BackendActivityBuffer = NULL;
 static __thread Size BackendActivityBufferSize = 0;
 #ifdef USE_SSL
-static PgBackendSSLStatus *BackendSslStatusBuffer = NULL;
+static __thread PgBackendSSLStatus *BackendSslStatusBuffer = NULL;
 #endif
 #ifdef ENABLE_GSS
 static PgBackendGSSStatus *BackendGssStatusBuffer = NULL;

@@ -5077,7 +5077,7 @@ static const struct yy_trans_info yy_transition[20495] =
  {   0,   0 }, {   0,   0 }, {   0,   0 }, {   0,   0 }, { 257,  65 },
  {   1,   0 },    };
 
-static const struct yy_trans_info *yy_start_state_list[25] =
+static __thread const struct yy_trans_info *yy_start_state_list[25] =
     {
     &yy_transition[1],
     &yy_transition[3],

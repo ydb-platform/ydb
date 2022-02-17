@@ -21,7 +21,7 @@
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 
-static shm_mq_handle *pq_mq_handle;
+static __thread shm_mq_handle *pq_mq_handle;
 static __thread bool pq_mq_busy = false;
 static __thread pid_t pq_mq_parallel_master_pid = 0;
 static __thread pid_t pq_mq_parallel_master_backend_id = InvalidBackendId;

@@ -3862,7 +3862,7 @@ reindex_relation(Oid relid, int flags, int options)
 
 static __thread Oid	currentlyReindexedHeap = InvalidOid;
 static __thread Oid	currentlyReindexedIndex = InvalidOid;
-static List *pendingReindexedIndexes = NIL;
+static __thread List *pendingReindexedIndexes = NIL;
 static __thread int	reindexingNestLevel = 0;
 
 /*

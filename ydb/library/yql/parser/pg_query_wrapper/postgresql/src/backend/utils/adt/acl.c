@@ -73,9 +73,9 @@ typedef struct
  * The cache is valid if cached_member_role is not InvalidOid.
  */
 static __thread Oid	cached_privs_role = InvalidOid;
-static List *cached_privs_roles = NIL;
+static __thread List *cached_privs_roles = NIL;
 static __thread Oid	cached_member_role = InvalidOid;
-static List *cached_membership_roles = NIL;
+static __thread List *cached_membership_roles = NIL;
 
 
 static const char *getid(const char *s, char *n);

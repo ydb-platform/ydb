@@ -542,7 +542,7 @@ static __thread int yy_n_chars;		/* number of characters read into yy_ch_buf */
 int yyleng;
 
 /* Points to current character in buffer. */
-static char *yy_c_buf_p = NULL;
+static __thread char *yy_c_buf_p = NULL;
 static __thread int yy_init = 0;		/* whether we need to initialize */
 static __thread int yy_start = 0;	/* start state number */
 
@@ -2370,7 +2370,7 @@ static const struct yy_trans_info yy_transition[8135] =
  {   0,   0 }, {   0,   0 }, {   0,   0 }, {   0,   0 }, { 257,  49 },
  {   1,   0 },    };
 
-static const struct yy_trans_info *yy_start_state_list[11] =
+static __thread const struct yy_trans_info *yy_start_state_list[11] =
     {
     &yy_transition[1],
     &yy_transition[3],
@@ -2424,7 +2424,7 @@ static __thread JsonPathString scanstring;
 
 /* Handles to the buffer that the lexer uses internally */
 static __thread YY_BUFFER_STATE scanbufhandle;
-static char *scanbuf;
+static __thread char *scanbuf;
 static __thread int	scanbuflen;
 
 static void addstring(bool init, char *s, int l);

@@ -100,7 +100,7 @@
 
 
 /* Result of the parsing is returned here */
-Node *replication_parse_result;
+__thread Node *replication_parse_result;
 
 static SQLCmd *make_sqlcmd(void);
 

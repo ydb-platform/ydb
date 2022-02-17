@@ -126,9 +126,9 @@ static __thread dlist_head dsm_segment_list ;void dsm_segment_list_init(void) { 
  * life cycle.  For simplicity, it doesn't have a dsm_segment object either.
  */
 static __thread dsm_handle dsm_control_handle;
-static dsm_control_header *dsm_control;
+static __thread dsm_control_header *dsm_control;
 static __thread Size dsm_control_mapped_size = 0;
-static void *dsm_control_impl_private = NULL;
+static __thread void *dsm_control_impl_private = NULL;
 
 /*
  * Start up the dynamic shared memory system.

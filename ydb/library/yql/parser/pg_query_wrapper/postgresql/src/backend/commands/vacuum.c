@@ -73,8 +73,8 @@ static __thread BufferAccessStrategy vac_strategy;
  * Variables for cost-based parallel vacuum.  See comments atop
  * compute_parallel_delay to understand how it works.
  */
-pg_atomic_uint32 *VacuumSharedCostBalance = NULL;
-pg_atomic_uint32 *VacuumActiveNWorkers = NULL;
+__thread pg_atomic_uint32 *VacuumSharedCostBalance = NULL;
+__thread pg_atomic_uint32 *VacuumActiveNWorkers = NULL;
 __thread int			VacuumCostBalanceLocal = 0;
 
 /* non-export function prototypes */

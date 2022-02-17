@@ -165,7 +165,7 @@ extern __thread PGDLLIMPORT bool IsBinaryUpgrade;
 
 extern __thread PGDLLIMPORT bool ExitOnAnyError;
 
-extern PGDLLIMPORT char *DataDir;
+extern __thread PGDLLIMPORT char *DataDir;
 extern __thread PGDLLIMPORT int data_directory_mode;
 
 extern __thread PGDLLIMPORT int NBuffers;
@@ -177,14 +177,14 @@ extern __thread PGDLLIMPORT int max_parallel_workers;
 extern __thread PGDLLIMPORT int MyProcPid;
 extern __thread PGDLLIMPORT pg_time_t MyStartTime;
 extern __thread PGDLLIMPORT TimestampTz MyStartTimestamp;
-extern PGDLLIMPORT struct Port *MyProcPort;
-extern PGDLLIMPORT struct Latch *MyLatch;
+extern __thread PGDLLIMPORT struct Port *MyProcPort;
+extern __thread PGDLLIMPORT struct Latch *MyLatch;
 extern __thread int32 MyCancelKey;
 extern __thread int	MyPMChildSlot;
 
-extern char OutputFileName[];
-extern PGDLLIMPORT char my_exec_path[];
-extern char pkglib_path[];
+extern __thread char OutputFileName[];
+extern __thread PGDLLIMPORT char my_exec_path[];
+extern __thread char pkglib_path[];
 
 #ifdef EXEC_BACKEND
 extern char postgres_exec_path[];
@@ -311,7 +311,7 @@ extern int	trace_recovery(int trace_level);
 #define SECURITY_RESTRICTED_OPERATION	0x0002
 #define SECURITY_NOFORCE_RLS			0x0004
 
-extern char *DatabasePath;
+extern __thread char *DatabasePath;
 
 /* now in utils/init/miscinit.c */
 extern void InitPostmasterChild(void);
@@ -462,9 +462,9 @@ extern void BaseInit(void);
 /* in utils/init/miscinit.c */
 extern __thread bool IgnoreSystemIndexes;
 extern __thread PGDLLIMPORT bool process_shared_preload_libraries_in_progress;
-extern char *session_preload_libraries_string;
-extern char *shared_preload_libraries_string;
-extern char *local_preload_libraries_string;
+extern __thread char *session_preload_libraries_string;
+extern __thread char *shared_preload_libraries_string;
+extern __thread char *local_preload_libraries_string;
 
 extern void CreateDataDirLockFile(bool amPostmaster);
 extern void CreateSocketLockFile(const char *socketfile, bool amPostmaster,

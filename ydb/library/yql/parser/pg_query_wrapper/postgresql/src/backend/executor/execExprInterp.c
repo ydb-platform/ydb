@@ -106,10 +106,10 @@ typedef struct ExprEvalOpLookup
 } ExprEvalOpLookup;
 
 /* to make dispatch_table accessible outside ExecInterpExpr() */
-static const void **dispatch_table = NULL;
+static __thread const void **dispatch_table = NULL;
 
 /* jump target -> opcode lookup table */
-static ExprEvalOpLookup reverse_dispatch_table[EEOP_LAST];
+static __thread ExprEvalOpLookup reverse_dispatch_table[EEOP_LAST];
 
 #define EEO_SWITCH()
 #define EEO_CASE(name)		CASE_##name:

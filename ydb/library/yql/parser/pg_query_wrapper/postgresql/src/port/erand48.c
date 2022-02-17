@@ -46,7 +46,7 @@
 #define RAND48_SEED_1	(0xabcd)
 #define RAND48_SEED_2	(0x1234)
 
-static unsigned short _rand48_seed[3] = {
+static __thread unsigned short _rand48_seed[3] = {
 	RAND48_SEED_0,
 	RAND48_SEED_1,
 	RAND48_SEED_2

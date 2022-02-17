@@ -288,9 +288,9 @@ typedef struct MultiXactStateData
 #define MaxOldestSlot	(MaxBackends + max_prepared_xacts)
 
 /* Pointers to the state data in shared memory */
-static MultiXactStateData *MultiXactState;
-static MultiXactId *OldestMemberMXactId;
-static MultiXactId *OldestVisibleMXactId;
+static __thread MultiXactStateData *MultiXactState;
+static __thread MultiXactId *OldestMemberMXactId;
+static __thread MultiXactId *OldestVisibleMXactId;
 
 
 /*

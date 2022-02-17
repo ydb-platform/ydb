@@ -118,7 +118,7 @@ __thread volatile bool ParallelMessagePending = false;
 __thread bool		InitializingParallelWorker = false;
 
 /* Pointer to our fixed parallel state. */
-static FixedParallelState *MyFixedParallelState;
+static __thread FixedParallelState *MyFixedParallelState;
 
 /* List of active parallel contexts. */
 static __thread dlist_head pcxt_list ;void pcxt_list_init(void) { dlist_init(&pcxt_list); }

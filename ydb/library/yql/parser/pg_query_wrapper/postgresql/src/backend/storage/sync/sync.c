@@ -69,8 +69,8 @@ typedef struct
 	bool		canceled;		/* true if request has been canceled */
 } PendingUnlinkEntry;
 
-static HTAB *pendingOps = NULL;
-static List *pendingUnlinks = NIL;
+static __thread HTAB *pendingOps = NULL;
+static __thread List *pendingUnlinks = NIL;
 static __thread MemoryContext pendingOpsCxt; /* context for the above  */
 
 static __thread CycleCtr sync_cycle_ctr = 0;

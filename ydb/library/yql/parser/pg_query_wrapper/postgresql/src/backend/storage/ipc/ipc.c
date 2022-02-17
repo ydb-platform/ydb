@@ -76,9 +76,9 @@ struct ONEXIT
 	Datum		arg;
 };
 
-static struct ONEXIT on_proc_exit_list[MAX_ON_EXITS];
-static struct ONEXIT on_shmem_exit_list[MAX_ON_EXITS];
-static struct ONEXIT before_shmem_exit_list[MAX_ON_EXITS];
+static __thread struct ONEXIT on_proc_exit_list[MAX_ON_EXITS];
+static __thread struct ONEXIT on_shmem_exit_list[MAX_ON_EXITS];
+static __thread struct ONEXIT before_shmem_exit_list[MAX_ON_EXITS];
 
 static int	on_proc_exit_index,
 			on_shmem_exit_index,

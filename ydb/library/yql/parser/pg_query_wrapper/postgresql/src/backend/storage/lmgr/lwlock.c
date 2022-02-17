@@ -94,7 +94,7 @@
 
 
 /* We use the ShmemLock spinlock to protect LWLockCounter */
-extern slock_t *ShmemLock;
+extern __thread slock_t *ShmemLock;
 
 #define LW_FLAG_HAS_WAITERS			((uint32) 1 << 30)
 #define LW_FLAG_RELEASE_OK			((uint32) 1 << 29)
@@ -189,7 +189,7 @@ StaticAssertDecl(lengthof(BuiltinTrancheNames) ==
  * stores the names of all dynamically-created tranches known to the current
  * process.  Any unused entries in the array will contain NULL.
  */
-static const char **LWLockTrancheNames = NULL;
+static __thread const char **LWLockTrancheNames = NULL;
 static __thread int	LWLockTrancheNamesAllocated = 0;
 
 /*
@@ -197,7 +197,7 @@ static __thread int	LWLockTrancheNamesAllocated = 0;
  * the pointer by fork from the postmaster (except in the EXEC_BACKEND case,
  * where we have special measures to pass it down).
  */
-LWLockPadded *MainLWLockArray = NULL;
+__thread LWLockPadded *MainLWLockArray = NULL;
 
 /*
  * We use this structure to keep track of locked LWLocks for release
@@ -215,7 +215,7 @@ typedef struct LWLockHandle
 } LWLockHandle;
 
 static __thread int	num_held_lwlocks = 0;
-static LWLockHandle held_lwlocks[MAX_SIMUL_LWLOCKS];
+static __thread LWLockHandle held_lwlocks[MAX_SIMUL_LWLOCKS];
 
 /* struct representing the LWLock tranche request for named tranche */
 typedef struct NamedLWLockTrancheRequest
@@ -224,7 +224,7 @@ typedef struct NamedLWLockTrancheRequest
 	int			num_lwlocks;
 } NamedLWLockTrancheRequest;
 
-static NamedLWLockTrancheRequest *NamedLWLockTrancheRequestArray = NULL;
+static __thread NamedLWLockTrancheRequest *NamedLWLockTrancheRequestArray = NULL;
 static __thread int	NamedLWLockTrancheRequestsAllocated = 0;
 
 /*
@@ -236,7 +236,7 @@ static __thread int	NamedLWLockTrancheRequestsAllocated = 0;
 __thread int			NamedLWLockTrancheRequests = 0;
 
 /* points to data in shared memory: */
-NamedLWLockTranche *NamedLWLockTrancheArray = NULL;
+__thread NamedLWLockTranche *NamedLWLockTrancheArray = NULL;
 
 static __thread bool lock_named_request_allowed = true;
 

@@ -99,33 +99,33 @@ static void PrintLockQueue(LOCK *lock, const char *info);
  */
 
 /* Workspace for FindLockCycle */
-static PGPROC **visitedProcs;	/* Array of visited procs */
+static __thread PGPROC **visitedProcs;	/* Array of visited procs */
 static __thread int	nVisitedProcs;
 
 /* Workspace for TopoSort */
-static PGPROC **topoProcs;		/* Array of not-yet-output procs */
-static int *beforeConstraints;	/* Counts of remaining before-constraints */
-static int *afterConstraints;	/* List head for after-constraints */
+static __thread PGPROC **topoProcs;		/* Array of not-yet-output procs */
+static __thread int *beforeConstraints;	/* Counts of remaining before-constraints */
+static __thread int *afterConstraints;	/* List head for after-constraints */
 
 /* Output area for ExpandConstraints */
-static WAIT_ORDER *waitOrders;	/* Array of proposed queue rearrangements */
+static __thread WAIT_ORDER *waitOrders;	/* Array of proposed queue rearrangements */
 static __thread int	nWaitOrders;
 static __thread PGPROC **waitOrderProcs; /* Space for waitOrders queue contents */
 
 /* Current list of constraints being considered */
-static EDGE *curConstraints;
+static __thread EDGE *curConstraints;
 static __thread int	nCurConstraints;
 static __thread int	maxCurConstraints;
 
 /* Storage space for results from FindLockCycle */
-static EDGE *possibleConstraints;
+static __thread EDGE *possibleConstraints;
 static __thread int	nPossibleConstraints;
 static __thread int	maxPossibleConstraints;
-static DEADLOCK_INFO *deadlockDetails;
+static __thread DEADLOCK_INFO *deadlockDetails;
 static __thread int	nDeadlockDetails;
 
 /* PGPROC pointer of any blocking autovacuum worker found */
-static PGPROC *blocking_autovacuum_proc = NULL;
+static __thread PGPROC *blocking_autovacuum_proc = NULL;
 
 
 /*

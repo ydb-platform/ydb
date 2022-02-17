@@ -230,7 +230,7 @@ typedef struct ErrorContextCallback
 	void	   *arg;
 } ErrorContextCallback;
 
-extern PGDLLIMPORT ErrorContextCallback *error_context_stack;
+extern __thread PGDLLIMPORT ErrorContextCallback *error_context_stack;
 
 
 /*----------
@@ -337,7 +337,7 @@ extern PGDLLIMPORT ErrorContextCallback *error_context_stack;
 	(pg_re_throw(), pg_unreachable())
 #endif
 
-extern PGDLLIMPORT sigjmp_buf *PG_exception_stack;
+extern __thread PGDLLIMPORT sigjmp_buf *PG_exception_stack;
 
 
 /* Stuff that error handlers might want to use */
@@ -408,9 +408,9 @@ typedef enum
 }			PGErrorVerbosity;
 
 extern __thread int	Log_error_verbosity;
-extern char *Log_line_prefix;
+extern __thread char *Log_line_prefix;
 extern __thread int	Log_destination;
-extern char *Log_destination_string;
+extern __thread char *Log_destination_string;
 extern __thread bool syslog_sequence_numbers;
 extern __thread bool syslog_split_messages;
 

@@ -126,7 +126,7 @@ typedef struct OldSnapshotControlData
 	TransactionId xid_by_minute[FLEXIBLE_ARRAY_MEMBER];
 } OldSnapshotControlData;
 
-static volatile OldSnapshotControlData *oldSnapshotControl;
+static __thread volatile OldSnapshotControlData *oldSnapshotControl;
 
 
 /*
@@ -169,7 +169,7 @@ __thread TransactionId RecentGlobalXmin = InvalidTransactionId;
 __thread TransactionId RecentGlobalDataXmin = InvalidTransactionId;
 
 /* (table, ctid) => (cmin, cmax) mapping during timetravel */
-static HTAB *tuplecid_data = NULL;
+static __thread HTAB *tuplecid_data = NULL;
 
 /*
  * Elements of the active snapshot stack.
@@ -187,10 +187,10 @@ typedef struct ActiveSnapshotElt
 } ActiveSnapshotElt;
 
 /* Top of the stack of active snapshots */
-static ActiveSnapshotElt *ActiveSnapshot = NULL;
+static __thread ActiveSnapshotElt *ActiveSnapshot = NULL;
 
 /* Bottom of the stack of active snapshots */
-static ActiveSnapshotElt *OldestActiveSnapshot = NULL;
+static __thread ActiveSnapshotElt *OldestActiveSnapshot = NULL;
 
 /*
  * Currently registered Snapshots.  Ordered in a heap by xmin, so that we can
@@ -222,7 +222,7 @@ typedef struct ExportedSnapshot
 } ExportedSnapshot;
 
 /* Current xact's exported snapshots (a list of ExportedSnapshot structs) */
-static List *exportedSnapshots = NIL;
+static __thread List *exportedSnapshots = NIL;
 
 /* Prototypes for local functions */
 static TimestampTz AlignTimestampToMinuteBoundary(TimestampTz ts);

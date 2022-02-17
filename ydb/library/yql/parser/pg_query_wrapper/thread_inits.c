@@ -10,6 +10,7 @@ void pg_thread_init(void) {
     cached_expression_list_init();
     dsm_segment_list_init();
     lsn_mapping_init();
+    mainrdata_last_init();
     pcxt_list_init();
     saved_plan_list_init();
 }

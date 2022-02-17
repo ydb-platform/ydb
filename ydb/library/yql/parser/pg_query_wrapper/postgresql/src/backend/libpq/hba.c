@@ -98,7 +98,7 @@ typedef struct TokenizedLine
  * pre-parsed content of HBA config file: list of HbaLine structs.
  * parsed_hba_context is the memory context where it lives.
  */
-static List *parsed_hba_lines = NIL;
+static __thread List *parsed_hba_lines = NIL;
 static __thread MemoryContext parsed_hba_context = NULL;
 
 /*
@@ -109,7 +109,7 @@ static __thread MemoryContext parsed_hba_context = NULL;
  * that live outside the memory context. Before destroying or resetting the
  * memory context, they need to be explicitly free'd.
  */
-static List *parsed_ident_lines = NIL;
+static __thread List *parsed_ident_lines = NIL;
 static __thread MemoryContext parsed_ident_context = NULL;
 
 /*

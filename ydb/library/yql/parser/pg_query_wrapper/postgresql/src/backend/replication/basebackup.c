@@ -84,7 +84,7 @@ static bool is_checksummed_file(const char *fullpath, const char *filename);
 static __thread bool backup_started_in_recovery = false;
 
 /* Relative path of temporary statistics directory */
-static char *statrelpath = NULL;
+static __thread char *statrelpath = NULL;
 
 /*
  * Size of each block sent into the tar stream for larger files.

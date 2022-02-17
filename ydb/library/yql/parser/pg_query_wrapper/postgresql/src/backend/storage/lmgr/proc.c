@@ -64,8 +64,8 @@ __thread int			IdleInTransactionSessionTimeout = 0;
 __thread bool		log_lock_waits = false;
 
 /* Pointer to this process's PGPROC and PGXACT structs, if any */
-PGPROC	   *MyProc = NULL;
-PGXACT	   *MyPgXact = NULL;
+__thread PGPROC	   *MyProc = NULL;
+__thread PGXACT	   *MyPgXact = NULL;
 
 /*
  * This spinlock protects the freelist of recycled PGPROC structures.
@@ -74,15 +74,15 @@ PGXACT	   *MyPgXact = NULL;
  * relatively infrequently (only at backend startup or shutdown) and not for
  * very long, so a spinlock is okay.
  */
-NON_EXEC_STATIC slock_t *ProcStructLock = NULL;
+__thread NON_EXEC_STATIC slock_t *ProcStructLock = NULL;
 
 /* Pointers to shared-memory structures */
-PROC_HDR   *ProcGlobal = NULL;
-NON_EXEC_STATIC PGPROC *AuxiliaryProcs = NULL;
-PGPROC	   *PreparedXactProcs = NULL;
+__thread PROC_HDR   *ProcGlobal = NULL;
+__thread NON_EXEC_STATIC PGPROC *AuxiliaryProcs = NULL;
+__thread PGPROC	   *PreparedXactProcs = NULL;
 
 /* If we are waiting for a lock, this points to the associated LOCALLOCK */
-static LOCALLOCK *lockAwaited = NULL;
+static __thread LOCALLOCK *lockAwaited = NULL;
 
 static __thread DeadLockState deadlock_state = DS_NOT_YET_CHECKED;
 

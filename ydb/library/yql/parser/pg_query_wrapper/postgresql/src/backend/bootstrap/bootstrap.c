@@ -73,7 +73,7 @@ __thread AuxProcType MyAuxProcType = NotAnAuxProcess;	/* declared in miscadmin.h
 
 __thread Relation	boot_reldesc;		/* current relation descriptor */
 
-Form_pg_attribute attrtypes[MAXATTR];	/* points to attribute info */
+__thread Form_pg_attribute attrtypes[MAXATTR];	/* points to attribute info */
 __thread int			numattr;			/* number of attributes for cur. rel */
 
 
@@ -161,11 +161,11 @@ struct typmap
 	FormData_pg_type am_typ;
 };
 
-static struct typmap **Typ = NULL;
-static struct typmap *Ap = NULL;
+static __thread struct typmap **Typ = NULL;
+static __thread struct typmap *Ap = NULL;
 
 static __thread Datum values[MAXATTR];	/* current row's attribute values */
-static bool Nulls[MAXATTR];
+static __thread bool Nulls[MAXATTR];
 
 static __thread MemoryContext nogc = NULL;	/* special no-gc mem context */
 
@@ -183,7 +183,7 @@ typedef struct _IndexList
 	struct _IndexList *il_next;
 } IndexList;
 
-static IndexList *ILHead = NULL;
+static __thread IndexList *ILHead = NULL;
 
 
 /*

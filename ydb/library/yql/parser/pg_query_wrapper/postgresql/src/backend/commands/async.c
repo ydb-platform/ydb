@@ -294,7 +294,7 @@ typedef struct AsyncQueueControl
 	/* backend[0] is not used; used entries are from [1] to [MaxBackends] */
 } AsyncQueueControl;
 
-static AsyncQueueControl *asyncQueueControl;
+static __thread AsyncQueueControl *asyncQueueControl;
 
 #define QUEUE_HEAD					(asyncQueueControl->head)
 #define QUEUE_TAIL					(asyncQueueControl->tail)
@@ -338,7 +338,7 @@ static __thread SlruCtlData NotifyCtlData;
  * (ie, have committed a LISTEN on).  It is a simple list of channel names,
  * allocated in TopMemoryContext.
  */
-static List *listenChannels = NIL;	/* list of C strings */
+static __thread List *listenChannels = NIL;	/* list of C strings */
 
 /*
  * State for pending LISTEN/UNLISTEN actions consists of an ordered list of
@@ -370,7 +370,7 @@ typedef struct ActionList
 	struct ActionList *upper;	/* details for upper transaction levels */
 } ActionList;
 
-static ActionList *pendingActions = NULL;
+static __thread ActionList *pendingActions = NULL;
 
 /*
  * State for outbound notifies consists of a list of all channels+payloads
@@ -422,7 +422,7 @@ typedef struct NotificationHash
 	Notification *event;		/* => the actual Notification struct */
 } NotificationHash;
 
-static NotificationList *pendingNotifies = NULL;
+static __thread NotificationList *pendingNotifies = NULL;
 
 /*
  * Inbound notifications are initially processed by HandleNotifyInterrupt(),

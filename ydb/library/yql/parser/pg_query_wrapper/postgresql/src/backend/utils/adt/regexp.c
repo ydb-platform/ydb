@@ -107,7 +107,7 @@ typedef struct cached_re_str
 } cached_re_str;
 
 static __thread int	num_res = 0;		/* # of cached re's */
-static cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
+static __thread cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
 
 
 /* Local functions */

@@ -90,8 +90,8 @@ __thread int			wal_receiver_timeout;
 __thread bool		hot_standby_feedback;
 
 /* libpqwalreceiver connection */
-static WalReceiverConn *wrconn = NULL;
-WalReceiverFunctionsType *WalReceiverFunctions = NULL;
+static __thread WalReceiverConn *wrconn = NULL;
+__thread WalReceiverFunctionsType *WalReceiverFunctions = NULL;
 
 #define NAPTIME_PER_CYCLE 100	/* max sleep time between cycles (100ms) */
 

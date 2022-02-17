@@ -91,10 +91,10 @@
 
 
 /* GUC settings */
-char	   *locale_messages;
-char	   *locale_monetary;
-char	   *locale_numeric;
-char	   *locale_time;
+__thread char	   *locale_messages;
+__thread char	   *locale_monetary;
+__thread char	   *locale_numeric;
+__thread char	   *locale_time;
 
 /*
  * lc_time localization cache.
@@ -103,10 +103,10 @@ char	   *locale_time;
  * element is left as NULL for the convenience of outside code that wants
  * to sequentially scan these arrays.
  */
-char	   *localized_abbrev_days[7 + 1];
-char	   *localized_full_days[7 + 1];
-char	   *localized_abbrev_months[12 + 1];
-char	   *localized_full_months[12 + 1];
+__thread char	   *localized_abbrev_days[7 + 1];
+__thread char	   *localized_full_days[7 + 1];
+__thread char	   *localized_abbrev_months[12 + 1];
+__thread char	   *localized_full_months[12 + 1];
 
 /* indicates whether locale information cache is valid */
 static __thread bool CurrentLocaleConvValid = false;
@@ -116,15 +116,15 @@ static __thread bool CurrentLCTimeValid = false;
 
 #define LC_ENV_BUFSIZE (NAMEDATALEN + 20)
 
-static char lc_collate_envbuf[LC_ENV_BUFSIZE];
-static char lc_ctype_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_collate_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_ctype_envbuf[LC_ENV_BUFSIZE];
 
 #ifdef LC_MESSAGES
-static char lc_messages_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_messages_envbuf[LC_ENV_BUFSIZE];
 #endif
-static char lc_monetary_envbuf[LC_ENV_BUFSIZE];
-static char lc_numeric_envbuf[LC_ENV_BUFSIZE];
-static char lc_time_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_monetary_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_numeric_envbuf[LC_ENV_BUFSIZE];
+static __thread char lc_time_envbuf[LC_ENV_BUFSIZE];
 
 /* Cache for collation-related knowledge */
 
@@ -137,7 +137,7 @@ typedef struct
 	pg_locale_t locale;			/* locale_t struct, or 0 if not valid */
 } collation_cache_entry;
 
-static HTAB *collation_cache = NULL;
+static __thread HTAB *collation_cache = NULL;
 
 
 #if defined(WIN32) && defined(LC_MESSAGES)
@@ -1777,7 +1777,7 @@ get_collation_actual_version(char collprovider, const char *collcollate)
  * in database encoding.  Since the database encoding doesn't change, we only
  * need one of these per session.
  */
-static UConverter *icu_converter = NULL;
+static __thread UConverter *icu_converter = NULL;
 
 static void
 init_icu_converter(void)

@@ -44,7 +44,7 @@ __thread Oid			binary_upgrade_next_pg_enum_oid = InvalidOid;
  * EnumValuesCreate are *not* blacklisted; we assume those are created during
  * CREATE TYPE, so they can't go away unless the enum type itself does.
  */
-static HTAB *enum_blacklist = NULL;
+static __thread HTAB *enum_blacklist = NULL;
 
 static void RenumberEnumType(Relation pg_enum, HeapTuple *existing, int nelems);
 static int	sort_order_cmp(const void *p1, const void *p2);

@@ -66,7 +66,7 @@ static const char *SSLerrmessage(unsigned long ecode);
 
 static char *X509_NAME_to_cstring(X509_NAME *name);
 
-static SSL_CTX *SSL_context = NULL;
+static __thread SSL_CTX *SSL_context = NULL;
 static __thread bool SSL_initialized = false;
 static __thread bool dummy_ssl_passwd_cb_called = false;
 static __thread bool ssl_is_server_start;
@@ -753,7 +753,7 @@ be_tls_write(Port *port, void *ptr, size_t len, int *waitfor)
 #define BIO_set_data(bio, data) (bio->ptr = data)
 #endif
 
-static BIO_METHOD *my_bio_methods = NULL;
+static __thread BIO_METHOD *my_bio_methods = NULL;
 
 static int
 my_sock_read(BIO *h, char *buf, int size)

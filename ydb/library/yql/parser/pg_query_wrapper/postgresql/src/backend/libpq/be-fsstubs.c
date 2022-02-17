@@ -66,7 +66,7 @@
  * dynamically allocated in that context.  Its current allocated size is
  * cookies_size entries, of which any unused entries will be NULL.
  */
-static LargeObjectDesc **cookies = NULL;
+static __thread LargeObjectDesc **cookies = NULL;
 static __thread int	cookies_size = 0;
 
 static __thread bool lo_cleanup_needed = false;

@@ -27,7 +27,7 @@
 #define DEFAULT_TABLE_ACCESS_METHOD	"heap"
 
 /* GUCs */
-extern char *default_table_access_method;
+extern __thread char *default_table_access_method;
 extern __thread bool synchronize_seqscans;
 
 

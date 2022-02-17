@@ -202,7 +202,7 @@ typedef struct vfd
  * needed.  'File' values are indexes into this array.
  * Note that VfdCache[0] is not a usable VFD, just a list header.
  */
-static Vfd *VfdCache;
+static __thread Vfd *VfdCache;
 static __thread Size SizeVfdCache = 0;
 
 /*
@@ -250,7 +250,7 @@ typedef struct
 
 static __thread int	numAllocatedDescs = 0;
 static __thread int	maxAllocatedDescs = 0;
-static AllocateDesc *allocatedDescs = NULL;
+static __thread AllocateDesc *allocatedDescs = NULL;
 
 /*
  * Number of open "external" FDs reported to Reserve/ReleaseExternalFD.
@@ -269,7 +269,7 @@ static __thread long tempFileCounter = 0;
  * When numTempTableSpaces is -1, this has not been set in the current
  * transaction.
  */
-static Oid *tempTableSpaces = NULL;
+static __thread Oid *tempTableSpaces = NULL;
 static __thread int	numTempTableSpaces = -1;
 static __thread int	nextTempTableSpace = 0;
 

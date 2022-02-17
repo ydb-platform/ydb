@@ -65,15 +65,15 @@ typedef union
 extern __thread bool Logging_collector;
 extern __thread int	Log_RotationAge;
 extern __thread int	Log_RotationSize;
-extern PGDLLIMPORT char *Log_directory;
-extern PGDLLIMPORT char *Log_filename;
+extern __thread PGDLLIMPORT char *Log_directory;
+extern __thread PGDLLIMPORT char *Log_filename;
 extern __thread bool Log_truncate_on_rotation;
 extern __thread int	Log_file_mode;
 
 #ifndef WIN32
-extern int	syslogPipe[2];
+extern __thread int	syslogPipe[2];
 #else
-extern HANDLE syslogPipe[2];
+extern __thread HANDLE syslogPipe[2];
 #endif
 
 

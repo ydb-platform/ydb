@@ -89,9 +89,9 @@
 
 
 /* Global variables */
-ErrorContextCallback *error_context_stack = NULL;
+__thread ErrorContextCallback *error_context_stack = NULL;
 
-sigjmp_buf *PG_exception_stack = NULL;
+__thread sigjmp_buf *PG_exception_stack = NULL;
 
 extern __thread bool redirection_done;
 
@@ -106,9 +106,9 @@ __thread emit_log_hook_type emit_log_hook = NULL;
 
 /* GUC parameters */
 __thread int			Log_error_verbosity = PGERROR_VERBOSE;
-char	   *Log_line_prefix = NULL; /* format for extra log line info */
+__thread char	   *Log_line_prefix = NULL; /* format for extra log line info */
 __thread int			Log_destination = LOG_DESTINATION_STDERR;
-char	   *Log_destination_string = NULL;
+__thread char	   *Log_destination_string = NULL;
 __thread bool		syslog_sequence_numbers = true;
 __thread bool		syslog_split_messages = true;
 
@@ -126,14 +126,14 @@ __thread bool		syslog_split_messages = true;
 #endif
 
 static __thread bool openlog_done = false;
-static char *syslog_ident = NULL;
+static __thread char *syslog_ident = NULL;
 static __thread int	syslog_facility = LOG_LOCAL0;
 
 static void write_syslog(int level, const char *line);
 #endif
 
 #ifdef WIN32
-extern char *event_source;
+extern __thread char *event_source;
 
 static void write_eventlog(int level, const char *line, int len);
 #endif
@@ -141,7 +141,7 @@ static void write_eventlog(int level, const char *line, int len);
 /* We provide a small stack of ErrorData records for re-entrant cases */
 #define ERRORDATA_STACK_SIZE  5
 
-static ErrorData errordata[ERRORDATA_STACK_SIZE];
+static __thread ErrorData errordata[ERRORDATA_STACK_SIZE];
 
 static __thread int	errordata_stack_depth = -1; /* index of topmost active frame */
 
@@ -155,8 +155,8 @@ static __thread struct timeval saved_timeval;
 static __thread bool saved_timeval_set = false;
 
 #define FORMATTED_TS_LEN 128
-static char formatted_start_time[FORMATTED_TS_LEN];
-static char formatted_log_time[FORMATTED_TS_LEN];
+static __thread char formatted_start_time[FORMATTED_TS_LEN];
+static __thread char formatted_log_time[FORMATTED_TS_LEN];
 
 
 /* Macro for checking errordata_stack_depth is reasonable */
@@ -1375,7 +1375,7 @@ getinternalerrposition(void)
  * therefore survive until FlushErrorState() is called.
  */
 static __thread int	save_format_errnumber;
-static const char *save_format_domain;
+static __thread const char *save_format_domain;
 
 void
 pre_format_elog_string(int errnumber, const char *domain)

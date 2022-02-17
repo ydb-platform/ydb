@@ -188,7 +188,7 @@ static __thread dlist_head BackendList ;void BackendList_init(void) { dlist_init
 static Backend *ShmemBackendArray;
 #endif
 
-BackgroundWorker *MyBgworkerEntry = NULL;
+__thread BackgroundWorker *MyBgworkerEntry = NULL;
 
 
 
@@ -196,10 +196,10 @@ BackgroundWorker *MyBgworkerEntry = NULL;
 __thread int			PostPortNumber;
 
 /* The directory names for Unix socket(s) */
-char	   *Unix_socket_directories;
+__thread char	   *Unix_socket_directories;
 
 /* The TCP listen address(es) */
-char	   *ListenAddresses;
+__thread char	   *ListenAddresses;
 
 /*
  * ReservedBackends is the number of backends reserved for superuser use.
@@ -214,12 +214,12 @@ __thread int			ReservedBackends;
 
 /* The socket(s) we're listening to. */
 #define MAXLISTEN	64
-static pgsocket ListenSocket[MAXLISTEN];
+static __thread pgsocket ListenSocket[MAXLISTEN];
 
 /*
  * Set by the -o option
  */
-static char ExtraOptions[MAXPGPATH];
+static __thread char ExtraOptions[MAXPGPATH];
 
 /*
  * These globals control the behavior of the postmaster in case some
@@ -242,7 +242,7 @@ __thread bool		Log_connections = false;
 __thread bool		Db_user_namespace = false;
 
 __thread bool		enable_bonjour = false;
-char	   *bonjour_name;
+__thread char	   *bonjour_name;
 __thread bool		restart_after_crash = true;
 
 /* PIDs of special child processes; 0 when not running */
@@ -566,7 +566,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
  * File descriptors for pipe used to monitor if postmaster is alive.
  * First is POSTMASTER_FD_WATCH, second is POSTMASTER_FD_OWN.
  */
-int			postmaster_alive_fds[2] = {-1, -1};
+__thread int			postmaster_alive_fds[2] = {-1, -1};
 #else
 /* Process handle of postmaster used for the same purpose on Windows */
 HANDLE		PostmasterHandle;
@@ -6166,10 +6166,10 @@ PostmasterMarkPIDForWorkerNotify(int pid)
  * The following need to be available to the save/restore_backend_variables
  * functions.  They are marked NON_EXEC_STATIC in their home modules.
  */
-extern slock_t *ShmemLock;
-extern slock_t *ProcStructLock;
-extern PGPROC *AuxiliaryProcs;
-extern PMSignalData *PMSignalState;
+extern __thread slock_t *ShmemLock;
+extern __thread slock_t *ProcStructLock;
+extern __thread PGPROC *AuxiliaryProcs;
+extern __thread PMSignalData *PMSignalState;
 extern __thread pgsocket pgStatSock;
 extern __thread pg_time_t first_syslogger_file_time;
 

@@ -87,8 +87,8 @@ typedef struct
 #define BARRIER_SHOULD_CHECK(flags, type) \
 	(((flags) & (((uint32) 1) << (uint32) (type))) != 0)
 
-static ProcSignalHeader *ProcSignal = NULL;
-static volatile ProcSignalSlot *MyProcSignalSlot = NULL;
+static __thread ProcSignalHeader *ProcSignal = NULL;
+static __thread volatile ProcSignalSlot *MyProcSignalSlot = NULL;
 
 static bool CheckProcSignal(ProcSignalReason reason);
 static void CleanupProcSignalState(int status, Datum arg);

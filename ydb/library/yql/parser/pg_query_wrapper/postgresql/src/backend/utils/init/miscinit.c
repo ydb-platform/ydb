@@ -60,7 +60,7 @@ __thread ProcessingMode Mode = InitProcessing;
 __thread BackendType MyBackendType;
 
 /* List of lock files to be removed at proc exit */
-static List *lock_files = NIL;
+static __thread List *lock_files = NIL;
 
 static __thread Latch LocalLatchData;
 
@@ -1560,9 +1560,9 @@ ValidatePgVersion(const char *path)
  * GUC variables: lists of library names to be preloaded at postmaster
  * start and at backend start
  */
-char	   *session_preload_libraries_string = NULL;
-char	   *shared_preload_libraries_string = NULL;
-char	   *local_preload_libraries_string = NULL;
+__thread char	   *session_preload_libraries_string = NULL;
+__thread char	   *shared_preload_libraries_string = NULL;
+__thread char	   *local_preload_libraries_string = NULL;
 
 /* Flag telling that we are loading shared_preload_libraries */
 __thread bool		process_shared_preload_libraries_in_progress = false;

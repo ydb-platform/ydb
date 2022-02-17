@@ -61,7 +61,7 @@
 #endif
 
 /* Cache management header --- pointer is NULL until created */
-static CatCacheHeader *CacheHdr = NULL;
+static __thread CatCacheHeader *CacheHdr = NULL;
 
 static inline HeapTuple SearchCatCacheInternal(CatCache *cache,
 											   int nkeys,

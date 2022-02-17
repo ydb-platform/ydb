@@ -252,8 +252,8 @@ const PGLZ_Strategy *const PGLZ_strategy_always = &strategy_always_data;
  * Statically allocated work arrays for history
  * ----------
  */
-static int16 hist_start[PGLZ_MAX_HISTORY_LISTS];
-static PGLZ_HistEntry hist_entries[PGLZ_HISTORY_SIZE + 1];
+static __thread int16 hist_start[PGLZ_MAX_HISTORY_LISTS];
+static __thread PGLZ_HistEntry hist_entries[PGLZ_HISTORY_SIZE + 1];
 
 /*
  * Element 0 in hist_entries is unused, and means 'invalid'. Likewise,

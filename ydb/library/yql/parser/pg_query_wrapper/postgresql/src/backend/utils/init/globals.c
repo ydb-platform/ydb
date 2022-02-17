@@ -40,7 +40,7 @@ __thread volatile uint32 CritSectionCount = 0;
 __thread int			MyProcPid;
 __thread pg_time_t	MyStartTime;
 __thread TimestampTz MyStartTimestamp;
-struct Port *MyProcPort;
+__thread struct Port *MyProcPort;
 __thread int32		MyCancelKey;
 __thread int			MyPMChildSlot;
 
@@ -51,7 +51,7 @@ __thread int			MyPMChildSlot;
  * PGPROC->procLatch if it has. Thus it can always be used in signal handlers,
  * without checking for its existence.
  */
-struct Latch *MyLatch;
+__thread struct Latch *MyLatch;
 
 /*
  * DataDir is the absolute path to the top level of the PGDATA directory tree.
@@ -59,7 +59,7 @@ struct Latch *MyLatch;
  * most code therefore can simply use relative paths and not reference DataDir
  * explicitly.
  */
-char	   *DataDir = NULL;
+__thread char	   *DataDir = NULL;
 
 /*
  * Mode of the data directory.  The default is 0700 but it may be changed in
@@ -67,10 +67,10 @@ char	   *DataDir = NULL;
  */
 __thread int			data_directory_mode = PG_DIR_MODE_OWNER;
 
-char		OutputFileName[MAXPGPATH];	/* debugging output file */
+__thread char		OutputFileName[MAXPGPATH];	/* debugging output file */
 
-char		my_exec_path[MAXPGPATH];	/* full path to my executable */
-char		pkglib_path[MAXPGPATH]; /* full path to lib directory */
+__thread char		my_exec_path[MAXPGPATH];	/* full path to my executable */
+__thread char		pkglib_path[MAXPGPATH]; /* full path to lib directory */
 
 #ifdef EXEC_BACKEND
 char		postgres_exec_path[MAXPGPATH];	/* full path to backend */
@@ -90,7 +90,7 @@ __thread Oid			MyDatabaseTableSpace = InvalidOid;
  * DatabasePath is the path (relative to DataDir) of my database's
  * primary directory, ie, its directory in the default tablespace.
  */
-char	   *DatabasePath = NULL;
+__thread char	   *DatabasePath = NULL;
 
 __thread pid_t		PostmasterPid = 0;
 

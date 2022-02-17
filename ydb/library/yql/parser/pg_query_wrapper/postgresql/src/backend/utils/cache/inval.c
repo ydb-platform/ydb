@@ -184,9 +184,9 @@ typedef struct TransInvalidationInfo
 	bool		RelcacheInitFileInval;
 } TransInvalidationInfo;
 
-static TransInvalidationInfo *transInvalInfo = NULL;
+static __thread TransInvalidationInfo *transInvalInfo = NULL;
 
-static SharedInvalidationMessage *SharedInvalidMessagesArray;
+static __thread SharedInvalidationMessage *SharedInvalidMessagesArray;
 static __thread int	numSharedInvalidMessagesArray;
 static __thread int	maxSharedInvalidMessagesArray;
 
@@ -212,7 +212,7 @@ static struct SYSCACHECALLBACK
 	Datum		arg;
 }			syscache_callback_list[MAX_SYSCACHE_CALLBACKS];
 
-static int16 syscache_callback_links[SysCacheSize];
+static __thread int16 syscache_callback_links[SysCacheSize];
 
 static __thread int	syscache_callback_count = 0;
 

@@ -70,7 +70,7 @@ typedef struct EventTriggerQueryState
 	struct EventTriggerQueryState *previous;
 } EventTriggerQueryState;
 
-static EventTriggerQueryState *currentEventTriggerState = NULL;
+static __thread EventTriggerQueryState *currentEventTriggerState = NULL;
 
 /* Support for dropped objects */
 typedef struct SQLDropObject

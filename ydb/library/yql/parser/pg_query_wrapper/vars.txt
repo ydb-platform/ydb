@@ -645,7 +645,6 @@ binary_upgrade_record_init_privs
 block_size
 blocking_autovacuum_proc
 bonjour_name
-boolRelOpts
 boot_reldesc
 boot_yy_flex_debug
 boot_yychar
@@ -785,7 +784,6 @@ enable_seqscan
 enable_sort
 enable_tidscan
 entryExecPlaceToPage.data
-enumRelOpts
 enum_blacklist
 eoxact_list
 eoxact_list_len
@@ -830,7 +828,6 @@ get_relation_info_hook
 get_relation_stats_hook
 get_stack_depth_rlimit.val
 gin_pending_list_limit
-gistBufferingOptValues
 gistGetFakeLSN.counter
 gistGetFakeLSN.lastlsn
 globalStats
@@ -865,7 +862,6 @@ in_progress_list_maxlen
 in_remote_transaction
 in_restore_command
 incoming_message
-intRelOpts
 integer_datetimes
 internal_flush.last_reported_send_errno
 invalid_page_tab
@@ -1197,7 +1193,6 @@ readOff
 readSegNo
 readSource
 ready_to_stop
-realRelOpts
 receiveTLI
 recentMulti
 recentXid
@@ -1379,7 +1374,6 @@ stmtStartTimestamp
 str_time.buf
 streamingDoneReceiving
 streamingDoneSending
-stringRelOpts
 sync_cycle_ctr
 sync_method
 synchronize_seqscans
@@ -1459,7 +1453,6 @@ vacuum_freeze_table_age
 vacuum_multixact_freeze_min_age
 vacuum_multixact_freeze_table_age
 values
-viewCheckOptValues
 visitedProcs
 waitOrderProcs
 waitOrders

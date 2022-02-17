@@ -45,7 +45,7 @@
 #define SESSION_KEY_RECORD_TYPMOD_REGISTRY	UINT64CONST(0xFFFFFFFFFFFF0002)
 
 /* This backend's current session. */
-Session    *CurrentSession = NULL;
+__thread Session    *CurrentSession = NULL;
 
 /*
  * Set up CurrentSession to point to an empty Session object.

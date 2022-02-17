@@ -727,8 +727,6 @@ SRCS(
     postgresql/src/port/snprintf.c
     postgresql/src/port/sprompt.c
     postgresql/src/port/strerror.c
-    postgresql/src/port/strlcat.c
-    postgresql/src/port/strlcpy.c
     postgresql/src/port/tar.c
     postgresql/src/port/thread.c
     postgresql/src/timezone/localtime.c

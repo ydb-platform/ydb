@@ -391,6 +391,8 @@ public:
 
     ui64 ResetTimeoutCount() { return TimeoutCount; TimeoutCount = 0; }
 
+    const TQueue& GetReadyQueue() const { return ReadyQueue; }
+
     // copies items, should be used in tests only
     TVector<T> GetQueue() const { return ReadyQueue.GetQueue(); }
     TVector<TItemWithTs> GetRunning() const { return RunningItems.GetQueue(); }

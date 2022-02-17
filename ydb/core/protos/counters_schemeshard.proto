@@ -137,7 +137,7 @@ enum ESimpleCounters {
     COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
     COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
 
-    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
+    COUNTER_COMPACTION_QUEUE_SIZE = 114                   [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
 
     COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
     COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
@@ -148,6 +148,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateReplication = 120       [(CounterOpts) = {Name: "InFlightOps/CreateReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxDropReplication = 122         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
+
+    COUNTER_COMPACTION_QUEUE_SIZE_SH = 123                [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
+    COUNTER_COMPACTION_QUEUE_SIZE_DELETES = 124           [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
+    COUNTER_COMPACTION_QUEUE_RUNNING = 125                [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
+    COUNTER_COMPACTION_QUEUE_WAITING_REPEAT = 126         [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
 }
 
 enum ECumulativeCounters {

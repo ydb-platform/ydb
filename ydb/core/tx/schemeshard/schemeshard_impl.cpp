@@ -285,8 +285,10 @@ TMessageSeqNo TSchemeShard::NextRound() {
 void TSchemeShard::Clear() {
     PathsById.clear();
     Tables.clear();
-    if (CompactionQueue)
+    if (CompactionQueue) {
         CompactionQueue->Clear();
+        UpdateBackgroundCompactionQueueMetrics();
+    }
     PersQueueGroups.clear();
     RtmrVolumes.clear();
     SubDomains.clear();
@@ -2071,6 +2073,7 @@ void TSchemeShard::DeleteTablePartitioning(NIceDb::TNiceDb& db, const TPathId pa
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
 
         CompactionQueue->Remove(TShardCompactionInfo(partitions[pi].ShardIdx));
+        UpdateBackgroundCompactionQueueMetrics();
     }
 }
 
@@ -3248,6 +3251,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     for (const auto& p: tableInfo->GetPartitions()) {
         CompactionQueue->Remove(TShardCompactionInfo(p.ShardIdx));
     }
+    UpdateBackgroundCompactionQueueMetrics();
 
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
@@ -5788,6 +5792,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, it->second));
+                UpdateBackgroundCompactionQueueMetrics();
             }
         }
     }

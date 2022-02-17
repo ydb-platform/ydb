@@ -195,6 +195,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         TShardCompactionInfo compactionInfo(shardIdx, newStats);
         if (!Self->CompactionQueue->Update(compactionInfo))
             Self->CompactionQueue->Enqueue(std::move(compactionInfo));
+        Self->UpdateBackgroundCompactionQueueMetrics();
     }
 
     NIceDb::TNiceDb db(txc.DB);

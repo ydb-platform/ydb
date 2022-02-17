@@ -1331,9 +1331,21 @@ message TCompactionConfig {
         // corresponding thresholds
         optional uint32 RowCountThreshold = 8 [default = 1];
 
-        // When this option specified, schemeshard calculates compaction rate so
-        // that the queue is compacted within this interval.
+        // When this option specified, schemeshard calculates compaction rate
+        // to compact QueueSize shards within this interval.
         // CompactionRate = Min(QueueSize / RoundSeconds, MaxRate).
+        //
+        // Note that compaction queue is round robin over three queues:
+        // 1. By last full compaction time (all shards)
+        // 2. By search height (some shards, depends on SearchHeightThreshold)
+        // 3. By row deletes (some shards, depends on RowDeletesThreshold)
+        // In queues 2 and 3 same shard can be compacted again after
+        // MinCompactionRepeatDelaySeconds depending on its state.
+        //
+        // Thus when there are items in all queues, RoundSeconds gives the only
+        // guarantee, that at least 1/3 unique shards will be compacted, the
+        // rest 2/3 can be shards compacted multiple times, i.e. all shards
+        // must be compacted within at most RoundSeconds*3.
         optional uint64 RoundSeconds = 9 [default = 86400];
     }
 

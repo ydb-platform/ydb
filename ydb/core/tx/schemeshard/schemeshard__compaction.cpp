@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardIdx& shardId) {
-    TabletCounters->Simple()[COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE].Set(CompactionQueue->Size());
+    UpdateBackgroundCompactionQueueMetrics();
     TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_TIMEOUT].Increment(CompactionQueue->ResetTimeoutCount());
 
     auto ctx = TActivationContext::ActorContextFor(SelfId());
@@ -79,6 +79,19 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_FAILED].Increment(1);
         break;
     }
+
+    UpdateBackgroundCompactionQueueMetrics();
+}
+
+void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
+    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE].Set(CompactionQueue->Size());
+    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_RUNNING].Set(CompactionQueue->RunningSize());
+    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_WAITING_REPEAT].Set(CompactionQueue->WaitingSize());
+
+    const auto& queue = CompactionQueue->GetReadyQueue();
+
+    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_SH].Set(queue.SizeBySearchHeight());
+    TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
 }
 
 } // NSchemeShard

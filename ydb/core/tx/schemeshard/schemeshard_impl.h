@@ -624,6 +624,7 @@ public:
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardIdx& shardId);
+    void UpdateBackgroundCompactionQueueMetrics();
 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();

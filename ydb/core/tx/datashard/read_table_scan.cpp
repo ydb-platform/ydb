@@ -427,7 +427,7 @@ private:
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
-    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
     {
         Driver = driver;
 

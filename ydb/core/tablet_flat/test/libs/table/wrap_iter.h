@@ -100,7 +100,7 @@ namespace NTest {
 
     public:
         const TIntrusiveConstPtr<TRowScheme> Scheme;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
         const TFrozen Frozen;
         const TFlatten Flatten;
         const TRowVersion Snapshot;

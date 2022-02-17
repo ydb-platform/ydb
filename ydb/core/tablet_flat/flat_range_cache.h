@@ -387,7 +387,7 @@ public:
     };
 
 public:
-    TKeyRangeCache(const TKeyNulls& nulls, const TKeyRangeCacheConfig& config);
+    TKeyRangeCache(const TKeyCellDefaults& nulls, const TKeyRangeCacheConfig& config);
 
     ~TKeyRangeCache();
 
@@ -552,7 +552,7 @@ private:
     static TCell AllocateCellCopy(TSpecialMemoryPool* pool, const TCell& cell);
 
 private:
-    const TKeyNulls& Nulls;
+    const TKeyCellDefaults& Nulls;
     const TKeyRangeCacheConfig Config;
     THolder<TSpecialMemoryPool> Pool;
     size_t UsedHeapMemory = 0;

@@ -100,7 +100,7 @@ namespace NCompShard {
      */
     class TSplitStatIterator {
     public:
-        TSplitStatIterator(const TKeyNulls& nulls)
+        TSplitStatIterator(const TKeyCellDefaults& nulls)
             : Nulls(nulls)
             , InitQueue(TCmpHeapByFirstKey{Nulls})
             , NextQueue(TCmpHeapByNextKey{Nulls})
@@ -148,19 +148,19 @@ namespace NCompShard {
         };
 
         struct TCmpHeapByFirstKey {
-            const TKeyNulls& Nulls;
+            const TKeyCellDefaults& Nulls;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
 
         struct TCmpHeapByNextKey {
-            const TKeyNulls& Nulls;
+            const TKeyCellDefaults& Nulls;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
 
         struct TCmpHeapByLastKey {
-            const TKeyNulls& Nulls;
+            const TKeyCellDefaults& Nulls;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
@@ -176,7 +176,7 @@ namespace NCompShard {
         void InitPageSize(TItemState* item) const noexcept;
 
     private:
-        const TKeyNulls& Nulls;
+        const TKeyCellDefaults& Nulls;
         TVector<TCell> Key;
         TDeque<TItemState> Items;
         TItemQueue<TCmpHeapByFirstKey> InitQueue;
@@ -195,7 +195,7 @@ namespace NCompShard {
      */
     class TPageReuseBuilder {
     public:
-        TPageReuseBuilder(const TKeyNulls& nulls)
+        TPageReuseBuilder(const TKeyCellDefaults& nulls)
             : Nulls(nulls)
         { }
 
@@ -257,7 +257,7 @@ namespace NCompShard {
         };
 
     private:
-        const TKeyNulls& Nulls;
+        const TKeyCellDefaults& Nulls;
         TDeque<TItemState> Items;
     };
 
@@ -381,7 +381,7 @@ namespace NCompShard {
 
         void RegisterItem(const TTablePart& info, TTablePart::TItem& item, bool isGarbage) noexcept;
 
-        bool FindSplitKey(TSerializedCellVec& foundKey, const TKeyNulls& nulls) const noexcept;
+        bool FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& nulls) const noexcept;
     };
 
     /**

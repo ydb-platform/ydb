@@ -46,7 +46,7 @@ namespace NTable {
             Trace = 2, /* how many last data pages to keep while seq scans */
         };
 
-        struct TEgg {
+        struct TParams {
             TEpoch Epoch;
             TIntrusiveConstPtr<TPartScheme> Scheme;
             TSharedData Index;
@@ -71,28 +71,28 @@ namespace NTable {
             ui64 HiddenDrops; /* Hidden (non-main) rows with ERowOp::Erase */
         };
 
-        TPart(const TLogoBlobID &label, TEgg egg, TStat stat)
+        TPart(const TLogoBlobID &label, TParams params, TStat stat)
             : Label(label)
-            , Epoch(egg.Epoch)
-            , Scheme(std::move(egg.Scheme))
-            , Blobs(std::move(egg.Blobs))
-            , Large(std::move(egg.Large))
-            , Small(std::move(egg.Small))
-            , Index(std::move(egg.Index))
+            , Epoch(params.Epoch)
+            , Scheme(std::move(params.Scheme))
+            , Blobs(std::move(params.Blobs))
+            , Large(std::move(params.Large))
+            , Small(std::move(params.Small))
+            , Index(std::move(params.Index))
             , GroupIndexes(
-                std::make_move_iterator(egg.GroupIndexes.begin()),
-                std::make_move_iterator(egg.GroupIndexes.end()))
+                std::make_move_iterator(params.GroupIndexes.begin()),
+                std::make_move_iterator(params.GroupIndexes.end()))
             , HistoricIndexes(
-                std::make_move_iterator(egg.HistoricIndexes.begin()),
-                std::make_move_iterator(egg.HistoricIndexes.end()))
-            , ByKey(std::move(egg.ByKey))
-            , GarbageStats(std::move(egg.GarbageStats))
-            , TxIdStats(std::move(egg.TxIdStats))
+                std::make_move_iterator(params.HistoricIndexes.begin()),
+                std::make_move_iterator(params.HistoricIndexes.end()))
+            , ByKey(std::move(params.ByKey))
+            , GarbageStats(std::move(params.GarbageStats))
+            , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
             , Groups(1 + GroupIndexes.size())
             , IndexesRawSize(Index.RawSize() + SumRawSize(GroupIndexes))
-            , MinRowVersion(egg.MinRowVersion)
-            , MaxRowVersion(egg.MaxRowVersion)
+            , MinRowVersion(params.MinRowVersion)
+            , MaxRowVersion(params.MaxRowVersion)
         {
             Y_VERIFY(Scheme->Groups.size() == Groups,
                 "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",

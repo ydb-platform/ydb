@@ -190,7 +190,7 @@ namespace NPage {
 
             if (Raw = raw ? *raw : TSharedData{ }) {
                 const void* base = Raw.data();
-                auto got = NPage::THello().Read(Raw, EPage::DataPage);
+                auto got = NPage::TLabelWrapper().Read(Raw, EPage::DataPage);
 
                 Y_VERIFY(got.Version == 1, "Unknown EPage::DataPage version");
 
@@ -229,7 +229,7 @@ namespace NPage {
         }
 
         TIter LookupKey(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyNulls *nulls) const noexcept
+                        ESeek seek, const TKeyCellDefaults *nulls) const noexcept
         {
             if (!key) {
                 switch (seek) {
@@ -266,7 +266,7 @@ namespace NPage {
         }
 
         TIter LookupKeyReverse(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyNulls *nulls) const noexcept
+                        ESeek seek, const TKeyCellDefaults *nulls) const noexcept
         {
             if (!key) {
                 switch (seek) {

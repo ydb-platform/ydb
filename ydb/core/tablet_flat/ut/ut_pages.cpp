@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(NPage) {
 
         for (auto page: xrange(part.Store->PageCollectionPagesCount(0))) {
             auto *raw = part.Store->GetPage(0, page);
-            auto got = NPage::THello().Read(*raw, NPage::EPage::Undef);
+            auto got = NPage::TLabelWrapper().Read(*raw, NPage::EPage::Undef);
 
             if (got.Type != NPage::EPage::DataPage) {
                 /* Have to check for compression only rows page */

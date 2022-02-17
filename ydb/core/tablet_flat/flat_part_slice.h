@@ -13,7 +13,7 @@ namespace NTable {
     /**
      * A very simple comparator for part keys (extended with schema defaults)
      */
-    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyNulls &nulls) noexcept;
+    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &nulls) noexcept;
 
     /**
      * Bounds for a range of keys
@@ -41,12 +41,12 @@ namespace NTable {
         {
         }
 
-        void Describe(IOutputStream& out, const TKeyNulls& nulls) const noexcept;
+        void Describe(IOutputStream& out, const TKeyCellDefaults& nulls) const noexcept;
 
         /**
          * Returns true if a is less than b without any intersections
          */
-        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyNulls& nulls) noexcept;
+        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& nulls) noexcept;
 
         /**
          * Compares search key and bounds first key
@@ -56,7 +56,7 @@ namespace NTable {
         static int CompareSearchKeyFirstKey(
                 TArrayRef<const TCell> key,
                 const TBounds& bounds,
-                const TKeyNulls& nulls) noexcept;
+                const TKeyCellDefaults& nulls) noexcept;
 
         /**
          * Compares bounds last key and search key
@@ -66,7 +66,7 @@ namespace NTable {
         static int CompareLastKeySearchKey(
                 const TBounds& bounds,
                 TArrayRef<const TCell> key,
-                const TKeyNulls& nulls) noexcept;
+                const TKeyCellDefaults& nulls) noexcept;
     };
 
     /**
@@ -565,9 +565,9 @@ namespace NTable {
         struct TCompare {
             typedef void is_transparent;
 
-            const TKeyNulls& Nulls;
+            const TKeyCellDefaults& Nulls;
 
-            explicit TCompare(const TKeyNulls& nulls)
+            explicit TCompare(const TKeyCellDefaults& nulls)
                 : Nulls(nulls)
             {
             }
@@ -641,7 +641,7 @@ namespace NTable {
         using iterator = TItems::iterator;
         using value_type = TItem;
 
-        explicit TRun(const TKeyNulls& nulls)
+        explicit TRun(const TKeyCellDefaults& nulls)
             : Nulls(nulls)
             , Slices({ }, TCompare(nulls))
         {
@@ -751,7 +751,7 @@ namespace NTable {
         }
 
     private:
-        const TKeyNulls& Nulls;
+        const TKeyCellDefaults& Nulls;
         TItems Slices;
     };
 
@@ -761,7 +761,7 @@ namespace NTable {
     class TLevels {
         class TItem : public TRun {
         public:
-            TItem(const TKeyNulls& nulls, size_t index)
+            TItem(const TKeyCellDefaults& nulls, size_t index)
                 : TRun(nulls)
                 , Index(index)
             { }
@@ -783,7 +783,7 @@ namespace NTable {
             TRun::iterator Position;
         };
 
-        explicit TLevels(TIntrusiveConstPtr<TKeyNulls> nulls)
+        explicit TLevels(TIntrusiveConstPtr<TKeyCellDefaults> nulls)
             : Nulls(std::move(nulls))
         {
         }
@@ -811,7 +811,7 @@ namespace NTable {
         iterator AddLevel();
 
     private:
-        TIntrusiveConstPtr<TKeyNulls> Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
         TItems Levels;
         TEpoch MaxEpoch = TEpoch::Min();
     };

@@ -39,7 +39,7 @@ namespace NTable {
         {
             Y_VERIFY(Lookup(table) && data.size() >= Family->Large);
 
-            auto blob = NPage::THello::Wrap(data, EPage::Opaque, 0);
+            auto blob = NPage::TLabelWrapper::Wrap(data, EPage::Opaque, 0);
 
             const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), 0);
 

@@ -42,7 +42,7 @@ namespace NPage {
         TGarbageStats(TSharedData page)
             : Raw(std::move(page))
         {
-            const auto got = NPage::THello().Read(Raw, EPage::GarbageStats);
+            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::GarbageStats);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 0);
 

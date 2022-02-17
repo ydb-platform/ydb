@@ -180,7 +180,7 @@ private:
     }
 
 private:
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
         Y_VERIFY(scheme);
         Y_VERIFY(driver);
 
@@ -193,7 +193,7 @@ private:
 
         Sleep = true;
 
-        THello startConfig;
+        TInitialState startConfig;
         startConfig.Scan = EScan::Sleep;
         startConfig.Conf.ReadAheadLo = READAHEAD_LO;
         startConfig.Conf.ReadAheadHi = READAHEAD_HI;

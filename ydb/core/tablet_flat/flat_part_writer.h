@@ -693,7 +693,7 @@ namespace NTable {
                 /* Need to extract first key from page. Just written key
                     columns may not hold EOp::Reset cells (and now this
                     isn't possible technically), thus there isn't required
-                    TNulls object for expanding defaults.
+                    TCellDefaults object for expanding defaults.
                  */
 
                 Y_VERIFY(dataPage->Records, "Invalid EPage::DataPage blob");
@@ -754,13 +754,13 @@ namespace NTable {
         TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override
         {
             if (plain.size() >= LargeEdge && plain.size() <= MaxLargeBlob) {
-                auto blob = NPage::THello::WrapString(plain, EPage::Opaque, 0);
+                auto blob = NPage::TLabelWrapper::WrapString(plain, EPage::Opaque, 0);
                 ui64 ref = Globs.Size(); /* is the current blob index */
 
                 return Register(row, tag, Pager.WriteLarge(std::move(blob), ref));
 
             } else if (plain.size() >= SmallEdge) {
-                auto blob = NPage::THello::Wrap(plain, EPage::Opaque, 0);
+                auto blob = NPage::TLabelWrapper::Wrap(plain, EPage::Opaque, 0);
                 Current.Bytes += blob.size();
                 Current.Coded += blob.size();
 
@@ -806,7 +806,7 @@ namespace NTable {
         {
             Y_VERIFY(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
 
-            auto got = NPage::THello().Read(page, EPage::DataPage);
+            auto got = NPage::TLabelWrapper().Read(page, EPage::DataPage);
 
             Y_VERIFY(got == ECodec::Plain, "Page is already encoded");
             Y_VERIFY(got.Page.data() - page.data() == 16, "Page compression would change page header size");

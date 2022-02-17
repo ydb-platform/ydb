@@ -10,7 +10,7 @@ namespace NTable {
 
 namespace {
 
-void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TNulls& nulls) noexcept
+void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& nulls) noexcept
 {
     out << '{';
     size_t pos = 0;
@@ -44,7 +44,7 @@ bool ValidateSlices(TConstArrayRef<TSlice> slices) noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyNulls &nulls) noexcept {
+int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &nulls) noexcept {
     size_t end = Max(left.size(), right.size());
     Y_VERIFY_DEBUG(end <= nulls.Size(), "Key schema is smaller than compared keys");
 
@@ -61,7 +61,7 @@ int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyNulls &nulls) noe
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TBounds::Describe(IOutputStream& out, const TKeyNulls& nulls) const noexcept
+void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& nulls) const noexcept
 {
     auto left = FirstKey.GetCells();
     auto right = LastKey.GetCells();
@@ -80,7 +80,7 @@ void TBounds::Describe(IOutputStream& out, const TKeyNulls& nulls) const noexcep
     out << (LastInclusive ? ']' : ')');
 }
 
-bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyNulls& nulls) noexcept
+bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& nulls) noexcept
 {
     auto left = a.LastKey.GetCells();
     auto right = b.FirstKey.GetCells();
@@ -112,7 +112,7 @@ bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyNulls& nul
 int TBounds::CompareSearchKeyFirstKey(
         TArrayRef<const TCell> key,
         const TBounds& bounds,
-        const TKeyNulls& nulls) noexcept
+        const TKeyCellDefaults& nulls) noexcept
 {
     if (!key) {
         // Search key is +inf => +inf > any
@@ -145,7 +145,7 @@ int TBounds::CompareSearchKeyFirstKey(
 int TBounds::CompareLastKeySearchKey(
         const TBounds& bounds,
         TArrayRef<const TCell> key,
-        const TKeyNulls& nulls) noexcept
+        const TKeyCellDefaults& nulls) noexcept
 {
     auto left = bounds.LastKey.GetCells();
     if (Y_UNLIKELY(!left)) {

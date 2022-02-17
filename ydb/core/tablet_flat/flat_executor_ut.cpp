@@ -276,7 +276,7 @@ public:
     }
 
 private:
-    THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
     {
         Driver = driver;
         Scheme = std::move(scheme);

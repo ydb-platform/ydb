@@ -39,8 +39,8 @@ namespace NTable {
 
         TRowScheme(
                 TVector<TColInfo> cols,
-                TIntrusiveConstPtr<TKeyNulls> keys,
-                TIntrusiveConstPtr<TRowNulls> nulls,
+                TIntrusiveConstPtr<TKeyCellDefaults> keys,
+                TIntrusiveConstPtr<TRowCellDefaults> nulls,
                 TVector<ui32> families)
             : Cols(std::move(cols))
             , Keys(std::move(keys))
@@ -66,8 +66,8 @@ namespace NTable {
                 keyCount += (meta.KeyOrder == Max<TPos>() ? 0 : 1);
             }
 
-            TNullsCook<TKeyNulls, NScheme::TTypeIdOrder> keys(keyCount);
-            TNullsCook<TRowNulls, NScheme::TTypeId> vals(cols.size());
+            TNullsCook<TKeyCellDefaults, NScheme::TTypeIdOrder> keys(keyCount);
+            TNullsCook<TRowCellDefaults, NScheme::TTypeId> vals(cols.size());
 
             TVector<TColInfo> info;
             info.reserve(cols.size());
@@ -151,8 +151,8 @@ namespace NTable {
 
     public:
         const TVector<TColInfo> Cols;
-        const TIntrusiveConstPtr<TKeyNulls> Keys;
-        const TIntrusiveConstPtr<TRowNulls> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> Keys;
+        const TIntrusiveConstPtr<TRowCellDefaults> Nulls;
         const TVector<ui32> Families; // per-group families
 
     private:

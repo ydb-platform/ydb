@@ -254,7 +254,7 @@ public:
 
     ~TBuildIndexScan() override = default;
 
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
         auto selfActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         auto ctx = TActivationContext::AsActorContext().MakeFor(selfActorId);
 

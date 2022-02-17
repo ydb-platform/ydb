@@ -94,7 +94,7 @@ namespace NTabletFlatExecutor {
             Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT);
         }
 
-        THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+        TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
         {
             TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 

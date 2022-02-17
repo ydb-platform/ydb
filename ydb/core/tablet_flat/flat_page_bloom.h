@@ -27,7 +27,7 @@ namespace NPage {
         TBloom(TSharedData page)
             : Raw(std::move(page))
         {
-            const auto got = NPage::THello().Read(Raw, EPage::Bloom);
+            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Bloom);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 0);
 

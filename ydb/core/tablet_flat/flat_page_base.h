@@ -269,7 +269,7 @@ template <typename TRecord>
 struct TCompare {
     using TColumns = TArrayRef<const TPartScheme::TColumn>;
 
-    TCompare(TColumns keys, const TKeyNulls &nulls)
+    TCompare(TColumns keys, const TKeyCellDefaults &nulls)
         : Info(keys)
         , Nulls(nulls)
     {
@@ -300,7 +300,7 @@ struct TCompare {
 
 private:
     const TColumns Info;
-    const TKeyNulls &Nulls;
+    const TKeyCellDefaults &Nulls;
 };
 
 

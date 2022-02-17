@@ -46,7 +46,7 @@ namespace NTable {
         }
 
         static bool Range(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyNulls &nulls, TTagsRef tags,
+                    const TRun &run, const TKeyCellDefaults &nulls, TTagsRef tags,
                     ui64 items, ui64 bytes, bool includeHistory = false) noexcept
         {
             if (run.size() == 1) {
@@ -102,7 +102,7 @@ namespace NTable {
         }
 
         static bool RangeReverse(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyNulls &nulls, TTagsRef tags,
+                    const TRun &run, const TKeyCellDefaults &nulls, TTagsRef tags,
                     ui64 items, ui64 bytes, bool includeHistory = false) noexcept
         {
             if (run.size() == 1) {
@@ -170,7 +170,7 @@ namespace NTable {
          * last key < splitKey are precharged. This method will not try to
          * load pages outside of [beginRowId, endRowId) range.
          */
-        bool SplitKey(const TCells splitKey, const TKeyNulls& nulls,
+        bool SplitKey(const TCells splitKey, const TKeyCellDefaults& nulls,
                 const TRowId beginRowId, const TRowId endRowId) const noexcept
         {
             Y_VERIFY_DEBUG(beginRowId < endRowId, "Unexpected empty row range");
@@ -285,7 +285,7 @@ namespace NTable {
          * Precharges data for rows between max(key1, row1) and min(key2, row2) inclusive
          */
         TResult Do(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyNulls &nulls, ui64 itemsLimit,
+                const TRowId row2, const TKeyCellDefaults &nulls, ui64 itemsLimit,
                 ui64 bytesLimit) const noexcept
         {
             auto startRow = row1;
@@ -352,7 +352,7 @@ namespace NTable {
          * Precharges data for rows between min(key1, row1) and max(key2, row2) inclusive in reverse
          */
         TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyNulls &nulls, ui64 itemsLimit,
+                const TRowId row2, const TKeyCellDefaults &nulls, ui64 itemsLimit,
                 ui64 bytesLimit) const noexcept
         {
             auto startRow = row1;
@@ -601,7 +601,7 @@ namespace NTable {
             Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
 
             // Directly use the histroy key nulls with correct sort order
-            const TKeyNulls* nulls = Part->Scheme->HistoryKeys.Get();
+            const TKeyCellDefaults* nulls = Part->Scheme->HistoryKeys.Get();
 
             auto first = HistoryIndex->LookupKey(startKey, scheme, ESeek::Lower, nulls);
             if (!first) {

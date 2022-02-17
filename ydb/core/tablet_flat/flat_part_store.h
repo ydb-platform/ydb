@@ -48,7 +48,7 @@ protected:
 public:
     using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
-    TPartStore(const TLogoBlobID &label, TEgg egg, TStat stat)
+    TPartStore(const TLogoBlobID &label, TPart::TParams egg, TStat stat)
         : TPart(label, egg, stat)
     {
 

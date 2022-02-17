@@ -124,7 +124,7 @@ namespace NTest {
         }
 
     private:
-        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override
+        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override
         {
             Y_FAIL("IScan::Prepare(...) isn't used in test env compaction");
         }

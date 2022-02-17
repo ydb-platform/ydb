@@ -70,7 +70,7 @@ namespace NPerf {
 
     private:
         TIntrusivePtr<TMemTable> Table;
-        TIntrusiveConstPtr<TKeyNulls> Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
         TRemap Remap;
         TAutoPtr<TMemIt> Iter;
         TRowState State;

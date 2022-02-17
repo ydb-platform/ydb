@@ -25,7 +25,7 @@ namespace NMem {
 
     struct TPoint {
         TArrayRef<const TCell> Key;
-        const TKeyNulls &Nulls;
+        const TKeyCellDefaults &Nulls;
     };
 
     struct TCandidate {

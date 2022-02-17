@@ -107,7 +107,7 @@ namespace {
         TIntrusivePtr<TSlices> Run;
     };
 
-    void VerifyRunOrder(TIntrusiveConstPtr<TSlices> run, const TKeyNulls& keys)
+    void VerifyRunOrder(TIntrusiveConstPtr<TSlices> run, const TKeyCellDefaults& keys)
     {
         const TSlice* prev = nullptr;
         for (auto& slice : *run) {

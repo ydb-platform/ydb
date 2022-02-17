@@ -18,7 +18,7 @@ namespace NPage {
         Size = Y_LIKELY(size < Max<ui32>()) ? ui32(size) : Max<ui32>();
     }
 
-    THello::TResult THello::Read(TArrayRef<const char> raw, EPage type) const noexcept
+    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const noexcept
     {
         auto label = TDeref<TLabel>::Copy(raw.begin(), 0);
 
@@ -55,7 +55,7 @@ namespace NPage {
         }
     }
 
-    TSharedData THello::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TSharedData TLabelWrapper::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
     {
         Y_VERIFY(!(version >> 15), "Version can use only 15 bits");
 
@@ -70,7 +70,7 @@ namespace NPage {
         return blob;
     }
 
-    TString THello::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TString TLabelWrapper::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
     {
         Y_VERIFY(!(version >> 15), "Version can use only 15 bits");
 

@@ -262,7 +262,7 @@ public:
                 , Step(step)
             { }
 
-            TString ToString(const TKeyNulls& nulls, bool dumpStep) const {
+            TString ToString(const TKeyCellDefaults& nulls, bool dumpStep) const {
                 TStringStream s;
                 Describe(s, nulls);
                 s << "@" << Epoch;
@@ -273,7 +273,7 @@ public:
             }
         };
 
-        const TKeyNulls& nulls = *DB.GetRowScheme(table)->Keys;
+        const TKeyCellDefaults& nulls = *DB.GetRowScheme(table)->Keys;
         auto keyRangeLess = [&nulls](const TKeyRange& a, const TKeyRange& b) -> bool {
             if (auto cmp = ComparePartKeys(a.FirstKey.GetCells(), b.FirstKey.GetCells(), nulls)) {
                 return cmp < 0;

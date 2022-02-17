@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTable {
 
-TKeyRangeCache::TKeyRangeCache(const TKeyNulls& nulls, const TKeyRangeCacheConfig& config)
+TKeyRangeCache::TKeyRangeCache(const TKeyCellDefaults& nulls, const TKeyRangeCacheConfig& config)
     : Nulls(nulls)
     , Config(config)
     , Pool(new TSpecialMemoryPool())

@@ -62,7 +62,7 @@ namespace NPage {
         TIndex(TSharedData raw)
             : Raw(std::move(raw))
         {
-            const auto got = NPage::THello().Read(Raw, EPage::Index);
+            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Index);
 
             Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3));
 
@@ -175,7 +175,7 @@ namespace NPage {
          */
         TIter LookupKey(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyNulls *nulls) const noexcept
+                const ESeek seek, const TKeyCellDefaults *nulls) const noexcept
         {
             if (!key) {
                 // Special treatment for an empty key
@@ -219,7 +219,7 @@ namespace NPage {
          */
         TIter LookupKeyReverse(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyNulls *nulls) const noexcept
+                const ESeek seek, const TKeyCellDefaults *nulls) const noexcept
         {
             if (!key) {
                 // Special treatment for an empty key

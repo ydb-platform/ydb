@@ -128,7 +128,7 @@ namespace NTable {
 
         TGroupInfo HistoryGroup;
         TVector<TColumn> HistoryColumns;
-        TIntrusiveConstPtr<TKeyNulls> HistoryKeys;
+        TIntrusiveConstPtr<TKeyCellDefaults> HistoryKeys;
 
     private:
         THashMap<TTag, const TColumn*> Tag2DataInfo;

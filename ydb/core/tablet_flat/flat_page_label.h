@@ -23,7 +23,7 @@ namespace NPage {
 
     static_assert(sizeof(TLabel) == 8, "Invalid page TLabel unit");
 
-    struct THello {
+    struct TLabelWrapper {
         struct TResult {
             bool operator==(NPage::ECodec codec) const noexcept
             {

@@ -27,9 +27,9 @@ namespace NTest {
         { }
 
     public:
-        TPartStore(TIntrusiveConstPtr<TStore> store, TLogoBlobID label, TEgg egg, TStat stat,
+        TPartStore(TIntrusiveConstPtr<TStore> store, TLogoBlobID label, TPart::TParams params, TStat stat,
                     TIntrusiveConstPtr<TSlices> slices)
-            : TPart(label, egg, stat)
+            : TPart(label, params, stat)
             , Store(std::move(store))
             , Slices(std::move(slices))
         {

@@ -136,7 +136,7 @@ namespace NTable {
         EReady Seek(
                 const TCells key, ESeek seek,
                 const TPart* part, IPages* env,
-                const TPartScheme::TGroupInfo& scheme, const TKeyNulls* nulls) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* nulls) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
@@ -208,7 +208,7 @@ namespace NTable {
         EReady SeekReverse(
                 const TCells key, ESeek seek,
                 const TPart* part, IPages* env,
-                const TPartScheme::TGroupInfo& scheme, const TKeyNulls* nulls) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* nulls) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
@@ -454,7 +454,7 @@ namespace NTable {
             Y_VERIFY_DEBUG(scheme.ColsKeyData.size() == 3);
 
             // Directly use the histroy key nulls with correct sort order
-            const TKeyNulls* nulls = part->Scheme->HistoryKeys.Get();
+            const TKeyCellDefaults* nulls = part->Scheme->HistoryKeys.Get();
 
             // Helper for loading row id and row version from the index
             auto checkIndex = [&]() -> bool {
@@ -669,7 +669,7 @@ namespace NTable {
         using TCells = NPage::TCells;
         using TGroupId = NPage::TGroupId;
 
-        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env)
+        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> nulls, IPages* env)
             : Part(part)
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
@@ -1139,7 +1139,7 @@ namespace NTable {
                 if (ref >> (sizeof(ui32) * 8))
                     Y_FAIL("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {
-                    const auto got = NPage::THello().Read(**blob);
+                    const auto got = NPage::TLabelWrapper().Read(**blob);
 
                     Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
 
@@ -1172,7 +1172,7 @@ namespace NTable {
 
     private:
         const TPinout Pinout;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
 
         TPartGroupKeyIt Main;
 
@@ -1211,7 +1211,7 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyNulls> nulls, IPages* env)
+        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> nulls, IPages* env)
             : Run(run)
             , Tags(tags)
             , Nulls(std::move(nulls))
@@ -1582,7 +1582,7 @@ namespace NTable {
     public:
         const TRun& Run;
         TTagsRef const Tags;
-        TIntrusiveConstPtr<TKeyNulls> const Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> const Nulls;
         IPages* const Env;
         ui64 InvisibleRowSkips = 0;
 

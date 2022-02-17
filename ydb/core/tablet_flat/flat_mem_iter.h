@@ -20,7 +20,7 @@ namespace NTable {
         using TCells = TArrayRef<const TCell>;
 
         TMemIt(const TMemTable* memTable,
-                TIntrusiveConstPtr<TKeyNulls> nulls,
+                TIntrusiveConstPtr<TKeyCellDefaults> nulls,
                 const TRemap* remap,
                 IPages *env,
                 NMem::TTreeIterator iterator)
@@ -41,7 +41,7 @@ namespace NTable {
                 const NMem::TTreeSnapshot& snapshot,
                 TCells key,
                 ESeek seek,
-                TIntrusiveConstPtr<TKeyNulls> nulls,
+                TIntrusiveConstPtr<TKeyCellDefaults> nulls,
                 const TRemap *remap,
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
@@ -322,7 +322,7 @@ namespace NTable {
                 const auto ref = up.Value.AsValue<ui64>();
 
                 if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
-                    const auto got = NPage::THello().Read(**blob);
+                    const auto got = NPage::TLabelWrapper().Read(**blob);
 
                     Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
 
@@ -349,7 +349,7 @@ namespace NTable {
 
     public:
         const TMemTable *MemTable = nullptr;
-        const TIntrusiveConstPtr<TKeyNulls> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;
         ui64 InvisibleRowSkips = 0;

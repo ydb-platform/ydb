@@ -10,12 +10,12 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TNulls: public TAtomicRefCount<TNulls, NUtil::TDtorDel<TNulls>> {
+    class TCellDefaults: public TAtomicRefCount<TCellDefaults, NUtil::TDtorDel<TCellDefaults>> {
     protected:
         using TType = NScheme::TTypeId;
         using TOrder = NScheme::TTypeIdOrder;
 
-        TNulls(TArrayRef<const TType> types, TArrayRef<const TCell> defs)
+        TCellDefaults(TArrayRef<const TType> types, TArrayRef<const TCell> defs)
             : Types(types)
             , Defs(defs)
         {
@@ -23,7 +23,7 @@ namespace NTable {
         }
 
     public:
-        virtual ~TNulls() = default;
+        virtual ~TCellDefaults() = default;
 
     protected:
         template<class TSelf>
@@ -104,45 +104,45 @@ namespace NTable {
     /**
      * Types and defaults for the complete row
      */
-    class TRowNulls : public TNulls {
-        friend TNulls;
+    class TRowCellDefaults : public TCellDefaults {
+        friend TCellDefaults;
 
-        TRowNulls(
+        TRowCellDefaults(
                 TArrayRef<const TType> types,
                 TArrayRef<const TOrder> order,
                 TArrayRef<const TCell> defs)
-            : TNulls(types, defs)
+            : TCellDefaults(types, defs)
         {
             Y_VERIFY(order.size() == 0);
         }
 
     public:
-        static TIntrusiveConstPtr<TRowNulls> Make(
+        static TIntrusiveConstPtr<TRowCellDefaults> Make(
                 TArrayRef<const TType> types,
                 TArrayRef<const TCell> defs) noexcept
         {
-            return TNulls::Make<TRowNulls>(types, { }, defs);
+            return TCellDefaults::Make<TRowCellDefaults>(types, { }, defs);
         }
     };
 
     /**
      * Types and defaults for key columns with per-column ordering
      */
-    class TKeyNulls : public TNulls {
-        friend TNulls;
+    class TKeyCellDefaults : public TCellDefaults {
+        friend TCellDefaults;
 
-        TKeyNulls(
+        TKeyCellDefaults(
                 TArrayRef<const TType> types,
                 TArrayRef<const TOrder> order,
                 TArrayRef<const TCell> defs)
-            : TNulls(types, defs)
+            : TCellDefaults(types, defs)
             , Types(order)
         {
-            Y_VERIFY(Types.size() == TNulls::Types.size());
+            Y_VERIFY(Types.size() == TCellDefaults::Types.size());
         }
 
     public:
-        static TIntrusiveConstPtr<TKeyNulls> Make(
+        static TIntrusiveConstPtr<TKeyCellDefaults> Make(
                 TArrayRef<const TOrder> order,
                 TArrayRef<const TCell> defs) noexcept
         {
@@ -151,12 +151,12 @@ namespace NTable {
             for (TOrder typeOrder : order) {
                 types.push_back(typeOrder.GetTypeId());
             }
-            return TNulls::Make<TKeyNulls>(types, order, defs);
+            return TCellDefaults::Make<TKeyCellDefaults>(types, order, defs);
         }
 
         TArrayRef<const TType> BasicTypes() const noexcept
         {
-            return TNulls::Types;
+            return TCellDefaults::Types;
         }
 
     public:

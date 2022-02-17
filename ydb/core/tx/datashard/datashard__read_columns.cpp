@@ -86,11 +86,11 @@ public:
         , BlockBuilder(std::move(blockBuilder))
     {}
 
-    THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
         Driver = driver;
         Scheme = std::move(scheme);
 
-        THello hello;
+        TInitialState hello;
         hello.Scan = EScan::Reset;
         return hello;
     }

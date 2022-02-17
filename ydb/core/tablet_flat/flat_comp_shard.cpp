@@ -455,7 +455,7 @@ namespace NCompShard {
         }
     }
 
-    bool TTableShard::FindSplitKey(TSerializedCellVec& foundKey, const TKeyNulls& nulls) const noexcept {
+    bool TTableShard::FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& nulls) const noexcept {
         TSplitStatIterator it(nulls);
 
         for (const auto& kvInfo : Parts) {
@@ -507,7 +507,7 @@ namespace NCompShard {
     }
 
     bool TSliceSplitOp::Execute(IPages* env) {
-        const TIntrusiveConstPtr<TKeyNulls> nulls = Table->RowScheme->Keys;
+        const TIntrusiveConstPtr<TKeyCellDefaults> nulls = Table->RowScheme->Keys;
 
         TVector<TCell> keyCellsBuffer(nulls->Size());
         auto getKeyCells = [this, &nulls, &keyCellsBuffer](ui64 keyId) {
@@ -691,7 +691,7 @@ namespace NCompShard {
             TIntrusiveConstPtr<TRowScheme> rowScheme,
             TVector<const TBounds*>& input) noexcept
     {
-        const TKeyNulls& nulls = *rowScheme->Keys;
+        const TKeyCellDefaults& nulls = *rowScheme->Keys;
 
         // Sorts heap by the first key (returns true when a->FirstKey < b->FirstKey)
         auto heapByFirstKeyMin = [&nulls](const TBounds* b, const TBounds* a) noexcept -> bool {

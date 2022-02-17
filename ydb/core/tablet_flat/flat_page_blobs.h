@@ -37,7 +37,7 @@ namespace NPage {
         {
             Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
-            auto got = NPage::THello().Read(Raw, EPage::Globs);
+            auto got = NPage::TLabelWrapper().Read(Raw, EPage::Globs);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 1);
 

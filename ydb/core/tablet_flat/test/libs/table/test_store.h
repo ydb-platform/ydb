@@ -142,7 +142,7 @@ namespace NTest {
             const auto& pages = PageCollections.at(MainPageCollection);
 
             for (auto it: xrange(pages.size())) {
-                auto got = NPage::THello().Read(pages[it], EPage::Undef);
+                auto got = NPage::TLabelWrapper().Read(pages[it], EPage::Undef);
 
                 Y_VERIFY(got.Page.end() == pages[it].end());
 

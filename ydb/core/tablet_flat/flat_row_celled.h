@@ -10,7 +10,7 @@ namespace NTable {
     struct TCelled {
         using TRaw = TArrayRef<const TRawTypeValue>;
 
-        TCelled(TRaw key, const TKeyNulls &nulls, bool extend)
+        TCelled(TRaw key, const TKeyCellDefaults &nulls, bool extend)
             : Size(extend ? nulls->size() : Min(nulls->size(), key.size()))
             , Large(Size > Small.size() ? Size : 0)
             , Cells(Large ? Large.begin() : Small.begin())

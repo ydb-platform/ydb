@@ -97,7 +97,7 @@ private:
 // This shouldn't be a problem for big parts with many pages
 class TPartIndexIterator {
 public:
-    TPartIndexIterator(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TKeyNulls> keys)
+    TPartIndexIterator(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TKeyCellDefaults> keys)
         : Part(std::move(part))
         , KeyColumns(std::move(keys))
     {
@@ -197,7 +197,7 @@ private:
 
 private:
     TIntrusiveConstPtr<TPart> Part;
-    TIntrusiveConstPtr<TKeyNulls> KeyColumns;
+    TIntrusiveConstPtr<TKeyCellDefaults> KeyColumns;
     NPage::TIndex::TIter Pos;
     NPage::TIndex::TIter End;
     TSmallVec<TCell> CurrentKey;
@@ -212,7 +212,7 @@ private:
 // if page start key is not screened then the whole previous page is added to stats
 class TScreenedPartIndexIterator {
 public:
-    TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyNulls> keyColumns,
+    TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyCellDefaults> keyColumns,
                             TIntrusiveConstPtr<NPage::TFrames> small)
         : PartIter(partView.Part, keyColumns)
         , Screen(std::move(partView.Screen))

@@ -34,7 +34,7 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
     if (labeled) {
         /* New styled scheme blob prepended with generic TLabel data */
 
-        auto got = NPage::THello().Read(raw, NPage::EPage::Schem2);
+        auto got = NPage::TLabelWrapper().Read(raw, NPage::EPage::Schem2);
 
         // Version 1 may have non-zero group columns
         Y_VERIFY(got.Version == 0 || got.Version == 1, "Unknown EPage::Schem2 version");
@@ -102,7 +102,7 @@ void TPartScheme::FillHistoricSlots()
     types.emplace_back(NScheme::NTypeIds::Uint64, NScheme::EOrder::Descending);
     TStackVec<TCell, 3> defs;
     defs.resize(3);
-    HistoryKeys = TKeyNulls::Make(types, defs);
+    HistoryKeys = TKeyCellDefaults::Make(types, defs);
 
     // Synthetic (rowid, step, txid) key for the lead group of historic data
     // Note that Tag/Pos are left unspecified, they should never be used
@@ -202,7 +202,7 @@ TSharedData TPartScheme::Serialize() const
     TStringStream ss;
     proto.SerializeToArcadiaStream(&ss);
 
-    return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
+    return NPage::TLabelWrapper::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
 }
 
 }}

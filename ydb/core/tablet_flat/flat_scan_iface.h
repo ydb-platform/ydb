@@ -107,12 +107,12 @@ namespace NTable {
             ui64 ReadAheadHi = Max<ui64>();
         };
 
-        struct THello {
+        struct TInitialState {
             EScan Scan;     /* Initial scan state           */
             TConf Conf;     /* Scan conveyer configuration  */
         };
 
-        virtual THello Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept = 0;
+        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept = 0;
         virtual EScan Seek(TLead&, ui64 seq) noexcept = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept = 0;
         virtual TAutoPtr<IDestructable> Finish(EAbort) noexcept = 0;

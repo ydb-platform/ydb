@@ -61,7 +61,7 @@ namespace NPerf {
             TStats stats;
 
             for (auto &page: part.Store->PageCollectionArray(0 /* main room */)) {
-                auto got = NPage::THello().Read(page, EPage::Undef);
+                auto got = NPage::TLabelWrapper().Read(page, EPage::Undef);
 
                 if (got == NPage::EPage::DataPage) {
                     stats.Bytes += page.size();

@@ -43,11 +43,11 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
      * Returns cache tree node size in bytes
      */
     size_t GetNodeSize() {
-        // Construct fake TKeyNulls
+        // Construct fake TKeyCellDefaults
         TVector<NScheme::TTypeIdOrder> types;
         types.emplace_back(NScheme::NTypeIds::Uint64);
         TVector<TCell> defs(1);
-        TIntrusiveConstPtr<TKeyNulls> nulls = TKeyNulls::Make(types, defs);
+        TIntrusiveConstPtr<TKeyCellDefaults> nulls = TKeyCellDefaults::Make(types, defs);
         // Empty default config
         TKeyRangeCache cache(*nulls, { });
         // Empty keys, both inclusive

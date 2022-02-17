@@ -41,7 +41,7 @@ namespace NPage {
         TTxIdStatsPage(TSharedData page)
             : Raw(std::move(page))
         {
-            const auto got = NPage::THello().Read(Raw, EPage::TxIdStats);
+            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::TxIdStats);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 0);
 

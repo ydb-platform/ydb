@@ -3,8 +3,10 @@
 #define DNS_PROTO_H
 // Utilities for processing DNS packet contents
 
+#include "ares_setup.h"
+#include "ares.h"
 // Include ares internal file for DNS protocol constants
-#include "nameser.h"
+#include "ares_nameser.h"
 
 #include <memory>
 #include <string>
@@ -41,21 +43,21 @@ void PushInt16(std::vector<byte>* data, int value);
 std::vector<byte> EncodeString(const std::string& name);
 
 struct DNSQuestion {
-  DNSQuestion(const std::string& name, ns_type rrtype, ns_class qclass)
+  DNSQuestion(const std::string& name, int rrtype, int qclass)
     : name_(name), rrtype_(rrtype), qclass_(qclass) {}
-  DNSQuestion(const std::string& name, ns_type rrtype)
-    : name_(name), rrtype_(rrtype), qclass_(ns_c_in) {}
+  DNSQuestion(const std::string& name, int rrtype)
+    : name_(name), rrtype_(rrtype), qclass_(C_IN) {}
   virtual ~DNSQuestion() {}
   virtual std::vector<byte> data() const;
   std::string name_;
-  ns_type rrtype_;
-  ns_class qclass_;
+  int rrtype_;
+  int qclass_;
 };
 
 struct DNSRR : public DNSQuestion {
-  DNSRR(const std::string& name, ns_type rrtype, ns_class qclass, int ttl)
+  DNSRR(const std::string& name, int rrtype, int qclass, int ttl)
     : DNSQuestion(name, rrtype, qclass), ttl_(ttl) {}
-  DNSRR(const std::string& name, ns_type rrtype, int ttl)
+  DNSRR(const std::string& name, int rrtype, int ttl)
     : DNSQuestion(name, rrtype), ttl_(ttl) {}
   virtual ~DNSRR() {}
   virtual std::vector<byte> data() const = 0;
@@ -63,10 +65,10 @@ struct DNSRR : public DNSQuestion {
 };
 
 struct DNSAddressRR : public DNSRR {
-  DNSAddressRR(const std::string& name, ns_type rrtype, int ttl,
+  DNSAddressRR(const std::string& name, int rrtype, int ttl,
                const byte* addr, int addrlen)
     : DNSRR(name, rrtype, ttl), addr_(addr, addr + addrlen) {}
-  DNSAddressRR(const std::string& name, ns_type rrtype, int ttl,
+  DNSAddressRR(const std::string& name, int rrtype, int ttl,
                const std::vector<byte>& addr)
     : DNSRR(name, rrtype, ttl), addr_(addr) {}
   virtual std::vector<byte> data() const;
@@ -75,20 +77,20 @@ struct DNSAddressRR : public DNSRR {
 
 struct DNSARR : public DNSAddressRR {
   DNSARR(const std::string& name, int ttl, const byte* addr, int addrlen)
-    : DNSAddressRR(name, ns_t_a, ttl, addr, addrlen) {}
+    : DNSAddressRR(name, T_A, ttl, addr, addrlen) {}
   DNSARR(const std::string& name, int ttl, const std::vector<byte>& addr)
-    : DNSAddressRR(name, ns_t_a, ttl, addr) {}
+    : DNSAddressRR(name, T_A, ttl, addr) {}
 };
 
 struct DNSAaaaRR : public DNSAddressRR {
   DNSAaaaRR(const std::string& name, int ttl, const byte* addr, int addrlen)
-    : DNSAddressRR(name, ns_t_aaaa, ttl, addr, addrlen) {}
+    : DNSAddressRR(name, T_AAAA, ttl, addr, addrlen) {}
   DNSAaaaRR(const std::string& name, int ttl, const std::vector<byte>& addr)
-    : DNSAddressRR(name, ns_t_aaaa, ttl, addr) {}
+    : DNSAddressRR(name, T_AAAA, ttl, addr) {}
 };
 
 struct DNSSingleNameRR : public DNSRR {
-  DNSSingleNameRR(const std::string& name, ns_type rrtype, int ttl,
+  DNSSingleNameRR(const std::string& name, int rrtype, int ttl,
                   const std::string& other)
     : DNSRR(name, rrtype, ttl), other_(other) {}
   virtual std::vector<byte> data() const;
@@ -97,29 +99,29 @@ struct DNSSingleNameRR : public DNSRR {
 
 struct DNSCnameRR : public DNSSingleNameRR {
   DNSCnameRR(const std::string& name, int ttl, const std::string& other)
-    : DNSSingleNameRR(name, ns_t_cname, ttl, other) {}
+    : DNSSingleNameRR(name, T_CNAME, ttl, other) {}
 };
 
 struct DNSNsRR : public DNSSingleNameRR {
   DNSNsRR(const std::string& name, int ttl, const std::string& other)
-    : DNSSingleNameRR(name, ns_t_ns, ttl, other) {}
+    : DNSSingleNameRR(name, T_NS, ttl, other) {}
 };
 
 struct DNSPtrRR : public DNSSingleNameRR {
   DNSPtrRR(const std::string& name, int ttl, const std::string& other)
-    : DNSSingleNameRR(name, ns_t_ptr, ttl, other) {}
+    : DNSSingleNameRR(name, T_PTR, ttl, other) {}
 };
 
 struct DNSTxtRR : public DNSRR {
   DNSTxtRR(const std::string& name, int ttl, const std::vector<std::string>& txt)
-    : DNSRR(name, ns_t_txt, ttl), txt_(txt) {}
+    : DNSRR(name, T_TXT, ttl), txt_(txt) {}
   virtual std::vector<byte> data() const;
   std::vector<std::string> txt_;
 };
 
 struct DNSMxRR : public DNSRR {
   DNSMxRR(const std::string& name, int ttl, int pref, const std::string& other)
-    : DNSRR(name, ns_t_mx, ttl), pref_(pref), other_(other) {}
+    : DNSRR(name, T_MX, ttl), pref_(pref), other_(other) {}
   virtual std::vector<byte> data() const;
   int pref_;
   std::string other_;
@@ -128,7 +130,7 @@ struct DNSMxRR : public DNSRR {
 struct DNSSrvRR : public DNSRR {
   DNSSrvRR(const std::string& name, int ttl,
            int prio, int weight, int port, const std::string& target)
-    : DNSRR(name, ns_t_srv, ttl), prio_(prio), weight_(weight), port_(port), target_(target) {}
+    : DNSRR(name, T_SRV, ttl), prio_(prio), weight_(weight), port_(port), target_(target) {}
   virtual std::vector<byte> data() const;
   int prio_;
   int weight_;
@@ -140,7 +142,7 @@ struct DNSSoaRR : public DNSRR {
   DNSSoaRR(const std::string& name, int ttl,
            const std::string& nsname, const std::string& rname,
            int serial, int refresh, int retry, int expire, int minimum)
-    : DNSRR(name, ns_t_soa, ttl), nsname_(nsname), rname_(rname),
+    : DNSRR(name, T_SOA, ttl), nsname_(nsname), rname_(rname),
       serial_(serial), refresh_(refresh), retry_(retry),
       expire_(expire), minimum_(minimum) {}
   virtual std::vector<byte> data() const;
@@ -160,7 +162,7 @@ struct DNSNaptrRR : public DNSRR {
              const std::string& service,
              const std::string& regexp,
              const std::string& replacement)
-    : DNSRR(name, ns_t_naptr, ttl), order_(order), pref_(pref),
+    : DNSRR(name, T_NAPTR, ttl), order_(order), pref_(pref),
       flags_(flags), service_(service), regexp_(regexp), replacement_(replacement) {}
   virtual std::vector<byte> data() const;
   int order_;
@@ -178,16 +180,16 @@ struct DNSOption {
 
 struct DNSOptRR : public DNSRR {
   DNSOptRR(int extrcode, int udpsize)
-    : DNSRR("", ns_t_opt, static_cast<ns_class>(udpsize), extrcode) {}
+    : DNSRR("", T_OPT, static_cast<int>(udpsize), extrcode) {}
   virtual std::vector<byte> data() const;
   std::vector<DNSOption> opts_;
 };
 
 struct DNSPacket {
   DNSPacket()
-    : qid_(0), response_(false), opcode_(ns_o_query),
+    : qid_(0), response_(false), opcode_(O_QUERY),
       aa_(false), tc_(false), rd_(false), ra_(false),
-      z_(false), ad_(false), cd_(false), rcode_(ns_r_noerror) {}
+      z_(false), ad_(false), cd_(false), rcode_(NOERROR) {}
   // Convenience functions that take ownership of given pointers.
   DNSPacket& add_question(DNSQuestion *q) {
     questions_.push_back(std::unique_ptr<DNSQuestion>(q));
@@ -215,14 +217,14 @@ struct DNSPacket {
   DNSPacket& set_z(bool v = true) { z_ = v; return *this; }
   DNSPacket& set_ad(bool v = true) { ad_ = v; return *this; }
   DNSPacket& set_cd(bool v = true) { cd_ = v; return *this; }
-  DNSPacket& set_rcode(ns_rcode rcode) { rcode_ = rcode; return *this; }
+  DNSPacket& set_rcode(int rcode) { rcode_ = rcode; return *this; }
 
   // Return the encoded packet.
   std::vector<byte> data() const;
 
   int qid_;
   bool response_;
-  ns_opcode opcode_;
+  int opcode_;
   bool aa_;
   bool tc_;
   bool rd_;
@@ -230,7 +232,7 @@ struct DNSPacket {
   bool z_;
   bool ad_;
   bool cd_;
-  ns_rcode rcode_;
+  int rcode_;
   std::vector<std::unique_ptr<DNSQuestion>> questions_;
   std::vector<std::unique_ptr<DNSRR>> answers_;
   std::vector<std::unique_ptr<DNSRR>> auths_;

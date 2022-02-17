@@ -38,9 +38,9 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
     Files with this license:
-        bitncmp.c [6:16]
-        inet_net_pton.c [6:16]
-        inet_ntop.c [5:15]
+        src/lib/bitncmp.c [6:16]
+        src/lib/inet_net_pton.c [6:16]
+        src/lib/inet_ntop.c [5:15]
 
 KEEP     NTP                  53568816d1ddf46f15453c6991d855a9
 BELONGS ya.make
@@ -51,73 +51,74 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
     Files with this license:
-        acountry.c [22:32]
-        adig.c [4:14]
-        ahost.c [4:14]
-        ares.h [5:15]
-        ares__close_sockets.c [4:14]
-        ares__get_hostent.c [4:14]
-        ares__parse_into_addrinfo.c [3:13]
-        ares__read_line.c [4:14]
-        ares__readaddrinfo.c [3:13]
-        ares_android.c [3:13]
-        ares_android.h [3:13]
-        ares_create_query.c [4:14]
-        ares_data.c [4:14]
-        ares_data.h [5:15]
-        ares_destroy.c [5:15]
-        ares_dns.h [6:16]
-        ares_expand_name.c [4:14]
-        ares_expand_string.c [4:14]
-        ares_fds.c [4:14]
-        ares_free_hostent.c [4:14]
-        ares_free_string.c [4:14]
-        ares_freeaddrinfo.c [5:15]
-        ares_getaddrinfo.c [6:16]
-        ares_getenv.c [5:15]
-        ares_getenv.h [7:17]
-        ares_gethostbyaddr.c [4:14]
-        ares_gethostbyname.c [4:14]
-        ares_getnameinfo.c [4:14]
-        ares_inet_net_pton.h [6:16]
-        ares_init.c [5:15]
-        ares_iphlpapi.h [7:17]
-        ares_ipv6.h [4:14]
-        ares_library_init.c [5:15]
-        ares_library_init.h [8:18]
-        ares_llist.c [4:14]
-        ares_llist.h [7:17]
-        ares_mkquery.c [4:14]
-        ares_nowarn.c [4:14]
-        ares_nowarn.h [7:17]
-        ares_options.c [5:15]
-        ares_parse_a_reply.c [5:15]
-        ares_parse_aaaa_reply.c [6:16]
-        ares_parse_mx_reply.c [5:15]
-        ares_parse_naptr_reply.c [5:15]
-        ares_parse_ns_reply.c [3:13]
-        ares_parse_ptr_reply.c [4:14]
-        ares_parse_soa_reply.c [5:15]
-        ares_parse_srv_reply.c [5:15]
-        ares_parse_txt_reply.c [5:15]
-        ares_platform.c [6:16]
-        ares_platform.h [8:18]
-        ares_private.h [8:18]
-        ares_process.c [5:15]
-        ares_query.c [4:14]
-        ares_search.c [4:14]
-        ares_send.c [4:14]
-        ares_strcasecmp.c [5:15]
-        ares_strcasecmp.h [7:17]
-        ares_strdup.c [5:15]
-        ares_strdup.h [7:17]
-        ares_strerror.c [4:14]
-        ares_strsplit.c [3:13]
-        ares_strsplit.h [6:16]
-        ares_timeout.c [4:14]
-        ares_writev.c [5:15]
-        ares_writev.h [7:17]
-        bitncmp.h [7:17]
+        include/ares.h [5:15]
+        include/ares_dns.h [6:16]
+        src/lib/ares__close_sockets.c [4:14]
+        src/lib/ares__get_hostent.c [4:14]
+        src/lib/ares__parse_into_addrinfo.c [3:13]
+        src/lib/ares__read_line.c [4:14]
+        src/lib/ares__readaddrinfo.c [3:13]
+        src/lib/ares_android.c [3:13]
+        src/lib/ares_android.h [3:13]
+        src/lib/ares_create_query.c [4:14]
+        src/lib/ares_data.c [4:14]
+        src/lib/ares_data.h [5:15]
+        src/lib/ares_destroy.c [5:15]
+        src/lib/ares_expand_name.c [4:14]
+        src/lib/ares_expand_string.c [4:14]
+        src/lib/ares_fds.c [4:14]
+        src/lib/ares_free_hostent.c [4:14]
+        src/lib/ares_free_string.c [4:14]
+        src/lib/ares_freeaddrinfo.c [5:15]
+        src/lib/ares_getaddrinfo.c [6:16]
+        src/lib/ares_getenv.c [5:15]
+        src/lib/ares_getenv.h [7:17]
+        src/lib/ares_gethostbyaddr.c [4:14]
+        src/lib/ares_gethostbyname.c [4:14]
+        src/lib/ares_getnameinfo.c [4:14]
+        src/lib/ares_inet_net_pton.h [6:16]
+        src/lib/ares_init.c [5:15]
+        src/lib/ares_iphlpapi.h [7:17]
+        src/lib/ares_ipv6.h [4:14]
+        src/lib/ares_library_init.c [5:15]
+        src/lib/ares_library_init.h [8:18]
+        src/lib/ares_llist.c [4:14]
+        src/lib/ares_llist.h [7:17]
+        src/lib/ares_mkquery.c [4:14]
+        src/lib/ares_nowarn.c [4:14]
+        src/lib/ares_nowarn.h [7:17]
+        src/lib/ares_options.c [5:15]
+        src/lib/ares_parse_a_reply.c [5:15]
+        src/lib/ares_parse_aaaa_reply.c [6:16]
+        src/lib/ares_parse_caa_reply.c [4:14]
+        src/lib/ares_parse_mx_reply.c [5:15]
+        src/lib/ares_parse_naptr_reply.c [5:15]
+        src/lib/ares_parse_ns_reply.c [3:13]
+        src/lib/ares_parse_ptr_reply.c [4:14]
+        src/lib/ares_parse_soa_reply.c [5:15]
+        src/lib/ares_parse_srv_reply.c [5:15]
+        src/lib/ares_parse_txt_reply.c [5:15]
+        src/lib/ares_platform.c [6:16]
+        src/lib/ares_platform.h [8:18]
+        src/lib/ares_private.h [8:18]
+        src/lib/ares_process.c [5:15]
+        src/lib/ares_query.c [4:14]
+        src/lib/ares_search.c [4:14]
+        src/lib/ares_send.c [4:14]
+        src/lib/ares_strcasecmp.c [5:15]
+        src/lib/ares_strcasecmp.h [7:17]
+        src/lib/ares_strdup.c [5:15]
+        src/lib/ares_strdup.h [7:17]
+        src/lib/ares_strerror.c [4:14]
+        src/lib/ares_strsplit.c [3:13]
+        src/lib/ares_strsplit.h [6:16]
+        src/lib/ares_timeout.c [4:14]
+        src/lib/ares_writev.c [5:15]
+        src/lib/ares_writev.h [7:17]
+        src/lib/bitncmp.h [7:17]
+        src/tools/acountry.c [22:32]
+        src/tools/adig.c [4:14]
+        src/tools/ahost.c [4:14]
 
 KEEP     BSD-3-Clause         6899d7bb10667745c38e41e3f295c45d
 BELONGS ya.make
@@ -129,21 +130,21 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ares_getopt.c [4:4]
+        src/tools/ares_getopt.c [4:4]
     Scancode info:
         Original SPDX id: BSD-3-Clause
         Score           : 99.00
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ares_getopt.c [4:4]
+        src/tools/ares_getopt.c [4:4]
     Scancode info:
         Original SPDX id: LicenseRef-scancode-unknown
         Score           : 11.00
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown.LICENSE
     Files with this license:
-        ares_getopt.c [4:4]
+        src/tools/ares_getopt.c [4:4]
 
 KEEP     NTP                  8fab855584c6999b237d25f7252d2d73
 BELONGS ya.make
@@ -154,14 +155,14 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
     Files with this license:
-        ares__timeval.c [4:12]
-        ares_build.h [7:15]
-        ares_cancel.c [4:12]
-        ares_getsock.c [4:12]
-        ares_rules.h [7:15]
-        ares_setup.h [7:15]
-        config-win32.h [6:14]
-        setup_once.h [7:15]
+        include/ares_build.h [8:16]
+        include/ares_rules.h [7:15]
+        src/lib/ares__timeval.c [4:12]
+        src/lib/ares_cancel.c [4:12]
+        src/lib/ares_getsock.c [4:12]
+        src/lib/ares_setup.h [7:15]
+        src/lib/config-win32.h [6:14]
+        src/lib/setup_once.h [7:15]
 
 KEEP     MIT                  94890220f883df92236a2e64421f8224
 BELONGS ya.make
@@ -173,7 +174,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        CHANGES [1622:1622]
+        CHANGES [2148:2148]
 
 KEEP     BSD-3-Clause         9d018aaf6e89baa34c9bc9407e762114
 BELONGS ya.make
@@ -185,7 +186,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ares__sortaddrinfo.c [3:3]
+        src/lib/ares__sortaddrinfo.c [3:3]
 
 KEEP     BSD-3-Clause         9f9f74951499b982d601e33ab0c03bed
 BELONGS ya.make
@@ -196,7 +197,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ares__sortaddrinfo.c [12:34]
+        src/lib/ares__sortaddrinfo.c [12:34]
 
 KEEP     BSD-3-Clause         cd98e0ba1ce0a730d60166f40b0e63b5
 BELONGS ya.make
@@ -207,8 +208,8 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ares_getopt.c [16:38]
-        ares_getopt.h [8:30]
+        src/tools/ares_getopt.c [16:38]
+        src/tools/ares_getopt.h [8:30]
 
 KEEP     MIT                  e8dcd3bdf4ebf29fb653dc583ef61bee
 BELONGS ya.make

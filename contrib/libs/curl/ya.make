@@ -28,7 +28,7 @@ PEERDIR(
 
 ADDINCL(
     GLOBAL contrib/libs/curl/include
-    contrib/libs/c-ares
+    contrib/libs/c-ares/include
     contrib/libs/curl/lib
 )
 

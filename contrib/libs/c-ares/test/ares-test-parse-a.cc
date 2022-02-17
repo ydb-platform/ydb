@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseAReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_a))
+    .add_question(new DNSQuestion("example.com", T_A))
     .add_answer(new DNSARR("example.com", 0x01020304, {2,3,4,5}))
     .add_answer(new DNSAaaaRR("example.com", 0x01020304, {0,0,0,0,0,0,0,0,0,0,0,0,2,3,4,5}));
   std::vector<byte> data = {
@@ -119,7 +119,7 @@ TEST_F(LibraryTest, ParseMalformedAReply) {
 TEST_F(LibraryTest, ParseAReplyNoData) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_a));
+    .add_question(new DNSQuestion("example.com", T_A));
   std::vector<byte> data = pkt.data();
   struct hostent *host = nullptr;
   struct ares_addrttl info[2];
@@ -146,7 +146,7 @@ TEST_F(LibraryTest, ParseAReplyNoData) {
 TEST_F(LibraryTest, ParseAReplyVariantA) {
   DNSPacket pkt;
   pkt.set_qid(6366).set_rd().set_ra()
-    .add_question(new DNSQuestion("mit.edu", ns_t_a))
+    .add_question(new DNSQuestion("mit.edu", T_A))
     .add_answer(new DNSARR("mit.edu", 52, {18,7,22,69}))
     .add_auth(new DNSNsRR("mit.edu", 292, "W20NS.mit.edu"))
     .add_auth(new DNSNsRR("mit.edu", 292, "BITSY.mit.edu"))
@@ -167,7 +167,7 @@ TEST_F(LibraryTest, ParseAReplyVariantA) {
 TEST_F(LibraryTest, ParseAReplyJustCname) {
   DNSPacket pkt;
   pkt.set_qid(6366).set_rd().set_ra()
-    .add_question(new DNSQuestion("mit.edu", ns_t_a))
+    .add_question(new DNSQuestion("mit.edu", T_A))
     .add_answer(new DNSCnameRR("mit.edu", 52, "other.mit.edu"));
   struct hostent *host = nullptr;
   struct ares_addrttl info[2];
@@ -186,7 +186,7 @@ TEST_F(LibraryTest, ParseAReplyJustCname) {
 TEST_F(LibraryTest, ParseAReplyVariantCname) {
   DNSPacket pkt;
   pkt.set_qid(6366).set_rd().set_ra()
-    .add_question(new DNSQuestion("query.example.com", ns_t_a))
+    .add_question(new DNSQuestion("query.example.com", T_A))
     .add_answer(new DNSCnameRR("query.example.com", 200, "redirect.query.example.com"))
     .add_answer(new DNSARR("redirect.query.example.com", 300, {129,97,123,22}))
     .add_auth(new DNSNsRR("example.com", 218, "aa.ns1.example.com"))
@@ -218,7 +218,7 @@ TEST_F(LibraryTest, ParseAReplyVariantCname) {
 TEST_F(LibraryTest, ParseAReplyVariantCnameChain) {
   DNSPacket pkt;
   pkt.set_qid(6366).set_rd().set_ra()
-    .add_question(new DNSQuestion("c1.localhost", ns_t_a))
+    .add_question(new DNSQuestion("c1.localhost", T_A))
     .add_answer(new DNSCnameRR("c1.localhost", 604800, "c2.localhost"))
     .add_answer(new DNSCnameRR("c2.localhost", 604800, "c3.localhost"))
     .add_answer(new DNSCnameRR("c3.localhost", 604800, "c4.localhost"))
@@ -243,7 +243,7 @@ TEST_F(LibraryTest, ParseAReplyVariantCnameChain) {
 TEST_F(LibraryTest, DISABLED_ParseAReplyVariantCnameLast) {
   DNSPacket pkt;
   pkt.set_qid(6366).set_rd().set_ra()
-    .add_question(new DNSQuestion("query.example.com", ns_t_a))
+    .add_question(new DNSQuestion("query.example.com", T_A))
     .add_answer(new DNSARR("redirect.query.example.com", 300, {129,97,123,221}))
     .add_answer(new DNSARR("redirect.query.example.com", 300, {129,97,123,222}))
     .add_answer(new DNSARR("redirect.query.example.com", 300, {129,97,123,223}))
@@ -271,7 +271,7 @@ TEST_F(LibraryTest, DISABLED_ParseAReplyVariantCnameLast) {
 TEST_F(LibraryTest, ParseAReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_a))
+    .add_question(new DNSQuestion("example.com", T_A))
     .add_answer(new DNSARR("example.com", 100, {0x02, 0x03, 0x04, 0x05}));
   std::vector<byte> data;
 
@@ -285,17 +285,17 @@ TEST_F(LibraryTest, ParseAReplyErrors) {
   EXPECT_EQ(ARES_EBADRESP, ares_parse_a_reply(data.data(), data.size(),
                                               &host, info, &count));
   EXPECT_EQ(nullptr, host);
-  pkt.add_question(new DNSQuestion("example.com", ns_t_a));
+  pkt.add_question(new DNSQuestion("example.com", T_A));
 
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_a));
+  pkt.add_question(new DNSQuestion("Axample.com", T_A));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_a_reply(data.data(), data.size(),
                                               &host, info, &count));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_a));
+  pkt.add_question(new DNSQuestion("example.com", T_A));
 
 #ifdef DISABLED
   // Not a response.
@@ -307,22 +307,22 @@ TEST_F(LibraryTest, ParseAReplyErrors) {
   pkt.set_response(true);
 
   // Bad return code.
-  pkt.set_rcode(ns_r_formerr);
+  pkt.set_rcode(FORMERR);
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_a_reply(data.data(), data.size(),
                                               &host, info, &count));
   EXPECT_EQ(nullptr, host);
-  pkt.set_rcode(ns_r_noerror);
+  pkt.set_rcode(NOERROR);
 #endif
 
   // Two questions
-  pkt.add_question(new DNSQuestion("example.com", ns_t_a));
+  pkt.add_question(new DNSQuestion("example.com", T_A));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_a_reply(data.data(), data.size(),
                                               &host, info, &count));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_a));
+  pkt.add_question(new DNSQuestion("example.com", T_A));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -356,7 +356,7 @@ TEST_F(LibraryTest, ParseAReplyErrors) {
 TEST_F(LibraryTest, ParseAReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_a))
+    .add_question(new DNSQuestion("example.com", T_A))
     .add_answer(new DNSCnameRR("example.com", 300, "c.example.com"))
     .add_answer(new DNSARR("c.example.com", 500, {0x02, 0x03, 0x04, 0x05}));
   std::vector<byte> data = pkt.data();

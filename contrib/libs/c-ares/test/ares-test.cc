@@ -1,9 +1,11 @@
+#include "ares_setup.h"
+#include "ares.h"
+#include "ares_nameser.h"
 #include "ares-test.h"
 #include "ares-test-ai.h"
 #include "dns-proto.h"
 
 // Include ares internal files for DNS protocol details
-#include "nameser.h"
 #include "ares_dns.h"
 
 #ifdef HAVE_NETDB_H
@@ -30,7 +32,8 @@ namespace ares {
 namespace test {
 
 bool verbose = false;
-int mock_port = 5300;
+static constexpr int dynamic_port = 0;
+int mock_port = dynamic_port;
 
 const std::vector<int> both_families = {AF_INET, AF_INET6};
 const std::vector<int> ipv4_family = {AF_INET};
@@ -134,7 +137,7 @@ bool LibraryTest::ShouldAllocFail(size_t size) {
 
 // static
 void* LibraryTest::amalloc(size_t size) {
-  if (ShouldAllocFail(size)) {
+  if (ShouldAllocFail(size) || size == 0) {
     if (verbose) std::cerr << "Failing malloc(" << size << ") request" << std::endl;
     return nullptr;
   } else {
@@ -169,8 +172,8 @@ void DefaultChannelModeTest::Process() {
   ProcessWork(channel_, NoExtraFDs, nullptr);
 }
 
-MockServer::MockServer(int family, int port, int tcpport)
-  : udpport_(port), tcpport_(tcpport ? tcpport : udpport_), qid_(-1) {
+MockServer::MockServer(int family, int port)
+  : udpport_(port), tcpport_(port), qid_(-1) {
   // Create a TCP socket to receive data on.
   tcpfd_ = socket(family, SOCK_STREAM, 0);
   EXPECT_NE(-1, tcpfd_);
@@ -197,6 +200,21 @@ MockServer::MockServer(int family, int port, int tcpport)
     addr.sin_port = htons(udpport_);
     int udprc = bind(udpfd_, (struct sockaddr*)&addr, sizeof(addr));
     EXPECT_EQ(0, udprc) << "Failed to bind AF_INET to UDP port " << udpport_;
+    // retrieve system-assigned port
+    if (udpport_ == dynamic_port) {
+      ares_socklen_t len = sizeof(addr);
+      auto result = getsockname(udpfd_, (struct sockaddr*)&addr, &len);
+      EXPECT_EQ(0, result);
+      udpport_ = ntohs(addr.sin_port);
+      EXPECT_NE(dynamic_port, udpport_);
+    }
+    if (tcpport_ == dynamic_port) {
+      ares_socklen_t len = sizeof(addr);
+      auto result = getsockname(tcpfd_, (struct sockaddr*)&addr, &len);
+      EXPECT_EQ(0, result);
+      tcpport_ = ntohs(addr.sin_port);
+      EXPECT_NE(dynamic_port, tcpport_);
+    }
   } else {
     EXPECT_EQ(AF_INET6, family);
     struct sockaddr_in6 addr;
@@ -209,6 +227,21 @@ MockServer::MockServer(int family, int port, int tcpport)
     addr.sin6_port = htons(udpport_);
     int udprc = bind(udpfd_, (struct sockaddr*)&addr, sizeof(addr));
     EXPECT_EQ(0, udprc) << "Failed to bind AF_INET6 to UDP port " << udpport_;
+    // retrieve system-assigned port
+    if (udpport_ == dynamic_port) {
+      ares_socklen_t len = sizeof(addr);
+      auto result = getsockname(udpfd_, (struct sockaddr*)&addr, &len);
+      EXPECT_EQ(0, result);
+      udpport_ = ntohs(addr.sin6_port);
+      EXPECT_NE(dynamic_port, udpport_);
+    }
+    if (tcpport_ == dynamic_port) {
+      ares_socklen_t len = sizeof(addr);
+      auto result = getsockname(tcpfd_, (struct sockaddr*)&addr, &len);
+      EXPECT_EQ(0, result);
+      tcpport_ = ntohs(addr.sin6_port);
+      EXPECT_NE(dynamic_port, tcpport_);
+    }
   }
   if (verbose) std::cerr << "Configured "
                          << (family == AF_INET ? "IPv4" : "IPv6")
@@ -281,7 +314,7 @@ void MockServer::ProcessFD(int fd) {
     std::cerr << "Not a request" << std::endl;
     return;
   }
-  if (DNS_HEADER_OPCODE(data) != ns_o_query) {
+  if (DNS_HEADER_OPCODE(data) != O_QUERY) {
     std::cerr << "Not a query (opcode " << DNS_HEADER_OPCODE(data)
               << ")" << std::endl;
     return;
@@ -311,7 +344,7 @@ void MockServer::ProcessFD(int fd) {
               << " bytes after name)" << std::endl;
     return;
   }
-  if (DNS_QUESTION_CLASS(question) != ns_c_in) {
+  if (DNS_QUESTION_CLASS(question) != C_IN) {
     std::cerr << "Unexpected question class (" << DNS_QUESTION_CLASS(question)
               << ")" << std::endl;
     return;
@@ -381,7 +414,8 @@ MockChannelOptsTest::NiceMockServers MockChannelOptsTest::BuildServers(int count
   NiceMockServers servers;
   assert(count > 0);
   for (int ii = 0; ii < count; ii++) {
-    std::unique_ptr<NiceMockServer> server(new NiceMockServer(family, base_port + ii));
+    int port = base_port == dynamic_port ? dynamic_port : base_port + ii;
+    std::unique_ptr<NiceMockServer> server(new NiceMockServer(family, port));
     servers.push_back(std::move(server));
   }
   return servers;
@@ -403,9 +437,9 @@ MockChannelOptsTest::MockChannelOptsTest(int count,
   }
 
   // Point the library at the first mock server by default (overridden below).
-  opts.udp_port = mock_port;
+  opts.udp_port = server_.udpport();
   optmask |= ARES_OPT_UDP_PORT;
-  opts.tcp_port = mock_port;
+  opts.tcp_port = server_.tcpport();
   optmask |= ARES_OPT_TCP_PORT;
 
   // If not already overridden, set short-ish timeouts.

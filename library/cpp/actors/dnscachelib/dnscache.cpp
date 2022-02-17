@@ -2,7 +2,7 @@
 #include "probes.h"
 #include "timekeeper.h"
 
-#include <contrib/libs/c-ares/ares.h>
+#include <contrib/libs/c-ares/include/ares.h>
 #include <util/system/guard.h>
 #include <util/datetime/systime.h>
 

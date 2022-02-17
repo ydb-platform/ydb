@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseMxReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSMxRR("example.com", 100, 100, "mx1.example.com"))
     .add_answer(new DNSMxRR("example.com", 100, 200, "mx2.example.com"));
   std::vector<byte> data = pkt.data();
@@ -65,7 +65,7 @@ TEST_F(LibraryTest, ParseMxReplyMalformed) {
 TEST_F(LibraryTest, ParseMxReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSMxRR("example.com", 100, 100, "mx1.example.com"));
   std::vector<byte> data;
   struct ares_mx_reply* mx = nullptr;
@@ -75,25 +75,25 @@ TEST_F(LibraryTest, ParseMxReplyErrors) {
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_mx_reply(data.data(), data.size(), &mx));
   EXPECT_EQ(nullptr, mx);
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
 
 #ifdef DISABLED
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("Axample.com", T_MX));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_mx_reply(data.data(), data.size(), &mx));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
 #endif
 
   // Two questions.
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_mx_reply(data.data(), data.size(), &mx));
   EXPECT_EQ(nullptr, mx);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
 
   // Wrong sort of answer.
   // TODO(drysdale): check if this should be ARES_ENODATA?
@@ -124,7 +124,7 @@ TEST_F(LibraryTest, ParseMxReplyErrors) {
 TEST_F(LibraryTest, ParseMxReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSCnameRR("example.com", 300, "c.example.com"))
     .add_answer(new DNSMxRR("c.example.com", 100, 100, "mx1.example.com"));
   std::vector<byte> data = pkt.data();

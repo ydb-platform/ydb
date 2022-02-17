@@ -166,13 +166,13 @@ TEST_F(LibraryTest, InetNtoP) {
 TEST_F(LibraryTest, Mkquery) {
   byte* p;
   int len;
-  ares_mkquery("example.com", ns_c_in, ns_t_a, 0x1234, 0, &p, &len);
+  ares_mkquery("example.com", C_IN, T_A, 0x1234, 0, &p, &len);
   std::vector<byte> data(p, p + len);
   ares_free_string(p);
 
   std::string actual = PacketToString(data);
   DNSPacket pkt;
-  pkt.set_qid(0x1234).add_question(new DNSQuestion("example.com", ns_t_a));
+  pkt.set_qid(0x1234).add_question(new DNSQuestion("example.com", T_A));
   std::string expected = PacketToString(pkt.data());
   EXPECT_EQ(expected, actual);
 }
@@ -181,14 +181,14 @@ TEST_F(LibraryTest, CreateQuery) {
   byte* p;
   int len;
   EXPECT_EQ(ARES_SUCCESS,
-            ares_create_query("exam\\@le.com", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("exam\\@le.com", C_IN, T_A, 0x1234, 0,
                               &p, &len, 0));
   std::vector<byte> data(p, p + len);
   ares_free_string(p);
 
   std::string actual = PacketToString(data);
   DNSPacket pkt;
-  pkt.set_qid(0x1234).add_question(new DNSQuestion("exam@le.com", ns_t_a));
+  pkt.set_qid(0x1234).add_question(new DNSQuestion("exam@le.com", T_A));
   std::string expected = PacketToString(pkt.data());
   EXPECT_EQ(expected, actual);
 }
@@ -197,7 +197,7 @@ TEST_F(LibraryTest, CreateQueryTrailingEscapedDot) {
   byte* p;
   int len;
   EXPECT_EQ(ARES_SUCCESS,
-            ares_create_query("example.com\\.", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("example.com\\.", C_IN, T_A, 0x1234, 0,
                               &p, &len, 0));
   std::vector<byte> data(p, p + len);
   ares_free_string(p);
@@ -215,7 +215,7 @@ TEST_F(LibraryTest, CreateQueryNameTooLong) {
               "a1234567890123456789.b1234567890123456789.c1234567890123456789.d1234567890123456789."
               "a1234567890123456789.b1234567890123456789.c1234567890123456789.d1234567890123456789."
               "x1234567890123456789.y1234567890123456789.",
-              ns_c_in, ns_t_a, 0x1234, 0, &p, &len, 0));
+              C_IN, T_A, 0x1234, 0, &p, &len, 0));
 }
 
 TEST_F(LibraryTest, CreateQueryFailures) {
@@ -228,7 +228,7 @@ TEST_F(LibraryTest, CreateQueryFailures) {
   }
   p = nullptr;
   EXPECT_EQ(ARES_EBADNAME,
-            ares_create_query(longname.c_str(), ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query(longname.c_str(), C_IN, T_A, 0x1234, 0,
                     &p, &len, 0));
   if (p) ares_free_string(p);
 
@@ -236,7 +236,7 @@ TEST_F(LibraryTest, CreateQueryFailures) {
 
   p = nullptr;
   EXPECT_EQ(ARES_ENOMEM,
-            ares_create_query("example.com", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("example.com", C_IN, T_A, 0x1234, 0,
                     &p, &len, 0));
   if (p) ares_free_string(p);
 
@@ -244,14 +244,14 @@ TEST_F(LibraryTest, CreateQueryFailures) {
   std::string longlabel = "a.a123456789b123456789c123456789d123456789e123456789f123456789g123456789.org";
   p = nullptr;
   EXPECT_EQ(ARES_EBADNAME,
-            ares_create_query(longlabel.c_str(), ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query(longlabel.c_str(), C_IN, T_A, 0x1234, 0,
                     &p, &len, 0));
   if (p) ares_free_string(p);
 
   // Empty non-terminal label
   p = nullptr;
   EXPECT_EQ(ARES_EBADNAME,
-            ares_create_query("example..com", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("example..com", C_IN, T_A, 0x1234, 0,
                     &p, &len, 0));
   if (p) ares_free_string(p);
 }
@@ -260,7 +260,7 @@ TEST_F(LibraryTest, CreateQueryOnionDomain) {
   byte* p;
   int len;
   EXPECT_EQ(ARES_ENOTFOUND,
-            ares_create_query("dontleak.onion", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("dontleak.onion", C_IN, T_A, 0x1234, 0,
                               &p, &len, 0));
 }
 
@@ -291,7 +291,7 @@ TEST_F(DefaultChannelTest, GetAddrinfoOnionDomain) {
 // still leaks information about the query to malicious resolvers.
 TEST_F(DefaultChannelTest, SearchOnionDomain) {
   SearchResult result;
-  ares_search(channel_, "dontleak.onion", ns_c_in, ns_t_a,
+  ares_search(channel_, "dontleak.onion", C_IN, T_A,
               SearchCallback, &result);
   EXPECT_TRUE(result.done_);
   EXPECT_EQ(ARES_ENOTFOUND, result.status_);
@@ -454,14 +454,14 @@ TEST_F(LibraryTest, CreateEDNSQuery) {
   byte* p;
   int len;
   EXPECT_EQ(ARES_SUCCESS,
-            ares_create_query("example.com", ns_c_in, ns_t_a, 0x1234, 0,
+            ares_create_query("example.com", C_IN, T_A, 0x1234, 0,
                               &p, &len, 1280));
   std::vector<byte> data(p, p + len);
   ares_free_string(p);
 
   std::string actual = PacketToString(data);
   DNSPacket pkt;
-  pkt.set_qid(0x1234).add_question(new DNSQuestion("example.com", ns_t_a))
+  pkt.set_qid(0x1234).add_question(new DNSQuestion("example.com", T_A))
     .add_additional(new DNSOptRR(0, 1280));
   std::string expected = PacketToString(pkt.data());
   EXPECT_EQ(expected, actual);
@@ -470,13 +470,13 @@ TEST_F(LibraryTest, CreateEDNSQuery) {
 TEST_F(LibraryTest, CreateRootQuery) {
   byte* p;
   int len;
-  ares_create_query(".", ns_c_in, ns_t_a, 0x1234, 0, &p, &len, 0);
+  ares_create_query(".", C_IN, T_A, 0x1234, 0, &p, &len, 0);
   std::vector<byte> data(p, p + len);
   ares_free_string(p);
 
   std::string actual = PacketToString(data);
   DNSPacket pkt;
-  pkt.set_qid(0x1234).add_question(new DNSQuestion("", ns_t_a));
+  pkt.set_qid(0x1234).add_question(new DNSQuestion("", T_A));
   std::string expected = PacketToString(pkt.data());
   EXPECT_EQ(expected, actual);
 }

@@ -2,12 +2,12 @@
 #ifndef ARES_TEST_H
 #define ARES_TEST_H
 
-#include "dns-proto.h"
-// Include ares internal file for DNS protocol constants
-#include "nameser.h"
-
 #include "ares_setup.h"
 #include "ares.h"
+
+#include "dns-proto.h"
+// Include ares internal file for DNS protocol constants
+#include "ares_nameser.h"
 
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
@@ -133,7 +133,7 @@ class DefaultChannelModeTest
 // Mock DNS server to allow responses to be scripted by tests.
 class MockServer {
  public:
-  MockServer(int family, int port, int tcpport = 0);
+  MockServer(int family, int port);
   ~MockServer();
 
   // Mock method indicating the processing of a particular <name, RRtype>

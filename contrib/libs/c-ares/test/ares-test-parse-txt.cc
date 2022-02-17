@@ -13,7 +13,7 @@ TEST_F(LibraryTest, ParseTxtReplyOK) {
   std::string expected2a = "txt2a";
   std::string expected2b("ABC\0ABC", 7);
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSTxtRR("example.com", 100, {expected1}))
     .add_answer(new DNSTxtRR("example.com", 100, {expected2a, expected2b}));
   std::vector<byte> data = pkt.data();
@@ -44,7 +44,7 @@ TEST_F(LibraryTest, ParseTxtExtReplyOK) {
   std::string expected2a = "txt2a";
   std::string expected2b("ABC\0ABC", 7);
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSTxtRR("example.com", 100, {expected1}))
     .add_answer(new DNSTxtRR("example.com", 100, {expected2a, expected2b}));
   std::vector<byte> data = pkt.data();
@@ -190,7 +190,7 @@ TEST_F(LibraryTest, ParseTxtReplyErrors) {
   std::string expected2a = "txt2a";
   std::string expected2b = "txt2b";
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSTxtRR("example.com", 100, {expected1}))
     .add_answer(new DNSTxtRR("example.com", 100, {expected1}))
     .add_answer(new DNSTxtRR("example.com", 100, {expected2a, expected2b}));
@@ -203,26 +203,26 @@ TEST_F(LibraryTest, ParseTxtReplyErrors) {
   txt = nullptr;
   EXPECT_EQ(ARES_EBADRESP, ares_parse_txt_reply(data.data(), data.size(), &txt));
   EXPECT_EQ(nullptr, txt);
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
 
 #ifdef DISABLED
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_txt));
+  pkt.add_question(new DNSQuestion("Axample.com", T_TXT));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_txt_reply(data.data(), data.size(), &txt));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_txt));
+  pkt.add_question(new DNSQuestion("example.com", T_TXT));
 #endif
 
   // Two questions.
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
   data = pkt.data();
   txt = nullptr;
   EXPECT_EQ(ARES_EBADRESP, ares_parse_txt_reply(data.data(), data.size(), &txt));
   EXPECT_EQ(nullptr, txt);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_mx));
+  pkt.add_question(new DNSQuestion("example.com", T_MX));
 
   // No answer.
   pkt.answers_.clear();
@@ -246,7 +246,7 @@ TEST_F(LibraryTest, ParseTxtReplyAllocFail) {
   std::string expected2a = "txt2a";
   std::string expected2b = "txt2b";
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_mx))
+    .add_question(new DNSQuestion("example.com", T_MX))
     .add_answer(new DNSCnameRR("example.com", 300, "c.example.com"))
     .add_answer(new DNSTxtRR("c.example.com", 100, {expected1}))
     .add_answer(new DNSTxtRR("c.example.com", 100, {expected1}))

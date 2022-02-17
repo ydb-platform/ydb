@@ -12,7 +12,7 @@ SRCS(
     dnsresolver_ut.cpp
 )
 
-ADDINCL(contrib/libs/c-ares)
+ADDINCL(contrib/libs/c-ares/include)
 
 TAG(ya:external)
 REQUIREMENTS(network:full)

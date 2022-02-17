@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseRootName) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion(".", ns_t_a))
+    .add_question(new DNSQuestion(".", T_A))
     .add_answer(new DNSARR(".", 100, {0x02, 0x03, 0x04, 0x05}));
   std::vector<byte> data = pkt.data();
 
@@ -60,6 +60,8 @@ TEST_F(LibraryTest, ParseIndirectRootName) {
   ares_free_hostent(host);
 }
 
+
+#if 0 /* We are validating hostnames now, its not clear how this would ever be valid */
 TEST_F(LibraryTest, ParseEscapedName) {
   std::vector<byte> data = {
     0x12, 0x34,  // qid
@@ -105,6 +107,7 @@ TEST_F(LibraryTest, ParseEscapedName) {
   EXPECT_EQ('c', hent.name_[6]);
   ares_free_hostent(host);
 }
+#endif
 
 TEST_F(LibraryTest, ParsePartialCompressedName) {
   std::vector<byte> data = {

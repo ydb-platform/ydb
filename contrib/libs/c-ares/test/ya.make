@@ -2,7 +2,12 @@
 
 GTEST(arestest)
 
-OWNER(max42 g:cpp-contrib)
+WITHOUT_LICENSE_TEXTS()
+
+OWNER(
+    max42
+    g:cpp-contrib
+)
 
 LICENSE(MIT)
 
@@ -17,7 +22,8 @@ PEERDIR(
 )
 
 ADDINCL(
-    contrib/libs/c-ares
+    contrib/libs/c-ares/include
+    contrib/libs/c-ares/src/lib
     contrib/libs/c-ares/test
 )
 
@@ -43,6 +49,7 @@ SRCS(
     ares-test-ns.cc
     ares-test-parse-a.cc
     ares-test-parse-aaaa.cc
+    ares-test-parse-caa.cc
     ares-test-parse-mx.cc
     ares-test-parse-naptr.cc
     ares-test-parse-ns.cc

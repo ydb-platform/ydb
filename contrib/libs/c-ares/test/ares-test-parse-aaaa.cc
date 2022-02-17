@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseAaaaReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_aaaa))
+    .add_question(new DNSQuestion("example.com", T_AAAA))
     .add_answer(new DNSAaaaRR("example.com", 100,
                               {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,
                                0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}))
@@ -40,7 +40,7 @@ TEST_F(LibraryTest, ParseAaaaReplyOK) {
 TEST_F(LibraryTest, ParseAaaaReplyCname) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_aaaa))
+    .add_question(new DNSQuestion("example.com", T_AAAA))
     .add_answer(new DNSCnameRR("example.com", 50, "c.example.com"))
     .add_answer(new DNSAaaaRR("c.example.com", 100,
                               {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,
@@ -75,7 +75,7 @@ TEST_F(LibraryTest, ParseAaaaReplyCname) {
 TEST_F(LibraryTest, ParseAaaaReplyNoData) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_aaaa));
+    .add_question(new DNSQuestion("example.com", T_AAAA));
   std::vector<byte> data = pkt.data();
   struct hostent *host = nullptr;
   struct ares_addr6ttl info[2];
@@ -96,7 +96,7 @@ TEST_F(LibraryTest, ParseAaaaReplyNoData) {
 TEST_F(LibraryTest, ParseAaaaReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_aaaa))
+    .add_question(new DNSQuestion("example.com", T_AAAA))
     .add_answer(new DNSAaaaRR("example.com", 100,
                               {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,
                                0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}));
@@ -112,26 +112,26 @@ TEST_F(LibraryTest, ParseAaaaReplyErrors) {
   EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), data.size(),
                                                  &host, info, &count));
   EXPECT_EQ(nullptr, host);
-  pkt.add_question(new DNSQuestion("example.com", ns_t_aaaa));
+  pkt.add_question(new DNSQuestion("example.com", T_AAAA));
 
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_aaaa));
+  pkt.add_question(new DNSQuestion("Axample.com", T_AAAA));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_aaaa_reply(data.data(), data.size(),
                                                 &host, info, &count));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_aaaa));
+  pkt.add_question(new DNSQuestion("example.com", T_AAAA));
 
   // Two questions.
-  pkt.add_question(new DNSQuestion("example.com", ns_t_aaaa));
+  pkt.add_question(new DNSQuestion("example.com", T_AAAA));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_aaaa_reply(data.data(), data.size(),
                                                  &host, info, &count));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_aaaa));
+  pkt.add_question(new DNSQuestion("example.com", T_AAAA));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -169,7 +169,7 @@ TEST_F(LibraryTest, ParseAaaaReplyErrors) {
 TEST_F(LibraryTest, ParseAaaaReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_aaaa))
+    .add_question(new DNSQuestion("example.com", T_AAAA))
     .add_answer(new DNSCnameRR("example.com", 300, "c.example.com"))
     .add_answer(new DNSAaaaRR("c.example.com", 100,
                               {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,

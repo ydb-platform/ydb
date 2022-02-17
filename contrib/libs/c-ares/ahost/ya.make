@@ -2,7 +2,12 @@
 
 PROGRAM(ahost)
 
-OWNER(max42 g:cpp-contrib)
+WITHOUT_LICENSE_TEXTS()
+
+OWNER(
+    max42
+    g:cpp-contrib
+)
 
 LICENSE(MIT)
 
@@ -11,7 +16,8 @@ PEERDIR(
 )
 
 ADDINCL(
-    contrib/libs/c-ares
+    contrib/libs/c-ares/include
+    contrib/libs/c-ares/src/lib
 )
 
 NO_COMPILER_WARNINGS()
@@ -20,7 +26,7 @@ CFLAGS(
     -DHAVE_CONFIG_H
 )
 
-SRCDIR(contrib/libs/c-ares)
+SRCDIR(contrib/libs/c-ares/src)
 
 IF (NOT DLL_FOR)
     CFLAGS(
@@ -29,7 +35,7 @@ IF (NOT DLL_FOR)
 ENDIF()
 
 SRCS(
-    ahost.c
+    tools/ahost.c
 )
 
 END()

@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseNaptrReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_naptr))
+    .add_question(new DNSQuestion("example.com", T_NAPTR))
     .add_answer(new DNSNaptrRR("example.com", 100,
                                10, 20, "SP", "service", "regexp", "replace"))
     .add_answer(new DNSNaptrRR("example.com", 0x0010,
@@ -43,7 +43,7 @@ TEST_F(LibraryTest, ParseNaptrReplyOK) {
 TEST_F(LibraryTest, ParseNaptrReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_naptr))
+    .add_question(new DNSQuestion("example.com", T_NAPTR))
     .add_answer(new DNSNaptrRR("example.com", 100,
                                10, 20, "SP", "service", "regexp", "replace"));
   std::vector<byte> data;
@@ -53,24 +53,24 @@ TEST_F(LibraryTest, ParseNaptrReplyErrors) {
   pkt.questions_.clear();
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_naptr_reply(data.data(), data.size(), &naptr));
-  pkt.add_question(new DNSQuestion("example.com", ns_t_naptr));
+  pkt.add_question(new DNSQuestion("example.com", T_NAPTR));
 
 #ifdef DISABLED
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_naptr));
+  pkt.add_question(new DNSQuestion("Axample.com", T_NAPTR));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_naptr_reply(data.data(), data.size(), &naptr));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_naptr));
+  pkt.add_question(new DNSQuestion("example.com", T_NAPTR));
 #endif
 
   // Two questions
-  pkt.add_question(new DNSQuestion("example.com", ns_t_naptr));
+  pkt.add_question(new DNSQuestion("example.com", T_NAPTR));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_naptr_reply(data.data(), data.size(), &naptr));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_naptr));
+  pkt.add_question(new DNSQuestion("example.com", T_NAPTR));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -129,7 +129,7 @@ TEST_F(LibraryTest, ParseNaptrReplyTooShort) {
 TEST_F(LibraryTest, ParseNaptrReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_naptr))
+    .add_question(new DNSQuestion("example.com", T_NAPTR))
     .add_answer(new DNSNaptrRR("example.com", 100,
                                10, 20, "SP", "service", "regexp", "replace"))
     .add_answer(new DNSNaptrRR("example.com", 0x0010,

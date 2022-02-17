@@ -13,7 +13,7 @@ PEERDIR(
     contrib/libs/c-ares
 )
 
-ADDINCL(contrib/libs/c-ares)
+ADDINCL(contrib/libs/c-ares/include)
 
 END()
 

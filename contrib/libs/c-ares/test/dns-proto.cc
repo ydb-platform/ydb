@@ -1,9 +1,9 @@
-#include "dns-proto.h"
 
 // Include ares internal file for DNS protocol details
 #include "ares_setup.h"
 #include "ares.h"
 #include "ares_dns.h"
+#include "dns-proto.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,93 +63,93 @@ std::string StatusToString(int status) {
 
 std::string RcodeToString(int rcode) {
   switch (rcode) {
-  case ns_r_noerror: return "NOERROR";
-  case ns_r_formerr: return "FORMERR";
-  case ns_r_servfail: return "SERVFAIL";
-  case ns_r_nxdomain: return "NXDOMAIN";
-  case ns_r_notimpl: return "NOTIMPL";
-  case ns_r_refused: return "REFUSED";
-  case ns_r_yxdomain: return "YXDOMAIN";
-  case ns_r_yxrrset: return "YXRRSET";
-  case ns_r_nxrrset: return "NXRRSET";
-  case ns_r_notauth: return "NOTAUTH";
-  case ns_r_notzone: return "NOTZONE";
-  case ns_r_badsig: return "BADSIG";
-  case ns_r_badkey: return "BADKEY";
-  case ns_r_badtime: return "BADTIME";
+  case NOERROR: return "NOERROR";
+  case FORMERR: return "FORMERR";
+  case SERVFAIL: return "SERVFAIL";
+  case NXDOMAIN: return "NXDOMAIN";
+  case NOTIMP: return "NOTIMP";
+  case REFUSED: return "REFUSED";
+  case YXDOMAIN: return "YXDOMAIN";
+  case YXRRSET: return "YXRRSET";
+  case NXRRSET: return "NXRRSET";
+  case NOTAUTH: return "NOTAUTH";
+  case NOTZONE: return "NOTZONE";
+  case TSIG_BADSIG: return "BADSIG";
+  case TSIG_BADKEY: return "BADKEY";
+  case TSIG_BADTIME: return "BADTIME";
   default: return "UNKNOWN";
   }
 }
 
 std::string RRTypeToString(int rrtype) {
   switch (rrtype) {
-  case ns_t_a: return "A";
-  case ns_t_ns: return "NS";
-  case ns_t_md: return "MD";
-  case ns_t_mf: return "MF";
-  case ns_t_cname: return "CNAME";
-  case ns_t_soa: return "SOA";
-  case ns_t_mb: return "MB";
-  case ns_t_mg: return "MG";
-  case ns_t_mr: return "MR";
-  case ns_t_null: return "NULL";
-  case ns_t_wks: return "WKS";
-  case ns_t_ptr: return "PTR";
-  case ns_t_hinfo: return "HINFO";
-  case ns_t_minfo: return "MINFO";
-  case ns_t_mx: return "MX";
-  case ns_t_txt: return "TXT";
-  case ns_t_rp: return "RP";
-  case ns_t_afsdb: return "AFSDB";
-  case ns_t_x25: return "X25";
-  case ns_t_isdn: return "ISDN";
-  case ns_t_rt: return "RT";
-  case ns_t_nsap: return "NSAP";
-  case ns_t_nsap_ptr: return "NSAP_PTR";
-  case ns_t_sig: return "SIG";
-  case ns_t_key: return "KEY";
-  case ns_t_px: return "PX";
-  case ns_t_gpos: return "GPOS";
-  case ns_t_aaaa: return "AAAA";
-  case ns_t_loc: return "LOC";
-  case ns_t_nxt: return "NXT";
-  case ns_t_eid: return "EID";
-  case ns_t_nimloc: return "NIMLOC";
-  case ns_t_srv: return "SRV";
-  case ns_t_atma: return "ATMA";
-  case ns_t_naptr: return "NAPTR";
-  case ns_t_kx: return "KX";
-  case ns_t_cert: return "CERT";
-  case ns_t_a6: return "A6";
-  case ns_t_dname: return "DNAME";
-  case ns_t_sink: return "SINK";
-  case ns_t_opt: return "OPT";
-  case ns_t_apl: return "APL";
-  case ns_t_ds: return "DS";
-  case ns_t_sshfp: return "SSHFP";
-  case ns_t_rrsig: return "RRSIG";
-  case ns_t_nsec: return "NSEC";
-  case ns_t_dnskey: return "DNSKEY";
-  case ns_t_tkey: return "TKEY";
-  case ns_t_tsig: return "TSIG";
-  case ns_t_ixfr: return "IXFR";
-  case ns_t_axfr: return "AXFR";
-  case ns_t_mailb: return "MAILB";
-  case ns_t_maila: return "MAILA";
-  case ns_t_any: return "ANY";
-  case ns_t_zxfr: return "ZXFR";
-  case ns_t_max: return "MAX";
+  case T_A: return "A";
+  case T_NS: return "NS";
+  case T_MD: return "MD";
+  case T_MF: return "MF";
+  case T_CNAME: return "CNAME";
+  case T_SOA: return "SOA";
+  case T_MB: return "MB";
+  case T_MG: return "MG";
+  case T_MR: return "MR";
+  case T_NULL: return "NULL";
+  case T_WKS: return "WKS";
+  case T_PTR: return "PTR";
+  case T_HINFO: return "HINFO";
+  case T_MINFO: return "MINFO";
+  case T_MX: return "MX";
+  case T_TXT: return "TXT";
+  case T_RP: return "RP";
+  case T_AFSDB: return "AFSDB";
+  case T_X25: return "X25";
+  case T_ISDN: return "ISDN";
+  case T_RT: return "RT";
+  case T_NSAP: return "NSAP";
+  case T_NSAP_PTR: return "NSAP_PTR";
+  case T_SIG: return "SIG";
+  case T_KEY: return "KEY";
+  case T_PX: return "PX";
+  case T_GPOS: return "GPOS";
+  case T_AAAA: return "AAAA";
+  case T_LOC: return "LOC";
+  case T_NXT: return "NXT";
+  case T_EID: return "EID";
+  case T_NIMLOC: return "NIMLOC";
+  case T_SRV: return "SRV";
+  case T_ATMA: return "ATMA";
+  case T_NAPTR: return "NAPTR";
+  case T_KX: return "KX";
+  case T_CERT: return "CERT";
+  case T_A6: return "A6";
+  case T_DNAME: return "DNAME";
+  case T_SINK: return "SINK";
+  case T_OPT: return "OPT";
+  case T_APL: return "APL";
+  case T_DS: return "DS";
+  case T_SSHFP: return "SSHFP";
+  case T_RRSIG: return "RRSIG";
+  case T_NSEC: return "NSEC";
+  case T_DNSKEY: return "DNSKEY";
+  case T_TKEY: return "TKEY";
+  case T_TSIG: return "TSIG";
+  case T_IXFR: return "IXFR";
+  case T_AXFR: return "AXFR";
+  case T_MAILB: return "MAILB";
+  case T_MAILA: return "MAILA";
+  case T_ANY: return "ANY";
+  case T_ZXFR: return "ZXFR";
+  case T_MAX: return "MAX";
   default: return "UNKNOWN";
   }
 }
 
 std::string ClassToString(int qclass) {
   switch (qclass) {
-  case ns_c_in: return "IN";
-  case ns_c_chaos: return "CHAOS";
-  case ns_c_hs: return "HESIOD";
-  case ns_c_none: return "NONE";
-  case ns_c_any: return "ANY";
+  case C_IN: return "IN";
+  case C_CHAOS: return "CHAOS";
+  case C_HS: return "HESIOD";
+  case C_NONE: return "NONE";
+  case C_ANY: return "ANY";
   default: return "UNKNOWN";
   }
 }
@@ -188,11 +188,11 @@ std::string PacketToString(const std::vector<byte>& packet) {
   }
   ss << ((DNS_HEADER_QR(data) == 0) ? "REQ " : "RSP ");
   switch (DNS_HEADER_OPCODE(data)) {
-  case ns_o_query: ss << "QRY "; break;
-  case ns_o_iquery: ss << "IQRY "; break;
-  case ns_o_status: ss << "STATUS "; break;
-  case ns_o_notify: ss << "NOTIFY "; break;
-  case ns_o_update: ss << "UPDATE "; break;
+  case O_QUERY: ss << "QRY "; break;
+  case O_IQUERY: ss << "IQRY "; break;
+  case O_STATUS: ss << "STATUS "; break;
+  case O_NOTIFY: ss << "NOTIFY "; break;
+  case O_UPDATE: ss << "UPDATE "; break;
   default: ss << "UNKNOWN(" << DNS_HEADER_OPCODE(data) << ") "; break;
   }
   if (DNS_HEADER_AA(data)) ss << "AA ";
@@ -292,7 +292,7 @@ std::string RRToString(const std::vector<byte>& packet,
     return ss.str();
   }
   int rrtype = DNS_RR_TYPE(*data);
-  if (rrtype == ns_t_opt) {
+  if (rrtype == T_OPT) {
     ss << "MAXUDP=" << DNS_RR_CLASS(*data) << " ";
     ss << RRTypeToString(rrtype) << " ";
     ss << "RCODE2=" << DNS_RR_TTL(*data);
@@ -309,11 +309,11 @@ std::string RRToString(const std::vector<byte>& packet,
     ss << "(RR too long at " << rdatalen << ", len left " << *len << ")";
   } else {
     switch (rrtype) {
-    case ns_t_a:
-    case ns_t_aaaa:
+    case T_A:
+    case T_AAAA:
       ss << " " << AddressToString(*data, rdatalen);
       break;
-    case ns_t_txt: {
+    case T_TXT: {
       const byte* p = *data;
       while (p < (*data + rdatalen)) {
         int len = *p++;
@@ -327,9 +327,9 @@ std::string RRToString(const std::vector<byte>& packet,
       }
       break;
     }
-    case ns_t_cname:
-    case ns_t_ns:
-    case ns_t_ptr: {
+    case T_CNAME:
+    case T_NS:
+    case T_PTR: {
       int rc = ares_expand_name(*data, packet.data(), packet.size(), &name, &enclen);
       if (rc != ARES_SUCCESS) {
         ss << "(error from ares_expand_name)";
@@ -339,7 +339,7 @@ std::string RRToString(const std::vector<byte>& packet,
       ares_free_string(name);
       break;
     }
-    case ns_t_mx:
+    case T_MX:
       if (rdatalen > 2) {
         int rc = ares_expand_name(*data + 2, packet.data(), packet.size(), &name, &enclen);
         if (rc != ARES_SUCCESS) {
@@ -352,7 +352,7 @@ std::string RRToString(const std::vector<byte>& packet,
         ss << "(RR too short)";
       }
       break;
-    case ns_t_srv: {
+    case T_SRV: {
       if (rdatalen > 6) {
         const byte* p = *data;
         unsigned long prio = DNS__16BIT(p);
@@ -371,7 +371,7 @@ std::string RRToString(const std::vector<byte>& packet,
       }
       break;
     }
-    case ns_t_soa: {
+    case T_SOA: {
       const byte* p = *data;
       int rc = ares_expand_name(p, packet.data(), packet.size(), &name, &enclen);
       if (rc != ARES_SUCCESS) {
@@ -401,7 +401,7 @@ std::string RRToString(const std::vector<byte>& packet,
       }
       break;
     }
-    case ns_t_naptr: {
+    case T_NAPTR: {
       if (rdatalen > 7) {
         const byte* p = *data;
         unsigned long order = DNS__16BIT(p);

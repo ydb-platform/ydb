@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseNsReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_ns))
+    .add_question(new DNSQuestion("example.com", T_NS))
     .add_answer(new DNSNsRR("example.com", 100, "ns.example.com"));
   std::vector<byte> data = pkt.data();
 
@@ -26,7 +26,7 @@ TEST_F(LibraryTest, ParseNsReplyOK) {
 TEST_F(LibraryTest, ParseNsReplyMultiple) {
   DNSPacket pkt;
   pkt.set_qid(10501).set_response().set_rd().set_ra()
-    .add_question(new DNSQuestion("google.com", ns_t_ns))
+    .add_question(new DNSQuestion("google.com", T_NS))
     .add_answer(new DNSNsRR("google.com", 59, "ns1.google.com"))
     .add_answer(new DNSNsRR("google.com", 59, "ns2.google.com"))
     .add_answer(new DNSNsRR("google.com", 59, "ns3.google.com"))
@@ -49,7 +49,7 @@ TEST_F(LibraryTest, ParseNsReplyMultiple) {
 TEST_F(LibraryTest, ParseNsReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_ns))
+    .add_question(new DNSQuestion("example.com", T_NS))
     .add_answer(new DNSNsRR("example.com", 100, "ns.example.com"));
   std::vector<byte> data;
   struct hostent *host = nullptr;
@@ -58,24 +58,24 @@ TEST_F(LibraryTest, ParseNsReplyErrors) {
   pkt.questions_.clear();
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_ns_reply(data.data(), data.size(), &host));
-  pkt.add_question(new DNSQuestion("example.com", ns_t_ns));
+  pkt.add_question(new DNSQuestion("example.com", T_NS));
 
 #ifdef DISABLED
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_ns));
+  pkt.add_question(new DNSQuestion("Axample.com", T_NS));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_ns_reply(data.data(), data.size(), &host));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_ns));
+  pkt.add_question(new DNSQuestion("example.com", T_NS));
 #endif
 
   // Two questions.
-  pkt.add_question(new DNSQuestion("example.com", ns_t_ns));
+  pkt.add_question(new DNSQuestion("example.com", T_NS));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_ns_reply(data.data(), data.size(), &host));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_ns));
+  pkt.add_question(new DNSQuestion("example.com", T_NS));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -101,7 +101,7 @@ TEST_F(LibraryTest, ParseNsReplyErrors) {
 TEST_F(LibraryTest, ParseNsReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_ns))
+    .add_question(new DNSQuestion("example.com", T_NS))
     .add_answer(new DNSCnameRR("example.com", 300, "c.example.com"))
     .add_answer(new DNSNsRR("c.example.com", 100, "ns.example.com"));
   std::vector<byte> data = pkt.data();

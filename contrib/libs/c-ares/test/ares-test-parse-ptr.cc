@@ -11,7 +11,7 @@ TEST_F(LibraryTest, ParsePtrReplyOK) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other.com"));
   std::vector<byte> data = pkt.data();
 
@@ -29,7 +29,7 @@ TEST_F(LibraryTest, ParsePtrReplyCname) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSCnameRR("64.48.32.16.in-addr.arpa", 50, "64.48.32.8.in-addr.arpa"))
     .add_answer(new DNSPtrRR("64.48.32.8.in-addr.arpa", 100, "other.com"));
   std::vector<byte> data = pkt.data();
@@ -63,7 +63,7 @@ TEST_F(LibraryTest, ParsePtrReplyMalformedCname) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSMalformedCnameRR("64.48.32.16.in-addr.arpa", 50, "64.48.32.8.in-addr.arpa"))
     .add_answer(new DNSPtrRR("64.48.32.8.in-addr.arpa", 100, "other.com"));
   std::vector<byte> data = pkt.data();
@@ -78,7 +78,7 @@ TEST_F(LibraryTest, ParseManyPtrReply) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "main.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other1.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other2.com"))
@@ -102,7 +102,7 @@ TEST_F(LibraryTest, ParsePtrReplyAdditional) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 55, "other.com"))
     .add_auth(new DNSNsRR("16.in-addr.arpa", 234, "ns1.other.com"))
     .add_auth(new DNSNsRR("16.in-addr.arpa", 234, "bb.ns2.other.com"))
@@ -126,7 +126,7 @@ TEST_F(LibraryTest, ParsePtrReplyErrors) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other.com"));
   std::vector<byte> data;
   struct hostent *host = nullptr;
@@ -136,26 +136,26 @@ TEST_F(LibraryTest, ParsePtrReplyErrors) {
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), data.size(),
                                                 addrv4, sizeof(addrv4), AF_INET, &host, NULL));
-  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr));
+  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR));
 
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("99.48.32.16.in-addr.arpa", ns_t_ptr));
+  pkt.add_question(new DNSQuestion("99.48.32.16.in-addr.arpa", T_PTR));
   data = pkt.data();
   EXPECT_EQ(ARES_ENODATA, ares_parse_ptr_reply(data.data(), data.size(),
                                                addrv4, sizeof(addrv4), AF_INET, &host, NULL));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr));
+  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR));
 
   // Two questions.
-  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr));
+  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_ptr_reply(data.data(), data.size(),
                                                 addrv4, sizeof(addrv4), AF_INET, &host, NULL));
   EXPECT_EQ(nullptr, host);
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr));
+  pkt.add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -197,7 +197,7 @@ TEST_F(LibraryTest, ParsePtrReplyAllocFailSome) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "main.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other1.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other2.com"))
@@ -217,7 +217,7 @@ TEST_F(LibraryTest, ParsePtrReplyAllocFailMany) {
   byte addrv4[4] = {0x10, 0x20, 0x30, 0x40};
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", ns_t_ptr))
+    .add_question(new DNSQuestion("64.48.32.16.in-addr.arpa", T_PTR))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "main.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other1.com"))
     .add_answer(new DNSPtrRR("64.48.32.16.in-addr.arpa", 100, "other2.com"))

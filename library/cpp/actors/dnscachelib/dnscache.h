@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/libs/c-ares/ares.h>
+#include <contrib/libs/c-ares/include/ares.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/network/address.h>

@@ -9,8 +9,8 @@ namespace test {
 TEST(DNSProto, EncodeQuestions) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com.", ns_t_a))
-    .add_question(new DNSQuestion("www.example.com", ns_t_aaaa, ns_c_chaos));
+    .add_question(new DNSQuestion("example.com.", T_A))
+    .add_question(new DNSQuestion("www.example.com", T_AAAA, C_CHAOS));
 
   std::vector<byte> data = {
     0x12, 0x34,  // qid
@@ -42,7 +42,7 @@ TEST(DNSProto, EncodeSingleNameAnswers) {
   pkt.qid_ = 0x1234;
   pkt.response_ = true;
   pkt.aa_ = true;
-  pkt.opcode_ = ns_o_query;
+  pkt.opcode_ = O_QUERY;
   pkt.add_answer(new DNSCnameRR("example.com", 0x01020304, "other.com."));
   pkt.add_auth(new DNSPtrRR("www.example.com", 0x01020304, "www.other.com"));
 
@@ -87,7 +87,7 @@ TEST(DNSProto, EncodeAddressAnswers) {
   pkt.qid_ = 0x1234;
   pkt.response_ = true;
   pkt.aa_ = true;
-  pkt.opcode_ = ns_o_query;
+  pkt.opcode_ = O_QUERY;
   std::vector<byte> addrv4 = {0x02, 0x03, 0x04, 0x05};
   pkt.add_answer(new DNSARR("example.com", 0x01020304, addrv4));
   byte addrv6[16] = {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,

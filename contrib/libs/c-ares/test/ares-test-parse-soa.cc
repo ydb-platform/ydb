@@ -10,7 +10,7 @@ namespace test {
 TEST_F(LibraryTest, ParseSoaReplyOK) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_soa))
+    .add_question(new DNSQuestion("example.com", T_SOA))
     .add_answer(new DNSSoaRR("example.com", 100,
                              "soa1.example.com", "fred.example.com",
                              1, 2, 3, 4, 5));
@@ -32,7 +32,7 @@ TEST_F(LibraryTest, ParseSoaReplyOK) {
 TEST_F(LibraryTest, ParseSoaReplyErrors) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_soa))
+    .add_question(new DNSQuestion("example.com", T_SOA))
     .add_answer(new DNSSoaRR("example.com", 100,
                              "soa1.example.com", "fred.example.com",
                              1, 2, 3, 4, 5));
@@ -43,24 +43,24 @@ TEST_F(LibraryTest, ParseSoaReplyErrors) {
   pkt.questions_.clear();
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_soa_reply(data.data(), data.size(), &soa));
-  pkt.add_question(new DNSQuestion("example.com", ns_t_soa));
+  pkt.add_question(new DNSQuestion("example.com", T_SOA));
 
 #ifdef DISABLED
   // Question != answer
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("Axample.com", ns_t_soa));
+  pkt.add_question(new DNSQuestion("Axample.com", T_SOA));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_soa_reply(data.data(), data.size(), &soa));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_soa));
+  pkt.add_question(new DNSQuestion("example.com", T_SOA));
 #endif
 
   // Two questions
-  pkt.add_question(new DNSQuestion("example.com", ns_t_soa));
+  pkt.add_question(new DNSQuestion("example.com", T_SOA));
   data = pkt.data();
   EXPECT_EQ(ARES_EBADRESP, ares_parse_soa_reply(data.data(), data.size(), &soa));
   pkt.questions_.clear();
-  pkt.add_question(new DNSQuestion("example.com", ns_t_soa));
+  pkt.add_question(new DNSQuestion("example.com", T_SOA));
 
   // Wrong sort of answer.
   pkt.answers_.clear();
@@ -90,7 +90,7 @@ TEST_F(LibraryTest, ParseSoaReplyErrors) {
 TEST_F(LibraryTest, ParseSoaReplyAllocFail) {
   DNSPacket pkt;
   pkt.set_qid(0x1234).set_response().set_aa()
-    .add_question(new DNSQuestion("example.com", ns_t_soa))
+    .add_question(new DNSQuestion("example.com", T_SOA))
     .add_answer(new DNSSoaRR("example.com", 100,
                              "soa1.example.com", "fred.example.com",
                              1, 2, 3, 4, 5));

@@ -172,13 +172,13 @@ Url::QueryStringToDict(String{Flag:AutoMap}, [
   MaxFields:Uint32?,      -- максимальное количество полей, при превышении кидается исключение; по умолчанию Max<Uint32>
   Separator:String?       -- разделитель пар ключ-значение; по умолчанию '&'
 ]) -> Dict<String, List<String>>
-Url::BuildQueryString(Dict<String, List<String>>{Flag:AutoMap}, [
+Url::BuildQueryString(Dict<String, List<String?>>{Flag:AutoMap}, [
   Separator:String?       -- разделитель пар ключ-значение; по умолчанию '&'
 ]) -> String
-Url::BuildQueryString(Dict<String, String>{Flag:AutoMap}, [
+Url::BuildQueryString(Dict<String, String?>{Flag:AutoMap}, [
   Separator:String?       -- разделитель пар ключ-значение; по умолчанию '&'
 ]) -> String
-Url::BuildQueryString(List<Tuple<String, String>>{Flag:AutoMap}, [
+Url::BuildQueryString(List<Tuple<String, String?>>{Flag:AutoMap}, [
   Separator:String?       -- разделитель пар ключ-значение; по умолчанию '&'
 ]) -> String
 ```

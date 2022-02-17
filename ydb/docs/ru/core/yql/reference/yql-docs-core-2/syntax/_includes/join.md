@@ -127,11 +127,4 @@ ON a.key == b.key;
 |"2"|"v122"|"v221"|
 |"2"|"v122"|"v222"|
 
-Непосредственно перед ключевым словом `JOIN` можно добавить `SORTED` – это приведет к форсированному выбору стреетигии Sorted Merge Join для данной пары таблиц:
-
-``` yql
--- выбор стратегии Sorted Merge Join для T1 LEFT JOIN T2
-SELECT * FROM T1 AS a LEFT SORTED JOIN T2 AS b ON a.key = b.key;
-```
-
 {% endif %}

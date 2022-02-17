@@ -7,7 +7,7 @@
 Подробнее правила преобразований описаны [здесь](../../../types/cast.md).
 {% endif %}
 
-{% include notitle [Десятичные типы](../../../_includes/decimal_args.md) %}
+{% include [decimal_args](../../../_includes/decimal_args.md) %}
 
 **Примеры**
 

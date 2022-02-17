@@ -55,4 +55,5 @@ RECURSE(
     client/impl/ydb_internal/db_driver_state
     client/draft/ut
     client/draft
+    examples
 )

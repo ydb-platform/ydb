@@ -269,11 +269,11 @@ template <typename TRecord>
 struct TCompare {
     using TColumns = TArrayRef<const TPartScheme::TColumn>;
 
-    TCompare(TColumns keys, const TKeyCellDefaults &nulls)
+    TCompare(TColumns keys, const TKeyCellDefaults &keyDefaults)
         : Info(keys)
-        , Nulls(nulls)
+        , KeyCellDefaults(keyDefaults)
     {
-        Y_VERIFY(Nulls->size() >= Info.size());
+        Y_VERIFY(KeyCellDefaults->size() >= Info.size());
     }
 
     bool operator()(const TRecord &record, TCells key) const noexcept
@@ -288,19 +288,19 @@ struct TCompare {
 
     int Compare(const TRecord &rec, const TCells key) const noexcept
     {
-        for (TPos it = 0; it < Min(key.size(), Nulls->size()); it++) {
-            const TCell left = it < Info.size() ? rec.Cell(Info[it]) : Nulls[it];
+        for (TPos it = 0; it < Min(key.size(), KeyCellDefaults->size()); it++) {
+            const TCell left = it < Info.size() ? rec.Cell(Info[it]) : KeyCellDefaults[it];
 
-            if (int cmp = CompareTypedCells(left, key[it], Nulls.Types[it]))
+            if (int cmp = CompareTypedCells(left, key[it], KeyCellDefaults.Types[it]))
                 return cmp;
         }
 
-        return  key.size() < Nulls->size() ? -1 : 0;
+        return  key.size() < KeyCellDefaults->size() ? -1 : 0;
     }
 
 private:
     const TColumns Info;
-    const TKeyCellDefaults &Nulls;
+    const TKeyCellDefaults &KeyCellDefaults;
 };
 
 

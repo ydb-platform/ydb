@@ -42,14 +42,14 @@ namespace NTable {
             , Types_(tags.size(), 0)
         {
             Tag2Pos.reserve(tags.size());
-            Nulls_.reserve(tags.size());
+            CellDefaults_.reserve(tags.size());
 
             for (TPos on = 0; on < tags.size(); on++) {
                 const auto *info = scheme.ColInfo(tags[on]);
                 Y_VERIFY(info, "Column %" PRIu32 " does not exist", tags[on]);
                 Types_[on] = info->TypeId;
 
-                Nulls_.emplace_back((*scheme.Nulls)[info->Pos]);
+                CellDefaults_.emplace_back((*scheme.RowCellDefaults)[info->Pos]);
 
                 if (info->IsKey())
                     KeyPins_.push_back({ on, info->Key });
@@ -74,9 +74,9 @@ namespace NTable {
             return KeyPins_;
         }
 
-        TArrayRef<const TCell> Nulls() const noexcept
+        TArrayRef<const TCell> CellDefaults() const noexcept
         {
-            return Nulls_;
+            return CellDefaults_;
         }
 
         THas Has(TTag tag) const noexcept
@@ -91,7 +91,7 @@ namespace NTable {
     private:
         TSmallVec<TPin> KeyPins_;
         TSmallVec<NScheme::TTypeId> Types_;
-        TSmallVec<TCell> Nulls_;
+        TSmallVec<TCell> CellDefaults_;
         THashMap<TTag, TPos> Tag2Pos;
     };
 

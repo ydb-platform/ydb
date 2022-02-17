@@ -46,14 +46,14 @@ namespace NTable {
         }
 
         static bool Range(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyCellDefaults &nulls, TTagsRef tags,
+                    const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
                     ui64 items, ui64 bytes, bool includeHistory = false) noexcept
         {
             if (run.size() == 1) {
                 auto pos = run.begin();
                 TRowId row1 = pos->Slice.BeginRowId();
                 TRowId row2 = pos->Slice.EndRowId() - 1;
-                return TCharge(env, *pos->Part, tags, includeHistory).Do(key1, key2, row1, row2, nulls, items, bytes).Ready;
+                return TCharge(env, *pos->Part, tags, includeHistory).Do(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
             }
 
             bool ready = true;
@@ -62,13 +62,13 @@ namespace NTable {
             if (pos == run.end())
                 return true;
 
-            bool fromStart = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, nulls) <= 0;
+            bool fromStart = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
 
             while (pos != run.end()) {
                 TRowId row1 = pos->Slice.BeginRowId();
                 TRowId row2 = pos->Slice.EndRowId() - 1;
 
-                const int cmp = TSlice::CompareLastKeySearchKey(pos->Slice, key2, nulls);
+                const int cmp = TSlice::CompareLastKeySearchKey(pos->Slice, key2, keyDefaults);
 
                 TArrayRef<const TCell> key1r;
                 if (!fromStart) {
@@ -79,7 +79,7 @@ namespace NTable {
                     key2r = key2;
                 }
 
-                auto r = TCharge(env, *pos->Part, tags, includeHistory).Do(key1r, key2r, row1, row2, nulls, items, bytes);
+                auto r = TCharge(env, *pos->Part, tags, includeHistory).Do(key1r, key2r, row1, row2, keyDefaults, items, bytes);
                 ready &= r.Ready;
 
                 if (cmp >= 0 /* slice->LastKey >= key2 */) {
@@ -102,14 +102,14 @@ namespace NTable {
         }
 
         static bool RangeReverse(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyCellDefaults &nulls, TTagsRef tags,
+                    const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
                     ui64 items, ui64 bytes, bool includeHistory = false) noexcept
         {
             if (run.size() == 1) {
                 auto pos = run.begin();
                 TRowId row1 = pos->Slice.EndRowId() - 1;
                 TRowId row2 = pos->Slice.BeginRowId();
-                return TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1, key2, row1, row2, nulls, items, bytes).Ready;
+                return TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
             }
 
             bool ready = true;
@@ -118,14 +118,14 @@ namespace NTable {
             if (pos == run.end())
                 return true;
 
-            bool fromEnd = TSlice::CompareLastKeySearchKey(pos->Slice, key1, nulls) <= 0;
+            bool fromEnd = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
 
             for (;;) {
                 TRowId row1 = pos->Slice.EndRowId() - 1;
                 TRowId row2 = pos->Slice.BeginRowId();
 
                 // N.B. empty key2 is like -inf during reverse iteration
-                const int cmp = key2 ? TSlice::CompareSearchKeyFirstKey(key2, pos->Slice, nulls) : -1;
+                const int cmp = key2 ? TSlice::CompareSearchKeyFirstKey(key2, pos->Slice, keyDefaults) : -1;
 
                 TArrayRef<const TCell> key1r;
                 if (!fromEnd) {
@@ -136,7 +136,7 @@ namespace NTable {
                     key2r = key2;
                 }
 
-                auto r = TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1r, key2r, row1, row2, nulls, items, bytes);
+                auto r = TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1r, key2r, row1, row2, keyDefaults, items, bytes);
                 ready &= r.Ready;
 
                 if (pos == run.begin()) {
@@ -170,7 +170,7 @@ namespace NTable {
          * last key < splitKey are precharged. This method will not try to
          * load pages outside of [beginRowId, endRowId) range.
          */
-        bool SplitKey(const TCells splitKey, const TKeyCellDefaults& nulls,
+        bool SplitKey(const TCells splitKey, const TKeyCellDefaults& keyDefaults,
                 const TRowId beginRowId, const TRowId endRowId) const noexcept
         {
             Y_VERIFY_DEBUG(beginRowId < endRowId, "Unexpected empty row range");
@@ -178,10 +178,10 @@ namespace NTable {
 
             bool ready = true;
 
-            const auto cmp = NPage::TCompare<NPage::TIndex::TRecord>(Scheme.Groups[0].ColsKeyIdx, nulls);
+            const auto cmp = NPage::TCompare<NPage::TIndex::TRecord>(Scheme.Groups[0].ColsKeyIdx, keyDefaults);
 
             // The first page that may contain splitKey
-            auto found = Index.LookupKey(splitKey, Scheme.Groups[0], ESeek::Lower, &nulls);
+            auto found = Index.LookupKey(splitKey, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
 
             // Do we need to load the previous page (e.g. splitKey <= foundKey)
             bool needPrev = !found || !cmp(*found, splitKey);
@@ -285,7 +285,7 @@ namespace NTable {
          * Precharges data for rows between max(key1, row1) and min(key2, row2) inclusive
          */
         TResult Do(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyCellDefaults &nulls, ui64 itemsLimit,
+                const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
                 ui64 bytesLimit) const noexcept
         {
             auto startRow = row1;
@@ -311,7 +311,7 @@ namespace NTable {
 
             if (key1) {
                 // First page to precharge (may contain key >= key1)
-                auto keyPage = Index.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &nulls);
+                auto keyPage = Index.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
                 if (!keyPage || keyPage > last) {
                     return { true, true }; // first key is outside of bounds
                 }
@@ -330,7 +330,7 @@ namespace NTable {
             if (key2) {
                 // Last page to precharge (may contain key >= key2)
                 // We actually use the next page since lookup is not exact
-                auto keyPage = Index.LookupKey(key2, Scheme.Groups[0], ESeek::Lower, &nulls) + 1;
+                auto keyPage = Index.LookupKey(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults) + 1;
                 if (keyPage && keyPage <= last) {
                     if (keyPage >= firstExt) {
                         last = keyPage; // precharge up to keyPage
@@ -352,7 +352,7 @@ namespace NTable {
          * Precharges data for rows between min(key1, row1) and max(key2, row2) inclusive in reverse
          */
         TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyCellDefaults &nulls, ui64 itemsLimit,
+                const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
                 ui64 bytesLimit) const noexcept
         {
             auto startRow = row1;
@@ -380,7 +380,7 @@ namespace NTable {
 
             if (key1) {
                 // First page to precharge (may contain key <= key1)
-                auto keyPage = Index.LookupKeyReverse(key1, Scheme.Groups[0], ESeek::Lower, &nulls);
+                auto keyPage = Index.LookupKeyReverse(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
                 if (!keyPage || keyPage < last) {
                     return { true, true }; // first key is outside of bounds
                 }
@@ -393,7 +393,7 @@ namespace NTable {
 
             if (key2) {
                 // Last page to precharge (may contain key <= key2)
-                auto keyPage = Index.LookupKeyReverse(key2, Scheme.Groups[0], ESeek::Lower, &nulls);
+                auto keyPage = Index.LookupKeyReverse(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
                 if (keyPage && keyPage >= last) {
                     if (keyPage <= first) {
                         last = keyPage; // precharge up to keyPage
@@ -600,15 +600,15 @@ namespace NTable {
             const auto& scheme = Part->Scheme->HistoryGroup;
             Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
 
-            // Directly use the histroy key nulls with correct sort order
-            const TKeyCellDefaults* nulls = Part->Scheme->HistoryKeys.Get();
+            // Directly use the histroy key defaults with correct sort order
+            const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
-            auto first = HistoryIndex->LookupKey(startKey, scheme, ESeek::Lower, nulls);
+            auto first = HistoryIndex->LookupKey(startKey, scheme, ESeek::Lower, keyDefaults);
             if (!first) {
                 return true;
             }
 
-            auto last = HistoryIndex->LookupKey(endKey, scheme, ESeek::Lower, nulls);
+            auto last = HistoryIndex->LookupKey(endKey, scheme, ESeek::Lower, keyDefaults);
 
             bool ready = true;
 

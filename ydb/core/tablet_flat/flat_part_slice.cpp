@@ -10,7 +10,7 @@ namespace NTable {
 
 namespace {
 
-void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& nulls) noexcept
+void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& cellDefaults) noexcept
 {
     out << '{';
     size_t pos = 0;
@@ -19,7 +19,7 @@ void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDef
             out << ", ";
         }
         TString value;
-        DbgPrintValue(value, cell, nulls.Types[pos++]);
+        DbgPrintValue(value, cell, cellDefaults.Types[pos++]);
         out << value;
     }
     out << '}';
@@ -44,14 +44,14 @@ bool ValidateSlices(TConstArrayRef<TSlice> slices) noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &nulls) noexcept {
+int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults) noexcept {
     size_t end = Max(left.size(), right.size());
-    Y_VERIFY_DEBUG(end <= nulls.Size(), "Key schema is smaller than compared keys");
+    Y_VERIFY_DEBUG(end <= keyDefaults.Size(), "Key schema is smaller than compared keys");
 
     for (size_t pos = 0; pos < end; ++pos) {
-        const auto& leftCell = pos < left.size() ? left[pos] : nulls.Defs[pos];
-        const auto& rightCell = pos < right.size() ? right[pos] : nulls.Defs[pos];
-        if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
+        const auto& leftCell = pos < left.size() ? left[pos] : keyDefaults.Defs[pos];
+        const auto& rightCell = pos < right.size() ? right[pos] : keyDefaults.Defs[pos];
+        if (int cmp = CompareTypedCells(leftCell, rightCell, keyDefaults.Types[pos])) {
             return cmp;
         }
     }
@@ -61,47 +61,47 @@ int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &nul
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& nulls) const noexcept
+void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const noexcept
 {
     auto left = FirstKey.GetCells();
     auto right = LastKey.GetCells();
     out << (FirstInclusive ? '[' : '(');
     if (left) {
-        PrintCells(out, left, nulls);
+        PrintCells(out, left, keyDefaults);
     } else {
         out << "-inf";
     }
     out << ", ";
     if (right) {
-        PrintCells(out, right, nulls);
+        PrintCells(out, right, keyDefaults);
     } else {
         out << "+inf";
     }
     out << (LastInclusive ? ']' : ')');
 }
 
-bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& nulls) noexcept
+bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults) noexcept
 {
     auto left = a.LastKey.GetCells();
     auto right = b.FirstKey.GetCells();
     if (Y_UNLIKELY(!left)) {
         // Empty LastKey is +inf-epsilon => +inf-epsilon < any is never true
         Y_VERIFY_DEBUG(!a.LastInclusive,
-            "Unexpected inclusion of +inf: %s", NFmt::Ln(a, nulls).data());
+            "Unexpected inclusion of +inf: %s", NFmt::Ln(a, keyDefaults).data());
         return false;
     }
     if (Y_UNLIKELY(!right)) {
         // Empty FirstKey is -inf => any < -inf is never true
         Y_VERIFY_DEBUG(b.FirstInclusive,
-            "Unexpected exclusion of -inf: %s", NFmt::Ln(b, nulls).data());
+            "Unexpected exclusion of -inf: %s", NFmt::Ln(b, keyDefaults).data());
         return false;
     }
     size_t end = Max(left.size(), right.size());
-    Y_VERIFY_DEBUG(end <= nulls.Size(), "Key schema is smaller than slice boundary keys");
+    Y_VERIFY_DEBUG(end <= keyDefaults.Size(), "Key schema is smaller than slice boundary keys");
     for (size_t pos = 0; pos < end; ++pos) {
-        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos];
-        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos];
-        if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
+        const auto& leftCell = pos < left.size() ? left[pos] : keyDefaults[pos];
+        const auto& rightCell = pos < right.size() ? right[pos] : keyDefaults[pos];
+        if (int cmp = CompareTypedCells(leftCell, rightCell, keyDefaults.Types[pos])) {
             return cmp < 0;
         }
     }
@@ -112,7 +112,7 @@ bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaul
 int TBounds::CompareSearchKeyFirstKey(
         TArrayRef<const TCell> key,
         const TBounds& bounds,
-        const TKeyCellDefaults& nulls) noexcept
+        const TKeyCellDefaults& keyDefaults) noexcept
 {
     if (!key) {
         // Search key is +inf => +inf > any
@@ -121,20 +121,20 @@ int TBounds::CompareSearchKeyFirstKey(
     auto right = bounds.FirstKey.GetCells();
     if (Y_UNLIKELY(!right)) {
         Y_VERIFY_DEBUG(bounds.FirstInclusive,
-            "Unexpected exclusion of -inf: %s", NFmt::Ln(bounds, nulls).data());
+            "Unexpected exclusion of -inf: %s", NFmt::Ln(bounds, keyDefaults).data());
         // Empty FirstKey is -inf => any > -inf
         return +1;
     }
-    Y_VERIFY_DEBUG(key.size() <= nulls.Size(),
+    Y_VERIFY_DEBUG(key.size() <= keyDefaults.Size(),
         "Key schema is smaller than the search key");
     for (size_t pos = 0; pos < key.size(); ++pos) {
         const auto& leftCell = key[pos];
-        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos];
-        if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
+        const auto& rightCell = pos < right.size() ? right[pos] : keyDefaults[pos];
+        if (int cmp = CompareTypedCells(leftCell, rightCell, keyDefaults.Types[pos])) {
             return cmp;
         }
     }
-    if (key.size() < nulls.Size()) {
+    if (key.size() < keyDefaults.Size()) {
         // Search key is extended with +inf => +inf > any
         return +1;
     }
@@ -145,12 +145,12 @@ int TBounds::CompareSearchKeyFirstKey(
 int TBounds::CompareLastKeySearchKey(
         const TBounds& bounds,
         TArrayRef<const TCell> key,
-        const TKeyCellDefaults& nulls) noexcept
+        const TKeyCellDefaults& keyDefaults) noexcept
 {
     auto left = bounds.LastKey.GetCells();
     if (Y_UNLIKELY(!left)) {
         Y_VERIFY_DEBUG(!bounds.LastInclusive,
-            "Unexpected inclusion of +inf: %s", NFmt::Ln(bounds, nulls).data());
+            "Unexpected inclusion of +inf: %s", NFmt::Ln(bounds, keyDefaults).data());
         // Empty LastKey is +inf-epsilon
         // +inf-epsilon > any,
         // +inf-epsilon < +inf
@@ -160,16 +160,16 @@ int TBounds::CompareLastKeySearchKey(
         // Search key is +inf => any < +inf
         return -1;
     }
-    Y_VERIFY_DEBUG(key.size() <= nulls.Size(),
+    Y_VERIFY_DEBUG(key.size() <= keyDefaults.Size(),
         "Key schema is smaller than the search key");
     for (size_t pos = 0; pos < key.size(); ++pos) {
-        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos];
+        const auto& leftCell = pos < left.size() ? left[pos] : keyDefaults[pos];
         const auto& rightCell = key[pos];
-        if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
+        if (int cmp = CompareTypedCells(leftCell, rightCell, keyDefaults.Types[pos])) {
             return cmp;
         }
     }
-    if (key.size() < nulls.Size()) {
+    if (key.size() < keyDefaults.Size()) {
         // Search key is extended with +inf => any < +inf
         return -1;
     }
@@ -562,7 +562,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TC
 TLevels::iterator TLevels::AddLevel()
 {
     size_t index = Levels.size();
-    Levels.emplace_front(*Nulls, index);
+    Levels.emplace_front(*KeyCellDefaults, index);
     return Levels.begin();
 }
 

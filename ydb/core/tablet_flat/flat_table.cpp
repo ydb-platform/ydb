@@ -766,7 +766,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
 
     const TRemap remap(*Scheme, tags);
 
-    row.Reset(remap.Nulls());
+    row.Reset(remap.CellDefaults());
 
     for (auto &pin: remap.KeyPins())
         row.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key[pin.Key]);

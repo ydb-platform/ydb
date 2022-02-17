@@ -307,9 +307,9 @@ namespace NTable {
 
             Y_VERIFY(Lead, "Cannot seek with invalid lead");
 
-            auto nulls = Subset.Scheme->Keys;
+            auto keyDefaults = Subset.Scheme->Keys;
 
-            Y_VERIFY(Lead.Key.GetCells().size() <= nulls->Size(), "TLead key is too large");
+            Y_VERIFY(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
             Iter = new TTableIt(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
@@ -318,7 +318,7 @@ namespace NTable {
             for (auto &mem: Subset.Frozen)
                 Iter->Push(
                     TMemIt::Make(
-                        *mem, mem.Snapshot, Lead.Key.GetCells(), Lead.Relation, nulls, &Iter->Remap, CurrentEnv));
+                        *mem, mem.Snapshot, Lead.Key.GetCells(), Lead.Relation, keyDefaults, &Iter->Remap, CurrentEnv));
 
             if (Lead.StopKey.GetCells()) {
                 if (Lead.StopKeyInclusive) {
@@ -358,11 +358,11 @@ namespace NTable {
 
         void PrepareBoots() noexcept
         {
-            auto nulls = Subset.Scheme->Keys;
+            auto keyDefaults = Subset.Scheme->Keys;
 
             // Assume subset is immutable and only construct levels once
             if (!Levels && (Subset.Flatten || LoadedParts)) {
-                Levels.Reset(new TLevels(nulls));
+                Levels.Reset(new TLevels(keyDefaults));
                 TVector<const TPartView*> parts;
                 parts.reserve(Subset.Flatten.size() + LoadedParts.size());
                 for (const auto& partView : Subset.Flatten) {
@@ -389,7 +389,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TRunIt>(run, Lead.Tags, nulls, CurrentEnv));
+                        MakeHolder<TRunIt>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }

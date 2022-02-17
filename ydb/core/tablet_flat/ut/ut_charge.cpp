@@ -117,17 +117,17 @@ namespace {
 
             TTouchEnv env(true);
 
-            const auto &nulls = *Tool.Scheme.Keys;
+            const auto &keyDefaults = *Tool.Scheme.Keys;
             const auto from = Tool.KeyCells(Mass.Saved[lower]);
             const auto to = Tool.KeyCells(Mass.Saved[upper]);
 
-            TRun run(nulls);
+            TRun run(keyDefaults);
             auto part = Eggs.Lone();
             for (auto& slice : *part->Slices) {
                 run.Insert(part, slice);
             }
 
-            TCharge::Range(&env, from, to, run, nulls, TTagsRef{ }, items, Max<ui64>());
+            TCharge::Range(&env, from, to, run, keyDefaults, TTagsRef{ }, items, Max<ui64>());
 
             if (!env.Is(arr, 0x00 /* require all pages */)) {
                 Log()

@@ -13,7 +13,7 @@ namespace NTable {
     /**
      * A very simple comparator for part keys (extended with schema defaults)
      */
-    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &nulls) noexcept;
+    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults) noexcept;
 
     /**
      * Bounds for a range of keys
@@ -41,12 +41,12 @@ namespace NTable {
         {
         }
 
-        void Describe(IOutputStream& out, const TKeyCellDefaults& nulls) const noexcept;
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const noexcept;
 
         /**
          * Returns true if a is less than b without any intersections
          */
-        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& nulls) noexcept;
+        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults) noexcept;
 
         /**
          * Compares search key and bounds first key
@@ -56,7 +56,7 @@ namespace NTable {
         static int CompareSearchKeyFirstKey(
                 TArrayRef<const TCell> key,
                 const TBounds& bounds,
-                const TKeyCellDefaults& nulls) noexcept;
+                const TKeyCellDefaults& keyDefaults) noexcept;
 
         /**
          * Compares bounds last key and search key
@@ -66,7 +66,7 @@ namespace NTable {
         static int CompareLastKeySearchKey(
                 const TBounds& bounds,
                 TArrayRef<const TCell> key,
-                const TKeyCellDefaults& nulls) noexcept;
+                const TKeyCellDefaults& keyDefaults) noexcept;
     };
 
     /**
@@ -565,10 +565,10 @@ namespace NTable {
         struct TCompare {
             typedef void is_transparent;
 
-            const TKeyCellDefaults& Nulls;
+            const TKeyCellDefaults& KeyCellDefaults;
 
-            explicit TCompare(const TKeyCellDefaults& nulls)
-                : Nulls(nulls)
+            explicit TCompare(const TKeyCellDefaults& keyDefaults)
+                : KeyCellDefaults(keyDefaults)
             {
             }
 
@@ -577,7 +577,7 @@ namespace NTable {
                 if (a.Part.Get() == b.Part.Get()) {
                     return TSlice::LessByRowId(a.Slice, b.Slice);
                 } else {
-                    return TSlice::LessByKey(a.Slice, b.Slice, Nulls);
+                    return TSlice::LessByKey(a.Slice, b.Slice, KeyCellDefaults);
                 }
             }
 
@@ -586,7 +586,7 @@ namespace NTable {
                 if (a.Part == b.Part.Get()) {
                     return TSlice::LessByRowId(a.Slice, b.Slice);
                 } else {
-                    return TSlice::LessByKey(a.Slice, b.Slice, Nulls);
+                    return TSlice::LessByKey(a.Slice, b.Slice, KeyCellDefaults);
                 }
             }
 
@@ -595,42 +595,42 @@ namespace NTable {
                 if (a.Part.Get() == b.Part) {
                     return TSlice::LessByRowId(a.Slice, b.Slice);
                 } else {
-                    return TSlice::LessByKey(a.Slice, b.Slice, Nulls);
+                    return TSlice::LessByKey(a.Slice, b.Slice, KeyCellDefaults);
                 }
             }
 
             Y_FORCE_INLINE bool operator()(const TItem& a, const TLowerBound& key) const
             {
                 // Returns true if a.LastKey < key
-                return TSlice::CompareLastKeySearchKey(a.Slice, key.Cells, Nulls) < 0;
+                return TSlice::CompareLastKeySearchKey(a.Slice, key.Cells, KeyCellDefaults) < 0;
             }
 
             Y_FORCE_INLINE bool operator()(const TUpperBound& key, const TItem& b) const
             {
                 // Returns true if key < b.LastKey
-                return TSlice::CompareLastKeySearchKey(b.Slice, key.Cells, Nulls) > 0;
+                return TSlice::CompareLastKeySearchKey(b.Slice, key.Cells, KeyCellDefaults) > 0;
             }
 
             Y_FORCE_INLINE bool operator()(const TLowerBoundReverse& key, const TItem& b) const
             {
                 // Returns true if key < b.FirstKey
-                return TSlice::CompareSearchKeyFirstKey(key.Cells, b.Slice, Nulls) < 0;
+                return TSlice::CompareSearchKeyFirstKey(key.Cells, b.Slice, KeyCellDefaults) < 0;
             }
 
             Y_FORCE_INLINE bool operator()(const TItem& a, const TUpperBoundReverse& key) const
             {
                 // Returns true if a.FirstKey < key
-                return TSlice::CompareSearchKeyFirstKey(key.Cells, a.Slice, Nulls) > 0;
+                return TSlice::CompareSearchKeyFirstKey(key.Cells, a.Slice, KeyCellDefaults) > 0;
             }
 
             Y_FORCE_INLINE bool operator()(const TSearchRange& range, const TItem& b) const
             {
-                return TSlice::CompareSearchKeyFirstKey(range.To, b.Slice, Nulls) < 0;
+                return TSlice::CompareSearchKeyFirstKey(range.To, b.Slice, KeyCellDefaults) < 0;
             }
 
             Y_FORCE_INLINE bool operator()(const TItem& a, const TSearchRange& range) const
             {
-                return TSlice::CompareLastKeySearchKey(a.Slice, range.From, Nulls) < 0;
+                return TSlice::CompareLastKeySearchKey(a.Slice, range.From, KeyCellDefaults) < 0;
             }
         };
 
@@ -641,9 +641,9 @@ namespace NTable {
         using iterator = TItems::iterator;
         using value_type = TItem;
 
-        explicit TRun(const TKeyCellDefaults& nulls)
-            : Nulls(nulls)
-            , Slices({ }, TCompare(nulls))
+        explicit TRun(const TKeyCellDefaults& keyDefaults)
+            : KeyCellDefaults(keyDefaults)
+            , Slices({ }, TCompare(keyDefaults))
         {
         }
 
@@ -679,7 +679,7 @@ namespace NTable {
         {
             TInsertKey key = { part, slice };
             auto it = Slices.lower_bound(key);
-            bool possible = it == Slices.end() || TCompare(Nulls)(key, *it);
+            bool possible = it == Slices.end() || TCompare(KeyCellDefaults)(key, *it);
             return { it, possible };
         }
 
@@ -751,7 +751,7 @@ namespace NTable {
         }
 
     private:
-        const TKeyCellDefaults& Nulls;
+        const TKeyCellDefaults& KeyCellDefaults;
         TItems Slices;
     };
 
@@ -761,8 +761,8 @@ namespace NTable {
     class TLevels {
         class TItem : public TRun {
         public:
-            TItem(const TKeyCellDefaults& nulls, size_t index)
-                : TRun(nulls)
+            TItem(const TKeyCellDefaults& keyDefaults, size_t index)
+                : TRun(keyDefaults)
                 , Index(index)
             { }
 
@@ -783,8 +783,8 @@ namespace NTable {
             TRun::iterator Position;
         };
 
-        explicit TLevels(TIntrusiveConstPtr<TKeyCellDefaults> nulls)
-            : Nulls(std::move(nulls))
+        explicit TLevels(TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults)
+            : KeyCellDefaults(std::move(keyDefaults))
         {
         }
 
@@ -811,7 +811,7 @@ namespace NTable {
         iterator AddLevel();
 
     private:
-        TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         TItems Levels;
         TEpoch MaxEpoch = TEpoch::Min();
     };

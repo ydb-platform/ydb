@@ -856,7 +856,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
 template<class TIteratorOps>
 inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 {
-    State.Reset(Remap.Nulls());
+    State.Reset(Remap.CellDefaults());
 
     const TDbTupleRef key = GetKey();
 

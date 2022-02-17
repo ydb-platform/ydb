@@ -262,9 +262,9 @@ public:
                 , Step(step)
             { }
 
-            TString ToString(const TKeyCellDefaults& nulls, bool dumpStep) const {
+            TString ToString(const TKeyCellDefaults& keyDefaults, bool dumpStep) const {
                 TStringStream s;
-                Describe(s, nulls);
+                Describe(s, keyDefaults);
                 s << "@" << Epoch;
                 if (dumpStep) {
                     s << "/" << Step;
@@ -273,15 +273,15 @@ public:
             }
         };
 
-        const TKeyCellDefaults& nulls = *DB.GetRowScheme(table)->Keys;
-        auto keyRangeLess = [&nulls](const TKeyRange& a, const TKeyRange& b) -> bool {
-            if (auto cmp = ComparePartKeys(a.FirstKey.GetCells(), b.FirstKey.GetCells(), nulls)) {
+        const TKeyCellDefaults& keyDefaults = *DB.GetRowScheme(table)->Keys;
+        auto keyRangeLess = [&keyDefaults](const TKeyRange& a, const TKeyRange& b) -> bool {
+            if (auto cmp = ComparePartKeys(a.FirstKey.GetCells(), b.FirstKey.GetCells(), keyDefaults)) {
                 return cmp < 0;
             }
             if (a.FirstInclusive != b.FirstInclusive) {
                 return a.FirstInclusive && !b.FirstInclusive;
             }
-            if (auto cmp = ComparePartKeys(a.LastKey.GetCells(), b.LastKey.GetCells(), nulls)) {
+            if (auto cmp = ComparePartKeys(a.LastKey.GetCells(), b.LastKey.GetCells(), keyDefaults)) {
                 return cmp < 0;
             }
             if (a.LastInclusive != b.LastInclusive) {
@@ -303,7 +303,7 @@ public:
             if (result) {
                 result.append(' ');
             }
-            result += keyRange.ToString(nulls, dumpStep);
+            result += keyRange.ToString(keyDefaults, dumpStep);
         }
         return result;
     }

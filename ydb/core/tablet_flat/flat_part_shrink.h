@@ -15,9 +15,9 @@ namespace NTable {
     public:
         using TCells = TArrayRef<const TCell>;
 
-        TShrink(IPages *env, TIntrusiveConstPtr<TKeyCellDefaults> nulls)
+        TShrink(IPages *env, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults)
             : Env(env)
-            , Nulls(nulls)
+            , KeyCellDefaults(keyDefaults)
         {
 
         }
@@ -29,8 +29,8 @@ namespace NTable {
 
         TShrink& Put(TArrayRef<const TPartView> all, TRawVals from_, TRawVals to_)
         {
-            const TCelled from(from_, *Nulls, false);
-            const TCelled to(to_, *Nulls, false);
+            const TCelled from(from_, *KeyCellDefaults, false);
+            const TCelled to(to_, *KeyCellDefaults, false);
 
             return Put(all, from, to);
         }
@@ -43,10 +43,10 @@ namespace NTable {
                 if (!from && !to) /* [-inf, +inf) */ {
                     PartView.emplace_back(partView);
                 } else {
-                    TPartSimpleIt first(partView.Part.Get(), { }, Nulls, Env);
+                    TPartSimpleIt first(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == first.Seek(from, ESeek::Lower);
 
-                    TPartSimpleIt last(partView.Part.Get(), { }, Nulls, Env);
+                    TPartSimpleIt last(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == last.Seek(to, to ? ESeek::Lower : ESeek::Upper);
 
                     auto firstRowId = first.GetRowId();
@@ -87,7 +87,7 @@ namespace NTable {
 
     public:
         IPages * const Env = nullptr;
-        TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         size_t Skipped = 0;
         TVector<TPartView> PartView;
     };

@@ -16,7 +16,7 @@ namespace NPerf {
     public:
         TDoMem(ILogger *logger, const TMass &mass)
             : Table(NTest::TMake(mass).Mem())
-            , Nulls(Table->Scheme->Keys)
+            , KeyCellDefaults(Table->Scheme->Keys)
             , Remap(TRemap::Full(*Table->Scheme))
         {
             if (auto logl = logger->Log(NKikiSched::ELnLev::INF1)) {
@@ -35,7 +35,7 @@ namespace NPerf {
         {
             const TCelled key(key_, *Table->Scheme->Keys, false);
 
-            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Nulls, &Remap, nullptr);
+            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, KeyCellDefaults, &Remap, nullptr);
         }
 
         ui64 Scan(ui64 items, TSponge &aggr) override
@@ -57,7 +57,7 @@ namespace NPerf {
     private:
         void Apply(TSponge &aggr) noexcept
         {
-            State.Reset(Remap.Nulls());
+            State.Reset(Remap.CellDefaults());
 
             const auto key = Iter->GetKey();
 
@@ -70,7 +70,7 @@ namespace NPerf {
 
     private:
         TIntrusivePtr<TMemTable> Table;
-        TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         TRemap Remap;
         TAutoPtr<TMemIt> Iter;
         TRowState State;

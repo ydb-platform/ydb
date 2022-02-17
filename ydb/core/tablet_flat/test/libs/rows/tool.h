@@ -158,7 +158,7 @@ namespace NTest {
                 cells.at(ColFor(value)->Pos) = value.Cell;
             }
 
-            out << NFmt::TCells(cells, *Scheme.Nulls, DbgRegistry());
+            out << NFmt::TCells(cells, *Scheme.RowCellDefaults, DbgRegistry());
         }
 
         const TColInfo* ColFor(const TRow::TUpdate &value) const

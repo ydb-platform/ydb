@@ -229,7 +229,7 @@ namespace NPage {
         }
 
         TIter LookupKey(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyCellDefaults *nulls) const noexcept
+                        ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
         {
             if (!key) {
                 switch (seek) {
@@ -243,7 +243,7 @@ namespace NPage {
 
             TIter it;
 
-            const auto cmp = TCompare<TRecord>(group.ColsKeyData, *nulls);
+            const auto cmp = TCompare<TRecord>(group.ColsKeyData, *keyDefaults);
             switch (seek) {
                 case ESeek::Exact:
                     it = std::lower_bound(Page.Begin(), Page.End(), key, cmp);
@@ -266,7 +266,7 @@ namespace NPage {
         }
 
         TIter LookupKeyReverse(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyCellDefaults *nulls) const noexcept
+                        ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
         {
             if (!key) {
                 switch (seek) {
@@ -280,7 +280,7 @@ namespace NPage {
 
             TIter it;
 
-            const auto cmp = TCompare<TRecord>(group.ColsKeyData, *nulls);
+            const auto cmp = TCompare<TRecord>(group.ColsKeyData, *keyDefaults);
             switch (seek) {
                 case ESeek::Exact:
                     it = std::lower_bound(Page.Begin(), Page.End(), key, cmp);

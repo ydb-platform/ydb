@@ -40,11 +40,11 @@ namespace NTable {
         TRowScheme(
                 TVector<TColInfo> cols,
                 TIntrusiveConstPtr<TKeyCellDefaults> keys,
-                TIntrusiveConstPtr<TRowCellDefaults> nulls,
+                TIntrusiveConstPtr<TRowCellDefaults> rowDefaults,
                 TVector<ui32> families)
             : Cols(std::move(cols))
             , Keys(std::move(keys))
-            , Nulls(std::move(nulls))
+            , RowCellDefaults(std::move(rowDefaults))
             , Families(std::move(families))
         {
             for (const auto &col: Cols)
@@ -141,9 +141,9 @@ namespace NTable {
                      */
 
                 } else {
-                    auto &null = (*scheme.Nulls)[other->Pos];
+                    auto &null = (*scheme.RowCellDefaults)[other->Pos];
 
-                    if (CompareTypedCells(null, (*Nulls)[col.Pos], col.TypeId))
+                    if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeId))
                         Y_FAIL("Cannot alter existing columnt default value");
                 }
             }
@@ -152,7 +152,7 @@ namespace NTable {
     public:
         const TVector<TColInfo> Cols;
         const TIntrusiveConstPtr<TKeyCellDefaults> Keys;
-        const TIntrusiveConstPtr<TRowCellDefaults> Nulls;
+        const TIntrusiveConstPtr<TRowCellDefaults> RowCellDefaults;
         const TVector<ui32> Families; // per-group families
 
     private:

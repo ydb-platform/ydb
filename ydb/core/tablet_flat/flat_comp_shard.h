@@ -100,12 +100,12 @@ namespace NCompShard {
      */
     class TSplitStatIterator {
     public:
-        TSplitStatIterator(const TKeyCellDefaults& nulls)
-            : Nulls(nulls)
-            , InitQueue(TCmpHeapByFirstKey{Nulls})
-            , NextQueue(TCmpHeapByNextKey{Nulls})
-            , StartQueue(TCmpHeapByFirstKey{Nulls})
-            , StopQueue(TCmpHeapByLastKey{Nulls})
+        TSplitStatIterator(const TKeyCellDefaults& keyDefaults)
+            : KeyCellDefaults(keyDefaults)
+            , InitQueue(TCmpHeapByFirstKey{KeyCellDefaults})
+            , NextQueue(TCmpHeapByNextKey{KeyCellDefaults})
+            , StartQueue(TCmpHeapByFirstKey{KeyCellDefaults})
+            , StopQueue(TCmpHeapByLastKey{KeyCellDefaults})
         { }
 
         void AddSlice(const TPart* part, const TSlice& slice, ui64 size) noexcept;
@@ -148,19 +148,19 @@ namespace NCompShard {
         };
 
         struct TCmpHeapByFirstKey {
-            const TKeyCellDefaults& Nulls;
+            const TKeyCellDefaults& KeyCellDefaults;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
 
         struct TCmpHeapByNextKey {
-            const TKeyCellDefaults& Nulls;
+            const TKeyCellDefaults& KeyCellDefaults;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
 
         struct TCmpHeapByLastKey {
-            const TKeyCellDefaults& Nulls;
+            const TKeyCellDefaults& KeyCellDefaults;
 
             bool operator()(const TItemState* b, const TItemState* a) const noexcept;
         };
@@ -176,7 +176,7 @@ namespace NCompShard {
         void InitPageSize(TItemState* item) const noexcept;
 
     private:
-        const TKeyCellDefaults& Nulls;
+        const TKeyCellDefaults& KeyCellDefaults;
         TVector<TCell> Key;
         TDeque<TItemState> Items;
         TItemQueue<TCmpHeapByFirstKey> InitQueue;
@@ -195,8 +195,8 @@ namespace NCompShard {
      */
     class TPageReuseBuilder {
     public:
-        TPageReuseBuilder(const TKeyCellDefaults& nulls)
-            : Nulls(nulls)
+        TPageReuseBuilder(const TKeyCellDefaults& keyDefaults)
+            : KeyCellDefaults(keyDefaults)
         { }
 
         void AddSlice(const TPart* part, const TSlice& slice, bool reusable) noexcept;
@@ -257,7 +257,7 @@ namespace NCompShard {
         };
 
     private:
-        const TKeyCellDefaults& Nulls;
+        const TKeyCellDefaults& KeyCellDefaults;
         TDeque<TItemState> Items;
     };
 
@@ -381,7 +381,7 @@ namespace NCompShard {
 
         void RegisterItem(const TTablePart& info, TTablePart::TItem& item, bool isGarbage) noexcept;
 
-        bool FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& nulls) const noexcept;
+        bool FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& keyDefaults) const noexcept;
     };
 
     /**

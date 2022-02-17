@@ -175,7 +175,7 @@ namespace NPage {
          */
         TIter LookupKey(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyCellDefaults *nulls) const noexcept
+                const ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
         {
             if (!key) {
                 // Special treatment for an empty key
@@ -188,7 +188,7 @@ namespace NPage {
                 }
             }
 
-            const auto cmp = TCompare<TRecord>(group.ColsKeyIdx, *nulls);
+            const auto cmp = TCompare<TRecord>(group.ColsKeyIdx, *keyDefaults);
 
             // N.B. we know that key < it->Key
             TIter it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);
@@ -219,7 +219,7 @@ namespace NPage {
          */
         TIter LookupKeyReverse(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyCellDefaults *nulls) const noexcept
+                const ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
         {
             if (!key) {
                 // Special treatment for an empty key
@@ -232,7 +232,7 @@ namespace NPage {
                 }
             }
 
-            const auto cmp = TCompare<TRecord>(group.ColsKeyIdx, *nulls);
+            const auto cmp = TCompare<TRecord>(group.ColsKeyIdx, *keyDefaults);
 
             TIter it;
             switch (seek) {

@@ -23,13 +23,13 @@ namespace NTable {
             State.assign(slots, { });
         }
 
-        void Reset(TArrayRef<const TCell> nulls)
+        void Reset(TArrayRef<const TCell> cellDefaults)
         {
             Rop = ERowOp::Absent;
             Need_ = 0;
-            Left_ = nulls.size();
+            Left_ = cellDefaults.size();
             State.assign(Left_, { });
-            Cells.assign(nulls.begin(), nulls.end());
+            Cells.assign(cellDefaults.begin(), cellDefaults.end());
         }
 
         ui32 Need() const noexcept { return Need_; }

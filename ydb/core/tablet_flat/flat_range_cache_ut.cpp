@@ -47,9 +47,9 @@ Y_UNIT_TEST_SUITE(TFlatEraseCacheTest) {
         TVector<NScheme::TTypeIdOrder> types;
         types.emplace_back(NScheme::NTypeIds::Uint64);
         TVector<TCell> defs(1);
-        TIntrusiveConstPtr<TKeyCellDefaults> nulls = TKeyCellDefaults::Make(types, defs);
+        TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults = TKeyCellDefaults::Make(types, defs);
         // Empty default config
-        TKeyRangeCache cache(*nulls, { });
+        TKeyRangeCache cache(*keyDefaults, { });
         // Empty keys, both inclusive
         TKeyRangeEntry entry({ }, { }, true, true, TRowVersion::Min());
         // This will allocate a single node in the map

@@ -72,7 +72,7 @@ namespace NTest {
         {
             if (Iter->IsValid()) {
                 if (Defaults) {
-                    State.Reset(Remap_.Nulls());
+                    State.Reset(Remap_.CellDefaults());
                 } else {
                     State.Init(Remap_.Size());
                 }

@@ -68,7 +68,7 @@ namespace NCompShard {
     bool TSplitStatIterator::TCmpHeapByFirstKey::operator()(const TItemState* b, const TItemState* a) const noexcept {
         TCellsRef left = a->Slice.FirstKey.GetCells();
         TCellsRef right = b->Slice.FirstKey.GetCells();
-        if (int cmp = ComparePartKeys(left, right, Nulls)) {
+        if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
             return cmp < 0;
         }
         return a->Slice.FirstInclusive && !b->Slice.FirstInclusive;
@@ -77,13 +77,13 @@ namespace NCompShard {
     bool TSplitStatIterator::TCmpHeapByNextKey::operator()(const TItemState* b, const TItemState* a) const noexcept {
         TCellsRef left = a->NextKey;
         TCellsRef right = b->NextKey;
-        return ComparePartKeys(left, right, Nulls) < 0;
+        return ComparePartKeys(left, right, KeyCellDefaults) < 0;
     }
 
     bool TSplitStatIterator::TCmpHeapByLastKey::operator()(const TItemState* b, const TItemState* a) const noexcept {
         TCellsRef left = a->Slice.LastKey.GetCells();
         TCellsRef right = b->Slice.LastKey.GetCells();
-        if (int cmp = ComparePartKeys(left, right, Nulls)) {
+        if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
             return cmp < 0;
         }
         return !a->Slice.LastInclusive && b->Slice.LastInclusive;
@@ -92,13 +92,13 @@ namespace NCompShard {
     bool TSplitStatIterator::HasStarted(const TItemState* item) const noexcept {
         TCellsRef left = item->Slice.FirstKey.GetCells();
         TCellsRef right = Key;
-        return ComparePartKeys(left, right, Nulls) < 0;
+        return ComparePartKeys(left, right, KeyCellDefaults) < 0;
     }
 
     bool TSplitStatIterator::HasStopped(const TItemState* item) const noexcept {
         TCellsRef left = item->Slice.LastKey.GetCells();
         TCellsRef right = Key;
-        if (int cmp = ComparePartKeys(left, right, Nulls)) {
+        if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
             return cmp < 0;
         }
         return !item->Slice.LastInclusive;
@@ -136,7 +136,7 @@ namespace NCompShard {
         if (InitQueue && NextQueue) {
             TCellsRef left = InitQueue.top()->Slice.FirstKey.GetCells();
             TCellsRef right = NextQueue.top()->NextKey;
-            if (ComparePartKeys(left, right, Nulls) <= 0) {
+            if (ComparePartKeys(left, right, KeyCellDefaults) <= 0) {
                 selected = left;
             } else {
                 selected = right;
@@ -152,7 +152,7 @@ namespace NCompShard {
         TCellsRef splitKey = Key;
 
         // Take all matching items from init queue and initialize them
-        while (InitQueue && ComparePartKeys(InitQueue.top()->Slice.FirstKey.GetCells(), splitKey, Nulls) <= 0) {
+        while (InitQueue && ComparePartKeys(InitQueue.top()->Slice.FirstKey.GetCells(), splitKey, KeyCellDefaults) <= 0) {
             auto* item = InitQueue.top();
             InitQueue.pop();
             StartQueue.push(item);
@@ -183,7 +183,7 @@ namespace NCompShard {
             if (item->LastPageRows <= 1) {
                 item->IsPartial = false;
             } else if (item->NextPage) {
-                item->IsPartial = ComparePartKeys(splitKey, item->NextKey, Nulls) < 0;
+                item->IsPartial = ComparePartKeys(splitKey, item->NextKey, KeyCellDefaults) < 0;
             } else if (HasStopped(item)) {
                 item->IsPartial = false;
             } else {
@@ -200,7 +200,7 @@ namespace NCompShard {
         ActivationQueue.clear();
 
         // Take all slices that have next key matching the new boundary
-        while (NextQueue && ComparePartKeys(NextQueue.top()->NextKey, splitKey, Nulls) <= 0) {
+        while (NextQueue && ComparePartKeys(NextQueue.top()->NextKey, splitKey, KeyCellDefaults) <= 0) {
             auto* item = NextQueue.top();
             NextQueue.pop();
 
@@ -271,7 +271,7 @@ namespace NCompShard {
         auto heapByFirstKeyMin = [this](const TItemState* b, const TItemState* a) noexcept -> bool {
             TCellsRef left = a->First.Key;
             TCellsRef right = b->First.Key;
-            if (int cmp = ComparePartKeys(left, right, Nulls)) {
+            if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
                 return cmp < 0;
             }
             return a->First.Inclusive && !b->First.Inclusive;
@@ -280,7 +280,7 @@ namespace NCompShard {
         auto noIntersection = [this](const TRightBoundary& a, const TLeftBoundary& b) noexcept -> bool {
             TCellsRef left = a.Key;
             TCellsRef right = b.Key;
-            if (int cmp = ComparePartKeys(left, right, Nulls)) {
+            if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
                 return cmp < 0;
             }
             return !a.Inclusive || !b.Inclusive;
@@ -289,7 +289,7 @@ namespace NCompShard {
         auto lessBoundary = [this](const TRightBoundary& a, const TRightBoundary& b) noexcept -> bool {
             TCellsRef left = a.Key;
             TCellsRef right = b.Key;
-            if (int cmp = ComparePartKeys(left, right, Nulls)) {
+            if (int cmp = ComparePartKeys(left, right, KeyCellDefaults)) {
                 return cmp < 0;
             }
             return !a.Inclusive && b.Inclusive;
@@ -455,8 +455,8 @@ namespace NCompShard {
         }
     }
 
-    bool TTableShard::FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& nulls) const noexcept {
-        TSplitStatIterator it(nulls);
+    bool TTableShard::FindSplitKey(TSerializedCellVec& foundKey, const TKeyCellDefaults& keyDefaults) const noexcept {
+        TSplitStatIterator it(keyDefaults);
 
         for (const auto& kvInfo : Parts) {
             for (const auto& kvSlice : kvInfo.second.Slices) {
@@ -507,24 +507,24 @@ namespace NCompShard {
     }
 
     bool TSliceSplitOp::Execute(IPages* env) {
-        const TIntrusiveConstPtr<TKeyCellDefaults> nulls = Table->RowScheme->Keys;
+        const TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults = Table->RowScheme->Keys;
 
-        TVector<TCell> keyCellsBuffer(nulls->Size());
-        auto getKeyCells = [this, &nulls, &keyCellsBuffer](ui64 keyId) {
+        TVector<TCell> keyCellsBuffer(keyDefaults->Size());
+        auto getKeyCells = [this, &keyDefaults, &keyCellsBuffer](ui64 keyId) {
             auto* key = Table->SplitKeys.FindPtr(keyId);
             Y_VERIFY(key, "Cannot find split key %" PRIu64, keyId);
 
             auto keyCells = key->GetCells();
-            if (keyCells.size() < nulls->Size()) {
+            if (keyCells.size() < keyDefaults->Size()) {
                 for (size_t i = 0; i < keyCells.size(); ++i) {
                     keyCellsBuffer[i] = keyCells[i];
                 }
-                for (size_t i = keyCells.size(); i < nulls->Size(); ++i) {
-                    keyCellsBuffer[i] = nulls->Defs[i];
+                for (size_t i = keyCells.size(); i < keyDefaults->Size(); ++i) {
+                    keyCellsBuffer[i] = keyDefaults->Defs[i];
                 }
                 keyCells = keyCellsBuffer;
             }
-            Y_VERIFY_DEBUG(keyCells.size() == nulls->Size());
+            Y_VERIFY_DEBUG(keyCells.size() == keyDefaults->Size());
 
             return keyCells;
         };
@@ -533,7 +533,7 @@ namespace NCompShard {
         TCharge charge(env, *Part, TTagsRef{ });
         for (size_t idx = 1; idx < Shards.size(); ++idx) {
             auto keyCells = getKeyCells(Shards[idx]->LeftKey);
-            ok &= charge.SplitKey(keyCells, *nulls, Slice.BeginRowId(), Slice.EndRowId());
+            ok &= charge.SplitKey(keyCells, *keyDefaults, Slice.BeginRowId(), Slice.EndRowId());
         }
 
         if (!ok) {
@@ -543,7 +543,7 @@ namespace NCompShard {
 
         TSlice current = Slice;
         TVector<TSlice> results(Reserve(Shards.size()));
-        TPartSimpleIt it(Part.Get(), { }, nulls, env);
+        TPartSimpleIt it(Part.Get(), { }, keyDefaults, env);
         for (size_t idx = 1; idx < Shards.size(); ++idx) {
             const TRowId currentBegin = current.BeginRowId();
             const TRowId currentEnd = current.EndRowId();
@@ -566,7 +566,7 @@ namespace NCompShard {
             TSerializedCellVec rowKey;
             if (rowId != currentEnd) {
                 rowKey = TSerializedCellVec(TSerializedCellVec::Serialize(it.GetRawKey()));
-            } else if (Y_UNLIKELY(ComparePartKeys(current.LastKey.GetCells(), keyCells, *nulls) < 0)) {
+            } else if (Y_UNLIKELY(ComparePartKeys(current.LastKey.GetCells(), keyCells, *keyDefaults) < 0)) {
                 // This shouldn't normally happen, but better safe than sorry
                 // Current split key is actually out of bounds for the slice
                 // Since there's no real intersection leave it as is
@@ -691,33 +691,33 @@ namespace NCompShard {
             TIntrusiveConstPtr<TRowScheme> rowScheme,
             TVector<const TBounds*>& input) noexcept
     {
-        const TKeyCellDefaults& nulls = *rowScheme->Keys;
+        const TKeyCellDefaults& keyDefaults = *rowScheme->Keys;
 
         // Sorts heap by the first key (returns true when a->FirstKey < b->FirstKey)
-        auto heapByFirstKeyMin = [&nulls](const TBounds* b, const TBounds* a) noexcept -> bool {
+        auto heapByFirstKeyMin = [&keyDefaults](const TBounds* b, const TBounds* a) noexcept -> bool {
             TCellsRef left = a->FirstKey.GetCells();
             TCellsRef right = b->FirstKey.GetCells();
-            if (int cmp = ComparePartKeys(left, right, nulls)) {
+            if (int cmp = ComparePartKeys(left, right, keyDefaults)) {
                 return cmp < 0;
             }
             return a->FirstInclusive && !b->FirstInclusive;
         };
 
         // Returns true when a->LastKey < b->LastKey
-        auto lastKeyLess = [&nulls](const TBounds* a, const TBounds* b) noexcept -> bool {
+        auto lastKeyLess = [&keyDefaults](const TBounds* a, const TBounds* b) noexcept -> bool {
             TCellsRef left = a->LastKey.GetCells();
             TCellsRef right = b->LastKey.GetCells();
-            if (int cmp = ComparePartKeys(left, right, nulls)) {
+            if (int cmp = ComparePartKeys(left, right, keyDefaults)) {
                 return cmp < 0;
             }
             return !a->LastInclusive && b->LastInclusive;
         };
 
         // Returns true when a->LastKey may be stitched with b->FirstKey
-        auto mayStitch = [&nulls](const TBounds* a, const TBounds* b) noexcept -> bool {
+        auto mayStitch = [&keyDefaults](const TBounds* a, const TBounds* b) noexcept -> bool {
             TCellsRef left = a->LastKey.GetCells();
             TCellsRef right = b->FirstKey.GetCells();
-            int cmp = ComparePartKeys(left, right, nulls);
+            int cmp = ComparePartKeys(left, right, keyDefaults);
             if (cmp < 0) {
                 return false;
             }
@@ -882,11 +882,11 @@ namespace NCompShard {
             }
         }
 
-        const auto& nulls = *TableInfo.RowScheme->Keys;
+        const auto& keyDefaults = *TableInfo.RowScheme->Keys;
         std::sort(splitKeyIds.begin(), splitKeyIds.end(), [&](ui64 a, ui64 b) -> bool {
             auto left = TableInfo.SplitKeys.at(a).GetCells();
             auto right = TableInfo.SplitKeys.at(b).GetCells();
-            return ComparePartKeys(left, right, nulls) < 0;
+            return ComparePartKeys(left, right, keyDefaults) < 0;
         });
 
         Shards.PushBack(new TTableShard());
@@ -1753,7 +1753,7 @@ namespace NCompShard {
 
     void TShardedCompactionStrategy::AddParts(TVector<TPartView> parts) {
         // Types and default values for current table keys
-        const auto& nulls = *TableInfo.RowScheme->Keys;
+        const auto& keyDefaults = *TableInfo.RowScheme->Keys;
 
         // A part/slice combination we scheduled to add
         struct TItem {
@@ -1767,34 +1767,34 @@ namespace NCompShard {
         };
 
         // Sorts items by their first key
-        auto cmpByFirstKey = [&nulls](const TItem& a, const TItem& b) noexcept -> bool {
+        auto cmpByFirstKey = [&keyDefaults](const TItem& a, const TItem& b) noexcept -> bool {
             auto left = a.Slice.FirstKey.GetCells();
             auto right = b.Slice.FirstKey.GetCells();
-            if (int cmp = ComparePartKeys(left, right, nulls)) {
+            if (int cmp = ComparePartKeys(left, right, keyDefaults)) {
                 return cmp < 0;
             }
             return a.Slice.FirstInclusive && !b.Slice.FirstInclusive;
         };
 
         // Returns true if the item is completely to the left of boundary
-        auto cmpFullyInside = [&nulls](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
+        auto cmpFullyInside = [&keyDefaults](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto left = a.Slice.LastKey.GetCells();
             if (Y_UNLIKELY(!left)) {
                 return false; // +inf
             }
-            if (int cmp = ComparePartKeys(left, boundary.GetCells(), nulls)) {
+            if (int cmp = ComparePartKeys(left, boundary.GetCells(), keyDefaults)) {
                 return cmp < 0;
             }
             return !a.Slice.LastInclusive;
         };
 
         // Returns true if the item is completely to the right of boundary
-        auto cmpFullyOutside = [&nulls](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
+        auto cmpFullyOutside = [&keyDefaults](const TItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto right = a.Slice.FirstKey.GetCells();
             if (Y_UNLIKELY(!right)) {
                 return false; // -inf
             }
-            return ComparePartKeys(boundary.GetCells(), right, nulls) <= 0;
+            return ComparePartKeys(boundary.GetCells(), right, keyDefaults) <= 0;
         };
 
         // A part/slice combination that crosses at least one shard boundary
@@ -1812,22 +1812,22 @@ namespace NCompShard {
         };
 
         // Heap order of split items by their last key
-        auto cmpHeapByLastKey = [&nulls](const TSplitItem& a, const TSplitItem& b) noexcept -> bool {
+        auto cmpHeapByLastKey = [&keyDefaults](const TSplitItem& a, const TSplitItem& b) noexcept -> bool {
             auto left = b.Slice.LastKey.GetCells();
             auto right = a.Slice.LastKey.GetCells();
-            if (int cmp = ComparePartKeys(left, right, nulls)) {
+            if (int cmp = ComparePartKeys(left, right, keyDefaults)) {
                 return cmp < 0;
             }
             return !b.Slice.LastInclusive && a.Slice.LastInclusive;
         };
 
         // Returns true if item is completely to the left of boundary
-        auto cmpSplitFullyInside = [&nulls](const TSplitItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
+        auto cmpSplitFullyInside = [&keyDefaults](const TSplitItem& a, const TSerializedCellVec& boundary) noexcept -> bool {
             auto left = a.Slice.LastKey.GetCells();
             if (Y_UNLIKELY(!left)) {
                 return false; // +inf
             }
-            if (int cmp = ComparePartKeys(left, boundary.GetCells(), nulls)) {
+            if (int cmp = ComparePartKeys(left, boundary.GetCells(), keyDefaults)) {
                 return cmp < 0;
             }
             return !a.Slice.LastInclusive;

@@ -15,7 +15,7 @@ namespace NTest {
 
         TWrapIterImpl(const TSubset &subset, TRowVersion snapshot = TRowVersion::Max())
             : Scheme(subset.Scheme)
-            , Nulls(Scheme->Keys)
+            , KeyCellDefaults(Scheme->Keys)
             , Frozen(subset.Frozen)
             , Flatten(subset.Flatten)
             , Snapshot(snapshot)
@@ -68,11 +68,11 @@ namespace NTest {
 
             for (auto &mem: Frozen)
                 Iter->Push(
-                    TMemIt::Make(*mem, mem.Snapshot, key, seek, Nulls, &Iter->Remap, Env,
+                    TMemIt::Make(*mem, mem.Snapshot, key, seek, KeyCellDefaults, &Iter->Remap, Env,
                         TIter::Direction));
 
             for (auto &run: Levels) {
-                auto one = MakeHolder<TRunIt>(run, Remap().Tags, Nulls, Env);
+                auto one = MakeHolder<TRunIt>(run, Remap().Tags, KeyCellDefaults, Env);
 
                 EReady status;
                 if constexpr (TIter::Direction == EDirection::Reverse) {
@@ -100,7 +100,7 @@ namespace NTest {
 
     public:
         const TIntrusiveConstPtr<TRowScheme> Scheme;
-        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         const TFrozen Frozen;
         const TFlatten Flatten;
         const TRowVersion Snapshot;

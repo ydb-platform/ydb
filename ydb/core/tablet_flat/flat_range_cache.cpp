@@ -4,11 +4,11 @@
 namespace NKikimr {
 namespace NTable {
 
-TKeyRangeCache::TKeyRangeCache(const TKeyCellDefaults& nulls, const TKeyRangeCacheConfig& config)
-    : Nulls(nulls)
+TKeyRangeCache::TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config)
+    : KeyCellDefaults(keyDefaults)
     , Config(config)
     , Pool(new TSpecialMemoryPool())
-    , Entries(TKeyRangeEntryCompare(Nulls.Types), TAllocator(&UsedHeapMemory))
+    , Entries(TKeyRangeEntryCompare(KeyCellDefaults.Types), TAllocator(&UsedHeapMemory))
 { }
 
 TKeyRangeCache::~TKeyRangeCache()
@@ -184,9 +184,9 @@ void TKeyRangeCache::TDumpRanges::DumpTo(IOutputStream& out) const {
     for (const auto& entry : Self->Entries) {
         out << (first ? " " : ", ");
         out << (entry.FromInclusive ? "[" : "(");
-        out << NFmt::TPrintableTypedCells(entry.FromKey, Self->Nulls.BasicTypes());
+        out << NFmt::TPrintableTypedCells(entry.FromKey, Self->KeyCellDefaults.BasicTypes());
         out << ", ";
-        out << NFmt::TPrintableTypedCells(entry.ToKey, Self->Nulls.BasicTypes());
+        out << NFmt::TPrintableTypedCells(entry.ToKey, Self->KeyCellDefaults.BasicTypes());
         out << (entry.ToInclusive ? "]" : ")");
         first = false;
     }

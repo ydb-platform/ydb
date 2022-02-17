@@ -21,8 +21,8 @@ namespace NFmt {
 
         }
 
-        TCells(TCellsRef cells, const NTable::TCellDefaults &nulls, const TReg *reg)
-            : TCells(cells, nulls.Types, reg)
+        TCells(TCellsRef cells, const NTable::TCellDefaults &cellDefaults, const TReg *reg)
+            : TCells(cells, cellDefaults.Types, reg)
         {
 
         }

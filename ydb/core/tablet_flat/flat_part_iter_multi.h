@@ -136,12 +136,12 @@ namespace NTable {
         EReady Seek(
                 const TCells key, ESeek seek,
                 const TPart* part, IPages* env,
-                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* nulls) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (Index = IndexRef.LookupKey(key, scheme, seek, nulls)) {
+            if (Index = IndexRef.LookupKey(key, scheme, seek, keyDefaults)) {
                 if (Index->GetRowId() >= EndRowId) {
                     // Page is outside of bounds
                     return Exhausted();
@@ -166,7 +166,7 @@ namespace NTable {
                     return EReady::Page;
                 }
 
-                if (Data = Page.LookupKey(key, scheme, seek, nulls)) {
+                if (Data = Page.LookupKey(key, scheme, seek, keyDefaults)) {
                     RowId = Page.BaseRow() + Data.Off();
 
                     if (RowId >= EndRowId) {
@@ -208,12 +208,12 @@ namespace NTable {
         EReady SeekReverse(
                 const TCells key, ESeek seek,
                 const TPart* part, IPages* env,
-                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* nulls) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (Index = IndexRef.LookupKeyReverse(key, scheme, seek, nulls)) {
+            if (Index = IndexRef.LookupKeyReverse(key, scheme, seek, keyDefaults)) {
                 if (Index->GetRowId() < BeginRowId) {
                     // Page may be outside of bounds
                     auto next = Index + 1;
@@ -234,7 +234,7 @@ namespace NTable {
                     return EReady::Page;
                 }
 
-                if (Data = Page.LookupKeyReverse(key, scheme, seek, nulls)) {
+                if (Data = Page.LookupKeyReverse(key, scheme, seek, keyDefaults)) {
                     RowId = Page.BaseRow() + Data.Off();
 
                     if (RowId < BeginRowId) {
@@ -453,8 +453,8 @@ namespace NTable {
             Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
             Y_VERIFY_DEBUG(scheme.ColsKeyData.size() == 3);
 
-            // Directly use the histroy key nulls with correct sort order
-            const TKeyCellDefaults* nulls = part->Scheme->HistoryKeys.Get();
+            // Directly use the histroy key keyDefaults with correct sort order
+            const TKeyCellDefaults* keyDefaults = part->Scheme->HistoryKeys.Get();
 
             // Helper for loading row id and row version from the index
             auto checkIndex = [&]() -> bool {
@@ -498,7 +498,7 @@ namespace NTable {
 
                         // Perform binary search on the last iteration
                         if (linear == 0 && Data) {
-                            Data = Page.LookupKey(key, scheme, ESeek::Lower, nulls);
+                            Data = Page.LookupKey(key, scheme, ESeek::Lower, keyDefaults);
                         }
 
                         if (!Data) {
@@ -563,7 +563,7 @@ namespace NTable {
             }
 
             // Full binary search
-            if (Index = IndexRef.LookupKey(key, scheme, ESeek::Lower, nulls)) {
+            if (Index = IndexRef.LookupKey(key, scheme, ESeek::Lower, keyDefaults)) {
                 // We need exact match on rowId, bail on larger values
                 TRowId indexRowId = Index->Cell(scheme.ColsKeyIdx[0]).AsValue<TRowId>();
                 if (rowId < indexRowId) {
@@ -580,7 +580,7 @@ namespace NTable {
                     return EReady::Page;
                 }
 
-                if (Data = Page.LookupKey(key, scheme, ESeek::Lower, nulls)) {
+                if (Data = Page.LookupKey(key, scheme, ESeek::Lower, keyDefaults)) {
                     if (!checkData()) {
                         // First row for the next RowId
                         MaxVersion = TRowVersion::Max();
@@ -669,17 +669,17 @@ namespace NTable {
         using TCells = NPage::TCells;
         using TGroupId = NPage::TGroupId;
 
-        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> nulls, IPages* env)
+        TPartSimpleIt(const TPart* part, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
             : Part(part)
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
-            , Nulls(std::move(nulls))
+            , KeyCellDefaults(std::move(keyDefaults))
             , Main(Part->Index, TGroupId(0))
             , SkipMainDeltas(0)
             , SkipMainVersion(false)
             , SkipEraseVersion(false)
         {
-            Key.reserve(Nulls->Size());
+            Key.reserve(KeyCellDefaults->Size());
 
             Groups.reserve(Pinout.AltGroups().size());
             GroupRemap.resize(Part->Scheme->Groups.size(), Max<ui32>());
@@ -710,13 +710,13 @@ namespace NTable {
         EReady Seek(const TCells key, ESeek seek) noexcept
         {
             ClearKey();
-            return Main.Seek(key, seek, Part, Env, Part->Scheme->Groups[0], &*Nulls);
+            return Main.Seek(key, seek, Part, Env, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
         EReady SeekReverse(const TCells key, ESeek seek) noexcept
         {
             ClearKey();
-            return Main.SeekReverse(key, seek, Part, Env, Part->Scheme->Groups[0], &*Nulls);
+            return Main.SeekReverse(key, seek, Part, Env, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
         EReady Seek(TRowId rowId) noexcept
@@ -775,7 +775,7 @@ namespace NTable {
         {
             InitKey();
 
-            return TDbTupleRef(Nulls->BasicTypes().begin(), Key.begin(), Key.size());
+            return TDbTupleRef(KeyCellDefaults->BasicTypes().begin(), Key.begin(), Key.size());
         }
 
         TCells GetRawKey() const noexcept
@@ -1083,8 +1083,8 @@ namespace NTable {
                     Key.push_back(Main.GetRecord()->Cell(info[pos]));
                 }
 
-                for (size_t pos = info.size(); pos < Nulls->Size(); ++pos) {
-                    Key.push_back((*Nulls)[pos]);
+                for (size_t pos = info.size(); pos < KeyCellDefaults->Size(); ++pos) {
+                    Key.push_back((*KeyCellDefaults)[pos]);
                 }
             }
         }
@@ -1172,7 +1172,7 @@ namespace NTable {
 
     private:
         const TPinout Pinout;
-        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
 
         TPartGroupKeyIt Main;
 
@@ -1211,10 +1211,10 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> nulls, IPages* env)
+        TRunIt(const TRun& run, TTagsRef tags, TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults, IPages* env)
             : Run(run)
             , Tags(tags)
-            , Nulls(std::move(nulls))
+            , KeyCellDefaults(std::move(keyDefaults))
             , Env(env)
             , Current(Run.end())
         {
@@ -1251,7 +1251,7 @@ namespace NTable {
 
                     pos = Run.LowerBound(key);
                     if (pos != Run.end() &&
-                        TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *Nulls) <= 0)
+                        TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *KeyCellDefaults) <= 0)
                     {
                         // Key is at the start of the slice
                         seekToStart = true;
@@ -1266,7 +1266,7 @@ namespace NTable {
 
                     pos = Run.UpperBound(key);
                     if (pos != Run.end() &&
-                        TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *Nulls) < 0)
+                        TSlice::CompareSearchKeyFirstKey(key, pos->Slice, *KeyCellDefaults) < 0)
                     {
                         // Key is at the start of the slice
                         seekToStart = true;
@@ -1342,7 +1342,7 @@ namespace NTable {
 
                     pos = Run.LowerBoundReverse(key);
                     if (pos != Run.end() &&
-                        TSlice::CompareLastKeySearchKey(pos->Slice, key, *Nulls) <= 0)
+                        TSlice::CompareLastKeySearchKey(pos->Slice, key, *KeyCellDefaults) <= 0)
                     {
                         seekToEnd = true;
                     }
@@ -1356,7 +1356,7 @@ namespace NTable {
 
                     pos = Run.UpperBoundReverse(key);
                     if (pos != Run.end() &&
-                        TSlice::CompareLastKeySearchKey(pos->Slice, key, *Nulls) < 0)
+                        TSlice::CompareLastKeySearchKey(pos->Slice, key, *KeyCellDefaults) < 0)
                     {
                         seekToEnd = true;
                     }
@@ -1536,7 +1536,7 @@ namespace NTable {
                 CurrentIt = std::move(it->second);
                 Cache.erase(it);
             } else {
-                CurrentIt = MakeHolder<TPartSimpleIt>(part, Tags, Nulls, Env);
+                CurrentIt = MakeHolder<TPartSimpleIt>(part, Tags, KeyCellDefaults, Env);
             }
             CurrentIt->SetBounds(Current->Slice);
         }
@@ -1582,7 +1582,7 @@ namespace NTable {
     public:
         const TRun& Run;
         TTagsRef const Tags;
-        TIntrusiveConstPtr<TKeyCellDefaults> const Nulls;
+        TIntrusiveConstPtr<TKeyCellDefaults> const KeyCellDefaults;
         IPages* const Env;
         ui64 InvisibleRowSkips = 0;
 

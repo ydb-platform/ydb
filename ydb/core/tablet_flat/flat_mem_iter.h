@@ -20,17 +20,17 @@ namespace NTable {
         using TCells = TArrayRef<const TCell>;
 
         TMemIt(const TMemTable* memTable,
-                TIntrusiveConstPtr<TKeyCellDefaults> nulls,
+                TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap* remap,
                 IPages *env,
                 NMem::TTreeIterator iterator)
             : MemTable(memTable)
-            , Nulls(std::move(nulls))
+            , KeyCellDefaults(std::move(keyDefaults))
             , Remap(remap)
             , Env(env)
             , RowIt(std::move(iterator))
         {
-            Key.reserve(Nulls->Size());
+            Key.reserve(KeyCellDefaults->Size());
 
             Y_VERIFY(Key.capacity() > 0, "No key cells in part scheme");
             Y_VERIFY(Remap, "Remap cannot be NULL");
@@ -41,12 +41,12 @@ namespace NTable {
                 const NMem::TTreeSnapshot& snapshot,
                 TCells key,
                 ESeek seek,
-                TIntrusiveConstPtr<TKeyCellDefaults> nulls,
+                TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap *remap,
                 IPages *env,
                 EDirection direction = EDirection::Forward) noexcept
         {
-            auto *iter = new TMemIt(&memTable, std::move(nulls), remap, env, snapshot.Iterator());
+            auto *iter = new TMemIt(&memTable, std::move(keyDefaults), remap, env, snapshot.Iterator());
 
             switch (direction) {
                 case EDirection::Forward:
@@ -66,7 +66,7 @@ namespace NTable {
             CurrentVersion = nullptr;
 
             if (key) {
-                NMem::TPoint search{ key, *Nulls };
+                NMem::TPoint search{ key, *KeyCellDefaults };
 
                 switch (seek) {
                     case ESeek::Lower:
@@ -98,7 +98,7 @@ namespace NTable {
             CurrentVersion = nullptr;
 
             if (key) {
-                NMem::TPoint search{ key, *Nulls };
+                NMem::TPoint search{ key, *KeyCellDefaults };
 
                 switch (seek) {
                     case ESeek::Exact:
@@ -131,14 +131,14 @@ namespace NTable {
             const ui32 len = MemTable->Scheme->Keys->Size();
             const auto *key = RowIt.GetKey();
 
-            if (len >= Nulls->BasicTypes().size()) {
-                return { Nulls->BasicTypes().begin(), key, len };
+            if (len >= KeyCellDefaults->BasicTypes().size()) {
+                return { KeyCellDefaults->BasicTypes().begin(), key, len };
             } else if (!Key) {
                 Key.insert(Key.end(), key, key + len);
-                Key.insert(Key.end(), (**Nulls).begin() + len, (**Nulls).end());
+                Key.insert(Key.end(), (**KeyCellDefaults).begin() + len, (**KeyCellDefaults).end());
             }
 
-            return { Nulls->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
+            return { KeyCellDefaults->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
         }
 
         bool IsDelta() const noexcept
@@ -349,7 +349,7 @@ namespace NTable {
 
     public:
         const TMemTable *MemTable = nullptr;
-        const TIntrusiveConstPtr<TKeyCellDefaults> Nulls;
+        const TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;
         ui64 InvisibleRowSkips = 0;

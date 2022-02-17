@@ -25,7 +25,7 @@ namespace NMem {
 
     struct TPoint {
         TArrayRef<const TCell> Key;
-        const TKeyCellDefaults &Nulls;
+        const TKeyCellDefaults &KeyCellDefaults;
     };
 
     struct TCandidate {
@@ -56,17 +56,17 @@ namespace NMem {
         }
 
         int DoCompare(const TCell* a, const TPoint& b) const {
-            const size_t bSize = Min(b.Key.size(), b.Nulls->size());
+            const size_t bSize = Min(b.Key.size(), b.KeyCellDefaults->size());
 
             for (size_t i = 0; i < bSize; ++i) {
-                const TCell& left = i < Count ? a[i] : b.Nulls[i];
+                const TCell& left = i < Count ? a[i] : b.KeyCellDefaults[i];
 
-                if (int cmp = CompareTypedCells(left, b.Key[i], b.Nulls.Types[i]))
+                if (int cmp = CompareTypedCells(left, b.Key[i], b.KeyCellDefaults.Types[i]))
                     return cmp;
             }
 
             // Missing point cells are filled with a virtual +inf
-            return b.Key.size() < b.Nulls->size() ? -1 : 0;
+            return b.Key.size() < b.KeyCellDefaults->size() ? -1 : 0;
         }
 
         bool operator()(const TTreeKey& a, const TPoint& b) const {

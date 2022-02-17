@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         wrap.To(10).Has(foo).Has(bar);
     }
 
-    Y_UNIT_TEST(Nulls)
+    Y_UNIT_TEST(CellDefaults)
     {
         TLayoutCook lay, fake;
 

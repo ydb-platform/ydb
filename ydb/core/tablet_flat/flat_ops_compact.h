@@ -172,7 +172,7 @@ namespace NTabletFlatExecutor {
                 if (row.GetRowState() == NTable::ERowOp::Erase) {
                     logl << "erased";
                 } else {
-                    logl << NFmt::TCells(*row, *Scheme->Nulls, Registry);
+                    logl << NFmt::TCells(*row, *Scheme->RowCellDefaults, Registry);
                 }
 
                 logl << " txId " << txId << " }";
@@ -226,7 +226,7 @@ namespace NTabletFlatExecutor {
                 if (row.GetRowState() == NTable::ERowOp::Erase) {
                     logl << "erased";
                 } else {
-                    logl << NFmt::TCells(*row, *Scheme->Nulls, Registry);
+                    logl << NFmt::TCells(*row, *Scheme->RowCellDefaults, Registry);
                 }
 
                 logl << " at " << rowVersion << " }";

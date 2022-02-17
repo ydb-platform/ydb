@@ -95,6 +95,7 @@ public:
     );
 
     void Bootstrap(const TActorContext& ctx);
+    void InitCounters(const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
     void HandleReadQuotaRequest(NReadSpeedLimiterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx);
@@ -130,6 +131,7 @@ private:
 
     TTabletCountersBase Counters;
     THolder<TPercentileCounter> QuotaWaitCounter;
+    bool CountersInited = false;
     TInstant LastReportedErrorTime;
 };
 

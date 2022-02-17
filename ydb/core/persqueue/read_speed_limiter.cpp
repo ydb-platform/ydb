@@ -55,12 +55,11 @@ TReadSpeedLimiter::TReadSpeedLimiter(
         LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << QuotaResourcePath);
 }
 
-
-void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
-    Become(&TThis::StateWork);
-    ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
-
-    auto counters = AppData()->Counters;
+void TReadSpeedLimiter::InitCounters(const TActorContext& ctx) {
+    if (CountersInited) {
+        return;
+    }
+    auto counters = AppData(ctx)->Counters;
     if (counters && TopicName.Contains("--")) {
         QuotaWaitCounter.Reset(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|consumerReadQuotaWait"),
@@ -77,6 +76,13 @@ void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
             true
         ));
     }
+    CountersInited = true;
+}
+
+
+void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
+    Become(&TThis::StateWork);
+    ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
 }
 
 void TReadSpeedLimiter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
@@ -101,6 +107,7 @@ void TReadSpeedLimiter::HandleReadQuotaRequest(NReadSpeedLimiterEvents::TEvReque
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER,
         LimiterDescription() << " quota required for cookie=" << ev->Get()->ReadRequest->Get()->Cookie
     );
+    InitCounters(ctx);
     bool hasActualErrors = ctx.Now() - LastReportedErrorTime <= DO_NOT_QUOTE_AFTER_ERROR_PERIOD;
     if ((QuotaRequestInFlight || !InProcessReadRequestCookies.empty()) && !hasActualErrors) {
         Queue.emplace_back(std::move(ev->Get()->ReadRequest), ctx.Now());

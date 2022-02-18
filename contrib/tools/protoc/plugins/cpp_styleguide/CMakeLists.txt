@@ -10,6 +10,14 @@ target_sources(cpp_styleguide PRIVATE
 )
 target_link_flags(cpp_styleguide
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -Wl,--gdb-index
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

@@ -38,6 +38,7 @@
 #include <unistd.h>
 
 #include <util/generic/string.h>
+#include <util/system/yassert.h>
 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
@@ -210,6 +211,9 @@ static void on_read(void* arg, grpc_error* err) {
         case EAGAIN:
           grpc_fd_notify_on_read(sp->emfd, &sp->read_closure);
           return;
+        case EMFILE:
+        case ENFILE:
+            Y_FAIL("grpc failed accept4: %s", strerror(errno));
         default:
           gpr_mu_lock(&sp->server->mu);
           if (!sp->server->shutdown_listeners) {

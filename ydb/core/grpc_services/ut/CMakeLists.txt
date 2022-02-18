@@ -26,6 +26,16 @@ add_test(
 )
 target_link_flags(ydb-core-grpc_services-ut
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -Wl,--gdb-index
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

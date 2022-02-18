@@ -12,6 +12,14 @@ target_sources(sqs PRIVATE
 )
 target_link_flags(sqs
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -Wl,--gdb-index
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

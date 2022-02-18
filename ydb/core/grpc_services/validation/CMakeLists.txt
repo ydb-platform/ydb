@@ -12,6 +12,14 @@ target_sources(validation PRIVATE
 )
 target_link_flags(validation
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -Wl,--gdb-index
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

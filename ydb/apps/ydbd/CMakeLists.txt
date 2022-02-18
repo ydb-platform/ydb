@@ -48,6 +48,16 @@ target_sources(ydbd PRIVATE
 )
 target_link_flags(ydbd
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -Wl,--gdb-index
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

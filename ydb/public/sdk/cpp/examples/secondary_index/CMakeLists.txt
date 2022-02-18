@@ -18,6 +18,16 @@ target_sources(secondary_index PRIVATE
 )
 target_link_flags(secondary_index
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -Wl,--gdb-index
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

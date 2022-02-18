@@ -20,6 +20,16 @@ target_sources(quoter_performance_test PRIVATE
 )
 target_link_flags(quoter_performance_test
   PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -Wl,--gdb-index
+  -Wl,-rpath,$ORIGIN
+  -fPIC
+  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
+  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

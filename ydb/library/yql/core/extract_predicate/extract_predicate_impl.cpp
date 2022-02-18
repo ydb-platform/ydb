@@ -759,6 +759,30 @@ TCoLambda OptimizeLambdaForRangeExtraction(const TExprNode::TPtr& filterLambdaNo
     return TCoLambda(output);
 }
 
+TExprNode::TPtr BuildFullRange(TPositionHandle pos, const TStructExprType& rowType, const TVector<TString>& indexKeys, TExprContext& ctx) {
+    YQL_ENSURE(!indexKeys.empty());
+    TExprNodeList components;
+    for (auto key : indexKeys) {
+        auto idx = rowType.FindItem(key);
+        YQL_ENSURE(idx);
+        const TTypeAnnotationNode* optKeyType = ctx.MakeType<TOptionalExprType>(rowType.GetItems()[*idx]->GetItemType());
+        auto nullNode = ctx.NewCallable(pos, "Nothing", { ExpandType(pos, *optKeyType, ctx) });
+
+        components.push_back(nullNode);
+    }
+
+    components.push_back(ctx.NewCallable(pos, "Int32", { ctx.NewAtom(pos, "0", TNodeFlags::Default) }));
+    auto boundary = ctx.NewList(pos, std::move(components));
+    return ctx.Builder(pos)
+        .Callable("AsRange")
+            .List(0)
+                .Add(0, boundary)
+                .Add(1, boundary)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
     const TExprNode& range, const THashMap<TString, size_t>& indexKeysOrder,
     const TPredicateExtractorSettings& settings, const TString& lastKey, TExprContext& ctx)
@@ -922,13 +946,20 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
                     .Seal()
                 .Seal()
                 .Build();
+            body = ctx.NewCallable(pos, "Collect", { body });
             body = ctx.Builder(pos)
-                .Callable("RangeUnion")
-                    .Callable(0, "RangeMultiply")
-                        .Callable(0, "Uint64")
+                .Callable("IfStrict")
+                    .Callable(0, ">")
+                        .Callable(0, "Length")
+                            .Add(0, body)
+                        .Seal()
+                        .Callable(1, "Uint64")
                             .Atom(0, ToString(settings.MaxRanges), TNodeFlags::Default)
                         .Seal()
-                        .Add(1, body)
+                    .Seal()
+                    .Add(1, BuildFullRange(pos, rowType, keys, ctx))
+                    .Callable(2, "RangeUnion")
+                        .Add(0, body)
                     .Seal()
                 .Seal()
                 .Build();
@@ -962,30 +993,6 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
             .Atom(0, op, TNodeFlags::Default)
             .Add(1, opNode->TailPtr())
             .Add(2, ExpandType(pos, *firstKeyType, ctx))
-        .Seal()
-        .Build();
-}
-
-TExprNode::TPtr BuildFullRange(TPositionHandle pos, const TStructExprType& rowType, const TVector<TString>& indexKeys, TExprContext& ctx) {
-    YQL_ENSURE(!indexKeys.empty());
-    TExprNodeList components;
-    for (auto key : indexKeys) {
-        auto idx = rowType.FindItem(key);
-        YQL_ENSURE(idx);
-        const TTypeAnnotationNode* optKeyType = ctx.MakeType<TOptionalExprType>(rowType.GetItems()[*idx]->GetItemType());
-        auto nullNode = ctx.NewCallable(pos, "Nothing", { ExpandType(pos, *optKeyType, ctx) });
-
-        components.push_back(nullNode);
-    }
-
-    components.push_back(ctx.NewCallable(pos, "Int32", { ctx.NewAtom(pos, "0", TNodeFlags::Default) }));
-    auto boundary = ctx.NewList(pos, std::move(components));
-    return ctx.Builder(pos)
-        .Callable("AsRange")
-            .List(0)
-                .Add(0, boundary)
-                .Add(1, boundary)
-            .Seal()
         .Seal()
         .Build();
 }

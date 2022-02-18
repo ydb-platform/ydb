@@ -10,6 +10,9 @@ items:
       when: false
     - name: YDB Monitoring
       href: embedded_monitoring/ydb_monitoring.md
+    - name: Hive web-viewera
+      when: audience == "tech"
+      href: embedded_monitoring/hive.md
     - name: Обзор соединений
       href: embedded_monitoring/interconnect_overview.md
       # when: false
@@ -22,23 +25,25 @@ items:
     items:
     - name: Обзор
       href: manual/index.md
+    - name: Способы предотвращения выхода за модель отказа
+      href: manual/failure_model.md
+    - name: Балансировка нагрузки на диски
+      href: manual/balancing_load.md
+    - name: Способы освобождения места на физических устройствах
+      href: manual/disk_end_space.md
     - name: Расширение кластера
-      href: manual/cluster_expasion.md
+      href: manual/cluster_expansion.md
     - name: Декоммиссия узлов и дисков
       href: manual/cluster_decomision.md
     - name: Добавление групп хранения
       href: manual/adding_storage_groups.md
-    - name: Изменение количествa слотов для вдисков на пдисках
-      href: manual/change_vslot_count.md
     - name: Безопасные рестарт и выключение узлов
       href: manual/node_restarting.md
-    - name: Решение проблем неработоспособности кластера
-      href: manual/solving_disk_issues.md
     - name: Включение/выключение SelfHeal
       href: manual/selfheal.md
     - name: Включение/выключение Scrubbing
       href: manual/scrubbing.md
-    - name: Перевоз ВДисков
+    - name: Перевоз виртуальных дисков
       href: manual/moving_vdisks.md
     - name: Изменение конфигураций через CMS
       href: manual/cms.md

@@ -21,6 +21,7 @@ conan_cmake_configure(
     bison/3.5.3
     c-ares/1.17.2
     libiconv/1.15
+    libidn/1.36
     openssl/1.1.1l
     ragel/6.10
     yasm/1.3.0
@@ -275,7 +276,6 @@ add_subdirectory(library/cpp/string_utils/scan)
 add_subdirectory(library/cpp/digest/lower_case)
 add_subdirectory(library/cpp/mime/types)
 add_subdirectory(library/cpp/uri)
-add_subdirectory(contrib/libs/libidn)
 add_subdirectory(library/cpp/http/server)
 add_subdirectory(library/cpp/http/io)
 add_subdirectory(library/cpp/streams/brotli)

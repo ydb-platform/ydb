@@ -162,12 +162,17 @@ def get_vars():
     s=subprocess.check_output("objdump ../../../../../contrib/libs/postgresql/libpostgres.a -tw",shell=True).decode("utf-8")
     for a in s.replace("\t"," ").split("\n"):
         for b in a.split(" "):
-            if b.startswith(".bss."): all_vars.add(b[5:])
-            elif b.startswith(".data."): all_vars.add(b[6:])
+            sym=None
+            if b.startswith(".bss."): sym=b[5:]
+            elif b.startswith(".data."): sym=b[6:]
+            if sym is not None:
+                all_vars.add(sym.replace("yql_",""))
+
     all_vars.remove("Dummy_trace")
 
     all_vars.remove("backslash_quote")
     all_vars.remove("sentinel") # rbtree.c
+    all_vars.remove("nullSemAction")
 
     all_vars.remove("gistBufferingOptValues")
     all_vars.remove("boolRelOpts")

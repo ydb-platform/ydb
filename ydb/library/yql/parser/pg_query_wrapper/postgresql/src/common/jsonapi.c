@@ -64,7 +64,7 @@ static JsonParseErrorType report_parse_error(JsonParseContext ctx, JsonLexContex
 static char *extract_token(JsonLexContext *lex);
 
 /* the null action object used for pure validation */
-__thread JsonSemAction nullSemAction =
+JsonSemAction nullSemAction =
 {
 	NULL, NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL, NULL

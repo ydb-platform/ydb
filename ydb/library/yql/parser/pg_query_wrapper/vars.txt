@@ -1044,7 +1044,6 @@ nfile
 nogc
 notifyInterruptPending
 noverify_checksums
-nullSemAction
 numAllocatedDescs
 numExternalFDs
 numSems

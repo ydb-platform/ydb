@@ -22,14 +22,10 @@
         db, err := ydb.New(
             ctx,
             ...
-            ydb.WithTraceDriver(ydbZap.Driver(
+            ydbZap.WithTraces(
                 log,
-                trace.DetailsAll,
-            )),
-            ydb.WithTraceTable(ydbZap.Table(
-                log,
-                trace.DetailsAll,
-            )),
+                ydbZap.WithDetails(trace.DetailsAll),
+            ),
         )
         if err != nil {
             panic(err)
@@ -62,14 +58,44 @@
         db, err := ydb.New(
             ctx,
             ydb.WithConnectionString(os.Getenv("YDB_CONNECTION_STRING")),
-            ydb.WithTraceDriver(ydbZerolog.Driver(
+            ydbZerolog.WithTraces(
                 log,
+                ydbZerolog.WithDetails(trace.DetailsAll),
+            ),
+        )
+        if err != nil {
+            panic(err)
+        }
+        defer func() {
+            _ = db.Close(ctx)
+        }()
+    }
+    ```
+    {% endcut %}
+* {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+    ```go
+    package main
+
+    import (
+        "context"
+        "os"
+
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+        "github.com/ydb-platform/ydb-go-sdk/v3/log"
+        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+    )
+
+    func main() {
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        var logger log.Logger // logger implementation with init out of this scope
+        db, err := ydb.New(
+            ctx,
+            ydb.WithConnectionString(os.Getenv("YDB_CONNECTION_STRING")),
+            ydb.WithLogger(
                 trace.DetailsAll,
-            )),
-            ydb.WithTraceTable(ydbZerolog.Table(
-                log,
-                trace.DetailsAll,
-            )),
+			    ydb.WithExternalLogger(logger),
+		    ),
         )
         if err != nil {
             panic(err)

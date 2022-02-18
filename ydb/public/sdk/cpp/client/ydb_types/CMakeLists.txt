@@ -1,0 +1,19 @@
+add_library(cpp-client-ydb_types)
+target_link_libraries(cpp-client-ydb_types PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+  cpp-grpc-client
+  yql-public-issue
+  tools-enum_parser-enum_serialization_runtime
+)
+generate_enum_serilization(cpp-client-ydb_types
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/s3_settings.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/client/ydb_types/s3_settings.h
+)
+generate_enum_serilization(cpp-client-ydb_types
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_types/status_codes.h
+  INCLUDE_HEADERS
+  ydb/public/sdk/cpp/client/ydb_types/status_codes.h
+)

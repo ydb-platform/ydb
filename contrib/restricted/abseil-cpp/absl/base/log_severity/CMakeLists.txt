@@ -1,0 +1,16 @@
+add_library(absl-base-log_severity)
+target_compile_options(absl-base-log_severity PRIVATE
+  -DNOMINMAX
+)
+target_include_directories(absl-base-log_severity PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
+)
+target_include_directories(absl-base-log_severity PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
+)
+target_link_libraries(absl-base-log_severity PUBLIC
+  contrib-libs-cxxsupp
+)
+target_sources(absl-base-log_severity PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/base/log_severity.cc
+)

@@ -1,0 +1,36 @@
+add_library(contrib-libs-re2)
+target_include_directories(contrib-libs-re2 PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/include
+)
+target_include_directories(contrib-libs-re2 PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/include
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2
+)
+target_link_libraries(contrib-libs-re2 PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+)
+target_sources(contrib-libs-re2 PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/bitstate.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/compile.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/dfa.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/filtered_re2.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/mimics_pcre.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/nfa.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/onepass.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/parse.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/perl_groups.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/prefilter.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/prefilter_tree.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/prog.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/re2.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/regexp.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/set.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/simplify.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/stringpiece.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/tostring.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/unicode_casefold.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/re2/unicode_groups.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/util/rune.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/util/strutil.cc
+)

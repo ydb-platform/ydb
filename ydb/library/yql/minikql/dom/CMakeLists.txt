@@ -1,0 +1,23 @@
+add_library(yql-minikql-dom)
+target_compile_options(yql-minikql-dom PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=21
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(yql-minikql-dom PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-containers-stack_vector
+  library-cpp-json
+  yson_pull
+  yql-public-udf
+  library-yql-utils
+)
+target_sources(yql-minikql-dom PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/node.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/json.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/yson.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/make.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/peel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/hash.cpp
+)

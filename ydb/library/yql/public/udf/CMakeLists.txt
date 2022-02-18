@@ -1,0 +1,27 @@
+add_library(yql-public-udf)
+target_compile_options(yql-public-udf PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(yql-public-udf PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-deprecated-enum_codegen
+  library-cpp-resource
+  yql-public-decimal
+  yql-public-types
+)
+target_sources(yql-public-udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_allocator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_data_type.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_registrator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_static_registry.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_string.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_inspection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_printer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_validate.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_version.cpp
+)

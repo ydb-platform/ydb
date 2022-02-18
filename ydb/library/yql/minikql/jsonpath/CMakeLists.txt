@@ -1,0 +1,37 @@
+add_library(yql-minikql-jsonpath)
+target_compile_options(yql-minikql-jsonpath PRIVATE
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=18
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(yql-minikql-jsonpath PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-double-conversion
+  library-cpp-json
+  cpp-regex-hyperscan
+  ydb-library-binary_json
+  yql-minikql-dom
+  yql-public-issue
+  yql-public-udf
+  library-yql-utils
+  core-issue-protos
+  yql-parser-proto_ast
+  proto_ast-gen-jsonpath
+  tools-enum_parser-enum_serialization_runtime
+)
+target_sources(yql-minikql-jsonpath PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/binary.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/executor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/jsonpath.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/parse_double.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/type_check.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/value.cpp
+)
+generate_enum_serilization(yql-minikql-jsonpath
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ast_nodes.h
+  INCLUDE_HEADERS
+  ydb/library/yql/minikql/jsonpath/ast_nodes.h
+)

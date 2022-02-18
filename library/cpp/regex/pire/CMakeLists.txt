@@ -1,0 +1,36 @@
+add_library(cpp-regex-pire)
+target_compile_options(cpp-regex-pire PRIVATE
+  -DPIRE_NO_CONFIG
+)
+target_include_directories(cpp-regex-pire PUBLIC
+  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
+)
+target_include_directories(cpp-regex-pire PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
+)
+target_link_libraries(cpp-regex-pire PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-charset
+)
+target_sources(cpp-regex-pire PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/classes.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/encoding.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/fsm.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/scanner_io.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/easy.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/scanners/null.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/capture.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/count.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/extra/glyphs.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/re_lexer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/read_unicode.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/extraencodings.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/approx_matching.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/half_final_fsm.cpp
+)
+target_bison_parser(cpp-regex-pire
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/pire/pire/re_parser.y
+)

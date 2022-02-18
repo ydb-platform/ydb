@@ -1,0 +1,48 @@
+find_package(Python2)
+
+add_library(library-cpp-build_info)
+target_link_libraries(library-cpp-build_info PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-string_utils-base64
+)
+target_sources(library-cpp-build_info INTERFACE
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
+)
+target_sources(library-cpp-build_info PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/build_info/build_info_static.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/build_info.cpp
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/build/scripts/build_info_gen.py
+  COMMAND
+  Python2::Interpreter
+  ${CMAKE_SOURCE_DIR}/build/scripts/build_info_gen.py
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
+  \"${CMAKE_CXX_COMPILER}\"
+  \"${CMAKE_CXX_FLAGS}\"
+)
+set(
+  KOSHER_SVN_VERSION
+  
+)
+set(
+  SANDBOX_TASK_ID
+  0
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/library/cpp/build_info/sandbox.cpp.in
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
+)
+set(
+  BUILD_TYPE
+  RELEASE
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/library/cpp/build_info/build_info.cpp.in
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/build_info.cpp
+)

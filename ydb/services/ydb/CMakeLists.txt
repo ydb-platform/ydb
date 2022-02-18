@@ -1,0 +1,34 @@
+add_library(ydb-services-ydb)
+target_link_libraries(ydb-services-ydb PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-monlib-encode
+  library-cpp-uri
+  ydb-core-base
+  ydb-core-client
+  ydb-core-formats
+  ydb-core-grpc_services
+  core-grpc_services-base
+  ydb-core-grpc_streaming
+  ydb-core-protos
+  ydb-core-scheme
+  ydb-library-aclib
+  api-grpc
+  api-grpc-draft
+  api-protos
+  yql-public-types
+)
+target_sources(ydb-services-ydb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_clickhouse_internal.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_dummy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_experimental.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_export.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_import.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_operation.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_s3_internal.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx.cpp
+)

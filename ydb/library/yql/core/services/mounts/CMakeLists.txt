@@ -1,0 +1,37 @@
+add_library(core-services-mounts)
+target_compile_options(core-services-mounts PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(core-services-mounts PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-core-user_data
+  library-yql-core
+)
+target_sources(core-services-mounts PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/mounts/yql_mounts.cpp
+)
+
+add_global_library_for(core-services-mounts.global core-services-mounts)
+target_compile_options(core-services-mounts.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_sources(core-services-mounts.global PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/services/mounts/bee1a30d03545744c170685330eaf0c3.cpp
+)
+resources(core-services-mounts.global
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/services/mounts/bee1a30d03545744c170685330eaf0c3.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/mount/lib/yql/aggregate.yql
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/mount/lib/yql/window.yql
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/mount/lib/yql/id.yql
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/mount/lib/yql/sqr.yql
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/mount/lib/yql/core.yql
+  KEYS
+  /lib/yql/aggregate.yql
+  /lib/yql/window.yql
+  /lib/yql/id.yql
+  /lib/yql/sqr.yql
+  /lib/yql/core.yql
+)

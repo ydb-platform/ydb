@@ -1,0 +1,48 @@
+find_package(OpenSSL)
+
+add_library(cpp-actors-interconnect)
+target_link_libraries(cpp-actors-interconnect PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-libc_compat
+  OpenSSL::OpenSSL
+  cpp-actors-core
+  cpp-actors-dnscachelib
+  cpp-actors-dnsresolver
+  cpp-actors-helpers
+  cpp-actors-prof
+  cpp-actors-protos
+  cpp-actors-util
+  cpp-digest-crc32c
+  library-cpp-json
+  library-cpp-lwtrace
+  cpp-monlib-dynamic_counters
+  cpp-monlib-metrics
+  service-pages-tablesorter
+  cpp-openssl-init
+  library-cpp-packedtypes
+)
+target_sources(cpp-actors-interconnect PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_address.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_channel.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_counters.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_handshake.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_mon.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_nameserver_dynamic.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_nameserver_table.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_proxy_wrapper.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_resolve.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_stream.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_tcp_input_session.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_tcp_proxy.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_tcp_server.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/interconnect_tcp_session.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/load.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/packet.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/poller_actor.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/poller_tcp.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/poller_tcp_unit.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/poller_tcp_unit_select.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/types.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/poller_tcp_unit_epoll.cpp
+)

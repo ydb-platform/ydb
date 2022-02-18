@@ -1,0 +1,50 @@
+add_library(providers-dq-actors)
+target_compile_options(providers-dq-actors PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(providers-dq-actors PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  library-cpp-yson
+  ydb-core-base
+  ydb-library-mkql_proto
+  yql-core-services
+  core-services-mounts
+  yql-core-user_data
+  yql-utils-actors
+  yql-utils-backtrace
+  yql-utils-log
+  api-protos
+  public-lib-yson_value
+  yql-dq-common
+  yql-dq-proto
+  yql-dq-runtime
+  yql-dq-tasks
+  yql-utils-failure_injector
+  dq-api-grpc
+  dq-api-protos
+  providers-dq-common
+  providers-dq-config
+  providers-dq-counters
+  providers-dq-interface
+  providers-dq-planner
+  providers-dq-task_runner
+  providers-dq-task_runner_actor
+  providers-dq-worker_manager
+  dq-worker_manager-interface
+)
+target_sources(providers-dq-actors PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/compute_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/executer_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/execution_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/graph_execution_events_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/resource_allocator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/task_controller.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/worker_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_aggregator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_receiver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/full_result_writer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/proto_builder.cpp
+)

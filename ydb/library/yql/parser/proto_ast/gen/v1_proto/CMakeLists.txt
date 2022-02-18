@@ -1,0 +1,54 @@
+add_library(proto_ast-gen-v1_proto)
+target_link_libraries(proto_ast-gen-v1_proto PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+)
+target_proto_messages(proto_ast-gen-v1_proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto
+)
+run_antlr(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1.g
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/org/antlr/codegen/templates/protobuf/protobuf.stg
+  WORKING_DIRECTORY
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto
+  ANTLER_ARGS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1.g
+  -lib
+  .
+  -fo
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto
+  -language
+  protobuf
+)
+set(
+  GRAMMAR_MULTILINE_COMMENT_CORE
+  .
+)
+set(
+  GRAMMAR_STRING_CORE_DOUBLE
+  ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
+)
+set(
+  GRAMMAR_STRING_CORE_SINGLE
+  ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1.g
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLv1Generated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/org/antlr/codegen/templates/protobuf/protobuf.stg
+)
+target_proto_plugin(proto_ast-gen-v1_proto
+  cpp_styleguide
+  cpp_styleguide
+)

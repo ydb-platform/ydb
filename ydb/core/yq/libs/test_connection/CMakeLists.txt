@@ -1,0 +1,16 @@
+add_library(yq-libs-test_connection)
+target_compile_options(yq-libs-test_connection PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(yq-libs-test_connection PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lwtrace
+  libs-actors-logging
+  libs-config-protos
+  libs-test_connection-events
+)
+target_sources(yq-libs-test_connection PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_connection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/probes.cpp
+)

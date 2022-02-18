@@ -1,0 +1,55 @@
+add_library(providers-ydb-provider)
+target_compile_options(providers-ydb-provider PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(providers-ydb-provider PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-random_provider
+  library-cpp-time_provider
+  cpp-yson-node
+  yq-libs-common
+  library-yql-ast
+  library-yql-minikql
+  yql-minikql-comp_nodes
+  yql-minikql-computation
+  providers-common-structured_token
+  common-token_accessor-client
+  public-lib-experimental
+  cpp-client-ydb_driver
+  cpp-client-ydb_table
+  library-yql-core
+  yql-core-type_ann
+  yql-dq-expr_nodes
+  providers-common-config
+  providers-common-db_id_async_resolver
+  providers-common-dq
+  providers-common-mkql
+  providers-common-proto
+  providers-common-provider
+  common-schema-expr
+  providers-common-transform
+  providers-dq-common
+  providers-dq-expr_nodes
+  providers-dq-interface
+  providers-result-expr_nodes
+  providers-ydb-expr_nodes
+  providers-ydb-proto
+)
+target_sources(providers-ydb-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink_execution.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasource.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasource_type_ann.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_dq_integration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_exec.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_io_discovery.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_load_meta.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_logical_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_physical_opt.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_mkql_compiler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_provider_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_settings.cpp
+)

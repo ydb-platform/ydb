@@ -1,0 +1,25 @@
+add_library(ydb-services-datastreams)
+target_link_libraries(ydb-services-datastreams PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-grpc-server
+  ydb-core-base
+  core-client-server
+  ydb-core-grpc_services
+  ydb-core-mind
+  api-grpc
+  api-grpc-draft
+  public-lib-operation_id
+  cpp-client-resources
+  cpp-client-ydb_datastreams
+  services-lib-actors
+  services-lib-sharding
+  ydb-services-ydb
+)
+target_sources(ydb-services-datastreams PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/datastreams_proxy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/grpc_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/next_token.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/put_records_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/shard_iterator.cpp
+)

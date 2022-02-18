@@ -1,0 +1,60 @@
+add_library(proto_ast-gen-v1_ansi)
+target_link_libraries(proto_ast-gen-v1_ansi PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  proto_ast-gen-v1_proto
+)
+target_sources(proto_ast-gen-v1_ansi PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.cpp
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLv1Generated
+)
+set(
+  LEXER_PARSER_NAMESPACE
+  NALPAnsi
+)
+set(
+  PROTOBUF_HEADER_PATH
+  ydb/library/yql/parser/proto_ast/gen/v1_proto
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
+set(
+  GRAMMAR_MULTILINE_COMMENT_CORE
+  MULTILINE_COMMENT | .
+)
+set(
+  GRAMMAR_STRING_CORE_DOUBLE
+  ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
+)
+set(
+  GRAMMAR_STRING_CORE_SINGLE
+  ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1.g
+)
+run_antlr(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1.g
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
+  WORKING_DIRECTORY
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi
+  ANTLER_ARGS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1.g
+  -lib
+  .
+  -fo
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi
+)

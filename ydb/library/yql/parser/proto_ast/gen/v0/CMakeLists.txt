@@ -1,0 +1,76 @@
+add_library(proto_ast-gen-v0)
+target_link_libraries(proto_ast-gen-v0 PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-protobuf
+)
+target_proto_messages(proto_ast-gen-v0 PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.proto
+)
+target_sources(proto_ast-gen-v0 PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.cpp
+)
+run_antlr(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.proto
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
+  WORKING_DIRECTORY
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
+  ANTLER_ARGS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
+  -lib
+  .
+  -fo
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
+  -language
+  protobuf
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLGenerated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLGenerated
+)
+set(
+  LEXER_PARSER_NAMESPACE
+  NALP
+)
+set(
+  PROTOBUF_HEADER_PATH
+  ydb/library/yql/parser/proto_ast/gen/v0
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
+run_antlr(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.h
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.h
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/Cpp/Cpp.stg
+  WORKING_DIRECTORY
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
+  ANTLER_ARGS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
+  -lib
+  .
+  -fo
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
+)
+target_proto_plugin(proto_ast-gen-v0
+  cpp_styleguide
+  cpp_styleguide
+)

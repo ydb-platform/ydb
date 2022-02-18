@@ -1,0 +1,34 @@
+add_library(ydb-services-persqueue_v1)
+target_link_libraries(ydb-services-persqueue_v1 PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  cpp-containers-disjoint_interval_tree
+  cpp-grpc-server
+  ydb-core-base
+  ydb-core-grpc_services
+  ydb-core-kqp
+  ydb-core-persqueue
+  core-persqueue-codecs
+  core-persqueue-writer
+  ydb-core-protos
+  ydb-core-ydb_convert
+  ydb-library-aclib
+  library-persqueue-obfuscate
+  library-persqueue-tests
+  library-persqueue-topic_parser
+  api-grpc-draft
+  api-protos
+  services-lib-actors
+  services-lib-sharding
+)
+target_sources(ydb-services-persqueue_v1 PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_codecs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_utils.cpp
+)

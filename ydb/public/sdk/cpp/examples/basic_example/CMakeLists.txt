@@ -1,0 +1,20 @@
+add_executable(basic_example)
+target_link_libraries(basic_example PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  library-cpp-getopt
+  cpp-client-ydb_table
+)
+target_sources(basic_example PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example_data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/basic_example/basic_example.cpp
+)
+target_link_flags(basic_example
+  PUBLIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(basic_example)

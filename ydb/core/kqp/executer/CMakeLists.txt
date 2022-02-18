@@ -1,0 +1,39 @@
+add_library(core-kqp-executer)
+target_compile_options(core-kqp-executer PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(core-kqp-executer PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  ydb-core-actorlib_impl
+  ydb-core-base
+  core-client-minikql_compile
+  ydb-core-formats
+  core-kqp-common
+  core-kqp-compile
+  core-kqp-rm
+  ydb-core-protos
+  ydb-core-ydb_convert
+  ydb-library-mkql_proto
+  library-mkql_proto-protos
+  dq-actors-compute
+  yql-dq-runtime
+  yql-dq-tasks
+)
+target_sources(core-kqp-executer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_data_executer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_scan_executer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_executer_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_executer_stats.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_literal_executer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_locks_helper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_partition_helper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_planner.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_planner_strategy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_shards_resolver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_result_channel.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_table_resolver.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_tasks_graph.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/executer/kqp_tasks_validate.cpp
+)

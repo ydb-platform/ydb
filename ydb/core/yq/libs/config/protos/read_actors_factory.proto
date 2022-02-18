@@ -12,6 +12,11 @@ message TS3ReadActorFactoryConfig {
     NYql.NS3.TRetryConfig RetryConfig = 1;
 }
 
+message TPqReadActorFactoryConfig {
+    bool CookieCommitMode = 1; // Turn off RangesMode setting in PQ read session.
+}
+
 message TReadActorsFactoryConfig {
     TS3ReadActorFactoryConfig S3ReadActorFactoryConfig = 1;
+    TPqReadActorFactoryConfig PqReadActorFactoryConfig = 2;
 }

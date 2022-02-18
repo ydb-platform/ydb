@@ -32,9 +32,10 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqSourceActor::ICallbacks* callback,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    i64 bufferSize = PQReadDefaultFreeSpace
+    i64 bufferSize = PQReadDefaultFreeSpace,
+    bool rangesMode = true
     );
 
-void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode = true);
 
 } // namespace NYql::NDq

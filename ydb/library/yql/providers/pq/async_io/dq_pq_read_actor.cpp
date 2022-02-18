@@ -100,11 +100,13 @@ public:
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         ICallbacks* callbacks,
-        i64 bufferSize)
+        i64 bufferSize,
+        bool rangesMode)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , InputIndex(inputIndex)
         , TxId(txId)
         , BufferSize(bufferSize)
+        , RangesMode(rangesMode)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
@@ -273,7 +275,8 @@ private:
             .AppendTopics(topicReadSettings)
             .ConsumerName(SourceParams.GetConsumerName())
             .MaxMemoryUsageBytes(BufferSize)
-            .StartingMessageTimestamp(StartingMessageTimestamp);
+            .StartingMessageTimestamp(StartingMessageTimestamp)
+            .RangesMode(RangesMode);
     }
 
     void UpdateStateWithNewReadData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -350,6 +353,7 @@ private:
     const ui64 InputIndex;
     const TString TxId;
     const i64 BufferSize;
+    const bool RangesMode;
     const THolderFactory& HolderFactory;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
@@ -376,7 +380,8 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqSourceActor::ICallbacks* callbacks,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    i64 bufferSize
+    i64 bufferSize,
+    bool rangesMode
     )
 {
     auto taskParamsIt = taskParams.find("pq");
@@ -398,15 +403,16 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         callbacks,
-        bufferSize
+        bufferSize,
+        rangesMode
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
     factory.Register<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqSourceActorFactory::TArguments&& args)
     {
@@ -420,7 +426,9 @@ void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver drive
             driver,
             credentialsFactory,
             args.Callback,
-            args.HolderFactory);
+            args.HolderFactory,
+            PQReadDefaultFreeSpace,
+            rangesMode);
     });
 
 }

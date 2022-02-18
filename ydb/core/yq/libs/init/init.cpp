@@ -178,7 +178,7 @@ void Init(
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(protoConfig.GetTokenAccessor().GetEndpoint(), protoConfig.GetTokenAccessor().GetUseSsl());
-        RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
+        RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory,
             httpGateway, std::make_shared<NYql::NS3::TRetryConfig>(protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetRetryConfig()));

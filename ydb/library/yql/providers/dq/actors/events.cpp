@@ -18,6 +18,10 @@ namespace NYql::NDqs {
     {
     }
 
+    TEvDqFailure::TEvDqFailure(const TString& error, TIssueCode issueCode, bool retriable, bool needFallback) 
+        : TEvDqFailure(TIssue(error).SetCode(issueCode, TSeverityIds::S_ERROR), retriable, needFallback) {
+    }
+
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {
         Record = std::move(queryResult);
     }
@@ -55,5 +59,16 @@ namespace NYql::NDqs {
 
     TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) {
         Record.CopyFrom(data);
+    }
+
+    TEvFullResultWriterWriteRequest::TEvFullResultWriterWriteRequest(NDqProto::TFullResultWriterWriteRequest&& data) {
+        Record.Swap(&data);
+    }
+
+    TEvFullResultWriterAck::TEvFullResultWriterAck(NDqProto::TFullResultWriterAck& data) {
+        Record.CopyFrom(data);
+    }
+
+    TEvMessageProcessed::TEvMessageProcessed(const TString& messageId) : MessageId(messageId) {
     }
 }

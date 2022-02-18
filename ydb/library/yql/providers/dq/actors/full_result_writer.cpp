@@ -41,8 +41,8 @@ public:
 private:
     STRICT_STFUNC(Handler, {
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        HFunc(TEvPullDataResponse, OnPullResponse)
-        HFunc(TEvFullResultWriterStatusRequest, OnStatusRequest)
+        HFunc(TEvFullResultWriterWriteRequest, OnWriteRequest)
+        HFunc(TEvFullResultWriterStatusRequest, OnStatusRequest)  // legacy
     })
 
     void PassAway() override {
@@ -71,20 +71,13 @@ private:
         Send(AggregatorID, new TEvFullResultWriterStatusResponse(response));
     }
 
-    void OnPullResponse(TEvPullDataResponse::TPtr& ev, const NActors::TActorContext&) {
+    void OnWriteRequest(TEvFullResultWriterWriteRequest::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceID);
-        auto& response = ev->Get()->Record;
-
-        switch (response.GetResponseType()) {
-            case NDqProto::FINISH:
-                Finish();
-                break;
-            case NDqProto::CONTINUE:
-                Continue(response);
-                break;
-            default:
-                YQL_ENSURE(false, "Unsupported pull request");
-                break;
+        auto& request = ev->Get()->Record;
+        if (request.GetFinish()) {
+            Finish();
+        } else {
+            Continue(request);
         }
     }
 
@@ -94,9 +87,7 @@ private:
             TFailureInjector::Reach("full_result_fail_on_finish", [] { throw yexception() << "full_result_fail_on_finish"; });
             FullResultWriter->Finish();
             if (ErrorMessage) {
-                TIssue issue(*ErrorMessage);
-                issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(issue, false, false).Release());
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
             } else {
                 Send(AggregatorID, MakeHolder<TEvDqFailure>().Release());
             }
@@ -111,14 +102,14 @@ private:
         Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
     }
 
-    void Continue(NDqProto::TPullResponse& response) {
+    void Continue(NDqProto::TFullResultWriterWriteRequest& request) {
         YQL_LOG(DEBUG) << "Continue -- RowCount = " << FullResultWriter->GetRowCount();
-        ui64 respSize = response.ByteSizeLong();
-        WriteToFullResultTable(response.GetData());
-        BytesReceived += respSize;
+        ui64 reqSize = request.ByteSizeLong();
+        WriteToFullResultTable(request);
+        BytesReceived += reqSize;
     }
 
-    void WriteToFullResultTable(const NDqProto::TData& data) {
+    void WriteToFullResultTable(NDqProto::TFullResultWriterWriteRequest& request) {
         if (ErrorMessage) {
             YQL_LOG(DEBUG) << "Failed to write previous chunk, aborting";
             return;
@@ -126,18 +117,23 @@ private:
 
         try {
             TFailureInjector::Reach("full_result_fail_on_write", [] { throw yexception() << "full_result_fail_on_write"; });
-            ResultBuilder->WriteData(data, [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
+            ResultBuilder->WriteData(request.GetData(), [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
                 writer->AddRow(value);
                 return true;
             });
+            NDqProto::TFullResultWriterAck ackRecord; 
+            ackRecord.SetMessageId(request.GetMessageId());
+            Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();
+            Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
         }
 
         if (ErrorMessage) {
             YQL_LOG(DEBUG) << "An error occurred: " << *ErrorMessage;
         }
     }
+
 private:
     const TString TraceID;
     THolder<TProtoBuilder> ResultBuilder;

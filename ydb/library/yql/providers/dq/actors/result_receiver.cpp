@@ -34,51 +34,91 @@ namespace {
 
 class TResultReceiver: public NYql::NDqs::NExecutionHelpers::TResultActorBase<TResultReceiver> {
 public:
+    using TBase = TResultActorBase<TResultReceiver>;
+
     static constexpr char ActorName[] = "YQL_DQ_RESULT_RECEIVER";
 
     explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings,
         const THashMap<TString, TString>& /*secureParams*/, const TString& resultType, const NActors::TActorId& graphExecutionEventsId, bool discard)
-        : TResultActorBase<TResultReceiver>(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard) {
+        : TBase(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard)
+        , PendingMessages() {
     }
 
 public:
-    STRICT_STFUNC(Handler, {
-        HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData)
-        HFunc(TEvReadyState, OnReadyState);
-        HFunc(TEvQueryResponse, OnQueryResult);
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-        HFunc(TEvDqFailure, OnFullResultWriterResponse);
-        hFunc(TEvents::TEvUndelivered, OnUndelivered);
-        cFunc(TEvents::TEvGone::EventType, OnFullResultWriterShutdown);
-        sFunc(TEvResultReceiverFinish, Finish);
-    })
+    STFUNC(Handler) {
+        switch (const ui32 etype = ev->GetTypeRewrite()) {
+            HFunc(NDq::TEvDqCompute::TEvChannelData, OnChannelData);
+            HFunc(TEvReadyState, OnReadyState);
+            hFunc(TEvMessageProcessed, OnMessageProcessed);
+            default:
+                TBase::HandlerBase(ev, ctx);
+        }
+    }
+
+    STFUNC(ShutdownHandler) {
+        switch (const ui32 etype = ev->GetTypeRewrite()) {
+            hFunc(TEvMessageProcessed, OnMessageProcessed);
+            default:
+                TBase::ShutdownHandlerBase(ev, ctx);
+        }
+    }
 
 private:
     void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
 
+        bool finishRequested = ev->Get()->Record.GetChannelData().GetFinished();
         if (!FinishCalled) {
-            OnReceiveData(std::move(*ev->Get()->Record.MutableChannelData()->MutableData()));
-        }
-        if (!FinishCalled && ev->Get()->Record.GetChannelData().GetFinished()) {
-            Send(SelfId(), MakeHolder<TEvResultReceiverFinish>());  // postpone finish until TFullResultWriterActor is instaniated
+            const auto messageId = GetMessageId(ev);
+            const auto hasData = ev->Get()->Record.GetChannelData().HasData();
+            OnReceiveData(std::move(*ev->Get()->Record.MutableChannelData()->MutableData()), messageId, !hasData);
+            const auto [it, inserted] = PendingMessages.insert({messageId, std::move(ev)});
+            Y_ENSURE(inserted);
         }
 
-        // todo: ack after data is stored to yt?
-        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
-        res->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
-        res->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        res->Record.SetFreeSpace(256_MB);
-        res->Record.SetFinish(FinishCalled);  // set if premature finish started (when response limit reached and FullResultTable not enabled)
-        Send(ev->Sender, res.Release());
-
-        YQL_LOG(DEBUG) << "Finished: " << ev->Get()->Record.GetChannelData().GetFinished();
+        YQL_LOG(DEBUG) << "Finished: " << finishRequested;
     }
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) {
         // do nothing
     }
+
+    void OnMessageProcessed(TEvMessageProcessed::TPtr& ev) {
+        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG(DEBUG) << __FUNCTION__;
+        SendAck(ev->Get()->MessageId);
+    }
+
+    void SendAck(const TString& messageId) {
+        const auto messageIt = PendingMessages.find(messageId);
+        Y_VERIFY(messageIt != PendingMessages.end());
+        const auto& message = messageIt->second;
+
+        auto req = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+        req->Record.SetChannelId(message->Get()->Record.GetChannelData().GetChannelId());
+        req->Record.SetSeqNo(message->Get()->Record.GetSeqNo());
+        req->Record.SetFreeSpace(256_MB);
+        req->Record.SetFinish(EarlyFinish);  // set if premature finish started (when response limit reached and FullResultTable not enabled)
+
+        Send(message->Sender, req.Release());
+        PendingMessages.erase(messageIt);
+    }
+
+    TString GetMessageId(const NDq::TEvDqCompute::TEvChannelData::TPtr& message) const {
+        TStringBuilder res;
+        res << message->Get()->Record.GetChannelData().GetChannelId()
+            << " " << message->Get()->Record.GetSeqNo()
+            << " " << ToString(message->Sender);
+        return res;
+    }
+
+    void FinishFullResultWriter() override {
+        Finish();
+    }
+
+private:
+    THashMap<TString, NDq::TEvDqCompute::TEvChannelData::TPtr> PendingMessages;  // N.B. TEvChannelData is partially moved
 };
 
 } /* namespace */

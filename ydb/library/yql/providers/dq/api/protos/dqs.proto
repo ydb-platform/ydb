@@ -232,12 +232,24 @@ message TGraphExecutionEvent {
     }
 }
 
+// legacy
 message TFullResultWriterStatusRequest {
 }
 
+// legacy
 message TFullResultWriterStatusResponse {
     uint64 BytesReceived = 1;
     optional string ErrorMessage = 2;
+}
+
+message TFullResultWriterWriteRequest {
+    TData Data = 1;
+    bool Finish = 2;
+    bytes MessageId = 3;
+}
+
+message TFullResultWriterAck {
+    bytes MessageId = 1;
 }
 
 message TDqTaskPrepareResult {

@@ -27,6 +27,7 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/guid.h>
 #include <util/string/split.h>
 #include <util/system/types.h>
 #include <util/stream/str.h>
@@ -50,6 +51,7 @@ using namespace NActors;
 namespace {
 
 class TResultAggregator: public TResultActorBase<TResultAggregator> {
+    using TBase = TResultActorBase<TResultAggregator>;
     static constexpr ui32 MAX_RESULT_BATCH = 2048;
 
 public:
@@ -57,7 +59,8 @@ public:
 
     explicit TResultAggregator(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId,
         const TDqConfiguration::TPtr& settings, const TString& resultType, NActors::TActorId graphExecutionEventsId, bool discard)
-        : TResultActorBase<TResultAggregator>(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard) {
+        : TBase(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard)
+        , Continue(false) {
         if (Settings) {
             PullRequestTimeout = TDuration::MilliSeconds(settings->PullRequestTimeoutMs.Get().GetOrElse(0));
             PingTimeout = TDuration::MilliSeconds(settings->PingTimeoutMs.Get().GetOrElse(0));
@@ -66,26 +69,37 @@ public:
     }
 
 public:
-#define HANDLER_STUB(TEvType)                                           \
-    cFunc(TEvType::EventType, [this]() {                        \
-        YQL_LOG_CTX_SCOPE(TraceId);                             \
-        YQL_LOG(DEBUG) << "Unexpected event " << ( #TEvType );  \
-    })
+    STFUNC(Handler) {
+        switch (const ui32 etype = ev->GetTypeRewrite()) {
+            HFunc(TEvPullDataResponse, OnPullResponse);
+            cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
+            sFunc(TEvMessageProcessed, OnMessageProcessed)
+            HFunc(TEvPullResult, OnPullResult);
+            HFunc(TEvReadyState, OnReadyState);
+            HFunc(TEvPingResponse, OnPingResponse);
+            default:
+                TBase::HandlerBase(ev, ctx);
+        }
+    }
 
-    STRICT_STFUNC(Handler, {
-        HFunc(TEvPullResult, OnPullResult);
-        HFunc(TEvReadyState, OnReadyState);
-        HFunc(TEvPullDataResponse, OnPullResponse);
-        HFunc(TEvPingResponse, OnPingResponse);
-        HFunc(TEvQueryResponse, OnQueryResult);
-        HFunc(TEvDqFailure, OnFullResultWriterResponse);
-        cFunc(TEvents::TEvPoison::EventType, PassAway)
-        hFunc(TEvents::TEvUndelivered, OnUndelivered)
-        cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
-        cFunc(TEvents::TEvGone::EventType, OnFullResultWriterShutdown)
-    })
+    STFUNC(ShutdownHandler) {
+        switch (const ui32 etype = ev->GetTypeRewrite()) {
+            sFunc(TEvMessageProcessed, OnMessageProcessed);
+            default:
+                TBase::ShutdownHandlerBase(ev, ctx);
+        }
+    }
 
 private:
+    void OnMessageProcessed() {
+        if (!Continue) {
+            return;
+        }
+
+        Continue = false;
+        Send(SelfId(), MakeHolder<TEvPullResult>());
+    }
+
     void OnWakeup() {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
@@ -148,7 +162,7 @@ private:
 
         switch (response.GetResponseType()) {
             case NYql::NDqProto::CONTINUE: {
-                Send(SelfId(), MakeHolder<TEvPullResult>());
+                Continue = true;
             } break;
             case NYql::NDqProto::FINISH:
                 Finish();
@@ -169,9 +183,11 @@ private:
                 break;
         }
 
-        OnReceiveData(std::move(*response.MutableData()));
+        // guid here is redundant and serves only for logic validation
+        OnReceiveData(std::move(*response.MutableData()), TGUID::Create().AsGuidString());
     }
 
+private:
     NActors::TActorId SourceID;
     TDuration PullRequestTimeout;
     TDuration PingTimeout;
@@ -180,6 +196,7 @@ private:
     TInstant PullRequestStartTime;
     bool PingRequested = false;
     NActors::TSchedulerCookieHolder TimerCookieHolder;
+    bool Continue;
 };
 
 class TResultPrinter: public TActor<TResultPrinter> {

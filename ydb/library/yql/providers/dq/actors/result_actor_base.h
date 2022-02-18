@@ -11,6 +11,7 @@
 
 #include <util/stream/holder.h>
 #include <util/stream/length.h>
+#include <util/generic/queue.h>
 
 namespace NYql::NDqs::NExecutionHelpers {
 
@@ -28,13 +29,15 @@ namespace NYql::NDqs::NExecutionHelpers {
             NActors::TActorId graphExecutionEventsId, 
             bool discard)
             : TBase(&TDerived::Handler)
-            , FullResultTableEnabled(settings->EnableFullResultWrite.Get().GetOrElse(false))
             , ExecuterID(executerId)
-            , GraphExecutionEventsId(graphExecutionEventsId)
-            , Discard(discard)
-            , DataParts()
             , TraceId(traceId)
             , Settings(settings)
+            , FinishCalled(false)
+            , EarlyFinish(false)
+            , FullResultTableEnabled(settings->EnableFullResultWrite.Get().GetOrElse(false))
+            , GraphExecutionEventsId(graphExecutionEventsId)
+            , Discard(discard)
+            , WriteQueue()
             , SizeLimit(
                 (Settings && Settings->_AllResultsBytesLimit.Get().Defined()) 
                 ? Settings->_AllResultsBytesLimit.Get().GetRef() 
@@ -43,57 +46,43 @@ namespace NYql::NDqs::NExecutionHelpers {
             , Rows(0)
             , Truncated(false)
             , FullResultWriterID()
-            , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
+            , ResultBuilder(resultType ? MakeHolder<TProtoBuilder>(resultType, columns) : nullptr)
             , ResultYson()
             , ResultYsonOut(new THoldingStream<TCountingOutput>(MakeHolder<TStringOutput>(ResultYson)))
             , ResultYsonWriter(MakeHolder<NYson::TYsonWriter>(ResultYsonOut.Get(), NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, true))
-            , FullResultSentBytes(0)
-            , FullResultReceivedBytes(0)
-            , FullResultSentDataParts(0)
             , Issues()
-            , FinishCalled(false)
             , BlockingActors()
-            , QueryResponse() {
+            , QueryResponse()
+            , WaitingAckFromFRW(false) {
             ResultYsonWriter->OnBeginList();
             YQL_LOG(DEBUG) << "_AllResultsBytesLimit = " << SizeLimit;
             YQL_LOG(DEBUG) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
 
-        void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
-            YQL_LOG(DEBUG) << "Shutting down TResultAggregator";
-
-            BlockingActors.clear();
-            if (FullResultWriterID) {
-                BlockingActors.insert(FullResultWriterID);
-                TBase::Send(FullResultWriterID, MakeHolder<NActors::TEvents::TEvPoison>());
-            }
-
-            YQL_LOG(DEBUG) << "Waiting for " << BlockingActors.size() << " blocking actors";
-
-            QueryResponse.Reset(ev->Release().Release());
-            TBase::Become(&TResultActorBase::ShutdownHandler);
-            TBase::Send(TBase::SelfId(), MakeHolder<NActors::TEvents::TEvGone>());
+        virtual void FinishFullResultWriter() {
+            TBase::Send(FullResultWriterID, MakeHolder<NActors::TEvents::TEvPoison>());
         }
 
-        void OnReceiveData(NYql::NDqProto::TData&& data) {
+        void OnReceiveData(NYql::NDqProto::TData&& data, const TString& messageId = "", bool autoAck = false) {
             YQL_LOG_CTX_SCOPE(TraceId);
 
-            if (Discard) {
+            if (data.GetRows() > 0 && !ResultBuilder) {
+                Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.GetRows())).SetCode(0, TSeverityIds::S_WARNING));
+            }
+            if (Discard || !ResultBuilder || autoAck) {
+                TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
                 return;
             }
 
+            WriteQueue.emplace(std::move(data), messageId);
             if (FullResultTableEnabled && FullResultWriterID) {
-                WriteToFullResultTable(MakeHolder<NDqProto::TData>(data));
+                TryWriteToFullResultTable();
             } else {
-                DataParts.emplace_back(data); // todo: seems like DataParts stores at most 1 element (replace with holder)
-
                 bool full = true;
                 bool exceedRows = false;
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
-                    full = ResultBuilder->WriteYsonData(DataParts.back(), [this, &exceedRows](const TString& rawYson) {
+                    full = ResultBuilder->WriteYsonData(WriteQueue.back().WriteRequest.GetData(), [this, &exceedRows](const TString& rawYson) {
                         if (RowsLimit && Rows + 1 > *RowsLimit) {
                             exceedRows = true;
                             return false;
@@ -111,6 +100,8 @@ namespace NYql::NDqs::NExecutionHelpers {
                 }
 
                 if (full) {
+                    WriteQueue.back().SentProcessedEvent = true;
+                    TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
                     return;
                 }
 
@@ -127,25 +118,9 @@ namespace NYql::NDqs::NExecutionHelpers {
                     TIssue issue(issueMsg);
                     issue.Severity = TSeverityIds::S_WARNING;
                     Issues.AddIssues({issue});
+                    EarlyFinish = true;
                     Finish();
                 }
-            }
-        }
-
-        void OnFullResultWriterShutdown() {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << "Got TEvGone";
-
-            FullResultWriterID = {};
-        }
-
-        void OnFullResultWriterResponse(NYql::NDqs::TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__;
-            if (ev->Get()->Record.IssuesSize() == 0) {
-                DoFinish();
-            } else {
-                TBase::Send(ExecuterID, ev->Release().Release());
             }
         }
 
@@ -167,11 +142,78 @@ namespace NYql::NDqs::NExecutionHelpers {
             FinishCalled = true;
 
             if (FullResultWriterID) {
-                NDqProto::TPullResponse response;
-                response.SetResponseType(NDqProto::EPullResponseType::FINISH);
-                TBase::Send(FullResultWriterID, MakeHolder<TEvPullDataResponse>(response));
+                NDqProto::TFullResultWriterWriteRequest requestRecord;
+                requestRecord.SetFinish(true);
+                TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(requestRecord)));
             } else {
                 DoFinish();
+            }
+        }
+
+    protected:
+        STFUNC(HandlerBase) {
+            Y_UNUSED(ctx);
+            switch (const ui32 etype = ev->GetTypeRewrite()) {
+                hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered);
+                HFunc(TEvQueryResponse, OnQueryResult);
+                HFunc(TEvFullResultWriterAck, OnFullResultWriterAck);
+                HFunc(TEvDqFailure, OnFullResultWriterResponse);
+                cFunc(NActors::TEvents::TEvGone::EventType, OnFullResultWriterShutdown);
+                cFunc(NActors::TEvents::TEvPoison::EventType, TBase::PassAway)
+                default:
+                    YQL_LOG_CTX_SCOPE(TraceId);
+                    YQL_LOG(DEBUG) << "Unexpected event " << etype;
+                    break;
+            }
+        }
+
+        STFUNC(ShutdownHandlerBase) {
+            Y_UNUSED(ctx);
+            switch (const ui32 etype = ev->GetTypeRewrite()) {
+                HFunc(NActors::TEvents::TEvGone, OnShutdownQueryResult);
+                cFunc(NActors::TEvents::TEvPoison::EventType, TBase::PassAway);
+                HFunc(TEvDqFailure, OnErrorInShutdownState);
+                HFunc(TEvFullResultWriterAck, OnFullResultWriterAck);
+                default:
+                    YQL_LOG_CTX_SCOPE(TraceId);
+                    YQL_LOG(DEBUG) << "Unexpected event " << etype;
+                    break;
+            }
+        }
+
+    private:
+        void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+            YQL_LOG(DEBUG) << "Shutting down TResultAggregator";
+
+            BlockingActors.clear();
+            if (FullResultWriterID) {
+                BlockingActors.insert(FullResultWriterID);
+                FinishFullResultWriter();
+            }
+
+            YQL_LOG(DEBUG) << "Waiting for " << BlockingActors.size() << " blocking actors";
+
+            QueryResponse.Reset(ev->Release().Release());
+            TBase::Become(&TDerived::ShutdownHandler);
+            TBase::Send(TBase::SelfId(), MakeHolder<NActors::TEvents::TEvGone>());
+        }
+
+        void OnFullResultWriterShutdown() {
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG(DEBUG) << "Got TEvGone";
+
+            FullResultWriterID = {};
+        }
+
+        void OnFullResultWriterResponse(NYql::NDqs::TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG(DEBUG) << __FUNCTION__;
+            if (ev->Get()->Record.IssuesSize() == 0) {
+                DoFinish();
+            } else {
+                TBase::Send(ExecuterID, ev->Release().Release());
             }
         }
 
@@ -183,21 +225,23 @@ namespace NYql::NDqs::NExecutionHelpers {
             OnError(message, true, true);
         }
 
-    private:
-        STFUNC(ShutdownHandler) {
-            Y_UNUSED(ctx);
-            switch (const ui32 etype = ev->GetTypeRewrite()) {
-                HFunc(NActors::TEvents::TEvGone, OnShutdownQueryResult);
-                cFunc(NActors::TEvents::TEvPoison::EventType, TBase::PassAway);
-                HFunc(TEvDqFailure, OnErrorInShutdownState);
-                default:
-                    YQL_LOG_CTX_SCOPE(TraceId);
-                    YQL_LOG(DEBUG) << "Unexpected event " << etype;
-                    break;
+        void OnFullResultWriterAck(TEvFullResultWriterAck::TPtr& ev, const NActors::TActorContext&) {
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG(DEBUG) << __FUNCTION__;
+            Y_VERIFY(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
+            if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
+                TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
             }
-        }
+            WriteQueue.pop();
 
-    private:
+            if (WriteQueue.empty()) {
+                WaitingAckFromFRW = false;
+                return;
+            }
+
+            UnsafeWriteToFullResultTable();
+        } 
+
         void OnErrorInShutdownState(NYql::NDqs::TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
             // FullResultWriter will always send TEvGone after this, so these issues will be passed to executor with TEvQueryResponse 
             TIssues issues;
@@ -244,7 +288,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                     NActorsProto::TActorId fullResultWriterProto;
                     ev->Get()->Record.GetMessage().UnpackTo(&fullResultWriterProto);
                     FullResultWriterID = NActors::ActorIdFromProto(fullResultWriterProto);
-                    WriteAllDataPartsToFullResultTable();
+                    TryWriteToFullResultTable();
                 }
             });
         }
@@ -277,75 +321,47 @@ namespace NYql::NDqs::NExecutionHelpers {
             YQL_LOG(DEBUG) << __FUNCTION__;
         }
 
-        bool CanSendToFullResultWriter() {
-            // TODO Customize
-            return FullResultSentBytes - FullResultReceivedBytes <= 32_MB;
-        }
-
-        template <class TCallback>
-        void UpdateEventQueueStatus(TCallback callback) {
-            YQL_LOG(DEBUG) << "UpdateEQStatus before: sent " << (FullResultSentBytes / 1024.0) << " kB "
-                        << " received " << (FullResultReceivedBytes / 1024.0) << " kB "
-                        << " diff " << (FullResultSentBytes - FullResultReceivedBytes) / 1024.0 << " kB";
-            TBase::Send(FullResultWriterID, new TEvFullResultWriterStatusRequest());
-            TBase::template Synchronize<TEvFullResultWriterStatusResponse>([this, callback](TEvFullResultWriterStatusResponse::TPtr& ev) {
-                YQL_LOG_CTX_SCOPE(TraceId);
-                this->FullResultReceivedBytes = ev->Get()->Record.GetBytesReceived();
-                YQL_LOG(DEBUG) << "UpdateEQStatus after: sent " << (FullResultSentBytes / 1024.0) << " kB "
-                            << " received " << (FullResultReceivedBytes / 1024.0) << " kB "
-                            << " diff " << (FullResultSentBytes - FullResultReceivedBytes) / 1024.0 << " kB";
-                if (ev->Get()->Record.HasErrorMessage()) {
-                    YQL_LOG(DEBUG) << "Received error message: " << ev->Get()->Record.GetErrorMessage();
-                    OnError(ev->Get()->Record.GetErrorMessage(), false, false);
-                    return;
-                }
-                callback();
-            });
-        }
-
-        void WriteAllDataPartsToFullResultTable() {
-            while (FullResultSentDataParts < DataParts.size() && CanSendToFullResultWriter()) {
-                UnsafeWriteToFullResultTable(DataParts[FullResultSentDataParts]);
-                DataParts[FullResultSentDataParts].Clear();
-                ++FullResultSentDataParts;
-            }
-            if (FullResultSentDataParts == DataParts.size()) {
+        void TryWriteToFullResultTable() {
+            if (WaitingAckFromFRW) {
                 return;
             }
-            // here we cannot continue since the event queue is overloaded
-            // kind of tail recursion (but without recursion)
-            UpdateEventQueueStatus([this]() {
-                WriteAllDataPartsToFullResultTable();
-            });
+            WaitingAckFromFRW = true;
+            UnsafeWriteToFullResultTable();
         }
 
-        void WriteToFullResultTable(TAutoPtr<NDqProto::TData> data) {
-            if (CanSendToFullResultWriter()) {
-                UnsafeWriteToFullResultTable(*data);
-                return;
+        void UnsafeWriteToFullResultTable() {
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG(DEBUG) << __FUNCTION__;
+            TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(WriteQueue.front().WriteRequest)));
+        }
+
+    private:
+        struct TQueueItem {
+            TQueueItem(NDqProto::TData&& data, const TString& messageId) 
+                : WriteRequest()
+                , MessageId(messageId)
+                , SentProcessedEvent(false) {
+                *WriteRequest.MutableData() = std::move(data);
+                WriteRequest.SetMessageId(messageId);
             }
-            UpdateEventQueueStatus([this, data]() {
-                WriteToFullResultTable(data);
-            });
-        }
 
-        void UnsafeWriteToFullResultTable(const NDqProto::TData& data) {
-            NDqProto::TPullResponse response;
-            response.SetResponseType(NDqProto::EPullResponseType::CONTINUE);
-            response.MutableData()->CopyFrom(data);
-            ui64 respSize = response.ByteSizeLong();
-            TBase::Send(FullResultWriterID, MakeHolder<TEvPullDataResponse>(response));
-            FullResultSentBytes += respSize;
-        }
+            NDqProto::TFullResultWriterWriteRequest WriteRequest;
+            const TString MessageId;
+            bool SentProcessedEvent;
+        };
 
     protected:
-        const bool FullResultTableEnabled;
         const NActors::TActorId ExecuterID;
-        const NActors::TActorId GraphExecutionEventsId;
-        const bool Discard;
-        TVector<NDqProto::TData> DataParts;
         const TString TraceId;
         TDqConfiguration::TPtr Settings;
+        bool FinishCalled;
+        bool EarlyFinish;
+
+    private:
+        const bool FullResultTableEnabled;
+        const NActors::TActorId GraphExecutionEventsId;
+        const bool Discard;
+        TQueue<TQueueItem> WriteQueue;
         ui64 SizeLimit;
         TMaybe<ui64> RowsLimit;
         ui64 Rows;
@@ -355,15 +371,9 @@ namespace NYql::NDqs::NExecutionHelpers {
         TString ResultYson;
         THolder<TCountingOutput> ResultYsonOut;
         THolder<NYson::TYsonWriter> ResultYsonWriter;
-
-        ui64 FullResultSentBytes;
-        ui64 FullResultReceivedBytes;
-        ui64 FullResultSentDataParts;
-
         TIssues Issues;
-        bool FinishCalled;
-
         THashSet<NActors::TActorId> BlockingActors;
         THolder<TEvQueryResponse> QueryResponse;
+        bool WaitingAckFromFRW;
     };
 } // namespace NYql::NDqs::NExecutionHelpers

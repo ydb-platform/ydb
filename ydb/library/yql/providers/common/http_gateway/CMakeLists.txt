@@ -7,6 +7,8 @@ target_link_libraries(providers-common-http_gateway PUBLIC
   yutil
   contrib-libs-curl
   cpp-monlib-dynamic_counters
+  library-cpp-retry
+  cpp-threading-task_scheduler
   providers-common-proto
   yql-public-issue
 )

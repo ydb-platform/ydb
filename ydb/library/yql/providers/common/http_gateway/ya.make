@@ -12,6 +12,8 @@ SRCS(
 PEERDIR(
     contrib/libs/curl
     library/cpp/monlib/dynamic_counters
+    library/cpp/retry
+    library/cpp/threading/task_scheduler
     ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
 )

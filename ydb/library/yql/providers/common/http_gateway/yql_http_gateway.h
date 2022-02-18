@@ -5,6 +5,8 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/retry/retry_policy.h>
+#include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
 #include <variant>
 #include <functional>
@@ -48,7 +50,14 @@ public:
     using TOnResult = std::function<void(TResult&&)>;
     using THeaders = TSmallVec<TString>;
 
-    virtual void Download(TString url, THeaders headers, std::size_t expectedSize, TOnResult callback, TString data = {}) = 0;
+    virtual void Download(
+        TString url,
+        THeaders headers,
+        std::size_t expectedSize,
+        TOnResult callback,
+        TString data = {},
+        IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
+    ) = 0;
 };
 
 }

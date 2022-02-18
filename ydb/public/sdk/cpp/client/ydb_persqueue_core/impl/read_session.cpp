@@ -864,7 +864,7 @@ void TSingleClusterReadSessionImpl::InitImpl(TDeferredActions& deferred) { // As
     Log << TLOG_DEBUG << "Successfully connected. Initializing session";
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
     auto& init = *req.mutable_init_request();
-    init.set_ranges_mode(RangesMode);
+    init.set_ranges_mode(GetRangesMode());
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
         topicSettings->set_topic(topic.Path_);
@@ -980,7 +980,7 @@ void TSingleClusterReadSessionImpl::Commit(const TPartitionStreamImpl* partition
         }
         Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
         bool hasSomethingToCommit = false;
-        if (RangesMode) {
+        if (GetRangesMode()) {
             hasSomethingToCommit = true;
             auto* range = req.mutable_commit()->add_offset_ranges();
             range->set_assign_id(partitionStream->GetAssignId());
@@ -1176,7 +1176,7 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
             for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& messageData : batch.message_data()) {
                 // Check offsets continuity.
                 if (messageData.offset() != desiredOffset) {
-                    bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), RangesMode);
+                    bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), GetRangesMode());
                     Y_VERIFY(res);
                 }
 
@@ -1473,6 +1473,10 @@ void TSingleClusterReadSessionImpl::UpdateMemoryUsageStatistics() {
     with_lock (Lock) {
         UpdateMemoryUsageStatisticsImpl();
     }
+}
+
+bool TSingleClusterReadSessionImpl::GetRangesMode() const {
+    return Settings.RangesMode_.GetOrElse(RangesMode);
 }
 
 bool TSingleClusterReadSessionImpl::TPartitionCookieMapping::AddMapping(const TCookie::TPtr& cookie) {

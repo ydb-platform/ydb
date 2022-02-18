@@ -1296,6 +1296,9 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_VECTOR(TString, Clusters);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    //! Experimental option
+    FLUENT_SETTING_OPTIONAL(bool, RangesMode);
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
@@ -1397,11 +1400,9 @@ public:
     //! Stop reading data and process only control events.
     //! You might need this function if a receiving side
     //! is not ready to process data.
-    //! Not implemented yet.
     virtual void StopReadingData() = 0;
 
     //! Resume reading data.
-    //! Not implemented yet.
     virtual void ResumeReadingData() = 0;
 
     //! Close read session.

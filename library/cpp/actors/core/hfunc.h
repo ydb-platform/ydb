@@ -82,3 +82,23 @@
 #define IgnoreFunc(TEvType)  \
     case TEvType::EventType: \
         break;
+
+#define ExceptionFunc(ExceptionType, HandleFunc)    \
+    catch (const ExceptionType& exception) {        \
+        HandleFunc(exception);                      \
+    }
+
+#define ExceptionFuncEv(ExceptionType, HandleFunc)    \
+    catch (const ExceptionType& exception) {          \
+        HandleFunc(exception, ev);                    \
+    }
+
+#define AnyExceptionFunc(HandleFunc)                \
+    catch (...) {                                   \
+        HandleFunc();                               \
+    }
+
+#define AnyExceptionFuncEv(HandleFunc)                \
+    catch (...) {                                     \
+        HandleFunc(ev);                               \
+    }

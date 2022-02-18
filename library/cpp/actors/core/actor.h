@@ -439,14 +439,29 @@ namespace NActors {
 #define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)
 #define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& )
 
-#define STRICT_STFUNC(NAME, HANDLERS)                                                               \
-    void NAME(STFUNC_SIG) {                                                                         \
-        Y_UNUSED(ctx);                                                                              \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
-            HANDLERS                                                                                \
-            default:                                                                                \
-                Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype); \
-        }                                                                                           \
+#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
+
+#define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
+    Y_UNUSED(ctx);                                                      \
+    switch (const ui32 etype = ev->GetTypeRewrite()) {                  \
+        HANDLERS                                                        \
+    default:                                                            \
+        UNHANDLED_MSG_HANDLER                                           \
+    }
+
+#define STRICT_STFUNC_BODY(HANDLERS) STFUNC_BODY(HANDLERS, STFUNC_STRICT_UNHANDLED_MSG_HANDLER)
+
+#define STRICT_STFUNC(NAME, HANDLERS)           \
+    void NAME(STFUNC_SIG) {                     \
+        STRICT_STFUNC_BODY(HANDLERS)            \
+    }
+
+#define STRICT_STFUNC_EXC(NAME, HANDLERS, EXCEPTION_HANDLERS)           \
+    void NAME(STFUNC_SIG) {                                             \
+        try {                                                           \
+            STRICT_STFUNC_BODY(HANDLERS)                                \
+        }                                                               \
+        EXCEPTION_HANDLERS                                              \
     }
 
     inline const TActorContext& TActivationContext::AsActorContext() {

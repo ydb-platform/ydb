@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 
+#include <library/cpp/actors/testlib/test_runtime.h>
 #include <library/cpp/actors/util/threadparkpad.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -574,5 +575,83 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
 
         UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName));
         UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(IActor::INTERCONNECT_PROXY_TCP) == IActor::INTERCONNECT_PROXY_TCP));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestStateFunc) {
+    struct TTestActorWithExceptionsStateFunc : TActor<TTestActorWithExceptionsStateFunc> {
+        static constexpr char ActorName[] = "TestActorWithExceptionsStateFunc";
+
+        TTestActorWithExceptionsStateFunc()
+            : TActor<TTestActorWithExceptionsStateFunc>(&TTestActorWithExceptionsStateFunc::StateFunc)
+        {
+        }
+
+        STRICT_STFUNC_EXC(StateFunc,
+            hFunc(TEvents::TEvWakeup, Handle),
+            ExceptionFunc(yexception, HandleException)
+            ExceptionFuncEv(std::exception, HandleException)
+            AnyExceptionFunc(HandleException)
+        )
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev) {
+            Owner = ev->Sender;
+            switch (ev->Get()->Tag) {
+            case ETag::NoException:
+                SendResponse(ETag::NoException);
+                break;
+            case ETag::YException:
+                Cerr << "Throw yexception" << Endl;
+                throw yexception();
+            case ETag::StdException:
+                Cerr << "Throw std::exception" << Endl;
+                throw std::runtime_error("trololo");
+            case ETag::OtherException:
+                Cerr << "Throw trash" << Endl;
+                throw TString("1");
+            default:
+                UNIT_ASSERT(false);
+            }
+        }
+
+        void HandleException(const yexception&) {
+            Cerr << "Handle yexception" << Endl;
+            SendResponse(ETag::YException);
+        }
+
+        void HandleException(const std::exception&, TAutoPtr<::NActors::IEventHandle>& ev) {
+            Cerr << "Handle std::exception from event with type " << ev->Type << Endl;
+            SendResponse(ETag::StdException);
+        }
+
+        void HandleException() {
+            Cerr << "Handle trash" << Endl;
+            SendResponse(ETag::OtherException);
+        }
+
+        enum ETag : ui64 {
+            NoException,
+            YException,
+            StdException,
+            OtherException,
+        };
+
+        void SendResponse(ETag tag) {
+            Send(Owner, new TEvents::TEvWakeup(tag));
+        }
+
+        TActorId Owner;
+    };
+
+    Y_UNIT_TEST(StateFuncWithExceptions) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto sender = runtime.AllocateEdgeActor();
+        auto testActor = runtime.Register(new TTestActorWithExceptionsStateFunc());
+        for (ui64 tag = 0; tag < 4; ++tag) {
+            runtime.Send(new IEventHandle(testActor, sender, new TEvents::TEvWakeup(tag)), 0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, tag);
+        }
     }
 }

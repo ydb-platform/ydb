@@ -81,6 +81,10 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
         EstablishingSessionsTimeout5min = group->GetCounter("EstablishingSessionsTimeout5min", false);
         UnconfiguredTimeout = group->GetCounter("UnconfiguredTimeout", false);
         UnconfiguredTimeout5min = group->GetCounter("UnconfiguredTimeout5min", false);
+        ConnectedAll = group->GetCounter("ConnectedAll", false);
+        ConnectedMinus1 = group->GetCounter("ConnectedMinus1", false);
+        ConnectedMinus2 = group->GetCounter("ConnectedMinus2", false);
+        ConnectedMinus3more = group->GetCounter("ConnectedMinus3more", false);
     }
 }
 

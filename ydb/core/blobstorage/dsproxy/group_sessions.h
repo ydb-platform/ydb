@@ -221,6 +221,7 @@ namespace NKikimr {
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected);
+        ui32 GetNumUnconnectedDisks();
     };
 
     struct TEvRequestProxySessionsState : TEventLocal<TEvRequestProxySessionsState, TEvBlobStorage::EvRequestProxySessionsState>

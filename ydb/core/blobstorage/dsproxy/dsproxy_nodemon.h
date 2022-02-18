@@ -89,6 +89,10 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TDynamicCounters::TCounterPtr EstablishingSessionsTimeout5min;
     NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout;
     NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout5min;
+    NMonitoring::TDynamicCounters::TCounterPtr ConnectedAll;
+    NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus1;
+    NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus2;
+    NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus3more;
 
     TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes);
     void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
@@ -99,6 +103,24 @@ struct TDsProxyNodeMon : public TThrRefBase {
 
     // Called only from NodeWarder
     void CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type);
+
+    void IncNumUnconnected(ui32 num) {
+        switch (num) {
+            case 0: ++*ConnectedAll; break;
+            case 1: ++*ConnectedMinus1; break;
+            case 2: ++*ConnectedMinus2; break;
+            default: ++*ConnectedMinus3more; break;
+        }
+    }
+
+    void DecNumUnconnected(ui32 num) {
+        switch (num) {
+            case 0: --*ConnectedAll; break;
+            case 1: --*ConnectedMinus1; break;
+            case 2: --*ConnectedMinus2; break;
+            default: --*ConnectedMinus3more; break;
+        }
+    }
 };
 
 } // NKikimr

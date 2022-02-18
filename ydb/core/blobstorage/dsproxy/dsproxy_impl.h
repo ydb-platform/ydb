@@ -175,6 +175,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Establishing Sessions state
 
+    ui32 NumUnconnectedDisks = Max<ui32>();
+
     void SwitchToWorkWhenGoodToGo();
     void WakeupEstablishingSessions(TEvEstablishingSessionTimeout::TPtr ev);
     void Handle(TEvProxyQueueState::TPtr& ev);

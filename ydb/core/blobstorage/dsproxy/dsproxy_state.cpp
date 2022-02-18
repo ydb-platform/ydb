@@ -151,6 +151,8 @@ namespace NKikimr {
             } else { // this is the first time configuration arrives -- no queues are created yet
                 EnsureMonitoring(false);
                 Sessions = MakeIntrusive<TGroupSessions>(Info, BSProxyCtx, MonActor, SelfId());
+                NumUnconnectedDisks = Sessions->GetNumUnconnectedDisks();
+                NodeMon->IncNumUnconnected(NumUnconnectedDisks);
             }
             SetStateEstablishingSessions();
         } else { // configuration has been reset, we have to request it via NodeWarden
@@ -208,6 +210,11 @@ namespace NKikimr {
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
         }
+
+        if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
+            NodeMon->IncNumUnconnected(NumUnconnectedDisks);
+            NodeMon->DecNumUnconnected(prev);
+        }
     }
 
     void TBlobStorageGroupProxy::Bootstrap() {
@@ -255,6 +262,10 @@ namespace NKikimr {
         // Reply error to all messages in the init queue
         ErrorDescription = "DsProxy got a Poison Pill";
         SetStateEstablishingSessionsTimeout();
+
+        if (NumUnconnectedDisks != Max<ui32>()) {
+            NodeMon->DecNumUnconnected(NumUnconnectedDisks);
+        }
 
         TActorBootstrapped::PassAway();
         // TODO: Unsubscribe

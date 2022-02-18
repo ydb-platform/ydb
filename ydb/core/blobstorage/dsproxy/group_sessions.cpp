@@ -122,4 +122,12 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     }
 }
 
+ui32 TGroupSessions::GetNumUnconnectedDisks() {
+    ui32 n = 0;
+    for (const ui8 mask : ConnectedQueuesMask) {
+        n += mask != AllQueuesMask;
+    }
+    return n;
+}
+
 } // NKikimr

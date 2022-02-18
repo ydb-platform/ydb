@@ -130,9 +130,16 @@ TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforc
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
         if (enforceCompact) {
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
+            bool changed = false;
             for (auto& c : calcs) {
                 TCoCalcOverWindowTuple win(c);
-                node = DqEnforceCompactPartition(node, win.Frames(), ctx);
+                auto enforced = DqEnforceCompactPartition(node, win.Frames(), ctx);
+                changed = changed || (enforced.Raw() != node.Raw());
+                node = enforced;
+            }
+
+            if (changed) {
+                return node;
             }
         }
 

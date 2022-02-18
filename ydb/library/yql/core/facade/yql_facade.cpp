@@ -1393,4 +1393,17 @@ bool TProgram::HasActiveProcesses() {
     return false;
 }
 
+bool TProgram::NeedWaitForActiveProcesses() {
+    bool flag = HasActiveProcesses();
+    if (!flag) {
+        return false;
+    }
+    for (const auto& dp : DataProviders_) {
+        if (dp.WaitForActiveProcesses) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace NYql

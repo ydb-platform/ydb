@@ -157,6 +157,7 @@ public:
     TFutureStatus ContinueAsync();
 
     bool HasActiveProcesses();
+    bool NeedWaitForActiveProcesses();
 
     void Abort();
 

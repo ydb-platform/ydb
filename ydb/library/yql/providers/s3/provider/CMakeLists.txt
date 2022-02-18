@@ -8,6 +8,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   contrib-libs-re2
   library-cpp-json
   library-cpp-random_provider
+  library-cpp-retry
   cpp-string_utils-quote
   library-cpp-time_provider
   cpp-xml-document

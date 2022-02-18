@@ -12,6 +12,7 @@ skip_func = False
 split_def = False
 def_type = None
 def_var = None
+ignore_func = False
 
 def fix_line(line, all_lines, pos):
     global define_for_yylval
@@ -21,6 +22,11 @@ def fix_line(line, all_lines, pos):
     global skip_func
     if line.startswith("build_guc_variables(void)"):
        skip_func = True
+       return line
+
+    global ignore_func
+    if line.startswith("yyparse"):
+       ignore_func = True
        return line
 
     global split_def
@@ -57,6 +63,13 @@ def fix_line(line, all_lines, pos):
        if not line.startswith("}"):
           return None
        skip_func=False
+
+    if ignore_func:
+       if line.startswith("{"):
+          return line
+       if not line.startswith("}"):
+          return line
+       ignore_func=False
 
     if line.startswith("#") or line.startswith(" ") or line.startswith("\t"):
         return line
@@ -181,6 +194,15 @@ def get_vars():
     all_vars.remove("viewCheckOptValues")
     all_vars.remove("enumRelOpts")
     all_vars.remove("stringRelOpts")
+
+    all_vars.add("yychar")
+    all_vars.add("yyin")
+    all_vars.add("yyout")
+    all_vars.add("yyleng")
+    all_vars.add("yynerrs")
+    all_vars.add("yytext")
+    all_vars.add("yy_flex_debug")
+    all_vars.add("yylineno")
 
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):

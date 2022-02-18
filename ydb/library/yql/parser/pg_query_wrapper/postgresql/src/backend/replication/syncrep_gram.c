@@ -1008,12 +1008,12 @@ yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep)
 
 
 /* The lookahead symbol.  */
-int yychar;
+__thread int yychar;
 
 /* The semantic value of the lookahead symbol.  */
 __thread YYSTYPE syncrep_yylval;
 /* Number of syntax errors so far.  */
-int yynerrs;
+__thread int yynerrs;
 
 
 /*----------.

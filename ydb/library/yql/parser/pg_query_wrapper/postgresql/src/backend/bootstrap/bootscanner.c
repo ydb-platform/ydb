@@ -414,9 +414,9 @@ typedef struct yy_buffer_state *YY_BUFFER_STATE;
 typedef size_t yy_size_t;
 #endif
 
-extern int yyleng;
+extern __thread int yyleng;
 
-extern FILE *yyin, *yyout;
+extern __thread FILE *yyin, *yyout;
 
 #define EOB_ACT_CONTINUE_SCAN 0
 #define EOB_ACT_END_OF_FILE 1
@@ -527,7 +527,7 @@ static __thread YY_BUFFER_STATE * yy_buffer_stack = NULL; /**< Stack as an array
 /* yy_hold_char holds the character lost when yytext is formed. */
 static __thread char yy_hold_char;
 static __thread int yy_n_chars;		/* number of characters read into yy_ch_buf */
-int yyleng;
+__thread int yyleng;
 
 /* Points to current character in buffer. */
 static __thread char *yy_c_buf_p = NULL;
@@ -587,14 +587,14 @@ void yyfree ( void *  );
 #define YY_SKIP_YYWRAP
 typedef flex_uint8_t YY_CHAR;
 
-FILE *yyin = NULL, *yyout = NULL;
+__thread FILE *yyin = NULL, *yyout = NULL;
 
 typedef int yy_state_type;
 
-extern int yylineno;
-int yylineno = 1;
+extern __thread int yylineno;
+__thread int yylineno = 1;
 
-extern char *yytext;
+extern __thread char *yytext;
 #ifdef yytext_ptr
 #undef yytext_ptr
 #endif
@@ -773,8 +773,8 @@ static const flex_int16_t yy_chk[192] =
 static __thread yy_state_type yy_last_accepting_state;
 static __thread char *yy_last_accepting_cpos;
 
-extern int yy_flex_debug;
-int yy_flex_debug = 0;
+extern __thread int yy_flex_debug;
+__thread int yy_flex_debug = 0;
 
 /* The intent behind this definition is that it'll catch
  * any uses of REJECT which flex missed.
@@ -783,7 +783,7 @@ int yy_flex_debug = 0;
 #define yymore() yymore_used_but_not_detected
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
-char *yytext;
+__thread char *yytext;
 #line 1 "bootscanner.l"
 #line 2 "bootscanner.l"
 /*-------------------------------------------------------------------------

@@ -1495,6 +1495,7 @@ yy_buffer_stack_max
 yy_buffer_stack_top
 yy_c_buf_p
 yy_did_buffer_switch_on_eof
+yy_flex_debug
 yy_hold_char
 yy_init
 yy_last_accepting_cpos
@@ -1502,6 +1503,13 @@ yy_last_accepting_state
 yy_n_chars
 yy_start
 yy_start_state_list
+yychar
+yyin
+yyleng
 yyline
+yylineno
+yynerrs
+yyout
+yytext
 zero_damaged_pages
 zoneabbrevtbl

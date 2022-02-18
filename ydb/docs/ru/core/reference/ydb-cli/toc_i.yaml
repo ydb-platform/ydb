@@ -2,7 +2,7 @@ items:
   - name: Установка
     href: install.md
   - name: Структура команд YDB CLI
-    href: commands/commands.md
+    href: commands.md
   - name: Сервисные команды
     href: commands/service.md
   - name: Соединение с БД и аутентификация
@@ -23,6 +23,8 @@ items:
     items:
     - name: Выполнение запроса к данным
       href: commands/query.md
+    - name: План исполнения запроса
+      href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
     - name: Работа со вторичными индексами

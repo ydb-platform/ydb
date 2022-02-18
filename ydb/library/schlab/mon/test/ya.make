@@ -1,4 +1,4 @@
-PROGRAM()
+PROGRAM(mon-test)
 
 OWNER(
     serxa

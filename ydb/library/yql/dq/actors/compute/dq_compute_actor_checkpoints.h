@@ -15,7 +15,7 @@
 #include <type_traits>
 
 namespace NYql::NDqProto {
-enum ECheckpointingMode;
+enum ECheckpointingMode : int;
 } // namespace NYql::NDqProto
 
 namespace NYql::NDq {

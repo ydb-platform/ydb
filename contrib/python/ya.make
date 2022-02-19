@@ -326,6 +326,7 @@ RECURSE(
     dpkt
     drf-extensions
     drf-spectacular
+    drf-spectacular-sidecar
     drf_ujson
     drf-yasg
     easywebdav

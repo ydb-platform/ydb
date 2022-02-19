@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 OWNER(g:python-contrib)
 
-VERSION(2.0.1)
+VERSION(2.1.0)
 
 LICENSE(BSD-3-Clause)
 

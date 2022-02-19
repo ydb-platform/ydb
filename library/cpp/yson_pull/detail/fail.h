@@ -9,7 +9,7 @@
 namespace NYsonPull {
     namespace NDetail {
         template <typename... Args>
-        ATTRIBUTE(noreturn, noinline, cold)
+        [[noreturn]] ATTRIBUTE(noinline, cold)
         void fail(
             const TPositionInfo& info,
             Args&&... args) {

@@ -1937,6 +1937,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (self.Input().Maybe<TCoMapNext>()) {
+            if (auto res = ApplyExtractMembersToMapNext(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
         return node;
     };
 
@@ -2298,6 +2305,37 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
                 .SwitchHandler(ctx.DeepCopyLambda(self.SwitchHandler().Ref()))
                 .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
+                .Done().Ptr();
+        }
+        return node;
+    };
+
+    map[TCoMapNext::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        TCoMapNext self(node);
+        if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+            return node;
+        }
+
+        std::map<std::string_view, TExprNode::TPtr> usedFields;
+        if ((
+             HaveFieldsSubset(self.Lambda().Body().Ptr(), self.Lambda().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false) &&
+             HaveFieldsSubset(self.Lambda().Body().Ptr(), self.Lambda().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false)
+            ) && usedFields.size() < GetSeqItemType(self.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetSize())
+        {
+            TExprNode::TListType fields;
+            fields.reserve(usedFields.size());
+            std::transform(usedFields.begin(), usedFields.end(), std::back_inserter(fields),
+                [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
+
+            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            return Build<TCoMapNext>(ctx, node->Pos())
+                .Input<TCoExtractMembers>()
+                    .Input(self.Input())
+                    .Members()
+                        .Add(std::move(fields))
+                    .Build()
+                .Build()
+                .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                 .Done().Ptr();
         }
         return node;

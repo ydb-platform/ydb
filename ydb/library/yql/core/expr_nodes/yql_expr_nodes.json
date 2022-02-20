@@ -183,6 +183,11 @@
             "Match": {"Type": "Callable", "Name": "OrderedMap"}
         },
         {
+            "Name": "TCoMapNext",
+            "Base": "TCoMapBase",
+            "Match": {"Type": "Callable", "Name": "MapNext"}
+        },
+        {
             "Name": "TCoMultiMap",
             "Base": "TCoMapBase",
             "Match": {"Type": "Callable", "Name": "MultiMap"}

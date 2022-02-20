@@ -7194,6 +7194,25 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ctx.NewCallable(node->Pos(), "Member", { node->HeadPtr(), node->ChildPtr(1) });
     };
 
+    map["MapNext"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        TCoMapNext self(node);
+        if (!IsDepended(self.Lambda().Body().Ref(), self.Lambda().Args().Arg(1).Ref())) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " with unused next arg";
+            return Build<TCoOrderedMap>(ctx, self.Pos())
+                .Input(self.Input())
+                .Lambda()
+                    .Args({"row"})
+                    .Body<TExprApplier>()
+                        .Apply(self.Lambda().Body())
+                        .With(self.Lambda().Args().Arg(0), "row")
+                    .Build()
+                .Build()
+                .Done()
+                .Ptr();
+        }
+        return node;
+    };
+
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(node->IsCallable());

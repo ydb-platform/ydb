@@ -25,5 +25,6 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
 TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
+TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 
 } // NYql

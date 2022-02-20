@@ -4,6 +4,7 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -792,6 +793,32 @@ TExprNode::TPtr ApplyExtractMembersToCollect(const TExprNode::TPtr& node, const 
             .Members(members)
         .Build()
         .Done().Ptr();
+}
+
+TExprNode::TPtr ApplyExtractMembersToMapNext(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoMapNext mapNext(node);
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+
+    const bool singleValue = GetItemType(*mapNext.Lambda().Ref().GetTypeAnn()) == nullptr;
+    TSet<TStringBuf> memberNames;
+    for (auto& member : members->ChildrenList()) {
+        YQL_ENSURE(member->IsAtom());
+        memberNames.insert(member->Content());
+    }
+    TExprBase newBody{FilterByFields(mapNext.Pos(), mapNext.Lambda().Body().Ptr(), memberNames, ctx, singleValue)};
+
+    return Build<TCoMapNext>(ctx, mapNext.Pos())
+        .Input(mapNext.Input())
+        .Lambda()
+            .Args({"current", "next"})
+            .Body<TExprApplier>()
+                .Apply(newBody)
+                .With(mapNext.Lambda().Args().Arg(0), "current")
+                .With(mapNext.Lambda().Args().Arg(1), "next")
+            .Build()
+        .Build()
+        .Done()
+        .Ptr();
 }
 
 } // NYql

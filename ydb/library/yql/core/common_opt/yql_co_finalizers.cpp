@@ -203,6 +203,14 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
             }
         );
     };
+
+    map[TCoMapNext::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        SubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToMapNext(input, members, ctx, " with multi-usage");
+            }
+        );
+    };
 }
 
 } // NYql

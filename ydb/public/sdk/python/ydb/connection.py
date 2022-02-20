@@ -176,7 +176,7 @@ def _construct_channel_options(driver_config, endpoint_options=None):
     :param endpoint_options: Endpoint options
     :return: A channel initialization options
     """
-    _max_message_size = 64 * 10 ** 6
+    _max_message_size = 64 * 10**6
     _default_connect_options = [
         ("grpc.max_receive_message_length", _max_message_size),
         ("grpc.max_send_message_length", _max_message_size),
@@ -269,7 +269,7 @@ class _RpcState(object):
         return self.rendezvous, self.result_future
 
 
-_nanos_in_second = 10 ** 9
+_nanos_in_second = 10**9
 
 
 def _set_duration(duration_value, seconds_float):

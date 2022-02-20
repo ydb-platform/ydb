@@ -7,11 +7,11 @@ from . import issues, types, _apis
 
 
 _SHIFT_BIT_COUNT = 64
-_SHIFT = 2 ** 64
-_SIGN_BIT = 2 ** 63
-_DecimalNanRepr = 10 ** 35 + 1
-_DecimalInfRepr = 10 ** 35
-_DecimalSignedInfRepr = -(10 ** 35)
+_SHIFT = 2**64
+_SIGN_BIT = 2**63
+_DecimalNanRepr = 10**35 + 1
+_DecimalInfRepr = 10**35
+_DecimalSignedInfRepr = -(10**35)
 _primitive_type_by_id = {}
 
 
@@ -49,7 +49,7 @@ def _pb_to_decimal(type_pb, value_pb, table_client_settings):
     elif int128_value == _DecimalSignedInfRepr:
         return decimal.Decimal("-Inf")
     return decimal.Decimal(int128_value) / decimal.Decimal(
-        10 ** type_pb.decimal_type.scale
+        10**type_pb.decimal_type.scale
     )
 
 

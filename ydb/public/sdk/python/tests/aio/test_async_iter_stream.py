@@ -63,7 +63,7 @@ async def test_read_shard_table(driver, database):
 
     data_by_shard_id = {}
     with session.transaction() as tx:
-        max_value = 2 ** 64
+        max_value = 2**64
         shard_key_bound = max_value >> 3
         data = []
 
@@ -75,7 +75,7 @@ async def test_read_shard_table(driver, database):
             table_row = {
                 "Key1": shard_id * shard_key_bound + idx,
                 "Key2": idx + 1000,
-                "Value": str(idx ** 4),
+                "Value": str(idx**4),
             }
             data_by_shard_id[shard_id].append(table_row)
             data.append(table_row)

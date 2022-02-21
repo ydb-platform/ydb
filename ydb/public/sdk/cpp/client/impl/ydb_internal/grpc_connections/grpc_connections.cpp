@@ -16,7 +16,7 @@ bool IsTokenCorrect(const TStringType& in) {
 TStringType GetAuthInfo(TDbDriverStatePtr p) {
     auto token = p->CredentialsProvider->GetAuthInfo();
     if (!IsTokenCorrect(token)) {
-        throw TContractViolation("token is incorrect, iligal characters found");
+        throw TContractViolation("token is incorrect, illegal characters found");
     }
     return token;
 }

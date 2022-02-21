@@ -82,7 +82,7 @@ private:
                 ticket = Ticket;
                 nextTicketUpdate = NextTicketUpdate;
                 if (ticket.empty()) {
-                    throw std::runtime_error(TStringBuilder() << "IAM-token not ready yet. " << LastRequestError);
+                    throw yexception() << "IAM-token not ready yet. " << LastRequestError;
                 }
             }
             if (TInstant::Now() >= nextTicketUpdate) {

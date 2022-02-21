@@ -5,6 +5,7 @@ target_link_libraries(ydb-library-login PUBLIC
   contrib-libs-jwt-cpp
   contrib-libs-protobuf
   cpp-digest-argonish
+  library-cpp-json
   cpp-string_utils-base64
   library-login-protos
 )

@@ -17,7 +17,7 @@ grpc::Status TYdbAuthenticator::GetMetadata(
 ) {
     try {
         metadata->insert(std::make_pair(YDB_AUTH_TICKET_HEADER, CredentialsProvider_->GetAuthInfo()));
-    } catch (const yexception& e) {
+    } catch (const std::exception& e) {
         return grpc::Status(
             grpc::StatusCode::UNAUTHENTICATED,
             "Can't get Authentication info from CredentialsProvider",

@@ -174,7 +174,7 @@ public:
                 if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
-                    } catch (const yexception& e) {
+                    } catch (const std::exception& e) {
                         userResponseCb(
                             nullptr,
                             TPlainStatus(
@@ -421,7 +421,7 @@ public:
                 if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
-                    } catch (const yexception& e) {
+                    } catch (const std::exception& e) {
                         responseCb(
                             TPlainStatus(
                                 EStatus::CLIENT_UNAUTHENTICATED,
@@ -519,7 +519,7 @@ public:
                 if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
                     try {
                         meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
-                    } catch (const yexception& e) {
+                    } catch (const std::exception& e) {
                         connectedCallback(
                             TPlainStatus(
                                 EStatus::CLIENT_UNAUTHENTICATED,

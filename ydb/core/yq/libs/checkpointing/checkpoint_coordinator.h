@@ -51,9 +51,10 @@ public:
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&);
+    void HandleException(const std::exception& err);
 
 
-    STRICT_STFUNC(DispatchEvent,
+    STRICT_STFUNC_EXC(DispatchEvent,
         hFunc(NYql::NDqs::TEvReadyState, Handle)
         hFunc(TEvCheckpointStorage::TEvRegisterCoordinatorResponse, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck, Handle)
@@ -71,7 +72,8 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
-        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
+        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle),
+        ExceptionFunc(std::exception, HandleException)
     )
 
     void Bootstrap();

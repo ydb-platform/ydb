@@ -582,6 +582,12 @@ void TCheckpointCoordinator::PassAway() {
     TActorBootstrapped<TCheckpointCoordinator>::PassAway();
 }
 
+void TCheckpointCoordinator::HandleException(const std::exception& err) {
+    NYql::TIssues issues;
+    issues.AddIssue(err.what());
+    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Internal error in checkpoint coordinator", issues));
+}
+
 THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& taskControllerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode, const YandexQuery::StreamingDisposition& streamingDisposition) {
     return MakeHolder<TCheckpointCoordinator>(coordinatorId, taskControllerId, storageProxy, runActorId, settings, counters, graphParams, stateLoadMode, streamingDisposition);
 }

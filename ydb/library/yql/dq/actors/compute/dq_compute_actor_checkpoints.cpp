@@ -105,8 +105,9 @@ NDqProto::TComputeActorState CombineForeignState(
 
 } // namespace
 
-TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor)
+TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor)
     : TActor(&TDqComputeActorCheckpoints::StateFunc)
+    , Owner(owner)
     , TxId(txId)
     , Task(std::move(task))
     , IngressTask(IsIngressTask(Task))
@@ -120,7 +121,7 @@ void TDqComputeActorCheckpoints::Init(NActors::TActorId computeActorId, NActors:
     EventsQueue.Init(TxId, computeActorId, checkpointsId);
 }
 
-STRICT_STFUNC(TDqComputeActorCheckpoints::StateFunc,
+STRICT_STFUNC_EXC(TDqComputeActorCheckpoints::StateFunc,
     hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, Handle);
     hFunc(TEvDqCompute::TEvInjectCheckpoint, Handle);
     hFunc(TEvDqCompute::TEvSaveTaskStateResult, Handle);
@@ -131,8 +132,15 @@ STRICT_STFUNC(TDqComputeActorCheckpoints::StateFunc,
     hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
     hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
     hFunc(TEvRetryQueuePrivate::TEvRetry, Handle);
-    cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+    cFunc(TEvents::TEvPoisonPill::EventType, PassAway);,
+    ExceptionFunc(std::exception, HandleException)
 )
+
+void TDqComputeActorCheckpoints::HandleException(const std::exception& err) {
+    NYql::TIssues issues;
+    issues.AddIssue(err.what());
+    Send(Owner, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Internal error in checkpointing", issues));
+}
 
 namespace {
 

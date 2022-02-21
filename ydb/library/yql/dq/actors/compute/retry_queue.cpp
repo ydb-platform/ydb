@@ -73,14 +73,13 @@ void TRetryEventsQueue::RemoveConfirmedEvents(ui64 confirmedSeqNo) {
     while (!Events.empty() && Events.front()->GetSeqNo() <= confirmedSeqNo) {
         Events.pop_front();
     }
-    Y_VERIFY(Events.size() <= 10000,
-        "Too many unconfirmed events: %lu. Confirmed SeqNo: %lu. Unconfirmed SeqNos: %lu-%lu. TxId: \"%s\". EventQueueId: %lu",
-             Events.size(),
-             confirmedSeqNo,
-             Events.front()->GetSeqNo(),
-             Events.back()->GetSeqNo(),
-             (TStringBuilder() << TxId).c_str(),
-             EventQueueId);
+    if (Events.size() > TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT) {
+        throw yexception()
+            << "Too many unconfirmed events: " << Events.size()
+            << ". Confirmed SeqNo: " << confirmedSeqNo
+            << ". Unconfirmed SeqNos: " << Events.front()->GetSeqNo() << "-" << Events.back()->GetSeqNo()
+            << ". TxId: \"" << TxId << "\". EventQueueId: " << EventQueueId;
+    }
 }
 
 void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {

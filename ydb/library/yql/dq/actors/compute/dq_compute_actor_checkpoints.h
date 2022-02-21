@@ -83,7 +83,7 @@ public:
         virtual ~ICallbacks() = default;
     };
 
-    TDqComputeActorCheckpoints(const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor);
+    TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor);
     void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
     [[nodiscard]]
     bool HasPendingCheckpoint() const;
@@ -110,6 +110,7 @@ private:
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
+    void HandleException(const std::exception& err);
 
     void PassAway() override;
 
@@ -118,6 +119,7 @@ private:
     bool ShouldIgnoreOldCoordinator(const E& ev, bool verifyOnGenerationFromFuture = true);
 
 private:
+    const NActors::TActorId Owner;
     const TTxId TxId;
     const NDqProto::TDqTask Task;
     const bool IngressTask;

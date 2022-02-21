@@ -7,6 +7,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/interconnect.h>
 
+#include <util/generic/yexception.h>
 #include <util/system/types.h>
 
 namespace NYql::NDq {
@@ -33,6 +34,8 @@ struct TEvRetryQueuePrivate {
 
         const ui64 EventQueueId;
     };
+
+    static constexpr size_t UNCONFIRMED_EVENTS_COUNT_LIMIT = 10000;
 };
 
 template <class T>
@@ -106,7 +109,13 @@ public:
             }
             return true;
         } else if (seqNo > MyConfirmedSeqNo) {
-            Y_VERIFY(ReceivedEventsSeqNos.size() < 10000); // Too wide window.
+            if (ReceivedEventsSeqNos.size() > TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT) {
+                throw yexception()
+                    << "Too wide window of reordered events: " << ReceivedEventsSeqNos.size()
+                    << ". MyConfirmedSeqNo: " << MyConfirmedSeqNo
+                    << ". Received SeqNo: " << seqNo
+                    << ". TxId: \"" << TxId << "\". EventQueueId: " << EventQueueId;
+            }
             return ReceivedEventsSeqNos.insert(seqNo).second;
         }
         return false;
@@ -180,7 +189,7 @@ private:
     bool LocalRecipient = false;
     ui64 NextSeqNo = 1;
     std::deque<IRetryableEvent::TPtr> Events;
-    ui64 MyConfirmedSeqNo = 0; // Recceived events seq no border.
+    ui64 MyConfirmedSeqNo = 0; // Received events seq no border.
     std::set<ui64> ReceivedEventsSeqNos;
     bool Connected = false;
     bool RetryScheduled = false;

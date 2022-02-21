@@ -904,7 +904,7 @@ protected:
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
         if (!Checkpoints) {
-            Checkpoints = new TDqComputeActorCheckpoints(TxId, Task, this);
+            Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
             Channels->SetCheckpointsSupport();
         }

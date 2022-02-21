@@ -30,17 +30,19 @@ SRCS(
     retry.h
     swap_bytes.cpp
     swap_bytes.h
+    url_builder.cpp
+    utf8.cpp
     yql_panic.cpp
     yql_panic.h
     yql_paths.cpp
     yql_paths.h
-    utf8.cpp
 )
 
 PEERDIR(
     library/cpp/digest/md5
-    library/cpp/threading/future
     library/cpp/messagebus
+    library/cpp/string_utils/quote
+    library/cpp/threading/future
 )
 
 END()

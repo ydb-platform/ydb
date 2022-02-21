@@ -126,7 +126,7 @@ static inline void skipColonDelimeter(ReadBuffer & istr)
 void JSONEachRowRowInputFormat::skipUnknownField(const StringRef & name_ref)
 {
     if (!format_settings.skip_unknown_fields)
-        throw Exception("Unknown field found while parsing JSONEachRow format: " + name_ref.toString(), ErrorCodes::INCORRECT_DATA);
+        throw Exception("Unknown field found while parsing json_each_row format: " + name_ref.toString(), ErrorCodes::INCORRECT_DATA);
 
     skipJSONField(in, name_ref);
 }
@@ -134,7 +134,7 @@ void JSONEachRowRowInputFormat::skipUnknownField(const StringRef & name_ref)
 void JSONEachRowRowInputFormat::readField(size_t index, MutableColumns & columns)
 {
     if (seen_columns[index])
-        throw Exception("Duplicate field found while parsing JSONEachRow format: " + columnName(index), ErrorCodes::INCORRECT_DATA);
+        throw Exception("Duplicate field found while parsing json_each_row format: " + columnName(index), ErrorCodes::INCORRECT_DATA);
 
     try
     {
@@ -174,7 +174,7 @@ inline bool JSONEachRowRowInputFormat::advanceToNextKey(size_t key_index)
     skipWhitespaceIfAny(in);
 
     if (in.eof())
-        throw ParsingException("Unexpected end of stream while parsing JSONEachRow format", ErrorCodes::CANNOT_READ_ALL_DATA);
+        throw ParsingException("Unexpected end of stream while parsing json_each_row format", ErrorCodes::CANNOT_READ_ALL_DATA);
     else if (*in.position() == '}')
     {
         ++in.position();
@@ -334,7 +334,7 @@ void JSONEachRowRowInputFormat::readSuffix()
 
 void registerInputFormatProcessorJSONEachRow(FormatFactory & factory)
 {
-    factory.registerInputFormatProcessor("JSONEachRow", [](
+    factory.registerInputFormatProcessor("json_each_row", [](
         ReadBuffer & buf,
         const Block & sample,
         IRowInputFormat::Params params,
@@ -355,13 +355,13 @@ void registerInputFormatProcessorJSONEachRow(FormatFactory & factory)
 
 void registerFileSegmentationEngineJSONEachRow(FormatFactory & factory)
 {
-    factory.registerFileSegmentationEngine("JSONEachRow", &fileSegmentationEngineJSONEachRowImpl);
+    factory.registerFileSegmentationEngine("json_each_row", &fileSegmentationEngineJSONEachRowImpl);
     factory.registerFileSegmentationEngine("JSONStringsEachRow", &fileSegmentationEngineJSONEachRowImpl);
 }
 
 void registerNonTrivialPrefixAndSuffixCheckerJSONEachRow(FormatFactory & factory)
 {
-    factory.registerNonTrivialPrefixAndSuffixChecker("JSONEachRow", nonTrivialPrefixAndSuffixCheckerJSONEachRowImpl);
+    factory.registerNonTrivialPrefixAndSuffixChecker("json_each_row", nonTrivialPrefixAndSuffixCheckerJSONEachRowImpl);
     factory.registerNonTrivialPrefixAndSuffixChecker("JSONStringsEachRow", nonTrivialPrefixAndSuffixCheckerJSONEachRowImpl);
 }
 

@@ -108,7 +108,7 @@ public:
                 << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
         }
 
@@ -210,7 +210,7 @@ protected:
                 << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
         }
 

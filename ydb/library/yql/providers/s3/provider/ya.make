@@ -52,6 +52,7 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/proto
+    ydb/library/yql/utils
 )
 
 YQL_LAST_ABI_VERSION()

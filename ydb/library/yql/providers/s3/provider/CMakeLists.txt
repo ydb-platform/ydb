@@ -35,6 +35,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-result-expr_nodes
   providers-s3-expr_nodes
   providers-s3-proto
+  library-yql-utils
 )
 target_sources(providers-s3-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider/yql_s3_datasink.cpp

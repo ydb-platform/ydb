@@ -6,7 +6,7 @@ using namespace NYql;
 
 Y_UNIT_TEST_SUITE(TUrlBuilder) {
     Y_UNIT_TEST(Basic) {
-        TUrlBuilder builder("https://localhost/abc?");
+        TUrlBuilder builder("https://localhost/abc");
         builder.AddUrlParam("param1", "val1");
         builder.AddUrlParam("param2", "val2");
 
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TUrlBuilder) {
     }
 
     Y_UNIT_TEST(Test1) {
-        TUrlBuilder builder("https://localhost/abc?");
+        TUrlBuilder builder("https://localhost/abc");
         builder.AddUrlParam("param1", "=!@#$%^&*(){}[]\" ");
         builder.AddUrlParam("param2", "val2");
 

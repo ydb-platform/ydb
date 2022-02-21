@@ -13,7 +13,7 @@ void TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
 }
 
 TString TUrlBuilder::Build() const {
-    TString res = MainUri;
+    TString res = MainUri + "?";
     for (size_t i = 0; i < Params.size(); ++i) {
         res += TStringBuilder() << (i > 0 ? "&" : "") << Params[i].Name  << "=" << CGIEscapeRet(Params[i].Value);
     }

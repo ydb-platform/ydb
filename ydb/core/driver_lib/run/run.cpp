@@ -1557,7 +1557,6 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
-    TBasicKikimrServicesMask servicesMask; // all services enabled by default
 
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
     runner->InitializeAllocator(runConfig);
@@ -1567,8 +1566,8 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeMessageBus(runConfig, factories);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
-    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));
-    runner->InitializeActorSystem(runConfig, sil, servicesMask);
+    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
+    runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
     runner->InitializeMonitoringLogin(runConfig);
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);

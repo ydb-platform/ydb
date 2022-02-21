@@ -144,6 +144,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 )
             )
 
+        if self.__configurator.node_kind is not None:
+            command.append(
+                "--node-kind=%s" % self.__configurator.node_kind
+            )
+
         command.extend(
             [
                 "--yaml-config=%s" % join(self.__config_path, "config.yaml"),
@@ -289,8 +294,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
 
-        self.__wait_for_bs_controller_to_start()
-        self.__add_bs_box()
+        bs_needed = 'blob_storage_config' in self.__configurator.yaml_config
+
+        if bs_needed:
+            self.__wait_for_bs_controller_to_start()
+            self.__add_bs_box()
 
         pools = {}
 
@@ -302,16 +310,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
-        self.client.bind_storage_pools(self.domain_name, pools)
-        default_pool_name = list(pools.keys())[0]
+        if len(pools) > 0:
+            self.client.bind_storage_pools(self.domain_name, pools)
+            default_pool_name = list(pools.keys())[0]
+        else:
+            default_pool_name = ""
+
         self.default_channel_bindings = {idx: default_pool_name for idx in range(3)}
         logger.info("Cluster started and initialized")
 
-        self.client.add_config_item(
-            resource.find(
-                "harness/resources/default_profile.txt"
+        if bs_needed:
+            self.client.add_config_item(
+                resource.find(
+                    "harness/resources/default_profile.txt"
+                )
             )
-        )
 
     def __run_node(self, node_id):
         """

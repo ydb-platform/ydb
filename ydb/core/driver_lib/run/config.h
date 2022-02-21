@@ -76,6 +76,18 @@ union TBasicKikimrServicesMask {
         Raw = 0xFFFFFFFFFFFFFFFFLL;
     }
 
+    void EnableYQ() {
+        EnableBasicServices = true;
+        EnableLogger = true;
+        EnableSchedulerActor = true;
+        EnableStatsCollector = true;
+        EnableSelfPing = true;
+        EnableMemoryLog = true;
+        EnableGRpcService = true;
+        EnableSecurityServices = true;
+        EnableYandexQuery = true;
+    }
+
     TBasicKikimrServicesMask() {
         EnableAll();
     }
@@ -90,6 +102,8 @@ struct TKikimrRunConfig {
     TKikimrScopeId             ScopeId;
 
     TString                    PathToConfigCacheFile;
+
+    TBasicKikimrServicesMask   ServicesMask;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});

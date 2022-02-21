@@ -19,6 +19,9 @@ extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 namespace NKikimr {
 namespace NDriverClient {
 
+constexpr auto NODE_KIND_YDB = "ydb";
+constexpr auto NODE_KIND_YQ = "yq";
+
 class TClientCommandServerBase : public TClientCommand {
 protected:
     NKikimrConfig::TAppConfig BaseConfig;
@@ -68,6 +71,7 @@ protected:
     TString NodeDomain;
     ui32 InterconnectPort;
     ui32 SqsHttpPort;
+    TString NodeKind = NODE_KIND_YDB;
     TString NodeType;
     TString DataCenter;
     TString Rack;
@@ -230,6 +234,8 @@ protected:
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
+        config.Opts->AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB, NODE_KIND_YQ))
+                .RequiredArgument("NAME").StoreResult(&NodeKind);
         config.Opts->AddLongOption("node-type", "Type of the node")
                 .RequiredArgument("NAME").StoreResult(&NodeType);
         config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
@@ -361,12 +367,21 @@ protected:
             if (!IsStartWithSlash(TenantName) && TenantName != "no" && TenantName != "dynamic") {
                 ythrow yexception() << "lead / in --tenant parametr is always required except from 'no' and 'dynamic'";
             }
-            if (TenantName != "no" && NodeId) {
+            if (TenantName != "no" && NodeId && NodeKind != NODE_KIND_YQ) {
                 ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
             }
             if (config.ParseResult->Has("tenant-pool-file")) {
                 ythrow yexception() << "opt '--tenant' is incompatible with --tenant-pool-file";
             }
+        }
+
+        if (NodeKind == NODE_KIND_YDB) {
+            // do nothing => default behaviour
+        } else if (NodeKind == NODE_KIND_YQ) {
+            RunConfig.ServicesMask.DisableAll();
+            RunConfig.ServicesMask.EnableYQ();
+        } else {
+            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
 
         MaybeRegisterAndLoadConfigs();

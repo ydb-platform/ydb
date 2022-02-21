@@ -113,6 +113,7 @@ class KikimrConfigGenerator(object):
             auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
+            node_kind=None
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -175,6 +176,7 @@ class KikimrConfigGenerator(object):
         self.__dynamic_pdisks = dynamic_pdisks
 
         self.__output_path = output_path or yatest_common.output_path()
+        self.node_kind = node_kind
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs

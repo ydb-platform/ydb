@@ -1,6 +1,7 @@
 #include <ydb/library/yql/parser/pg_query_wrapper/wrapper.h>
 
 #include <util/stream/str.h>
+#include <util/system/thread.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql;
@@ -42,5 +43,71 @@ Y_UNIT_TEST_SUITE(TWrapperTests) {
         UNIT_ASSERT_NO_DIFF(msg, "syntax error at or near \"SELECT1\"");
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2);
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3);
+    }
+}
+
+const ui32 threadsCount = 10;
+
+Y_UNIT_TEST_SUITE(TMTWrapperTests) {
+    Y_UNIT_TEST(TestOk) {
+        TVector<THolder<TThread>> threads;
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads.emplace_back(MakeHolder<TThread>([]() {
+                ui32 iters = 10000;
+#if defined(_san_enabled_)
+                iters /= 100;
+#endif
+                for (ui32 i = 0; i < iters; ++i) {
+                    TEvents events;
+                    PGParse(TString("SELECT 1"), events);
+                    Y_ENSURE(events.Result);
+                    Y_ENSURE(!events.Issue);
+                    const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
+                    "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
+                    ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
+                    ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
+                    ":rarg <>} :stmt_location 0 :stmt_len 0})";
+                    Y_ENSURE(*events.Result == expected);
+                }
+            }));
+        }
+
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads[i]->Start();
+        }
+
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads[i]->Join();
+        }
+    }
+
+    Y_UNIT_TEST(TestFail) {
+        TVector<THolder<TThread>> threads;
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads.emplace_back(MakeHolder<TThread>([]() {
+                ui32 iters = 10000;
+#if defined(_san_enabled_)
+                iters /= 100;
+#endif
+                for (ui32 i = 0; i < iters; ++i) {
+                    TEvents events;
+                    PGParse(TString(" \n  SELECT1"), events);
+                    Y_ENSURE(!events.Result);
+                    Y_ENSURE(events.Issue);
+                    auto msg = events.Issue->Message;
+                    Y_ENSURE(msg == "syntax error at or near \"SELECT1\"");
+                    Y_ENSURE(events.Issue->Position.Row == 2);
+                    Y_ENSURE(events.Issue->Position.Column == 3);
+                }
+            }));
+        }
+
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads[i]->Start();
+        }
+
+        for (ui32 i = 0; i < threadsCount; ++i) {
+            threads[i]->Join();
+        }
     }
 }

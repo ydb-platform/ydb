@@ -40,7 +40,7 @@ struct IRetryPolicy {
 
         //! Calculate delay before next retry if next retry is allowed.
         //! Returns empty maybe if retry is not allowed anymore.
-        virtual TMaybe<TDuration> GetNextRetryDelay(typename TTypeTraits<TArgs>::TFuncParam... args) = 0;
+        [[nodiscard]] virtual TMaybe<TDuration> GetNextRetryDelay(typename TTypeTraits<TArgs>::TFuncParam... args) = 0;
     };
 
     virtual ~IRetryPolicy() = default;
@@ -48,7 +48,7 @@ struct IRetryPolicy {
     //! Function that is called after first error
     //! to find out a futher retry behaviour.
     //! Retry state is expected to be created for the whole single retry session.
-    virtual typename IRetryState::TPtr CreateRetryState() const = 0;
+    [[nodiscard]] virtual typename IRetryState::TPtr CreateRetryState() const = 0;
 
     //!
     //! Default implementations.

@@ -44,6 +44,8 @@ RECURSE(
     alabaster
     alembic
     allpairspy
+    allure-pytest
+    allure-python-commons
     amqp
     aniso8601
     annoy

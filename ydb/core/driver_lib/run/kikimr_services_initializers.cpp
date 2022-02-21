@@ -699,7 +699,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(GetDestructActorID(), TActorSetupCmd(new TDestructActor,
                 TMailboxType::ReadAsFilled, interconnectPoolId));
 
-            Y_VERIFY(!table->StaticNodeTable.empty());
+            if (nsConfig.GetType() != NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL) {
+                Y_VERIFY(!table->StaticNodeTable.empty());
+            }
+
             ui32 maxNode = 0;
             for (const auto &node : table->StaticNodeTable) {
                 maxNode = Max(maxNode, node.first);

@@ -10,7 +10,7 @@ items:
       when: false
     - name: YDB Monitoring
       href: embedded_monitoring/ydb_monitoring.md
-    - name: Hive web-viewera
+    - name: Hive web-viewer
       when: audience == "tech"
       href: embedded_monitoring/hive.md
     - name: Обзор соединений

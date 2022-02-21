@@ -94,13 +94,47 @@ public:
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
         THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
         if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
-            Tablets.reserve(describeResult->GetRecord().GetPathDescription().TablePartitionsSize());
-            for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetTablePartitions()) {
-                Tablets.emplace_back(partition.GetDatashardId());
+            const auto& pathDescription = describeResult->GetRecord().GetPathDescription();
+            if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeTable) {
+                Tablets.reserve(describeResult->GetRecord().GetPathDescription().TablePartitionsSize());
+                for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetTablePartitions()) {
+                    Tablets.emplace_back(partition.GetDatashardId());
+                }
             }
-            Tablets.reserve(describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().PartitionsSize());
-            for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().GetPartitions()) {
-                Tablets.emplace_back(partition.GetTabletId());
+            if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
+                Tablets.reserve(describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().PartitionsSize());
+                for (const auto& partition : describeResult->GetRecord().GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+                    Tablets.emplace_back(partition.GetTabletId());
+                }
+            }
+            if (pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeDir
+                || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain
+                || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain) {
+                if (pathDescription.HasDomainDescription()) {
+                    for (TTabletId tabletId : pathDescription.GetDomainDescription().GetProcessingParams().GetCoordinators()) {
+                        Tablets.emplace_back(tabletId);
+                    }
+                    for (TTabletId tabletId : pathDescription.GetDomainDescription().GetProcessingParams().GetMediators()) {
+                        Tablets.emplace_back(tabletId);
+                    }
+                    if (pathDescription.GetDomainDescription().GetProcessingParams().HasSchemeShard()) {
+                        Tablets.emplace_back(pathDescription.GetDomainDescription().GetProcessingParams().GetSchemeShard());
+                    } else {
+                        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+                        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+
+                        Tablets.emplace_back(domain->SchemeRoot);
+
+                        ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
+                        ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
+                        Tablets.emplace_back(MakeBSControllerID(defaultStateStorageGroup));
+                        Tablets.emplace_back(MakeConsoleID(defaultStateStorageGroup));
+                        Tablets.emplace_back(MakeNodeBrokerID(defaultStateStorageGroup));
+                    }
+                    if (pathDescription.GetDomainDescription().GetProcessingParams().HasHive()) {
+                        Tablets.emplace_back(pathDescription.GetDomainDescription().GetProcessingParams().GetHive());
+                    }
+                }
             }
             Sort(Tablets);
             Tablets.erase(std::unique(Tablets.begin(), Tablets.end()), Tablets.end());

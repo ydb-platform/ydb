@@ -296,6 +296,9 @@
         "news": {
             "description": "Run news team tools"
         },
+        "saas2": {
+            "description": "Run saas2 cli"
+        },
         "go": {
             "description": "Run go tool (1.17.7)"
         },
@@ -1685,6 +1688,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "os": "IOSSIM",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "os": "YOCTO",
                         "arch": "armv7a"
                     },
@@ -1792,6 +1805,16 @@
                 },
                 {
                     "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "os": "IOSSIM",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -1896,6 +1919,17 @@
                     },
                     "target": {
                         "os": "IOS",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "target": {
+                        "os": "IOSSIM",
                         "arch": "arm64"
                     },
                     "default": true
@@ -4778,6 +4812,28 @@
                 }
             ]
         },
+        "saas2": {
+            "tools": {
+                "saas2": {
+                    "bottle": "saas2",
+                    "executable": "saas2"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "golang_1_17_7": {
             "tools": {
                 "golang": {
@@ -7373,6 +7429,17 @@
             "executable": {
                 "news_launcher": [
                     "news_launcher"
+                ]
+            }
+        },
+        "saas2": {
+            "formula": {
+                "sandbox_id": 1222768210,
+                "match": "saas2"
+            },
+            "executable": {
+                "saas2": [
+                    "saas2"
                 ]
             }
         },

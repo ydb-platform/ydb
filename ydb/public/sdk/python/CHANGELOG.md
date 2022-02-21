@@ -1,3 +1,7 @@
+## 2.1.0 ##
+
+* add compression support to ydb sdk
+
 ## 1.1.16 ##
 
 * alias `kikimr.public.sdk.python.client` is deprecated. use `import ydb` instead.

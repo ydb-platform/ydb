@@ -3,6 +3,7 @@ from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
 import six
 import os
+import grpc
 
 if six.PY2:
     Any = None
@@ -37,6 +38,14 @@ def parse_connection_string(connection_string):
     assert len(database) > 0
 
     return p.scheme + "://" + p.netloc, database[0]
+
+
+class RPCCompression:
+    """Indicates the compression method to be used for an RPC."""
+
+    NoCompression = grpc.Compression.NoCompression
+    Deflate = grpc.Compression.Deflate
+    Gzip = grpc.Compression.Gzip
 
 
 def default_credentials(credentials=None, tracer=None):
@@ -94,6 +103,7 @@ class DriverConfig(object):
         "tracer",
         "grpc_lb_policy_name",
         "discovery_request_timeout",
+        "compression",
     )
 
     def __init__(
@@ -115,6 +125,7 @@ class DriverConfig(object):
         tracer=None,
         grpc_lb_policy_name="round_robin",
         discovery_request_timeout=10,
+        compression=None,
     ):
         """
         A driver config to initialize a driver instance
@@ -159,6 +170,7 @@ class DriverConfig(object):
         self.tracer = tracer if tracer is not None else tracing.Tracer(None)
         self.grpc_lb_policy_name = grpc_lb_policy_name
         self.discovery_request_timeout = discovery_request_timeout
+        self.compression = compression
 
     def set_database(self, database):
         self.database = database

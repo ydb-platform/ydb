@@ -22,6 +22,25 @@ async def test_async_call(endpoint, database):
 
 
 @pytest.mark.asyncio
+async def test_gzip_compression(endpoint, database):
+    driver_config = ydb.DriverConfig(
+        endpoint,
+        database,
+        credentials=ydb.construct_credentials_from_environ(),
+        root_certificates=ydb.load_ydb_root_certificate(),
+        compression=ydb.RPCCompression.Gzip,
+    )
+
+    driver = Driver(driver_config=driver_config)
+
+    await driver.scheme_client.make_directory(
+        "/local/lol",
+        settings=ydb.BaseRequestSettings().with_compression(ydb.RPCCompression.Deflate),
+    )
+    await driver.stop()
+
+
+@pytest.mark.asyncio
 async def test_other_credentials(endpoint, database):
     driver = Driver(endpoint=endpoint, database=database)
 

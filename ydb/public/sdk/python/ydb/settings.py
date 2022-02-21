@@ -9,6 +9,7 @@ class BaseRequestSettings(object):
         "cancel_after",
         "operation_timeout",
         "tracer",
+        "compression",
     )
 
     def __init__(self):
@@ -20,6 +21,11 @@ class BaseRequestSettings(object):
         self.timeout = None
         self.cancel_after = None
         self.operation_timeout = None
+        self.compression = None
+
+    def with_compression(self, compression):
+        self.compression = compression
+        return self
 
     def with_trace_id(self, trace_id):
         """

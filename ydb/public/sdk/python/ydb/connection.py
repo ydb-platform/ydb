@@ -300,14 +300,22 @@ def channel_factory(
     logger.debug("Channel options: {}".format(options))
 
     if driver_config.root_certificates is None and not driver_config.secure_channel:
-        return channel_provider.insecure_channel(endpoint, options)
+        return channel_provider.insecure_channel(
+            endpoint, options, compression=getattr(driver_config, "compression", None)
+        )
+
     root_certificates = driver_config.root_certificates
     if root_certificates is None:
         root_certificates = default_pem.load_default_pem()
     credentials = grpc.ssl_channel_credentials(
         root_certificates, driver_config.private_key, driver_config.certificate_chain
     )
-    return channel_provider.secure_channel(endpoint, credentials, options)
+    return channel_provider.secure_channel(
+        endpoint,
+        credentials,
+        options,
+        compression=getattr(driver_config, "compression", None),
+    )
 
 
 class Connection(object):
@@ -405,7 +413,12 @@ class Connection(object):
         rpc_state, timeout, metadata = self._prepare_call(
             stub, rpc_name, request, settings
         )
-        rendezvous, result_future = rpc_state.future(request, timeout, metadata)
+        rendezvous, result_future = rpc_state.future(
+            request,
+            timeout,
+            metadata,
+            compression=getattr(settings, "compression", None),
+        )
         rendezvous.add_done_callback(
             lambda resp_future: _on_response_callback(
                 rpc_state,
@@ -443,7 +456,12 @@ class Connection(object):
             stub, rpc_name, request, settings
         )
         try:
-            response = rpc_state(request, timeout, metadata)
+            response = rpc_state(
+                request,
+                timeout,
+                metadata,
+                compression=getattr(settings, "compression", None),
+            )
             _log_response(rpc_state, response)
             return (
                 response

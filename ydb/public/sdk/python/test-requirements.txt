@@ -10,7 +10,7 @@ docker==5.0.0
 docker-compose==1.29.2
 dockerpty==0.4.1
 docopt==0.6.2
-grpcio==1.38.0
+grpcio>=1.38.0
 idna==3.2
 importlib-metadata==4.6.1
 iniconfig==1.1.1

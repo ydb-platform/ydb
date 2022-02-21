@@ -377,7 +377,7 @@ StaticAssertDecl(lengthof(xmloption_options) == (XMLOPTION_CONTENT + 2),
  * Although only "on", "off", and "safe_encoding" are documented, we
  * accept all the likely variants of "on" and "off".
  */
-static const struct config_enum_entry backslash_quote_options[] = {
+static const const struct config_enum_entry backslash_quote_options[] = {
 	{"safe_encoding", BACKSLASH_QUOTE_SAFE_ENCODING, false},
 	{"on", BACKSLASH_QUOTE_ON, false},
 	{"off", BACKSLASH_QUOTE_OFF, false},

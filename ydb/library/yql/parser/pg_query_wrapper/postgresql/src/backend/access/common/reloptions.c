@@ -93,7 +93,7 @@
  * value has no effect until the next VACUUM, so no need for stronger lock.
  */
 
-static relopt_bool boolRelOpts[] =
+static const relopt_bool boolRelOpts[] =
 {
 	{
 		{
@@ -172,7 +172,7 @@ static relopt_bool boolRelOpts[] =
 	{{NULL}}
 };
 
-static relopt_int intRelOpts[] =
+static const relopt_int intRelOpts[] =
 {
 	{
 		{
@@ -387,7 +387,7 @@ static relopt_int intRelOpts[] =
 	{{NULL}}
 };
 
-static relopt_real realRelOpts[] =
+static const relopt_real realRelOpts[] =
 {
 	{
 		{
@@ -475,7 +475,7 @@ static relopt_real realRelOpts[] =
 };
 
 /* values from GistOptBufferingMode */
-relopt_enum_elt_def gistBufferingOptValues[] =
+const relopt_enum_elt_def gistBufferingOptValues[] =
 {
 	{"auto", GIST_OPTION_BUFFERING_AUTO},
 	{"on", GIST_OPTION_BUFFERING_ON},
@@ -484,7 +484,7 @@ relopt_enum_elt_def gistBufferingOptValues[] =
 };
 
 /* values from ViewOptCheckOption */
-relopt_enum_elt_def viewCheckOptValues[] =
+const relopt_enum_elt_def viewCheckOptValues[] =
 {
 	/* no value for NOT_SET */
 	{"local", VIEW_OPTION_CHECK_OPTION_LOCAL},
@@ -492,7 +492,7 @@ relopt_enum_elt_def viewCheckOptValues[] =
 	{(const char *) NULL}		/* list terminator */
 };
 
-static relopt_enum enumRelOpts[] =
+static const relopt_enum enumRelOpts[] =
 {
 	{
 		{
@@ -520,7 +520,7 @@ static relopt_enum enumRelOpts[] =
 	{{NULL}}
 };
 
-static relopt_string stringRelOpts[] =
+static const relopt_string stringRelOpts[] =
 {
 	/* list terminator */
 	{{NULL}}

@@ -60,7 +60,7 @@ struct RBTree
  */
 #define RBTNIL (&sentinel)
 
-static RBTNode sentinel =
+static const RBTNode sentinel =
 {
 	RBTBLACK, RBTNIL, RBTNIL, NULL
 };

@@ -5136,7 +5136,7 @@ fprintf_to_ereport(const char *fmt, const char *msg)
  * as such, changing their values can induce very unintuitive behavior.
  * But we shall have to live with it until we can remove these variables.
  */
-int			backslash_quote = BACKSLASH_QUOTE_SAFE_ENCODING;
+const int			backslash_quote = BACKSLASH_QUOTE_SAFE_ENCODING;
 __thread bool		escape_string_warning = true;
 __thread bool		standard_conforming_strings = true;
 

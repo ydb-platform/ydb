@@ -14,6 +14,18 @@ def_type = None
 def_var = None
 ignore_func = False
 
+to_add_const = set([
+    "nullSemAction",
+    "sentinel",
+    "backslash_quote",
+    "gistBufferingOptValues",
+    "boolRelOpts",
+    "intRelOpts",
+    "realRelOpts",
+    "viewCheckOptValues",
+    "enumRelOpts",
+    "stringRelOpts"])
+
 def fix_line(line, all_lines, pos):
     global define_for_yylval
     if line.startswith("#define yylval"):
@@ -92,6 +104,20 @@ def fix_line(line, all_lines, pos):
 
     ret = None
     found_v = None
+    for v in to_add_const:
+       if v in norm:
+          ret = line \
+              .replace("static","static const") \
+              .replace("relopt_enum_elt_def","const relopt_enum_elt_def")
+
+          if v == "backslash_quote":
+              ret = ret.replace("int","const int")
+
+          if v == "nullSemAction":
+              ret = ret.replace("JsonSemAction","const JsonSemAction")
+
+          return ret
+
     for v in all_vars:
         if " " + v + " " in norm or " " + v + ";" in norm or " " + v + "[" in norm or \
            "*" + v + " " in norm or "*" + v + ";" in norm or "*" + v + "[" in norm:
@@ -183,17 +209,8 @@ def get_vars():
 
     all_vars.remove("Dummy_trace")
 
-    all_vars.remove("backslash_quote")
-    all_vars.remove("sentinel") # rbtree.c
-    all_vars.remove("nullSemAction")
-
-    all_vars.remove("gistBufferingOptValues")
-    all_vars.remove("boolRelOpts")
-    all_vars.remove("intRelOpts")
-    all_vars.remove("realRelOpts")
-    all_vars.remove("viewCheckOptValues")
-    all_vars.remove("enumRelOpts")
-    all_vars.remove("stringRelOpts")
+    for x in to_add_const:
+        all_vars.remove(x)
 
     all_vars.add("yychar")
     all_vars.add("yyin")

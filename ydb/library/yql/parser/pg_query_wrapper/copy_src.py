@@ -18,6 +18,8 @@ to_add_const = set([
     "nullSemAction",
     "sentinel",
     "backslash_quote",
+    "escape_string_warning",
+    "standard_conforming_strings",
     "gistBufferingOptValues",
     "boolRelOpts",
     "intRelOpts",
@@ -112,6 +114,9 @@ def fix_line(line, all_lines, pos):
 
           if v == "backslash_quote":
               ret = ret.replace("int","const int")
+
+          if v == "escape_string_warning" or v == "standard_conforming_strings":
+              ret = ret.replace("bool","const bool")
 
           if v == "nullSemAction":
               ret = ret.replace("JsonSemAction","const JsonSemAction")

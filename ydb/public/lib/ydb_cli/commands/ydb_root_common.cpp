@@ -197,6 +197,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             << "    3. \"YDB_PASSWORD\" environment variable" << Endl
             << "    4. Active configuration profile";
         opts.AddLongOption("password-file", passwordHelp).RequiredArgument("PATH").StoreResult(&PasswordFile);
+
+        opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
     }
 
     if (config.UseIamAuth) {
@@ -540,7 +542,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
 
     if (config.UseStaticCredentials) {
         if (config.StaticCredentials.User) {
-            if (!config.StaticCredentials.Password) {
+            if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
                 Cout << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
             }

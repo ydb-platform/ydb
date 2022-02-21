@@ -204,23 +204,23 @@ static __thread int	maxSharedInvalidMessagesArray;
 #define MAX_SYSCACHE_CALLBACKS 64
 #define MAX_RELCACHE_CALLBACKS 10
 
-static struct SYSCACHECALLBACK
+typedef struct SYSCACHECALLBACK
 {
 	int16		id;				/* cache number */
 	int16		link;			/* next callback index+1 for same cache */
 	SyscacheCallbackFunction function;
 	Datum		arg;
-}			syscache_callback_list[MAX_SYSCACHE_CALLBACKS];
+} SYSCACHECALLBACK; static __thread SYSCACHECALLBACK syscache_callback_list[MAX_SYSCACHE_CALLBACKS];
 
 static __thread int16 syscache_callback_links[SysCacheSize];
 
 static __thread int	syscache_callback_count = 0;
 
-static struct RELCACHECALLBACK
+typedef struct RELCACHECALLBACK
 {
 	RelcacheCallbackFunction function;
 	Datum		arg;
-}			relcache_callback_list[MAX_RELCACHE_CALLBACKS];
+} RELCACHECALLBACK; static __thread RELCACHECALLBACK relcache_callback_list[MAX_RELCACHE_CALLBACKS];
 
 static __thread int	relcache_callback_count = 0;
 

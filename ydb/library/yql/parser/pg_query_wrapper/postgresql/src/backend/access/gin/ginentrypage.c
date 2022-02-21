@@ -578,7 +578,7 @@ entryExecPlaceToPage(GinBtree btree, Buffer buf, GinBtreeStack *stack,
 		 * and we can't palloc here.  Ugly, but the XLogInsert infrastructure
 		 * isn't reentrant anyway.
 		 */
-		static ginxlogInsertEntry data;
+		static __thread ginxlogInsertEntry data;
 
 		data.isDelete = insertData->isDelete;
 		data.offset = off;

@@ -78,7 +78,7 @@ get_code_entry(pg_wchar code)
 static const pg_wchar *
 get_code_decomposition(pg_unicode_decomposition *entry, int *dec_size)
 {
-	static pg_wchar x;
+	static __thread pg_wchar x;
 
 	if (DECOMPOSITION_IS_INLINE(entry))
 	{

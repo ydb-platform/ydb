@@ -493,11 +493,11 @@ InitLocalBuffers(void)
 static Block
 GetLocalBufferStorage(void)
 {
-	static char *cur_block = NULL;
-	static int	next_buf_in_block = 0;
-	static int	num_bufs_in_block = 0;
-	static int	total_bufs_allocated = 0;
-	static MemoryContext LocalBufferContext = NULL;
+	static __thread char *cur_block = NULL;
+	static __thread int	next_buf_in_block = 0;
+	static __thread int	num_bufs_in_block = 0;
+	static __thread int	total_bufs_allocated = 0;
+	static __thread MemoryContext LocalBufferContext = NULL;
 
 	char	   *this_buf;
 

@@ -72,14 +72,14 @@ ReceiveSharedInvalidMessages(void (*invalFunction) (SharedInvalidationMessage *m
 							 void (*resetFunction) (void))
 {
 #define MAXINVALMSGS 32
-	static SharedInvalidationMessage messages[MAXINVALMSGS];
+	static __thread SharedInvalidationMessage messages[MAXINVALMSGS];
 
 	/*
 	 * We use volatile here to prevent bugs if a compiler doesn't realize that
 	 * recursion is a possibility ...
 	 */
-	static volatile int nextmsg = 0;
-	static volatile int nummsgs = 0;
+	static __thread volatile int nextmsg = 0;
+	static __thread volatile int nummsgs = 0;
 
 	/* Deal with any messages still pending from an outer recursion */
 	while (nextmsg < nummsgs)

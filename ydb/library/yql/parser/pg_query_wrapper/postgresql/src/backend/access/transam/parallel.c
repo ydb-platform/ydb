@@ -1015,7 +1015,7 @@ HandleParallelMessages(void)
 	dlist_iter	iter;
 	MemoryContext oldcontext;
 
-	static MemoryContext hpm_context = NULL;
+	static __thread MemoryContext hpm_context = NULL;
 
 	/*
 	 * This is invoked from ProcessInterrupts(), and since some of the

@@ -470,7 +470,7 @@ pg_flush_data(int fd, off_t offset, off_t nbytes)
 #if defined(HAVE_SYNC_FILE_RANGE)
 	{
 		int			rc;
-		static bool not_implemented_by_kernel = false;
+		static __thread bool not_implemented_by_kernel = false;
 
 		if (not_implemented_by_kernel)
 			return;
@@ -514,7 +514,7 @@ pg_flush_data(int fd, off_t offset, off_t nbytes)
 #if !defined(WIN32) && defined(MS_ASYNC)
 	{
 		void	   *p;
-		static int	pagesize = 0;
+		static __thread int	pagesize = 0;
 
 		/*
 		 * On several OSs msync(MS_ASYNC) on a mmap'ed file triggers

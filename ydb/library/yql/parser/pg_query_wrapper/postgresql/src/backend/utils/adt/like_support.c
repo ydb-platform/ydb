@@ -1581,8 +1581,8 @@ make_greater_string(const Const *str_const, FmgrInfo *ltproc, Oid collation)
 		else
 		{
 			/* If first time through, determine the suffix to use */
-			static char suffixchar = 0;
-			static Oid	suffixcollation = 0;
+			static __thread char suffixchar = 0;
+			static __thread Oid	suffixcollation = 0;
 
 			if (!suffixchar || suffixcollation != collation)
 			{

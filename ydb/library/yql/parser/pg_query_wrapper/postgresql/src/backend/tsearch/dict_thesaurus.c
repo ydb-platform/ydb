@@ -105,8 +105,8 @@ newLexeme(DictThesaurus *d, char *b, char *e, uint32 idsubst, uint16 posinsubst)
 static void
 addWrd(DictThesaurus *d, char *b, char *e, uint32 idsubst, uint16 nwrd, uint16 posinsubst, bool useasis)
 {
-	static int	nres = 0;
-	static int	ntres = 0;
+	static __thread int	nres = 0;
+	static __thread int	ntres = 0;
 	TheSubstitute *ptr;
 
 	if (nwrd == 0)

@@ -2532,7 +2532,7 @@ get_config_unit_name(int flags)
 			return "MB";
 		case GUC_UNIT_BLOCKS:
 			{
-				static char bbuf[8];
+				static __thread char bbuf[8];
 
 				/* initialize if first time through */
 				if (bbuf[0] == '\0')
@@ -2541,7 +2541,7 @@ get_config_unit_name(int flags)
 			}
 		case GUC_UNIT_XBLOCKS:
 			{
-				static char xbuf[8];
+				static __thread char xbuf[8];
 
 				/* initialize if first time through */
 				if (xbuf[0] == '\0')
@@ -3851,7 +3851,7 @@ const char *
 GetConfigOption(const char *name, bool missing_ok, bool restrict_privileged)
 {
 	struct config_generic *record;
-	static char buffer[256];
+	static __thread char buffer[256];
 
 	record = find_option(name, false, ERROR);
 	if (record == NULL)
@@ -3907,7 +3907,7 @@ const char *
 GetConfigOptionResetString(const char *name)
 {
 	struct config_generic *record;
-	static char buffer[256];
+	static __thread char buffer[256];
 
 	record = find_option(name, false, ERROR);
 	if (record == NULL)
@@ -7589,7 +7589,7 @@ static const char *
 show_tcp_keepalives_idle(void)
 {
 	/* See comments in assign_tcp_keepalives_idle */
-	static char nbuf[16];
+	static __thread char nbuf[16];
 
 	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivesidle(MyProcPort));
 	return nbuf;
@@ -7606,7 +7606,7 @@ static const char *
 show_tcp_keepalives_interval(void)
 {
 	/* See comments in assign_tcp_keepalives_idle */
-	static char nbuf[16];
+	static __thread char nbuf[16];
 
 	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivesinterval(MyProcPort));
 	return nbuf;
@@ -7623,7 +7623,7 @@ static const char *
 show_tcp_keepalives_count(void)
 {
 	/* See comments in assign_tcp_keepalives_idle */
-	static char nbuf[16];
+	static __thread char nbuf[16];
 
 	snprintf(nbuf, sizeof(nbuf), "%d", pq_getkeepalivescount(MyProcPort));
 	return nbuf;
@@ -7640,7 +7640,7 @@ static const char *
 show_tcp_user_timeout(void)
 {
 	/* See comments in assign_tcp_keepalives_idle */
-	static char nbuf[16];
+	static __thread char nbuf[16];
 
 	snprintf(nbuf, sizeof(nbuf), "%d", pq_gettcpusertimeout(MyProcPort));
 	return nbuf;
@@ -7788,7 +7788,7 @@ check_cluster_name(char **newval, void **extra, GucSource source)
 static const char *
 show_unix_socket_permissions(void)
 {
-	static char buf[12];
+	static __thread char buf[12];
 
 	snprintf(buf, sizeof(buf), "%04o", Unix_socket_permissions);
 	return buf;
@@ -7797,7 +7797,7 @@ show_unix_socket_permissions(void)
 static const char *
 show_log_file_mode(void)
 {
-	static char buf[12];
+	static __thread char buf[12];
 
 	snprintf(buf, sizeof(buf), "%04o", Log_file_mode);
 	return buf;
@@ -7806,7 +7806,7 @@ show_log_file_mode(void)
 static const char *
 show_data_directory_mode(void)
 {
-	static char buf[12];
+	static __thread char buf[12];
 
 	snprintf(buf, sizeof(buf), "%04o", data_directory_mode);
 	return buf;

@@ -4597,7 +4597,7 @@ long
 get_stack_depth_rlimit(void)
 {
 #if defined(HAVE_GETRLIMIT) && defined(RLIMIT_STACK)
-	static long val = 0;
+	static __thread long val = 0;
 
 	/* This won't change after process launch, so check just once */
 	if (val == 0)

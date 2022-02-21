@@ -44,8 +44,8 @@ pg_TZDIR(void)
 {
 #ifndef SYSTEMTZDIR
 	/* normal case: timezone stuff is under our share dir */
-	static bool done_tzdir = false;
-	static char tzdir[MAXPGPATH];
+	static __thread bool done_tzdir = false;
+	static __thread char tzdir[MAXPGPATH];
 
 	if (done_tzdir)
 		return tzdir;

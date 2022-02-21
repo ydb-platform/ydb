@@ -2671,7 +2671,7 @@ is_objectclass_supported(Oid class_id)
 static const ObjectPropertyType *
 get_object_property_data(Oid class_id)
 {
-	static const ObjectPropertyType *prop_last = NULL;
+	static __thread const ObjectPropertyType *prop_last = NULL;
 	int			index;
 
 	/*

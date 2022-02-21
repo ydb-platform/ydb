@@ -1635,7 +1635,7 @@ mxstatus_to_string(MultiXactStatus status)
 char *
 mxid_to_string(MultiXactId multi, int nmembers, MultiXactMember *members)
 {
-	static char *str = NULL;
+	static __thread char *str = NULL;
 	StringInfoData buf;
 	int			i;
 

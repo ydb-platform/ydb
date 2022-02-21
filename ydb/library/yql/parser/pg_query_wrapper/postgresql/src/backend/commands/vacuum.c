@@ -272,7 +272,7 @@ void
 vacuum(List *relations, VacuumParams *params,
 	   BufferAccessStrategy bstrategy, bool isTopLevel)
 {
-	static bool in_vacuum = false;
+	static __thread bool in_vacuum = false;
 
 	const char *stmttype;
 	volatile bool in_outer_xact,

@@ -1841,7 +1841,7 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 		 * We also support ISO 8601 for timestamps, because to_json[b]()
 		 * functions use this format.
 		 */
-		static const char *fmt_str[] =
+		static __thread const char *fmt_str[] =
 		{
 			"yyyy-mm-dd",
 			"HH24:MI:SSTZH:TZM",
@@ -1856,7 +1856,7 @@ executeDateTimeMethod(JsonPathExecContext *cxt, JsonPathItem *jsp,
 		};
 
 		/* cache for format texts */
-		static text *fmt_txt[lengthof(fmt_str)] = {0};
+		static __thread text *fmt_txt[lengthof(fmt_str)] = {0};
 		int			i;
 
 		/* loop until datetime format fits */

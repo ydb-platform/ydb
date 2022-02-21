@@ -324,8 +324,8 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 		Oid			relid;
 		TimestampTz last_start_time;
 	};
-	static List *table_states = NIL;
-	static HTAB *last_start_times = NULL;
+	static __thread List *table_states = NIL;
+	static __thread HTAB *last_start_times = NULL;
 	ListCell   *lc;
 	bool		started_tx = false;
 

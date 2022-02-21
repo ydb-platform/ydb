@@ -1767,7 +1767,7 @@ timestamptz_to_time_t(TimestampTz t)
 const char *
 timestamptz_to_str(TimestampTz t)
 {
-	static char buf[MAXDATELEN + 1];
+	static __thread char buf[MAXDATELEN + 1];
 	int			tz;
 	struct pg_tm tt,
 			   *tm = &tt;

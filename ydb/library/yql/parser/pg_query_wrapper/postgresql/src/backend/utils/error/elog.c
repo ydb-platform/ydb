@@ -1925,7 +1925,7 @@ set_syslog_parameters(const char *ident, int facility)
 static void
 write_syslog(int level, const char *line)
 {
-	static unsigned long seq = 0;
+	static __thread unsigned long seq = 0;
 
 	int			len;
 	const char *nlpos;
@@ -2297,10 +2297,10 @@ static void
 log_line_prefix(StringInfo buf, ErrorData *edata)
 {
 	/* static counter for line numbers */
-	static long log_line_number = 0;
+	static __thread long log_line_number = 0;
 
 	/* has counter been reset in current process? */
-	static int	log_my_pid = 0;
+	static __thread int	log_my_pid = 0;
 	int			padding;
 	const char *p;
 
@@ -2651,10 +2651,10 @@ write_csvlog(ErrorData *edata)
 	bool		print_stmt = false;
 
 	/* static counter for line numbers */
-	static long log_line_number = 0;
+	static __thread long log_line_number = 0;
 
 	/* has counter been reset in current process? */
-	static int	log_my_pid = 0;
+	static __thread int	log_my_pid = 0;
 
 	/*
 	 * This is one of the few places where we'd rather not inherit a static
@@ -2854,7 +2854,7 @@ write_csvlog(ErrorData *edata)
 char *
 unpack_sql_state(int sql_state)
 {
-	static char buf[12];
+	static __thread char buf[12];
 	int			i;
 
 	for (i = 0; i < 5; i++)

@@ -259,7 +259,7 @@ SyncPostCheckpoint(void)
 void
 ProcessSyncRequests(void)
 {
-	static bool sync_in_progress = false;
+	static __thread bool sync_in_progress = false;
 
 	HASH_SEQ_STATUS hstat;
 	PendingFsyncEntry *entry;

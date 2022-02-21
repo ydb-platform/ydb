@@ -1055,7 +1055,7 @@ ReplicationOriginExitCleanup(int code, Datum arg)
 void
 replorigin_session_setup(RepOriginId node)
 {
-	static bool registered_cleanup;
+	static __thread bool registered_cleanup;
 	int			i;
 	int			free_slot = -1;
 

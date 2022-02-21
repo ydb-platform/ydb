@@ -946,7 +946,7 @@ xml_is_document(xmltype *arg)
 void
 pg_xml_init_library(void)
 {
-	static bool first_time = true;
+	static __thread bool first_time = true;
 
 	if (first_time)
 	{

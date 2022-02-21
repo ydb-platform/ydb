@@ -840,7 +840,7 @@ pgstat_report_stat(bool force)
 {
 	/* we assume this inits to all zeroes: */
 	static const PgStat_TableCounts all_zeroes;
-	static TimestampTz last_report = 0;
+	static __thread TimestampTz last_report = 0;
 
 	TimestampTz now;
 	PgStat_MsgTabstat regular_msg;

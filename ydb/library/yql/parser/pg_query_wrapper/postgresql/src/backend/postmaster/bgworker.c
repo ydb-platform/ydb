@@ -904,7 +904,7 @@ void
 RegisterBackgroundWorker(BackgroundWorker *worker)
 {
 	RegisteredBgWorker *rw;
-	static int	numworkers = 0;
+	static __thread int	numworkers = 0;
 
 	if (!IsUnderPostmaster)
 		ereport(DEBUG1,
@@ -1315,7 +1315,7 @@ GetBackgroundWorkerTypeByPid(pid_t pid)
 {
 	int			slotno;
 	bool		found = false;
-	static char result[BGW_MAXLEN];
+	static __thread char result[BGW_MAXLEN];
 
 	LWLockAcquire(BackgroundWorkerLock, LW_SHARED);
 

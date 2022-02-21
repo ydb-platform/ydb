@@ -234,7 +234,7 @@ CreatePortal(const char *name, bool allowDup, bool dupSilent)
 Portal
 CreateNewPortal(void)
 {
-	static unsigned int unnamed_portal_count = 0;
+	static __thread unsigned int unnamed_portal_count = 0;
 
 	char		portalname[MAX_PORTALNAME_LEN];
 

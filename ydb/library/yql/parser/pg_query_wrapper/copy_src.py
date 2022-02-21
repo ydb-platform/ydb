@@ -4,8 +4,10 @@
 import os
 from shutil import Error, copy2, rmtree
 import subprocess
+from collections import defaultdict
 
 all_vars = set()
+all_funcs_with_statics = defaultdict(list)
 thread_funcs = []
 define_for_yylval = None
 skip_func = False
@@ -13,11 +15,13 @@ split_def = False
 def_type = None
 def_var = None
 ignore_func = False
+inside_func = None
 
 to_add_const = set([
     "nullSemAction",
     "sentinel",
     "backslash_quote",
+    "Dummy_trace",
     "escape_string_warning",
     "standard_conforming_strings",
     "gistBufferingOptValues",
@@ -29,9 +33,14 @@ to_add_const = set([
     "stringRelOpts"])
 
 def fix_line(line, all_lines, pos):
+    global inside_func
     global define_for_yylval
     if line.startswith("#define yylval"):
         define_for_yylval=line[14:].strip()
+
+    if "static YYSTYPE yyval_default" in line or \
+       "static YYLTYPE yyloc_default" in line:
+        return line.replace("static","static __thread")
 
     global skip_func
     if line.startswith("build_guc_variables(void)"):
@@ -43,6 +52,29 @@ def fix_line(line, all_lines, pos):
        ignore_func = True
        return line
 
+    if inside_func is not None:
+       for v in all_funcs_with_statics[inside_func]:
+          if v in line and "static" in line:
+              return line.replace("static","static __thread")
+
+    if inside_func:
+       if line.startswith("}"):
+           inside_func=None
+
+    if skip_func:
+       if line.startswith("{"):
+          return line
+       if not line.startswith("}"):
+          return None
+       skip_func=False
+
+    if ignore_func:
+       if line.startswith("{"):
+          return line
+       if not line.startswith("}"):
+          return line
+       ignore_func=False
+
     global split_def
     global def_type
     global def_var
@@ -51,6 +83,18 @@ def fix_line(line, all_lines, pos):
        def_type = "xllist"
        def_var = "records";
        return "typedef struct xllist\n";
+
+    if line.startswith("static struct RELCACHECALLBACK"):
+       split_def = True
+       def_type = "RELCACHECALLBACK"
+       def_var = "relcache_callback_list[MAX_RELCACHE_CALLBACKS]";
+       return "typedef struct RELCACHECALLBACK\n";
+
+    if line.startswith("static struct SYSCACHECALLBACK"):
+       split_def = True
+       def_type = "SYSCACHECALLBACK"
+       def_var = "syscache_callback_list[MAX_SYSCACHE_CALLBACKS]";
+       return "typedef struct SYSCACHECALLBACK\n";
 
     if split_def and line.startswith("}"):
        split_def = False;
@@ -71,22 +115,13 @@ def fix_line(line, all_lines, pos):
        skip_func = True
        return line
 
-    if skip_func:
-       if line.startswith("{"):
-          return line
-       if not line.startswith("}"):
-          return None
-       skip_func=False
-
-    if ignore_func:
-       if line.startswith("{"):
-          return line
-       if not line.startswith("}"):
-          return line
-       ignore_func=False
-
     if line.startswith("#") or line.startswith(" ") or line.startswith("\t"):
         return line
+
+    for f in all_funcs_with_statics:
+       if f in line and ";" not in line:
+           inside_func = f
+           return line
 
     if not "=" in line:
         line2=line  
@@ -212,10 +247,15 @@ def get_vars():
             if sym is not None:
                 all_vars.add(sym.replace("yql_",""))
 
-    all_vars.remove("Dummy_trace")
-
     for x in to_add_const:
         all_vars.remove(x)
+
+    all_vars.remove("BlockSig")
+    all_vars.remove("StartupBlockSig")
+    all_vars.remove("UnBlockSig")
+    all_vars.remove("on_proc_exit_index")
+    all_vars.remove("on_shmem_exit_index")
+    all_vars.remove("before_shmem_exit_index")
 
     all_vars.add("yychar")
     all_vars.add("yyin")
@@ -229,6 +269,11 @@ def get_vars():
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):
             print(a, file=f)
+
+    for a in all_vars:
+       l=a.split(".")
+       if len(l)==2:
+           all_funcs_with_statics[l[0]].append(l[1])
 
 def write_thread_inits():
     with open("thread_inits.c","w") as f:

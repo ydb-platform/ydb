@@ -1756,12 +1756,12 @@ LogicalRepApplyLoop(XLogRecPtr last_received)
 static void
 send_feedback(XLogRecPtr recvpos, bool force, bool requestReply)
 {
-	static StringInfo reply_message = NULL;
-	static TimestampTz send_time = 0;
+	static __thread StringInfo reply_message = NULL;
+	static __thread TimestampTz send_time = 0;
 
-	static XLogRecPtr last_recvpos = InvalidXLogRecPtr;
-	static XLogRecPtr last_writepos = InvalidXLogRecPtr;
-	static XLogRecPtr last_flushpos = InvalidXLogRecPtr;
+	static __thread XLogRecPtr last_recvpos = InvalidXLogRecPtr;
+	static __thread XLogRecPtr last_writepos = InvalidXLogRecPtr;
+	static __thread XLogRecPtr last_flushpos = InvalidXLogRecPtr;
 
 	XLogRecPtr	writepos;
 	XLogRecPtr	flushpos;

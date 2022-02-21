@@ -1184,7 +1184,7 @@ PageIndexTupleOverwrite(Page page, OffsetNumber offnum,
 char *
 PageSetChecksumCopy(Page page, BlockNumber blkno)
 {
-	static char *pageCopy = NULL;
+	static __thread char *pageCopy = NULL;
 
 	/* If we don't need a checksum, just return the passed-in data */
 	if (PageIsNew(page) || !DataChecksumsEnabled())

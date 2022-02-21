@@ -119,7 +119,7 @@ static const char *const lock_mode_names[] =
 };
 
 #ifndef LOCK_DEBUG
-static bool Dummy_trace = false;
+static const bool Dummy_trace = false;
 #endif
 
 static const LockMethodData default_lockmethod = {
@@ -2913,7 +2913,7 @@ FastPathGetRelationLockEntry(LOCALLOCK *locallock)
 VirtualTransactionId *
 GetLockConflicts(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
 {
-	static VirtualTransactionId *vxids;
+	static __thread VirtualTransactionId *vxids;
 	LOCKMETHODID lockmethodid = locktag->locktag_lockmethodid;
 	LockMethod	lockMethodTable;
 	LOCK	   *lock;

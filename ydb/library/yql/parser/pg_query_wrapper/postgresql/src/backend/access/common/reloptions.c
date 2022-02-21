@@ -675,7 +675,7 @@ add_reloption_kind(void)
 static void
 add_reloption(relopt_gen *newoption)
 {
-	static int	max_custom_options = 0;
+	static __thread int	max_custom_options = 0;
 
 	if (num_custom_options >= max_custom_options)
 	{

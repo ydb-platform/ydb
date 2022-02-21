@@ -1017,7 +1017,7 @@ gistGetFakeLSN(Relation rel)
 		 * Temporary relations are only accessible in our session, so a simple
 		 * backend-local counter will do.
 		 */
-		static XLogRecPtr counter = FirstNormalUnloggedLSN;
+		static __thread XLogRecPtr counter = FirstNormalUnloggedLSN;
 
 		return counter++;
 	}
@@ -1029,7 +1029,7 @@ gistGetFakeLSN(Relation rel)
 		 * Emit a dummy WAL record if insert-LSN hasn't advanced after the
 		 * last call.
 		 */
-		static XLogRecPtr lastlsn = InvalidXLogRecPtr;
+		static __thread XLogRecPtr lastlsn = InvalidXLogRecPtr;
 		XLogRecPtr	currlsn = GetXLogInsertRecPtr();
 
 		/* Shouldn't be called for WAL-logging relations */

@@ -399,7 +399,7 @@ calc_rank(const float *w, TSVector t, TSQuery q, int32 method)
 static const float *
 getWeights(ArrayType *win)
 {
-	static float ws[lengthof(weights)];
+	static __thread float ws[lengthof(weights)];
 	int			i;
 	float4	   *arrdata;
 

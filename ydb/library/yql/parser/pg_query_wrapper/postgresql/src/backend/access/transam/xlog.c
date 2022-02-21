@@ -1676,7 +1676,7 @@ WALInsertLockAcquire(void)
 	 * (semi-)randomly.  This allows the locks to be used evenly if you have a
 	 * lot of very short connections.
 	 */
-	static int	lockToTry = -1;
+	static __thread int	lockToTry = -1;
 
 	if (lockToTry == -1)
 		lockToTry = MyProc->pgprocno % NUM_XLOGINSERT_LOCKS;
@@ -1897,8 +1897,8 @@ GetXLogBuffer(XLogRecPtr ptr)
 {
 	int			idx;
 	XLogRecPtr	endptr;
-	static uint64 cachedPage = 0;
-	static char *cachedPos = NULL;
+	static __thread uint64 cachedPage = 0;
+	static __thread char *cachedPos = NULL;
 	XLogRecPtr	expectedEndPtr;
 
 	/*
@@ -3058,7 +3058,7 @@ XLogBackgroundFlush(void)
 {
 	XLogwrtRqst WriteRqst;
 	bool		flexible = true;
-	static TimestampTz lastflush;
+	static __thread TimestampTz lastflush;
 	TimestampTz now;
 	int			flushbytes;
 
@@ -4739,7 +4739,7 @@ ReadControlFile(void)
 {
 	pg_crc32c	crc;
 	int			fd;
-	static char wal_segsz_str[20];
+	static __thread char wal_segsz_str[20];
 	int			r;
 
 	/*
@@ -5395,7 +5395,7 @@ BootStrapXLOG(void)
 static char *
 str_time(pg_time_t tnow)
 {
-	static char buf[128];
+	static __thread char buf[128];
 
 	pg_strftime(buf, sizeof(buf),
 				"%Y-%m-%d %H:%M:%S %Z",
@@ -11630,7 +11630,7 @@ do_pg_abort_backup(int code, Datum arg)
 void
 register_persistent_abort_backup_handler(void)
 {
-	static bool already_done = false;
+	static __thread bool already_done = false;
 
 	if (already_done)
 		return;
@@ -12240,7 +12240,7 @@ static bool
 WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 							bool fetching_ckpt, XLogRecPtr tliRecPtr)
 {
-	static TimestampTz last_fail_time = 0;
+	static __thread TimestampTz last_fail_time = 0;
 	TimestampTz now;
 	bool		streaming_reply_sent = false;
 
@@ -12711,7 +12711,7 @@ StartupRequestWalReceiverRestart(void)
 static int
 emode_for_corrupt_record(int emode, XLogRecPtr RecPtr)
 {
-	static XLogRecPtr lastComplaint = 0;
+	static __thread XLogRecPtr lastComplaint = 0;
 
 	if (readSource == XLOG_FROM_PG_WAL && emode == LOG)
 	{

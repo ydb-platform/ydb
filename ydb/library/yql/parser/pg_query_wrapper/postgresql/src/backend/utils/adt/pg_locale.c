@@ -203,7 +203,7 @@ pg_perm_setlocale(int category, const char *locale)
 	 */
 	if (category == LC_CTYPE)
 	{
-		static char save_lc_ctype[LC_ENV_BUFSIZE];
+		static __thread char save_lc_ctype[LC_ENV_BUFSIZE];
 
 		/* copy setlocale() return value before callee invokes it again */
 		strlcpy(save_lc_ctype, result, sizeof(save_lc_ctype));
@@ -498,8 +498,8 @@ db_encoding_convert(int encoding, char **str)
 struct lconv *
 PGLC_localeconv(void)
 {
-	static struct lconv CurrentLocaleConv;
-	static bool CurrentLocaleConvAllocated = false;
+	static __thread struct lconv CurrentLocaleConv;
+	static __thread bool CurrentLocaleConvAllocated = false;
 	struct lconv *extlconv;
 	struct lconv worklconv;
 	char	   *save_lc_monetary;
@@ -1368,7 +1368,7 @@ lc_collate_is_c(Oid collation)
 	 */
 	if (collation == DEFAULT_COLLATION_OID)
 	{
-		static int	result = -1;
+		static __thread int	result = -1;
 		char	   *localeptr;
 
 		if (result >= 0)
@@ -1418,7 +1418,7 @@ lc_ctype_is_c(Oid collation)
 	 */
 	if (collation == DEFAULT_COLLATION_OID)
 	{
-		static int	result = -1;
+		static __thread int	result = -1;
 		char	   *localeptr;
 
 		if (result >= 0)

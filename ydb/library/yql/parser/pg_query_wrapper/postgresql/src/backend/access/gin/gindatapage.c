@@ -1162,7 +1162,7 @@ dataExecPlaceToPageInternal(GinBtree btree, Buffer buf, GinBtreeStack *stack,
 		 * and we can't palloc here.  Ugly, but the XLogInsert infrastructure
 		 * isn't reentrant anyway.
 		 */
-		static ginxlogInsertDataInternal data;
+		static __thread ginxlogInsertDataInternal data;
 
 		data.offset = off;
 		data.newitem = *pitem;

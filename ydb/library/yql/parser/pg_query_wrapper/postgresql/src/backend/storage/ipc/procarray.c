@@ -985,7 +985,7 @@ ProcArrayApplyXidAssignment(TransactionId topxid,
 bool
 TransactionIdIsInProgress(TransactionId xid)
 {
-	static TransactionId *xids = NULL;
+	static __thread TransactionId *xids = NULL;
 	int			nxids = 0;
 	ProcArrayStruct *arrayP = procArray;
 	TransactionId topxid;
@@ -1936,7 +1936,7 @@ RunningTransactions
 GetRunningTransactionData(void)
 {
 	/* result workspace */
-	static RunningTransactionsData CurrentRunningXactsData;
+	static __thread RunningTransactionsData CurrentRunningXactsData;
 
 	ProcArrayStruct *arrayP = procArray;
 	RunningTransactions CurrentRunningXacts = &CurrentRunningXactsData;
@@ -2577,7 +2577,7 @@ GetCurrentVirtualXIDs(TransactionId limitXmin, bool excludeXmin0,
 VirtualTransactionId *
 GetConflictingVirtualXIDs(TransactionId limitXmin, Oid dbOid)
 {
-	static VirtualTransactionId *vxids;
+	static __thread VirtualTransactionId *vxids;
 	ProcArrayStruct *arrayP = procArray;
 	int			count = 0;
 	int			index;

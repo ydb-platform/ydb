@@ -3380,7 +3380,7 @@ autovac_refresh_stats(void)
 {
 	if (IsAutoVacuumLauncherProcess())
 	{
-		static TimestampTz last_read = 0;
+		static __thread TimestampTz last_read = 0;
 		TimestampTz current_time;
 
 		current_time = GetCurrentTimestamp();

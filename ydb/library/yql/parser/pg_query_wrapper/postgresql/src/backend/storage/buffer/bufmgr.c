@@ -2092,15 +2092,15 @@ BgBufferSync(WritebackContext *wb_context)
 	 * Information saved between calls so we can determine the strategy
 	 * point's advance rate and avoid scanning already-cleaned buffers.
 	 */
-	static bool saved_info_valid = false;
-	static int	prev_strategy_buf_id;
-	static uint32 prev_strategy_passes;
-	static int	next_to_clean;
-	static uint32 next_passes;
+	static __thread bool saved_info_valid = false;
+	static __thread int	prev_strategy_buf_id;
+	static __thread uint32 prev_strategy_passes;
+	static __thread int	next_to_clean;
+	static __thread uint32 next_passes;
 
 	/* Moving averages of allocation rate and clean-buffer density */
-	static float smoothed_alloc = 0;
-	static float smoothed_density = 10.0;
+	static __thread float smoothed_alloc = 0;
+	static __thread float smoothed_density = 10.0;
 
 	/* Potentially these could be tunables, but for now, not */
 	float		smoothing_samples = 16;

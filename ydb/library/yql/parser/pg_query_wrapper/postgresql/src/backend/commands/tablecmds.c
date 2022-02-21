@@ -600,7 +600,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	ListCell   *listptr;
 	AttrNumber	attnum;
 	bool		partitioned;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	static __thread char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	Oid			ofTypeId;
 	ObjectAddress address;
 	LOCKMODE	parentLockmode;
@@ -2127,7 +2127,7 @@ MergeAttributes(List *schema, List *supers, char relpersistence,
 	List	   *constraints = NIL;
 	bool		have_bogus_defaults = false;
 	int			child_attno;
-	static Node bogus_marker = {0}; /* marks conflicting defaults */
+	static __thread Node bogus_marker = {0}; /* marks conflicting defaults */
 	List	   *saved_schema = NIL;
 	ListCell   *entry;
 
@@ -13140,7 +13140,7 @@ ATExecSetRelOptions(Relation rel, List *defList, AlterTableType operation,
 	Datum		repl_val[Natts_pg_class];
 	bool		repl_null[Natts_pg_class];
 	bool		repl_repl[Natts_pg_class];
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+	static __thread char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 
 	if (defList == NIL && operation != AT_ReplaceRelOptions)
 		return;					/* nothing to do */

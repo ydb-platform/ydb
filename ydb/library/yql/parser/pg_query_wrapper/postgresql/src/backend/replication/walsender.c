@@ -1352,7 +1352,7 @@ WalSndWriteData(LogicalDecodingContext *ctx, XLogRecPtr lsn, TransactionId xid,
 static void
 WalSndUpdateProgress(LogicalDecodingContext *ctx, XLogRecPtr lsn, TransactionId xid)
 {
-	static TimestampTz sendTime = 0;
+	static __thread TimestampTz sendTime = 0;
 	TimestampTz now = GetCurrentTimestamp();
 
 	/*
@@ -1379,7 +1379,7 @@ static XLogRecPtr
 WalSndWaitForWal(XLogRecPtr loc)
 {
 	int			wakeEvents;
-	static XLogRecPtr RecentFlushPtr = InvalidXLogRecPtr;
+	static __thread XLogRecPtr RecentFlushPtr = InvalidXLogRecPtr;
 
 	/*
 	 * Fast path to avoid acquiring the spinlock in case we already know we
@@ -1877,7 +1877,7 @@ ProcessStandbyReplyMessage(void)
 	TimestampTz now;
 	TimestampTz replyTime;
 
-	static bool fullyAppliedLastTime = false;
+	static __thread bool fullyAppliedLastTime = false;
 
 	/* the caller already consumed the msgtype byte */
 	writePtr = pq_getmsgint64(&reply_message);
@@ -2839,7 +2839,7 @@ XLogSendLogical(void)
 	 * helpful because GetFlushRecPtr() needs to acquire a heavily-contended
 	 * spinlock.
 	 */
-	static XLogRecPtr flushPtr = InvalidXLogRecPtr;
+	static __thread XLogRecPtr flushPtr = InvalidXLogRecPtr;
 
 	/*
 	 * Don't know whether we've caught up yet. We'll set WalSndCaughtUp to

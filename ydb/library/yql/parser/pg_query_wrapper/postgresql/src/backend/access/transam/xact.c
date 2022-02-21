@@ -527,8 +527,8 @@ MarkCurrentTransactionIdLoggedIfAny(void)
 TransactionId
 GetStableLatestTransactionId(void)
 {
-	static LocalTransactionId lxid = InvalidLocalTransactionId;
-	static TransactionId stablexid = InvalidTransactionId;
+	static __thread LocalTransactionId lxid = InvalidLocalTransactionId;
+	static __thread TransactionId stablexid = InvalidTransactionId;
 
 	if (lxid != MyProc->lxid)
 	{

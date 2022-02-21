@@ -39,7 +39,7 @@ pg_rusage_init(PGRUsage *ru0)
 const char *
 pg_rusage_show(const PGRUsage *ru0)
 {
-	static char result[100];
+	static __thread char result[100];
 	PGRUsage	ru1;
 
 	pg_rusage_init(&ru1);

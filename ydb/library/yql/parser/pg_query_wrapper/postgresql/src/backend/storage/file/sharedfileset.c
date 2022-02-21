@@ -48,7 +48,7 @@ static Oid	ChooseTablespace(const SharedFileSet *fileset, const char *name);
 void
 SharedFileSetInit(SharedFileSet *fileset, dsm_segment *seg)
 {
-	static uint32 counter = 0;
+	static __thread uint32 counter = 0;
 
 	SpinLockInit(&fileset->mutex);
 	fileset->refcnt = 1;

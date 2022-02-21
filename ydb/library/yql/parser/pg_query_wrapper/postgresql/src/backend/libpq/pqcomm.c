@@ -1417,7 +1417,7 @@ socket_flush(void)
 static int
 internal_flush(void)
 {
-	static int	last_reported_send_errno = 0;
+	static __thread int	last_reported_send_errno = 0;
 
 	char	   *bufptr = PqSendBuffer + PqSendStart;
 	char	   *bufend = PqSendBuffer + PqSendPointer;

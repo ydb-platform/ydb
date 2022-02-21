@@ -34,7 +34,7 @@ static char *win32_socket_strerror(int errnum, char *buf, size_t buflen);
 char *
 pg_strerror(int errnum)
 {
-	static char errorstr_buf[PG_STRERROR_R_BUFLEN];
+	static __thread char errorstr_buf[PG_STRERROR_R_BUFLEN];
 
 	return pg_strerror_r(errnum, errorstr_buf, sizeof(errorstr_buf));
 }

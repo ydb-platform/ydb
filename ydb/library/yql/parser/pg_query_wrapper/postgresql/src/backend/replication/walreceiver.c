@@ -1093,10 +1093,10 @@ XLogWalRcvClose(XLogRecPtr recptr)
 static void
 XLogWalRcvSendReply(bool force, bool requestReply)
 {
-	static XLogRecPtr writePtr = 0;
-	static XLogRecPtr flushPtr = 0;
+	static __thread XLogRecPtr writePtr = 0;
+	static __thread XLogRecPtr flushPtr = 0;
 	XLogRecPtr	applyPtr;
-	static TimestampTz sendTime = 0;
+	static __thread TimestampTz sendTime = 0;
 	TimestampTz now;
 
 	/*
@@ -1169,10 +1169,10 @@ XLogWalRcvSendHSFeedback(bool immed)
 				catalog_xmin_epoch;
 	TransactionId xmin,
 				catalog_xmin;
-	static TimestampTz sendTime = 0;
+	static __thread TimestampTz sendTime = 0;
 
 	/* initially true so we always send at least one feedback message */
-	static bool master_has_standby_xmin = true;
+	static __thread bool master_has_standby_xmin = true;
 
 	/*
 	 * If the user doesn't want status to be reported to the master, be sure

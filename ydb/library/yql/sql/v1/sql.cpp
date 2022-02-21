@@ -636,10 +636,12 @@ static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node,
     }
 
     if (to_lower(id.Name) == "sink_type") {
-        if (to_lower(value) == "local") {
+        auto parsed = StringContent(ctx.Context(), ctx.Context().Pos(), value);
+        YQL_ENSURE(parsed.Defined());
+        if (to_lower(parsed->Content) == "local") {
             settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
         } else {
-            ctx.Error() << "Unknown changefeed's sink type: " << to_upper(value);
+            ctx.Error() << "Unknown changefeed sink type: " << to_upper(parsed->Content);
             return false;
         }
     } else if (to_lower(id.Name) == "mode") {

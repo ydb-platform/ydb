@@ -138,6 +138,7 @@ public:
 
     virtual void Initialize(NKikimr::TAppData* appData) override
     {
+        appData->DomainsConfig = Config.GetDomainsConfig();
         // setup domain info
         appData->DomainsInfo = new TDomainsInfo();
         for (const NKikimrConfig::TDomainsConfig::TDomain &domain : Config.GetDomainsConfig().GetDomain()) {
@@ -189,7 +190,6 @@ public:
         }
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
-
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());

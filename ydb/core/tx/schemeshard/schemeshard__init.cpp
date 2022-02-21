@@ -1371,7 +1371,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY(rootPath->DomainPathId == Self->RootPathId());
 
                 Y_VERIFY(!IsStartWithSlash(rootPath->Name));
-                Self->RootPathElemets = SplitPath(rootPath->Name);
+                Self->RootPathElements = SplitPath(rootPath->Name);
 
                 Y_VERIFY(!rootPath->StepDropped);
                 Self->PathsById[rootPath->PathId ] = rootPath;

@@ -30,16 +30,27 @@ public:
         if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
+            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
-                    auto response = context.SS->LoginProvider.CreateUser({.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+                    auto response = context.SS->LoginProvider.CreateUser(
+                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        if (securityConfig.HasAllUsersGroup()) {
+                            auto response = context.SS->LoginProvider.AddGroupMembership({
+                                .Group = securityConfig.GetAllUsersGroup(),
+                                .Member = createUser.GetUser(),
+                            });
+                            if (!response.Error) {
+                                db.Table<Schema::LoginSidMembers>().Key(securityConfig.GetAllUsersGroup(), createUser.GetUser()).Update();
+                            }
+                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;

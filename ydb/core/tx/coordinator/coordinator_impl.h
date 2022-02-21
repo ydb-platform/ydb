@@ -172,6 +172,10 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         enum EEv {
             EvPlanTick = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvAcquireReadStepFlush,
+            EvReadStepSubscribed,
+            EvReadStepUnsubscribed,
+            EvReadStepUpdated,
+            EvPipeServerDisconnected,
             EvEnd
         };
 
@@ -180,6 +184,55 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         struct TEvPlanTick : public TEventLocal<TEvPlanTick, EvPlanTick> {};
 
         struct TEvAcquireReadStepFlush : public TEventLocal<TEvAcquireReadStepFlush, EvAcquireReadStepFlush> {};
+
+        // Coordinator to subscription manager, must be transactional, from Complete only!
+        struct TEvReadStepSubscribed : public TEventLocal<TEvReadStepSubscribed, EvReadStepSubscribed> {
+            const TActorId PipeServer;
+            const TActorId InterconnectSession;
+            const TActorId Sender;
+            const ui64 Cookie;
+            const ui64 SeqNo;
+            const ui64 LastStep;
+            const ui64 NextStep;
+
+            TEvReadStepSubscribed(const TActorId& pipeServer, const TEvTxProxy::TEvSubscribeReadStep::TPtr &ev, ui64 lastStep, ui64 nextStep)
+                : PipeServer(pipeServer)
+                , InterconnectSession(ev->InterconnectSession)
+                , Sender(ev->Sender)
+                , Cookie(ev->Cookie)
+                , SeqNo(ev->Get()->Record.GetSeqNo())
+                , LastStep(lastStep)
+                , NextStep(nextStep)
+            { }
+        };
+
+        // Coordinator to subscription manager, must be transactional, from Complete only!
+        struct TEvReadStepUnsubscribed : public TEventLocal<TEvReadStepUnsubscribed, EvReadStepUnsubscribed> {
+            const TActorId Sender;
+            const ui64 SeqNo;
+
+            explicit TEvReadStepUnsubscribed(const TEvTxProxy::TEvUnsubscribeReadStep::TPtr &ev)
+                : Sender(ev->Sender)
+                , SeqNo(ev->Get()->Record.GetSeqNo())
+            { }
+        };
+
+        // Coordinator to subscription manager, must be transactional, from Complete only!
+        struct TEvReadStepUpdated : public TEventLocal<TEvReadStepUpdated, EvReadStepUpdated> {
+            const ui64 NextStep;
+
+            explicit TEvReadStepUpdated(ui64 nextStep)
+                : NextStep(nextStep)
+            { }
+        };
+
+        struct TEvPipeServerDisconnected : public TEventLocal<TEvPipeServerDisconnected, EvPipeServerDisconnected> {
+            const TActorId ServerId;
+
+            explicit TEvPipeServerDisconnected(const TActorId& serverId)
+                : ServerId(serverId)
+            { }
+        };
     };
 
     struct TQueueType {
@@ -239,6 +292,10 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     struct TTxMonitoring;
     struct TTxStopGuard;
     struct TTxAcquireReadStep;
+    struct TTxSubscribeReadStep;
+    struct TTxUnsubscribeReadStep;
+
+    class TReadStepSubscriptionManager;
 
     ITransaction* CreateTxInit();
     ITransaction* CreateTxRestoreTransactions();
@@ -409,12 +466,15 @@ private:
     TCoordinatorMonCounters MonCounters;
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+    THashSet<TActorId> PipeServers;
 
     typedef THashMap<TTabletId, TMediator> TMediatorsIndex;
     TMediatorsIndex Mediators;
 
     typedef THashMap<TTxId, TTransaction> TTransactions;
     TTransactions Transactions;
+
+    TActorId ReadStepSubscriptionManager;
 
     bool Stopping = false;
 
@@ -426,6 +486,11 @@ private:
 #endif
 
     void Die(const TActorContext &ctx) override {
+        if (ReadStepSubscriptionManager) {
+            ctx.Send(ReadStepSubscriptionManager, new TEvents::TEvPoison);
+            ReadStepSubscriptionManager = { };
+        }
+
         for (TMediatorsIndex::iterator it = Mediators.begin(), end = Mediators.end(); it != end; ++it) {
             TMediator &x = it->second;
             ctx.Send(x.QueueActor, new TEvents::TEvPoisonPill());
@@ -468,6 +533,10 @@ private:
     void Handle(TEvTxProxy::TEvAcquireReadStep::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvAcquireReadStepFlush::TPtr &ev, const TActorContext &ctx);
 
+    TActorId EnsureReadStepSubscriptionManager(const TActorContext &ctx);
+    void Handle(TEvTxProxy::TEvSubscribeReadStep::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxProxy::TEvUnsubscribeReadStep::TPtr &ev, const TActorContext &ctx);
+
     void Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvMediatorQueueRestart::TPtr &ev, const TActorContext &ctx);
@@ -476,6 +545,8 @@ private:
     void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
@@ -509,30 +580,37 @@ public:
 
     // no incomming pipes is allowed in StateInit
     STFUNC_TABLET_INIT(StateInit,
-            HFunc(TEvents::TEvPoisonPill, Handle))
+                HFunc(TEvents::TEvPoisonPill, Handle);
+            )
 
     STFUNC_TABLET_DEF(StateSync,
-                  HFunc(TEvTxProxy::TEvProposeTransaction, HandleEnqueue)
-                  HFunc(TEvTxProxy::TEvAcquireReadStep, Handle)
-                  HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
-                  HFunc(TEvSubDomain::TEvConfigure, Handle)
-                  HFunc(TEvents::TEvPoisonPill, Handle)
-                  IgnoreFunc(TEvTabletPipe::TEvServerConnected)
-                  IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+                HFunc(TEvSubDomain::TEvConfigure, Handle);
+                HFunc(TEvTxProxy::TEvProposeTransaction, HandleEnqueue);
+                HFunc(TEvTxProxy::TEvAcquireReadStep, Handle);
+                HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
+                HFunc(TEvTxProxy::TEvSubscribeReadStep, Handle);
+                HFunc(TEvTxProxy::TEvUnsubscribeReadStep, Handle);
+                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+            )
 
     STFUNC_TABLET_DEF(StateWork,
-                  HFunc(TEvSubDomain::TEvConfigure, Handle)
-                  HFunc(TEvTxProxy::TEvProposeTransaction, Handle)
-                  HFunc(TEvTxProxy::TEvAcquireReadStep, Handle)
-                  HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle)
-                  HFunc(TEvPrivate::TEvPlanTick, Handle)
-                  HFunc(TEvTxCoordinator::TEvMediatorQueueConfirmations, Handle)
-                  HFunc(TEvTxCoordinator::TEvMediatorQueueRestart, Handle)
-                  HFunc(TEvTxCoordinator::TEvMediatorQueueStop, Handle)
-                  HFunc(TEvTxCoordinator::TEvCoordinatorConfirmPlan, Handle)
-                  HFunc(TEvents::TEvPoisonPill, Handle)
-                  IgnoreFunc(TEvTabletPipe::TEvServerConnected)
-                  IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+                HFunc(TEvSubDomain::TEvConfigure, Handle);
+                HFunc(TEvTxProxy::TEvProposeTransaction, Handle);
+                HFunc(TEvTxProxy::TEvAcquireReadStep, Handle);
+                HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
+                HFunc(TEvTxProxy::TEvSubscribeReadStep, Handle);
+                HFunc(TEvTxProxy::TEvUnsubscribeReadStep, Handle);
+                HFunc(TEvPrivate::TEvPlanTick, Handle);
+                HFunc(TEvTxCoordinator::TEvMediatorQueueConfirmations, Handle);
+                HFunc(TEvTxCoordinator::TEvMediatorQueueRestart, Handle);
+                HFunc(TEvTxCoordinator::TEvMediatorQueueStop, Handle);
+                HFunc(TEvTxCoordinator::TEvCoordinatorConfirmPlan, Handle);
+                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+            )
 
    STFUNC_TABLET_IGN(StateBroken,)
 };

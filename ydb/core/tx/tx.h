@@ -14,9 +14,13 @@ struct TEvTxProxy {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_PROXY),
         EvAcquireReadStep,
+        EvSubscribeReadStep,
+        EvUnsubscribeReadStep,
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvAcquireReadStepResult,
+        EvSubscribeReadStepResult,
+        EvSubscribeReadStepUpdate,
 
         EvEnd
     };
@@ -72,6 +76,53 @@ struct TEvTxProxy {
         TEvAcquireReadStepResult(ui64 coordinator, ui64 step) {
             Record.SetCoordinatorID(coordinator);
             Record.SetStep(step);
+        }
+    };
+
+    struct TEvSubscribeReadStep
+        : public TEventPB<TEvSubscribeReadStep, NKikimrTx::TEvSubscribeReadStep, EvSubscribeReadStep>
+    {
+        TEvSubscribeReadStep() = default;
+
+        TEvSubscribeReadStep(ui64 coordinator, ui64 seqNo) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvUnsubscribeReadStep
+        : public TEventPB<TEvUnsubscribeReadStep, NKikimrTx::TEvUnsubscribeReadStep, EvUnsubscribeReadStep>
+    {
+        TEvUnsubscribeReadStep() = default;
+
+        TEvUnsubscribeReadStep(ui64 coordinator, ui64 seqNo) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvSubscribeReadStepResult
+        : public TEventPB<TEvSubscribeReadStepResult, NKikimrTx::TEvSubscribeReadStepResult, EvSubscribeReadStepResult>
+    {
+        TEvSubscribeReadStepResult() = default;
+
+        TEvSubscribeReadStepResult(ui64 coordinator, ui64 seqNo, ui64 lastAcquireStep, ui64 nextAcquireStep) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+            Record.SetLastAcquireStep(lastAcquireStep);
+            Record.SetNextAcquireStep(nextAcquireStep);
+        }
+    };
+
+    struct TEvSubscribeReadStepUpdate
+        : public TEventPB<TEvSubscribeReadStepUpdate, NKikimrTx::TEvSubscribeReadStepUpdate, EvSubscribeReadStepUpdate>
+    {
+        TEvSubscribeReadStepUpdate() = default;
+
+        TEvSubscribeReadStepUpdate(ui64 coordinator, ui64 seqNo, ui64 nextAcquireStep) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+            Record.SetNextAcquireStep(nextAcquireStep);
         }
     };
 };

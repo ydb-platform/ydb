@@ -56,6 +56,51 @@ message TEvAcquireReadStepResult {
     optional fixed64 Step = 2;
 }
 
+// mediator timecast to coordinator
+message TEvSubscribeReadStep {
+    // Coordinator tablet id for paranoid checks
+    optional fixed64 CoordinatorID = 1;
+    // Sender increments seqno each time it re-subscribes
+    // This invalidates all subscriptions with a lower seqno
+    optional uint64 SeqNo = 2;
+}
+
+// mediator timecast to coordinator (not really used)
+message TEvUnsubscribeReadStep {
+    // Coordinator tablet id for paranoid checks
+    optional fixed64 CoordinatorID = 1;
+    // Unsubscribe up to this seqno (inclusive)
+    optional uint64 SeqNo = 2;
+}
+
+// coordinator to mediator timecast
+message TEvSubscribeReadStepResult {
+    optional fixed64 CoordinatorID = 1;
+    optional uint64 SeqNo = 2;
+
+    // The maximum step that coordinator has possibly given to clients as a
+    // read step in the past. This is useful to detect which point in time
+    // has been possibly used for snapshot isolation reads. Clients are
+    // expected to take the maximum value from multiple coordinators.
+    optional fixed64 LastAcquireStep = 3;
+
+    // The minimum step that coordinator would return as read step in the
+    // future. This is useful to understand which step is guaranteed to be
+    // readable with snapshot isolation. Clients are expected to take the
+    // minimum value from multiple coordinators which may be a basis of a
+    // readable point in time, and also the upper bound for mediator timecast.
+    optional fixed64 NextAcquireStep = 4;
+}
+
+// coordinator to mediator timecast
+message TEvSubscribeReadStepUpdate {
+    optional fixed64 CoordinatorID = 1;
+    optional uint64 SeqNo = 2;
+
+    // See above description for NextAcquireStep
+    optional fixed64 NextAcquireStep = 3;
+}
+
 // coordinator to mediator
 message TCoordinatorTransaction {
     repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator

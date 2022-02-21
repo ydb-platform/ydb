@@ -25,6 +25,7 @@ target_sources(core-tx-coordinator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__mediators_confirmations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__plan_step.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__read_step_subscriptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restart_mediator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_transaction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema.cpp

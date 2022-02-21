@@ -5,11 +5,11 @@
 Просмотрите текст лицензионного соглашения:
 
 ```bash
-sudo docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} LICENSE
+docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} LICENSE
 ```
 
 Просмотрите все использованные при создании компоненты и их лицензии:
 
 ```bash
-sudo docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LICENSES
+docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LICENSES
 ```

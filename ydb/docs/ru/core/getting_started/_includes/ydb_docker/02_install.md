@@ -1,6 +1,6 @@
 ## Выгрузите Docker-образ {{ ydb-short-name }} {#install}
 
-Выгрузите актуальную публичную версию Docker-образа:
+Загрузите актуальную публичную версию Docker-образа:
 
 ```bash
 docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}

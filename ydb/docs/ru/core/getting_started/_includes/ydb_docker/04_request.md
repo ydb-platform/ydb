@@ -1,6 +1,6 @@
 ## Выполните запрос к базе данных {#request}
 
-Выполните запрос к базе данных {{ ydb-short-name }} в Docker-контейнере:
+Скачайте [YDB CLI](../../../getting_started/cli.md) и выполните запрос к базе данных {{ ydb-short-name }} в Docker-контейнере:
 
 ```bash
 ydb \
@@ -37,7 +37,12 @@ ydb \
 Предсобранная версия [YDB CLI](../../../reference/ydb-cli/index.md) также доступа внутри образа:
 
 ```bash
-sudo docker exec <CONTAINER-ID> /ydb -e localhost:2135 -d /local table query execute -q 'select 1;'
+docker exec <CONTAINER-ID> /ydb -e localhost:2136 -d /local table query execute -q 'select 1;'
+```
+
+Результат выполнения:
+
+```text
 ┌─────────┐
 | column0 |
 ├─────────┤

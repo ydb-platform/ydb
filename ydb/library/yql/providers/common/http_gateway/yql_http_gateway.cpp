@@ -300,6 +300,17 @@ private:
         entry = easy;
         Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
         Await.emplace(std::move(easy));
+        Wakeup(expectedSize);
+    }
+
+    void OnRetry(TEasyCurl::TPtr easy) {
+        const std::unique_lock lock(Sync);
+        const std::size_t expectedSize = easy->GetExpectedSize();
+        Await.emplace(std::move(easy));
+        Wakeup(expectedSize);
+    }
+
+    void Wakeup(std::size_t expectedSize) {
         if (Allocated.size() < MaxHandlers && AllocatedSize + expectedSize + OutputSize.load() <= MaxSimulatenousDownloadsSize) {
             curl_multi_wakeup(Handle);
         }
@@ -317,7 +328,7 @@ private:
         bool Process() override {
             if (const auto g = Gateway.lock()) {
                 Y_VERIFY(Easy);
-                g->Await.emplace(std::move(Easy));
+                g->OnRetry(std::move(Easy));
             }
             return false;
         }
@@ -356,6 +367,7 @@ std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;
 std::mutex THTTPMultiGateway::CreateSync;
 THTTPMultiGateway::TWeakPtr THTTPMultiGateway::Singleton;
 
+// Class that is not used in production (for testing only).
 class THTTPEasyGateway : public IHTTPGateway, private std::enable_shared_from_this<THTTPEasyGateway> {
 friend class IHTTPGateway;
 public:

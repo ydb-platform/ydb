@@ -254,9 +254,6 @@ public:
             if (!group) {
                 groupsToDiscard.insert(groupsToDiscard.end(), groupId);
             } else if (group->Generation > generation) {
-                auto *meta = res->Record.AddGroupMetadata();
-                meta->SetGroupId(groupId);
-                meta->SetCurrentGeneration(group->Generation);
                 groupIDsToRead.insert(groupId);
             }
         };

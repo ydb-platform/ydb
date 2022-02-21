@@ -296,13 +296,13 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     SourceId = init.message_group_id();
     try {
-	// "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
-	// Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
-	// Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
+        // "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
+        // Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
+        // Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
         EncodedSourceId = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcId(), SourceId);
-        
-	// Good hash and proper way of calcultion;
-	CompatibleHash = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcIdHash(), SourceId).Hash;
+
+        // Good hash and proper way of calcultion;
+        CompatibleHash = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcIdHash(), SourceId).Hash;
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -672,7 +672,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     parameters["$Hash"] = hash;
     parameters["$Topic"] = topic;
     parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
-    
+
     parameters["$CreateTime"] = SourceIdCreateTime;
     parameters["$AccessTime"] = TInstant::Now().MilliSeconds();
     parameters["$Partition"] = Partition;

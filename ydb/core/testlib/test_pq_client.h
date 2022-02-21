@@ -73,7 +73,7 @@ struct TRequestCreatePQ {
         ui64 writeSpeed = 20000000,
         const TString& user = "",
         ui64 readSpeed = 20000000,
-        const TVector<TString>& readRules = {},
+        const TVector<TString>& readRules = {"user"},
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
@@ -149,9 +149,9 @@ struct TRequestCreatePQ {
             config->AddReadRuleVersions(0);
             config->AddConsumerCodecs()->AddIds(0);
         }
-        if (!ReadRules.empty()) {
-            config->SetRequireAuthRead(true);
-        }
+//        if (!ReadRules.empty()) {
+//            config->SetRequireAuthRead(true);
+//        }
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -831,7 +831,7 @@ public:
     }
 
 
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {}) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {"user"}) {
         TString path = name;
         if (UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
@@ -886,7 +886,7 @@ public:
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                   "proxy failure");
+                                   TStringBuilder() << "proxy failure: " << response->Record.DebugString());
 
         AddTopic(createRequest.Topic);
         while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) {
@@ -907,7 +907,7 @@ public:
         ui64 writeSpeed = 20000000,
         TString user = "",
         ui64 readSpeed = 200000000,
-        TVector<TString> rr = {},
+        TVector<TString> rr = {"user"},
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
@@ -1211,7 +1211,7 @@ public:
             auto t = res.GetTopicResult(i);
             count += t.PartitionResultSize();
             for (ui32 j = 0; j < t.PartitionResultSize(); ++j) {
-                if (t.GetPartitionResult(j).HasClientOffset())
+                if (t.GetPartitionResult(j).HasClientOffset() && t.GetPartitionResult(j).GetClientOffset() > 0)
                     ++clientOffsetCount;
             }
         }

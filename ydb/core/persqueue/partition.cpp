@@ -414,10 +414,8 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
 
     for (auto& userInfo : UsersInfoStorage.GetAll()) {
         userInfo.second.ReadFromTimestamp = TInstant::Zero();
-        if (userInfo.second.HasReadRule) {
-            userInfo.second.HasReadRule = false;
-            hasReadRule.insert(userInfo.first);
-        }
+        userInfo.second.HasReadRule = false;
+        hasReadRule.insert(userInfo.first);
     }
     for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
         const auto& consumer = config.GetReadRules(i);
@@ -435,16 +433,16 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
         hasReadRule.erase(consumer);
         TInstant ts = i < config.ReadFromTimestampsMsSize() ? TInstant::MilliSeconds(config.GetReadFromTimestampsMs(i)) : TInstant::Zero();
         if (!ts) ts += TDuration::MilliSeconds(1);
-        if (!userInfo.ReadFromTimestamp|| userInfo.ReadFromTimestamp > ts)
+        if (!userInfo.ReadFromTimestamp || userInfo.ReadFromTimestamp > ts)
             userInfo.ReadFromTimestamp = ts;
     }
     for (auto& consumer : hasReadRule) {
         auto& userInfo = UsersInfoStorage.GetOrCreate(consumer, ctx);
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer,
+                                                                               0, "", 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
         if (!userInfo.Important) {
             ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters.GetGroup()));
         }
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer,
-                                                                               0, "", 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
         userInfo.Session = "";
         userInfo.Offset = 0;
         userInfo.Step = userInfo.Generation = 0;
@@ -1805,6 +1803,10 @@ void TPartition::Handle(TEvPQ::TEvChangeConfig::TPtr& ev, const TActorContext& c
     if (CurrentStateFunc() != &TThis::StateInit) {
         InitUserInfoForImportantClients(ctx);
         FillReadFromTimestamps(Config, ctx);
+
+        for (auto& ui : UsersInfoStorage.GetAll()) {
+            ProcessUserActs(ui.second, ctx);
+        }
     }
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
@@ -3829,6 +3831,12 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             auto range = del->MutableRange();
             range->SetFrom(ikey.Data(), ikey.Size());
             range->SetTo(ikey.Data(), ikey.Size());
+            range->SetIncludeFrom(true);
+            range->SetIncludeTo(true);
+            del = request->Record.AddCmdDeleteRange();
+            range = del->MutableRange();
+            range->SetFrom(ikeyDeprecated.Data(), ikeyDeprecated.Size());
+            range->SetTo(ikeyDeprecated.Data(), ikeyDeprecated.Size());
             range->SetIncludeFrom(true);
             range->SetIncludeTo(true);
             request->Record.SetCookie(cookie);

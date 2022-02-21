@@ -168,7 +168,6 @@ Y_UNIT_TEST(TestUserInfoCompatibility) {
         FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 3, 0);
         FillUserInfo(request->Record.AddCmdWrite(), client, 3, 1);
 
-
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
@@ -194,7 +193,8 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         TString client = "test";
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{client, false}}, tc, 3);
+
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{client, false}, {"another-user", false}}, tc, 3);
 
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
@@ -208,18 +208,75 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         CmdSetOffset(0, client, 1, false, tc);
         CmdSetOffset(1, client, 2, false, tc);
 
+        {
+            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+
+            FillUserInfo(request->Record.AddCmdWrite(), "old_consumer", 0, 0);
+            FillDeprecatedUserInfo(request->Record.AddCmdWrite(), "old_consumer", 0, 0);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            Y_UNUSED(result);
+
+        }
+
         RestartTablet(tc);
 
         CmdGetOffset(0, client, 1, tc);
         CmdGetOffset(1, client, 2, tc);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 3);
+        {
+            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            auto read = request->Record.AddCmdReadRange();
+            auto range = read->MutableRange();
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUser);
+            range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
+            range->SetIncludeFrom(true);
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 1, NPQ::TKeyPrefix::MarkUser);
+            range->SetTo(ikeyTo.Data(), ikeyTo.Size());
+            range->SetIncludeTo(true);
 
-        CmdCreateSession(0, client, "session1", tc, 0, 0, 0, true);
-        CmdCreateSession(1, client, "session2", tc, 0, 0, 0, true);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+            Cerr << result->Record << "\n";
+
+            UNIT_ASSERT(result->Record.GetReadRangeResult(0).GetPair().size() == 7);
+        }
+
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 3);
 
         CmdGetOffset(0, client, 0, tc);
         CmdGetOffset(1, client, 0, tc);
+
+        {
+            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            auto read = request->Record.AddCmdReadRange();
+            auto range = read->MutableRange();
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUser);
+            range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
+            range->SetIncludeFrom(true);
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 1, NPQ::TKeyPrefix::MarkUser);
+            range->SetTo(ikeyTo.Data(), ikeyTo.Size());
+            range->SetIncludeTo(true);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            TEvKeyValue::TEvResponse* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+            Cerr << result->Record << "\n";
+
+            UNIT_ASSERT(result->Record.GetReadRangeResult(0).GetPair().size() == 3);
+        }
+
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new NActors::NMon::TEvRemoteHttpInfo(TStringBuilder() << "localhost:8765/tablets/app?TabletID=" << tc.TabletId), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+
+        tc.Runtime->GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(handle);
+        TString rs = handle->Get<NMon::TEvRemoteHttpInfoRes>()->Html;
+        Cerr << rs << "\n";
     });
 }
 

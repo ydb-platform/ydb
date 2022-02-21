@@ -186,35 +186,6 @@ class KiKiMRMessageBusClient(object):
             request.SecurityToken = token
         return self.send_and_poll_request(request, 'SchemeOperation')
 
-    def upgrade_subdomain(self, working_dir, name, token=None):
-        request = msgbus.TSchemeOperation()
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomain
-        request.Transaction.ModifyScheme.WorkingDir = working_dir
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
-        if token:
-            request.SecurityToken = token
-        return self.send_and_poll_request(request, 'SchemeOperation')
-
-    def commit_upgrade_subdomain(self, working_dir, name, token=None):
-        request = msgbus.TSchemeOperation()
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision
-        request.Transaction.ModifyScheme.WorkingDir = working_dir
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Commit
-        if token:
-            request.SecurityToken = token
-        return self.send_and_poll_request(request, 'SchemeOperation')
-
-    def undo_upgrade_subdomain(self, working_dir, name, token=None):
-        request = msgbus.TSchemeOperation()
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision
-        request.Transaction.ModifyScheme.WorkingDir = working_dir
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Undo
-        if token:
-            request.SecurityToken = token
-        return self.send_and_poll_request(request, 'SchemeOperation')
-
     def hive_create_tablets(self, list_of_tablets):
         request = msgbus.THiveCreateTablet()
         for tablet in list_of_tablets:

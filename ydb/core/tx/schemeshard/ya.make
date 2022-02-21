@@ -36,8 +36,6 @@ RECURSE_FOR_TESTS(
     ut_subdomain
     ut_subdomain_reboots
     ut_ttl
-    ut_upgradesubdomain
-    ut_upgradesubdomain_reboots
     ut_user_attributes
     ut_user_attributes_reboots
 )

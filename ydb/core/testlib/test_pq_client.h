@@ -7,10 +7,11 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <library/cpp/tvmauth/unittest.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
@@ -30,7 +31,18 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseAccessService(false);
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
+    authConfig.MutableTVMConfig()->SetEnabled(true);
+    authConfig.MutableTVMConfig()->SetServiceTVMId(10);
+    authConfig.MutableTVMConfig()->SetPublicKeys(NTvmAuth::NUnittest::TVMKNIFE_PUBLIC_KEYS);
+    authConfig.MutableTVMConfig()->SetUpdatePublicKeys(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
+    const TString query = R"___(
+             DECLARE $userNameHint AS Utf8; DECLARE $uid AS Uint64;
+             SELECT DISTINCT(name) FROM (SELECT name FROM [/Root/PQ/Config/V2/Producer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = "")
+                                UNION ALL SELECT name FROM [/Root/PQ/Config/V2/Consumer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = ""));
+        )___";
+
+    authConfig.MutableUserRegistryConfig()->SetQuery(query);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -73,7 +85,7 @@ struct TRequestCreatePQ {
         ui64 writeSpeed = 20000000,
         const TString& user = "",
         ui64 readSpeed = 20000000,
-        const TVector<TString>& readRules = {"user"},
+        const TVector<TString>& readRules = {},
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
@@ -149,9 +161,9 @@ struct TRequestCreatePQ {
             config->AddReadRuleVersions(0);
             config->AddConsumerCodecs()->AddIds(0);
         }
-//        if (!ReadRules.empty()) {
-//            config->SetRequireAuthRead(true);
-//        }
+        if (!ReadRules.empty()) {
+            config->SetRequireAuthRead(true);
+        }
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -478,7 +490,6 @@ private:
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-public:
     TMaybe<NYdb::TResultSet> RunYqlDataQueryWithParams(TString query, const NYdb::TParams& params) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
         TMaybe<NYdb::TResultSet> rs;
@@ -503,6 +514,7 @@ public:
     }
 
 
+public:
     TFlatMsgBusPQClient(
             const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing()
     )
@@ -681,6 +693,16 @@ public:
             );
         )___");
 
+        RunYqlDataQuery(R"___(
+            UPSERT INTO [/Root/PQ/Config/V2/Consumer] (name, tvmClientId) VALUES
+                ("user1", "1"),
+                ("user2", "1"),
+                ("user5", "1"),
+                ("user3", "2");
+            UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES
+                ("user4", "2"),
+                ("topic1", "1");
+        )___");
     }
 
     void UpdateDC(const TString& name, bool local, bool enabled) {
@@ -831,7 +853,7 @@ public:
     }
 
 
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {"user"}) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true) {
         TString path = name;
         if (UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
@@ -839,12 +861,6 @@ public:
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
-        TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
-        for (auto &user : rr) {
-            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});
-        }
-        settings.ReadRules(rrSettings);
-
         Cerr << "===Create topic: " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
@@ -886,7 +902,7 @@ public:
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                   TStringBuilder() << "proxy failure: " << response->Record.DebugString());
+                                   "proxy failure");
 
         AddTopic(createRequest.Topic);
         while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) {
@@ -907,7 +923,7 @@ public:
         ui64 writeSpeed = 20000000,
         TString user = "",
         ui64 readSpeed = 200000000,
-        TVector<TString> rr = {"user"},
+        TVector<TString> rr = {},
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
@@ -1211,7 +1227,7 @@ public:
             auto t = res.GetTopicResult(i);
             count += t.PartitionResultSize();
             for (ui32 j = 0; j < t.PartitionResultSize(); ++j) {
-                if (t.GetPartitionResult(j).HasClientOffset() && t.GetPartitionResult(j).GetClientOffset() > 0)
+                if (t.GetPartitionResult(j).HasClientOffset())
                     ++clientOffsetCount;
             }
         }

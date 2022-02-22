@@ -1999,7 +1999,7 @@ void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TP
                     break;
             }
         }
-        [[fallthrough]];
+        // fall through
     default:
         return MarkShardError(tabletId, *perTablet, false, ctx);
     }
@@ -2053,9 +2053,8 @@ void TDataReq::Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const T
     case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
     case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
     case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
-        // cancel proposal only for defined cases and fall through for generic error handling
         CancelProposal(0);
-        [[fallthrough]];
+        // cancel proposal only for defined cases and fall through for generic error handling
     default:
         // smth goes wrong
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,

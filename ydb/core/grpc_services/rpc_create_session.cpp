@@ -1,9 +1,8 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
+
 #include "rpc_calls.h"
 #include "rpc_common.h"
 #include "rpc_kqp_base.h"
-#include "service_table.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
@@ -16,9 +15,6 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
-
-using TEvCreateSessionRequest = TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
-    Ydb::Table::CreateSessionResponse>;
 
 class TCreateSessionRPC : public TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest> {
     using TBase = TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest>;
@@ -102,10 +98,7 @@ private:
 
         auto database = Request_->GetDatabaseName().GetOrElse("");
 
-        using TEvDeleteSessionRequest = TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
-            Ydb::Table::DeleteSessionResponse>;
-
-        auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
+        auto actorId = NRpcService::DoLocalRpcSameMailbox<NKikimr::NGRpcService::TEvDeleteSessionRequest>(
             std::move(request), std::move(cb), database, Request_->GetInternalToken(), ctx);
 
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
@@ -141,8 +134,8 @@ private:
 
 };
 
-void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCreateSessionRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TCreateSessionRPC(ev->Release().Release()));
 }
 
 template<>

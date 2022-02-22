@@ -82,7 +82,7 @@ void TKqpPlanner::HandleWait(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
 }
 
 void TKqpPlanner::HandleWait(TEvKqp::TEvAbortExecution::TPtr& ev) {
-    LOG_E("Terminate KqpPlanner, reason: " << ev->Get()->GetIssues().ToOneLineString());
+    LOG_E("Terminate KqpPlanner, reason: " << ev->Get()->Record.GetMessage());
     PassAway();
 }
 
@@ -326,3 +326,4 @@ IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
 }
 
 } // namespace NKikimr::NKqp
+

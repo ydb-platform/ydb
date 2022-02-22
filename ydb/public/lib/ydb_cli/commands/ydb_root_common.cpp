@@ -11,8 +11,6 @@
 #include "ydb_tools.h"
 #include "ydb_yql.h"
 
-#include "ydb_workload.h"
-
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -38,7 +36,6 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandStream>());
-    AddCommand(std::make_unique<TCommandWorkload>());
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -197,8 +194,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             << "    3. \"YDB_PASSWORD\" environment variable" << Endl
             << "    4. Active configuration profile";
         opts.AddLongOption("password-file", passwordHelp).RequiredArgument("PATH").StoreResult(&PasswordFile);
-
-        opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
     }
 
     if (config.UseIamAuth) {
@@ -542,7 +537,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
 
     if (config.UseStaticCredentials) {
         if (config.StaticCredentials.User) {
-            if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
+            if (!config.StaticCredentials.Password) {
                 Cout << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
             }

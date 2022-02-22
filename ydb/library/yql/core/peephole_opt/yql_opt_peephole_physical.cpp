@@ -2499,9 +2499,8 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
 
 template <bool Ordered, bool EnableNewOptimizers>
 TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
-    const auto& arg = node->Tail().Head().Head();
     if constexpr (EnableNewOptimizers) {
-        if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
+        if (ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
             return ctx.Builder(node->Pos())
                 .Callable("IfPresent")
@@ -2519,10 +2518,10 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Build();
         }
 
-        if (const auto& input = node->Head(); !arg.IsUsedInDependsOn() && input.IsCallable("AsList")) {
+        if (const auto& input = node->Head(); input.IsCallable("AsList")) {
             TNodeSet uniqueItems(input.ChildrenSize());
             input.ForEachChild([&uniqueItems](const TExprNode& item){ uniqueItems.emplace(&item); });
-            if (uniqueItems.size() < 0x10U) {
+            if (const auto& arg = node->Tail().Head().Head(); uniqueItems.size() < 0x10U && !arg.IsUsedInDependsOn()) {
                 YQL_CLOG(DEBUG, CorePeepHole) << "Eliminate " << node->Content() << " over list of " << uniqueItems.size();
                 auto list = input.ChildrenList();
                 for (auto& item : list) {
@@ -2534,6 +2533,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (node->Head().IsCallable("NarrowMap")) {
+        const auto& arg = node->Tail().Head().Head();
         if (!arg.IsUsedInDependsOn()) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
             const auto width = node->Head().Tail().Head().ChildrenSize();
@@ -2552,7 +2552,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) {
+    if (1U == node->Head().UseCount()) {
         if (node->Head().IsCallable({"Map", "OrderedMap"})) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())

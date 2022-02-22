@@ -1,11 +1,9 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
+
+#include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
-#include "service_table.h"
 
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -22,16 +20,13 @@ using namespace Ydb;
 using namespace Ydb::Table;
 using namespace NKqp;
 
-using TEvExecuteDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
-    Ydb::Table::ExecuteDataQueryResponse>;
-
 class TExecuteDataQueryRPC : public TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest> {
     using TBase = TRpcKqpRequestActor<TExecuteDataQueryRPC, TEvExecuteDataQueryRequest>;
 
 public:
     using TResult = Ydb::Table::ExecuteQueryResult;
 
-    TExecuteDataQueryRPC(IRequestOpCtx* msg)
+    TExecuteDataQueryRPC(TEvExecuteDataQueryRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -248,8 +243,8 @@ public:
     }
 };
 
-void DoExecuteDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TExecuteDataQueryRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvExecuteDataQueryRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TExecuteDataQueryRPC(ev->Release().Release()));
 }
 
 } // namespace NGRpcService

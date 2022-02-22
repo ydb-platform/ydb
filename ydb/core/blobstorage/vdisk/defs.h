@@ -5,4 +5,5 @@
 // define to turn on latency optimization
 //#define UNPACK_LOCALSYNCDATA
 
-
+// set to 1 to enable extended blocks format
+#define ENABLE_EXTENDED_BLOCKS 0

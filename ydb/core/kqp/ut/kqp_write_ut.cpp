@@ -98,7 +98,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
 
             DECLARE $key AS Uint64;
@@ -128,7 +127,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto queryPrefix = R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
         )";
 
@@ -210,7 +208,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         TString query(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "%s";
 
             DECLARE $Key AS Uint32;
@@ -266,7 +263,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
 
             DECLARE $key AS Uint64;
@@ -591,14 +587,12 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
             UPSERT INTO `/Root/Temp` (Key) VALUES (127);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
             UPSERT INTO `/Root/Temp` (Key) VALUES (128);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -606,7 +600,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
             DELETE FROM `/Root/Temp` ON (Key) VALUES (140);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -614,7 +607,6 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
             SELECT * FROM `/Root/Temp`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

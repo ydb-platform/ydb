@@ -21,9 +21,7 @@ namespace NYql::NDqs {
 
     struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> {
         TEvDqFailure() = default;
-        explicit TEvDqFailure(const TIssues& issues, bool retriable = false, bool needFallback = false);
         explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
-        TEvDqFailure(const TString& error, TIssueCode, bool retriable = false, bool needFallback = false);
     };
 
     struct TEvQueryResponse
@@ -77,14 +75,12 @@ namespace NYql::NDqs {
         TEvPingResponse() = default;
     };
 
-    // legacy
     struct TEvFullResultWriterStatusRequest
         : NActors::TEventPB<TEvFullResultWriterStatusRequest, NYql::NDqProto::TFullResultWriterStatusRequest,
         TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_REQUEST> {
         TEvFullResultWriterStatusRequest() = default;
     };
 
-    // legacy
     struct TEvFullResultWriterStatusResponse
         : NActors::TEventPB<TEvFullResultWriterStatusResponse, NYql::NDqProto::TFullResultWriterStatusResponse,
         TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_RESPONSE> {
@@ -94,27 +90,5 @@ namespace NYql::NDqs {
 
     struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
-    };
-
-    struct TEvFullResultWriterWriteRequest
-        : NActors::TEventPB<TEvFullResultWriterWriteRequest, NYql::NDqProto::TFullResultWriterWriteRequest,
-        TDqDataEvents::ES_FULL_RESULT_WRITER_WRITE_REQUEST> {
-        TEvFullResultWriterWriteRequest() = default;
-        explicit TEvFullResultWriterWriteRequest(NDqProto::TFullResultWriterWriteRequest&& data);
-    };
-
-    struct TEvFullResultWriterAck
-        : NActors::TEventPB<TEvFullResultWriterAck, NYql::NDqProto::TFullResultWriterAck,
-        TDqDataEvents::ES_FULL_RESULT_WRITER_ACK> {
-        TEvFullResultWriterAck() = default;
-        explicit TEvFullResultWriterAck(NDqProto::TFullResultWriterAck& data);
-    };
-
-    struct TEvMessageProcessed : NActors::TEventBase<TEvMessageProcessed, TDqDataEvents::ES_MESSAGE_PROCESSED> {
-        DEFINE_SIMPLE_LOCAL_EVENT(TEvMessageProcessed, "");
-
-        explicit TEvMessageProcessed(const TString& messageId);
-        
-        const TString MessageId;
     };
 }

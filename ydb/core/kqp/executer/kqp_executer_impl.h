@@ -172,11 +172,10 @@ protected:
 protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
-        NYql::TIssues issues = ev->Get()->GetIssues();
         LOG_D("Got EvAbortExecution, status: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+            << ", message: " << msg.GetMessage());
         if (msg.GetStatusCode() == Ydb::StatusIds::INTERNAL_ERROR) {
-            InternalError(issues);
+            InternalError(msg.GetMessage());
         } else if (msg.GetStatusCode() == Ydb::StatusIds::TIMEOUT) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
@@ -184,7 +183,7 @@ protected:
             TerminateComputeActors(Ydb::StatusIds::TIMEOUT, "timeout");
             this->PassAway();
         } else {
-            RuntimeError(msg.GetStatusCode(), issues);
+            RuntimeError(msg.GetStatusCode(), msg.GetMessage());
         }
     }
 
@@ -251,7 +250,7 @@ protected:
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
             bool sent = this->Send(computeActorId, channelsInfoEv.Release());
-            YQL_ENSURE(sent, "Failed to send event to " << computeActorId.ToString());
+            Y_VERIFY_DEBUG_S(sent, "Failed to send event to " << computeActorId.ToString());
         }
     }
 
@@ -500,22 +499,18 @@ protected:
     }
 
 protected:
-    void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
+    void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const TString& message) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
             if (task.ComputeActorId) {
-                LOG_I("aborting compute actor execution, message: " << issues.ToOneLineString()
+                LOG_I("aborting compute actor execution, message: " << message
                     << ", compute actor: " << task.ComputeActorId << ", task: " << task.Id);
 
-                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(code, issues);
+                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(code, message);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
                 LOG_I("task: " << task.Id << ", does not have Compute ActorId yet");
             }
         }
-    }
-
-    void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const TString& message) {
-        TerminateComputeActors(code, NYql::TIssues({NYql::TIssue(message)}));
     }
 
 protected:
@@ -525,18 +520,12 @@ protected:
             << ", event: " << eventType);
     }
 
-    void InternalError(const NYql::TIssues& issues) {
-        LOG_E(issues.ToOneLineString());
-        TerminateComputeActors(Ydb::StatusIds::INTERNAL_ERROR, issues);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
-        for (const NYql::TIssue& i : issues) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-        }
-        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issue);
-    }
-
     void InternalError(const TString& message) {
-        InternalError(NYql::TIssues({NYql::TIssue(message)}));
+        LOG_E(message);
+        TerminateComputeActors(Ydb::StatusIds::INTERNAL_ERROR, message);
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
+        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(message));
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
     void ReplyUnavailable(const TString& message) {
@@ -547,10 +536,10 @@ protected:
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
     }
 
-    void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
-        LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
-        TerminateComputeActors(code, issues);
-        ReplyErrorAndDie(code, issues);
+    void RuntimeError(Ydb::StatusIds::StatusCode code, const TString& message) {
+        LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << message);
+        TerminateComputeActors(code, message);
+        ReplyErrorAndDie(code, NYql::TIssue(message));
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {

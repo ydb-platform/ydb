@@ -5,7 +5,6 @@
 #include "datashard_trans_queue.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
-#include "datashard_schema_snapshots.h"
 #include "datashard_snapshots.h"
 #include "datashard_s3_downloads.h"
 #include "datashard_s3_uploads.h"
@@ -240,7 +239,6 @@ class TDataShard
     friend class TEngineBay;
     friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
-    friend class TSchemaSnapshotManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
@@ -591,8 +589,8 @@ class TDataShard
         };
 
         struct Snapshots : Table<14> {
-            struct Oid :             Column<1, NScheme::NTypeIds::Uint64> {}; // PathOwnerId
-            struct Tid :             Column<2, NScheme::NTypeIds::Uint64> {}; // LocalPathId
+            struct Oid :             Column<1, NScheme::NTypeIds::Uint64> {};
+            struct Tid :             Column<2, NScheme::NTypeIds::Uint64> {};
             struct Step :            Column<3, NScheme::NTypeIds::Uint64> {};
             struct TxId :            Column<4, NScheme::NTypeIds::Uint64> {};
             struct Name :            Column<5, NScheme::NTypeIds::String> {};
@@ -736,24 +734,12 @@ class TDataShard
             using TColumns = TableColumns<Tid, FullCompactionTs>;
         };
 
-        struct SchemaSnapshots : Table<28> {
-            struct PathOwnerId :   Column<1, NScheme::NTypeIds::Uint64> {};
-            struct LocalPathId :   Column<2, NScheme::NTypeIds::Uint64> {};
-            struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct Step :          Column<4, NScheme::NTypeIds::Uint64> {};
-            struct TxId :          Column<5, NScheme::NTypeIds::Uint64> {};
-            struct Schema :        Column<6, NScheme::NTypeIds::String> {};
-
-            using TKey = TableKey<PathOwnerId, LocalPathId, SchemaVersion>;
-            using TColumns = TableColumns<PathOwnerId, LocalPathId, SchemaVersion, Step, TxId, Schema>;
-        };
-
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
             SrcChangeSenderActivations, DstChangeSenderActivations,
             ReplicationSourceOffsets, ReplicationSources, DstReplicationSourceOffsetsReceived,
-            UserTablesStats, SchemaSnapshots>;
+            UserTablesStats>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1402,9 +1388,6 @@ public:
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }
     const TSnapshotManager& GetSnapshotManager() const { return SnapshotManager; }
 
-    TSchemaSnapshotManager& GetSchemaSnapshotManager() { return SchemaSnapshotManager; }
-    const TSchemaSnapshotManager& GetSchemaSnapshotManager() const { return SchemaSnapshotManager; }
-
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
@@ -1901,7 +1884,6 @@ private:
     TInstant LastDbStatsUpdateTime;
     TInstant LastDbStatsReportTime;
     TInstant LastCpuWarnTime;
-    TInstant LastDataSizeWarnTime;
     TActorId DbStatsReportPipe;
     TActorId TableResolvePipe;
     ui64 StatsReportRound = 0;
@@ -1960,7 +1942,6 @@ private:
     TSysLocks SysLocks;
 
     TSnapshotManager SnapshotManager;
-    TSchemaSnapshotManager SchemaSnapshotManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -1979,8 +1960,6 @@ private:
     TControlWrapper PerShardReadSizeLimit;
     TControlWrapper CpuUsageReportThreshlodPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
-    TControlWrapper HighDataSizeReportThreshlodBytes;
-    TControlWrapper HighDataSizeReportIntervalSeconds;
 
     TControlWrapper DataTxProfileLogThresholdMs;
     TControlWrapper DataTxProfileBufferThresholdMs;

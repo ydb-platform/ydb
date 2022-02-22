@@ -1,35 +1,26 @@
-# YDB C++ SDK Metrics
+# Мониторинг YDB С++ SDK
 
-You can plug in YDB C++ SDK extension to monitor how your application interacts with YDB. In particular you can monitor:
-- Transport errors;
-- Per host messages in fligh;
-- How database nodes discover works;
-- Session pool size;
-- Number of sessions per host;
-- Number of server endpoints available;
-- Query size, latency, etc.
+Имеется возможность подключать расширение для C++ SDK, позволяющее мониторить работу последнего. В частности возможен мониторинг транспортных ошибок, infligh для каждого хоста, работа discovery, размер пула сессий, количество сессий на host, количество endpoint'ов, размеры, latency запросов и другие. 
 
-You can get these metrics via http server provided by YDB C++ SDK or implement your own MetricRegistry if it more convenient.
+Есть возможность как использовать http сервер создаваемый в sdk, так и использовать свой MetricRegistry (что часто удобнее).
 
-## Setting up Solomon Monitoring
+## Настройка Solomon
 
-> This is Yandex specific section for setting up internal monitoring called Solomon
+При использовании выделенного http сервера для sdk требуется подготовить проект в Solomon, для чего:
 
-### Setup Solomon Environment
-TSolomonStatPullExtension class allows you to quickly setup you application monitoring. You need to prepare a Solomon project that can accept your metrics beforehand.
-[Create project, cluster and service, and connect them.](https://wiki.yandex-team.ru/solomon/howtostart/).
-Add hostnames which run your application to **Cluster hosts** (use hostnames without "http://"). Solomon's fetcher will use **Port** field for all added hosts.
-Fill in the following params:
+Нужно [создать проект, кластер и сервис, и связать в шард в Solomon.](https://wiki.yandex-team.ru/solomon/howtostart/)
+При создании кластера в **Cluster hosts** добавить host опрашиваемого клиента (без http://). Поле **Port** будет использоваться для всех host'ов, добавленных в данный кластер, вне зависимости от настроек сервиса.
+При создании сервиса указать следующие настройки:
 - **Monitoring model** : **PULL**;
 - **URL Path** : **/stats**;
 - **Interval** : **10**;
-- **Port** : a port of http server YDB SDK runs.
+- **Port** : порт http сервера.
 
-### Setup TSolomonStatPullExtension in Your Application Code
+## Настройка мониторинга в SDK при использовании http сервера в sdk
 
-After creating NYdb::TDriver you need to add Solomon Monitoring extension. If you set up incorrect hostname or port **TSystemError** exception will be thrown.
+После создания драйвера нужно добавить расширение для мониторинга. При указании неверного host или открытого порта, генерируется исключение **TSystemError**.
 
-> **Important**: you must plug in monitoring before driver creation.
+Внимание: подключение мониторинга должно происходить до создания клиента.
 
 ```cl
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
@@ -42,11 +33,11 @@ After creating NYdb::TDriver you need to add Solomon Monitoring extension. If yo
     NYdb::TDriver driver(config);
     try {
 
-        const TString host = ...    // use hostname without http://
+        const TString host = ... // без http://
         const ui64 port = ...
-        const TString project = ... // Solomon's project id
-        const TString service = ... // Solomon's service id
-        const TString cluster = ... // Solomon's cluster id
+        const TString project = ... // поле id проекта в Solomon
+        const TString service = ... // поле id сервиса в Solomon
+        const TString cluster = ... // поле id кластера в Solomon 
         NSolomonStatExtension::TSolomonStatPullExtension::TParams params(host, port, project, service, cluster);
         driver.AddExtension<NSolomonStatExtension::TSolomonStatPullExtension>(params);
 
@@ -57,13 +48,12 @@ After creating NYdb::TDriver you need to add Solomon Monitoring extension. If yo
 
 ```
 
-## Setup Monitoring of Your Choice
+## Настройка мониторинга в SDK при использовании своего SensorsRegestry
 
-Implementing NMonitoring::IMetricRegistry provides more flexibility. You can deliver application metrics to Prometheus or any other system of your choice, just register your specific NMonitoring::IMetricRegistry implementation via AddMetricRegistry function.
+В данном случае подключение еще проще. Где то в вашем коде есть экземпляр IMetricRegistry. В SDK есть перегрузки для хелпера AddMetricRegistry
 
-> **Important**: you must plug in monitoring before driver creation.
+Внимание: подключение мониторинга должно происходить до создания клиента.
 
-Select a method which is right for you:
 ```cl
 #include <ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_connector.h>
 
@@ -74,19 +64,19 @@ void AddMetricRegistry(NYdb::TDriver& driver, std::shared_ptr<NMonitoring::IMetr
 void AddMetricRegistry(NYdb::TDriver& driver, TAtomicSharedPtr<NMonitoring::IMetricRegistry> ptr);
 ```
 
-If you provide a raw pointer, it's your responsibility to delete the registry. You must shutdown the SDK driver before destroying the registry.
+которые позволяют подключить IMetricRegistry к sdk. При передаче по сырому указателю обязанность по контролю времени жизни лежит на пользовательском коде, sdk должен быть остановлен до разрушения MetricRegistry.
 
-## Metrics Description
+## Описание графиков
 
-The most valuable metrics are the following:
+Наиболле интересные сенсоры:
 
-- Grpc/InFlightByYdbHost - queries in flight for a selected YDB hostname
-- Request/Latency - Query execution latency histogram from the client side, ms (without RetryOperation)
-- Request/ParamsSize - Query params size histogram in bytes
-- Request/QuerySize - Query text size histogram in bytes
-- Request/ResultSize - Query response size histogram in bytes
-- SessionBalancer/Variation - Coefficient of variation in the distribution of sessions across database hosts
-- Sessions/InPool - Number of sessions in a pool
-- Sessions/SessionsLimitExceeded - Rate of events for exceeding the limit on the number of sessions on the client side
-- SessionsByYdbHost - Number of sessions per YDB hosts
+- Grpc/InFlightByYdbHost - запросы в полете для заданного ydb хоста
+- Request/Latency - Гистограмма времени выполнения запроса с клиентской стороны, ms (без учета времени в RetryOperation)
+- Request/ParamsSize - Гистограмма размера параметров используемых в запросах, в байтах
+- Request/QuerySize - Гистограмма размера текстов программ, в байтах
+- Request/ResultSize - Гистограмма размера ответов, в байтах
+- SessionBalancer/Variation - Коэффициент вариации распределения сессий по хостам базы данных
+- Sessions/InPool - количество сессий в пуле
+- Sessions/SessionsLimitExceeded - Рейт событий превышения лимита на количество сессий на клиентской стороне
+- SessionsByYdbHost - количество сессий по хостам базы данных
 

@@ -360,11 +360,6 @@ public:
     virtual void AddServerHint(const TString& hint) = 0;
     virtual void SetCostInfo(float consumed_units) = 0;
 
-    virtual void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) = 0;
-    virtual void FinishStream() = 0;
-
-    virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
-
 private:
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 };
@@ -383,7 +378,6 @@ public:
 };
 
 class IRequestNoOpCtx : public IRequestCtx {
-
 };
 
 struct TCommonResponseFillerImpl {
@@ -920,7 +914,7 @@ public:
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) {
         // res->data() pointer is used inside grpc code.
         // So this object should be destroyed during grpc_slice destroying routine
         auto res = new TString;
@@ -960,8 +954,9 @@ public:
         return google::protobuf::Arena::CreateMessage<TResult>(ctx->GetArena());
     }
 
-    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) override {
-        Ctx_->SetNextReplyCallback(std::move(cb));
+    template<typename Tcb>
+    void SetStreamingNotify(Tcb&& cb) {
+        Ctx_->SetNextReplyCallback(cb);
     }
 
     void SetClientLostAction(std::function<void()>&& cb) override {
@@ -974,7 +969,7 @@ public:
         Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
     }
 
-    void FinishStream() override {
+    void FinishStream() {
         Ctx_->FinishStreamingOk();
     }
 
@@ -1029,58 +1024,20 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath;
 };
 
-template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
-class TGRpcRequestValidationWrapperImpl :
-    public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived> {
-
-public:
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
-    TGRpcRequestValidationWrapperImpl(NGrpc::IRequestContextBase* ctx)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
-    { }
-
-    bool Validate(TString& error) override {
-        return this->GetProtoRequest()->validate(error);
-    }
-};
-
-// SFINAE
-// Check protobuf has validate feature
-template<typename TProto>
-struct TProtoHasValidate {
-private:
-    static int Detect(...);
-    // validate function has prototype: bool validate(TProtoStringType&) const
-    static TProtoStringType Dummy_;
-    template<typename U>
-    static decltype(std::declval<U>().validate(Dummy_)) Detect(const U&);
-public:
-    static constexpr bool Value = std::is_same<bool, decltype(Detect(std::declval<TProto>()))>::value;
-};
-
 class IFacilityProvider;
 
 template <typename TReq, typename TResp, bool IsOperation>
 class TGrpcRequestCall
-    : public std::conditional_t<TProtoHasValidate<TReq>::Value,
-            TGRpcRequestValidationWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
-            TGRpcRequestWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>
-    {
+    : public TGRpcRequestWrapperImpl<
+        TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>> {
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestIface;
 public:
     static constexpr bool IsOp = IsOperation;
-    static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
-    using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
-            TGRpcRequestValidationWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
-            TGRpcRequestWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>;
-
     TGrpcRequestCall(NGrpc::IRequestContextBase* ctx,
         void (*cb)(std::unique_ptr<TRequestIface>, const IFacilityProvider&), TRequestAuxSettings auxSettings = {})
-        : TBase(ctx)
+        : TGRpcRequestWrapperImpl<
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation,
+                TGrpcRequestCall<TReq, TResp, IsOperation>>(ctx)
         , PassMethod(cb)
         , AuxSettings(std::move(auxSettings))
     { }

@@ -1,11 +1,8 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
-
-#include "service_table.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -17,14 +14,11 @@ using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
 
-using TEvKeepAliveRequest = TGrpcRequestOperationCall<Ydb::Table::KeepAliveRequest,
-    Ydb::Table::KeepAliveResponse>;
-
 class TKeepAliveRPC : public TRpcKqpRequestActor<TKeepAliveRPC, TEvKeepAliveRequest> {
     using TBase = TRpcKqpRequestActor<TKeepAliveRPC, TEvKeepAliveRequest>;
 
 public:
-    TKeepAliveRPC(IRequestOpCtx* msg)
+    TKeepAliveRPC(TEvKeepAliveRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -93,8 +87,8 @@ private:
     }
 };
 
-void DoKeepAliveRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TKeepAliveRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvKeepAliveRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TKeepAliveRPC(ev->Release().Release()));
 }
 
 } // namespace NGRpcService

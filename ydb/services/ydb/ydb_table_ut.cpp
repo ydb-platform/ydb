@@ -14,7 +14,6 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
@@ -45,22 +44,6 @@ void EnsureTablePartitions(NYdb::NTable::TTableClient& client, TString table, ui
     UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionsCount(), expectedPartitions);
     UNIT_ASSERT_VALUES_EQUAL(description.GetTableDescription().GetPartitionStats().size(), expectedPartitions);
-}
-
-bool HasIssue(const NYql::TIssues& issues, ui32 code, std::string_view message,
-    std::function<bool(const NYql::TIssue& issue)> predicate = {})
-{
-    bool hasIssue = false;
-
-    for (auto& issue : issues) {
-        NYql::WalkThroughIssues(issue, false, [&] (const NYql::TIssue& issue, int) {
-            if (!hasIssue && issue.GetCode() == code && (message.empty() || message == issue.Message)) {
-                hasIssue = !predicate || predicate(issue);
-            }
-        });
-    }
-
-    return hasIssue;
 }
 
 static void MultiTenantSDK(bool asyncDiscovery) {
@@ -1458,11 +1441,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             SELECT * FROM [Root/Test] WHERE Key != 1;
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::UNDETERMINED);
-
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE,
-            "Result of Kikimr query didn't meet requirements and isn't available"sv), result.GetIssues().ToString());
-
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("REPLY_SIZE_EXECEEDED"), result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().Contains("ExecResultUnavailable"));
+        UNIT_ASSERT(result.GetIssues().ToString().Contains("REPLY_SIZE_EXECEEDED"));
     }
 
     Y_UNIT_TEST(TestDoubleKey) {
@@ -2865,24 +2845,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 } else {
                     // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
                     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                    if (stats.query_phases().size() == 1) {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                        UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
-                        UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us());
-                        UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), stats.query_phases(0).duration_us());
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Foo");
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
-                        UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
-                        UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
-                        UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
-                        UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), stats.query_phases(0).duration_us() + stats.query_phases(1).duration_us());
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+                    UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
+                    UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), stats.query_phases(0).duration_us());
                 }
             }
 
@@ -2965,35 +2935,23 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 } else {
                     // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
                     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-                    int idx = 0;
-                    if (stats.query_phases().size() == 2) {
-                        idx = 0;
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                        UNIT_ASSERT(stats.query_phases(0).table_access().empty());
-                        idx = 1;
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
                     // 1st phase: find matching rows
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 2);
-                    UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+                    UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
                     // 2nd phase: delete found rows
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).name(), "/Root/Foo");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).deletes().rows(), 2);
-                    UNIT_ASSERT(stats.query_phases(idx + 1).cpu_time_us() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
+                    UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
                     // Totals
-                    ui64 cpuTimeUs = 0;
-                    ui64 durationUs = 0;
-                    for (const auto& phase: stats.query_phases()) {
-                        cpuTimeUs += phase.cpu_time_us();
-                        durationUs += phase.duration_us();
-                    }
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), cpuTimeUs);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), durationUs);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(),
+                        stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(),
+                        stats.query_phases(0).duration_us() + stats.query_phases(1).duration_us());
                 }
             }
         }

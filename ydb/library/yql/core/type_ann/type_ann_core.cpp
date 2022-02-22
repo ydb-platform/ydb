@@ -5002,6 +5002,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        if constexpr (ContainsOrLookup) {
+            if (IsDataOrOptionalOfData(input->Head().GetTypeAnn())) {
+                return WithWrapper(input, output, ctx);
+            }
+        }
+
         if (IsNull(input->Head())) {
             output = ContainsOrLookup ? MakeBool(input->Pos(), false, ctx.Expr) : input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
@@ -5743,104 +5749,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             output = ctx.Expr.NewCallable(input->Pos(), "AsStruct", std::move(children));
-        }
-
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    IGraphTransformer::TStatus StaticZipWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        const TStructExprType* argStruct = nullptr;
-        TVector<TStringBuf> argNames;
-        const TTupleExprType* argTuple = nullptr;
-
-        auto getMemberNames = [](const TStructExprType& type) {
-            TVector<TStringBuf> result;
-            for (auto& item : type.GetItems()) {
-                result.push_back(item->GetName());
-            }
-            Sort(result);
-            return result;
-        };
-
-        for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
-            auto child = input->Child(i);
-            const TTypeAnnotationNode* childType = child->GetTypeAnn();
-            if (HasError(childType, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!childType) {
-                YQL_ENSURE(child->Type() == TExprNode::Lambda);
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected either struct or tuple, but got lambda"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (argStruct) {
-                if (childType->GetKind() != ETypeAnnotationKind::Struct) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
-                        TStringBuilder() << "Expected all arguments to be of Struct type, but got: " << *childType << " for " << i << "th argument"));
-                    return IGraphTransformer::TStatus::Error;
-                }
-                auto childNames = getMemberNames(*childType->Cast<TStructExprType>());
-                if (childNames != argNames) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
-                        TStringBuilder() << "Struct members mismatch. Members for first argument: " << JoinSeq(",", argNames)
-                                         << ". Members for " << i << "th argument: " << JoinSeq(", ", childNames)));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else if (argTuple) {
-                if (childType->GetKind() != ETypeAnnotationKind::Tuple) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
-                        TStringBuilder() << "Expected all arguments to be of Tuple type, but got: " << *childType << " for " << i << "th argument"));
-                    return IGraphTransformer::TStatus::Error;
-                }
-                auto childSize = childType->Cast<TTupleExprType>()->GetSize();
-                if (childSize != argTuple->GetSize()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
-                        TStringBuilder() << "Tuple size mismatch. Got " << argTuple->GetSize()
-                                         << " for first argument and " << childSize << " for " << i << "th argument"));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else if (childType->GetKind() == ETypeAnnotationKind::Struct) {
-                argStruct = childType->Cast<TStructExprType>();
-                argNames = getMemberNames(*argStruct);
-            } else if (childType->GetKind() == ETypeAnnotationKind::Tuple) {
-                argTuple = childType->Cast<TTupleExprType>();
-            } else {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "Expected either struct or tuple, but got: " << *childType));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        if (argStruct) {
-            TExprNodeList asStructArgs;
-            for (auto& name : argNames) {
-                auto nameAtom = ctx.Expr.NewAtom(input->Pos(), name);
-                TExprNodeList zippedValues;
-                for (auto child : input->ChildrenList()) {
-                    zippedValues.push_back(ctx.Expr.NewCallable(child->Pos(), "Member", { child , nameAtom }));
-                }
-                auto zipped = ctx.Expr.NewList(input->Pos(), std::move(zippedValues));
-                asStructArgs.push_back(ctx.Expr.NewList(input->Pos(), { nameAtom, zipped }));
-            }
-            output = ctx.Expr.NewCallable(input->Pos(), "AsStruct", std::move(asStructArgs));
-        } else {
-            YQL_ENSURE(argTuple);
-            TExprNodeList tupleArgs;
-            for (size_t i = 0; i < argTuple->GetSize(); ++i) {
-                auto idxAtom = ctx.Expr.NewAtom(input->Pos(), ToString(i), TNodeFlags::Default);
-                TExprNodeList zippedValues;
-                for (auto child : input->ChildrenList()) {
-                    zippedValues.push_back(ctx.Expr.NewCallable(child->Pos(), "Nth", { child , idxAtom }));
-                }
-                auto zipped = ctx.Expr.NewList(input->Pos(), std::move(zippedValues));
-                tupleArgs.push_back(zipped);
-            }
-            output = ctx.Expr.NewList(input->Pos(), std::move(tupleArgs));
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -12807,7 +12715,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Likely"] = &BoolOpt1Wrapper;
         Functions["Map"] = &MapWrapper;
         Functions["OrderedMap"] = &MapWrapper;
-        Functions["MapNext"] = &MapNextWrapper;
         Functions["FoldMap"] = &FoldMapWrapper;
         Functions["Fold1Map"] = &Fold1MapWrapper;
         Functions["Chain1Map"] = &Chain1MapWrapper;
@@ -12952,7 +12859,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions[ForName] = &ForWorldWrapper;
         Functions["IfPresent"] = &IfPresentWrapper;
         Functions["StaticMap"] = &StaticMapWrapper;
-        Functions["StaticZip"] = &StaticZipWrapper;
         Functions["TryRemoveAllOptionals"] = &TryRemoveAllOptionalsWrapper;
         Functions["HasNull"] = &HasNullWrapper;
         Functions["TypeOf"] = &TypeOfWrapper;

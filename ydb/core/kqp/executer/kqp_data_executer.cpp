@@ -799,8 +799,6 @@ private:
                 LOG_E("DeliveryProblem to shard " << msg->TabletId << ", notDelivered: " << msg->NotDelivered
                     << ", txPlanned: " << TxPlanned << ", coordinator: " << TxCoordinator);
                 Y_VERIFY_DEBUG(false);
-                // Proceed with query processing
-                [[fallthrough]];
             case TShardState::EState::Executing: {
                 if ((wasRestarting || shardState->ReattachState.Reattaching) &&
                      shardState->ReattachState.ShouldReattach(TlsActivationContext->Now()))
@@ -1123,7 +1121,6 @@ private:
 
                 case NKqpProto::TKqpPhyConnection::kMap: {
                     partitionsCount = originStageInfo.Tasks.size();
-                    break;
                 }
 
                 default: {

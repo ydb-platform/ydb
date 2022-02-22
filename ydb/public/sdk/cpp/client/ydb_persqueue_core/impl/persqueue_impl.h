@@ -7,7 +7,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue/persqueue.h>
 
 namespace NYdb::NPersQueue {
 

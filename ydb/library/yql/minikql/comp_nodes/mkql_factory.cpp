@@ -50,7 +50,6 @@
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
-#include "mkql_mapnext.h"
 #include "mkql_map_join.h"
 #include "mkql_multihopping.h"
 #include "mkql_multimap.h"
@@ -145,7 +144,6 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Fold1", &WrapFold1},
         {"Map", &WrapMap},
         {"OrderedMap", &WrapMap},
-        {"MapNext", &WrapMapNext},
         {"MultiMap", &WrapMultiMap},
         {"FlatMap", &WrapFlatMap},
         {"OrderedFlatMap", &WrapFlatMap},

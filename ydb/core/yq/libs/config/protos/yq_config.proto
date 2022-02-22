@@ -16,7 +16,6 @@ import "ydb/core/yq/libs/config/protos/pending_fetcher.proto";
 import "ydb/core/yq/libs/config/protos/pinger.proto";
 import "ydb/core/yq/libs/config/protos/private_api.proto";
 import "ydb/core/yq/libs/config/protos/private_proxy.proto";
-import "ydb/core/yq/libs/config/protos/read_actors_factory.proto";
 import "ydb/core/yq/libs/config/protos/resource_manager.proto";
 import "ydb/core/yq/libs/config/protos/test_connection.proto";
 import "ydb/core/yq/libs/config/protos/token_accessor.proto";
@@ -43,5 +42,4 @@ message TConfig {
     TPingerConfig Pinger = 16;
     bool EnableDynamicNameservice = 17;
     TTestConnectionConfig TestConnection = 18;
-    TReadActorsFactoryConfig ReadActorsFactoryConfig = 19;
 }

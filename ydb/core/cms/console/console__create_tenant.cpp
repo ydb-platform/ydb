@@ -166,8 +166,6 @@ public:
             }
 
             Tenant->AreResourcesShared = true;
-            // fallthrough to normal resources handling
-            [[fallthrough]];
 
         case Ydb::Cms::CreateDatabaseRequest::kResources:
             for (auto &unit : GetResources(rec).storage_units()) {

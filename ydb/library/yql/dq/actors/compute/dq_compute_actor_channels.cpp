@@ -151,7 +151,13 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         inputChannel.Finished = true;
     }
 
-    Cbs->TakeInputChannelData(std::move(*record.MutableChannelData()), !record.GetNoAck());
+    i64 freeSpace = Cbs->TakeInputChannelData(std::move(*record.MutableChannelData()));
+
+    if (!record.GetNoAck()) {
+        SendChannelDataAck(inputChannel, freeSpace);
+    }
+
+    Cbs->ResumeExecution();
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& ev) {
@@ -681,11 +687,6 @@ const TDqComputeActorChannels::TInputChannelStats* TDqComputeActorChannels::GetI
 
 const TDqComputeActorChannels::TOutputChannelStats* TDqComputeActorChannels::GetOutputChannelStats(ui64 channelId) {
     return OutCh(channelId).Stats.get();
-}
-
-void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
-    TInputChannelState& inputChannel = InCh(channelId);
-    SendChannelDataAck(inputChannel, freeSpace);
 }
 
 void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChannel, i64 freeSpace) {

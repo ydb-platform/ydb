@@ -24,7 +24,6 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
-#include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
@@ -172,17 +171,13 @@ void Init(
     auto sinkActorFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-    const auto httpGateway = NYql::IHTTPGateway::Make(
-        &protoConfig.GetGateways().GetHttpGateway(),
-        yqCounters->GetSubgroup("subcomponent", "http_gateway"));
-
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
+        const auto gateway = NYql::IHTTPGateway::Make();
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(protoConfig.GetTokenAccessor().GetEndpoint(), protoConfig.GetTokenAccessor().GetUseSsl());
-        RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
+        RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterYdbReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
-        RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory,
-            httpGateway, std::make_shared<NYql::NS3::TRetryConfig>(protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetRetryConfig()));
-        RegisterClickHouseReadActorFactory(*sourceActorFactory, credentialsFactory, httpGateway);
+        RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory, gateway);
+        RegisterClickHouseReadActorFactory(*sourceActorFactory, credentialsFactory, gateway);
 
         RegisterDqPqWriteActorFactory(*sinkActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*sinkActorFactory, credentialsFactory);
@@ -209,7 +204,7 @@ void Init(
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
         lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
-        auto resman = NYql::NDqs::CreateLocalWorkerManager(lwmOptions);
+        auto resman = new NYql::NDq::TLogWrapReceive(NYql::NDqs::CreateLocalWorkerManager(lwmOptions), "");
 
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);
     }
@@ -251,12 +246,14 @@ void Init(
             dqCompFactory,
             serviceCounters,
             credentialsFactory,
-            httpGateway,
+            NYql::IHTTPGateway::Make(
+                &protoConfig.GetGateways().GetHttpGateway(),
+                yqCounters->GetSubgroup("subcomponent", "http_gateway")),
             std::move(pqCmConnections),
             clientCounters
             );
 
-        actorRegistrator(MakePendingFetcherId(nodeId), fetcher);
+        actorRegistrator(MakeYqlAnalyticsFetcherId(nodeId), fetcher);
     }
 
     if (protoConfig.GetPrivateProxy().GetEnabled()) {

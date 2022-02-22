@@ -122,35 +122,39 @@ blob_storage_config:
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-4.local"
+          - node_id: "ydb-node-zone-b-1.local"
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-5.local"
+          - node_id: "ydb-node-zone-b-2.local"
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-6.local"
+          - node_id: "ydb-node-zone-b-3.local"
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-7.local"
+          - node_id: "ydb-node-zone-c-1.local"
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-8.local"
+          - node_id: "ydb-node-zone-c-2.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-3.local"
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
 channel_profile_config:
   profile:
   - channel:
     - erasure_species: block-4-2
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: block-4-2
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: block-4-2
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     profile_id: 0

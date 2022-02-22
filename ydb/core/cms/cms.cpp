@@ -364,7 +364,6 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
             AddHostExtensions(action.GetHost(), perm);
-            break;
         default:
             break;
     }

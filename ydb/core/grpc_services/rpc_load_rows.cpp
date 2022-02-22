@@ -1,8 +1,7 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
+#include "rpc_calls.h"
 #include "rpc_common.h"
-#include "service_table.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
@@ -174,13 +173,10 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 
 }
 
-using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
-    Ydb::Table::BulkUpsertResponse>;
-
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(TEvBulkUpsertRequest* request)
+    explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
         : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
         , Request(request)
     {}
@@ -436,14 +432,14 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvBulkUpsertRequest> Request;
+    TAutoPtr<TEvBulkUpsertRequest> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadColumnsRPCPublic(TEvBulkUpsertRequest* request)
+    explicit TUploadColumnsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
         : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
         , Request(request)
     {}
@@ -650,7 +646,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvBulkUpsertRequest> Request;
+    TAutoPtr<TEvBulkUpsertRequest> Request;
     TVector<std::pair<TSerializedCellVec, TString>> Rows;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
@@ -658,16 +654,14 @@ private:
     }
 };
 
-void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-
-    auto* req = dynamic_cast<TEvBulkUpsertRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    if (req->GetProtoRequest()->has_arrow_batch_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(req));
-    } else if (req->GetProtoRequest()->has_csv_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(req));
+void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx) {
+    auto* req = ev->Get()->GetProtoRequest();
+    if (req->has_arrow_batch_settings()) {
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
+    } else if (req->has_csv_settings()) {
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
     } else {
-        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(req));
+        ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release()));
     }
 }
 

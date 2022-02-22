@@ -29,8 +29,6 @@ extern const char SubqueryExtendFor[] = "SubqueryExtendFor";
 extern const char SubqueryUnionAllFor[] = "SubqueryUnionAllFor";
 extern const char SubqueryMergeFor[] = "SubqueryMergeFor";
 extern const char SubqueryUnionMergeFor[] = "SubqueryUnionMergeFor";
-extern const char SubqueryOrderBy[] = "SubqueryOrderBy";
-extern const char SubqueryAssumeOrderBy[] = "SubqueryAssumeOrderBy";
 
 TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfArgs) {
     if (ns == "clickhouse") {
@@ -591,29 +589,6 @@ public:
         return new TYqlSubqueryFor<Name>(Pos, Args);
     }
 };
-
-template <const char* Name>
-class TYqlSubqueryOrderBy : public TCallNode {
-public:
-    TYqlSubqueryOrderBy(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, Name, 2, 2, args)
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        if (!ValidateArguments(ctx)) {
-            return false;
-        }
-
-        Args[1] = Y("EvaluateExpr", Args[1]);
-        return TCallNode::DoInit(ctx, src);
-    }
-
-    TNodePtr DoClone() const final {
-        return new TYqlSubqueryOrderBy<Name>(Pos, Args);
-    }
-};
-
 
 template <bool Strict>
 class TYqlTypeAssert : public TCallNode {
@@ -2674,8 +2649,6 @@ struct TBuiltinFuncData {
             {"subqueryunionallfor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionAllFor>>() },
             {"subquerymergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryMergeFor>>() },
             {"subqueryunionmergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionMergeFor>>() },
-            {"subqueryorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryOrderBy>>() },
-            {"subqueryassumeorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryAssumeOrderBy>>() },
 
             // Tuple builtins
             {"astuple", BuildSimpleBuiltinFactoryCallback<TTupleNode>()},
@@ -2689,7 +2662,6 @@ struct TBuiltinFuncData {
             {"combinemembers", BuildNamedBuiltinFactoryCallback<TCombineMembers>("FlattenMembers")},
             {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
             {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
-            {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
 
             // File builtins
             {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},

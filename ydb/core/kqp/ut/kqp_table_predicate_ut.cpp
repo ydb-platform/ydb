@@ -475,7 +475,6 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
                 PRAGMA kikimr.AllowNullCompareInIndex = "true";
 
                 DECLARE $key1 AS 'Uint32?';
@@ -730,8 +729,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
         CreateSampleTables(session);
 
-        const TString query = "PRAGMA Kikimr.UseNewEngine = 'false'; "
-                              "SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1 "
+        const TString query = "SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1 "
                               "UNION ALL SELECT Key, ValueInt FROM [/Root/MultiShardTable] WHERE ValueInt = 1;";
 
         auto result = session.ExplainDataQuery(query).ExtractValueSync();
@@ -974,7 +972,6 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             DECLARE $key1_from AS Uint32;
             DECLARE $name AS String;
             SELECT * FROM [/Root/Join2] WHERE Key1 > $key1_from AND Name = $name;
@@ -1226,6 +1223,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         for (auto& data: testData) {
             auto query = TString(R"(
                 --!syntax_v1
+                PRAGMA kikimr.OptEnablePredicateExtract = "true";
                 SELECT * FROM `/Root/TableWithIntKey`
                 WHERE <PREDICATE>
                 ORDER BY Key1;
@@ -1284,6 +1282,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         for (auto& data: testData) {
             auto query = TString(R"(
                 --!syntax_v1
+                PRAGMA kikimr.OptEnablePredicateExtract = "true";
                 SELECT Value FROM `/Root/TestDNF`
                 WHERE <PREDICATE>
                 ORDER BY Value;

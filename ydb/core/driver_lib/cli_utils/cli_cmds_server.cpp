@@ -19,9 +19,6 @@ extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 namespace NKikimr {
 namespace NDriverClient {
 
-constexpr auto NODE_KIND_YDB = "ydb";
-constexpr auto NODE_KIND_YQ = "yq";
-
 class TClientCommandServerBase : public TClientCommand {
 protected:
     NKikimrConfig::TAppConfig BaseConfig;
@@ -71,7 +68,6 @@ protected:
     TString NodeDomain;
     ui32 InterconnectPort;
     ui32 SqsHttpPort;
-    TString NodeKind = NODE_KIND_YDB;
     TString NodeType;
     TString DataCenter;
     TString Rack;
@@ -234,8 +230,6 @@ protected:
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
-        config.Opts->AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB, NODE_KIND_YQ))
-                .RequiredArgument("NAME").StoreResult(&NodeKind);
         config.Opts->AddLongOption("node-type", "Type of the node")
                 .RequiredArgument("NAME").StoreResult(&NodeType);
         config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
@@ -249,6 +243,7 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&Rack);
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
+        config.Opts->AddLongOption("cache-file", "NodeWarden cache file path").OptionalArgument("PATH");
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
@@ -367,21 +362,12 @@ protected:
             if (!IsStartWithSlash(TenantName) && TenantName != "no" && TenantName != "dynamic") {
                 ythrow yexception() << "lead / in --tenant parametr is always required except from 'no' and 'dynamic'";
             }
-            if (TenantName != "no" && NodeId && NodeKind != NODE_KIND_YQ) {
+            if (TenantName != "no" && NodeId) {
                 ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
             }
             if (config.ParseResult->Has("tenant-pool-file")) {
                 ythrow yexception() << "opt '--tenant' is incompatible with --tenant-pool-file";
             }
-        }
-
-        if (NodeKind == NODE_KIND_YDB) {
-            // do nothing => default behaviour
-        } else if (NodeKind == NODE_KIND_YQ) {
-            RunConfig.ServicesMask.DisableAll();
-            RunConfig.ServicesMask.EnableYQ();
-        } else {
-            ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
 
         MaybeRegisterAndLoadConfigs();
@@ -488,7 +474,7 @@ protected:
         if (NodeId)
             RunConfig.NodeId = NodeId;
         if (AppConfig.HasNameserviceConfig() && NodeId) {
-            bool nodeIdMatchesConfig = true;
+            bool nodeIdMatchesConfig = false;
             TString localhost("localhost");
             TString hostname;
             try {
@@ -502,9 +488,10 @@ protected:
                     if (node.GetNodeId() == NodeId) {
                         if ((node.GetHost() != hostname && node.GetHost() != localhost) ||
                             (InterconnectPort && InterconnectPort != node.GetPort())) {
-                            nodeIdMatchesConfig = false;
-                            break;
+                            continue;
                         }
+                        nodeIdMatchesConfig = true;
+                        break;
                     }
                 }
             } catch(TSystemError& e) {
@@ -676,6 +663,12 @@ protected:
             messageBusConfig->SetStartTracingBusProxy(!!TracePath);
             messageBusConfig->SetTracePath(TracePath);
         }
+
+        if (config.ParseResult->Has("cache-file")) {
+            auto *bsc = AppConfig.MutableBlobStorageConfig();
+            bsc->SetCacheFilePath(config.ParseResult->Get("cache-file"));
+        }
+
     }
 
     inline bool LoadConfigFromCMS() {

@@ -3,8 +3,12 @@ LIBRARY()
 OWNER(g:yql)
 
 SRCS(
+    download_stream.cpp
+    download_stream.h
     file_storage.cpp
     file_storage.h
+    pattern_group.cpp
+    pattern_group.h
     sized_cache.cpp
     sized_cache.h
     storage.cpp
@@ -16,20 +20,28 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/grpc
     library/cpp/cache
+    library/cpp/cgiparam
     library/cpp/digest/md5
     library/cpp/logger/global
-    library/cpp/threading/future
     library/cpp/regex/pcre
-    library/cpp/protobuf/util
-    library/cpp/uri
+    library/cpp/threading/future
     ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/file_storage/defs
-    ydb/library/yql/core/file_storage/download
     ydb/library/yql/utils
-    ydb/library/yql/utils/log
     ydb/library/yql/utils/fetch
+    ydb/library/yql/utils/log
 )
+
+IF (NOT OPENSOURCE)
+PEERDIR(
+    ydb/library/yql/core/file_storage/exporter
+)
+ELSE()
+PEERDIR(
+    ydb/library/yql/core/file_storage/exporter_dummy
+)
+ENDIF()
 
 END()
 

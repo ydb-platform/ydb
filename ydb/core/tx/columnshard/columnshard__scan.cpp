@@ -254,16 +254,15 @@ private:
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
-        TString reason = ev->Get()->GetIssues().ToOneLineString();
 
         auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got AbortExecution"
             << ", at: " << ScanActorId
             << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
             << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", reason: " << reason);
+            << ", reason: " << msg.GetMessage());
 
-        AbortReason = std::move(reason);
+        AbortReason = std::move(msg.GetMessage());
         SendError(NKikimrProto::EReplyStatus::ERROR); // TODO: better status?
         Finish();
     }

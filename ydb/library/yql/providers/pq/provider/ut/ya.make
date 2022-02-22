@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/sql/pg_dummy
+    ydb/core/yq/libs/db_resolver
     ydb/library/yql/core/facade
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/services/mounts
@@ -17,7 +17,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/local_gateway
     ydb/library/yql/providers/pq/gateway/dummy

@@ -384,30 +384,13 @@ private:
         }
 
         bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
-
-        std::optional<TKqpTransactionInfo::EEngine> engine;
-        if (settings.UseNewEngine.Defined()) {
-            engine = *settings.UseNewEngine
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->UseNewEngine.Get().Defined()) {
-            engine = Config->UseNewEngine.Get().Get()
-                ? TKqpTransactionInfo::EEngine::NewEngine
-                : TKqpTransactionInfo::EEngine::OldEngine;
-        }
-        if (!engine.has_value() && Config->HasKqpForceNewEngine()) {
-            engine = TKqpTransactionInfo::EEngine::NewEngine;
-        }
-
-        if ((queryCtx->Type == EKikimrQueryType::Scan) ||
-            (engine.has_value() && *engine == TKqpTransactionInfo::EEngine::NewEngine))
-        {
+        bool newEngine = MergeFlagValue(Config->HasUseNewEngine(), settings.UseNewEngine);
+        bool forceNewEngine = Config->HasKqpForceNewEngine();
+        if (newEngine || forceNewEngine || queryCtx->Type == EKikimrQueryType::Scan) {
             return PrepareQueryNewEngine(cluster, dataQuery, ctx, settings, sysColumnsEnabled);
         }
 
         // OldEngine only
-        YQL_ENSURE(!engine.has_value() || *engine == TKqpTransactionInfo::EEngine::OldEngine);
 
         for (const auto& [name, table] : TransformCtx->Tables->GetTables()) {
             if (!table.Metadata->SysView.empty()) {

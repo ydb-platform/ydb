@@ -42,7 +42,6 @@ struct TEventIds {
         EvForwardPingRequest,
         EvForwardPingResponse,
         EvGraphParams,
-        EvRaiseTransientIssues,
 
         // Special events
         EvEnd

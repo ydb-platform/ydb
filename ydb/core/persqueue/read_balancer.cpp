@@ -370,10 +370,8 @@ void TPersQueueReadBalancer::CheckACL(const TEvPersQueue::TEvCheckACL::TPtr &req
 
     if (record.GetOperation() == NKikimrPQ::EOperation::READ_OP) {
         if (!Consumers.contains(user)) {
-            RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "no read rule provided for consumer '"
-                    << (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ? user : NPersQueue::ConvertOldConsumerName(user))
-                    << "' that allows to read topic from cluster '" << NPersQueue::GetDC(Topic)
-                    << "'; may be there is read rule with mode all-original only and you are reading with mirrored topics. Change read-rule to mirror-to-<cluster> or options of reading process.", ctx);
+            RespondWithACL(request, NKikimrPQ::EAccess::DENIED, TStringBuilder() << "no read rule provided for consumer '" << NPersQueue::ConvertOldConsumerName(user) << "' that allows to read topic from cluster '"
+                    << NPersQueue::GetDC(Topic) <<"'; may be there is read rule with mode all-original only and you are reading with mirrored topics. Change read-rule to mirror-to-<cluster> or options of reading process.", ctx);
             return;
         }
     }

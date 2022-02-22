@@ -78,7 +78,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             // join on key-column of left table and non-key column of right one
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t1.Value, t2.Value
                     FROM [/Root/FJ_Table_1] AS t1
@@ -403,7 +402,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
                     FROM [/Root/FJ_Table_1] AS t1
@@ -436,7 +434,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t3.Key, t3.Value
                     FROM [/Root/FJ_Table_1] AS t1
@@ -473,7 +470,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
@@ -514,7 +510,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
                     FROM [/Root/FJ_Table_3] AS t1
@@ -547,7 +542,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t2.Key AS Key, t2.Fk1 AS Fk1, t2.Fk2 AS Fk2, t2.Value AS Value
@@ -587,7 +581,6 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
 
         auto test = [&](bool disableFlip, std::function<void(const TDataQueryResult&)> assertFn) {
             const TString query = Sprintf(R"(
-                    PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3

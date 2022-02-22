@@ -10,7 +10,7 @@ namespace NYq {
 
 class TSqlQueryBuilder {
 public:
-    TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName = "Unknown query name");
+    TSqlQueryBuilder(const TString& tablePrefix);
 
     TSqlQueryBuilder& PushPk();
     TSqlQueryBuilder& PopPk();
@@ -108,7 +108,6 @@ private:
     void ConstructWhereFilter(TStringBuilder& text);
 
     const TString TablePrefix;
-    const TString QueryName;
     TString Table;
     int Limit = 0;
     TString Op;

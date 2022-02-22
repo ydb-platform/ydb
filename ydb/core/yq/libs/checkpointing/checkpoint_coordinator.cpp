@@ -3,7 +3,6 @@
 #include "checkpoint_coordinator.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/events/events.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -111,9 +110,10 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     CC_LOG_D("Got TEvRegisterCoordinatorResponse; issues: " << ev->Get()->Issues.ToOneLineString());
     const auto& issues = ev->Get()->Issues;
     if (issues) {
-        CC_LOG_E("Can't register in storage: " + issues.ToOneLineString());
+        auto message = "Can't register in storage: " + issues.ToOneLineString();
+        CC_LOG_E(message);
         ++*Metrics.StorageError;
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't register in storage", issues));
+        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message));
         return;
     }
 
@@ -125,7 +125,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
 
     const bool needCheckpointMetadata = StateLoadMode == YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
     if (needCheckpointMetadata) {
-        const bool loadGraphDescription = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
+        const bool loadGraphDescription = StateLoadMode == YandexQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint();
         CC_LOG_I("Send TEvGetCheckpointsMetadataRequest; state load mode: " << YandexQuery::StateLoadMode_Name(StateLoadMode) << "; load graph: " << loadGraphDescription);
         Send(StorageProxy,
             new TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
@@ -167,8 +167,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
 
     if (event->Issues) {
         ++*Metrics.StorageError;
-        CC_LOG_E("Can't get checkpoints to restore: " + event->Issues.ToOneLineString());
-        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Can't get checkpoints to restore", event->Issues));
+        auto message = "Can't get checkpoints to restore: " + event->Issues.ToOneLineString();
+        CC_LOG_E(message);
+        Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message));
         return;
     }
 
@@ -229,10 +230,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues));
+        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues.ToString()));
         return;
-    } else { // Report as transient issues
-        Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));
     }
 
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
@@ -580,12 +579,6 @@ void TCheckpointCoordinator::PassAway() {
         transport->EventsQueue.Unsubscribe();
     }
     TActorBootstrapped<TCheckpointCoordinator>::PassAway();
-}
-
-void TCheckpointCoordinator::HandleException(const std::exception& err) {
-    NYql::TIssues issues;
-    issues.AddIssue(err.what());
-    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError("Internal error in checkpoint coordinator", issues));
 }
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& taskControllerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode, const YandexQuery::StreamingDisposition& streamingDisposition) {

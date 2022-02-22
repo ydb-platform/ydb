@@ -758,10 +758,6 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 TMaybe<ui32> commonArgs;
                 for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
                     const auto lambda = node->Child(i);
-                    if (lambda->IsArgument()) {
-                        return node;
-                    }
-
                     if (!EnsureLambda(*lambda, ctx)) {
                         return nullptr;
                     }

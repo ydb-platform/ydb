@@ -900,7 +900,7 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvVBlock &record = ev->Get()->Record;
             const ui64 tabletId = record.GetTabletId();
             const ui32 gen = record.GetGeneration();
-            const ui64 issuerGuid = record.GetIssuerGuid();
+            const ui64 issuerGuid = ENABLE_EXTENDED_BLOCKS ? record.GetIssuerGuid() : 0;
 
             if (!OutOfSpaceLogic->Allow(ctx, ev)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
@@ -941,7 +941,7 @@ namespace NKikimr {
             OverloadHandler->ActualizeWeights(ctx, Mask(EHullDbType::Blocks));
             // prepare synclog msg in advance
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, gen,
-                record.GetIssuerGuid()));
+                issuerGuid));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, confirmSyncLogAlso, tabletId, gen,

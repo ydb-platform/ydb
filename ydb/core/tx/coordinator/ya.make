@@ -15,7 +15,6 @@ SRCS(
     coordinator__mediators_confirmations.cpp
     coordinator__monitoring.cpp
     coordinator__plan_step.cpp
-    coordinator__read_step_subscriptions.cpp
     coordinator__restart_mediator.cpp
     coordinator__restore_transaction.cpp
     coordinator__schema.cpp
@@ -41,7 +40,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

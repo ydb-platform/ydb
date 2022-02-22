@@ -1,7 +1,8 @@
 static_erasure: none
 host_configs:
 - drive:
-  - path: /tmp/pdisk.data
+  - kind: 0
+    path: /tmp/pdisk.data
     type: SSD
   host_config_id: 1
 hosts:
@@ -23,7 +24,7 @@ domains_config:
         kind: ssd
         pdisk_filter:
         - property:
-          - type: SSD
+          - type: ROT
         vdisk_kind: Default
   state_storage:
   - ring:

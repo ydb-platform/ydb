@@ -1,7 +1,5 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
-#include "service_table.h"
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
@@ -11,9 +9,6 @@ namespace NGRpcService {
 
 using namespace NActors;
 using namespace Ydb;
-
-using TEvDropTableRequest = TGrpcRequestOperationCall<Ydb::Table::DropTableRequest,
-    Ydb::Table::DropTableResponse>;
 
 class TDropTableRPC : public TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest>;
@@ -59,8 +54,8 @@ private:
     }
 };
 
-void DoDropTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDropTableRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvDropTableRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TDropTableRPC(ev->Release().Release()));
 }
 
 template<>

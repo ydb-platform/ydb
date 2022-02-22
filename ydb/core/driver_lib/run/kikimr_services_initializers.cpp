@@ -699,10 +699,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(GetDestructActorID(), TActorSetupCmd(new TDestructActor,
                 TMailboxType::ReadAsFilled, interconnectPoolId));
 
-            if (nsConfig.GetType() != NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL) {
-                Y_VERIFY(!table->StaticNodeTable.empty());
-            }
-
+            Y_VERIFY(!table->StaticNodeTable.empty());
             ui32 maxNode = 0;
             for (const auto &node : table->StaticNodeTable) {
                 maxNode = Max(maxNode, node.first);
@@ -1510,9 +1507,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
-        auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck() 
-            ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-            : NGRpcService::CreateGRpcRequestProxy(Config);
+        auto grpcReqProxy = NGRpcService::CreateGRpcRequestProxy(Config);
         setup->LocalServices.push_back(std::pair<TActorId,
                                        TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(),
                                                        TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,

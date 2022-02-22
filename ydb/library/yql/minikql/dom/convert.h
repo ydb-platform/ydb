@@ -260,7 +260,7 @@ TUnboxedValuePod ConvertToString(TUnboxedValuePod x, const IValueBuilder* valueB
                 return {};
         case ENodeType::Double:
             if constexpr (AutoConvert)
-                return valueBuilder->NewString(::FloatToString(x.Get<double>())).Release();
+                return valueBuilder->NewString(ToString(x.Get<double>())).Release();
             else if constexpr (Strict)
                 break;
             else

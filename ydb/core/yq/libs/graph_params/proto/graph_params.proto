@@ -9,7 +9,6 @@ package NYq.NProto;
 message TGraphParams {
     string GraphId = 1;
     repeated NYql.NDqProto.TDqTask Tasks = 2;
-    map<int64, bytes> StageProgram = 12;
     uint64 SourceId = 3;
     bytes ResultType = 4;
     repeated string Columns = 5;

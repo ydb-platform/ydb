@@ -34,7 +34,7 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
 
 
 def load_yaml(path):
-    with open(path, 'r') as r:
+    with open(os.path.join(path, "cluster.yaml"), 'r') as r:
         data = yaml.safe_load(r.read())
     return data
 

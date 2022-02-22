@@ -1018,21 +1018,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         });
 
         const auto& record4 = readResult4->Record;
-        UNIT_ASSERT(record4.GetLimitReached());
-        UNIT_ASSERT(!record4.HasFinished());
+        UNIT_ASSERT(!record4.GetLimitReached());
+        UNIT_ASSERT(record4.HasFinished());
         UNIT_ASSERT_VALUES_EQUAL(record4.GetReadId(), 1UL);
         UNIT_ASSERT_VALUES_EQUAL(record4.GetSeqNo(), 4UL);
-        // TODO: check continuation token
-
-        auto readResult5 = helper.WaitReadResult();
-        CheckResult(helper.Tables["table-1"].UserTable, *readResult5, {
-        });
-
-        const auto& record5 = readResult5->Record;
-        UNIT_ASSERT(!record5.GetLimitReached());
-        UNIT_ASSERT(record5.HasFinished());
-        UNIT_ASSERT_VALUES_EQUAL(record5.GetReadId(), 1UL);
-        UNIT_ASSERT_VALUES_EQUAL(record5.GetSeqNo(), 5UL);
         // TODO: check no continuation token
     }
 

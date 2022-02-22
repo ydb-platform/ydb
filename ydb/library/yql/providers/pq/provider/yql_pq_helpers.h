@@ -15,10 +15,10 @@ NNodes::TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& me
 void FindYdsDbIdsForResolving(
     const TPqState::TPtr& state,
     TExprNode::TPtr input,
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& ids);
+    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& ids);
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>& fullResolvedIds);
+    const THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TEvEndpointResponse::TEndpoint>& fullResolvedIds);
 
 } // namespace NYql

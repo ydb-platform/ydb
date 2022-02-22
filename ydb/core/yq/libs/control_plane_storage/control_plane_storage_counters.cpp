@@ -6,13 +6,12 @@ TRequestCounters::TRequestCounters(const TString& name)
     : Name(name) {}
 
 void TRequestCounters::Register(const NMonitoring::TDynamicCounterPtr& counters) {
-    auto requestCounters = counters->GetSubgroup("request", Name);
-    InFly = requestCounters->GetCounter("InFly", false);
-    Ok = requestCounters->GetCounter("Ok", true);
-    Error = requestCounters->GetCounter("Error", true);
-    Retry = requestCounters->GetCounter("Retry", true);
-    LatencyMs = requestCounters->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
-    Issues = requestCounters->GetSubgroup("subcomponent", "Issues");
+    RequestCounters = counters->GetSubgroup("request", Name);
+    InFly = RequestCounters->GetCounter("InFly", false);
+    Ok = RequestCounters->GetCounter("Ok", true);
+    Error = RequestCounters->GetCounter("Error", true);
+    Retry = RequestCounters->GetCounter("Retry", true);
+    LatencyMs = RequestCounters->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
 }
 
 NMonitoring::IHistogramCollectorPtr TRequestCounters::GetLatencyHistogramBuckets() {

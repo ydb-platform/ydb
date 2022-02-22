@@ -11,7 +11,6 @@ SRCS(
     grpc_mon.cpp
     grpc_publisher_service_actor.cpp
     grpc_request_proxy.cpp
-    grpc_request_proxy_simple.cpp
     local_rate_limiter.cpp
     operation_helpers.cpp
     resolve_local_db_table.cpp

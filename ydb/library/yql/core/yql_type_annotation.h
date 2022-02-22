@@ -71,10 +71,6 @@ public:
         UrlLoader = loader;
     }
 
-    void SetParameters(const NYT::TNode& node) {
-        Parameters = node;
-    }
-
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -91,14 +87,12 @@ private:
     bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
-    TString SubstParameters(const TString& str);
 
 private:
     THolder<TExprContext> OwnedCtx;
     const TModulesTable* ParentModules = nullptr;
     TUserDataStorage::TPtr UserData;
     IUrlLoader::TPtr UrlLoader;
-    TMaybe<NYT::TNode> Parameters;
     TExprContext LibsContext;
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;
@@ -207,7 +201,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashSet<TString> DisableConstraintCheck;
     bool UdfSupportsYield = false;
     ui32 EvaluateForLimit = 500;
-    ui32 EvaluateOrderByColumnLimit = 100;
     bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,

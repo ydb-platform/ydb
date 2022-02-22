@@ -1225,16 +1225,11 @@ private:
     const TTypeAnnotationNode* const RawOutputType;
 };
 
-struct TQueueParams {
-    ui64 DataOutpace = 0;
-    ui64 DataLag = 0;
-    bool DataQueueNeeded = false;
-    ui64 LagQueueSize = 0;
-    const TTypeAnnotationNode* LagQueueItemType = nullptr;
-};
-
-TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, const TExprNode::TPtr& frames, TExprContext& ctx) {
-    queueParams = {};
+TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(ui64& dataOutpace, ui64& dataLag, ui64& lagQueueSize,
+    const TTypeAnnotationNode*& lagQueueItemType, const TExprNode::TPtr& frames, TExprContext& ctx)
+{
+    dataOutpace = dataLag = lagQueueSize = 0;
+    lagQueueItemType = nullptr;
 
     TVector<TChain1MapTraits::TPtr> result;
 
@@ -1242,16 +1237,15 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, co
 
     if (traits.LagQueueItemType->Cast<TStructExprType>()->GetSize()) {
         YQL_ENSURE(traits.MaxUnboundedPrecedingLag > 0);
-        queueParams.LagQueueSize = traits.MaxUnboundedPrecedingLag;
-        queueParams.LagQueueItemType = traits.LagQueueItemType;
+        lagQueueSize = traits.MaxUnboundedPrecedingLag;
+        lagQueueItemType = traits.LagQueueItemType;
     }
 
     ui64 currentRowIndex = 0;
     if (traits.MaxDataOutpace || traits.MaxDataLag) {
-        queueParams.DataOutpace = traits.MaxDataOutpace;
-        queueParams.DataLag = traits.MaxDataLag;
-        currentRowIndex = queueParams.DataLag;
-        queueParams.DataQueueNeeded = true;
+        dataOutpace = traits.MaxDataOutpace;
+        dataLag = traits.MaxDataLag;
+        currentRowIndex = dataLag;
     }
 
     for (const auto& item : traits.RawTraits) {
@@ -1288,8 +1282,8 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, co
                 auto end = *trait.FrameSettings.Last;
                 YQL_ENSURE(end <= 0);
                 if (end < 0) {
-                    YQL_ENSURE(queueParams.LagQueueSize >= ui64(0 - end));
-                    lagQueueIndex = queueParams.LagQueueSize + end;
+                    YQL_ENSURE(lagQueueSize >= ui64(0 - end));
+                    lagQueueIndex = lagQueueSize + end;
                 }
 
                 result.push_back(new TChain1MapTraitsCurrentOrLagging(name, trait, lagQueueIndex));
@@ -1307,7 +1301,6 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, co
                 break;
             }
             case EFrameType::GENERIC: {
-                queueParams.DataQueueNeeded = true;
                 auto first = trait.FrameSettings.First;
                 auto last = trait.FrameSettings.Last;
                 YQL_ENSURE(first.Defined());
@@ -1822,11 +1815,6 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
     TExprNode::TPtr sortKey;
     TExprNode::TPtr sortOrder;
     TExprNode::TPtr input = inputList;
-    if (input->IsCallable("ForwardList")) {
-        // full frame strategy uses input 2 times (for grouping and join)
-        // TODO: better way to detect "single use input"
-        input = ctx.NewCallable(pos, "Collect", { input });
-    }
 
     const auto rowType = inputList->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TVector<const TItemExprType*> rowItems = rowType->GetItems();
@@ -2245,8 +2233,11 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
         return expanded;
     }
 
-    TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, ctx);
+    ui64 dataOutpace;
+    ui64 dataLag;
+    ui64 lagQueueSize;
+    const TTypeAnnotationNode* lagQueueItemType;
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(dataOutpace, dataLag, lagQueueSize, lagQueueItemType, frames, ctx);
 
     TExprNode::TPtr sessionKey;
     TExprNode::TPtr sessionSortTraits;
@@ -2308,14 +2299,14 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
 
     TExprNode::TPtr processed = topLevelStreamArg;
     TExprNode::TPtr dataQueue;
-    if (queueParams.DataQueueNeeded) {
-        ui64 queueSize = (queueParams.DataOutpace == Max<ui64>()) ? Max<ui64>() : (queueParams.DataOutpace + queueParams.DataLag + 2);
-        dataQueue = BuildQueue(pos, *rowType, queueSize, queueParams.DataLag, topLevelStreamArg, ctx);
+    if (dataOutpace || dataLag) {
+        ui64 queueSize = (dataOutpace == Max<ui64>()) ? Max<ui64>() : (dataOutpace + dataLag + 2);
+        dataQueue = BuildQueue(pos, *rowType, queueSize, dataLag, topLevelStreamArg, ctx);
         processed = ctx.Builder(pos)
             .Callable("PreserveStream")
                 .Add(0, topLevelStreamArg)
                 .Add(1, dataQueue)
-                .Add(2, BuildUint64(pos, queueParams.DataOutpace, ctx))
+                .Add(2, BuildUint64(pos, dataOutpace, ctx))
             .Seal()
             .Build();
     }
@@ -2325,8 +2316,8 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
         .Callable("OrderedMap")
             .Callable(0, "Chain1Map")
                 .Add(0, std::move(processed))
-                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, queueParams.LagQueueSize, queueParams.LagQueueItemType, ctx))
-                .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, queueParams.LagQueueSize != 0, ctx))
+                .Add(1, BuildChain1MapInitLambda(pos, traits, dataQueue, lagQueueSize, lagQueueItemType, ctx))
+                .Add(2, BuildChain1MapUpdateLambda(pos, traits, dataQueue, lagQueueSize != 0, ctx))
             .Seal()
             .Lambda(1)
                 .Param("pair")

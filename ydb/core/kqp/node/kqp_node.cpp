@@ -292,8 +292,8 @@ private:
 
             auto runtimeSettings = runtimeSettingsBase;
             runtimeSettings.TerminateHandler = [actorSystem, rm = SelfId(), txId, taskId = dqTask.GetId()]
-                (bool success, const NYql::TIssues& issues) {
-                    actorSystem->Send(rm, new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, issues));
+                (bool success, const TString& message) {
+                    actorSystem->Send(rm, new TEvKqpNode::TEvFinishKqpTask(txId, taskId, success, message));
                 };
 
             ETableKind tableKind = ETableKind::Unknown;
@@ -347,7 +347,7 @@ private:
         auto& msg = *ev->Get();
 
         LOG_D("TxId: " << msg.TxId << ", finish compute task: " << msg.TaskId << ", success: " << msg.Success
-            << ", message: " << msg.Issues.ToOneLineString());
+            << ", message: " << msg.Message);
 
         auto task = State.RemoveTask(msg.TxId, msg.TaskId, msg.Success, [this, &msg]
             (const TActorId& requester, const NKqpNode::TTasksRequest& request, const NKqpNode::TTaskContext&, bool finishTx) {

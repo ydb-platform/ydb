@@ -8,7 +8,6 @@
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -230,7 +229,7 @@ struct TComputeRuntimeSettings {
     bool UseLLVM = false;
     bool UseSpilling = false;
 
-    std::function<void(bool success, const TIssues& issues)> TerminateHandler;
+    std::function<void(bool success, const TString& reason)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;
 };
 

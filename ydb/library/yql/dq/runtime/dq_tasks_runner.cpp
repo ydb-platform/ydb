@@ -22,6 +22,8 @@ using namespace NYql::NDqProto;
 
 namespace NYql::NDq {
 
+// #define ENABLE_LLVM_STATS 1
+
 namespace {
 
 void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
@@ -333,9 +335,11 @@ public:
         LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
             << ", llvm: `" << Settings.OptLLVM << "`.");
 
+#ifdef ENABLE_LLVM_STATS
         if (Y_UNLIKELY(CollectProfileStats)) {
             ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry();
         }
+#endif
 
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
         TComputationPatternOpts opts(Alloc().Ref(), typeEnv, Context.ComputationFactory, Context.FuncRegistry,
@@ -344,6 +348,15 @@ public:
         SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
         opts.SecureParamsProvider = SecureParamsProvider.get();
         ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
+
+#ifdef ENABLE_LLVM_STATS
+        TStringBuilder sb;
+        sb << "LLVM Stats, task: " << TaskId << Endl;
+        ProgramParsed.StatsRegistry->ForEachStat([&sb](const TStatKey& key, i64 value) {
+            sb << "  " << key.GetName() << ": " << value << Endl;
+        });
+        LOG(sb);
+#endif
 
         ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
             opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
@@ -523,13 +536,6 @@ public:
 
         if (Y_UNLIKELY(CollectProfileStats)) {
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
-
-            if (ProgramParsed.StatsRegistry) {
-                Stats->MkqlStats.clear();
-                ProgramParsed.StatsRegistry->ForEachStat([this](const TStatKey& key, i64 value) {
-                    Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
-                });
-            }
         }
 
         if (runStatus == ERunStatus::Finished) {

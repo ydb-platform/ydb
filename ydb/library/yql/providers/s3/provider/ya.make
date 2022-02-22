@@ -25,7 +25,6 @@ PEERDIR(
     contrib/libs/re2
     library/cpp/json
     library/cpp/random_provider
-    library/cpp/retry
     library/cpp/string_utils/quote
     library/cpp/time_provider
     library/cpp/xml/document
@@ -52,7 +51,6 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/proto
-    ydb/library/yql/utils
 )
 
 YQL_LAST_ABI_VERSION()

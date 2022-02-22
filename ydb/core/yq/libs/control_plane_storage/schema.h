@@ -4,6 +4,7 @@ namespace NYq {
 
 // tables
 #define QUERIES_TABLE_NAME "queries"
+#define PENDING_TABLE_NAME "pending"
 #define PENDING_SMALL_TABLE_NAME "pending_small"
 #define CONNECTIONS_TABLE_NAME "connections"
 #define BINDINGS_TABLE_NAME "bindings"

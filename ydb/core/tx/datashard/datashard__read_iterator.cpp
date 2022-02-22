@@ -2,17 +2,11 @@
 
 #include <ydb/core/formats/arrow_batch_builder.h>
 
-#include <util/system/hp_timer.h>
-
-#include <utility>
-
 namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
 
 namespace {
-
-constexpr ui64 MinRowsPerCheck = 1000;
 
 class TCellBlockBuilder : public IBlockBuilder {
 public:
@@ -195,12 +189,6 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     return result;
 }
 
-ui64 ResetRowStats(NTable::TIteratorStats& stats)
-{
-    return std::exchange(stats.DeletedRowSkips, 0UL) +
-        std::exchange(stats.InvisibleRowSkips, 0UL);
-}
-
 // nota that reader captures state reference and must be used only
 // after checking that state is still alife, i.e. read can be aborted
 // between Execute() and Complete()
@@ -215,14 +203,7 @@ class TReader {
     TString LastProcessedKey;
 
     ui64 RowsRead = 0;
-    ui64 RowsSinceLastCheck = 0;
-
     ui64 BytesInResult = 0;
-
-    NHPTimer::STime StartTime;
-    NHPTimer::STime EndTime;
-
-    static const NHPTimer::STime MaxCyclesPerIteration;
 
     enum class EReadStatus {
         Done = 0,
@@ -238,10 +219,7 @@ public:
         , BlockBuilder(blockBuilder)
         , TableInfo(tableInfo)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
-    {
-        GetTimeFast(&StartTime);
-        EndTime = StartTime;
-    }
+    {}
 
     EReadStatus ReadRange(TTransactionContext& txc, const TActorContext& ctx, const TSerializedTableRange& range) {
         bool fromInclusive;
@@ -313,9 +291,7 @@ public:
 
         NTable::TRowState rowState;
         rowState.Init(State.Columns.size());
-        NTable::TSelectStats stats;
-        auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
-        RowsSinceLastCheck += 1 + stats.Invisible;
+        auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, 0, State.ReadVersion);
         if (ready == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
@@ -338,7 +314,7 @@ public:
 
     bool ReadRanges(TTransactionContext& txc, const TActorContext& ctx) {
         for (; FirstUnprocessedQuery < State.Request->Ranges.size(); ++FirstUnprocessedQuery) {
-            if (OutOfQuota() || ShouldStopByElapsedTime())
+            if (OutOfQuota())
                 return true;
 
             const auto& range = State.Request->Ranges[FirstUnprocessedQuery];
@@ -358,7 +334,7 @@ public:
 
     bool ReadKeys(TTransactionContext& txc, const TActorContext& ctx) {
         for (; FirstUnprocessedQuery < State.Request->Keys.size(); ++FirstUnprocessedQuery) {
-            if (OutOfQuota() || ShouldStopByElapsedTime())
+            if (OutOfQuota())
                 return true;
 
             const auto& key = State.Request->Keys[FirstUnprocessedQuery];
@@ -392,27 +368,6 @@ public:
     bool HasUnreadQueries() const {
         return FirstUnprocessedQuery < State.Request->Keys.size()
             || FirstUnprocessedQuery < State.Request->Ranges.size();
-    }
-
-    void UpdateCycles() {
-        GetTimeFast(&EndTime);
-    }
-
-    NHPTimer::STime ElapsedCycles() const {
-        return EndTime - StartTime;
-    }
-
-    bool ShouldStopByElapsedTime() {
-        // TODO: should we also check bytes for the case
-        // when rows are very heavy?
-        if (RowsSinceLastCheck >= MinRowsPerCheck) {
-            RowsSinceLastCheck = 0;
-            UpdateCycles();
-
-            return ElapsedCycles() >= MaxCyclesPerIteration;
-        }
-
-        return false;
     }
 
     void FillResult(TEvDataShard::TEvReadResult& result) {
@@ -521,14 +476,15 @@ private:
             BlockBuilder.AddRow(TDbTupleRef(), rowValues);
 
             ++RowsRead;
-            RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
-            if (OutOfQuota() || ShouldStopByElapsedTime()) {
+            if (OutOfQuota()) {
+                // try to check if we have more data to read or it was last row
+                if (Y_UNLIKELY(iter->Next(NTable::ENext::Data) == NTable::EReady::Gone)) {
+                    LastProcessedKey.clear();
+                    return EReadStatus::Done;
+                }
                 return EReadStatus::StoppedByLimit;
             }
         }
-
-        // last iteration to Page or Gone also might have deleted or invisible rows
-        RowsSinceLastCheck += ResetRowStats(iter->Stats);
 
         // TODO: consider restart when Page and too few data read
         // (how much is too few, less than user's limit?)
@@ -543,9 +499,6 @@ private:
         return EReadStatus::Done;
     }
 };
-
-const NHPTimer::STime TReader::MaxCyclesPerIteration =
-    /* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100;
 
 } // namespace
 

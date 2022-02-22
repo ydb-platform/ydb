@@ -1,5 +1,4 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
@@ -11,14 +10,11 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-using TEvCopyTablesRequest = TGrpcRequestOperationCall<Ydb::Table::CopyTablesRequest,
-    Ydb::Table::CopyTablesResponse>;
-
 class TCopyTablesRPC : public TRpcSchemeRequestActor<TCopyTablesRPC, TEvCopyTablesRequest> {
     using TBase = TRpcSchemeRequestActor<TCopyTablesRPC, TEvCopyTablesRequest>;
 
 public:
-    TCopyTablesRPC(IRequestOpCtx* msg)
+    TCopyTablesRPC(TEvCopyTablesRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -48,8 +44,8 @@ private:
     }
 };
 
-void DoCopyTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TCopyTablesRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvCopyTablesRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TCopyTablesRPC(ev->Release().Release()));
 }
 
 } // namespace NKikimr

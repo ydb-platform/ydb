@@ -1178,7 +1178,7 @@ TExprNode::TPtr OptimizeFlatContainerIf(const TExprNode::TPtr& node, TExprContex
     return node;
 }
 
-template <bool HeadOrTail, bool OrderAware = true>
+template <bool HeadOrTail>
 TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("ToList")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
@@ -1194,13 +1194,6 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
     if (1U == nodeToCheck.ChildrenSize() && nodeToCheck.IsCallable("List")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over empty " << nodeToCheck.Content();
         return ctx.NewCallable(node->Head().Pos(), "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
-    }
-
-    if constexpr (!OrderAware) {
-        if (node->Head().GetConstraint<TSortedConstraintNode>()) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted collection";
-            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
-        }
     }
 
     return node;
@@ -1227,8 +1220,8 @@ TExprNode::TPtr OptimizeDirection(const TExprNode::TPtr& node) {
     return node;
 }
 
-TExprNode::TPtr OptimizeAsStruct(const TExprNode::TPtr& node, TExprContext& ctx) {
-    TExprNode::TPtr singleFrom;
+TExprNode::TPtr CheckClonedStructure(const TExprNode::TPtr& node) {
+    TExprNode::TPtr singleNode;
     for (const auto& member : node->Children()) {
         if (!member->Child(1)->IsCallable("Member")) {
             return node;
@@ -1239,62 +1232,25 @@ TExprNode::TPtr OptimizeAsStruct(const TExprNode::TPtr& node, TExprContext& ctx)
         }
 
         auto from = member->Child(1)->HeadPtr();
-        if (!singleFrom) {
+        if (!singleNode) {
             if (from->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
                 return node;
             }
 
-            singleFrom = from;
+            if (from->GetTypeAnn()->Cast<TStructExprType>()->GetSize() != node->ChildrenSize()) {
+                return node;
+            }
+
+            singleNode = from;
         } else {
-            if (singleFrom != from) {
+            if (singleNode != from) {
                 return node;
             }
         }
     }
 
-    if (!singleFrom) {
-        return node;
-    }
-
-    if (singleFrom->GetTypeAnn()->Cast<TStructExprType>()->GetSize() == node->ChildrenSize()) {
-        YQL_CLOG(DEBUG, Core) << "CheckClonedStructure";
-        return singleFrom;
-    }
-
-    if (TCoVisit::Match(singleFrom.Get())) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << singleFrom->Content();
-        return ctx.Builder(node->Pos())
-            .Callable("Visit")
-                .Add(0, singleFrom->HeadPtr())
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    for (size_t i = 1; i < singleFrom->ChildrenSize(); ++i) {
-                        auto child = singleFrom->ChildPtr(i);
-                        if (child->IsAtom()) {
-                            auto lambda = singleFrom->Child(i + 1);
-                            parent
-                                .Add(i, std::move(child))
-                                .Lambda(i + 1)
-                                    .Param("visitItem")
-                                    .ApplyPartial(lambda->HeadPtr(), node)
-                                        .WithNode(*singleFrom, lambda->TailPtr())
-                                        .With(0, "visitItem")
-                                    .Seal()
-                                .Seal();
-                            ++i;
-                        }
-                        else {
-                            parent.ApplyPartial(i, {}, node)
-                                .WithNode(*singleFrom, std::move(child))
-                            .Seal();
-                        }
-                    }
-                    return parent;
-                })
-            .Seal()
-            .Build();
-    }
-
-    return node;
+    YQL_CLOG(DEBUG, Core) << __FUNCTION__;
+    return singleNode ? singleNode : node;
 }
 
 TExprNode::TPtr RemoveToStringFromString(const TExprNode::TPtr& node) {
@@ -2149,14 +2105,6 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    if (lambdaBody.IsCallable("AsList") && lambdaBody.ChildrenSize() == 1 &&
-        node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional)
-    {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " with single arg AsList";
-        auto newLambda = ctx.ChangeChild(self.Lambda().Ref(), 1U, ctx.RenameNode(lambdaBody, "Just"));
-        return ctx.ChangeChild(*node, 1U, ctx.DeepCopyLambda(*newLambda));
-    }
-
     if (IsJustOrSingleAsList(lambdaBody)) {
         const bool isIdentical = &lambdaBody.Head() == &lambdaArg;
         const auto type = lambdaArg.GetTypeAnn();
@@ -2211,6 +2159,11 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
                 return ctx.WrapByCallableIf(toList, "ToList", std::move(extractMembers));
             }
         }
+    }
+
+    if (node->Head().IsCallable("Just")) {
+        YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " over " << node->Head().Content();
+        return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), node->Head().HeadPtr());
     }
 
     if (CanRewriteToEmptyContainer(*node)) {
@@ -4013,7 +3966,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["FlattenByColumns"] = std::bind(&ExpandFlattenByColumns, _1, _2);
 
-    map["AsStruct"] = std::bind(&OptimizeAsStruct, _1, _2);
+    map["AsStruct"] = std::bind(&CheckClonedStructure, _1);
 
     map["Nth"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().Type() == TExprNode::List) {
@@ -4311,7 +4264,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["ToOptional"] = std::bind(OptimizeToOptional<true, false>, _1, _2);
+    map["ToOptional"] = std::bind(OptimizeToOptional<true>, _1, _2);
     map["Head"] = std::bind(OptimizeToOptional<true>, _1, _2);
     map["Last"] = std::bind(OptimizeToOptional<false>, _1, _2);
 
@@ -7192,25 +7145,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["SqlColumnFromType"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << "Decay of " << node->Content();
         return ctx.NewCallable(node->Pos(), "Member", { node->HeadPtr(), node->ChildPtr(1) });
-    };
-
-    map["MapNext"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        TCoMapNext self(node);
-        if (!IsDepended(self.Lambda().Body().Ref(), self.Lambda().Args().Arg(1).Ref())) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " with unused next arg";
-            return Build<TCoOrderedMap>(ctx, self.Pos())
-                .Input(self.Input())
-                .Lambda()
-                    .Args({"row"})
-                    .Body<TExprApplier>()
-                        .Apply(self.Lambda().Body())
-                        .With(self.Lambda().Args().Arg(0), "row")
-                    .Build()
-                .Build()
-                .Done()
-                .Ptr();
-        }
-        return node;
     };
 
     // will be applied to any callable after all above

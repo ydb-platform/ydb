@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
+import ydb
+
 from . import credentials as credentials_impl, table, scheme, pool
-from . import tracing
 import six
 import os
-import grpc
 
 if six.PY2:
     Any = None
@@ -40,16 +40,8 @@ def parse_connection_string(connection_string):
     return p.scheme + "://" + p.netloc, database[0]
 
 
-class RPCCompression:
-    """Indicates the compression method to be used for an RPC."""
-
-    NoCompression = grpc.Compression.NoCompression
-    Deflate = grpc.Compression.Deflate
-    Gzip = grpc.Compression.Gzip
-
-
 def default_credentials(credentials=None, tracer=None):
-    tracer = tracer if tracer is not None else tracing.Tracer(None)
+    tracer = tracer if tracer is not None else ydb.Tracer(None)
     with tracer.trace("Driver.default_credentials") as ctx:
         if credentials is not None:
             ctx.trace({"credentials.prepared": True})
@@ -103,7 +95,6 @@ class DriverConfig(object):
         "tracer",
         "grpc_lb_policy_name",
         "discovery_request_timeout",
-        "compression",
     )
 
     def __init__(
@@ -125,8 +116,8 @@ class DriverConfig(object):
         tracer=None,
         grpc_lb_policy_name="round_robin",
         discovery_request_timeout=10,
-        compression=None,
     ):
+        # type:(str, str, str, str, Any, ydb.Credentials, bool, bytes, bytes, bytes, float, ydb.TableClientSettings, list, str, ydb.Tracer) -> None
         """
         A driver config to initialize a driver instance
 
@@ -167,10 +158,9 @@ class DriverConfig(object):
         self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
         self.table_client_settings = table_client_settings
         self.primary_user_agent = primary_user_agent
-        self.tracer = tracer if tracer is not None else tracing.Tracer(None)
+        self.tracer = tracer if tracer is not None else ydb.Tracer(None)
         self.grpc_lb_policy_name = grpc_lb_policy_name
         self.discovery_request_timeout = discovery_request_timeout
-        self.compression = compression
 
     def set_database(self, database):
         self.database = database
@@ -245,6 +235,8 @@ class Driver(pool.ConnectionPool):
         credentials=None,
         **kwargs
     ):
+        # type:(DriverConfig, str, str, str, bytes, ydb.AbstractCredentials, **Any) -> None
+
         """
         Constructs a driver instance to be used in table and scheme clients.
         It encapsulates endpoints discovery mechanism and provides ability to execute RPCs

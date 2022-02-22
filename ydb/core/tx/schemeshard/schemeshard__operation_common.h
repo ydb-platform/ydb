@@ -1011,7 +1011,6 @@ public:
         }
 
         TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
-
         for (auto shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tabletId = context.SS->ShardInfos.at(idx).TabletID;

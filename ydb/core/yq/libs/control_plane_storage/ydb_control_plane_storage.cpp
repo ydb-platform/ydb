@@ -42,6 +42,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     auto as = NActors::TActivationContext::ActorSystem();
     CreateDirectory(as);
     CreateQueriesTable(as);
+    CreatePendingTable(as);
     CreatePendingSmallTable(as);
     CreateConnectionsTable(as);
     CreateBindingsTable(as);
@@ -115,6 +116,34 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
         });
 }
 
+TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingTable(TActorSystem* as)
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(QUERY_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
+            if (!IsTableCreated(status)) {
+                CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString());
+                return CreatePendingTable(as);
+            }
+            return future;
+        });
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem* as)
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_SMALL_TABLE_NAME);
@@ -127,8 +156,6 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
         .AddNullableColumn(RETRY_COUNTER_UPDATE_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(IS_RESIGN_QUERY_COLUMN_NAME, EPrimitiveType::Bool)
-        .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
-        .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
@@ -202,7 +229,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
         .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME, JOB_ID_COLUMN_NAME})
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, JOB_ID_COLUMN_NAME})
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .Build();
 

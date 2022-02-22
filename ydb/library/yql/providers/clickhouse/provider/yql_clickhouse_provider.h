@@ -1,10 +1,9 @@
 #pragma once
 
-#include "yql_clickhouse_settings.h"
-
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include "yql_clickhouse_settings.h"
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
 
 namespace NKikimr::NMiniKQL {
    class IFunctionRegistry;
@@ -27,13 +26,13 @@ struct TClickHouseState : public TThrRefBase
     TTypeAnnotationContext* Types = nullptr;
     TClickHouseConfiguration::TPtr Configuration = MakeIntrusive<TClickHouseConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
+    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
+    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver;
 };
 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
     IHTTPGateway::TPtr gateway,
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
+    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
 );
 
 TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway);

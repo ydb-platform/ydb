@@ -23,7 +23,6 @@ using namespace NKikimrClient;
 
 namespace NKikimr {
 using namespace NSchemeCache;
-using namespace NPQ;
 
 Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) {
     static const THashMap<TString, Ydb::PersQueue::V1::Codec> codecsByName = {
@@ -82,7 +81,29 @@ using namespace Ydb::PersQueue::V1;
 static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
 static const ui32 MAX_BYTES_INFLIGHT = 1 << 20; //1mb
+static const ui32 MURMUR_ARRAY_SEED = 0x9747b28c;
 static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
+
+static const TString SELECT_SOURCEID_QUERY1 =
+    "--!syntax_v1\n"
+    "DECLARE $Hash AS Uint32; "
+    "DECLARE $Topic AS Utf8; "
+    "DECLARE $SourceId AS Utf8; "
+    "SELECT Partition, CreateTime FROM `";
+static const TString SELECT_SOURCEID_QUERY2 = "` "
+    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId; ";
+
+static const TString UPDATE_SOURCEID_QUERY1 =
+    "--!syntax_v1\n"
+    "DECLARE $SourceId AS Utf8; "
+    "DECLARE $Topic AS Utf8; "
+    "DECLARE $Hash AS Uint32; "
+    "DECLARE $Partition AS Uint32; "
+    "DECLARE $CreateTime AS Uint64; "
+    "DECLARE $AccessTime AS Uint64; "
+    "UPSERT INTO `";
+static const TString UPDATE_SOURCEID_QUERY2 = "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
+    "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition); ";
 
 //TODO: add here tracking of bytes in/out
 
@@ -121,7 +142,7 @@ TWriteSessionActor::TWriteSessionActor(
     , ClientDC(clientDC ? *clientDC : "other")
     , LastSourceIdUpdate(TInstant::Zero())
     , SourceIdCreateTime(0)
-    , SourceIdUpdatesInflight(0)
+    , SourceIdUpdateInfly(false)
 {
     Y_ASSERT(Request);
     ++(*GetServiceCounters(Counters, "pqproxy|writeSession")->GetCounter("SessionsCreatedTotal", true));
@@ -133,8 +154,8 @@ TWriteSessionActor::~TWriteSessionActor() = default;
 void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
 
     Y_VERIFY(Request);
-    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath());
-    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(AppData(ctx)->PQConfig.GetSourceIdTablePath());
+    SelectSourceIdQuery = SELECT_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + SELECT_SOURCEID_QUERY2;
+    UpdateSourceIdQuery = UPDATE_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + UPDATE_SOURCEID_QUERY2;
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
@@ -295,18 +316,17 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     PeerName = event->PeerName;
 
     SourceId = init.message_group_id();
+    TString encodedSourceId;
     try {
-        // "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
-        // Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
-        // Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcId(), SourceId);
-
-        // Good hash and proper way of calcultion;
-        CompatibleHash = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcIdHash(), SourceId).Hash;
+        encodedSourceId = NPQ::NSourceIdEncoding::Encode(SourceId);
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    EscapedSourceId = HexEncode(encodedSourceId);
+
+    TString s = TopicConverter->GetClientsideName() + encodedSourceId;
+    Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << init << " from " << PeerName);
     //TODO: get user agent from headers
@@ -509,12 +529,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
         ProceedPartition(partitionId, ctx);
         return;
     }
-    SendSelectPartitionRequest(CompatibleHash, TopicConverter->GetFullLegacyName(), ctx);
-    SendSelectPartitionRequest(EncodedSourceId.Hash, TopicConverter->GetFullLegacyName(), ctx);
-    State = ES_WAIT_TABLE_REQUEST_1;
-}
 
-void TWriteSessionActor::SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx) {
     //read from DS
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -528,20 +543,19 @@ void TWriteSessionActor::SendSelectPartitionRequest(ui32 hash, const TString& to
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
     NClient::TParameters parameters;
-
-    parameters["$Hash"] = hash;
-    parameters["$Topic"] = topic;
-    parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
-
+    parameters["$Hash"] = Hash;
+    parameters["$Topic"] = TopicConverter->GetClientsideName();
+    parameters["$SourceId"] = EscapedSourceId;
     ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    SelectSrcIdsInflight++;
+    State = ES_WAIT_TABLE_REQUEST_1;
 }
 
 
 void TWriteSessionActor::UpdatePartition(const TActorContext& ctx) {
     Y_VERIFY(State == ES_WAIT_TABLE_REQUEST_1 || State == ES_WAIT_NEXT_PARTITION);
-    SendUpdateSrcIdsRequests(ctx);
+    auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     State = ES_WAIT_TABLE_REQUEST_2;
 }
 
@@ -575,7 +589,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
 
     if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition race, retrying");
+            << SourceId << " escaped " << EscapedSourceId << " discover partition race, retrying");
         DiscoverPartition(ctx);
         return;
     }
@@ -585,7 +599,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         errorReason << "internal error in kqp Marker# PQ50 : " <<  record;
         if (State == EState::ES_INITED) {
             LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason);
-            SourceIdUpdatesInflight--;
+            SourceIdUpdateInfly = false;
         } else {
             CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         }
@@ -593,66 +607,53 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
     }
 
     if (State == EState::ES_WAIT_TABLE_REQUEST_1) {
-        SelectSrcIdsInflight--;
+        SourceIdCreateTime = TInstant::Now().MilliSeconds();
+
+        bool partitionFound = false;
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
 
         if (t.ListSize() != 0) {
             auto& tt = t.GetList(0).GetStruct(0);
             if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
-                auto accessTime = t.GetList(0).GetStruct(2).GetOptional().GetUint64();
-                if (accessTime > MaxSrcIdAccessTime) { // AccessTime
-                    Partition = tt.GetOptional().GetUint32();
-                    PartitionFound = true;
-                    SourceIdCreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
-                    MaxSrcIdAccessTime = accessTime;
+                Partition = tt.GetOptional().GetUint32();
+                if (PreferedPartition < Max<ui32>() && Partition != PreferedPartition) {
+                    CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId " << (Partition + 1) << ", but client provided " << (PreferedPartition + 1) << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use another MessageGroupId, specify PartitionGroupId " << (Partition + 1) << ", or do not specify PartitionGroupId at all.",
+                        PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                    return;
                 }
+                partitionFound = true;
+                SourceIdCreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
             }
-        }
-        if (SelectSrcIdsInflight != 0) {
-            return;
-        }
-        if (PartitionFound && PreferedPartition < Max<ui32>() && Partition != PreferedPartition) {
-            CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId " << (Partition + 1) << ", but client provided " << (PreferedPartition + 1) << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use another MessageGroupId, specify PartitionGroupId " << (Partition + 1) << ", or do not specify PartitionGroupId at all.",
-                         PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return;
-        }
-        if (SourceIdCreateTime == 0) {
-            SourceIdCreateTime = TInstant::Now().MilliSeconds();
         }
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " hash " << CompatibleHash << " partition " << Partition << " partitions "
-            << PartitionToTablet.size() << "(" << CompatibleHash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
+            << SourceId << " escaped " << EscapedSourceId << " hash " << Hash << " partition " << Partition << " partitions "
+            << PartitionToTablet.size() << "(" << Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
 
-        if (!PartitionFound && (PreferedPartition < Max<ui32>() || !AppData(ctx)->PQConfig.GetRoundRobinPartitionMapping())) {
-            Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : CompatibleHash % PartitionToTablet.size(); //choose partition default value
-            PartitionFound = true;
+        if (!partitionFound && (PreferedPartition < Max<ui32>() || !AppData(ctx)->PQConfig.GetRoundRobinPartitionMapping())) {
+            Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : Hash % PartitionToTablet.size(); //choose partition default value
+            partitionFound = true;
         }
 
-        if (PartitionFound) {
+        if (partitionFound) {
             UpdatePartition(ctx);
         } else {
             RequestNextPartition(ctx);
         }
         return;
     } else if (State == EState::ES_WAIT_TABLE_REQUEST_2) {
-        SourceIdUpdatesInflight--;
-        if (!SourceIdUpdatesInflight) {
-            LastSourceIdUpdate = ctx.Now();
-            ProceedPartition(Partition, ctx);
-        }
+        LastSourceIdUpdate = ctx.Now();
+        ProceedPartition(Partition, ctx);
     } else if (State == EState::ES_INITED) {
-        SourceIdUpdatesInflight--;
-        if (!SourceIdUpdatesInflight) {
-            LastSourceIdUpdate = ctx.Now();
-        }
+        SourceIdUpdateInfly = false;
+        LastSourceIdUpdate = ctx.Now();
     } else {
         Y_FAIL("Wrong state");
     }
 }
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMetadataRequest(
-        ui32 hash, const TString& topic, const NActors::TActorContext& ctx
+        const NActors::TActorContext& ctx
 ) {
 
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -669,10 +670,9 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
     NClient::TParameters parameters;
-    parameters["$Hash"] = hash;
-    parameters["$Topic"] = topic;
-    parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
-
+    parameters["$Hash"] = Hash;
+    parameters["$Topic"] = TopicConverter->GetClientsideName();
+    parameters["$SourceId"] = EscapedSourceId;
     parameters["$CreateTime"] = SourceIdCreateTime;
     parameters["$AccessTime"] = TInstant::Now().MilliSeconds();
     parameters["$Partition"] = Partition;
@@ -681,25 +681,12 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     return ev;
 }
 
-void TWriteSessionActor::SendUpdateSrcIdsRequests(const TActorContext& ctx) {
-    {
-        //full legacy name (rt3.dc--acc--topic)
-        auto ev = MakeUpdateSourceIdMetadataRequest(CompatibleHash, TopicConverter->GetFullLegacyName(), ctx);
-        SourceIdUpdatesInflight++;
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
-    {
-        auto ev = MakeUpdateSourceIdMetadataRequest(EncodedSourceId.Hash, TopicConverter->GetFullLegacyName(), ctx);
-        SourceIdUpdatesInflight++;
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
-}
 
 void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx) {
     auto& record = ev->Get()->Record;
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " sourceID "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition error - " << record);
+            << SourceId << " escaped " << EscapedSourceId << " discover partition error - " << record);
 
     CloseSession("Internal error on discovering partition", PersQueue::ErrorCode::ERROR, ctx);
 }
@@ -1180,11 +1167,10 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         InitCheckSchema(ctx);
     }
     // ToDo[migration] - separate flag for having config tables
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
-                                && !SourceIdUpdatesInflight
-                                && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD
-    ) {
-        SendUpdateSrcIdsRequests(ctx);
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SourceIdUpdateInfly && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD) {
+        auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
+        SourceIdUpdateInfly = true;
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
     if (ctx.Now() >= LogSessionDeadline) {
         LogSession(ctx);

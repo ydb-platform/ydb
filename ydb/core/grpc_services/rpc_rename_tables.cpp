@@ -1,7 +1,5 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
-#include "service_table.h"
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
@@ -12,14 +10,11 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-using TEvRenameTablesRequest = TGrpcRequestOperationCall<Ydb::Table::RenameTablesRequest,
-    Ydb::Table::RenameTablesResponse>;
-
 class TRenameTablesRPC : public TRpcSchemeRequestActor<TRenameTablesRPC, TEvRenameTablesRequest> {
     using TBase = TRpcSchemeRequestActor<TRenameTablesRPC, TEvRenameTablesRequest>;
 
 public:
-    TRenameTablesRPC(IRequestOpCtx* msg)
+    TRenameTablesRPC(TEvRenameTablesRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -68,8 +63,8 @@ private:
     }
 };
 
-void DoRenameTablesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TRenameTablesRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvRenameTablesRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TRenameTablesRPC(ev->Release().Release()));
 }
 
 } // namespace NKikimr

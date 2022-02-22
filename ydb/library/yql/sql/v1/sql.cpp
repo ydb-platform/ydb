@@ -625,61 +625,6 @@ static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, T
     return true;
 }
 
-static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
-    const auto id = IdEx(node.GetRule_an_id1(), ctx);
-    const TString value(ctx.Token(node.GetRule_changefeed_setting_value3().GetToken1()));
-
-    if (alter) {
-        // currently we don't support alter settings
-        ctx.Error() << to_upper(id.Name) << " alter is not supported";
-        return false;
-    }
-
-    if (to_lower(id.Name) == "sink_type") {
-        auto parsed = StringContent(ctx.Context(), ctx.Context().Pos(), value);
-        YQL_ENSURE(parsed.Defined());
-        if (to_lower(parsed->Content) == "local") {
-            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
-        } else {
-            ctx.Error() << "Unknown changefeed sink type: " << to_upper(parsed->Content);
-            return false;
-        }
-    } else if (to_lower(id.Name) == "mode") {
-        settings.Mode = BuildLiteralSmartString(ctx.Context(), value);
-    } else if (to_lower(id.Name) == "format") {
-        settings.Format = BuildLiteralSmartString(ctx.Context(), value);
-    } else {
-        ctx.Error() << "Unknown changefeed setting: " << id.Name;
-        return false;
-    }
-
-    return true;
-}
-
-static bool ChangefeedSettings(const TRule_changefeed_settings& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
-    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) {
-        return false;
-    }
-
-    for (auto& block : node.GetBlock2()) {
-        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool CreateChangefeed(const TRule_changefeed& node, TTranslation& ctx, TVector<TChangefeedDescription>& changefeeds) {
-    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
-
-    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
-        return false;
-    }
-
-    return true;
-}
-
 static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
     if (nameWithAt.first) {
         view = "@";
@@ -1930,15 +1875,6 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             params.ColumnFamilies.push_back(family);
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry5:
-        {
-            // changefeed
-            auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
-            if (!CreateChangefeed(changefeed, *this, params.Changefeeds)) {
-                return false;
-            }
-            break;
-        }
         default:
             AltNotImplemented("create_table_entry", node);
             return false;
@@ -2947,23 +2883,18 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints) {
     // table_hint:
-    //      an_id_hint (EQUALS type_name_tag)?
+    //      an_id_hint
     //    | (SCHEMA | COLUMNS) type_name_or_bind
     //    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
-        const auto& alt = rule.GetAlt_table_hint1();
-        const TString id = Id(alt.GetRule_an_id_hint1(), *this);
+        const TString id = Id(rule.GetAlt_table_hint1().GetRule_an_id_hint1(), *this);
         const auto idLower = to_lower(id);
         if (idLower == "schema" || idLower == "columns") {
             Error() << "Expected type after " << to_upper(id);
             return false;
         }
-        TVector<TNodePtr> hint_val;
-        if (alt.HasBlock2()) {
-            hint_val.push_back(TypeNameTag(alt.GetBlock2().GetRule_type_name_tag2()));
-        }
-        hints[id] = hint_val;
+        hints[id] = {};
         break;
     }
 
@@ -4238,15 +4169,14 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         lastExpr = expr;
     } else {
         const bool flexibleTypes = Ctx.FlexibleTypes;
-        bool columnOrType = false;
         if (auto simpleType = LookupSimpleTypeBySqlAlias(name, flexibleTypes); simpleType && typePossible && suffixIsEmpty) {
             auto columnRefsState = Ctx.GetColumnReferenceState();
-            if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || !flexibleTypes) {
+            if (tail.Count > 0 || columnRefsState != EColumnRefState::Allow || !flexibleTypes) {
                 // a type
                 return AddOptionals(BuildSimpleType(Ctx, Ctx.Pos(), name, false), tail.Count);
             }
             // type or column: ambiguity will be resolved on type annotation stage
-            columnOrType = columnRefsState == EColumnRefState::Allow;
+            return BuildColumnOrType(Ctx.Pos(), name);
         }
         if (tail.Count) {
             UnexpectedQuestionToken(tail);
@@ -4256,7 +4186,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             return nullptr;
         }
 
-        ids.push_back(columnOrType ? BuildColumnOrType(Ctx.Pos()) : BuildColumn(Ctx.Pos()));
+        ids.push_back(BuildColumn(Ctx.Pos()));
         ids.push_back(name);
     }
 
@@ -5536,7 +5466,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
     // block: (join_op (ANY)? flatten_source join_constraint?)
     // join_op:
     //    COMMA
-    //  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
+    //  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN
     //;
     const auto& node = block.GetRule_join_op1();
     switch (node.Alt_case()) {
@@ -5552,9 +5482,8 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
             TString joinOp("Inner");
-            // TODO: custom join hints/settings should be here
             TJoinLinkSettings linkSettings;
-            linkSettings.ForceSortedMerge = false;
+            linkSettings.ForceSortedMerge = alt.HasBlock3();
             switch (alt.GetBlock2().Alt_case()) {
                 case TRule_join_op::TAlt2::TBlock2::kAlt1:
                     if (alt.GetBlock2().GetAlt1().HasBlock1()) {
@@ -6916,22 +6845,6 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
         return false;
     }
 
-    if (frameSpec->FrameType != EFrameType::FrameByRange) {
-        // replace FrameCurrentRow for ROWS/GROUPS with 0 preceding/following
-        // FrameCurrentRow has special meaning ( = first/last peer row)
-        auto replaceCurrent = [](TFrameBound& frame, bool preceding) {
-            frame.Settings = preceding ? EFrameSettings::FramePreceding : EFrameSettings::FrameFollowing;
-            frame.Bound = new TLiteralNumberNode<i32>(frame.Pos, "Int32", "0");
-        };
-        if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
-            replaceCurrent(*frameSpec->FrameBegin, true);
-        }
-
-        if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
-            replaceCurrent(*frameSpec->FrameEnd, false);
-        }
-    }
-
     return true;
 }
 
@@ -6984,27 +6897,21 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameType = EFrameType::FrameByRows;
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
-        // BETWEEN UNBOUNDED PRECEDING AND ...
         winSpecPtr->Frame->FrameBegin = new TFrameBound;
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
 
         const bool ordered = !winSpecPtr->OrderBy.empty();
         winSpecPtr->Frame->FrameEnd = new TFrameBound;
-        winSpecPtr->Frame->FrameBegin->Pos = winSpecPtr->Frame->FrameEnd->Pos = Ctx.Pos();
         if (ordered) {
-            if (Ctx.AnsiCurrentRow) {
-                // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                // We emit FrameByRows here, but FrameCurrentRow works specially for ROWS
-                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
-            } else {
-                // ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING
-                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
-                winSpecPtr->Frame->FrameEnd->Bound = new TLiteralNumberNode<i32>(Ctx.Pos(), "Int32", "0");
-            }
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
         } else {
             // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
         }
+
+        // TODO: According to standard this should be RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW with order by clause
+        // TODO: and RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING without order by
     }
     return winSpecPtr;
 }
@@ -8030,20 +7937,21 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
 
     bool withTruncate = false;
-    TTableHints tableHints;
     if (tableRef.HasBlock2()) {
         auto hints = TableHintsImpl(tableRef.GetBlock2().GetRule_table_hints1());
         if (!hints) {
             Ctx.Error() << "Failed to parse table hints";
             return nullptr;
         }
+
         for (const auto& hint : *hints) {
             if (to_upper(hint.first) == "TRUNCATE") {
                 withTruncate = true;
+            } else {
+                Ctx.Error() << "Unsupported hint: " << hint.first;
+                return nullptr;
             }
         }
-        std::erase_if(*hints, [](const auto &hint) { return to_upper(hint.first) == "TRUNCATE"; });
-        tableHints = std::move(*hints);
     }
 
     TVector<TString> eraseColumns;
@@ -8074,7 +7982,6 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     TNodePtr tableKey = BuildTableKey(pos, service, cluster, nameOrAt.second, nameOrAt.first ? "@" : "");
 
     TTableRef table(Ctx.MakeName("table"), service, cluster, tableKey);
-
     Ctx.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
     auto values = TSqlIntoValues(Ctx, Mode).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr);
@@ -8086,9 +7993,12 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     }
     Ctx.IncrementMonCounter("sql_features", SqlIntoModeStr);
 
-    return BuildWriteColumns(pos, Ctx.Scoped, table,
-                             ToWriteColumnsMode(SqlIntoMode), std::move(values),
-                             BuildIntoTableOptions(pos, eraseColumns, tableHints));
+    TNodePtr options;
+    if (eraseColumns) {
+        options = BuildEraseColumns(pos, std::move(eraseColumns));
+    }
+
+    return BuildWriteColumns(pos, Ctx.Scoped, table, ToWriteColumnsMode(SqlIntoMode), std::move(values), std::move(options));
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
@@ -8167,9 +8077,6 @@ private:
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
-    bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
-    bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
-    void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
 
@@ -8933,28 +8840,6 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableRenameTo(renameTo, params);
         break;
     }
-    case TRule_alter_table_action::kAltAlterTableAction12: {
-        // ADD CHANGEFEED
-        const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1();
-        if (!AlterTableAddChangefeed(rule, params)) {
-            return false;
-        }
-        break;
-    }
-    case TRule_alter_table_action::kAltAlterTableAction13: {
-        // ALTER CHANGEFEED
-        const auto& rule = node.GetAlt_alter_table_action13().GetRule_alter_table_alter_changefeed1();
-        if (!AlterTableAlterChangefeed(rule, params)) {
-            return false;
-        }
-        break;
-    }
-    case TRule_alter_table_action::kAltAlterTableAction14: {
-        // DROP CHANGEFEED
-        const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_drop_changefeed1();
-        AlterTableDropChangefeed(rule, params);
-        break;
-    }
 
     default:
         AltNotImplemented("alter_table_action", node);
@@ -9099,41 +8984,6 @@ void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TA
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
-}
-
-bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
-    return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds);
-}
-
-bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params) {
-    params.AlterChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
-
-    const auto& alter = node.GetRule_changefeed_alter_settings4();
-    switch (alter.Alt_case()) {
-        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings1: {
-            // DISABLE
-            params.AlterChangefeeds.back().Disable = true;
-            break;
-        }
-        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
-            // SET
-            const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
-            if (!ChangefeedSettings(rule, *this, params.AlterChangefeeds.back().Settings, true)) {
-                return false;
-            }
-            break;
-        }
-
-        default:
-            AltNotImplemented("changefeed_alter_settings", alter);
-            return false;
-    }
-
-    return true;
-}
-
-void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
-    params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
@@ -9601,12 +9451,6 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableflexibletypes") {
             Ctx.FlexibleTypes = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableFlexibleTypes");
-        } else if (normalizedPragma == "ansicurrentrow") {
-            Ctx.AnsiCurrentRow = true;
-            Ctx.IncrementMonCounter("sql_pragma", "AnsiCurrentRow");
-        } else if (normalizedPragma == "disableansicurrentrow") {
-            Ctx.AnsiCurrentRow = false;
-            Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

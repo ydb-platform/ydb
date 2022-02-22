@@ -179,7 +179,6 @@ namespace {
                 switch (Mode) {
                     case MATCH:
                         anchor = RE2::ANCHOR_BOTH;
-                        [[fallthrough]];
                     case GREP:
                         return TUnboxedValuePod(Regexp->Match(piece, 0, input.size(), anchor, nullptr, 0));
                     case CAPTURE: {

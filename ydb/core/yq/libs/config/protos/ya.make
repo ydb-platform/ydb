@@ -16,7 +16,6 @@ SRCS(
     pinger.proto
     private_api.proto
     private_proxy.proto
-    read_actors_factory.proto
     resource_manager.proto
     storage.proto
     test_connection.proto
@@ -27,7 +26,6 @@ SRCS(
 PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/s3/proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

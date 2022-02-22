@@ -52,7 +52,6 @@ private:
 
     TString UserName;
     TString PasswordFile;
-    bool DoNotAskForPassword = false;
 
     bool UseMetadataCredentials = false;
     TString YCToken;

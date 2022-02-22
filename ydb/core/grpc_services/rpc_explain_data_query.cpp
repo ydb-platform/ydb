@@ -1,10 +1,8 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
-#include "service_table.h"
 
 #include <ydb/core/protos/console_config.pb.h>
 
@@ -20,14 +18,11 @@ using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
 
-using TEvExplainDataQueryRequest = TGrpcRequestOperationCall<Ydb::Table::ExplainDataQueryRequest,
-    Ydb::Table::ExplainDataQueryResponse>;
-
 class TExplainDataQueryRPC : public TRpcKqpRequestActor<TExplainDataQueryRPC, TEvExplainDataQueryRequest> {
     using TBase = TRpcKqpRequestActor<TExplainDataQueryRPC, TEvExplainDataQueryRequest>;
 
 public:
-    TExplainDataQueryRPC(IRequestOpCtx* msg)
+    TExplainDataQueryRPC(TEvExplainDataQueryRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -92,8 +87,8 @@ public:
     }
 };
 
-void DoExplainDataQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TExplainDataQueryRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvExplainDataQueryRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TExplainDataQueryRPC(ev->Release().Release()));
 }
 
 } // namespace NGRpcService

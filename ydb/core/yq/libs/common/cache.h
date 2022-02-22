@@ -2,7 +2,7 @@
 
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
-#include <util/system/spinlock.h>
+#include <util/system/mutex.h>
 
 namespace NYq {
 
@@ -41,7 +41,7 @@ public:
     { }
 
     void Put(const TKey& key, const TMaybe<TValue>& value) {
-        TGuard<TAdaptiveLock> lock(AdaptiveLock);
+        TGuard<TMutex> lock(Mutex);
         auto it = Data.find(key);
         if (it != Data.end()) {
             it->second.Queue->erase(it->second.Position);
@@ -59,8 +59,7 @@ public:
     }
 
     bool Get(const TKey& key, TMaybe<TValue>* value) {
-        TGuard<TAdaptiveLock> lock(AdaptiveLock);
-        DropOld(lock);
+        TGuard<TMutex> lock(Mutex);
         auto it = Data.find(key);
         if (it == Data.end()) {
             return false;
@@ -78,12 +77,11 @@ public:
     }
 
     ui64 Size() const {
-        TGuard<TAdaptiveLock> lock(AdaptiveLock);
         return Data.size();
     }
 
 private:
-    void DropOld(const TGuard<TAdaptiveLock>&) {
+    void DropOld(const TGuard<TMutex>& ) {
         auto now = TInstant::Now();
         auto cleanUp = [&](TList<TKeyAndTime>& queue, const TDuration& ttl) {
             for (auto it = queue.begin(); it != queue.end() && (it->LastAccess <= now - ttl || Data.size() > Config.MaxSize) ; ) {
@@ -96,7 +94,7 @@ private:
         cleanUp(OkQueue, Config.Ttl);
     }
 
-    TAdaptiveLock AdaptiveLock;
+    TMutex Mutex;
 
     struct TKeyAndTime {
         TKey Key;

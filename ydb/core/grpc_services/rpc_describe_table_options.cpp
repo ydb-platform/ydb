@@ -1,11 +1,9 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "table_profiles.h"
-#include "service_table.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -19,14 +17,11 @@ using namespace NConsole;
 using namespace Ydb;
 using namespace Ydb::Table;
 
-using TEvDescribeTableOptionsRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTableOptionsRequest,
-    Ydb::Table::DescribeTableOptionsResponse>;
-
 class TDescribeTableOptionsRPC : public TRpcSchemeRequestActor<TDescribeTableOptionsRPC, TEvDescribeTableOptionsRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableOptionsRPC, TEvDescribeTableOptionsRequest>;
 
 public:
-    TDescribeTableOptionsRPC(IRequestOpCtx* msg)
+    TDescribeTableOptionsRPC(TEvDescribeTableOptionsRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -207,8 +202,8 @@ private:
     TTableProfiles Profiles;
 };
 
-void DoDescribeTableOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDescribeTableOptionsRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvDescribeTableOptionsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TDescribeTableOptionsRPC(ev->Release().Release()));
 }
 
 } // namespace NGRpcService

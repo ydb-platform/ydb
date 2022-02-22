@@ -386,14 +386,11 @@ private:
     };
 
     template<typename T>
-    TPermissions ExtractPermissions(T& ev, const TPermissions& availablePermissions) {
+    TPermissions ExtractPermissions(T& ev) {
         TPermissions permissions;
         for (const auto& permission: ev->Get()->Permissions) {
             if (auto it = PermissionsItems.find(permission); it != PermissionsItems.end()) {
-                // cut off permissions that should not be used in other services
-                if (availablePermissions.Check(it->second)) {
-                    permissions.Set(it->second);
-                }
+                permissions.Set(it->second);
             }
         }
         return permissions;
@@ -442,13 +439,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::QUERY_INVOKE
-            | TPermissions::TPermission::CONNECTIONS_USE
-            | TPermissions::TPermission::BINDINGS_USE
-            | TPermissions::TPermission::MANAGE_PUBLIC
-        };
-
         Register(new TRequestActor<YandexQuery::CreateQueryRequest,
                                    TEvControlPlaneStorage::TEvCreateQueryRequest,
                                    TEvControlPlaneStorage::TEvCreateQueryResponse,
@@ -457,7 +447,7 @@ private:
                                          std::move(request), std::move(user), std::move(token),
                                          ControlPlaneStorageServiceActorId(),
                                          requestCounters,
-                                         probe, ExtractPermissions(ev, availablePermissions), Counters.Requests[RT_RESOLVE_FOLDER]));
+                                         probe, ExtractPermissions(ev), Counters.Requests[RT_RESOLVE_FOLDER]));
     }
 
     void Handle(TEvControlPlaneProxy::TEvListQueriesRequest::TPtr& ev) {
@@ -487,11 +477,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ListQueriesRequest,
                                    TEvControlPlaneStorage::TEvListQueriesRequest,
                                    TEvControlPlaneStorage::TEvListQueriesResponse,
@@ -500,7 +485,7 @@ private:
                                                                                  ControlPlaneStorageServiceActorId(),
                                                                                  requestCounters,
                                                                                  probe,
-                                                                                 ExtractPermissions(ev, availablePermissions)));
+                                                                                 ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeQueryRequest::TPtr& ev) {
@@ -531,12 +516,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_AST
-            | TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DescribeQueryRequest,
                                    TEvControlPlaneStorage::TEvDescribeQueryRequest,
                                    TEvControlPlaneStorage::TEvDescribeQueryResponse,
@@ -545,7 +524,7 @@ private:
                                                                                    ControlPlaneStorageServiceActorId(),
                                                                                    requestCounters,
                                                                                    probe,
-                                                                                   ExtractPermissions(ev, availablePermissions)));
+                                                                                   ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr& ev) {
@@ -576,11 +555,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::GetQueryStatusRequest,
                                    TEvControlPlaneStorage::TEvGetQueryStatusRequest,
                                    TEvControlPlaneStorage::TEvGetQueryStatusResponse,
@@ -589,7 +563,7 @@ private:
                                                                                    ControlPlaneStorageServiceActorId(),
                                                                                    requestCounters,
                                                                                    probe,
-                                                                                   ExtractPermissions(ev, availablePermissions)));
+                                                                                   ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvModifyQueryRequest::TPtr& ev) {
@@ -620,14 +594,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::QUERY_INVOKE
-            | TPermissions::TPermission::CONNECTIONS_USE
-            | TPermissions::TPermission::BINDINGS_USE
-            | TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ModifyQueryRequest,
                                    TEvControlPlaneStorage::TEvModifyQueryRequest,
                                    TEvControlPlaneStorage::TEvModifyQueryResponse,
@@ -636,7 +602,7 @@ private:
                                                                                  ControlPlaneStorageServiceActorId(),
                                                                                  requestCounters,
                                                                                  probe,
-                                                                                 ExtractPermissions(ev, availablePermissions)));
+                                                                                 ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteQueryRequest::TPtr& ev) {
@@ -667,11 +633,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DeleteQueryRequest,
                                    TEvControlPlaneStorage::TEvDeleteQueryRequest,
                                    TEvControlPlaneStorage::TEvDeleteQueryResponse,
@@ -680,7 +641,7 @@ private:
                                                                                  ControlPlaneStorageServiceActorId(),
                                                                                  requestCounters,
                                                                                  probe,
-                                                                                 ExtractPermissions(ev, availablePermissions)));
+                                                                                 ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvControlQueryRequest::TPtr& ev) {
@@ -711,11 +672,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ControlQueryRequest,
                                    TEvControlPlaneStorage::TEvControlQueryRequest,
                                    TEvControlPlaneStorage::TEvControlQueryResponse,
@@ -724,7 +680,7 @@ private:
                                                                                   ControlPlaneStorageServiceActorId(),
                                                                                   requestCounters,
                                                                                   probe,
-                                                                                  ExtractPermissions(ev, availablePermissions)));
+                                                                                  ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvGetResultDataRequest::TPtr& ev) {
@@ -758,11 +714,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::GetResultDataRequest,
                                    TEvControlPlaneStorage::TEvGetResultDataRequest,
                                    TEvControlPlaneStorage::TEvGetResultDataResponse,
@@ -771,7 +722,7 @@ private:
                                                                                       ControlPlaneStorageServiceActorId(),
                                                                                       requestCounters,
                                                                                       probe,
-                                                                                      ExtractPermissions(ev, availablePermissions)));
+                                                                                      ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvListJobsRequest::TPtr& ev) {
@@ -791,8 +742,6 @@ private:
             LWPROBE(ListJobsRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
 
-
-
         NYql::TIssues issues = ValidatePermissions(ev, {"yq.jobs.get@as"});
         if (issues) {
             CPS_LOG_E("ListJobsRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
@@ -804,11 +753,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ListJobsRequest,
                                    TEvControlPlaneStorage::TEvListJobsRequest,
                                    TEvControlPlaneStorage::TEvListJobsResponse,
@@ -817,7 +761,7 @@ private:
                                                                               ControlPlaneStorageServiceActorId(),
                                                                               requestCounters,
                                                                               probe,
-                                                                              ExtractPermissions(ev, availablePermissions)));
+                                                                              ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr& ev) {
@@ -848,11 +792,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DescribeJobRequest,
                                    TEvControlPlaneStorage::TEvDescribeJobRequest,
                                    TEvControlPlaneStorage::TEvDescribeJobResponse,
@@ -861,7 +800,7 @@ private:
                                                                                      ControlPlaneStorageServiceActorId(),
                                                                                      requestCounters,
                                                                                      probe,
-                                                                                     ExtractPermissions(ev, availablePermissions)));
+                                                                                     ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
@@ -896,10 +835,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-        };
-
         Register(new TRequestActor<YandexQuery::CreateConnectionRequest,
                                    TEvControlPlaneStorage::TEvCreateConnectionRequest,
                                    TEvControlPlaneStorage::TEvCreateConnectionResponse,
@@ -908,7 +843,7 @@ private:
                                          std::move(request), std::move(user), std::move(token),
                                          ControlPlaneStorageServiceActorId(),
                                          requestCounters,
-                                         probe, ExtractPermissions(ev, availablePermissions), Counters.Requests[RT_RESOLVE_FOLDER]));
+                                         probe, ExtractPermissions(ev), Counters.Requests[RT_RESOLVE_FOLDER]));
     }
 
     void Handle(TEvControlPlaneProxy::TEvListConnectionsRequest::TPtr& ev) {
@@ -938,11 +873,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ListConnectionsRequest,
                                    TEvControlPlaneStorage::TEvListConnectionsRequest,
                                    TEvControlPlaneStorage::TEvListConnectionsResponse,
@@ -951,7 +881,7 @@ private:
                                                                                      ControlPlaneStorageServiceActorId(),
                                                                                      requestCounters,
                                                                                      probe,
-                                                                                     ExtractPermissions(ev, availablePermissions)));
+                                                                                     ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeConnectionRequest::TPtr& ev) {
@@ -982,11 +912,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DescribeConnectionRequest,
                                    TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                    TEvControlPlaneStorage::TEvDescribeConnectionResponse,
@@ -995,7 +920,7 @@ private:
                                                                                       ControlPlaneStorageServiceActorId(),
                                                                                       requestCounters,
                                                                                       probe,
-                                                                                      ExtractPermissions(ev, availablePermissions)));
+                                                                                      ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
@@ -1031,11 +956,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ModifyConnectionRequest,
                                    TEvControlPlaneStorage::TEvModifyConnectionRequest,
                                    TEvControlPlaneStorage::TEvModifyConnectionResponse,
@@ -1044,7 +964,7 @@ private:
                                                                                       ControlPlaneStorageServiceActorId(),
                                                                                       requestCounters,
                                                                                       probe,
-                                                                                      ExtractPermissions(ev, availablePermissions)));
+                                                                                      ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& ev) {
@@ -1075,11 +995,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DeleteConnectionRequest,
                                    TEvControlPlaneStorage::TEvDeleteConnectionRequest,
                                    TEvControlPlaneStorage::TEvDeleteConnectionResponse,
@@ -1088,7 +1003,7 @@ private:
                                                                                       ControlPlaneStorageServiceActorId(),
                                                                                       requestCounters,
                                                                                       probe,
-                                                                                      ExtractPermissions(ev, availablePermissions)));
+                                                                                      ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr& ev) {
@@ -1131,7 +1046,7 @@ private:
                                      std::move(request), std::move(user), std::move(token),
                                      TestConnectionActorId(),
                                      requestCounters,
-                                     probe, ExtractPermissions(ev, {})));
+                                     probe, ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& ev) {
@@ -1161,10 +1076,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-        };
-
         Register(new TRequestActor<YandexQuery::CreateBindingRequest,
                                    TEvControlPlaneStorage::TEvCreateBindingRequest,
                                    TEvControlPlaneStorage::TEvCreateBindingResponse,
@@ -1173,7 +1084,7 @@ private:
                                          std::move(request), std::move(user), std::move(token),
                                          ControlPlaneStorageServiceActorId(),
                                          requestCounters,
-                                         probe, ExtractPermissions(ev, availablePermissions), Counters.Requests[RT_RESOLVE_FOLDER]));
+                                         probe, ExtractPermissions(ev), Counters.Requests[RT_RESOLVE_FOLDER]));
     }
 
     void Handle(TEvControlPlaneProxy::TEvListBindingsRequest::TPtr& ev) {
@@ -1203,11 +1114,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ListBindingsRequest,
                                    TEvControlPlaneStorage::TEvListBindingsRequest,
                                    TEvControlPlaneStorage::TEvListBindingsResponse,
@@ -1216,7 +1122,7 @@ private:
                                                                                   ControlPlaneStorageServiceActorId(),
                                                                                   requestCounters,
                                                                                   probe,
-                                                                                  ExtractPermissions(ev, availablePermissions)));
+                                                                                  ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDescribeBindingRequest::TPtr& ev) {
@@ -1247,11 +1153,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::VIEW_PUBLIC
-            | TPermissions::TPermission::VIEW_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DescribeBindingRequest,
                                    TEvControlPlaneStorage::TEvDescribeBindingRequest,
                                    TEvControlPlaneStorage::TEvDescribeBindingResponse,
@@ -1260,7 +1161,7 @@ private:
                                                                                      ControlPlaneStorageServiceActorId(),
                                                                                      requestCounters,
                                                                                      probe,
-                                                                                     ExtractPermissions(ev, availablePermissions)));
+                                                                                     ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& ev) {
@@ -1291,11 +1192,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::ModifyBindingRequest,
                                    TEvControlPlaneStorage::TEvModifyBindingRequest,
                                    TEvControlPlaneStorage::TEvModifyBindingResponse,
@@ -1304,7 +1200,7 @@ private:
                                                                                       ControlPlaneStorageServiceActorId(),
                                                                                       requestCounters,
                                                                                       probe,
-                                                                                      ExtractPermissions(ev, availablePermissions)));
+                                                                                      ExtractPermissions(ev)));
     }
 
     void Handle(TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& ev) {
@@ -1335,11 +1231,6 @@ private:
             return;
         }
 
-        static const TPermissions availablePermissions {
-            TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
-        };
-
         Register(new TRequestActor<YandexQuery::DeleteBindingRequest,
                                    TEvControlPlaneStorage::TEvDeleteBindingRequest,
                                    TEvControlPlaneStorage::TEvDeleteBindingResponse,
@@ -1348,7 +1239,7 @@ private:
                                                                                    ControlPlaneStorageServiceActorId(),
                                                                                    requestCounters,
                                                                                    probe,
-                                                                                   ExtractPermissions(ev, availablePermissions)));
+                                                                                   ExtractPermissions(ev)));
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {

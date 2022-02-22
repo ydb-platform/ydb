@@ -47,7 +47,7 @@ TRope TestingRope(size_t chunkSize, size_t chunkAlign = ENCIPHER_ALIGN) {
     return TestingRope(reinterpret_cast<char *>(in), SIZE, chunkSize, chunkAlign);
 }
 
-// FIXME: ? check if distance between iterator and rope.End() >= size
+// FIXME(gleb-kov): ? check if distance between iterator and rope.End() >= size
 void CompareRopes(TRope::TIterator lhsBegin, TRope::TIterator rhsBegin, size_t size) {
     TString lhs = TString::Uninitialized(size);
     lhsBegin.ExtractPlainDataAndAdvance(lhs.Detach(), size);

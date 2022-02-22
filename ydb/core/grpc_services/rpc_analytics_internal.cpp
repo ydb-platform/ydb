@@ -26,7 +26,10 @@ namespace {
     template <typename TEv, typename TReq>
     void SendResponse(const TEv& ev, TReq& req) {
         if (!ev->Get()->Record) {
-            req.RaiseIssues(ev->Get()->Issues);
+            for (const auto& x : ev->Get()->Issues) {
+                req.RaiseIssue(x);
+            }
+
             req.ReplyWithYdbStatus(ev->Get()->Status);
         } else {
             req.SendResult(*ev->Get()->Record, ev->Get()->Status);

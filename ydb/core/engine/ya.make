@@ -40,6 +40,7 @@ END()
 
 RECURSE(
     minikql
+    ut
 )
 
 RECURSE_FOR_TESTS(

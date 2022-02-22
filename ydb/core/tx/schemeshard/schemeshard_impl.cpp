@@ -3673,11 +3673,6 @@ const TDomainsInfo::TDomain& TSchemeShard::GetDomainDescription(const TActorCont
     return domain;
 }
 
-const NKikimrConfig::TDomainsConfig& TSchemeShard::GetDomainsConfig() {
-    Y_VERIFY(AppData());
-    return AppData()->DomainsConfig;
-}
-
 NKikimrSubDomains::TProcessingParams TSchemeShard::CreateRootProcessingParams(const TActorContext &ctx) {
     const auto& domain = GetDomainDescription(ctx);
 

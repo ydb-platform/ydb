@@ -498,6 +498,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto query = TString(R"(
             --!syntax_v1
+            PRAGMA kikimr.OptEnablePredicateExtract = "true";
             SELECT key, value FROM `/Root/table-1`
             WHERE
                 (key > 1 AND key < 3) OR

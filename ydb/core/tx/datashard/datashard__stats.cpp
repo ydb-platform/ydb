@@ -165,21 +165,10 @@ void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorCo
     Executor()->Execute(new TTxGetTableStats(this, ev), ctx);
 }
 
-template <class TTables>
-void ListTableNames(const TTables& tables, TStringBuilder& names) {
-    for (auto& t : tables) {
-        if (!names.Empty()) {
-            names << ", ";
-        }
-        names << "[" << t.second->Path << "]";
-    }
-}
-
 void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
     ui64 tableId = ev->Get()->TableId;
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard %" PRIu64, TabletID());
 
-    i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {
         const TUserTable& tableInfo = *TableInfos[tableId];
 
@@ -194,31 +183,11 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
         tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
 
-        dataSize += tableInfo.Stats.DataStats.DataSize;
-
         UpdateSearchHeightStats(tableInfo.Stats, ev->Get()->SearchHeight);
 
         tableInfo.StatsUpdateInProgress = false;
 
         SendPeriodicTableStats(ctx);
-    }
-
-    if (dataSize > HighDataSizeReportThreshlodBytes) {
-        TInstant now = AppData(ctx)->TimeProvider->Now();
-
-        if (LastDataSizeWarnTime + TDuration::Seconds(HighDataSizeReportIntervalSeconds) > now)
-            return;
-
-        LastDataSizeWarnTime = now;
-
-        TStringBuilder names;
-        ListTableNames(GetUserTables(), names);
-
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << dataSize
-                    << " is higher than threshold of " << (i64)HighDataSizeReportThreshlodBytes
-                    << " at datashard: " << TabletID()
-                    << " table: " << names
-                    << " consider reconfiguring table partitioning settings");
     }
 }
 
@@ -375,7 +344,7 @@ void TDataShard::UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSear
 void TDataShard::UpdateFullCompactionTsMetric(TUserTable::TStats& stats) {
     if (!TabletCounters)
         return;
-
+    
     auto now = AppData()->TimeProvider->Now();
     if (now < stats.LastFullCompaction) {
         // extra sanity check
@@ -415,7 +384,12 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
         LastCpuWarnTime = now;
 
         TStringBuilder names;
-        ListTableNames(GetUserTables(), names);
+        for (auto &pr : GetUserTables()) {
+            if (!names.Empty()) {
+                names << ", ";
+            }
+            names << "[" << pr.second->Path << "]";
+        }
 
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "CPU usage " << cpuPercent
                     << "% is higher than threshold of " << (i64)CpuUsageReportThreshlodPercent

@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
 
         auto result = ExecQueryAndTestResult(session, query, params, R"([[["1"];["One"]]])");
         AssertTableReads(result, "/Root/KeyValue2", 1);
-    }
+}
 
     Y_UNIT_TEST_NEW_ENGINE(Dict) {
         TKikimrRunner kikimr;

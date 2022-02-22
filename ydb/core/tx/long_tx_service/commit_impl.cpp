@@ -232,8 +232,7 @@ namespace NLongTxService {
                 case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: may retry
                     // We only cancel for known cases where transaction is not planned
                     CancelProposal();
-                    // fall through to handle generic errors
-                    [[fallthrough]];
+                    // fall through to generic errors
 
                 default: {
                     TXLOG_ERROR("Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());

@@ -251,7 +251,6 @@ namespace {
                     return false;
                 }
             }
-            break;
 
         default:
             break;

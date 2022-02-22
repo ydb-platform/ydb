@@ -2674,13 +2674,20 @@ bool TReadInitAndAuthActor::CheckTopicACL(
 ) {
     auto& pqDescr = entry.PQGroupInfo->Description;
     //ToDo[migration] - proper auth setup
-    if (Token && !CheckACLPermissionsForNavigate(
+    bool alwaysCheckPermissions = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen();
+    bool reqAuthRead = DoCheckACL && (
+            pqDescr.GetPQTabletConfig().GetRequireAuthRead() || alwaysCheckPermissions
+    );
+
+    if (reqAuthRead && !CheckACLPermissionsForNavigate(
             entry.SecurityObject, topic, NACLib::EAccessRights::SelectRow,
             "No ReadTopic permissions", ctx
     )) {
         return false;
     }
-    if (Token) {
+    //ToDo[migration] - proper auth setup
+    bool doCheckReadRules = AppData(ctx)->PQConfig.GetCheckACL() && (Token || alwaysCheckPermissions);
+    if (doCheckReadRules) {
         bool found = false;
         for (auto& cons : pqDescr.GetPQTabletConfig().GetReadRules() ) {
             if (cons == ClientId) {

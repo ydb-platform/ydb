@@ -54,7 +54,6 @@ const TType TType::String2m(NScheme::NTypeIds::String2m);
 const TType TType::Yson(NScheme::NTypeIds::Yson);
 const TType TType::Json(NScheme::NTypeIds::Json);
 const TType TType::JsonDocument(NScheme::NTypeIds::JsonDocument);
-const TType TType::Timestamp(NScheme::NTypeIds::Timestamp);
 
 const TString& TType::GetName() const {
     return TypeName;

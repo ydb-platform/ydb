@@ -1,7 +1,6 @@
 RECURSE(
     codec
     config
-    db_id_async_resolver
     dq
     gateway
     http_gateway

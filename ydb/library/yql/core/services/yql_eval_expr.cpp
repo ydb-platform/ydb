@@ -35,9 +35,7 @@ static THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryExtendFor"),
     TStringBuf("SubqueryUnionAllFor"),
     TStringBuf("SubqueryMergeFor"),
-    TStringBuf("SubqueryUnionMergeFor"),
-    TStringBuf("SubqueryOrderBy"),
-    TStringBuf("SubqueryAssumeOrderBy")
+    TStringBuf("SubqueryUnionMergeFor")
 };
 
 bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const TExprNode*>& activeArgs, const TNodeMap<ui32>& externalWorlds, TExprContext& ctx,
@@ -165,15 +163,11 @@ private:
             }
         } else if (node.IsCallable(SubqueryExpandFuncs)) {
             // scan list only if it's wrapped by evaluation func
-            ui32 index = 0;
-            if (node.IsCallable("SubqueryOrderBy") || node.IsCallable("SubqueryAssumeOrderBy")) {
-                index = 1;
-            }
-            if (node.ChildrenSize() > index) {
-                if (node.Child(index)->IsCallable(EvaluationFuncs)) {
+            if (node.ChildrenSize() > 0) {
+                if (node.Child(0)->IsCallable(EvaluationFuncs)) {
                     CurrentEvalNodes.insert(&node);
                     pop = true;
-                    ScanImpl(*node.Child(index));
+                    ScanImpl(*node.Child(0));
                 } else {
                     for (const auto& child : node.Children()) {
                         ScanImpl(*child);
@@ -661,138 +655,56 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 return nullptr;
             }
 
-            if (node->IsCallable("SubqueryOrderBy") || node->IsCallable("SubqueryAssumeOrderBy")) {
-                auto inputSub = node->Child(0);
-                if (inputSub->IsArgument()) {
-                    return node;
-                }
-
-                if (!EnsureLambda(*inputSub, ctx) || !EnsureArgsCount(*inputSub->Child(0), 1, ctx)) {
-                    return nullptr;
-                }
-
-                auto keys = node->Child(1);
-                if (keys->IsCallable(EvaluationFuncs)) {
-                    return node;
-                }
-
-                if (!keys->IsCallable("AsList") && !keys->IsCallable("List") && !keys->IsCallable("EmptyList")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(keys->Pos()), TStringBuilder() << "Expected literal list"));
-                    return nullptr;
-                }
-
-                auto itemsCount = keys->ChildrenSize() - (keys->IsCallable("List") ? 1 : 0);
-                if (itemsCount > types.EvaluateOrderByColumnLimit) {
-                    ctx.AddError(TIssue(ctx.GetPosition(keys->Pos()), TStringBuilder() << "Too many columns for subquery order by, allowed: " <<
-                        types.EvaluateOrderByColumnLimit << ", got: " << itemsCount));
-                    return nullptr;
-                }
-
-                auto arg = ctx.NewArgument(node->Pos(), "row");
-
-                TExprNode::TListType dirItems;
-                TExprNode::TListType extractorItems;
-                for (ui32 i = keys->IsCallable("List") ? 1 : 0; i < keys->ChildrenSize(); ++i) {
-                    auto k = keys->Child(i);
-                    if (!k->IsList() || k->ChildrenSize() != 2) {
-                        ctx.AddError(TIssue(ctx.GetPosition(k->Pos()), TStringBuilder() << "Expected tuple of 2 items"));
-                        return nullptr;
-                    }
-
-                    auto columnName = k->Child(0);
-                    auto direction = k->Child(1);
-                    if (!columnName->IsCallable("String")) {
-                        ctx.AddError(TIssue(ctx.GetPosition(columnName->Pos()), TStringBuilder() << "Expected String as column name"));
-                        return nullptr;
-                    }
-
-                    if (!direction->IsCallable("Bool")) {
-                        ctx.AddError(TIssue(ctx.GetPosition(columnName->Pos()), TStringBuilder() << "Expected Bool as direction"));
-                        return nullptr;
-                    }
-
-                    dirItems.push_back(direction);
-                    extractorItems.push_back(ctx.Builder(k->Pos())
-                        .Callable("Member")
-                            .Add(0, arg)
-                            .Add(1, columnName->ChildPtr(0))
-                        .Seal()
-                        .Build());
-                }
-
-                auto args = ctx.NewArguments(node->Pos(), { arg });
-                auto body = ctx.NewList(node->Pos(), std::move(extractorItems));
-                auto extractorLambda = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
-
-                auto dirs = ctx.NewList(node->Pos(), std::move(dirItems));
-                auto sorted = ctx.Builder(node->Pos())
-                    .Lambda()
-                        .Param("world")
-                        .Callable(node->IsCallable("SubqueryOrderBy") ? "Sort" : "AssumeSorted")
-                            .Apply(0, inputSub)
-                                .With(0, "world")
-                            .Seal()
-                            .Add(1, dirs)
-                            .Add(2, extractorLambda)
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
-                return sorted;
-            } else {
-                auto list = node->Child(0);
-                if (list->IsCallable(EvaluationFuncs)) {
-                    return node;
-                }
-
-                if (list->IsCallable("Just")) {
-                    list = list->Child(0);
-                }
-
-                if (!list->IsCallable("AsList") || list->ChildrenSize() == 0) {
-                    ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Expected non-empty literal list"));
-                    return nullptr;
-                }
-
-                auto itemsCount = list->ChildrenSize();
-                if (itemsCount > types.EvaluateForLimit) {
-                    ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for subquery loop, allowed: " <<
-                        types.EvaluateForLimit << ", got: " << itemsCount));
-                    return nullptr;
-                }
-
-                if (node->Child(1)->IsCallable(EvaluationFuncs)) {
-                    return node;
-                }
-
-                const auto status = ConvertToLambda(node->ChildRef(1), ctx, 2, 2, false);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
-
-                const auto& lambda = node->Child(1);
-                TExprNodeList argItems;
-                argItems.push_back(ctx.NewArgument(node->Pos(), "world"));
-
-                TExprNodeList inputs;
-                for (ui32 i = 0; i < list->ChildrenSize(); ++i) {
-                    TNodeOnNodeOwnedMap replaces;
-                    replaces[lambda->Child(0)->Child(0)] = argItems[0];
-                    replaces[lambda->Child(0)->Child(1)] = list->ChildPtr(i);
-
-                    inputs.push_back(ctx.ReplaceNodes(lambda->TailPtr(), replaces));
-                }
-
-                auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8, node->Content().size() - 8 - 3), std::move(inputs));
-                auto args = ctx.NewArguments(node->Pos(), std::move(argItems));
-                auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
-
-                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
-                return merged;
+            auto list = node->Child(0);
+            if (list->IsCallable(EvaluationFuncs)) {
+                return node;
             }
+
+            if (list->IsCallable("Just")) {
+                list = list->Child(0);
+            }
+
+            if (!list->IsCallable("AsList") || list->ChildrenSize() == 0) {
+                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Expected non-empty literal list"));
+                return nullptr;
+            }
+
+            auto itemsCount = list->ChildrenSize();
+            if (itemsCount > types.EvaluateForLimit) {
+                ctx.AddError(TIssue(ctx.GetPosition(list->Pos()), TStringBuilder() << "Too large list for subquery loop, allowed: " <<
+                    types.EvaluateForLimit << ", got: " << itemsCount));
+                return nullptr;
+            }
+
+            if (node->Child(1)->IsCallable(EvaluationFuncs)) {
+                return node;
+            }
+
+            const auto status = ConvertToLambda(node->ChildRef(1), ctx, 2, 2, false);
+            if (status.Level == IGraphTransformer::TStatus::Error) {
+                return nullptr;
+            }
+
+            const auto& lambda = node->Child(1);
+            TExprNodeList argItems;
+            argItems.push_back(ctx.NewArgument(node->Pos(), "world"));
+
+            TExprNodeList inputs;
+            for (ui32 i = 0; i < list->ChildrenSize(); ++i) {
+                TNodeOnNodeOwnedMap replaces;
+                replaces[lambda->Child(0)->Child(0)] = argItems[0];
+                replaces[lambda->Child(0)->Child(1)] = list->ChildPtr(i);
+
+                inputs.push_back(ctx.ReplaceNodes(lambda->TailPtr(), replaces));
+            }
+
+            auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8, node->Content().size() - 8 - 3), std::move(inputs));
+            auto args = ctx.NewArguments(node->Pos(), std::move(argItems));
+            auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
+
+            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+            return merged;
         }
 
         if (node->IsCallable("MrTableEach") || node->IsCallable("MrTableEachStrict")) {

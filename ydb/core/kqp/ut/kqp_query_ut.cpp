@@ -656,7 +656,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
             SELECT * FROM [/Root/Test] WHERE Group = 1 AND Name > "Name";
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

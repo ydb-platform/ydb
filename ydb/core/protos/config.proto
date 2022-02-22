@@ -217,21 +217,6 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
-
-        message TUser {
-            optional string Name = 1;
-            optional string Password = 2;
-        }
-
-        message TGroup {
-            optional string Name = 1;
-            repeated string Members = 2;
-        }
-
-        repeated TUser DefaultUsers = 15;
-        repeated TGroup DefaultGroups = 16;
-        repeated string DefaultAccess = 17;
-        optional string AllUsersGroup = 18;
     }
 
     repeated TDomain Domain = 1;
@@ -603,8 +588,6 @@ message TGRpcConfig {
     repeated string ServicesEnabled = 22;
     repeated string ServicesDisabled = 23;
 
-    optional bool SkipSchemeCheck = 24 [default = false];
-
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE
@@ -680,7 +663,7 @@ message TFeatureFlags {
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
-    optional bool EnableBackgroundCompaction = 51 [default = true];
+    optional bool EnableBackgroundCompaction = 51 [default = false];
     optional bool EnableArrowFormatInChannels = 52 [default = false];
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = false];
@@ -691,8 +674,8 @@ message TFeatureFlags {
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
-    optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
-    optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
+    optional bool EnableImplicitScanQueryInScripts = 61 [default = false];
+    optional bool EnablePredicateExtractForScanQueries = 62 [default = false];
     optional bool AllowVDiskDefrag = 63 [default = true];
 }
 

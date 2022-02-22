@@ -1,5 +1,6 @@
-#include <ydb/library/yql/sql/pg_sql.h>
+#include "pg_sql.h"
 #include <ydb/library/yql/parser/pg_query_wrapper/wrapper.h>
+#include <ydb/library/yql/parser/pg_query_wrapper/enum.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <util/string/builder.h>
@@ -7,102 +8,9 @@
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
 
-#ifdef _WIN32
-#define __restrict
-#endif
-
-#define TypeName PG_TypeName
-#define SortBy PG_SortBy
-#undef SIZEOF_SIZE_T
-extern "C" {
-#include "postgres.h"
-#include "nodes/pg_list.h"
-#include "nodes/parsenodes.h"
-#include "nodes/value.h"
-#undef Min
-#undef Max
-#undef TypeName
-#undef SortBy
-}
-
 namespace NSQLTranslationPG {
 
 using namespace NYql;
-
-template <typename T>
-const T* CastNode(const void* nodeptr, int tag) {
-    Y_ENSURE(nodeTag(nodeptr) == tag);
-    return static_cast<const T*>(nodeptr);
-}
-
-int NodeTag(const Node* node) {
-    return nodeTag(node);
-}
-
-int NodeTag(const Value& node) {
-    return node.type;
-}
-
-int IntVal(const Value& node) {
-    Y_ENSURE(node.type == T_Integer);
-    return intVal(&node);
-}
-
-double FloatVal(const Value& node) {
-    Y_ENSURE(node.type == T_Float);
-    return floatVal(&node);
-}
-
-const char* StrFloatVal(const Value& node) {
-    Y_ENSURE(node.type == T_Float);
-    return strVal(&node);
-}
-
-const char* StrVal(const Value& node) {
-    Y_ENSURE(node.type == T_String);
-    return strVal(&node);
-}
-
-int IntVal(const Node* node) {
-    Y_ENSURE(node->type == T_Integer);
-    return intVal((const Value*)node);
-}
-
-double FloatVal(const Node* node) {
-    Y_ENSURE(node->type == T_Float);
-    return floatVal((const Value*)node);
-}
-
-const char* StrFloatVal(const Node* node) {
-    Y_ENSURE(node->type == T_Float);
-    return strVal((const Value*)node);
-}
-
-const char* StrVal(const Node* node) {
-    Y_ENSURE(node->type == T_String);
-    return strVal((const Value*)node);
-}
-
-int ListLength(const List* list) {
-    return list_length(list);
-}
-
-int StrLength(const char* s) {
-    return s ? strlen(s) : 0;
-}
-
-int StrCompare(const char* s1, const char* s2) {
-    return strcmp(s1 ? s1 : "", s2 ? s2 : "");
-}
-
-#define CAST_NODE(nodeType, nodeptr) CastNode<nodeType>(nodeptr, T_##nodeType)
-#define CAST_NODE_EXT(nodeType, tag, nodeptr) CastNode<nodeType>(nodeptr, tag)
-#define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, i))
-#define LIST_CAST_EXT_NTH(nodeType, tag, list, index) CAST_NODE_EXT(nodeType, tag, list_nth(list, i))
-
-const Node* ListNodeNth(const List* list, int index) {
-    return static_cast<const Node*>(list_nth(list, index));
-}
 
 class TConverter : public IPGParseEvents {
 public:
@@ -134,16 +42,16 @@ public:
         }
     }
 
-    void OnResult(const List* raw) {
+    void OnResult(const PgQuery__ParseResult* result) {
         AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
-        AstParseResult.Root = ParseResult(raw);
+        AstParseResult.Root = ParseResult(result);
     }
 
     void OnError(const TIssue& issue) {
         AstParseResult.Issues.AddIssue(issue);
     }
 
-    TAstNode* ParseResult(const List* raw) {
+    TAstNode* ParseResult(const PgQuery__ParseResult* value) {
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
@@ -152,8 +60,8 @@ public:
                 QA("DqEngine"), QA(DqEngineForce ? "force" : "auto"))));
         }
 
-        for (int i = 0; i < ListLength(raw); ++i) {
-           if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+        for (ui32 i = 0; i < value->n_stmts; ++i) {
+           if (!RawStmt(value->stmts[i])) {
                return nullptr;
            }
         }
@@ -163,32 +71,32 @@ public:
     }
 
     [[nodiscard]]
-    bool ParseRawStmt(const RawStmt* value) {
+    bool RawStmt(const PgQuery__RawStmt* value) {
         auto node = value->stmt;
-        switch (NodeTag(node)) {
-        case T_SelectStmt: {
-            return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
+        switch (node->node_case) {
+        case PG_QUERY__NODE__NODE_SELECT_STMT: {
+            return SelectStmt(node->select_stmt, false) != nullptr;
         }
         default:
-            NodeNotImplemented(value, node);
+            AltNotImplemented(value, node);
             return false;
         }
     }
 
-    using TTraverseSelectStack = TStack<std::pair<const SelectStmt*, bool>>;
-    using TTraverseNodeStack = TStack<std::pair<const Node*, bool>>;
+    using TTraverseSelectStack = TStack<std::pair<const PgQuery__SelectStmt*, bool>>;
+    using TTraverseNodeStack = TStack<std::pair<const PgQuery__Node*, bool>>;
 
     [[nodiscard]]
-    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner) {
+    TAstNode* SelectStmt(const PgQuery__SelectStmt* value, bool inner) {
         TTraverseSelectStack traverseSelectStack;
         traverseSelectStack.push({ value, false });
 
-        TVector<const SelectStmt*> setItems;
+        TVector<const PgQuery__SelectStmt*> setItems;
         TVector<TAstNode*> setOpsNodes;
 
         while (!traverseSelectStack.empty()) {
             auto& top = traverseSelectStack.top();
-            if (top.first->op == SETOP_NONE) {
+            if (top.first->op == PG_QUERY__SET_OPERATION__SETOP_NONE) {
                 // leaf
                 setItems.push_back(top.first);
                 setOpsNodes.push_back(QA("push"));
@@ -206,14 +114,15 @@ public:
                 } else {
                     TString op;
                     switch (top.first->op) {
-                    case SETOP_UNION:
+                    case PG_QUERY__SET_OPERATION__SETOP_UNION:
                         op = "union"; break;
-                    case SETOP_INTERSECT:
+                    case PG_QUERY__SET_OPERATION__SETOP_INTERSECT:
                         op = "intersect"; break;
-                    case SETOP_EXCEPT:
+                    case PG_QUERY__SET_OPERATION__SETOP_EXCEPT:
                         op = "except"; break;
                     default:
-                        AddError(TStringBuilder() << "SetOperation unsupported value: " << (int)top.first->op);
+                        AddError(TStringBuilder() << "SetOperation unsupported value: " <<
+                            protobuf_c_enum_descriptor_get_value(&pg_query__set_operation__descriptor, value->op)->name);
                         return nullptr;
                     }
 
@@ -229,22 +138,21 @@ public:
 
         TVector<TAstNode*> setItemNodes;
         for (const auto& x : setItems) {
-            if (x->distinctClause) {
-                AddError("SelectStmt: not supported distinctClause");
+            if (x->n_distinct_clause) {
+                AddError("SelectStmt: not supported distinct_clause");
                 return nullptr;
             }
 
-            if (x->intoClause) {
-                AddError("SelectStmt: not supported intoClause");
+            if (x->into_clause) {
+                AddError("SelectStmt: not supported into_clause");
                 return nullptr;
             }
 
             TVector<TAstNode*> fromList;
             TVector<TAstNode*> joinOps;
-            for (int i = 0; i < ListLength(x->fromClause); ++i) {
-                auto node = ListNodeNth(x->fromClause, i);
-                if (NodeTag(node) != T_JoinExpr) {
-                    auto p = ParseFromClause(node);
+            for (ui32 i = 0; i < x->n_from_clause; ++i) {
+                if (x->from_clause[i]->node_case != PG_QUERY__NODE__NODE_JOIN_EXPR) {
+                    auto p = FromClause(x->from_clause[i]);
                     if (!std::get<0>(p)) {
                         return nullptr;
                     }
@@ -253,14 +161,14 @@ public:
                     joinOps.push_back(QL());
                 } else {
                     TTraverseNodeStack traverseNodeStack;
-                    traverseNodeStack.push({ node, false });
+                    traverseNodeStack.push({ x->from_clause[i], false });
                     TVector<TAstNode*> oneJoinGroup;
 
                     while (!traverseNodeStack.empty()) {
                         auto& top = traverseNodeStack.top();
-                        if (NodeTag(top.first) != T_JoinExpr) {
+                        if (top.first->node_case != PG_QUERY__NODE__NODE_JOIN_EXPR) {
                             // leaf
-                            auto p = ParseFromClause(top.first);
+                            auto p = FromClause(top.first);
                             if (!std::get<0>(p)) {
                                 return nullptr;
                             }
@@ -268,24 +176,24 @@ public:
                             AddFrom(p, fromList);
                             traverseNodeStack.pop();
                         } else {
-                            auto join = CAST_NODE(JoinExpr, top.first);
+                            auto join = top.first->join_expr;
                             if (!join->larg || !join->rarg) {
-                                AddError("JoinExpr: expected larg and rarg");
+                                AddError("join_expr: expected larg and rarg");
                                 return nullptr;
                             }
 
                             if (join->alias) {
-                                AddError("JoinExpr: unsupported alias");
+                                AddError("join_expr: unsupported alias");
                                 return nullptr;
                             }
 
-                            if (join->isNatural) {
-                                AddError("JoinExpr: unsupported isNatural");
+                            if (join->is_natural) {
+                                AddError("join_expr: unsupported natural");
                                 return nullptr;
                             }
 
-                            if (ListLength(join->usingClause) > 0) {
-                                AddError("JoinExpr: unsupported using");
+                            if (join->n_using_clause) {
+                                AddError("join_expr: unsupported using");
                                 return nullptr;
                             }
 
@@ -296,16 +204,17 @@ public:
                             } else {
                                 TString op;
                                 switch (join->jointype) {
-                                case JOIN_INNER:
+                                case PG_QUERY__JOIN_TYPE__JOIN_INNER:
                                     op = join->quals ? "inner" : "cross"; break;
-                                case JOIN_LEFT:
+                                case PG_QUERY__JOIN_TYPE__JOIN_LEFT:
                                     op = "left"; break;
-                                case JOIN_FULL:
+                                case PG_QUERY__JOIN_TYPE__JOIN_FULL:
                                     op = "full"; break;
-                                case JOIN_RIGHT:
+                                case PG_QUERY__JOIN_TYPE__JOIN_RIGHT:
                                     op = "right"; break;
                                 default:
-                                    AddError(TStringBuilder() << "jointype unsupported value: " << (int)join->jointype);
+                                    AddError(TStringBuilder() << "jointype unsupported value: " <<
+                                        protobuf_c_enum_descriptor_get_value(&pg_query__join_type__descriptor, join->jointype)->name);
                                     return nullptr;
                                 }
 
@@ -339,27 +248,26 @@ public:
             }
 
             TAstNode* whereFilter = nullptr;
-            if (x->whereClause) {
+            if (x->where_clause) {
                 TExprSettings settings;
                 settings.AllowColumns = true;
                 settings.Scope = "WHERE";
-                whereFilter = ParseExpr(x->whereClause, settings);
+                whereFilter = ParseExpr(x->where_clause, settings);
                 if (!whereFilter) {
                     return nullptr;
                 }
             }
 
             TAstNode* groupBy = nullptr;
-            if (ListLength(x->groupClause) > 0) {
+            if (x->n_group_clause) {
                 TVector<TAstNode*> groupByItems;
-                for (int i = 0; i < ListLength(x->groupClause); ++i) {
-                    auto node = ListNodeNth(x->groupClause, i);
-                    if (NodeTag(node) != T_ColumnRef) {
-                        NodeNotImplemented(x, node);
+                for (ui32 i = 0; i < x->n_group_clause; ++i) {
+                    if (x->group_clause[i]->node_case != PG_QUERY__NODE__NODE_COLUMN_REF) {
+                        AltNotImplemented(x, x->group_clause[i]);
                         return nullptr;
                     }
 
-                    auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
+                    auto ref = ColumnRef(x->group_clause[i]->column_ref);
                     if (!ref) {
                         return nullptr;
                     }
@@ -372,27 +280,26 @@ public:
             }
 
             TAstNode* having = nullptr;
-            if (x->havingClause) {
+            if (x->having_clause) {
                 TExprSettings settings;
                 settings.AllowColumns = true;
                 settings.Scope = "HAVING";
                 settings.AllowAggregates = true;
-                having = ParseExpr(x->havingClause, settings);
+                having = ParseExpr(x->having_clause, settings);
                 if (!having) {
                     return nullptr;
                 }
             }
 
             TVector<TAstNode*> windowItems;
-            if (ListLength(x->windowClause) > 0) {
-                for (int i = 0; i < ListLength(x->windowClause); ++i) {
-                    auto node = ListNodeNth(x->windowClause, i);
-                    if (NodeTag(node) != T_WindowDef) {
-                        NodeNotImplemented(x, node);
+            if (x->n_window_clause) {
+                for (ui32 i = 0; i < x->n_window_clause; ++i) {
+                    if (x->window_clause[i]->node_case != PG_QUERY__NODE__NODE_WINDOW_DEF) {
+                        AltNotImplemented(x, x->window_clause[i]);
                         return nullptr;
                     }
 
-                    auto win = ParseWindowDef(CAST_NODE(WindowDef, node));
+                    auto win = WindowDef(x->window_clause[i]->window_def);
                     if (!win) {
                         return nullptr;
                     }
@@ -401,46 +308,45 @@ public:
                 }
             }
 
-            if (ListLength(x->valuesLists) && ListLength(x->fromClause)) {
+            if (x->n_values_lists && x->n_from_clause) {
                 AddError("SelectStmt: values_lists isn't compatible to from_clause");
                 return nullptr;
             }
 
-            if (!ListLength(x->valuesLists) == !ListLength(x->targetList)) {
+            if (!x->n_values_lists == !x->n_target_list) {
                 AddError("SelectStmt: only one of values_lists and target_list should be specified");
                 return nullptr;
             }
 
-            if (x != value && ListLength(x->sortClause) > 0) {
-                AddError("SelectStmt: sortClause should be used only on top");
+            if (x != value && x->n_sort_clause) {
+                AddError("SelectStmt: sort_clause should be used only on top");
                 return nullptr;
             }
 
-            if (x != value && x->limitOption != LIMIT_OPTION_DEFAULT) {
+            if (x != value && x->limit_option != PG_QUERY__LIMIT_OPTION__LIMIT_OPTION_DEFAULT) {
                 AddError("SelectStmt: limit should be used only on top");
                 return nullptr;
             }
 
-            if (ListLength(x->lockingClause) > 0) {
-                AddError("SelectStmt: not supported lockingClause");
+            if (x->n_locking_clause) {
+                AddError("SelectStmt: not supported locking_clause");
                 return nullptr;
             }
 
-            if (x->withClause) {
-                AddError("SelectStmt: not supported withClause");
+            if (x->with_clause) {
+                AddError("SelectStmt: not supported with_clause");
                 return nullptr;
             }
 
             TVector<TAstNode*> res;
             ui32 i = 0;
-            for (int targetIndex = 0; targetIndex < ListLength(x->targetList); ++targetIndex) {
-                auto node = ListNodeNth(x->targetList, targetIndex);
-                if (NodeTag(node) != T_ResTarget) {
-                    NodeNotImplemented(x, node);
+            for (ui32 targetIndex = 0; targetIndex < x->n_target_list; ++targetIndex) {
+                if (x->target_list[targetIndex]->node_case != PG_QUERY__NODE__NODE_RES_TARGET) {
+                    AltNotImplemented(x, x->target_list[targetIndex]);
                     return nullptr;
                 }
 
-                auto r = CAST_NODE(ResTarget, node);
+                auto r = x->target_list[targetIndex]->res_target;
                 if (!r->val) {
                     AddError("SelectStmt: expected val");
                     return nullptr;
@@ -458,10 +364,10 @@ public:
                 }
 
                 bool isStar = false;
-                if (NodeTag(r->val) == T_ColumnRef) {
-                    auto ref = CAST_NODE(ColumnRef, r->val);
-                    for (int fieldNo = 0; fieldNo < ListLength(ref->fields); ++fieldNo) {
-                        if (NodeTag(ListNodeNth(ref->fields, fieldNo)) == T_A_Star) {
+                if (r->val->node_case == PG_QUERY__NODE__NODE_COLUMN_REF) {
+                    auto ref = r->val->column_ref;
+                    for (ui32 fieldNo = 0; fieldNo < ref->n_fields; ++fieldNo) {
+                        if (ref->fields[fieldNo]->node_case == PG_QUERY__NODE__NODE_A_STAR) {
                             isStar = true;
                             break;
                         }
@@ -472,11 +378,11 @@ public:
                 if (!isStar) {
                     name = r->name;
                     if (name.empty()) {
-                        if (NodeTag(r->val) == T_ColumnRef) {
-                            auto ref = CAST_NODE(ColumnRef, r->val);
-                            auto field = ListNodeNth(ref->fields, ListLength(ref->fields) - 1);
-                            if (NodeTag(field) == T_String) {
-                                name = StrVal(field);
+                        if (r->val->node_case == PG_QUERY__NODE__NODE_COLUMN_REF) {
+                            auto ref = r->val->column_ref;
+                            auto field = ref->fields[ref->n_fields - 1];
+                            if (field->node_case == PG_QUERY__NODE__NODE_STRING) {
+                                name = field->string->str;
                             }
                         }
                     }
@@ -495,32 +401,31 @@ public:
             TVector<TAstNode*> valNames;
             val.push_back(A("AsList"));
 
-            for (int valueIndex = 0; valueIndex < ListLength(x->valuesLists); ++valueIndex) {
+            for (ui32 valueIndex = 0; valueIndex < x->n_values_lists; ++valueIndex) {
                 TExprSettings settings;
                 settings.AllowColumns = false;
                 settings.Scope = "VALUES";
 
-                auto node = ListNodeNth(x->valuesLists, valueIndex);
-                if (NodeTag(node) != T_List) {
-                    NodeNotImplemented(x, node);
+                if (x->values_lists[valueIndex]->node_case != PG_QUERY__NODE__NODE_LIST) {
+                    AltNotImplemented(x, x->values_lists[valueIndex]);
                     return nullptr;
                 }
 
-                auto lst = CAST_NODE(List, node);
+                auto lst = x->values_lists[valueIndex]->list;
                 TVector<TAstNode*> row;
                 if (valueIndex == 0) {
-                    for (int item = 0; item < ListLength(lst); ++item) {
+                    for (ui32 item = 0; item < lst->n_items; ++item) {
                         valNames.push_back(QA("column" + ToString(i++)));
                     }
                 } else {
-                    if (ListLength(lst) != (int)valNames.size()) {
+                    if (lst->n_items != valNames.size()) {
                         AddError("SelectStmt: VALUES lists must all be the same length");
                         return nullptr;
                     }
                 }
 
-                for (int item = 0; item < ListLength(lst); ++item) {
-                    auto cell = ParseExpr(ListNodeNth(lst, item), settings);
+                for (ui32 item = 0; item < lst->n_items; ++item) {
+                    auto cell = ParseExpr(lst->items[item], settings);
                     if (!cell) {
                         return nullptr;
                     }
@@ -532,7 +437,7 @@ public:
             }
 
             TVector<TAstNode*> setItemOptions;
-            if (ListLength(x->targetList) > 0) {
+            if (x->n_target_list) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
             } else {
                 setItemOptions.push_back(QL(QA("values"), QVL(valNames.data(), valNames.size()), VL(val.data(), val.size())));
@@ -566,27 +471,26 @@ public:
             setItemNodes.push_back(setItem);
         }
 
-        if (value->distinctClause) {
-            AddError("SelectStmt: not supported distinctClause");
+        if (value->n_distinct_clause) {
+            AddError("SelectStmt: not supported distinct_clause");
             return nullptr;
         }
 
-        if (value->intoClause) {
-            AddError("SelectStmt: not supported intoClause");
+        if (value->into_clause) {
+            AddError("SelectStmt: not supported into_clause");
             return nullptr;
         }
 
         TAstNode* sort = nullptr;
-        if (ListLength(value->sortClause) > 0) {
+        if (value->n_sort_clause) {
             TVector<TAstNode*> sortItems;
-            for (int i = 0; i < ListLength(value->sortClause); ++i) {
-                auto node = ListNodeNth(value->sortClause, i);
-                if (NodeTag(node) != T_SortBy) {
-                    NodeNotImplemented(value, node);
+            for (ui32 i = 0; i < value->n_sort_clause; ++i) {
+                if (value->sort_clause[i]->node_case != PG_QUERY__NODE__NODE_SORT_BY) {
+                    AltNotImplemented(value, value->sort_clause[i]);
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node));
+                auto sort = SortBy(value->sort_clause[i]->sort_by);
                 if (!sort) {
                     return nullptr;
                 }
@@ -597,41 +501,45 @@ public:
             sort = QVL(sortItems.data(), sortItems.size());
         }
 
-        if (ListLength(value->lockingClause) > 0) {
-            AddError("SelectStmt: not supported lockingClause");
+        if (value->n_locking_clause) {
+            AddError("SelectStmt: not supported locking_clause");
             return nullptr;
         }
 
-        if (value->withClause) {
-            AddError("SelectStmt: not supported withClause");
+        if (value->with_clause) {
+            AddError("SelectStmt: not supported with_clause");
             return nullptr;
         }
 
         TAstNode* limit = nullptr;
         TAstNode* offset = nullptr;
-        if (value->limitOption == LIMIT_OPTION_COUNT || value->limitOption == LIMIT_OPTION_DEFAULT) {
-            if (value->limitCount) {
+        if (value->limit_option != PG_QUERY__LIMIT_OPTION__LIMIT_OPTION_DEFAULT) {
+            if (value->limit_option == PG_QUERY__LIMIT_OPTION__LIMIT_OPTION_COUNT) {
+                if (!value->limit_count) {
+                    AddError("Expected limit_count");
+                    return nullptr;
+                }
+
                 TExprSettings settings;
                 settings.AllowColumns = false;
                 settings.Scope = "LIMIT";
-                limit = ParseExpr(value->limitCount, settings);
+                limit = ParseExpr(value->limit_count, settings);
                 if (!limit) {
                     return nullptr;
                 }
-            }
 
-            if (value->limitOffset) {
-                TExprSettings settings;
-                settings.AllowColumns = false;
-                settings.Scope = "OFFSET";
-                offset = ParseExpr(value->limitOffset, settings);
-                if (!offset) {
-                    return nullptr;
+                if (value->limit_offset) {
+                    settings.Scope = "OFFSET";
+                    offset = ParseExpr(value->limit_offset, settings);
+                    if (!offset) {
+                        return nullptr;
+                    }
                 }
+            } else {
+                AddError(TStringBuilder() << "LimitOption unsupported value: " <<
+                    protobuf_c_enum_descriptor_get_value(&pg_query__limit_option__descriptor, value->limit_option)->name);
+                return nullptr;
             }
-        } else {
-            AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)value->limitOption);
-            return nullptr;
         }
 
         TVector<TAstNode*> selectOptions;
@@ -667,14 +575,14 @@ public:
         return Statements.back();
     }
 
-    TFromDesc ParseFromClause(const Node* node) {
-        switch (NodeTag(node)) {
-        case T_RangeVar:
-            return ParseRangeVar(CAST_NODE(RangeVar, node));
-        case T_RangeSubselect:
-            return ParseRangeSubselect(CAST_NODE(RangeSubselect, node));
+    TFromDesc FromClause(const PgQuery__Node* node) {
+        switch (node->node_case) {
+        case PG_QUERY__NODE__NODE_RANGE_VAR:
+            return RangeVar(node->range_var);
+        case PG_QUERY__NODE__NODE_RANGE_SUBSELECT:
+            return RangeSubselect(node->range_subselect);
         default:
-            NodeNotImplementedImpl<SelectStmt>(node);
+            AltNotImplementedDesc(nullptr, node);
             return {};
         }
     }
@@ -698,33 +606,32 @@ public:
         }
     }
 
-    bool ParseAlias(const Alias* alias, TString& res, TVector<TString>& colnames) {
-        for (int i = 0; i < ListLength(alias->colnames); ++i) {
-            auto node = ListNodeNth(alias->colnames, i);
-            if (NodeTag(node) != T_String) {
-                NodeNotImplemented(alias, node);
+    bool ParseAlias(const PgQuery__Alias* alias, TString& res, TVector<TString>& colnames) {
+        for (ui32 i = 0; i < alias->n_colnames; ++i) {
+            if (alias->colnames[i]->node_case != PG_QUERY__NODE__NODE_STRING) {
+                AltNotImplemented(alias, alias->colnames[i]);
                 return false;
             }
 
-            colnames.push_back(StrVal(node));
+            colnames.push_back(alias->colnames[i]->string->str);
         }
 
         res = alias->aliasname;
         return true;
     }
 
-    TFromDesc ParseRangeVar(const RangeVar* value) {
-        if (StrLength(value->catalogname) > 0) {
+    TFromDesc RangeVar(const PgQuery__RangeVar* value) {
+        if (strlen(value->catalogname) > 0) {
             AddError("catalogname is not supported");
             return {};
         }
 
-        if (StrLength(value->schemaname) == 0) {
+        if (strlen(value->schemaname) == 0) {
             AddError("schemaname should be specified");
             return {};
         }
 
-        if (StrLength(value->relname) == 0) {
+        if (strlen(value->relname) == 0) {
             AddError("relname should be specified");
             return {};
         }
@@ -750,7 +657,7 @@ public:
             QL()), alias, colnames, true };
     }
 
-    TFromDesc ParseRangeSubselect(const RangeSubselect* value) {
+    TFromDesc RangeSubselect(const PgQuery__RangeSubselect* value) {
         if (value->lateral) {
             AddError("RangeSubselect: unsupported lateral");
             return {};
@@ -772,68 +679,68 @@ public:
             return {};
         }
 
-        if (NodeTag(value->subquery) != T_SelectStmt) {
-            NodeNotImplemented(value, value->subquery);
+        if (value->subquery->node_case != PG_QUERY__NODE__NODE_SELECT_STMT) {
+            AltNotImplemented(value, value->subquery);
             return {};
         }
 
-        return { ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), true), alias, colnames, false };
+        return { SelectStmt(value->subquery->select_stmt, true), alias, colnames, false };
     }
 
-    TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
-        switch (NodeTag(node)) {
-        case T_A_Const: {
-            return ParseAConst(CAST_NODE(A_Const, node));
+    TAstNode* ParseExpr(const PgQuery__Node* node, const TExprSettings& settings) {
+        switch (node->node_case) {
+        case PG_QUERY__NODE__NODE_A_CONST: {
+            return AConst(node->a_const);
         }
-        case T_A_Expr: {
-            return ParseAExpr(CAST_NODE(A_Expr, node), settings);
+        case PG_QUERY__NODE__NODE_A_EXPR: {
+            return AExpr(node->a_expr, settings);
         }
-        case T_ColumnRef: {
+        case PG_QUERY__NODE__NODE_COLUMN_REF: {
             if (!settings.AllowColumns) {
                 AddError(TStringBuilder() << "Columns are not allowed in: " << settings.Scope);
                 return nullptr;
             }
 
-            return ParseColumnRef(CAST_NODE(ColumnRef, node));
+            return ColumnRef(node->column_ref);
         }
-        case T_TypeCast: {
-            return ParseTypeCast(CAST_NODE(TypeCast, node));
+        case PG_QUERY__NODE__NODE_TYPE_CAST: {
+            return TypeCast(node->type_cast);
         }
-        case T_BoolExpr: {
-            return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
+        case PG_QUERY__NODE__NODE_BOOL_EXPR: {
+            return BoolExpr(node->bool_expr, settings);
         }
-        case T_FuncCall: {
-            return ParseFuncCall(CAST_NODE(FuncCall, node), settings);
+        case PG_QUERY__NODE__NODE_FUNC_CALL: {
+            return FuncCall(node->func_call, settings);
         }
         default:
-            NodeNotImplemented(node);
+            AltNotImplementedDesc(nullptr, node);
             return nullptr;
         }
     }
 
-    TAstNode* ParseAConst(const A_Const* value) {
-        const auto& val = value->val;
-        switch (NodeTag(val)) {
-        case T_Integer: {
-            return L(A("Just"), L(A("Int32"), QA(ToString(IntVal(val)))));
+    TAstNode* AConst(const PgQuery__AConst* value) {
+        auto node = value->val;
+        switch (node->node_case) {
+        case PG_QUERY__NODE__NODE_INTEGER: {
+            return L(A("Just"), L(A("Int32"), QA(ToString(node->integer->ival))));
         }
-        case T_Float: {
-            return L(A("Just"), L(A("Double"), QA(ToString(StrFloatVal(val)))));
+        case PG_QUERY__NODE__NODE_FLOAT: {
+            return L(A("Just"), L(A("Double"), QA(ToString(node->float_->str))));
         }
-        case T_String: {
-            return L(A("Just"), L(A("Utf8"), QA(ToString(StrVal(val)))));
+        case PG_QUERY__NODE__NODE_STRING: {
+            return L(A("Just"), L(A("Utf8"), QA(ToString(node->string->str))));
         }
-        case T_Null: {
+        case PG_QUERY__NODE__NODE_NULL: {
             return L(A("Null"));
         }
         default:
-            ValueNotImplemented(value, val);
+            AltNotImplemented(value, node);
             return nullptr;
         }
     }
 
-    TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings) {
-        if (ListLength(value->agg_order) > 0) {
+    TAstNode* FuncCall(const PgQuery__FuncCall* value, const TExprSettings& settings) {
+        if (value->n_agg_order) {
             AddError("FuncCall: unsupported agg_order");
             return nullptr;
         }
@@ -865,11 +772,11 @@ public:
                 return nullptr;
             }
 
-            if (StrLength(value->over->name)) {
+            if (strlen(value->over->name)) {
                 window = QA(value->over->name);
             } else {
                 auto index = settings.WindowItems->size();
-                auto def = ParseWindowDef(value->over);
+                auto def = WindowDef(value->over);
                 if (!def) {
                     return nullptr;
                 }
@@ -880,14 +787,14 @@ public:
         }
 
         TVector<TString> names;
-        for (int i = 0; i < ListLength(value->funcname); ++i) {
-            auto x = ListNodeNth(value->funcname, i);
-            if (NodeTag(x) != T_String) {
-                NodeNotImplemented(value, x);
+        for (ui32 i = 0; i < value->n_funcname; ++i) {
+            auto x = value->funcname[i];
+            if (x->node_case != PG_QUERY__NODE__NODE_STRING) {
+                AltNotImplemented(value, x);
                 return nullptr;
             }
 
-            names.push_back(to_lower(TString(StrVal(x))));
+            names.push_back(to_lower(TString(x->string->str)));
         }
 
         if (names.empty()) {
@@ -940,14 +847,14 @@ public:
                 return nullptr;
             }
         } else {
-            if (name == "count" && ListLength(value->args) == 0) {
+            if (name == "count" && value->n_args == 0) {
                 AddError("FuncCall: count(*) must be used to call a parameterless aggregate function");
                 return nullptr;
             }
 
             bool hasError = false;
-            for (int i = 0; i < ListLength(value->args); ++i) {
-                auto x = ListNodeNth(value->args, i);
+            for (ui32 i = 0; i < value->n_args; ++i) {
+                auto x = value->args[i];
                 auto arg = ParseExpr(x, settings);
                 if (!arg) {
                     hasError = true;
@@ -965,46 +872,45 @@ public:
         return VL(args.data(), args.size());
     }
 
-    TAstNode* ParseTypeCast(const TypeCast* value) {
+    TAstNode* TypeCast(const PgQuery__TypeCast* value) {
         if (!value->arg) {
             AddError("Expected arg");
             return nullptr;
         }
 
-        if (!value->typeName) {
+        if (!value->type_name) {
             AddError("Expected type_name");
             return nullptr;
         }
 
         auto arg = value->arg;
-        auto typeName = value->typeName;
-        if (NodeTag(arg) == T_A_Const &&
-            (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
-            NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
-            typeName->typeOid == 0 &&
+        auto typeName = value->type_name;
+        if (arg->node_case == PG_QUERY__NODE__NODE_A_CONST &&
+            (arg->a_const->val->node_case == PG_QUERY__NODE__NODE_STRING ||
+             arg->a_const->val->node_case == PG_QUERY__NODE__NODE_NULL) &&
+            typeName->type_oid == 0 &&
             !typeName->setof &&
             !typeName->pct_type &&
-            ListLength(typeName->typmods) == 0 &&
-            ListLength(typeName->arrayBounds) == 0 &&
-            (ListLength(typeName->names) == 2 &&
-            NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
-            !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
-            NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String &&
+            typeName->n_typmods == 0 &&
+            typeName->n_array_bounds == 0 &&
+            (typeName->n_names == 2 &&
+            typeName->names[0]->node_case == PG_QUERY__NODE__NODE_STRING &&
+            !strcmp(typeName->names[0]->string->str, "pg_catalog") || typeName->n_names == 1) &&
+            typeName->names[typeName->n_names - 1]->node_case == PG_QUERY__NODE__NODE_STRING &&
             typeName->typemod == -1) {
-            TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
-            if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
-                auto str = StrVal(CAST_NODE(A_Const, arg)->val);
-                if (!StrCompare(str, "t")) {
+            TStringBuf targetType = typeName->names[typeName->n_names - 1]->string->str;
+            if (arg->a_const->val->node_case == PG_QUERY__NODE__NODE_STRING && targetType == "bool") {
+                if (!strcmp(arg->a_const->val->string->str, "t")) {
                     return L(A("Just"), L(A("Bool"), QA("1")));
-                } else if (!StrCompare(str, "f")) {
+                } else if (!strcmp(arg->a_const->val->string->str, "f")) {
                     return L(A("Just"), L(A("Bool"), QA("0")));
                 } else {
-                    AddError(TStringBuilder() << "Unsupported boolean literal: " << str);
+                    AddError(TStringBuilder() << "Unsupported boolean literal: " << arg->a_const->val->string->str);
                     return nullptr;
                 }
             }
 
-            if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) {
+            if (arg->a_const->val->node_case == PG_QUERY__NODE__NODE_NULL) {
                 TString yqlType;
                 if (targetType == "bool") {
                     yqlType = "Bool";
@@ -1026,43 +932,48 @@ public:
         return nullptr;
     }
 
-    TAstNode* ParseBoolExpr(const BoolExpr* value, const TExprSettings& settings) {
+    TAstNode* BoolExpr(const PgQuery__BoolExpr* value, const TExprSettings& settings) {
+        if (value->xpr) {
+            AddError("BoolExpr: not supported xpr");
+            return nullptr;
+        }
+
         switch (value->boolop) {
-        case AND_EXPR: {
-            if (ListLength(value->args) != 2) {
+        case PG_QUERY__BOOL_EXPR_TYPE__AND_EXPR: {
+            if (value->n_args != 2) {
                 AddError("Expected 2 args for AND");
                 return nullptr;
             }
 
-            auto lhs = ParseExpr(ListNodeNth(value->args, 0), settings);
-            auto rhs = ParseExpr(ListNodeNth(value->args, 1), settings);
+            auto lhs = ParseExpr(value->args[0], settings);
+            auto rhs = ParseExpr(value->args[1], settings);
             if (!lhs || !rhs) {
                 return nullptr;
             }
 
             return L(A("And"), lhs, rhs);
         }
-        case OR_EXPR: {
-            if (ListLength(value->args) != 2) {
+        case PG_QUERY__BOOL_EXPR_TYPE__OR_EXPR: {
+            if (value->n_args != 2) {
                 AddError("Expected 2 args for OR");
                 return nullptr;
             }
 
-            auto lhs = ParseExpr(ListNodeNth(value->args, 0), settings);
-            auto rhs = ParseExpr(ListNodeNth(value->args, 1), settings);
+            auto lhs = ParseExpr(value->args[0], settings);
+            auto rhs = ParseExpr(value->args[1], settings);
             if (!lhs || !rhs) {
                 return nullptr;
             }
 
             return L(A("Or"), lhs, rhs);
         }
-        case NOT_EXPR: {
-            if (ListLength(value->args) != 1) {
+        case PG_QUERY__BOOL_EXPR_TYPE__NOT_EXPR: {
+            if (value->n_args != 1) {
                 AddError("Expected 1 arg for NOT");
                 return nullptr;
             }
 
-            auto arg = ParseExpr(ListNodeNth(value->args, 0), settings);
+            auto arg = ParseExpr(value->args[0], settings);
             if (!arg) {
                 return nullptr;
             }
@@ -1070,23 +981,23 @@ public:
             return L(A("Not"), arg);
         }
         default:
-            AddError(TStringBuilder() << "BoolExprType unsupported value: " << (int)value->boolop);
+            AddError(TStringBuilder() << "BoolExprType unsupported value: " <<
+                protobuf_c_enum_descriptor_get_value(&pg_query__bool_expr_type__descriptor, value->boolop)->name);
             return nullptr;
         }
     }
 
-    TAstNode* ParseWindowDef(const WindowDef* value) {
+    TAstNode* WindowDef(const PgQuery__WindowDef* value) {
         auto name = QA(value->name);
         auto refName = QA(value->refname);
         TVector<TAstNode*> sortItems;
-        for (int i = 0; i < ListLength(value->orderClause); ++i) {
-            auto node = ListNodeNth(value->orderClause, i);
-            if (NodeTag(node) != T_SortBy) {
-                NodeNotImplemented(value, node);
+        for (ui32 i = 0; i < value->n_order_clause; ++i) {
+            if (value->order_clause[i]->node_case != PG_QUERY__NODE__NODE_SORT_BY) {
+                AltNotImplemented(value, value->order_clause[i]);
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node));
+            auto sort = SortBy(value->order_clause[i]->sort_by);
             if (!sort) {
                 return nullptr;
             }
@@ -1096,14 +1007,13 @@ public:
 
         auto sort = QVL(sortItems.data(), sortItems.size());
         TVector<TAstNode*> groupByItems;
-        for (int i = 0; i < ListLength(value->partitionClause); ++i) {
-            auto node = ListNodeNth(value->partitionClause, i);
-            if (NodeTag(node) != T_ColumnRef) {
-                NodeNotImplemented(value, node);
+        for (ui32 i = 0; i < value->n_partition_clause; ++i) {
+            if (value->partition_clause[i]->node_case != PG_QUERY__NODE__NODE_COLUMN_REF) {
+                AltNotImplemented(value, value->partition_clause[i]);
                 return nullptr;
             }
 
-            auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
+            auto ref = ColumnRef(value->partition_clause[i]->column_ref);
             if (!ref) {
                 return nullptr;
             }
@@ -1114,9 +1024,9 @@ public:
 
         auto group = QVL(groupByItems.data(), groupByItems.size());
         TVector<TAstNode*> optionItems;
-        if (value->frameOptions & FRAMEOPTION_NONDEFAULT) {
+        if (value->frame_options & PG_FRAMEOPTION_NONDEFAULT) {
             TString exclude;
-            if (value->frameOptions & FRAMEOPTION_EXCLUDE_CURRENT_ROW) {
+            if (value->frame_options & PG_FRAMEOPTION_EXCLUDE_CURRENT_ROW) {
                 if (exclude) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1125,7 +1035,7 @@ public:
                 exclude = "c";
             }
 
-            if (value->frameOptions & FRAMEOPTION_EXCLUDE_GROUP) {
+            if (value->frame_options & PG_FRAMEOPTION_EXCLUDE_GROUP) {
                 if (exclude) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1134,7 +1044,7 @@ public:
                 exclude = "cp";
             }
 
-            if (value->frameOptions & FRAMEOPTION_EXCLUDE_TIES) {
+            if (value->frame_options & PG_FRAMEOPTION_EXCLUDE_TIES) {
                 if (exclude) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1148,7 +1058,7 @@ public:
             }
 
             TString type;
-            if (value->frameOptions & FRAMEOPTION_RANGE) {
+            if (value->frame_options & PG_FRAMEOPTION_RANGE) {
                 if (type) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1157,7 +1067,7 @@ public:
                 type = "range";
             }
 
-            if (value->frameOptions & FRAMEOPTION_ROWS) {
+            if (value->frame_options & PG_FRAMEOPTION_ROWS) {
                 if (type) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1166,7 +1076,7 @@ public:
                 type = "rows";
             }
 
-            if (value->frameOptions & FRAMEOPTION_GROUPS) {
+            if (value->frame_options & PG_FRAMEOPTION_GROUPS) {
                 if (type) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1181,7 +1091,7 @@ public:
             }
 
             TString from;
-            if (value->frameOptions & FRAMEOPTION_START_UNBOUNDED_PRECEDING) {
+            if (value->frame_options & PG_FRAMEOPTION_START_UNBOUNDED_PRECEDING) {
                 if (from) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1190,14 +1100,14 @@ public:
                 from = "up";
             }
 
-            if (value->frameOptions & FRAMEOPTION_START_OFFSET_PRECEDING) {
+            if (value->frame_options & PG_FRAMEOPTION_START_OFFSET_PRECEDING) {
                 if (from) {
                     AddError("Wrong frame options");
                     return nullptr;
                 }
 
                 from = "p";
-                auto offset = ConvertFrameOffset(value->startOffset);
+                auto offset = ConvertFrameOffset(value->start_offset);
                 if (!offset) {
                     return nullptr;
                 }
@@ -1205,7 +1115,7 @@ public:
                 optionItems.push_back(QL(QA("from_value"), offset));
             }
 
-            if (value->frameOptions & FRAMEOPTION_START_CURRENT_ROW) {
+            if (value->frame_options & PG_FRAMEOPTION_START_CURRENT_ROW) {
                 if (from) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1214,14 +1124,14 @@ public:
                 from = "c";
             }
 
-            if (value->frameOptions & FRAMEOPTION_START_OFFSET_FOLLOWING) {
+            if (value->frame_options & PG_FRAMEOPTION_START_OFFSET_FOLLOWING) {
                 if (from) {
                     AddError("Wrong frame options");
                     return nullptr;
                 }
 
                 from = "f";
-                auto offset = ConvertFrameOffset(value->startOffset);
+                auto offset = ConvertFrameOffset(value->start_offset);
                 if (!offset) {
                     return nullptr;
                 }
@@ -1229,7 +1139,7 @@ public:
                 optionItems.push_back(QL(QA("from_value"), offset));
             }
 
-            if (value->frameOptions & FRAMEOPTION_START_UNBOUNDED_FOLLOWING) {
+            if (value->frame_options & PG_FRAMEOPTION_START_UNBOUNDED_FOLLOWING) {
                 AddError("Wrong frame options");
                 return nullptr;
             }
@@ -1240,19 +1150,19 @@ public:
             }
 
             TString to;
-            if (value->frameOptions & FRAMEOPTION_END_UNBOUNDED_PRECEDING) {
+            if (value->frame_options & PG_FRAMEOPTION_END_UNBOUNDED_PRECEDING) {
                 AddError("Wrong frame options");
                 return nullptr;
             }
 
-            if (value->frameOptions & FRAMEOPTION_END_OFFSET_PRECEDING) {
+            if (value->frame_options & PG_FRAMEOPTION_END_OFFSET_PRECEDING) {
                 if (to) {
                     AddError("Wrong frame options");
                     return nullptr;
                 }
 
                 to = "p";
-                auto offset = ConvertFrameOffset(value->endOffset);
+                auto offset = ConvertFrameOffset(value->end_offset);
                 if (!offset) {
                     return nullptr;
                 }
@@ -1260,7 +1170,7 @@ public:
                 optionItems.push_back(QL(QA("to_value"), offset));
             }
 
-            if (value->frameOptions & FRAMEOPTION_END_CURRENT_ROW) {
+            if (value->frame_options & PG_FRAMEOPTION_END_CURRENT_ROW) {
                 if (to) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1269,14 +1179,14 @@ public:
                 to = "c";
             }
 
-            if (value->frameOptions & FRAMEOPTION_END_OFFSET_FOLLOWING) {
+            if (value->frame_options & PG_FRAMEOPTION_END_OFFSET_FOLLOWING) {
                 if (to) {
                     AddError("Wrong frame options");
                     return nullptr;
                 }
 
                 to = "f";
-                auto offset = ConvertFrameOffset(value->endOffset);
+                auto offset = ConvertFrameOffset(value->end_offset);
                 if (!offset) {
                     return nullptr;
                 }
@@ -1284,7 +1194,7 @@ public:
                 optionItems.push_back(QL(QA("to_value"), offset));
             }
 
-            if (value->frameOptions & FRAMEOPTION_END_UNBOUNDED_FOLLOWING) {
+            if (value->frame_options & PG_FRAMEOPTION_END_UNBOUNDED_FOLLOWING) {
                 if (to) {
                     AddError("Wrong frame options");
                     return nullptr;
@@ -1307,10 +1217,10 @@ public:
         return L(A("PgWindow"), name, refName, group, sort, options);
     }
 
-    TAstNode* ConvertFrameOffset(const Node* off) {
-        if (NodeTag(off) == T_A_Const
-            && NodeTag(CAST_NODE(A_Const, off)->val) == T_Integer) {
-            return L(A("Int32"), QA(ToString(IntVal(CAST_NODE(A_Const, off)->val))));
+    TAstNode* ConvertFrameOffset(const PgQuery__Node* off) {
+        if (off->node_case == PG_QUERY__NODE__NODE_A_CONST
+            && off->a_const->val->node_case == PG_QUERY__NODE__NODE_INTEGER) {
+            return L(A("Int32"), QA(ToString(off->a_const->val->integer->ival)));
         } else {
             TExprSettings settings;
             settings.AllowColumns = false;
@@ -1324,27 +1234,29 @@ public:
         }
     }
 
-    TAstNode* ParseSortBy(const PG_SortBy* value) {
+    TAstNode* SortBy(const PgQuery__SortBy* value) {
         bool asc = true;
         switch (value->sortby_dir) {
-        case SORTBY_DEFAULT:
+        case PG_QUERY__SORT_BY_DIR__SORTBY_DEFAULT:
             break;
-        case SORTBY_ASC:
+        case PG_QUERY__SORT_BY_DIR__SORTBY_ASC:
             break;
-        case SORTBY_DESC:
+        case PG_QUERY__SORT_BY_DIR__SORTBY_DESC:
             asc = false;
             break;
         default:
-            AddError(TStringBuilder() << "sortby_dir unsupported value: " << (int)value->sortby_dir);
+            AddError(TStringBuilder() << "sortby_dir unsupported value: " <<
+                protobuf_c_enum_descriptor_get_value(&pg_query__sort_by_dir__descriptor, value->sortby_dir)->name);
             return nullptr;
         }
 
-        if (value->sortby_nulls != SORTBY_NULLS_DEFAULT) {
-            AddError(TStringBuilder() << "sortby_nulls unsupported value: " << (int)value->sortby_nulls);
+        if (value->sortby_nulls != PG_QUERY__SORT_BY_NULLS__SORTBY_NULLS_DEFAULT) {
+            AddError(TStringBuilder() << "sortby_nulls unsupported value: " <<
+                protobuf_c_enum_descriptor_get_value(&pg_query__sort_by_nulls__descriptor, value->sortby_nulls)->name);
             return nullptr;
         }
 
-        if (ListLength(value->useOp) > 0) {
+        if (value->n_use_op) {
             AddError("Unsupported operators in sort_by");
             return nullptr;
         }
@@ -1361,32 +1273,32 @@ public:
         return L(A("PgSort"), L(A("Void")), lambda, QA(asc ? "asc" : "desc"));
     }
 
-    TAstNode* ParseColumnRef(const ColumnRef* value) {
-        if (ListLength(value->fields) == 0) {
+    TAstNode* ColumnRef(const PgQuery__ColumnRef* value) {
+        if (value->n_fields == 0) {
             AddError("No fields");
             return nullptr;
         }
 
-        if (ListLength(value->fields) > 2) {
+        if (value->n_fields > 2) {
             AddError("Too many fields");
             return nullptr;
         }
 
         bool isStar = false;
         TVector<TString> fields;
-        for (int i = 0; i < ListLength(value->fields); ++i) {
-            auto x = ListNodeNth(value->fields, i);
+        for (ui32 i = 0; i < value->n_fields; ++i) {
+            auto x = value->fields[i];
             if (isStar) {
                 AddError("Star is already defined");
                 return nullptr;
             }
 
-            if (NodeTag(x) == T_String) {
-                fields.push_back(StrVal(x));
-            } else if (NodeTag(x) == T_A_Star) {
+            if (x->node_case == PG_QUERY__NODE__NODE_STRING) {
+                fields.push_back(x->string->str);
+            } else if (x->node_case == PG_QUERY__NODE__NODE_A_STAR) {
                 isStar = true;
             } else {
-                NodeNotImplemented(value, x);
+                AltNotImplemented(value, x);
                 return nullptr;
             }
         }
@@ -1404,24 +1316,25 @@ public:
         }
     }
 
-    TAstNode* ParseAExpr(const A_Expr* value, const TExprSettings& settings) {
-        if (value->kind != AEXPR_OP) {
-            AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
+    TAstNode* AExpr(const PgQuery__AExpr* value, const TExprSettings& settings) {
+        if (value->kind != PG_QUERY__A__EXPR__KIND__AEXPR_OP) {
+            AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " <<
+                protobuf_c_enum_descriptor_get_value(&pg_query__a__expr__kind__descriptor, value->kind)->name);
             return nullptr;
         }
 
-        if (ListLength(value->name) != 1) {
-            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+        if (value->n_name != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << value->n_name);
             return nullptr;
         }
 
-        auto nameNode = ListNodeNth(value->name, 0);
-        if (NodeTag(nameNode) != T_String) {
-            NodeNotImplemented(value, nameNode);
+        auto nameNode = value->name[0];
+        if (nameNode->node_case != PG_QUERY__NODE__NODE_STRING) {
+            AltNotImplemented(value, nameNode);
             return nullptr;
         }
 
-        auto op = StrVal(nameNode);
+        auto op = nameNode->string->str;
         if (!value->rexpr) {
             AddError("Missing operands");
             return nullptr;
@@ -1458,36 +1371,18 @@ public:
     }
 
     template <typename T>
-    void NodeNotImplementedImpl(const Node* nodeptr) {
+    void AltNotImplemented(const T* outer, const PgQuery__Node* node) {
+        AltNotImplementedDesc(((const ProtobufCMessage*)outer)->descriptor, node);
+    }
+
+    void AltNotImplementedDesc(const ProtobufCMessageDescriptor* outer, const PgQuery__Node* node) {
         TStringBuilder b;
-        b << TypeName<T>() << ": ";
-        b << "alternative is not implemented yet : " << NodeTag(nodeptr);
-        AddError(b);
-    }
+        if (outer) {
+            b << outer->name << ": ";
+        }
 
-    template <typename T>
-    void NodeNotImplemented(const T* outer, const Node* nodeptr) {
-        Y_UNUSED(outer);
-        NodeNotImplementedImpl<T>(nodeptr);
-    }
-
-    template <typename T>
-    void ValueNotImplementedImpl(const Value& value) {
-        TStringBuilder b;
-        b << TypeName<T>() << ": ";
-        b << "alternative is not implemented yet : " << NodeTag(value);
-        AddError(b);
-    }
-
-    template <typename T>
-    void ValueNotImplemented(const T* outer, const Value& value) {
-        Y_UNUSED(outer);
-        ValueNotImplementedImpl<T>(value);
-    }
-
-    void NodeNotImplemented(const Node* nodeptr) {
-        TStringBuilder b;
-        b << "alternative is not implemented yet : " << NodeTag(nodeptr);
+        b << "alternative is not implemented yet : " <<
+            protobuf_c_message_descriptor_get_field(node->base.descriptor, node->node_case)->name;
         AddError(b);
     }
 

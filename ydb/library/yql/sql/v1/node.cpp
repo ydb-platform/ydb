@@ -1737,7 +1737,7 @@ bool ISource::SetSamplingRate(TContext& ctx, TNodePtr samplingRate) {
 }
 
 TNodePtr ISource::BuildAggregation(const TString& label) {
-    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !HoppingWindowSpec) {
+    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource()) {
         return nullptr;
     }
 
@@ -1839,17 +1839,17 @@ TNodePtr BuildFrameNode(const TFrameBound& frame) {
     TNodePtr node = frame.Bound;
     TPosition pos = frame.Pos;
     if (frame.Settings == FrameCurrentRow) {
-        node = BuildQuotedAtom(pos, "currentRow", TNodeFlags::Default);
+        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, "0", TNodeFlags::Default) });
     } else if (!node) {
         node = BuildLiteralVoid(pos);
     } else if (node->IsLiteral()) {
         YQL_ENSURE(node->GetLiteralType() == "Int32");
-        i32 value = FromString<i32>(node->GetLiteralValue());
-        YQL_ENSURE(value >= 0);
+        auto value = node->GetLiteralValue();
+        YQL_ENSURE(!value.StartsWith('-'));
         if (frame.Settings == FramePreceding) {
-            value = -value;
+            value = "-" + value;
         }
-        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, ToString(value), TNodeFlags::Default) });
+        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, value, TNodeFlags::Default) });
     } else {
         if (frame.Settings == FramePreceding) {
             node = new TCallNodeImpl(pos, "Minus", { node->Clone() });

@@ -182,8 +182,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         case JSON_STRING:
             return EAttributeType::String;
 
-        case JSON_MAP:
-        {
+        case JSON_MAP: {
             const auto* type = value.GetMapSafe().FindPtr("@type");
 
             if (!type || type->GetType() != JSON_STRING) {
@@ -193,8 +192,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             if (type->GetStringSafe() == "ACTOR_ID") {
                 return EAttributeType::ActorId;
             }
-            // can not detenmine map type, fallback to unknown
-            [[fallthrough]];
         }
 
         default:

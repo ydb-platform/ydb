@@ -346,7 +346,6 @@ public:
                     TString partitionId = Sprintf("  %6" PRIu32 " ", partition.GetPartitionId());
                     Cout << partitionId << "│" << partition.GetTabletId() << Endl;
                 }
-                break;
             }
             default:
                 break;

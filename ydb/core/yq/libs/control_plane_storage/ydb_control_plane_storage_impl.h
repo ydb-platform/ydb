@@ -637,12 +637,6 @@ private:
                 event->DebugInfo = debugInfo;
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Error->Inc();
-                for (const auto& issue : issues) {
-                    NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
-                      Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
-                    });
-                }
             } else {
                 CPS_LOG_AS_T(*actorSystem, name << ": " << request.DebugString() << " success");
                 auto event = std::make_unique<ResponseEvent>(result);
@@ -711,7 +705,7 @@ private:
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
                       Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                      requestCounters->RequestCounters->GetNamedCounter("Issue", ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -777,7 +771,7 @@ private:
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
                       Y_UNUSED(level);
-                      requestCounters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                      requestCounters->RequestCounters->GetNamedCounter("Issue", ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {

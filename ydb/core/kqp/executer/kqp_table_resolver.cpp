@@ -75,9 +75,9 @@ private:
             auto* table = TableKeys.FindTablePtr(entry.TableId);
             if (!table) {
                 timer.reset();
-                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, TStringBuilder()
-                        << "Unresolved table `" << JoinPath(entry.Path) << "` with tableId: " << entry.TableId << "."));
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+                        << "Unresolved table  `" << JoinPath(entry.Path) << "` with tableId: " << entry.TableId << "."));
                 return;
             }
 

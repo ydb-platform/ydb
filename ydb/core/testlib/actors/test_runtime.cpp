@@ -9,7 +9,6 @@
 
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
 
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
@@ -212,15 +211,17 @@ namespace NActors {
 
     void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie) {
         bool newPipe = (clientId == TActorId());
-        if (newPipe) {
-            clientId = ConnectToPipe(tabletId, sender, nodeIndex, pipeConfig);
+        if (newPipe)
+            clientId = Register(NKikimr::NTabletPipe::CreateClient(sender, tabletId, pipeConfig), nodeIndex);
+        if (!UseRealThreads) {
+            EnableScheduleForActor(clientId, true);
         }
 
-        SendToPipe(clientId, sender, payload, nodeIndex, cookie);
-
-        if (newPipe) {
-            ClosePipe(clientId, sender, nodeIndex);
-        }
+        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie);
+        pipeEv->Rewrite(NKikimr::TEvTabletPipe::EvSend, clientId);
+        Send(pipeEv, nodeIndex, true);
+        if (newPipe)
+            Send(new IEventHandle(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()), nodeIndex, true);
     }
 
     void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
@@ -236,18 +237,6 @@ namespace NActors {
             EnableScheduleForActor(clientId, true);
         }
         return clientId;
-    }
-
-    void TTestActorRuntime::ClosePipe(TActorId clientId, const TActorId& sender, ui32 nodeIndex) {
-        Send(new IEventHandle(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()), nodeIndex, true);
-    }
-
-    void TTestActorRuntime::DisconnectNodes(ui32 fromNodeIndex, ui32 toNodeIndex, bool async) {
-        Send(new IEventHandle(
-            GetInterconnectProxy(fromNodeIndex, toNodeIndex),
-            TActorId(),
-            new TEvInterconnect::TEvDisconnect()),
-            fromNodeIndex, async);
     }
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> TTestActorRuntime::GetCountersForComponent(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const char* component) {

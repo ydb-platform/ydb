@@ -128,7 +128,7 @@ log_config:
   sys_log: false
   default_level: {ydb_default_log_level}
 grpc_config:
-  host: "{ydb_grpc_host}"
+  host: "[::]"
   services:
   - "experimental"
   - "legacy"
@@ -159,8 +159,6 @@ kqpconfig:
     value: "{ydb_yql_syntax_version}"
   - name: "_KqpAllowNewEngine"
     value: "true"
-  - name: "_KqpForceNewEngine"
-    value: "{ydb_force_new_engine}"
 interconnect_config:
   start_tcp: true
 sqs_config:

@@ -41,7 +41,3 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    with_offset_ranges_mode_ut
-)

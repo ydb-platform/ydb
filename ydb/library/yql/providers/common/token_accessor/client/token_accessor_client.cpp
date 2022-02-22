@@ -82,7 +82,7 @@ private:
                 ticket = Ticket;
                 nextTicketUpdate = NextTicketUpdate;
                 if (ticket.empty()) {
-                    throw yexception() << "IAM-token not ready yet. " << LastRequestError;
+                    ythrow yexception() << "IAM-token not ready yet. " << LastRequestError;
                 }
             }
             if (TInstant::Now() >= nextTicketUpdate) {

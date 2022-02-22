@@ -1,11 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
+#include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
+#include <ydb/core/yq/libs/common/database_token_builder.h>
 
 namespace NYql {
 
@@ -22,8 +23,8 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
     template <typename TProtoConfig>
     void Init(
         const TProtoConfig& config,
-        const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
+        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
+        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds)
     {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
@@ -36,11 +37,10 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
         for (auto& cluster: config.GetClusterMapping()) {
             this->Dispatch(cluster.GetName(), cluster.GetSettings());
 
-            if (dbResolver) {
+            if (dbResolver) { //TODO: change log level
                 YQL_CLOG(DEBUG, ProviderClickHouse) << "Settings: clusterName = " << cluster.GetName()
                     << ", clusterDbId = "  << cluster.GetId() << ", cluster.GetCluster(): " << cluster.GetCluster() << ", HasCluster: " << (cluster.HasCluster() ? "TRUE" : "FALSE") ;
-                databaseIds[std::make_pair(cluster.GetId(), NYql::DatabaseType::ClickHouse)] =
-                    NYql::TDatabaseAuth{cluster.GetCHToken(), /*AddBearer=*/false};
+                dbResolver->TryAddDbIdToResolve(cluster.HasCluster(), cluster.GetName(), cluster.GetId(), NYq::DatabaseType::ClickHouse, databaseIds);
                 if (cluster.GetId()) {
                     DbId2Clusters[cluster.GetId()].emplace_back(cluster.GetName());
                     YQL_CLOG(DEBUG, ProviderClickHouse) << "Add dbId: " << cluster.GetId() << " to DbId2Clusters";

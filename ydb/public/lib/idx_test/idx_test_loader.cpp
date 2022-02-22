@@ -136,7 +136,7 @@ public:
         , Client_(client)
         , WithDataColumn_(withDataColumn)
     {
-        ChooseColumnsForIndex();
+        СhooseColumnsForIndex();
     }
 
     TAsyncStatus Run() override {
@@ -166,7 +166,7 @@ public:
         return WithDataColumn_ ? IWorkLoader::LC_ALTER_ADD_INDEX_WITH_DATA_COLUMN : IWorkLoader::LC_ALTER_ADD_INDEX;
     }
 private:
-    void ChooseColumnsForIndex() {
+    void СhooseColumnsForIndex() {
         TVector<TString> columns;
 
         bool hasIndexedType = false;

@@ -21,7 +21,7 @@ public:
 
     struct ICallbacks {
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
-        virtual void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) = 0;
+        virtual i64 TakeInputChannelData(NDqProto::TChannelData&& channelData) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
         virtual void ResumeExecution() = 0;
 
@@ -71,7 +71,6 @@ public:
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(ui64 channelId);
     void SendChannelData(NDqProto::TChannelData&& channelData);
-    void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
     bool FinishInputChannels();

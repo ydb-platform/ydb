@@ -9,7 +9,7 @@
 
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
+
 #include <ydb/core/base/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -526,16 +526,12 @@ private:
     void LogSession(const TActorContext& ctx);
 
     void DiscoverPartition(const NActors::TActorContext& ctx);
-    void SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx);
-
     void UpdatePartition(const NActors::TActorContext& ctx);
     void RequestNextPartition(const NActors::TActorContext& ctx);
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(ui32 hash, const TString& topic,
-                                                                             const NActors::TActorContext& ctx);
-    void SendUpdateSrcIdsRequests(const TActorContext& ctx);
-    //void InitCheckACL(const TActorContext& ctx);
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const NActors::TActorContext& ctx);
+    void InitCheckACL(const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
@@ -585,11 +581,10 @@ private:
     NPersQueue::TConverterPtr TopicConverter;
     ui32 Partition;
     ui32 PreferedPartition;
-    bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
-    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-    ui32 CompatibleHash;
+    TString EscapedSourceId;
+    ui32 Hash = 0;
 
     TString OwnerCookie;
     TString UserAgent;
@@ -664,12 +659,9 @@ private:
     TString ClientDC;
     TString SelectSourceIdQuery;
     TString UpdateSourceIdQuery;
-    ui32 SelectSrcIdsInflight = 0;
-    ui64 MaxSrcIdAccessTime = 0;
-
     TInstant LastSourceIdUpdate;
     ui64 SourceIdCreateTime;
-    ui32 SourceIdUpdatesInflight = 0;
+    bool SourceIdUpdateInfly;
 
     TVector<NPQ::TLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

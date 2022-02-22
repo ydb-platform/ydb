@@ -23,6 +23,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         const TDomainsInfo::TDomain& selfDomain = Self->GetDomainDescription(ctx);
 
         TString rootName = selfDomain.Name;
+        TString owner = BUILTIN_ACL_ROOT;
 
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TTxInitRoot DoExecute"
@@ -35,71 +36,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Y_VERIFY(!Self->IsShemeShardConfigured());
         Y_VERIFY_S(!rootName.empty(), "invalid root name in domain config");
 
-        TVector<TString> rootPathElements = SplitPath(rootName);
-        TString joinedRootPath = JoinPath(rootPathElements);
-        Y_VERIFY_S(rootPathElements.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElements.size());
-
-        TString owner;
-        const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = Self->GetDomainsConfig().GetSecurityConfig();
-
-        for (const auto& defaultUser : securityConfig.GetDefaultUsers()) {
-            auto response = Self->LoginProvider.CreateUser({
-                .User = defaultUser.GetName(),
-                .Password = defaultUser.GetPassword(),
-            });
-            if (response.Error) {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TTxInitRoot DoExecute"
-                         << ", path: " << rootName
-                         << ", error creating user: " << defaultUser.GetName()
-                         << ", error: " << response.Error);
-            } else {
-                auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
-                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
-                if (owner.empty()) {
-                    owner = defaultUser.GetName();
-                }
-            }
-        }
-
-        for (const auto& defaultGroup : securityConfig.GetDefaultGroups()) {
-            auto response = Self->LoginProvider.CreateGroup({
-                .Group = defaultGroup.GetName(),
-                .Options = {
-                    .CheckName = false
-                }
-            });
-            if (response.Error) {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TTxInitRoot DoExecute"
-                         << ", path: " << rootName
-                         << ", error creating group: " << defaultGroup.GetName()
-                         << ", error: " << response.Error);
-            } else {
-                auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
-                db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType>(sid.Type);
-                for (const auto& member : defaultGroup.GetMembers()) {
-                    auto response = Self->LoginProvider.AddGroupMembership({
-                        .Group = defaultGroup.GetName(),
-                        .Member = member,
-                    });
-                    if (response.Error) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInitRoot DoExecute"
-                                << ", path: " << rootName
-                                << ", error modifying group: " << defaultGroup.GetName()
-                                << ", with member: " << member
-                                << ", error: " << response.Error);
-                    } else {
-                        db.Table<Schema::LoginSidMembers>().Key(defaultGroup.GetName(), member).Update();
-                    }
-                }
-            }
-        }
-
-        if (owner.empty()) {
-            owner = BUILTIN_ACL_ROOT;
-        }
+        TVector<TString> rootPathElemets = SplitPath(rootName);
+        TString joinedRootPath = JoinPath(rootPathElemets);
+        Y_VERIFY_S(rootPathElemets.size() == 1, "invalid root name in domain config: " << rootName << " parts count: " << rootPathElemets.size());
 
         TPathElement::TPtr newPath = new TPathElement(Self->RootPathId(), Self->RootPathId(), Self->RootPathId(), joinedRootPath, owner);
         newPath->CreateTxId = TTxId(1);
@@ -112,27 +51,18 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->NextLocalPathId = Self->RootPathId().LocalPathId + 1;
         Self->NextLocalShardIdx = 1;
         Self->ShardInfos.clear();
-        Self->RootPathElements = std::move(rootPathElements);
+        Self->RootPathElemets = std::move(rootPathElemets);
+
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
         Self->SubDomains[Self->RootPathId()] = newDomain;
-
-        NACLib::TDiffACL diffAcl;
-        for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
-            NACLibProto::TACE ace;
-            NACLib::TACL::FromString(ace, defaultAccess);
-            diffAcl.AddAccess(ace);
-        }
-        newPath->ApplyACL(diffAcl.SerializeAsString());
-        newDomain->UpdateSecurityState(Self->LoginProvider.GetSecurityState());
 
         Self->PersistUserAttributes(db, Self->RootPathId(), nullptr, newPath->UserAttrs);
         Self->PersistPath(db, newPath->PathId);
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
-        Self->PersistACL(db, newPath);
 
         Self->InitState = TTenantInitState::Done;
         Self->PersistInitState(db);
@@ -294,9 +224,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             return;
         }
 
-        TVector<TString> rootPathElements = SplitPath(rootPath);
+        TVector<TString> rootPathElemets = SplitPath(rootPath);
 
-        TString joinedRootPath = JoinPath(rootPathElements);
+        TString joinedRootPath = JoinPath(rootPathElemets);
         Y_VERIFY(!IsStartWithSlash(joinedRootPath)); //skip lead '/'
 
 
@@ -330,7 +260,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             return;
         }
 
-        if (rootPathElements.size() <= 1) {
+        if (rootPathElemets.size() <= 1) {
             Reply->Record.SetStatus(NKikimrScheme::StatusInvalidParameter);
             return;
         }
@@ -354,7 +284,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->NextLocalShardIdx = 1;
         Self->ShardInfos.clear();
 
-        Self->RootPathElements = std::move(rootPathElements);
+        Self->RootPathElemets = std::move(rootPathElemets);
 
         Self->ParentDomainId = TPathId(domainSchemeShard, domainPathId);
         Self->ParentDomainOwner = owner;

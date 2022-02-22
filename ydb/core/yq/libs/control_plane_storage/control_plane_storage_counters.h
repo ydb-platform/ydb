@@ -9,12 +9,12 @@ class TRequestCounters: public virtual TThrRefBase {
 public:
     const TString Name;
 
+    NMonitoring::TDynamicCounterPtr RequestCounters;
     NMonitoring::TDynamicCounters::TCounterPtr InFly;
     NMonitoring::TDynamicCounters::TCounterPtr Ok;
     NMonitoring::TDynamicCounters::TCounterPtr Error;
     NMonitoring::TDynamicCounters::TCounterPtr Retry;
     NMonitoring::THistogramPtr LatencyMs;
-    NMonitoring::TDynamicCounterPtr Issues;
 
     explicit TRequestCounters(const TString& name);
 

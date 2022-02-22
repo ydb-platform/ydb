@@ -47,7 +47,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         node->set_node_address(nodeAddress);
     }
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix);
     readQueryBuilder.AddTimestamp("now", TInstant::Now());
     readQueryBuilder.AddString("tenant", tenant);
     readQueryBuilder.AddText(
@@ -75,7 +75,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
             }
         }
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix);
         writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddUint32("node_id", nodeId);
         writeQueryBuilder.AddString("instance_id", instanceId);

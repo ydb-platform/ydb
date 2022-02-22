@@ -30,8 +30,8 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
                         const TString &version)
 {
 
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<TLogRecordData::EType>(rec.GetRecordType()), TLogRecordData::CMS_LOADED);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<TLogRecordData::EType>(rec.GetData().GetRecordType()), TLogRecordData::CMS_LOADED);
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetRecordType(), TLogRecordData::CMS_LOADED);
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetData().GetRecordType(), TLogRecordData::CMS_LOADED);
     auto &data = rec.GetData().GetCmsLoaded();
     UNIT_ASSERT_VALUES_EQUAL(data.GetHost(), host);
     UNIT_ASSERT_VALUES_EQUAL(data.GetNodeId(), nodeId);

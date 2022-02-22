@@ -198,7 +198,7 @@ public:
         return ProcessTempDir;
     }
 
-    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NYql::NFS::TDataProvider& puller) {
+    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TStorage::TDataPuller& puller) {
         bool newFileAdded = false;
         TFileLinkPtr result = HardlinkFromStorage(storageFileName, md5, outFileName);
         if (!result) {
@@ -208,17 +208,9 @@ public:
 
             ui64 fileSize = 0;
             TString pullerMd5; // overrides input arg 'md5'
-            try {
-                std::tie(fileSize, pullerMd5) = puller(hardlinkFile);
-            } catch (...) {
-                YQL_LOG(ERROR) << CurrentExceptionMessage();
-                NFs::Remove(hardlinkFile);
-                throw;
-            }
+            std::tie(fileSize, pullerMd5) = puller(hardlinkFile);
             Y_ENSURE(hardlinkFile.Exists(), "FileStorage: cannot put not existing temporary path");
             Y_ENSURE(hardlinkFile.IsFile(), "FileStorage: cannot put non-file temporary path");
-
-            SetCacheFilePermissionsNoThrow(hardlinkFile);
 
             if (NFs::HardLink(hardlinkFile, storageFile)) {
                 AtomicIncrement(CurrentFiles);
@@ -230,6 +222,8 @@ public:
             newFileAdded = true;
             result = MakeIntrusive<TFileLink>(hardlinkFile, storageFileName, fileSize, pullerMd5);
         }
+
+        SetCacheFilePermissionsNoThrow(result->GetPath().c_str());
 
         YQL_LOG(INFO) << "Using " << (newFileAdded ? "new" : "existing") << " storage file " << result->GetStorageFileName().Quote()
             << ", temp path: " << result->GetPath().GetPath().Quote()
@@ -275,7 +269,6 @@ public:
         if (!NFs::Rename(src, dstStorageFile)) {
             ythrow yexception() << "Failed to rename file from " << src << " to " << dstStorageFile;
         }
-        SetCacheFilePermissionsNoThrow(dstStorageFile);
 
         const i64 newFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
 
@@ -465,7 +458,7 @@ TFsPath TStorage::GetTemp() const
     return Impl->GetTemp();
 }
 
-TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const NFS::TDataProvider& puller)
+TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TDataPuller& puller)
 {
     return Impl->Put(storageFileName, outFileName, md5, puller);
 }

@@ -793,7 +793,7 @@ public:
                     break;
                 }
             }
-            [[fallthrough]];
+            // FALLTHRU
         default:
             {
                 auto issue = BuildErrorMsg(rec);

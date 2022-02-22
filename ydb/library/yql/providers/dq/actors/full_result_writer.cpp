@@ -41,8 +41,8 @@ public:
 private:
     STRICT_STFUNC(Handler, {
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
-        HFunc(TEvFullResultWriterWriteRequest, OnWriteRequest)
-        HFunc(TEvFullResultWriterStatusRequest, OnStatusRequest)  // legacy
+        HFunc(TEvPullDataResponse, OnPullResponse)
+        HFunc(TEvFullResultWriterStatusRequest, OnStatusRequest)
     })
 
     void PassAway() override {
@@ -71,13 +71,20 @@ private:
         Send(AggregatorID, new TEvFullResultWriterStatusResponse(response));
     }
 
-    void OnWriteRequest(TEvFullResultWriterWriteRequest::TPtr& ev, const NActors::TActorContext&) {
+    void OnPullResponse(TEvPullDataResponse::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceID);
-        auto& request = ev->Get()->Record;
-        if (request.GetFinish()) {
-            Finish();
-        } else {
-            Continue(request);
+        auto& response = ev->Get()->Record;
+
+        switch (response.GetResponseType()) {
+            case NDqProto::FINISH:
+                Finish();
+                break;
+            case NDqProto::CONTINUE:
+                Continue(response);
+                break;
+            default:
+                YQL_ENSURE(false, "Unsupported pull request");
+                break;
         }
     }
 
@@ -87,7 +94,9 @@ private:
             TFailureInjector::Reach("full_result_fail_on_finish", [] { throw yexception() << "full_result_fail_on_finish"; });
             FullResultWriter->Finish();
             if (ErrorMessage) {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
+                TIssue issue(*ErrorMessage);
+                issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(issue, false, false).Release());
             } else {
                 Send(AggregatorID, MakeHolder<TEvDqFailure>().Release());
             }
@@ -99,17 +108,17 @@ private:
             }
             Send(AggregatorID, MakeHolder<TEvDqFailure>(issue, false, false).Release());
         }
-        Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
+        PassAway();
     }
 
-    void Continue(NDqProto::TFullResultWriterWriteRequest& request) {
+    void Continue(NDqProto::TPullResponse& response) {
         YQL_LOG(DEBUG) << "Continue -- RowCount = " << FullResultWriter->GetRowCount();
-        ui64 reqSize = request.ByteSizeLong();
-        WriteToFullResultTable(request);
-        BytesReceived += reqSize;
+        ui64 respSize = response.ByteSizeLong();
+        WriteToFullResultTable(response.GetData());
+        BytesReceived += respSize;
     }
 
-    void WriteToFullResultTable(NDqProto::TFullResultWriterWriteRequest& request) {
+    void WriteToFullResultTable(const NDqProto::TData& data) {
         if (ErrorMessage) {
             YQL_LOG(DEBUG) << "Failed to write previous chunk, aborting";
             return;
@@ -117,23 +126,18 @@ private:
 
         try {
             TFailureInjector::Reach("full_result_fail_on_write", [] { throw yexception() << "full_result_fail_on_write"; });
-            ResultBuilder->WriteData(request.GetData(), [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
+            ResultBuilder->WriteData(data, [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
                 writer->AddRow(value);
                 return true;
             });
-            NDqProto::TFullResultWriterAck ackRecord; 
-            ackRecord.SetMessageId(request.GetMessageId());
-            Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
         }
 
         if (ErrorMessage) {
             YQL_LOG(DEBUG) << "An error occurred: " << *ErrorMessage;
         }
     }
-
 private:
     const TString TraceID;
     THolder<TProtoBuilder> ResultBuilder;

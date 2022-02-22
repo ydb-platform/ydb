@@ -110,22 +110,19 @@ private:
     std::stack<IHTTPGateway::TOnResult> Callbacks;
 };
 
-using TKeyType = std::tuple<TString, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
+using TKeyType = std::tuple<TString, IHTTPGateway::THeaders, TString>;
 
 class TKeyHash {
 public:
-    TKeyHash() : Hash(), HashPtr() {}
+    TKeyHash() : Hash() {}
 
     size_t operator()(const TKeyType& key) const {
         const auto& headers = std::get<1U>(key);
-        auto initHash = CombineHashes(Hash(std::get<0U>(key)), Hash(std::get<2U>(key)));
-        initHash = CombineHashes(HashPtr(std::get<3U>(key)), initHash);
-        return std::accumulate(headers.cbegin(), headers.cend(), initHash,
+        return std::accumulate(headers.cbegin(), headers.cend(), CombineHashes(Hash(std::get<0U>(key)), Hash(std::get<2U>(key))),
             [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
     }
 private:
     const std::hash<TString> Hash;
-    const std::hash<IRetryPolicy<long>::TPtr> HashPtr;
 };
 
 class THTTPMultiGateway : public IHTTPGateway {
@@ -151,8 +148,6 @@ public:
         if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) {
             MaxSimulatenousDownloadsSize  = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize();
         }
-
-        TaskScheduler.Start();
     }
 
     ~THTTPMultiGateway() {
@@ -232,17 +227,7 @@ private:
         {
             const std::unique_lock lock(Sync);
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
-                long httpResponseCode = 0;
                 easy = std::move(it->second);
-                curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
-
-                if (const auto stateIt = Easy2RetryState.find(easy); stateIt != Easy2RetryState.end()) {
-                    if (const auto& nextRetryDelay = stateIt->second->GetNextRetryDelay(httpResponseCode)) {
-                        Y_VERIFY(TaskScheduler.Add(new THttpGatewayTask(easy, Singleton), *nextRetryDelay));
-                    } else {
-                        Easy2RetryState.erase(stateIt);
-                    }
-                }
                 AllocatedSize -= easy->GetExpectedSize();
                 Allocated.erase(it);
             }
@@ -280,71 +265,30 @@ private:
         }
     }
 
-    void Download(
-        TString url,
-        THeaders headers,
-        std::size_t expectedSize,
-        TOnResult callback,
-        TString data,
-        IRetryPolicy<long>::TPtr retryPolicy) final
-    {
+    void Download(TString url, THeaders headers, std::size_t expectedSize, TOnResult callback, TString data) final {
         Rps->Inc();
         InFlight->Inc();
 
         const std::unique_lock lock(Sync);
-        auto& entry = Requests[TKeyType(url, headers, data, retryPolicy)];
+        auto& entry = Requests[TKeyType(url, headers, data)];
         if (const auto& easy = entry.lock())
             return easy->AddCallback(std::move(callback));
 
         auto easy = TEasyCurl::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
         entry = easy;
-        Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
         Await.emplace(std::move(easy));
-        Wakeup(expectedSize);
-    }
-
-    void OnRetry(TEasyCurl::TPtr easy) {
-        const std::unique_lock lock(Sync);
-        const std::size_t expectedSize = easy->GetExpectedSize();
-        Await.emplace(std::move(easy));
-        Wakeup(expectedSize);
-    }
-
-    void Wakeup(std::size_t expectedSize) {
         if (Allocated.size() < MaxHandlers && AllocatedSize + expectedSize + OutputSize.load() <= MaxSimulatenousDownloadsSize) {
             curl_multi_wakeup(Handle);
         }
     }
 
-    class THttpGatewayTask: public TTaskScheduler::IRepeatedTask {
-    public:
-        THttpGatewayTask(
-            TEasyCurl::TPtr easy,
-            THTTPMultiGateway::TWeakPtr gateway)
-            : Easy(easy)
-            , Gateway(gateway)
-        {}
-
-        bool Process() override {
-            if (const auto g = Gateway.lock()) {
-                Y_VERIFY(Easy);
-                g->OnRetry(std::move(Easy));
-            }
-            return false;
-        }
-    private:
-        TEasyCurl::TPtr Easy;
-        THTTPMultiGateway::TWeakPtr Gateway;
-    };
-
-private:
     CURLM* Handle = nullptr;
 
     std::queue<TEasyCurl::TPtr> Await;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
+
     std::unordered_map<TKeyType, TEasyCurl::TWeakPtr, TKeyHash> Requests;
-    std::unordered_map<TEasyCurl::TPtr, IRetryPolicy<long>::IRetryState::TPtr> Easy2RetryState;
 
     std::mutex Sync;
     std::thread Thread;
@@ -359,15 +303,12 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr Rps;
     const NMonitoring::TDynamicCounters::TCounterPtr InFlight;
     const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
-
-    TTaskScheduler TaskScheduler;
 };
 
 std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;
 std::mutex THTTPMultiGateway::CreateSync;
 THTTPMultiGateway::TWeakPtr THTTPMultiGateway::Singleton;
 
-// Class that is not used in production (for testing only).
 class THTTPEasyGateway : public IHTTPGateway, private std::enable_shared_from_this<THTTPEasyGateway> {
 friend class IHTTPGateway;
 public:
@@ -393,16 +334,9 @@ private:
             easy->Done(result);
     }
 
-    void Download(
-        TString url,
-        THeaders headers,
-        std::size_t expectedSize,
-        TOnResult callback,
-        TString data,
-        IRetryPolicy<long>::TPtr retryPolicy) final
-    {
+    void Download(TString url, THeaders headers, std::size_t expectedSize, TOnResult callback, TString data) final {
         const std::unique_lock lock(Sync);
-        auto& entry = Requests[TKeyType(url, headers, data, std::move(retryPolicy))];
+        auto& entry = Requests[TKeyType(url, headers, data)];
         if (const auto& easy = entry.first.lock())
             return easy->AddCallback(std::move(callback));
         auto easy = TEasyCurl::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));

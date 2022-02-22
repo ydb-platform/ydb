@@ -1,7 +1,8 @@
 static_erasure: none
 host_configs:
 - drive:
-  - path: SectorMap:1:64
+  - kind: 0
+    path: SectorMap:1:64
     type: SSD
   host_config_id: 1
 hosts:
@@ -23,7 +24,7 @@ domains_config:
         kind: ssd
         pdisk_filter:
         - property:
-          - type: SSD
+          - type: ROT
         vdisk_kind: Default
   state_storage:
   - ring:
@@ -72,12 +73,12 @@ channel_profile_config:
   profile:
   - channel:
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     profile_id: 0

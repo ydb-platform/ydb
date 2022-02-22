@@ -138,7 +138,6 @@ public:
 
     virtual void Initialize(NKikimr::TAppData* appData) override
     {
-        appData->DomainsConfig = Config.GetDomainsConfig();
         // setup domain info
         appData->DomainsInfo = new TDomainsInfo();
         for (const NKikimrConfig::TDomainsConfig::TDomain &domain : Config.GetDomainsConfig().GetDomain()) {
@@ -190,6 +189,7 @@ public:
         }
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
+
         appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
         if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
@@ -475,12 +475,10 @@ void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig
 }
 
 void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
-    if (runConfig.ServicesMask.EnableKqp) {
-        auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
-        auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
-        KqpShutdownController->Initialize(ActorSystem.Get());
-    }
+    auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
+    auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
+    KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+    KqpShutdownController->Initialize(ActorSystem.Get());
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
@@ -1559,6 +1557,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
+    TBasicKikimrServicesMask servicesMask; // all services enabled by default
 
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
     runner->InitializeAllocator(runConfig);
@@ -1568,8 +1567,8 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeMessageBus(runConfig, factories);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
-    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
-    runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
+    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));
+    runner->InitializeActorSystem(runConfig, sil, servicesMask);
     runner->InitializeMonitoringLogin(runConfig);
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);

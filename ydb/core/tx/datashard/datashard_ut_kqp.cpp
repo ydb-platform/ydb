@@ -199,7 +199,7 @@ private:
             }
 
             if (auto* ev = std::get<TEvKqp::TEvAbortExecution*>(replies)) {
-                UNIT_FAIL(ev->GetIssues().ToOneLineString());
+                UNIT_FAIL(ev->Record.GetMessage());
             }
 
             if (auto* ev = std::get<TEvKqpExecuter::TEvStreamData*>(replies)) {
@@ -469,7 +469,7 @@ void KqpStabilityTests::AbortOnDisconnect() {
         }
 
         if (auto* ev = std::get<TEvKqp::TEvAbortExecution*>(replies)) {
-            UNIT_FAIL(ev->GetIssues().ToOneLineString());
+            UNIT_FAIL(ev->Record.GetMessage());
         }
 
         if (std::get<TEvKqpExecuter::TEvStreamData*>(replies)) {
@@ -481,3 +481,4 @@ void KqpStabilityTests::AbortOnDisconnect() {
         }
     }
 }
+

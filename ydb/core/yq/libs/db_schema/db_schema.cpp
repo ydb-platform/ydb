@@ -7,9 +7,8 @@ namespace NYq {
 
 using namespace NYdb;
 
-TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName)
+TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix)
     : TablePrefix(tablePrefix)
-    , QueryName(queryName)
 { }
 
 TSqlQueryBuilder& TSqlQueryBuilder::PushPk() {
@@ -290,7 +289,6 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
 {
     TStringBuilder declr;
     declr << "--!syntax_v1\n";
-    declr << "-- Query name: " << QueryName << "\n";
     declr << "PRAGMA TablePathPrefix(\"" << TablePrefix << "\");\n";
     for (const auto& [k, v] : ParametersOrdered) {
         declr << "DECLARE $" << k << " as " << v << ";\n";

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import sys
 import itertools
 import os
 import tempfile
@@ -47,12 +46,6 @@ def get_additional_log_configs():
     return rt
 
 
-def get_grpc_host():
-    if sys.platform == "darwin":
-        return "localhost"
-    return "[::]"
-
-
 def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, n_to_select, state_storage_nodes, log_configs):
     data = resource.find("harness/resources/default_yaml.yml")
     if isinstance(data, bytes):
@@ -60,14 +53,12 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
         ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
-        ydb_force_new_engine=os.getenv("YDB_KQP_FORCE_NEW_ENGINE", "false"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
         ydb_static_erasure=static_erasure,
         ydb_state_storage_n_to_select=n_to_select,
         ydb_state_storage_nodes=state_storage_nodes,
-        ydb_grpc_host=get_grpc_host(),
     )
     yaml_dict = yaml.safe_load(data)
     yaml_dict["log_config"]["entry"] = []
@@ -89,7 +80,6 @@ class KikimrConfigGenerator(object):
             udfs_path=None,
             output_path=None,
             enable_pq=False,
-            pq_client_service_types=None,
             slot_count=0,
             pdisk_store_path=None,
             version=None,
@@ -113,7 +103,6 @@ class KikimrConfigGenerator(object):
             auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
-            node_kind=None
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -176,17 +165,11 @@ class KikimrConfigGenerator(object):
         self.__dynamic_pdisks = dynamic_pdisks
 
         self.__output_path = output_path or yatest_common.output_path()
-        self.node_kind = node_kind
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         self.yaml_config['pqconfig']['enabled'] = enable_pq
-        if pq_client_service_types:
-            self.yaml_config['pqconfig']['client_service_type'] = []
-            for service_type in pq_client_service_types:
-                self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
-
         self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = enable_pq and enable_datastreams
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd

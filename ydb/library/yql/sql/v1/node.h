@@ -18,7 +18,6 @@
 
 #include <array>
 #include <functional>
-#include <variant>
 
 namespace NSQLTranslationV1 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;
@@ -1106,27 +1105,6 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
     };
 
-    struct TChangefeedSettings {
-        struct TLocalSinkSettings {
-            // no special settings
-        };
-
-        TNodePtr Mode;
-        TNodePtr Format;
-        std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
-    };
-
-    struct TChangefeedDescription {
-        TChangefeedDescription(const TIdentifier& name)
-            : Name(name)
-            , Disable(false)
-        {}
-
-        TIdentifier Name;
-        TChangefeedSettings Settings;
-        bool Disable;
-    };
-
     struct TCreateTableParameters {
         TVector<TColumnSchema> Columns;
         TVector<TIdentifier> PkColumns;
@@ -1134,7 +1112,6 @@ namespace NSQLTranslationV1 {
         TVector<std::pair<TIdentifier, bool>> OrderByColumns;
         TVector<TIndexDescription> Indexes;
         TVector<TFamilyEntry> ColumnFamilies;
-        TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
     };
 
@@ -1148,19 +1125,16 @@ namespace NSQLTranslationV1 {
         TVector<TIndexDescription> AddIndexes;
         TVector<TIdentifier> DropIndexes;
         TMaybe<TIdentifier> RenameTo;
-        TVector<TChangefeedDescription> AddChangefeeds;
-        TVector<TChangefeedDescription> AlterChangefeeds;
-        TVector<TIdentifier> DropChangefeeds;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
-                && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
-                && !TableSettings.IsSet()
-                && AddIndexes.empty() && DropIndexes.empty()
-                && !RenameTo.Defined()
-                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+                     && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
+                     && !TableSettings.IsSet()
+                     && AddIndexes.empty() && DropIndexes.empty()
+                     && !RenameTo.Defined();
         }
     };
+
 
     struct TRoleParameters {
         TMaybe<TDeferredAtom> Password;
@@ -1205,7 +1179,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TString& source = TString());
     TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
-    TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
+    TNodePtr BuildColumnOrType(TPosition pos, const TString& column);
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
@@ -1312,7 +1286,6 @@ namespace NSQLTranslationV1 {
 
     EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode);
     TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns);
-    TNodePtr BuildIntoTableOptions(TPosition pos, const TVector<TString>& eraseColumns, const TTableHints& hints);
     TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options = nullptr);
     TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source);
     TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source);

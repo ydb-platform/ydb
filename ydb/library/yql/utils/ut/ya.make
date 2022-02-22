@@ -9,7 +9,6 @@ SRCS(
     parse_double_ut.cpp
     range_walker_ut.cpp
     retry_ut.cpp
-    url_builder_ut.cpp
     utf8_ut.cpp
 )
 

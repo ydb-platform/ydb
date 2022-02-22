@@ -588,7 +588,7 @@ private:
                             break;
                     }
                 }
-                [[fallthrough]];
+                // fall through
             default:
                 return MarkShardPrepareError(shardId, state, false, ctx);
         }
@@ -702,7 +702,6 @@ private:
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
             CancelProposal();
             // cancel proposal only for defined cases and fall through for generic error handling
-            [[fallthrough]];
         default:
             TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
             // smth goes wrong

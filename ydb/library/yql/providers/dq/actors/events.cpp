@@ -7,19 +7,10 @@ namespace NYql::NDqs {
         *Record.MutableTask() = std::move(task);
     }
 
-    TEvDqFailure::TEvDqFailure(const TIssues& issues, bool retriable, bool needFallback) {
-        IssuesToMessage(issues, Record.MutableIssues());
+    TEvDqFailure::TEvDqFailure(const TIssue& issue, bool retriable, bool needFallback) {
+        IssuesToMessage({issue}, Record.MutableIssues());
         Record.SetRetriable(retriable);
         Record.SetNeedFallback(needFallback);
-    }
-
-    TEvDqFailure::TEvDqFailure(const TIssue& issue, bool retriable, bool needFallback)
-        : TEvDqFailure(TIssues({issue}), retriable, needFallback)
-    {
-    }
-
-    TEvDqFailure::TEvDqFailure(const TString& error, TIssueCode issueCode, bool retriable, bool needFallback) 
-        : TEvDqFailure(TIssue(error).SetCode(issueCode, TSeverityIds::S_ERROR), retriable, needFallback) {
     }
 
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {
@@ -59,16 +50,5 @@ namespace NYql::NDqs {
 
     TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) {
         Record.CopyFrom(data);
-    }
-
-    TEvFullResultWriterWriteRequest::TEvFullResultWriterWriteRequest(NDqProto::TFullResultWriterWriteRequest&& data) {
-        Record.Swap(&data);
-    }
-
-    TEvFullResultWriterAck::TEvFullResultWriterAck(NDqProto::TFullResultWriterAck& data) {
-        Record.CopyFrom(data);
-    }
-
-    TEvMessageProcessed::TEvMessageProcessed(const TString& messageId) : MessageId(messageId) {
     }
 }

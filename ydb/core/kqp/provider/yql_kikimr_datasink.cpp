@@ -555,7 +555,6 @@ public:
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
-                        .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())

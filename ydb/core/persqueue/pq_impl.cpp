@@ -1934,7 +1934,6 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 {
     if (!ev)
         return true;
-
     if (ev->Get()->Cgi().Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
     }
@@ -2041,8 +2040,8 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
 
 TString TPersQueue::GetMeteringJson(
         const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
-        ui64 quantity, const TString& quantityUnit, const TInstant& start, const TInstant& end,
-        const TInstant& now
+        ui64 quantity, const TString& quantityUnit,
+        const TInstant& start, const TInstant& end, const TInstant& now
 ) {
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -2122,14 +2121,12 @@ void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) {
         RequestsMetricsLastFlush = now;
     }
     if (needFlushShards) {
-        // TODO: storageLimit here bytes/sec
         ui64 writeQuota = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         ui64 reservedSpace = Config.GetPartitionConfig().GetLifetimeSeconds() * writeQuota;
         ui64 consumersThroughput = Config.ReadRulesSize() * writeQuota;
         ui64 numPartitions = Config.PartitionsSize();
         THashMap<TString, ui64> tags = {
-                {"reserved_throughput_bps", writeQuota},
-                {"shard_enhanced_consumers_throughput", consumersThroughput},
+                {"reserved_throughput_bps", writeQuota}, {"shard_enhanced_consumers_throughput", consumersThroughput},
                 {"reserved_storage_bytes", reservedSpace}
         };
         auto makeShardsMetricsJson = [&](TInstant& end) {

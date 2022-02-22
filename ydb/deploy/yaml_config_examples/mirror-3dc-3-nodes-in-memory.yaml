@@ -128,12 +128,12 @@ channel_profile_config:
   profile:
   - channel:
     - erasure_species: mirror-3-dc
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: mirror-3-dc
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: mirror-3-dc
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     profile_id: 0

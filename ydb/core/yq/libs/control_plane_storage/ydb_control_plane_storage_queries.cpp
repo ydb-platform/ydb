@@ -72,9 +72,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
     }
-    if (request.disposition().has_from_last_checkpoint()) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
-    }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "CreateQueryRequest, validation failed: "
@@ -116,7 +113,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     response->first.set_query_id(queryId);
     response->second.CloudId = cloudId;
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(read)");
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix);
     ReadIdempotencyKeyQuery(readQueryBuilder, scope, idempotencyKey);
 
     if (request.execute_mode() != YandexQuery::SAVE) {
@@ -200,7 +197,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
         response->second.After.ConstructInPlace().CopyFrom(query);
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -224,20 +221,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
             // insert job
             writeQueryBuilder.AddText(
-                "INSERT INTO `" JOBS_TABLE_NAME "`\n"
-                "(`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, \n"
-                "`" JOB_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`)\n"
-                "VALUES\n"
-                "    ($scope, $query_id, $job_id, $job, $user, $visibility);"
+                "INSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`) VALUES\n"
+                "    ($scope, $job_id, $query_id, $job, $user, $visibility);"
+            );
+
+            // insert pending
+            writeQueryBuilder.AddText(
+                "INSERT INTO `" PENDING_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`) VALUES\n"
+                "    ($scope, $query_id, $query, $internal, \"\", \"\");"
             );
 
             // insert pending small
             writeQueryBuilder.AddText(
-                "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
-                "(`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`,\n"
-                "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
-                "VALUES\n"
-                "    ($scope, $query_id, $query_type, $zero_timestamp, 0, $now, \"\", \"\");"
+                "INSERT INTO `" PENDING_SMALL_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`) VALUES\n"
+                "    ($scope, $query_id, $query_type, $zero_timestamp, 0, $now);"
             );
         }
 
@@ -292,9 +289,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-
-    const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
+    const TString pageToken = request.page_token();
     const int64_t limit = request.limit();
 
     CPS_LOG_T(MakeLogPrefix(scope, user)
@@ -315,7 +311,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListQueries");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("last_query", pageToken);
     queryBuilder.AddTimestamp("now", TInstant::Now());
@@ -412,8 +408,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
                 ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
             }
             YandexQuery::BriefQuery briefQuery;
-            const auto lastJobId = query.meta().last_job_id();
-            query.mutable_meta()->set_last_job_id(lastJobId + "-" + query.meta().common().id());
             *briefQuery.mutable_meta() = query.meta();
             briefQuery.set_name(query.content().name());
             briefQuery.set_type(query.content().type());
@@ -481,7 +475,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeQuery");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
@@ -506,9 +500,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         if (!result.mutable_query()->ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
-
-        const auto lastJobId = result.query().meta().last_job_id();
-        result.mutable_query()->mutable_meta()->set_last_job_id(lastJobId + "-" + result.query().meta().common().id());
 
         const auto queryVisibility = result.query().content().acl().visibility();
         const auto queryUser = result.query().meta().common().created_by();
@@ -576,7 +567,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "GetQueryStatus");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
@@ -667,9 +658,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
     }
-    if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
-    }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "ModifyQueryRequest, validation failed: "
@@ -684,10 +672,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
     const TString idempotencyKey = request.idempotency_key();
 
-    std::shared_ptr<std::pair<YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>> response =
-        std::make_shared<std::pair<YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>>();
+    std::shared_ptr<std::pair<YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>> response = std::make_shared<std::pair<YandexQuery::ModifyQueryResult, TAuditDetails<YandexQuery::Query>>>();
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(read)");
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix);
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("query_id", queryId);
     readQueryBuilder.AddTimestamp("now", TInstant::Now());
@@ -764,6 +751,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         *query.mutable_content() = request.content();
         query.mutable_meta()->set_execute_mode(request.execute_mode());
 
+        if (request.state_load_mode() != YandexQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED) {
+            internal.set_state_load_mode(request.state_load_mode());
+        }
+        internal.mutable_disposition()->CopyFrom(request.disposition());
+
         bool isValidMode = request.execute_mode() == YandexQuery::SAVE ||
             IsIn({
                 YandexQuery::QueryMeta::ABORTED_BY_USER,
@@ -781,11 +773,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             internal.set_token(token);
         }
         if (request.execute_mode() != YandexQuery::SAVE) {
-            if (request.state_load_mode() != YandexQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED) {
-                internal.set_state_load_mode(request.state_load_mode());
-            }
-            internal.mutable_disposition()->CopyFrom(request.disposition());
-
             internal.clear_binding();
             internal.clear_connection();
             // TODO: move to run actor priority selection
@@ -862,7 +849,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = internal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddUint64("max_count_jobs", Config.Proto.GetMaxCountJobs());
@@ -905,34 +892,30 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             writeQueryBuilder.AddTimestamp("now", TInstant::Now());
             // insert job
             writeQueryBuilder.AddText(
-                "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`,  `" JOB_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`) VALUES\n"
-                "    ($scope, $query_id, $job_id, $job, $user, $visibility);\n"
+                "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`) VALUES\n"
+                "    ($scope, $job_id, $query_id, $job, $user, $visibility);\n"
+            );
+
+            // insert pending
+            writeQueryBuilder.AddText(
+                "INSERT INTO `" PENDING_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`) VALUES\n"
+                "    ($scope, $query_id, $query, $internal, \"\", \"\");\n"
             );
 
             // insert pending small
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
-                "   (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, \n"
-                "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "    (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "   ($scope, $query_id, $zero_timestamp, 0, $now, $query_type, \"\", \"\");\n"
+                "    ($scope, $query_id, $zero_timestamp, 0, $now, $query_type);\n"
             );
         }
 
         writeQueryBuilder.AddText(
             "DELETE FROM `" JOBS_TABLE_NAME "` ON\n"
             "SELECT * FROM $to_delete;\n"
-            "UPDATE `" QUERIES_TABLE_NAME "` SET \n"
-            "   `" LAST_JOB_ID_COLUMN_NAME "` = $job_id, `" VISIBILITY_COLUMN_NAME "` = $visibility, `" AUTOMATIC_COLUMN_NAME "` = $automatic,\n"
-            "   `" NAME_COLUMN_NAME "` = $name, `" EXECUTE_MODE_COLUMN_NAME "` = $execute_mode,\n"
-            "   `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, "
-        );
-        writeQueryBuilder.AddText(
-            (request.execute_mode() != YandexQuery::SAVE ? "`" INTERNAL_COLUMN_NAME "` = $internal,\n" : TString{"\n"})
-        );
-        writeQueryBuilder.AddText(
-            "   `" QUERY_TYPE_COLUMN_NAME "` = $query_type, `" QUERY_COLUMN_NAME "` = $query,\n"
-            "   `" RESULT_ID_COLUMN_NAME "` = $result_id, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
+            "UPDATE `" QUERIES_TABLE_NAME "` SET `" LAST_JOB_ID_COLUMN_NAME "` = $job_id, `" VISIBILITY_COLUMN_NAME "` = $visibility, `" AUTOMATIC_COLUMN_NAME "` = $automatic, `" NAME_COLUMN_NAME "` = $name, `" EXECUTE_MODE_COLUMN_NAME "` = $execute_mode,"
+            "`" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" QUERY_TYPE_COLUMN_NAME "` = $query_type, `" QUERY_COLUMN_NAME "` = $query, `" RESULT_ID_COLUMN_NAME "` = $result_id, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
         );
 
@@ -1036,13 +1019,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         return;
     }
     std::shared_ptr<std::pair<YandexQuery::DeleteQueryResult, TAuditDetails<YandexQuery::Query>>> response = std::make_shared<std::pair<YandexQuery::DeleteQueryResult, TAuditDetails<YandexQuery::Query>>>();
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteQuery");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
 
     InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config.IdempotencyKeyTtl);
     queryBuilder.AddText(
         "DELETE FROM `" JOBS_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "DELETE FROM `" PENDING_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "DELETE FROM `" PENDING_SMALL_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
@@ -1150,7 +1135,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
     std::shared_ptr<std::pair<YandexQuery::ControlQueryResult, TAuditDetails<YandexQuery::Query>>> response = std::make_shared<std::pair<YandexQuery::ControlQueryResult, TAuditDetails<YandexQuery::Query>>>();
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ControlQuery(read)");
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix);
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("query_id", queryId);
 
@@ -1160,11 +1145,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "$job_id = SELECT `" LAST_JOB_ID_COLUMN_NAME "` FROM $selected;\n"
         "SELECT * FROM $selected;"
         "SELECT `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
+        "SELECT `" INTERNAL_COLUMN_NAME "` FROM `" PENDING_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=, config=Config](const TVector<TResultSet>& resultSets) {
-        if (resultSets.size() != 2) {
+        if (resultSets.size() != 3) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
@@ -1206,7 +1193,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             }
         }
 
+        YandexQuery::Internal::QueryInternal pendingInternal;
+        {
+            TResultSetParser parser(resultSets[2]);
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            }
+
+            if (!pendingInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
+            }
+        }
+
         queryInternal.set_action(action);
+        pendingInternal.set_action(action);
 
         auto& metaQuery = *query.mutable_meta();
         auto& commonQuery = *metaQuery.mutable_common();
@@ -1261,7 +1261,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = queryInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ControlQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
         writeQueryBuilder.AddString("job_id", jobId);
@@ -1270,14 +1270,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         writeQueryBuilder.AddInt64("revision", query.meta().common().revision());
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
+        writeQueryBuilder.AddString("pending_internal", pendingInternal.SerializeAsString());
 
         InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + Config.IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" JOBS_TABLE_NAME "` SET `" JOB_COLUMN_NAME "` = $job\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
+            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
             "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" HOST_NAME_COLUMN_NAME "` = \"\"\n"
+            "UPDATE `" PENDING_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $pending_internal, `" QUERY_COLUMN_NAME "` = $query, `" HOST_NAME_COLUMN_NAME "` = \"\"\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
         );
 
@@ -1373,7 +1374,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "GetResultData");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
@@ -1485,11 +1486,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
     if (request.has_filter() && request.filter().query_id()) {
         queryId = request.filter().query_id();
     }
-
-    auto  splittedPageToken = SplitId(request.page_token());
-    const auto jobIdToken = std::move(splittedPageToken.first);
-    const auto queryIdToken = std::move(splittedPageToken.second);
-
+    const TString pageToken = request.page_token();
     const int byteSize = ev->Get()->Request.ByteSize();
     const TString token = ev->Get()->Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -1517,16 +1514,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListJobs");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
-    queryBuilder.AddString("last_job", jobIdToken);
-    queryBuilder.AddString("last_query", queryIdToken);
+    queryBuilder.AddString("last_job", pageToken);
     queryBuilder.AddTimestamp("now", TInstant::Now());
     queryBuilder.AddUint64("limit", limit + 1);
     queryBuilder.AddText(
         "SELECT `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` >= $last_query\n"
-        "AND `" JOB_ID_COLUMN_NAME "` >= $last_job AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now) "
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" JOB_ID_COLUMN_NAME "` >= $last_job AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now)"
     );
 
     TString filter;
@@ -1571,9 +1566,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
             if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
                 ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
             }
-            const TString mergedId = job.meta().id() + "-" + job.query_meta().common().id();
-            job.mutable_meta()->set_id(mergedId);
-            job.mutable_query_meta()->set_last_job_id(mergedId);
             YandexQuery::BriefJob briefJob;
             *briefJob.mutable_meta() = job.meta();
             *briefJob.mutable_query_meta() = job.query_meta();
@@ -1585,8 +1577,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         }
 
         if (result.job_size() == limit + 1) {
-            result.set_next_page_token(
-                result.job(result.job_size() - 1).meta().id() + "-" + result.job(result.job_size() - 1).query_meta().common().id());
+            result.set_next_page_token(result.job(result.job_size() - 1).meta().id());
             result.mutable_job()->RemoveLast();
         }
         return result;
@@ -1618,11 +1609,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     const YandexQuery::DescribeJobRequest& request = ev->Get()->Request;
     const TString scope = ev->Get()->Scope;
     const TString user = ev->Get()->User;
-
-    auto splittedId = SplitId(request.job_id());
-    const auto jobId = std::move(splittedId.first);
-    const auto queryId = std::move(splittedId.second);
-
+    const TString jobId = request.job_id();
     const int byteSize = ev->Get()->Request.ByteSize();
     const TString token = ev->Get()->Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -1648,23 +1635,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeJob");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("job_id", jobId);
-    queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
 
     queryBuilder.AddText(
         "SELECT `" JOB_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id\n"
-        " AND `" JOB_ID_COLUMN_NAME "` = $job_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" JOB_ID_COLUMN_NAME "` = $job_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);\n"
     );
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
 
-    auto prepare = [=, id=request.job_id(), resultSets=resultSets] {
+    auto prepare = [=, resultSets=resultSets] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
@@ -1672,17 +1657,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         YandexQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id job or your access rights";
         }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
         }
         auto visibility = static_cast<YandexQuery::Acl::Visibility>(*parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64());
-        result.mutable_job()->mutable_meta()->set_id(id);
 
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the id job or your access rights";
         }
         return result;
     };

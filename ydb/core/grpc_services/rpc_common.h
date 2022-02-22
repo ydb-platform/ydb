@@ -8,7 +8,6 @@
 
 namespace NKikimr {
 namespace NGRpcService {
-class IRequestCtx;
 
 template<typename TEv>
 inline void SetRlPath(TEv& ev, const IRequestCtx& ctx) {

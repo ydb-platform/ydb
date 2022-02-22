@@ -106,8 +106,11 @@ struct TIndexDescription {
 
     static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) {
         auto type = NYql::TIndexDescription::EType::GlobalSync;
-        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            type = NYql::TIndexDescription::EType::GlobalAsync;
+        switch (index.GetType()) {
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
+                type = NYql::TIndexDescription::EType::GlobalAsync;
+            default:
+                break;
         }
 
         return type;

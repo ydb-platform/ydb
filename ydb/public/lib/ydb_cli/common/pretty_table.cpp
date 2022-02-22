@@ -81,7 +81,8 @@ void TPrettyTable::TRow::PrintFreeText(IOutputStream& o, size_t width) const {
 }
 
 TPrettyTable::TRow& TPrettyTable::AddRow() {
-    return Rows.emplace_back(Columns);
+    Rows.push_back(TRow(Columns));
+    return Rows.back();
 }
 
 static void PrintDelim(IOutputStream& o, const TVector<size_t>& widths,

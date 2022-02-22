@@ -70,7 +70,7 @@ public:
 
         struct TKeyState {
             std::vector<TBucket, TMKQLAllocator<TBucket>> Buckets; // circular buffer
-            ui64 HopIndex; // Start index of current window
+            ui64 HopIndex;
 
             TKeyState(ui64 bucketsCount, ui64 hopIndex)
                 : Buckets(bucketsCount)
@@ -163,13 +163,19 @@ public:
                 return NUdf::EFetchStatus::Finish;
             }
 
-            i64 thrownEventsStat = 0;
-            i64 newHopsStat = 0;
-            i64 emptyTimeCtStat = 0;
+            i64 thrownEvents = 0;
+            i64 newHops = 0;
+            i64 emptyTimeCt = 0;
             Y_DEFER {
-                MKQL_ADD_STAT(Ctx.Stats, Hop_ThrownEventsCount, thrownEventsStat);
-                MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHopsStat);
-                MKQL_ADD_STAT(Ctx.Stats, Hop_EmptyTimeCount, emptyTimeCtStat);
+                if (thrownEvents) {
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_ThrownEventsCount, thrownEvents);
+                }
+                if (newHops) {
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHops);
+                }
+                if (emptyTimeCt) {
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_EmptyTimeCount, emptyTimeCt);
+                }
             };
 
             for (NUdf::TUnboxedValue item;;) {
@@ -182,7 +188,7 @@ public:
                 const auto status = Stream.Fetch(item);
                 if (status != NUdf::EFetchStatus::Ok) {
                     if (status == NUdf::EFetchStatus::Finish) {
-                        CloseOldBuckets(Max<ui64>(), newHopsStat);
+                        CloseOldBuckets(Max<ui64>(), newHops);
                         Finished = true;
                         if (!Ready.empty()) {
                             result = std::move(Ready.front());
@@ -197,37 +203,34 @@ public:
                 auto key = Self->KeyExtract->GetValue(Ctx);
                 const auto& time = Self->OutTime->GetValue(Ctx);
                 if (!time) {
-                    ++emptyTimeCtStat;
+                    ++emptyTimeCt;
                     continue;
                 }
 
                 const auto ts = time.Get<ui64>();
                 const auto hopIndex = ts / HopTime;
-                auto& keyState = GetOrCreateKeyState(key, hopIndex);
+                auto& keyState = GetOrCreateKeyState(key, hopIndex + 1);
 
-                if (hopIndex < keyState.HopIndex) {
-                    ++thrownEventsStat;
-                    continue;
-                }
+                CloseOldBucketsForKey(key, keyState, hopIndex, newHops);
 
-                // Overflow is not possible, because of hopIndex is a product of a division
-                auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
-                CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
-
-                auto& bucket = keyState.Buckets[hopIndex % keyState.Buckets.size()];
-                if (!bucket.HasValue) {
-                    bucket.Value = Self->OutInit->GetValue(Ctx);
-                    bucket.HasValue = true;
+                if (hopIndex + DelayHopCount + 1 >= keyState.HopIndex) {
+                    auto& bucket = keyState.Buckets[hopIndex % keyState.Buckets.size()];
+                    if (!bucket.HasValue) {
+                        bucket.Value = Self->OutInit->GetValue(Ctx);
+                        bucket.HasValue = true;
+                    } else {
+                        Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
+                        Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
+                        bucket.Value = Self->OutUpdate->GetValue(Ctx);
+                    }
                 } else {
-                    Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
-                    Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                    bucket.Value = Self->OutUpdate->GetValue(Ctx);
+                    ++thrownEvents;
                 }
 
                 if (WatermarkTracker) {
                     const auto newWatermark = WatermarkTracker->HandleNextEventTime(ts);
                     if (newWatermark) {
-                        CloseOldBuckets(*newWatermark, newHopsStat);
+                        CloseOldBuckets(*newWatermark, newHops);
                     }
                 }
                 MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
@@ -238,9 +241,7 @@ public:
             const auto iter = StatesMap.try_emplace(
                 key,
                 IntervalHopCount + DelayHopCount,
-                Max<i64>(hopIndex + 1 - IntervalHopCount, 0)
-                // For first element we shouldn't forget windows in the past
-                // Overflow is not possible, because of hopIndex is a product of a division
+                hopIndex
             );
             if (iter.second) {
                 key.Ref();
@@ -252,82 +253,58 @@ public:
         bool CloseOldBucketsForKey(
             const NUdf::TUnboxedValue& key,
             TKeyState& keyState,
-            const ui64 closeBeforeIndex, // Excluded bound
-            i64& newHopsStat)
+            const ui64 hopIndex,
+            i64& newHops)
         {
             auto& bucketsForKey = keyState.Buckets;
+            const auto endIndex = Min(hopIndex, keyState.HopIndex + bucketsForKey.size()); // TODO: fix possible overflow
 
-            bool becameEmpty = false;
-            for (auto i = 0; i < bucketsForKey.size(); i++) {
-                const auto curHopIndex = keyState.HopIndex;
-                if (curHopIndex >= closeBeforeIndex) {
-                    break;
-                }
+            for (auto& hopIndexForKey = keyState.HopIndex; hopIndexForKey <= endIndex; hopIndexForKey++) {
+                auto firstBucketIndex = hopIndexForKey % bucketsForKey.size();
 
-                i64 lastIndexWithValue = -1;
+                auto bucketIndex = firstBucketIndex;
                 TMaybe<NUdf::TUnboxedValue> aggregated;
-                for (ui64 j = 0; j < IntervalHopCount; j++) {
-                    const auto curBucketIndex = (curHopIndex + j) % bucketsForKey.size();
-                    const auto& bucket = bucketsForKey[curBucketIndex];
-                    if (!bucket.HasValue) {
-                        continue;
-                    }
 
-                    if (!aggregated) { // todo: clone
-                        Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        Self->InLoad->SetValue(Ctx, Self->OutSave->GetValue(Ctx));
-                        aggregated = Self->OutLoad->GetValue(Ctx);
-                    } else {
-                        Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        Self->State2->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                        aggregated = Self->OutMerge->GetValue(Ctx);
+                for (ui64 i = 0; i < IntervalHopCount; ++i) {
+                    const auto& bucket = bucketsForKey[bucketIndex];
+                    if (bucket.HasValue) {
+                        if (!aggregated) { // todo: clone
+                            Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
+                            Self->InLoad->SetValue(Ctx, Self->OutSave->GetValue(Ctx));
+                            aggregated = Self->OutLoad->GetValue(Ctx);
+                        } else {
+                            Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
+                            Self->State2->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
+                            aggregated = Self->OutMerge->GetValue(Ctx);
+                        }
                     }
-
-                    lastIndexWithValue = Max<i64>(lastIndexWithValue, j);
+                    if (++bucketIndex == bucketsForKey.size()) {
+                        bucketIndex = 0;
+                    }
                 }
+
+                auto& clearBucket = bucketsForKey[firstBucketIndex];
+                clearBucket.Value = NUdf::TUnboxedValue();
+                clearBucket.HasValue = false;
 
                 if (aggregated) {
                     Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
                     Self->State->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                    // Outer code requires window end time (not start as could be expected)
-                    Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((curHopIndex + IntervalHopCount) * HopTime));
+                    Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((hopIndexForKey - DelayHopCount) * HopTime));
                     Ready.emplace_back(Self->OutFinish->GetValue(Ctx));
-
-                    newHopsStat++;
                 }
 
-                auto& clearBucket = bucketsForKey[curHopIndex % bucketsForKey.size()];
-                clearBucket.Value = NUdf::TUnboxedValue();
-                clearBucket.HasValue = false;
-
-                keyState.HopIndex++;
-
-                if (lastIndexWithValue == 0) {
-                    // Check if there is extra data in delayed buckets
-                    for (ui64 j = IntervalHopCount; j < bucketsForKey.size(); j++) {
-                        const auto curBucketIndex = (curHopIndex + j) % bucketsForKey.size();
-                        const auto& bucket = bucketsForKey[curBucketIndex];
-                        if (bucket.HasValue) {
-                            lastIndexWithValue = Max<i64>(lastIndexWithValue, j);
-                        }
-                    }
-
-                    if (lastIndexWithValue == 0) {
-                        becameEmpty = true;
-                        break;
-                    }
-                }
+                ++newHops;
             }
 
-            keyState.HopIndex = Max<ui64>(keyState.HopIndex, closeBeforeIndex);
-            return becameEmpty;
+            return endIndex < hopIndex;
         }
 
         void CloseOldBuckets(ui64 watermarkTs, i64& newHops) {
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, watermarkIndex + 1 - IntervalHopCount, newHops);
+                const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, watermarkIndex, newHops);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
                 }

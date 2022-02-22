@@ -42,25 +42,15 @@ public:
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
-protected:
-    void AppendCell(const TCell& cell, ui32 colNum);
-
-    const TVector<std::pair<TString, NScheme::TTypeId>>& GetYdbSchema() const {
-        return YdbSchema;
-    }
-
 private:
     arrow::ipc::IpcWriteOptions WriteOptions;
     TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};
-
-protected:
     size_t NumRows{0};
     size_t NumBytes{0};
 
-private:
     std::unique_ptr<IBlockBuilder> Clone() const override {
         return std::make_unique<TArrowBatchBuilder>();
     }

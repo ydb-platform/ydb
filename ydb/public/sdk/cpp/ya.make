@@ -19,8 +19,10 @@ RECURSE(
     client/ydb_datastreams
     client/ydb_table/impl/ut
     client/ydb_scheme
+    client/ydb_persqueue/codecs
     client/ydb_export
     client/ydb_persqueue_core/impl
+    client/ydb_persqueue
     client/ydb_value/ut
     client/ydb_types/fatal_error_handlers
     client/ydb_operation
@@ -55,5 +57,4 @@ RECURSE(
     client/impl/ydb_internal/db_driver_state
     client/draft/ut
     client/draft
-    examples
 )

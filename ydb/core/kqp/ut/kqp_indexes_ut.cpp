@@ -127,11 +127,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             server.GetFunctionRegistry());
 
         {
-            const TString query = Q_(R"(
-                UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
-                    VALUES (1, "qq", "ww")
-            )");
-
+            const TString query = "UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2) "
+                                  "VALUES (1, \"qq\", \"ww\");";
             auto explainResult = qp->SyncExplainDataQuery(query, true);
 
             UNIT_ASSERT(explainResult.Success());
@@ -139,24 +136,15 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             TExprContext exprCtx;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName](const TExprNode::TPtr& exprNode) {
-                    if (UseNewEngine) {
-                        if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                            UNIT_ASSERT(!TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName));
-                        }
-                        if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                            UNIT_ASSERT(!TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName));
-                        }
-                    } else {
-                        if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
-                            auto update = maybeupdate.Cast();
-                            TStringBuf toUpdate = update.Table().Path().Value();
-                            UNIT_ASSERT(!toUpdate.Contains(indexName));
-                        }
-                        if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
-                            auto erase = maybeerase.Cast();
-                            TStringBuf toErase = erase.Table().Path().Value();
-                            UNIT_ASSERT(!toErase.Contains(indexName));
-                        }
+                    if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
+                        auto update = maybeupdate.Cast();
+                        TStringBuf toUpdate = update.Table().Path().Value();
+                        UNIT_ASSERT(!toUpdate.Contains(indexName));
+                    }
+                    if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
+                        auto erase = maybeerase.Cast();
+                        TStringBuf toErase = erase.Table().Path().Value();
+                        UNIT_ASSERT(!toErase.Contains(indexName));
                     }
                     return true;
                 });
@@ -194,10 +182,8 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             server.GetFunctionRegistry());
 
         {
-            const TString query = Q_(R"(
-                UPSERT INTO `/Root/IndexedTableWithState` ("key", "value", "value2")
-                    VALUES (1, "qq", "ww");
-            )");
+            const TString query = "UPSERT INTO `/Root/IndexedTableWithState` (\"key\", \"value\", \"value2\") "
+                                  "VALUES (1, \"qq\", \"ww\");";
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT(explainResult.Success());
 
@@ -206,31 +192,18 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             bool indexCleaned = false;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
-                    if (UseNewEngine) {
-                        if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                            if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                                indexUpdated = true;
-                            }
+                    if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
+                        auto update = maybeupdate.Cast();
+                        TStringBuf toUpdate = update.Table().Path().Value();
+                        if (toUpdate.Contains(indexName)) {
+                            indexUpdated = true;
                         }
-                        if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                            if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                                indexCleaned = true;
-                            }
-                        }
-                    } else {
-                        if (auto maybeupdate = TMaybeNode<TKiUpdateRow>(exprNode)) {
-                            auto update = maybeupdate.Cast();
-                            TStringBuf toUpdate = update.Table().Path().Value();
-                            if (toUpdate.Contains(indexName)) {
-                                indexUpdated = true;
-                            }
-                        }
-                        if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
-                            auto erase = maybeerase.Cast();
-                            TStringBuf toErase = erase.Table().Path().Value();
-                            if (toErase.Contains(indexName)) {
-                                indexCleaned = true;
-                            }
+                    }
+                    if (auto maybeerase = TMaybeNode<TKiEraseRow>(exprNode)) {
+                        auto erase = maybeerase.Cast();
+                        TStringBuf toErase = erase.Table().Path().Value();
+                        if (toErase.Contains(indexName)) {
+                            indexCleaned = true;
                         }
                     }
                     return true;
@@ -259,8 +232,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk IS NULL;
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/SecondaryKeys] : Index WHERE Fk IS NULL;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -291,8 +264,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         CreateSampleTablesWithIndex(session);
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk IS NULL;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/SecondaryKeys] : Index WHERE Fk IS NULL;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -322,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             {
                 const TString query(Q_(R"(
-                    SELECT * FROM `/Root/SecondaryKeys` : Index WHERE Fk IS NULL;
+                    SELECT * FROM [/Root/SecondaryKeys] : Index WHERE Fk IS NULL;
                 )"));
 
                 auto result = session.ExecuteDataQuery(
@@ -344,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            const TString keyColumnName = "key";
+            const TString& keyColumnName = "key";
             auto builder = TTableBuilder()
                .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64);
 
@@ -358,8 +331,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query1(Q1_(R"(
-                DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
+            const TString query1(Q_(R"(
+                DECLARE $items AS "List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>";
                 UPSERT INTO `/Root/Test1`
                     SELECT * FROM AS_TABLE($items);
             )"));
@@ -405,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         // Just check table prepared
         {
-            const auto yson = ReadTablePartToYson(session, "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            const auto& yson = ReadTablePartToYson(session, "/Root/SecondaryWithDataColumns/Index/indexImplTable");
             const TString expected = R"([[["Secondary1"];["Primary1"];["Value1"]]])";
             UNIT_ASSERT_VALUES_EQUAL(yson, expected);
         }
@@ -416,8 +389,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // This test checks the implementation has correct handle not exact semantic for table lookup
         // (the lenth of lookup result is not equal to the lengh of the user input)
         {
-            const TString query1(Q1_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Value, ExtPayload) VALUES
+            const TString query1(Q_(R"(
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Value, ExtPayload) VALUES
                 ("Primary0", "Value0_", "Something"),
                 ("Primary1", "Value1_", "Something");
             )"));
@@ -457,7 +430,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Upsert using pk and some other column. Index will be read from table value from user input.
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Value, ExtPayload) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Value, ExtPayload) VALUES
                 ("Primary1", NULL, "Something");
             )"));
 
@@ -491,13 +464,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .Build()
                 .Build();
 
-            const TString query1(Q1_(R"(
-                DECLARE $rows AS List<Struct<
+            const TString query1(Q_(R"(
+                DECLARE $rows AS 'List<Struct<
                     Key : String?,
                     Value : String?,
                     ExtPayload : String?
-                >>;
-                UPSERT INTO `/Root/SecondaryWithDataColumns`
+                >>';
+                UPSERT INTO [/Root/SecondaryWithDataColumns]
                 SELECT * FROM AS_TABLE($rows);
             )"));
 
@@ -536,7 +509,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Upsert using previous inserved pk and fk, check data column realy updated
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1_1");
             )"));
 
@@ -556,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Upsert using previous inserved pk but without fk, check data column still realy updated
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Value) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Value) VALUES
                 ("Primary1", "Value1_2");
             )"));
 
@@ -576,7 +549,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Upsert using new pk without fk
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Value) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Value) VALUES
                 ("Primary2", "Value2_1");
             )"));
 
@@ -596,7 +569,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Upsert using pk, fk, and some other column. Data column in index must have old value
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, ExtPayload) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Index2, ExtPayload) VALUES
                 ("Primary1", "Secondary1", "Something");
             )"));
 
@@ -616,7 +589,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Replace row
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                REPLACE INTO [/Root/SecondaryWithDataColumns] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1_3");
             )"));
 
@@ -636,7 +609,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Replace row but no specify data column
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Index2) VALUES
+                REPLACE INTO [/Root/SecondaryWithDataColumns] (Key, Index2) VALUES
                 ("Primary1", "Secondary1");
             )"));
 
@@ -657,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Replace row specify data column but no index column
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Value) VALUES
+                REPLACE INTO [/Root/SecondaryWithDataColumns] (Key, Value) VALUES
                 ("Primary2", "Value2_3");
             )"));
 
@@ -677,7 +650,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Replace just by pk
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/SecondaryWithDataColumns` (Key) VALUES
+                REPLACE INTO [/Root/SecondaryWithDataColumns] (Key) VALUES
                 ("Primary2");
             )"));
 
@@ -697,7 +670,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Delete
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/SecondaryWithDataColumns` ON (Key) VALUES
+                DELETE FROM [/Root/SecondaryWithDataColumns] ON (Key) VALUES
                 ("Primary2"), ("Primary1");
             )"));
 
@@ -717,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Insert new row in empty table
         {
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                INSERT INTO [/Root/SecondaryWithDataColumns] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1");
             )"));
 
@@ -737,7 +710,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Insert row with same pk
         {
             const TString query1(R"(
-                INSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                INSERT INTO [/Root/SecondaryWithDataColumns] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1_1");
             )");
 
@@ -760,7 +733,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Insert new row but no specify index column
         {
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/SecondaryWithDataColumns` (Key, Value) VALUES
+                INSERT INTO [/Root/SecondaryWithDataColumns] (Key, Value) VALUES
                 ("Primary2", "Value2");
             )"));
 
@@ -780,7 +753,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Update on
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` ON (Key, Index2, Value) VALUES
+                UPDATE [/Root/SecondaryWithDataColumns] ON (Key, Index2, Value) VALUES
                 ("NonExistPrimary", "Secondary1_1", "Value1_1"),
                 ("Primary1", "Secondary1_1", "Value1_1");
             )"));
@@ -802,7 +775,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
 
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` ON (Key, Value) VALUES
+                UPDATE [/Root/SecondaryWithDataColumns] ON (Key, Value) VALUES
                 ("Primary1", "Value1_2");
             )"));
 
@@ -823,7 +796,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
 
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` ON (Key, Index2, ExtPayload) VALUES
+                UPDATE [/Root/SecondaryWithDataColumns] ON (Key, Index2, ExtPayload) VALUES
                 ("Primary1", "Secondary1_1", "Something");
             )"));
 
@@ -845,7 +818,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Update where - update data column
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` SET Value = "Value1_3"
+                UPDATE [/Root/SecondaryWithDataColumns] SET Value = "Value1_3"
                 WHERE Key = "Primary1";
             )"));
 
@@ -866,7 +839,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Update were - do not touch index
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` SET ExtPayload = "Something2"
+                UPDATE [/Root/SecondaryWithDataColumns] SET ExtPayload = "Something2"
                 WHERE Key = "Primary1";
             )"));
 
@@ -887,7 +860,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         // Update wete - update index column
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/SecondaryWithDataColumns` SET Index2 = "Secondary1_2"
+                UPDATE [/Root/SecondaryWithDataColumns] SET Index2 = "Secondary1_2"
                 WHERE Key = "Primary1";
             )"));
 
@@ -920,7 +893,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/SecondaryWithDataColumns] (Key, Index2, Value) VALUES
                 ("p2", "s2", "2");
             )"));
 
@@ -933,7 +906,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                UPSERT INTO [/Root/SecondaryKeys] (Key, Fk, Value) VALUES
                 (1, 111, "Secondary1");
             )"));
 
@@ -948,8 +921,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 = 'Secondary1';
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryWithDataColumns]:Index WHERE Index2 = 'Secondary1';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -980,8 +953,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            const TString query = Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 IN ('Secondary1');
+            const TString query(R"(
+                SELECT Value FROM [/Root/SecondaryWithDataColumns]:Index WHERE Index2 IN ('Secondary1');
             )");
 
             auto result = session.ExecuteDataQuery(
@@ -994,26 +967,20 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), UseNewEngine ? 2 : 1, stats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            ui32 index = 0;
-            if (UseNewEngine) {
-                UNIT_ASSERT(stats.query_phases(index).table_access().empty());
-                index = 1;
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         }
 
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-            const TString query = Q1_(R"(
-                SELECT t2.Value FROM `/Root/SecondaryKeys` as t1
-                    INNER JOIN `/Root/SecondaryWithDataColumns` VIEW Index as t2 ON t2.Index2 = t1.Value;
+            const TString query(R"(
+                SELECT t2.Value FROM [/Root/SecondaryKeys] as t1
+                    INNER JOIN [/Root/SecondaryWithDataColumns]:Index as t2 ON t2.Index2 = t1.Value;
             )");
 
             auto result = session.ExecuteDataQuery(
@@ -1027,29 +994,25 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
-            if (WithMvcc && !UseNewEngine) {
-                phaseCount--;
-            }
+            int phaseCount = WithMvcc ? 2 : 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryKeys");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
 
-            int idx = UseNewEngine ? 2 : 1;
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
         }
 
         {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-            const TString query = Q1_(R"(
-                SELECT t2.Value FROM `/Root/SecondaryWithDataColumns` VIEW Index as t1
-                    INNER JOIN `/Root/KeyValue2` as t2 ON t2.Key = t1.Value WHERE t1.Index2 = "s2";
+            const TString query(R"(
+                SELECT t2.Value FROM [/Root/SecondaryWithDataColumns]:Index as t1
+                    INNER JOIN [/Root/KeyValue2] as t2 ON t2.Key = t1.Value WHERE t1.Index2 = "s2";
             )");
 
             auto result = session.ExecuteDataQuery(
@@ -1063,31 +1026,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
-            if (WithMvcc && !UseNewEngine) {
-                phaseCount--;
-            }
-            if (UseNewEngine) {
-                phaseCount++;
-            }
+            int phaseCount = WithMvcc ? 2 : 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
 
-            int idx = 0;
-            if (UseNewEngine) {
-                idx = 1;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
-            idx++;
-            if (UseNewEngine) {
-                idx++;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/KeyValue2");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/KeyValue2");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
         }
+
     }
 
 
@@ -1116,7 +1066,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1"),
                 ("Primary2", "Secondary2", "Value2"),
                 ("Primary3", "Secondary3", "Value3");
@@ -1130,7 +1080,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         const TString query1(Q_(R"(
-            SELECT Index2 FROM `/Root/TestTable` WHERE Key = "Primary1";
+            SELECT Index2 FROM [/Root/TestTable] WHERE Key = "Primary1";
         )"));
 
         // Start tx1, select from table by pk (without touching index table) and without commit
@@ -1147,7 +1097,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             // In other tx, update string
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1New", "Value1New")
             )"));
 
@@ -1158,8 +1108,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        const TString query2(Q1_(R"(
-            SELECT Index2 FROM `/Root/TestTable` VIEW Index WHERE Index2 = "Secondary1";
+        const TString query2(Q_(R"(
+            SELECT Index2 FROM [/Root/TestTable]:Index WHERE Index2 = "Secondary1";
         )"));
 
         UNIT_ASSERT(result1.GetTransaction());
@@ -1197,7 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1"),
                 ("Primary2", "Secondary2", "Value2"),
                 ("Primary3", "Secondary3", "Value3");
@@ -1210,8 +1160,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        const TString query1 = Q1_(R"(
-            SELECT Index2 FROM `/Root/TestTable` VIEW Index WHERE Index2 = "Secondary1";
+        const TString query1(R"(
+            SELECT Index2 FROM [/Root/TestTable]:Index WHERE Index2 = "Secondary1";
         )");
 
         // Start tx1, select from table by index
@@ -1228,7 +1178,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             // In other tx, update string
             const TString query(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1New", "Value1New")
             )"));
 
@@ -1240,7 +1190,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         const TString query2(Q_(R"(
-            UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+            UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
             ("Primary4", "Secondary4", "Value4")
         )"));
 
@@ -1278,7 +1228,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1");
             )"));
 
@@ -1330,8 +1280,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query1 = Q1_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+            const TString query1(R"(
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1_1", "Value1");
             )");
 
@@ -1344,29 +1294,27 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = UseNewEngine ? 3 : 2;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(idx).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).deletes().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(stats.query_phases(2).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).deletes().rows(), 1);
         }
 
         {
             // Upsert without touching index
-            const TString query2 = Q1_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES
+            const TString query2(R"(
+                UPSERT INTO [/Root/TestTable] (Key, Value) VALUES
                 ("Primary1", "Value1_1");
             )");
 
@@ -1379,26 +1327,23 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = UseNewEngine ? 3 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 2);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).updates().rows(), 1);
 
             // No touching index
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            if (!UseNewEngine) { // BUG
-                UNIT_ASSERT(!stats.query_phases(idx).table_access(1).has_updates());
-                UNIT_ASSERT(!stats.query_phases(idx).table_access(1).has_deletes());
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_updates());
+            UNIT_ASSERT(!stats.query_phases(2).table_access(1).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1409,8 +1354,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             // Update without touching index
-            const TString query2 = Q1_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Value) VALUES
+            const TString query2(R"(
+                UPDATE [/Root/TestTable] ON (Key, Value) VALUES
                 ("Primary1", "Value1_2");
             )");
 
@@ -1423,20 +1368,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 4 : 2); // BUG
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            int idx = UseNewEngine ? 1 : 0;
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             // One read of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
             // One update of index table
-            idx += (UseNewEngine ? 2 : 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
 
             // Thats it, no phase for index table - we remove it on compile time
 
@@ -1449,8 +1391,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             // Update without touching index
-            const TString query2 = Q1_(R"(
-                UPDATE `/Root/TestTable` SET Value = "Value1_3"
+            const TString query2(R"(
+                UPDATE [/Root/TestTable] SET Value = "Value1_3"
                 WHERE Key = "Primary1";
             )");
 
@@ -1509,8 +1451,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index) VALUES
                 ("Primary1", "Secondary1");
             )");
 
@@ -1549,8 +1490,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index) VALUES
                 ("Primary1", "Secondary1_1");
             )");
 
@@ -1590,8 +1530,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` ON (Key, Index) VALUES
+                UPDATE [/Root/TestTable] ON (Key, Index) VALUES
                 ("Primary1", "Secondary1_2");
             )");
 
@@ -1630,8 +1569,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` SET Index = "Secondary1_3"
+                UPDATE [/Root/TestTable] SET Index = "Secondary1_3"
                 WHERE Key = "Primary1";
             )");
 
@@ -1693,8 +1631,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index) VALUES
                 ("Primary1", "Secondary1");
             )");
 
@@ -1732,8 +1669,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             // Upsert on new pk
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPSERT INTO `/Root/TestTable` (Key, Index) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index) VALUES
                 ("Primary1", "Secondary1_1");
             )");
 
@@ -1772,8 +1708,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         {
             // Update on non existing key - do nothing
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                UPDATE `/Root/TestTable` ON (Key, Index) VALUES
+                UPDATE [/Root/TestTable] ON (Key, Index) VALUES
                 ("Primary1", "Secondary1_2");
             )");
 
@@ -1829,8 +1764,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                REPLACE INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1");
             )");
 
@@ -1861,8 +1795,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(R"(
-                PRAGMA Kikimr.UseNewEngine = 'false';
-                REPLACE INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1_1", "Value1");
             )");
 
@@ -1924,7 +1857,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "SomeOldIndex", "SomeOldValue");
             )"));
 
@@ -1936,7 +1869,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         const TString query1(Q_(R"(
-            UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+            UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
             ("Primary1", "Secondary1", "Value1"),
             ("Primary2", "Secondary2", "Value2"),
             ("Primary3", "Secondary3", "Value3");
@@ -1961,7 +1894,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                SELECT * FROM `/Root/TestTable/Index/indexImplTable`;
+                SELECT * FROM [/Root/TestTable/Index/indexImplTable];
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -1974,8 +1907,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/TestTable` VIEW WrongView WHERE Index2 = 'Secondary2';
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/TestTable]:WrongView WHERE Index2 = 'Secondary2';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -1986,8 +1919,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/TestTable` VIEW Index WHERE Index2 = 'Secondary2';
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/TestTable]:Index WHERE Index2 = 'Secondary2';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2000,7 +1933,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                DELETE FROM `/Root/TestTable` ON (Key) VALUES ('Primary1');
+                DELETE FROM [/Root/TestTable] ON (Key) VALUES ('Primary1');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2018,7 +1951,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                DELETE FROM `/Root/TestTable` WHERE Key = 'Primary2';
+                DELETE FROM [/Root/TestTable] WHERE Key = 'Primary2';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2036,7 +1969,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Index2) VALUES ('Primary3', 'Secondary3_1');
+                UPDATE [/Root/TestTable] ON (Key, Index2) VALUES ('Primary3', 'Secondary3_1');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2060,7 +1993,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                UPDATE `/Root/TestTable` SET Index2 = 'Secondary3_2' WHERE Key = 'Primary3';
+                UPDATE [/Root/TestTable] SET Index2 = 'Secondary3_2' WHERE Key = 'Primary3';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2107,7 +2040,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         const TString query1(Q_(R"(
-            UPSERT INTO `/Root/TestTable` (Key, Index2, Index2A) VALUES
+            UPSERT INTO [/Root/TestTable] (Key, Index2, Index2A) VALUES
             ("Primary1", "Secondary1", "Secondary1A"),
             ("Primary2", "Secondary2", "Secondary2A"),
             ("Primary3", "Secondary3", "Secondary3A");
@@ -2127,7 +2060,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Index2) VALUES ('Primary1', 'Secondary1_1');
+                UPDATE [/Root/TestTable] ON (Key, Index2) VALUES ('Primary1', 'Secondary1_1');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2151,7 +2084,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                UPDATE `/Root/TestTable` SET Index2 = 'Secondary1_2' WHERE Key = 'Primary1';
+                UPDATE [/Root/TestTable] SET Index2 = 'Secondary1_2' WHERE Key = 'Primary1';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2198,7 +2131,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         const TString query1(Q_(R"(
-            UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+            UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
             ("Primary1", "Secondary1", "Val1");
         )"));
 
@@ -2216,9 +2149,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
 
-            const TString query(Q1_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Index2, Value)
-                    (SELECT Key, Index2, 'Val1_1' as Value FROM `/Root/TestTable` VIEW Index WHERE Index2 = 'Secondary1');
+            const TString query(Q_(R"(
+                UPDATE [/Root/TestTable] ON (Key, Index2, Value)
+                    (SELECT Key, Index2, 'Val1_1' as Value FROM [/Root/TestTable]:Index WHERE Index2 = 'Secondary1');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2253,8 +2186,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         CreateSampleTablesWithIndex(session);
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2;
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2267,8 +2200,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk > 1 LIMIT 1;
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/SecondaryKeys]:Index WHERE Fk > 1 LIMIT 1;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2281,8 +2214,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2;
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2294,8 +2227,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk > 1 LIMIT 1;
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryKeys]:Index WHERE Fk > 1 LIMIT 1;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2307,8 +2240,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2 AND Key = 2;
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2 AND Key = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2320,8 +2253,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2 AND Key = 2;
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2 AND Key = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2333,8 +2266,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2 AND Value = "Payload2";
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2 AND Value = "Payload2";
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2346,8 +2279,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2 AND Value = "Payload2";
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2 AND Value = "Payload2";
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2359,8 +2292,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 2 AND Value = "Payload2" ORDER BY Fk, Key;
+            const TString query(Q_(R"(
+                SELECT Key, Fk, Value FROM [/Root/SecondaryKeys]:Index WHERE Fk = 2 AND Value = "Payload2" ORDER BY Fk, Key;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2372,8 +2305,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Key = 2;
+            const TString query(Q_(R"(
+                SELECT Value FROM [/Root/SecondaryKeys]:Index WHERE Key = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2382,15 +2315,16 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                               .ExtractValueSync();
 
             if (UseNewEngine) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index: Index");
-                    }), result.GetIssues().ToString());
+                const TString expectedIssues(R"(<main>: Warning: Execution, code: 1060
+    <main>:3:57: Warning: Given predicate is not suitable for used index: Index, code: 2503
+)");
+                UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString(), expectedIssues);
             } else {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index");
-                    }), result.GetIssues().ToString());
+                const TString expectedIssues(R"(<main>: Warning: Execution, code: 1060
+    <main>:2:57: Warning: Given predicate is not suitable for used index, code: 2503
+)");
+                UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString(), expectedIssues);
+
             }
 
             UNIT_ASSERT(result.IsSuccess());
@@ -2398,8 +2332,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Fk FROM `/Root/SecondaryKeys` VIEW Index WHERE Key = 2;
+            const TString query(Q_(R"(
+                SELECT Fk FROM [/Root/SecondaryKeys]:Index WHERE Key = 2;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2407,10 +2341,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
             if (UseNewEngine) {
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
-                    [](const NYql::TIssue& issue) {
-                        return issue.Message.Contains("Given predicate is not suitable for used index: Index");
-                    }), result.GetIssues().ToString());
+                const TString expectedIssues(R"(<main>: Warning: Execution, code: 1060
+    <main>:3:54: Warning: Given predicate is not suitable for used index: Index, code: 2503
+)");
+                UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString(), expectedIssues);
             } else {
                 UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
             }
@@ -2419,8 +2353,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value, Key FROM `/Root/SecondaryKeys` VIEW Index WHERE Key > 2 ORDER BY Key DESC;
+            const TString query(Q_(R"(
+                SELECT Value, Key FROM [/Root/SecondaryKeys]:Index WHERE Key > 2 ORDER BY Key DESC;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -2468,7 +2402,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 (1, 1001, "Value1"),
                 (2, 1002, "Value2"),
                 (3, 1003, "Value3");
@@ -2482,8 +2416,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2 DESC;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t ORDER BY t.Index2 DESC;
             )"));
 
            {
@@ -2514,8 +2448,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2 DESC LIMIT 2;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t ORDER BY t.Index2 DESC LIMIT 2;
             )"));
 
            {
@@ -2547,8 +2481,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Index2, Key FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2 DESC LIMIT 2;
+            const TString query(Q_(R"(
+                SELECT Index2, Key FROM [/Root/TestTable]:Index as t ORDER BY t.Index2 DESC LIMIT 2;
             )"));
 
            {
@@ -2579,8 +2513,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t WHERE t.Index2 < 1003 ORDER BY t.Index2 DESC;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t WHERE t.Index2 < 1003 ORDER BY t.Index2 DESC;
             )"));
 
             {
@@ -2611,8 +2545,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t ORDER BY t.Index2;
             )"));
 
             {
@@ -2642,8 +2576,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2 LIMIT 2;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t ORDER BY t.Index2 LIMIT 2;
             )"));
 
             {
@@ -2675,8 +2609,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t
                 WHERE t.Index2 > 1001
                 ORDER BY t.Index2 LIMIT 2;
             )"));
@@ -2709,8 +2643,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW Index as t
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:Index as t
                 WHERE t.Index2 = 1002
                 ORDER BY t.Index2 LIMIT 2;
             )"));
@@ -2744,8 +2678,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
 
         {
-            const TString query(Q1_(R"(
-                SELECT Index2, Key FROM `/Root/TestTable` VIEW Index as t
+            const TString query(Q_(R"(
+                SELECT Index2, Key FROM [/Root/TestTable]:Index as t
                 WHERE t.Index2 > 1001
                 ORDER BY t.Index2 LIMIT 2;
             )"));
@@ -2779,8 +2713,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             // Request by Key but using Index table, expect correct result
-            const TString query(Q1_(R"(
-                SELECT Index2, Key FROM `/Root/TestTable` VIEW Index as t
+            const TString query(Q_(R"(
+                SELECT Index2, Key FROM [/Root/TestTable]:Index as t
                 WHERE t.Key > 1
                 ORDER BY t.Index2 LIMIT 2;
             )"));
@@ -2841,7 +2775,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (id, customer, created, processed) VALUES
+                UPSERT INTO [/Root/TestTable] (id, customer, created, processed) VALUES
                 (1, "Vasya", CAST('2020-01-01T00:00:01Z' as DATETIME), "Value1"),
                 (2, "Vova",  CAST('2020-01-01T00:00:02Z' as DATETIME), "Value2"),
                 (3, "Petya", CAST('2020-01-01T00:00:03Z' as DATETIME), "Value3"),
@@ -2860,8 +2794,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW ix_cust as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:ix_cust as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC;
             )"));
 
            {
@@ -2910,8 +2844,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW ix_cust2 as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC, t.created DESC LIMIT 2;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:ix_cust2 as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC, t.created DESC LIMIT 2;
             )"));
 
            {
@@ -2961,8 +2895,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW ix_cust3 as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC, t.created DESC LIMIT 2;
+            const TString query(Q_(R"(
+                SELECT * FROM [/Root/TestTable]:ix_cust3 as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC, t.created DESC LIMIT 2;
             )"));
 
            {
@@ -3033,7 +2967,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, KeyA, Index2, Index2A, Value) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, KeyA, Index2, Index2A, Value) VALUES
                     ("Primary1", 41, "Secondary1", 1, "Value1"),
                     ("Primary2", 42, "Secondary2", 2, "Value2"),
                     ("Primary3", 43, "Secondary3", 3, "Value3");
@@ -3060,7 +2994,7 @@ R"([[["Secondary1"];[1u];["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[
 
         {
             const TString query(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, KeyA, Value) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, KeyA, Value) VALUES
                     ("Primary1", 41, "Value1_1");
                 )"));
             auto result = session.ExecuteDataQuery(
@@ -3110,7 +3044,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query(Q_(R"(
-                INSERT INTO `/Root/TestTable` (Key, Value) VALUES
+                INSERT INTO [/Root/TestTable] (Key, Value) VALUES
                 ("Primary1", "Value1"),
                 ("Primary2", "Value2"),
                 ("Primary3", "Value3");
@@ -3156,7 +3090,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         const TString query1(Q_(R"(
-            UPSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+            UPSERT INTO [/Root/TestTable] (Key, Value1, Value2) VALUES
             ("Primary1", "Val1", "Val2");
         )"));
 
@@ -3223,7 +3157,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Value1, Value2, Value3) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Value1, Value2, Value3) VALUES
                 ("Primary1", "Val1", "Val2", 42);
             )"));
 
@@ -3251,8 +3185,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Value2 FROM `/Root/TestTable` VIEW Index1 WHERE Value1 = 'Val1';
+            const TString query(Q_(R"(
+                SELECT Value2 FROM [/Root/TestTable]:Index1 WHERE Value1 = 'Val1';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3265,7 +3199,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, Value1, Value2, Value3) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, Value1, Value2, Value3) VALUES
                 ("Primary1", "Val1_1", "Val2_1", 43);
             )"));
 
@@ -3293,7 +3227,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, Value1, Value2) VALUES
                 ("Primary1", "Val1_1", "Val2_1");
             )"));
 
@@ -3321,7 +3255,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET 'Value3' = 35;
+                UPDATE [/Root/TestTable] SET 'Value3' = 35;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3348,7 +3282,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Value3) VALUES ('Primary1', 36);
+                UPDATE [/Root/TestTable] ON (Key, Value3) VALUES ('Primary1', 36);
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3375,7 +3309,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` ON (Key, Value1) VALUES ('Primary1', 'Val1_2');
+                UPDATE [/Root/TestTable] ON (Key, Value1) VALUES ('Primary1', 'Val1_2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3402,7 +3336,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/TestTable` (Key, Value2) VALUES ('Primary2', 'Record2');
+                INSERT INTO [/Root/TestTable] (Key, Value2) VALUES ('Primary2', 'Record2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3429,7 +3363,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/TestTable` (Key, Value3) VALUES ('Primary3', 37);
+                INSERT INTO [/Root/TestTable] (Key, Value3) VALUES ('Primary3', 37);
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3456,7 +3390,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/TestTable` WHERE Key = 'Primary3';
+                DELETE FROM [/Root/TestTable] WHERE Key = 'Primary3';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3483,7 +3417,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/TestTable` ON (Key) VALUES ('Primary2');
+                DELETE FROM [/Root/TestTable] ON (Key) VALUES ('Primary2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3511,7 +3445,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/TestTable`;
+                DELETE FROM [/Root/TestTable];
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3561,7 +3495,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, KeyA, Value1, Payload) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, KeyA, Value1, Payload) VALUES
                 ("Primary1", 42, "Val1", "SomeData");
             )"));
 
@@ -3590,8 +3524,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key FROM `/Root/TestTable` VIEW Index1 WHERE Value1 = 'Val1';
+            const TString query(Q_(R"(
+                SELECT Key FROM [/Root/TestTable]:Index1 WHERE Value1 = 'Val1';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3603,8 +3537,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT Key, Value1, Payload FROM `/Root/TestTable` VIEW Index2 WHERE Key = 'Primary1' ORDER BY Key, Value1;
+            const TString query(Q_(R"(
+                SELECT Key, Value1, Payload FROM [/Root/TestTable]:Index2 WHERE Key = 'Primary1' ORDER BY Key, Value1;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3617,7 +3551,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, KeyA, Value1, Payload) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, KeyA, Value1, Payload) VALUES
                 ("Primary1", 42, "Val1_0", "SomeData2");
             )"));
 
@@ -3648,7 +3582,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, KeyA, Value1) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, KeyA, Value1) VALUES
                 ("Primary1", 42, "Val1_1");
             )"));
 
@@ -3678,7 +3612,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                REPLACE INTO `/Root/TestTable` (Key, KeyA) VALUES
+                REPLACE INTO [/Root/TestTable] (Key, KeyA) VALUES
                 ("Primary1", 42);
             )"));
 
@@ -3701,7 +3635,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET 'Value1' = 'Val1_2';
+                UPDATE [/Root/TestTable] SET 'Value1' = 'Val1_2';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3723,7 +3657,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` ON (Key, KeyA, Value1) VALUES ('Primary1', 42, 'Val1_3');
+                UPDATE [/Root/TestTable] ON (Key, KeyA, Value1) VALUES ('Primary1', 42, 'Val1_3');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3745,7 +3679,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/TestTable` (Key, KeyA, Value1) VALUES ('Primary2', 43, 'Val2');
+                INSERT INTO [/Root/TestTable] (Key, KeyA, Value1) VALUES ('Primary2', 43, 'Val2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3767,7 +3701,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/TestTable` WHERE Key = 'Primary2';
+                DELETE FROM [/Root/TestTable] WHERE Key = 'Primary2';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3789,7 +3723,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                DELETE FROM `/Root/TestTable` ON (Key, KeyA) VALUES ('Primary1', 42);
+                DELETE FROM [/Root/TestTable] ON (Key, KeyA) VALUES ('Primary1', 42);
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3820,11 +3754,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CreateSampleTablesWithIndex(session);
 
         const TString query(R"(
-            --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false';
-            DECLARE $keys AS List<Tuple<Int32, String>>;
+            DECLARE $keys AS 'List<Tuple<Int32, String>>';
             $to_delete = (
-                SELECT Key FROM `/Root/SecondaryComplexKeys` VIEW Index WHERE (Fk1, Fk2) in $keys
+                SELECT Key FROM `/Root/SecondaryComplexKeys` : Index WHERE (Fk1, Fk2) in $keys
             );
             DELETE FROM `/Root/SecondaryComplexKeys` ON
             SELECT * FROM $to_delete;
@@ -3898,12 +3830,12 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable1` (Key, Value) VALUES
+                UPSERT INTO [/Root/TestTable1] (Key, Value) VALUES
                     ("Table1Primary3", 3),
                     ("Table1Primary4", 4),
                     ("Table1Primary55", 55);
 
-                UPSERT INTO `/Root/TestTable2` (Key, Value) VALUES
+                UPSERT INTO [/Root/TestTable2] (Key, Value) VALUES
                     ("Table2Primary1", 1),
                     ("Table2Primary2", 2),
                     ("Table2Primary3", 3),
@@ -3922,9 +3854,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         {
-            const TString query(Q1_(R"(
-                SELECT `/Root/TestTable1`.Key FROM `/Root/TestTable1`
-                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value;
+            const TString query(Q_(R"(
+                SELECT [/Root/TestTable1].Key FROM [/Root/TestTable1]
+                    INNER JOIN [/Root/TestTable2]:Index1 as t2 ON t2.Value = [/Root/TestTable1].Value;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3955,9 +3887,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT `/Root/TestTable1`.Key, `/Root/TestTable1`.Value FROM `/Root/TestTable1`
-                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value ORDER BY `/Root/TestTable1`.Value DESC;
+            const TString query(Q_(R"(
+                SELECT [/Root/TestTable1].Key, [/Root/TestTable1].Value FROM [/Root/TestTable1]
+                    INNER JOIN [/Root/TestTable2]:Index1 as t2 ON t2.Value = [/Root/TestTable1].Value ORDER BY [/Root/TestTable1].Value DESC;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3988,9 +3920,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT `/Root/TestTable1`.Key FROM `/Root/TestTable1`
-                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value;
+            const TString query(Q_(R"(
+                SELECT [/Root/TestTable1].Key FROM [/Root/TestTable1]
+                    LEFT JOIN [/Root/TestTable2]:Index1 as t2 ON t2.Value = [/Root/TestTable1].Value;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4021,9 +3953,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT `/Root/TestTable1`.Key, `/Root/TestTable1`.Value FROM `/Root/TestTable1`
-                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t2.Value = `/Root/TestTable1`.Value ORDER BY `/Root/TestTable1`.Value DESC;
+            const TString query(Q_(R"(
+                SELECT [/Root/TestTable1].Key, [/Root/TestTable1].Value FROM [/Root/TestTable1]
+                    LEFT JOIN [/Root/TestTable2]:Index1 as t2 ON t2.Value = [/Root/TestTable1].Value ORDER BY [/Root/TestTable1].Value DESC;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4093,12 +4025,12 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable1` (Key, Value) VALUES
+                UPSERT INTO [/Root/TestTable1] (Key, Value) VALUES
                     ("Table1Primary3", 3),
                     ("Table1Primary4", 4),
                     ("Table1Primary55", 55);
 
-                UPSERT INTO `/Root/TestTable2` (Key, Value, Value2) VALUES
+                UPSERT INTO [/Root/TestTable2] (Key, Value, Value2) VALUES
                     ("Table2Primary1", 1, "aa"),
                     ("Table2Primary2", 2, "bb"),
                     ("Table2Primary3", 3, "cc"),
@@ -4113,9 +4045,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT(result.IsSuccess());
         }
         {
-            const TString query(Q1_(R"(
-                SELECT t1.Key, t2.Value2 FROM `/Root/TestTable1` as t1
-                    INNER JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value;
+            const TString query(Q_(R"(
+                SELECT t1.Key, t2.Value2 FROM [/Root/TestTable1] as t1
+                    INNER JOIN [/Root/TestTable2]:Index1 as t2 ON t1.Value = t2.Value;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4152,9 +4084,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                SELECT t1.Key, t2.Value2 FROM `/Root/TestTable1` as t1
-                    LEFT JOIN `/Root/TestTable2` VIEW Index1 as t2 ON t1.Value = t2.Value;
+            const TString query(Q_(R"(
+                SELECT t1.Key, t2.Value2 FROM [/Root/TestTable1] as t1
+                    LEFT JOIN [/Root/TestTable2]:Index1 as t2 ON t1.Value = t2.Value;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4214,7 +4146,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                 ("Primary1", "Secondary1", "Value1");
             )"));
 
@@ -4226,8 +4158,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                INSERT INTO `/Root/TestTable` VIEW Index (Index2, Key) VALUES('Secondary2', 'Primary2');
+            const TString query(Q_(R"(
+                INSERT INTO [/Root/TestTable]:Index (Index2, Key) VALUES('Secondary2', 'Primary2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4239,8 +4171,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                UPSERT INTO `/Root/TestTable` VIEW Index (Index2, Key) VALUES('Secondary2', 'Primary2');
+            const TString query(Q_(R"(
+                UPSERT INTO [/Root/TestTable]:Index (Index2, Key) VALUES('Secondary2', 'Primary2');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4252,8 +4184,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                UPDATE `/Root/TestTable` VIEW Index ON (Index2, Key) VALUES ('Primary1', 'Secondary1');
+            const TString query(Q_(R"(
+                UPDATE [/Root/TestTable]:Index ON (Index2, Key) VALUES ('Primary1', 'Secondary1');
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4265,8 +4197,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            const TString query(Q1_(R"(
-                DELETE FROM `/Root/TestTable` VIEW Index WHERE Index2 = 'Secondary1';
+            const TString query(Q_(R"(
+                DELETE FROM [/Root/TestTable]:Index WHERE Index2 = 'Secondary1';
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -4353,7 +4285,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                     ("Primary1", "Secondary1", "Value1"),
                     ("Primary1", "Secondary2", "Value2"),
                     ("Primary1", "Secondary3", "Value3");
@@ -4390,7 +4322,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                     ("Primary1", "Secondary1", "Value1"),
                     ("Primary2", "Secondary2", "Value2"),
                     ("Primary1", "Secondary11", "Value3"),
@@ -4427,14 +4359,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         {
-            const TString query(Q1_(R"(
+            const TString query(Q_(R"(
                 DECLARE $rows AS
-                    List<Struct<
+                    'List<Struct<
                         Key: String?,
                         Index2: String?,
-                        Value: String?>>;
+                        Value: String?>>';
 
-                    UPSERT INTO `/Root/TestTable`
+                    UPSERT INTO [/Root/TestTable]
                     SELECT Key, Index2, Value FROM AS_TABLE($rows);
             )"));
 
@@ -4516,7 +4448,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Key, Index2, Value) VALUES
+                UPSERT INTO [/Root/TestTable] (Key, Index2, Value) VALUES
                     ("Primary1", "Secondary1", "Value1"),
                     ("Primary2", "Secondary2", "Value2");
             )"));
@@ -4528,7 +4460,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
 
             const TString query2(Q_(R"(
-                DELETE FROM `/Root/TestTable` ON (Key) VALUES
+                DELETE FROM [/Root/TestTable] ON (Key) VALUES
                     ("Primary1"),
                     ("Primary2");
             )"));
@@ -5054,6 +4986,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q1_(R"(
+            --!syntax_v1
             SELECT * FROM TestTable ORDER BY Key, Subkey;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
@@ -5159,6 +5092,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q1_(R"(
+            --!syntax_v1
             SELECT Key, Fk, Value FROM SecondaryKeys WHERE Key IN [2, 3] ORDER BY Key;
             SELECT Key FROM SecondaryKeys VIEW Index WHERE Fk IS NULL ORDER BY Key;
             SELECT Key FROM SecondaryKeys VIEW Index WHERE Fk = 2 ORDER BY Key;

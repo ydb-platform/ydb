@@ -77,12 +77,7 @@ public:
     };
 
     struct TCreateGroupRequest : TBasicRequest {
-        struct TOptions {
-            bool CheckName = true;
-        };
-
         TString Group;
-        TOptions Options;
     };
 
     struct TAddGroupMembershipRequest : TBasicRequest {

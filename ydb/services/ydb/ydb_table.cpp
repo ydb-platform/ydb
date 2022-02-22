@@ -1,8 +1,8 @@
 #include "ydb_table.h"
 
-#include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -33,64 +33,90 @@ void TGRpcYdbTableService::DecRequest() {
 
 void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-#ifdef ADD_REQUEST_LIMIT
-#error ADD_REQUEST_LIMIT macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
+#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
+    MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
+        [this](NGrpc::IRequestContextBase *ctx) { \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
-#ifdef ADD_STREAM_REQUEST_LIMIT
-#error ADD_STREAM_REQUEST_LIMIT macro already defined
-#endif
+#define ADD_BYTES_REQUEST(NAME, IN, OUT, ACTION) \
+    MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
+        [this](NGrpc::IRequestContextBase *ctx) { \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("table", #NAME))->Run();
 
-#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGRpcYdbTableService>>    \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>        \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
-            }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
+    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateSessionRequest(ctx));
+    })
+    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDeleteSessionRequest(ctx));
+    })
+    ADD_REQUEST(KeepAlive, KeepAliveRequest, KeepAliveResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvKeepAliveRequest(ctx));
+    })
+    ADD_REQUEST(AlterTable, AlterTableRequest, AlterTableResponse, {
+       ActorSystem_->Send(GRpcRequestProxyId_, new TEvAlterTableRequest(ctx));
+    })
+    ADD_REQUEST(CreateTable, CreateTableRequest, CreateTableResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateTableRequest(ctx));
+    })
+    ADD_REQUEST(DropTable, DropTableRequest, DropTableResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDropTableRequest(ctx));
+    })
+    ADD_BYTES_REQUEST(StreamReadTable, ReadTableRequest, ReadTableResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvReadTableRequest(ctx));
+    })
+    ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTableRequest(ctx));
+    })
+    ADD_REQUEST(CopyTable, CopyTableRequest, CopyTableResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCopyTableRequest(ctx));
+    })
+    ADD_REQUEST(CopyTables, CopyTablesRequest, CopyTablesResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCopyTablesRequest(ctx));
+    })
+    ADD_REQUEST(RenameTables, RenameTablesRequest, RenameTablesResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvRenameTablesRequest(ctx));
+    })
+    ADD_REQUEST(ExplainDataQuery, ExplainDataQueryRequest, ExplainDataQueryResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExplainDataQueryRequest(ctx));
+    })
+    ADD_REQUEST(PrepareDataQuery, PrepareDataQueryRequest, PrepareDataQueryResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPrepareDataQueryRequest(ctx));
+    })
+    ADD_REQUEST(ExecuteDataQuery, ExecuteDataQueryRequest, ExecuteDataQueryResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExecuteDataQueryRequest(ctx));
+    })
+    ADD_REQUEST(ExecuteSchemeQuery, ExecuteSchemeQueryRequest, ExecuteSchemeQueryResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExecuteSchemeQueryRequest(ctx));
+    })
+    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvBeginTransactionRequest(ctx));
+    })
+    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCommitTransactionRequest(ctx));
+    })
+    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvRollbackTransactionRequest(ctx));
+    })
+    ADD_REQUEST(DescribeTableOptions, DescribeTableOptionsRequest, DescribeTableOptionsResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTableOptionsRequest(ctx));
+    })
+    ADD_REQUEST(BulkUpsert, BulkUpsertRequest, BulkUpsertResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvBulkUpsertRequest(ctx));
+    })
+    ADD_REQUEST(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvStreamExecuteScanQueryRequest(ctx));
+    })
 
-#define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                          \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                            \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
-            }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                    \
-            #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
-
-    ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps)
-    ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps)
-    ADD_REQUEST_LIMIT(AlterTable, DoAlterTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CreateTable, DoCreateTableRequest, Rps)
-    ADD_REQUEST_LIMIT(DropTable, DoDropTableRequest, Rps)
-    ADD_REQUEST_LIMIT(DescribeTable, DoDescribeTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CopyTable, DoCopyTableRequest, Rps)
-    ADD_REQUEST_LIMIT(CopyTables, DoCopyTablesRequest, Rps)
-    ADD_REQUEST_LIMIT(RenameTables, DoRenameTablesRequest, Rps)
-    ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps)
-    ADD_REQUEST_LIMIT(ExecuteSchemeQuery, DoExecuteSchemeQueryRequest, Rps)
-    ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps)
-    ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps)
-
-    ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off)
-    ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off)
-    ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off)
-
-
-    ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru)
-    ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru)
-    ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru)
-
-    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress)
-    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress)
-
-#undef ADD_REQUEST_LIMIT
-#undef ADD_STREAM_REQUEST_LIMIT
+#undef ADD_REQUEST
 }
 
 } // namespace NGRpcService

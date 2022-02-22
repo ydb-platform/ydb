@@ -3,7 +3,6 @@
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/size_literals.h>
 
@@ -14,7 +13,6 @@
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
-#include <library/cpp/retry/retry_policy.h>
 
 namespace NYql {
 
@@ -33,10 +31,6 @@ std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode& settings) {
 using TItemsMap = std::map<TString, std::size_t>;
 using TPendingBuckets = std::unordered_map<std::tuple<TString, TString, TString>, std::tuple<TNodeSet, TItemsMap, TIssues>, THash<std::tuple<TString, TString, TString>>>;
 
-ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
-    return httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
-}
-
 void OnDiscovery(
     IHTTPGateway::TWeakPtr gateway,
     TPosition pos,
@@ -45,8 +39,7 @@ void OnDiscovery(
     TPendingBuckets::mapped_type& output,
     NThreading::TPromise<void> promise,
     std::weak_ptr<TPendingBuckets> pendingBucketsWPtr,
-    int promiseInd,
-    const IRetryPolicy<long>::TPtr& retryPolicy) {
+    int promiseInd) {
     auto pendingBuckets = pendingBucketsWPtr.lock(); // keys and output could be used only when TPendingBuckets is alive
     if (!pendingBuckets) {
         return;
@@ -86,19 +79,8 @@ void OnDiscovery(
                     IHTTPGateway::THeaders headers;
                     if (const auto& token = std::get<2U>(keys); !token.empty())
                         headers.emplace_back(token);
-
-                    TUrlBuilder urlBuilder(std::get<0U>(keys));
-                    urlBuilder.AddUrlParam("list-type", "2");
-                    urlBuilder.AddUrlParam("prefix", prefix);
-                    urlBuilder.AddUrlParam("continuation-token", next);
-                    urlBuilder.AddUrlParam("max-keys", maxKeys);
-                    return g->Download(
-                        urlBuilder.Build(),
-                        std::move(headers),
-                        0U,
-                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd, retryPolicy),
-                        /*data=*/"",
-                        retryPolicy);
+                    return g->Download(std::get<0U>(keys) + "?list-type=2&prefix=" + prefix + "&continuation-token=" + next + "&max-keys=" + maxKeys, std::move(headers), 0U,
+                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd));
                 }
                 YQL_CLOG(INFO, ProviderS3) << "Gateway disappeared.";
             }
@@ -123,6 +105,7 @@ void OnDiscovery(
     YQL_CLOG(DEBUG, ProviderS3) << "Set promise with log message: " << logMsg;
     promise.SetValue();
 }
+
 
 TString RegexFromWildcards(const std::string_view& pattern) {
     const auto& escaped = RE2::QuoteMeta(re2::StringPiece(pattern));
@@ -212,7 +195,6 @@ public:
         handles.reserve(PendingBuckets_->size());
 
         int i = 0;
-        const auto retryPolicy = IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown);
         for (auto& bucket : *PendingBuckets_) {
             auto promise = NThreading::NewPromise();
             handles.emplace_back(promise.GetFuture());
@@ -222,19 +204,9 @@ public:
             if (const auto& token = std::get<2U>(bucket.first); !token.empty())
                 headers.emplace_back(token);
             std::weak_ptr<TPendingBuckets> pendingBucketsWPtr = PendingBuckets_;
-            TUrlBuilder urlBuilder(std::get<0U>(bucket.first));
-            urlBuilder.AddUrlParam("list-type", "2");
-            urlBuilder.AddUrlParam("prefix", prefix);
-            Gateway_->Download(
-                urlBuilder.Build(),
-                headers,
-                0U,
-                std::bind(&OnDiscovery,
-                    IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1,
-                    std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++, retryPolicy),
-                /*data=*/"",
-                retryPolicy
-            );
+            Gateway_->Download(std::get<0U>(bucket.first) + "?list-type=2&prefix=" + prefix, headers, 0U, std::bind(&OnDiscovery,
+                IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1,
+                std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++));
             YQL_CLOG(INFO, ProviderS3) << "Enumerate items in " << std::get<0U>(bucket.first) << std::get<1U>(bucket.first);
         }
 

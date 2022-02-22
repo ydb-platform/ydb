@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/yq/libs/control_plane_proxy)
 
 OWNER(g:yq)
 
-SIZE(MEDIUM)
-
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base

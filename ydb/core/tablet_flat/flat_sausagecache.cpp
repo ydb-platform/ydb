@@ -262,7 +262,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
         switch (page->LoadState) {
         case TPage::LoadStateNo:
             Y_VERIFY_DEBUG(!page->SharedPending, "Trying to load a page that may be restored");
-            [[fallthrough]];
+            // fall through
         case TPage::LoadStateRequestedAsync:
             page->LoadState = TPage::LoadStateRequested;
             bytesToRequest += page->Size;

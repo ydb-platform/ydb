@@ -1,10 +1,8 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 
-#include "service_table.h"
 #include "rpc_common.h"
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -16,14 +14,11 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-using TEvDescribeTableRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTableRequest,
-    Ydb::Table::DescribeTableResponse>;
-
 class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
 public:
-    TDescribeTableRPC(IRequestOpCtx* msg)
+    TDescribeTableRPC(TEvDescribeTableRequest* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -138,8 +133,8 @@ private:
     }
 };
 
-void DoDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-    TActivationContext::AsActorContext().Register(new TDescribeTableRPC(p.release()));
+void TGRpcRequestProxy::Handle(TEvDescribeTableRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TDescribeTableRPC(ev->Release().Release()));
 }
 
 } // namespace NKikimr

@@ -234,11 +234,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        const TString msg = ev->Get()->GetIssues().ToOneLineString();
+        auto& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+            << "Received abort execution event for scan query: " << record.GetMessage());
 
-        TBase::HandleError(msg, ctx);
+        TBase::HandleError(record.GetMessage(), ctx);
     }
 
     using TBase::HandleResponse;
@@ -350,11 +350,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        const TString msg = ev->Get()->GetIssues().ToOneLineString();
+        auto& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, this->SelfId()
-            << "Received abort execution event for data query: " << msg);
+            << "Received abort execution event for data query: " << record.GetMessage());
 
-        TBase::HandleError(msg, ctx);
+        TBase::HandleError(record.GetMessage(), ctx);
     }
 
     using TBase::Handle;
@@ -437,11 +437,11 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-        const TString msg = ev->Get()->GetIssues().ToOneLineString();
+        auto& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+            << "Received abort execution event for scan query: " << record.GetMessage());
 
-        TBase::HandleError(msg, ctx);
+        TBase::HandleError(record.GetMessage(), ctx);
     }
 
     using TBase::HandleResponse;
@@ -748,7 +748,7 @@ public:
                 return;
             }
 
-            case TEvTxUserProxy::TResultStatus::ExecError:
+            case TEvTxUserProxy::TResultStatus::ExecError: {
                 switch (response.GetSchemeShardStatus()) {
                     case NKikimrScheme::EStatus::StatusMultipleModifications: {
                         Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS,
@@ -766,7 +766,7 @@ public:
                     default:
                         break;
                 }
-                break;
+            }
 
             default:
                 break;
@@ -892,21 +892,14 @@ private:
 
     void Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         auto& msg = ev->Get()->Record;
-        NYql::TIssues issues = ev->Get()->GetIssues();
 
         LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY,
             "TKqpExecPhysicalRequestHandler, got EvAbortExecution event."
              << " Code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
-             << ", reason: " << issues.ToOneLineString());
+             << ", reason: " << msg.GetMessage());
 
         auto issueCode = NYql::YqlStatusFromYdbStatus(msg.GetStatusCode());
-        NYql::TIssues resultIssues;
-        for (const auto& i : issues) {
-            NYql::TIssue issue(i);
-            NYql::SetIssueCode(issueCode, issue);
-            resultIssues.AddIssue(std::move(issue));
-        }
-        Promise.SetValue(ResultFromError<TResult>(std::move(resultIssues)));
+        Promise.SetValue(ResultFromError<TResult>(YqlIssue({}, issueCode, msg.GetMessage())));
 
         this->PassAway();
     }
@@ -1229,8 +1222,7 @@ public:
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
-            using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
-                Ydb::Table::AlterTableResponse>;
+            using TEvAlterTableRequest = TGRpcRequestValidationWrapper<TRpcServices::EvAlterTable, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, true, TRateLimiterMode::Rps>;
 
             return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
         }
@@ -1284,8 +1276,7 @@ public:
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;
-            using TEvDropTableRequest = TGrpcRequestOperationCall<Ydb::Table::DropTableRequest,
-                Ydb::Table::DropTableResponse>;
+            using TEvDropTableRequest = TGRpcRequestWrapper<TRpcServices::EvDropTable, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, true, TRateLimiterMode::Rps>;
 
             return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat());
         }

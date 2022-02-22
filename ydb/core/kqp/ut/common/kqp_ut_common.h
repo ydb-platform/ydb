@@ -55,11 +55,14 @@
 
 template <bool UseNewEngine, bool ForceVersionV1 = false>
 TString Query(const TString& tmpl) {
-    return TStringBuilder()
-        << (ForceVersionV1 ? "--!syntax_v1\n" : "")
-        << "PRAGMA Kikimr.UseNewEngine = '" << (UseNewEngine ? "true" : "false") << "';" << Endl
-        //<< (UseNewEngine ? "PRAGMA Kikimr.UseNewEngine = 'true';" : "")
-        << tmpl;
+    if constexpr (UseNewEngine) {
+        return TStringBuilder()
+            << (ForceVersionV1 ? "--!syntax_v1\n" : "")
+            << "PRAGMA Kikimr.UseNewEngine = \"true\";\n"
+            << tmpl;
+    } else {
+        return ForceVersionV1 ? TString("--!syntax_v1\n") + tmpl : tmpl;
+    }
 }
 
 #define Q_(expr) Query<UseNewEngine, false>(expr)

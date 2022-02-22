@@ -6,7 +6,9 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
+#include <ydb/core/yq/libs/common/database_token_builder.h>
 
 namespace NYql {
 
@@ -40,8 +42,8 @@ struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher
     void Init(
         const TPqGatewayConfig& config,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds);
+        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
+        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds);
 
     TString GetDatabaseForTopic(const TString& cluster) const;
 

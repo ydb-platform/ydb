@@ -51,12 +51,10 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
-#include <ydb/core/yq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/yq/libs/actors/nodes_manager.h>
 #include <ydb/core/yq/libs/gateway/empty_gateway.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_deleter.h>
-#include <ydb/core/yq/libs/tasks_packer/tasks_packer.h>
 #include <util/system/hostname.h>
 
 #include <library/cpp/json/yson/json2yson.h>
@@ -69,6 +67,8 @@
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_impl.h>
+#include <ydb/core/yq/libs/common/database_token_builder.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
 #define LOG_E(stream) \
@@ -83,18 +83,55 @@ using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
 
+class TDeferredCountersCleanupActor : public NActors::TActorBootstrapped<TDeferredCountersCleanupActor> {
+public:
+     TDeferredCountersCleanupActor(
+         const NMonitoring::TDynamicCounterPtr& rootCountersParent,
+         const NMonitoring::TDynamicCounterPtr& publicCountersParent,
+         const TString& queryId)
+        : RootCountersParent(rootCountersParent)
+        , PublicCountersParent(publicCountersParent)
+        , QueryId(queryId)
+    {
+    }
+
+    static constexpr char ActorName[] = "YQ_DEFERRED_COUNTERS_CLEANUP";
+
+    void Bootstrap() {
+        Become(&TDeferredCountersCleanupActor::StateFunc, TDuration::Seconds(60), new NActors::TEvents::TEvWakeup());
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle)
+    )
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        if (RootCountersParent) {
+            RootCountersParent->RemoveSubgroup("query_id", QueryId);
+        }
+        if (PublicCountersParent) {
+            PublicCountersParent->RemoveSubgroup("query_id", QueryId);
+        }
+        PassAway();
+    }
+
+private:
+    const NMonitoring::TDynamicCounterPtr RootCountersParent;
+    const NMonitoring::TDynamicCounterPtr PublicCountersParent;
+    const TString QueryId;
+};
+
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
 public:
     explicit TRunActor(
-        const NActors::TActorId& fetcherId
-        , const ::NYq::NCommon::TServiceCounters& queryCounters
+        const ::NYq::NCommon::TServiceCounters& serviceCounters
         , TRunActorParams&& params)
-        : FetcherId(fetcherId)
-        , Params(std::move(params))
+        : Params(std::move(params))
         , CreatedAt(TInstant::Now())
-        , QueryCounters(queryCounters)
+        , ServiceCounters(serviceCounters)
+        , QueryCounters(serviceCounters)
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
-        , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
+        , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 100)
     {
     }
 
@@ -142,17 +179,16 @@ private:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvents::TEvAsyncContinue, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(TEvents::TEvGraphParams, Handle);
-        hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
+        hFunc(NYq::TEvents::TEvGraphParams, Handle);
+        hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
         hFunc(NYql::NDqs::TEvQueryResponse, Handle);
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-        hFunc(TEvents::TEvRaiseTransientIssues, Handle);
     )
 
     STRICT_STFUNC(FinishStateFunc,
-        hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
+        hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
         hFunc(TEvents::TEvDataStreamsReadRulesDeletionResult, HandleFinish);
         hFunc(NYql::NDqs::TEvQueryResponse, HandleFinish);
         hFunc(TEvents::TEvForwardPingResponse, HandleFinish);
@@ -160,10 +196,9 @@ private:
         // Ignore tail of action events after normal work.
         IgnoreFunc(TEvents::TEvAsyncContinue);
         IgnoreFunc(NActors::TEvents::TEvUndelivered);
-        IgnoreFunc(TEvents::TEvGraphParams);
+        IgnoreFunc(NYq::TEvents::TEvGraphParams);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
-        IgnoreFunc(TEvents::TEvRaiseTransientIssues);
     )
 
     void KillExecuter() {
@@ -200,8 +235,13 @@ private:
     }
 
     void PassAway() override {
-        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
+        if (!Params.Automatic) {
+            // Cleanup non-automatic counters only
+            Register(new TDeferredCountersCleanupActor(RootCountersParent, PublicCountersParent, Params.QueryId));
+        }
+
         KillChildrenActors();
+
         NActors::TActorBootstrapped<TRunActor>::PassAway();
     }
 
@@ -235,11 +275,13 @@ private:
     void HandleConnections() {
         LOG_D("HandleConnections");
 
+        THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth> databaseIds;
         for (const auto& connection : Params.Connections) {
             if (!connection.content().name()) {
                 LOG_D("Connection with empty name " << connection.meta().id());
                 continue;
             }
+            Connections[connection.content().name()] = connection; // Necessary for TDatabaseAsyncResolverWithMeta
             YqConnections.emplace(connection.meta().id(), connection);
         }
     }
@@ -453,7 +495,7 @@ private:
         return false;
     }
 
-    void Handle(TEvents::TEvGraphParams::TPtr& ev) {
+    void Handle(NYq::TEvents::TEvGraphParams::TPtr& ev) {
         LOG_D("Graph params with tasks: " << ev->Get()->GraphParams.TasksSize());
         DqGraphParams.push_back(ev->Get()->GraphParams);
     }
@@ -462,14 +504,6 @@ private:
         LOG_D("Coordinator saved zero checkpoint");
         Y_VERIFY(CheckpointCoordinatorId);
         SetLoadFromCheckpointMode();
-    }
-
-    void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
-        Yq::Private::PingTaskRequest request;
-
-        NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
-
-        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
     }
 
     i32 UpdateResultIndices() {
@@ -698,7 +732,7 @@ private:
         ContinueFinish();
     }
 
-    void Handle(TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
+    void Handle(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
         LOG_D("Read rules creation finished. Issues: " << ev->Get()->Issues.Size());
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
@@ -710,7 +744,7 @@ private:
         }
     }
 
-    void HandleFinish(TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
+    void HandleFinish(NYq::TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
             TransientIssues.AddIssues(ev->Get()->Issues);
@@ -791,7 +825,29 @@ private:
             return;
         }
 */
+        PrepareQueryCounters();
         RunNextDqGraph();
+    }
+
+    void PrepareQueryCounters() {
+        const TVector<TString> path = StringSplitter(Params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
+        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
+                            ? path.back() : TString{};
+
+
+        QueryCounters = ServiceCounters;
+        PublicCountersParent = ServiceCounters.PublicCounters;
+
+        if (Params.CloudId && folderId) {
+            PublicCountersParent = PublicCountersParent->GetSubgroup("cloud_id", Params.CloudId)->GetSubgroup("folder_id", folderId);
+        }
+        QueryCounters.PublicCounters = PublicCountersParent->GetSubgroup("query_id",
+            Params.Automatic ? (Params.QueryName ? Params.QueryName : "automatic") : Params.QueryId);
+
+        RootCountersParent = ServiceCounters.RootCounters;
+        QueryCounters.RootCounters = RootCountersParent->GetSubgroup("query_id",
+            Params.Automatic ? (folderId ? "automatic_" + folderId : "automatic") : Params.QueryId);
+        QueryCounters.Counters = QueryCounters.RootCounters;
     }
 
     void RunNextDqGraph() {
@@ -801,7 +857,7 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = "never";
 
-        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, ServiceCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 
         NActors::TActorId resultId;
         if (dqGraphParams.GetResultType()) {
@@ -817,9 +873,11 @@ private:
                 columns.emplace_back(column);
             }
             resultId = NActors::TActivationContext::Register(
+                new NDq::TLogWrapReceive(
                     CreateResultWriter(
                         Params.Driver, ExecuterId, dqGraphParams.GetResultType(), Params.PrivateApiConfig,
-                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters));
+                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters)
+                    , dqGraphParams.GetSession()));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;
@@ -846,7 +904,7 @@ private:
         *request.MutableSettings() = dqGraphParams.GetSettings();
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
-        NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
+        *request.MutableTask() = dqGraphParams.GetTasks();
         NActors::TActivationContext::Send(new IEventHandle(ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId, CheckpointCoordinatorId)));
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId);
     }
@@ -1048,6 +1106,7 @@ private:
         }
         DqGraphIndex = Params.DqGraphIndex;
         UpdateResultIndices();
+        PrepareQueryCounters();
         RunNextDqGraph();
     }
 
@@ -1071,8 +1130,8 @@ private:
             clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
-        const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
-            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId);
+        const auto dbResolver = std::make_shared<TDatabaseAsyncResolverWithMeta>(TDatabaseAsyncResolverWithMeta(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
+            Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId, Params.AuthToken, Params.AccountIdSignatures, Connections));
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
@@ -1258,7 +1317,6 @@ private:
     }
 
 private:
-    TActorId FetcherId;
     TRunActorParams Params;
     THashMap<TString, YandexQuery::Connection> YqConnections;
 
@@ -1273,14 +1331,18 @@ private:
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
     std::vector<i32> DqGrapResultIndices;
     i32 DqGraphIndex = 0;
+    NMonitoring::TDynamicCounterPtr RootCountersParent;
+    NMonitoring::TDynamicCounterPtr PublicCountersParent;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
     NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
+    ::NYq::NCommon::TServiceCounters ServiceCounters;
     ::NYq::NCommon::TServiceCounters QueryCounters;
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
+    THashMap<TString, YandexQuery::Connection> Connections; // Necessary for DbAsyncResolver
 
     const ui64 MaxTasksPerOperation = 100;
 
@@ -1303,17 +1365,15 @@ private:
         UpdateQueryInfoCookie,
         SaveFinalizingStatusCookie,
         SetLoadFromCheckpointModeCookie,
-        RaiseTransientIssuesCookie,
     };
 };
 
 
 IActor* CreateRunActor(
-    const NActors::TActorId& fetcherId,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
-    return new TRunActor(fetcherId, serviceCounters, std::move(params));
+    return new TRunActor(serviceCounters, std::move(params));
 }
 
 } /* NYq */

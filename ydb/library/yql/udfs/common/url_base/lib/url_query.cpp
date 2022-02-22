@@ -7,9 +7,7 @@
 #include <library/cpp/string_utils/quote/quote.h>
 
 namespace NUrlUdf {
-    void TQueryStringParse::MakeSignature(IFunctionTypeInfoBuilder& builder,
-                                          const TType* retType)
-    {
+    void TQueryStringParse::MakeSignature(IFunctionTypeInfoBuilder& builder, TType* retType) {
         builder.Returns(retType).OptionalArgs(4);
         auto args = builder.Args();
         args->Add<TAutoMap<TQueryStr>>();
@@ -134,11 +132,7 @@ namespace NUrlUdf {
                 while (listIt.Next(item)) {
                     if (wasItem++)
                         ret << sep;
-                    if (item) {
-                        ret << keyEscaped << '=' << CGIEscapeRet(item.AsStringRef());
-                    } else {
-                        ret << keyEscaped << '=';
-                    }
+                    ret << keyEscaped << '=' << CGIEscapeRet(item.AsStringRef());
                 }
             }
             break;
@@ -150,12 +144,7 @@ namespace NUrlUdf {
             while (dictIt.NextPair(key, value)) {
                 if (wasKey++)
                     ret << sep;
-                if (value) {
-                    ret << CGIEscapeRet(key.AsStringRef()) << '='
-                        << CGIEscapeRet(value.AsStringRef());
-                } else {
-                    ret << CGIEscapeRet(key.AsStringRef()) << '=';
-                }
+                ret << CGIEscapeRet(key.AsStringRef()) << '=' << CGIEscapeRet(value.AsStringRef());
             }
             break;
         }
@@ -167,12 +156,7 @@ namespace NUrlUdf {
                 if (wasItem++)
                     ret << sep;
                 TUnboxedValue key = item.GetElement(0), val = item.GetElement(1);
-                if (val) {
-                    ret << CGIEscapeRet(key.AsStringRef()) << '='
-                        << CGIEscapeRet(val.AsStringRef());
-                } else {
-                    ret << CGIEscapeRet(key.AsStringRef()) << '=';
-                }
+                ret << CGIEscapeRet(key.AsStringRef()) << '=' << CGIEscapeRet(val.AsStringRef());
             }
             break;
         }
@@ -207,18 +191,11 @@ namespace NUrlUdf {
             const auto firstArgType = argsTypeInspector.GetElementType(0);
             EFirstArgTypeId firstArgTypeId = EFirstArgTypeId::None;
 
-            if (typeHelper->IsSameType(GetDictType(builder), firstArgType) ||
-                typeHelper->IsSameType(GetDictType(builder, true), firstArgType)) {
+            if (typeHelper->IsSameType(GetDictType(builder), firstArgType)) {
                 firstArgTypeId = EFirstArgTypeId::Dict;
-            } else if (typeHelper->IsSameType(GetListType(builder), firstArgType) ||
-                       typeHelper->IsSameType(GetListType(builder, true), firstArgType) ||
-                       typeHelper->GetTypeKind(firstArgType) == ETypeKind::EmptyList)
-            {
+            } else if (typeHelper->IsSameType(GetListType(builder), firstArgType)) {
                 firstArgTypeId = EFirstArgTypeId::List;
-            } else if (typeHelper->IsSameType(GetFlattenDictType(builder), firstArgType) ||
-                       typeHelper->IsSameType(GetFlattenDictType(builder, true), firstArgType) ||
-                       typeHelper->GetTypeKind(firstArgType) == ETypeKind::EmptyDict)
-            {
+            } else if (typeHelper->IsSameType(GetFlattenDictType(builder), firstArgType)) {
                 firstArgTypeId = EFirstArgTypeId::FlattenDict;
             }
             if (firstArgTypeId != EFirstArgTypeId::None) {

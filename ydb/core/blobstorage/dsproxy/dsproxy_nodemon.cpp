@@ -62,9 +62,8 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
 
     {
         auto group = Group->GetSubgroup("subsystem", "restart_histo");
-        auto histoGroup = group->GetSubgroup("sensor", "restart_histo");
         for (size_t i = 0; i < RestartHisto.size(); ++i) {
-            RestartHisto[i] = histoGroup->GetNamedCounter("restartCount", ToString(i), true);
+            RestartHisto[i] = group->GetNamedCounter("restartCount", ToString(i), true);
         }
     }
     // Accelerate counters
@@ -193,7 +192,7 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceT
 
         auto getNamedHisto = [&subGroup, &type] (const TString& name) {
             auto buckets = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type));
-            return subGroup->GetHistogram(name, std::move(buckets));
+            return subGroup->GetNamedHistogram("event", name, std::move(buckets));
         };
 
         PutTabletLogResponseTimeHist256Ki[idx] = getNamedHisto("putTabletLog256KiMs");

@@ -96,7 +96,6 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         auto equiJoin = node.Cast<TCoEquiJoin>();
-        bool hasDqConnections = false;
         for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
             auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List();
             if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) {
@@ -105,10 +104,11 @@ protected:
             if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
                 list = maybeFlatMap.Cast().Input();
             }
-            hasDqConnections |= !!list.Maybe<TDqConnection>();
+            if (!list.Maybe<TDqConnection>()) {
+                return node;
+            }
         }
-
-        return hasDqConnections ? DqRewriteEquiJoin(node, ctx) : node;
+        return DqRewriteEquiJoin(node, ctx);
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {

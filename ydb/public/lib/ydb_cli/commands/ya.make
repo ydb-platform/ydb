@@ -1,9 +1,8 @@
-LIBRARY(clicommands)
+LIBRARY(commands)
 
 OWNER(g:kikimr)
 
 SRCS(
-    stock_workload.cpp
     ydb_command.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
@@ -16,17 +15,13 @@ SRCS(
     ydb_service_stream.cpp
     ydb_service_table.cpp
     ydb_tools.cpp
-    ydb_workload.cpp
     ydb_yql.cpp
 )
 
 PEERDIR(
-    library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
-    library/cpp/threading/local_executor
     ydb/library/backup
-    ydb/library/workload
     ydb/public/lib/operation_id
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump

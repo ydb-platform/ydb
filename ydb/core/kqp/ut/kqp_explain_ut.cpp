@@ -206,14 +206,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
+        auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
         UNIT_ASSERT(node.IsDefined());
 
         auto operators = node.GetMapSafe().at("Operators").GetArraySafe();
-        UNIT_ASSERT(operators[1].GetMapSafe().at("Name") == "TableRangesScan");
+        UNIT_ASSERT(operators[1].GetMapSafe().at("Name") == "TableRangeScan");
 
-        auto& readRanges = operators[1].GetMapSafe().at("ReadRanges").GetArraySafe();
-        UNIT_ASSERT(readRanges[0] == "Key [150, 266]");
+        auto& readRange = operators[1].GetMapSafe().at("ReadRange").GetArraySafe();
+        UNIT_ASSERT(readRange[0] == "Key [150, 266]");
     }
 
     Y_UNIT_TEST(CompoundKeyRange) {
@@ -251,6 +251,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
+            PRAGMA kikimr.OptEnablePredicateExtract = "true";
             SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Text;
         )", settings).GetValueSync();
 
@@ -625,6 +626,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
+            PRAGMA kikimr.OptEnablePredicateExtract = "true";
             SELECT * FROM `/Root/KeyValue`
             WHERE Key >= 2000 OR Key < 100;
         )", settings).GetValueSync();

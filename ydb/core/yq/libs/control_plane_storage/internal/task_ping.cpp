@@ -21,18 +21,21 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) {
 
-    TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
+    TSqlQueryBuilder readQueryBuilder(tablePathPrefix);
     readQueryBuilder.AddString("scope", request->Scope);
     readQueryBuilder.AddString("query_id", request->QueryId);
     readQueryBuilder.AddText(
-        "$last_job_id = SELECT `" LAST_JOB_ID_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
-        "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-        "SELECT `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
-        "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-        "SELECT `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
-        "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $last_job_id;\n"
-        "SELECT `" OWNER_COLUMN_NAME "` FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "$t1 = SELECT `" QUERY_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "$cache = (SELECT `" LAST_JOB_ID_COLUMN_NAME "` FROM $t1);\n"
+        "$t2 = SELECT `" JOB_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" JOB_ID_COLUMN_NAME "` IN COMPACT $cache;\n"
+        "SELECT `" QUERY_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM $t1 AS a \n"
+        "INNER JOIN $t2 AS b\n"
+        "ON a.`" LAST_JOB_ID_COLUMN_NAME "` == b.`" JOB_ID_COLUMN_NAME "`\n"
+        "WHERE a.`" LAST_JOB_ID_COLUMN_NAME "` = b.`" JOB_ID_COLUMN_NAME "`;\n"
+        "SELECT `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`\n"
+        "FROM `" PENDING_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
@@ -40,10 +43,12 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         YandexQuery::Query query;
         YandexQuery::Internal::QueryInternal internal;
         YandexQuery::Job job;
+        YandexQuery::Query pendingQuery;
+        YandexQuery::Internal::QueryInternal pendingInternal;
         TString selectedOwner;
 
-        if (resultSets.size() != 3) {
-           ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 3 but equal " << resultSets.size() << ". Please contact internal support";
+        if (resultSets.size() != 2) {
+           ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         {
@@ -55,12 +60,6 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
                 }
-            }
-        }
-
-        {
-            TResultSetParser parser(resultSets[1]);
-            if (parser.TryNextRow()) {
                 if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
                     ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
                 }
@@ -69,8 +68,14 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         }
 
         {
-            TResultSetParser parser(resultSets[2]);
+            TResultSetParser parser(resultSets[1]);
             if (parser.TryNextRow()) {
+                if (!pendingQuery.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
+                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for pending query. Please contact internal support";
+                }
+                if (!pendingInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for pending query internal. Please contact internal support";
+                }
                 selectedOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
             }
         }
@@ -82,11 +87,13 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         if (request->Status) {
             query.mutable_meta()->set_status(*request->Status);
             job.mutable_query_meta()->set_status(*request->Status);
+            pendingQuery.mutable_meta()->set_status(*request->Status);
         }
 
         if (request->Issues) {
             NYql::IssuesToMessage(*request->Issues, query.mutable_issue());
             NYql::IssuesToMessage(*request->Issues, job.mutable_issue());
+            NYql::IssuesToMessage(*request->Issues, pendingQuery.mutable_issue());
         }
 
         if (request->TransientIssues) {
@@ -99,44 +106,53 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             std::for_each_n(issues.begin(), std::min(static_cast<unsigned long long>(issues.Size()), 20ULL), [&](auto& issue){ newIssues.AddIssue(issue); });
 
             NYql::IssuesToMessage(newIssues, query.mutable_transient_issue());
+            NYql::IssuesToMessage(newIssues, pendingQuery.mutable_transient_issue());
         }
 
         if (request->Statistics) {
             *query.mutable_statistics()->mutable_json() = *request->Statistics;
             *job.mutable_statistics()->mutable_json() = *request->Statistics;
+            *pendingQuery.mutable_statistics()->mutable_json() = *request->Statistics;
         }
 
         if (request->ResultSetMetas) {
             // we will overwrite result_set_meta's COMPLETELY
             query.clear_result_set_meta();
             job.clear_result_set_meta();
+            pendingQuery.clear_result_set_meta();
             for (const auto& resultSetMeta : *request->ResultSetMetas) {
                 *query.add_result_set_meta() = resultSetMeta;
                 *job.add_result_set_meta() = resultSetMeta;
+                *pendingQuery.add_result_set_meta() = resultSetMeta;
             }
         }
 
         if (request->Ast) {
             query.mutable_ast()->set_data(*request->Ast);
             job.mutable_ast()->set_data(*request->Ast);
+            pendingQuery.mutable_ast()->set_data(*request->Ast);
         }
 
         if (request->Plan) {
             query.mutable_plan()->set_json(*request->Plan);
             job.mutable_plan()->set_json(*request->Plan);
+            pendingQuery.mutable_plan()->set_json(*request->Plan);
         }
 
         if (request->StartedAt) {
             *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt);
             *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt);
+            *pendingQuery.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->StartedAt);
         }
 
         if (request->FinishedAt) {
             *query.mutable_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt);
             *job.mutable_query_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt);
+            *pendingQuery.mutable_meta()->mutable_finished_at() = NProtoInterop::CastToProto(*request->FinishedAt);
             if (!query.meta().has_started_at()) {
                 *query.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt);
                 *job.mutable_query_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt);
+                *pendingQuery.mutable_meta()->mutable_started_at() = NProtoInterop::CastToProto(*request->FinishedAt);
             }
         }
 
@@ -145,24 +161,32 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             *query.mutable_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
             *job.mutable_query_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
             *job.mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
+            *pendingQuery.mutable_meta()->mutable_expire_at() = NProtoInterop::CastToProto(expireAt);
         }
 
         if (query.meta().status() == YandexQuery::QueryMeta::COMPLETED) {
             *query.mutable_meta()->mutable_result_expire_at() = NProtoInterop::CastToProto(request->Deadline);
+            *pendingQuery.mutable_meta()->mutable_result_expire_at() = NProtoInterop::CastToProto(request->Deadline);
         }
 
         if (request->StateLoadMode) {
+            pendingInternal.set_state_load_mode(request->StateLoadMode);
             internal.set_state_load_mode(request->StateLoadMode);
             if (request->StateLoadMode == YandexQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint
                 query.mutable_meta()->set_has_saved_checkpoints(true);
+                pendingQuery.mutable_meta()->set_has_saved_checkpoints(true);
             }
         }
 
         if (request->StreamingDisposition) {
+            pendingInternal.mutable_disposition()->CopyFrom(*request->StreamingDisposition);
             internal.mutable_disposition()->CopyFrom(*request->StreamingDisposition);
         }
 
         if (request->Status && IsFinishedStatus(*request->Status)) {
+            pendingInternal.clear_created_topic_consumers();
+            pendingInternal.clear_dq_graph();
+            pendingInternal.clear_dq_graph_index();
             internal.clear_created_topic_consumers();
             internal.clear_dq_graph();
             internal.clear_dq_graph_index();
@@ -171,6 +195,9 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         if (!request->CreatedTopicConsumers.empty()) {
             std::set<Yq::Private::TopicConsumer, TTopicConsumerLess> mergedConsumers;
             for (auto&& c : *internal.mutable_created_topic_consumers()) {
+                mergedConsumers.emplace(std::move(c));
+            }
+            for (auto&& c : *pendingInternal.mutable_created_topic_consumers()) {
                 mergedConsumers.emplace(std::move(c));
             }
 
@@ -187,23 +214,28 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 mergedConsumers.emplace(std::move(proto));
             }
             internal.clear_created_topic_consumers();
+            pendingInternal.clear_created_topic_consumers();
             for (auto&& c : mergedConsumers) {
+                *pendingInternal.add_created_topic_consumers() = c;
                 *internal.add_created_topic_consumers() = std::move(c);
             }
         }
 
         if (!request->DqGraphs.empty()) {
+            pendingInternal.clear_dq_graph();
             internal.clear_dq_graph();
             for (const auto& g : request->DqGraphs) {
+                pendingInternal.add_dq_graph(g);
                 internal.add_dq_graph(g);
             }
         }
 
         if (request->DqGraphIndex) {
+            pendingInternal.set_dq_graph_index(request->DqGraphIndex);
             internal.set_dq_graph_index(request->DqGraphIndex);
         }
 
-        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "HardPingTask(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix);
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("job_id", jobId);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -216,14 +248,20 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         if (IsTerminalStatus(query.meta().status())) {
             // delete pending
             writeQueryBuilder.AddText(
+                "DELETE FROM `" PENDING_TABLE_NAME "`\n"
+                "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
                 "DELETE FROM `" PENDING_SMALL_TABLE_NAME "`\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         } else {
-            // update pending small
+            // update pending
+            writeQueryBuilder.AddString("pending_query", pendingQuery.SerializeAsString());
+            writeQueryBuilder.AddString("pending_internal", pendingInternal.SerializeAsString());
             writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
             const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
             writeQueryBuilder.AddText(
+                "UPDATE `" PENDING_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $pending_query, `" INTERNAL_COLUMN_NAME "` = $pending_internal\n"
+                "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
                 "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now " + updateResignQueryFlag + "\n"
                 "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
@@ -260,7 +298,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         }
 
         writeQueryBuilder.AddText(
-            "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $query_id, $job_id, $job);\n"
+            "UPSERT INTO `" JOBS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "`) VALUES($scope, $job_id, $job);\n"
             "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" RESULT_ID_COLUMN_NAME "` = $result_id, " + updateResultSetsExpire + ", " + updateQueryTtl + ", `" META_REVISION_COLUMN_NAME  "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
@@ -276,19 +314,19 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructSoftPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
     const TString& tablePathPrefix) {
-    TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "SoftPingTask(read)");
+    TSqlQueryBuilder readQueryBuilder(tablePathPrefix);
     readQueryBuilder.AddString("scope", request->Scope);
     readQueryBuilder.AddString("query_id", request->QueryId);
     readQueryBuilder.AddText(
         "SELECT `" INTERNAL_COLUMN_NAME "`\n"
         "FROM `" QUERIES_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
         "SELECT `" OWNER_COLUMN_NAME "`\n"
-        "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
+        "FROM `" PENDING_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
         TString selectedOwner;
-        YandexQuery::Internal::QueryInternal internal;
+        YandexQuery::Internal::QueryInternal pendingInternal;
 
         if (resultSets.size() != 2) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
@@ -297,7 +335,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         {
             TResultSetParser parser(resultSets[0]);
             if (parser.TryNextRow()) {
-                if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+                if (!pendingInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for pending internal query. Please contact internal support";
                 }
             }
@@ -309,13 +347,13 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 selectedOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
             }
         }
-        *response = internal.action();
+        *response = pendingInternal.action();
 
         if (selectedOwner != request->Owner) {
             ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "query with the specified Owner: \"" <<  request->Owner << "\" does not exist. Selected owner: \"" << selectedOwner << "\"";
         }
 
-        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix);
         writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("query_id", request->QueryId);
@@ -346,9 +384,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     const TString owner = request->Owner;
     const TInstant deadline = request->Deadline;
 
-    CPS_LOG_T("PingTaskRequest: " << scope << " " << queryId
-        << " " << owner << " " << deadline << " "
-        << (request->Status ? YandexQuery::QueryMeta_ComputeStatus_Name(*request->Status) : "no status"));
+    CPS_LOG_T("PingTaskRequest: " << scope << " " << queryId << " " << owner << " " << deadline << " " << (request->Status ? YandexQuery::QueryMeta_ComputeStatus_Name(*request->Status) : "no status")); //TODO remove
 
     NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl);
     if (issues) {

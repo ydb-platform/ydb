@@ -66,7 +66,6 @@ public:
     static const TType Yson;
     static const TType Json;
     static const TType JsonDocument;
-    static const TType Timestamp;
 
     const TString& GetName() const;
     ui16 GetId() const;

@@ -218,7 +218,6 @@ namespace Tests {
             Runtime->GetAppData(nodeIdx).NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
             Runtime->GetAppData(nodeIdx).StreamingConfig.MergeFrom(Settings->AppConfig.GetGRpcConfig().GetStreamingConfig());
             Runtime->GetAppData(nodeIdx).EnforceUserTokenRequirement = Settings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
-            Runtime->GetAppData(nodeIdx).DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }

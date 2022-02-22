@@ -157,8 +157,6 @@ bool MakeContinueFromStreamingOffsetsPlan(
     THashMap<ui64, NDqProto::NDqStateLoadPlan::TTaskPlan>& plan,
     TIssues& issues)
 {
-#define FORCE_MSG(msg) (force ? ". " msg : ". Use force mode to ignore this issue")
-
     bool result = true;
     // Build src mapping
     TTopicsMapping srcMapping;
@@ -198,7 +196,7 @@ bool MakeContinueFromStreamingOffsetsPlan(
                 }
                 const auto mappingInfoIt = srcMapping.find(TTopic{srcDesc.GetDatabaseId(), srcDesc.GetDatabase(), srcDesc.GetTopicPath()});
                 if (mappingInfoIt == srcMapping.end()) {
-                    ISSUE("Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query" << FORCE_MSG("Query will use fresh offsets for its partitions"));
+                    ISSUE("Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query" << (force ? ". Query will use fresh offsets for its partitions" : ". Use force mode to ignore this issue"));
                     continue;
                 }
                 TTopicMappingInfo& mappingInfo = mappingInfoIt->second;
@@ -211,10 +209,13 @@ bool MakeContinueFromStreamingOffsetsPlan(
                 do {
                     auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(currentPartition);
                     if (taskBegin == taskEnd) {
-                        ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " is not found in previous query" << FORCE_MSG("Query will use fresh offsets for it"));
+                        // Normal case. Topic was extended. Print warning and continue.
+                        TIssue issue(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " is not found in previous query. Query will use fresh offsets for it");
+                        issue.SetCode(TIssuesIds::WARNING, TSeverityIds::S_WARNING);
+                        issues.AddIssue(std::move(issue));
                     } else {
                         if (std::distance(taskBegin, taskEnd) > 1) {
-                            ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " has ambiguous offsets source in previous query checkpoint" << FORCE_MSG("Query will use minimum offset to avoid skipping data"));
+                            ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " has ambiguous offsets source in previous query checkpoint" << (force ? ". Query will use minimum offset to avoid skipping data" : ". Use force mode to ignore this issue"));
                         }
                         for (; taskBegin != taskEnd; ++taskBegin) {
                             tasksSet.insert(taskBegin->second);
@@ -241,12 +242,10 @@ bool MakeContinueFromStreamingOffsetsPlan(
     }
     for (const auto& [topic, mappingInfo] : srcMapping) {
         if (!mappingInfo.Used) {
-            ISSUE("Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query" << FORCE_MSG("Reading offsets will be lost in next checkpoint"));
+            ISSUE("Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query" << (force ? ". Reading offsets will be lost in next checkpoint" : ". Use force mode to ignore this issue"));
         }
     }
     return result;
-
-#undef FORCE_MSG
 }
 
 } // namespace NYql::NDq

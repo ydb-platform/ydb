@@ -232,11 +232,7 @@ TExprNode::TPtr ReplicateDqOutput(TExprNode::TPtr&& input, const TMultiUsedConne
     replaces[dqStage.Raw()] = newStage.Ptr();
 
     ui32 consumerIdx = 0;
-    TVector<const TExprNode*> consumers; consumers.reserve(muConnection.Output->Consumers.size());
-    consumers.insert(consumers.end(), muConnection.Output->Consumers.begin(), muConnection.Output->Consumers.end());
-    std::sort(consumers.begin(), consumers.end(), [](auto l, auto r) { return l->UniqueId() < r->UniqueId(); });
-
-    for (auto& connection : consumers) {
+    for (auto& connection : muConnection.Output->Consumers) {
         YQL_ENSURE(TExprBase(connection).Maybe<TDqConnection>(), "DqOutput "
             << NCommon::ExprToPrettyString(ctx, muConnection.Output->Output.Ref())
             << " used by not DqConnection callable: " << connection->Content());

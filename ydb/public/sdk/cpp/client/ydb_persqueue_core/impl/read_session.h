@@ -859,8 +859,6 @@ private:
         return Max<i64>(1l, static_cast<i64>(Settings.MaxMemoryUsageBytes_) - GetCompressedDataSizeLimit());
     }
 
-    bool GetRangesMode() const;
-
     void CallCloseCallbackImpl();
 
     void UpdateMemoryUsageStatisticsImpl();

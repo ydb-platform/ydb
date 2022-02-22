@@ -14,7 +14,6 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/yq
     ydb/public/sdk/cpp/client/ydb_table
-    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/dq/provider
 )
 

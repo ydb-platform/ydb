@@ -1,14 +1,21 @@
 #pragma once
 
-#include "workload_query_generator.h"
+#include "workload_query_gen.h"
+#include "stock_workload.h"
 
 #include <memory>
 
-namespace NYdbWorkload {
-
 class TWorkloadFactory {
 public:
-    std::shared_ptr<IWorkloadQueryGenerator> GetWorkloadQueryGenerator(const std::string& workloadName, const TWorkloadParams* params);
-};
+    static std::unique_ptr<IWorkloadQueryGenerator> GetWorkloadQueryGenerator(const std::string& workloadName, const TWorkloadParams* params) {
+        if (!params) {
+            return nullptr;
+        }
 
-} // namespace NYdbWorkload
+        if (workloadName == "stock") {
+            return std::unique_ptr<TStockWorkloadGenerator>(TStockWorkloadGenerator::New(static_cast<const TStockWorkloadParams*>(params)));
+        } else {
+            return nullptr;
+        }
+    }
+};

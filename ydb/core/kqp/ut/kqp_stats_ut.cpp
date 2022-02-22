@@ -21,6 +21,7 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     settings.ProfileMode(NYdb::NExperimental::EStreamQueryProfileMode::Full);
 
     auto it = db.ExecuteStreamQuery(R"(
+        PRAGMA kikimr.OptEnablePredicateExtract = "true";
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
     )", settings).GetValueSync();
 
@@ -92,6 +93,7 @@ Y_UNIT_TEST(MultiTxStatsFull) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
     auto it = db.StreamExecuteScanQuery(R"(
+        PRAGMA kikimr.OptEnablePredicateExtract = "true";
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
     )", settings).GetValueSync();
 

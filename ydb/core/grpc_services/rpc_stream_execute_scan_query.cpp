@@ -1,9 +1,7 @@
-#include "service_table.h"
-#include <ydb/core/grpc_services/base/base.h>
+#include "grpc_request_proxy.h"
 
 #include "rpc_common.h"
 #include "rpc_kqp_base.h"
-#include "service_table.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -242,9 +240,6 @@ bool FillProfile(Ydb::Table::ExecuteScanQueryPartialResponse& response,
     return false;
 }
 
-using TEvStreamExecuteScanQueryRequest = TGrpcRequestNoOperationCall<Ydb::Table::ExecuteScanQueryRequest,
-    Ydb::Table::ExecuteScanQueryPartialResponse>;
-
 template<typename TRequestEv, typename TResponse>
 class TStreamExecuteScanQueryRPC : public TActorBootstrapped<TStreamExecuteScanQueryRPC<TRequestEv, TResponse>> {
 private:
@@ -447,13 +442,13 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        NYql::TIssues issues = ev->Get()->GetIssues();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Got abort execution event, from: "
             << ev->Sender << ", code: " << Ydb::StatusIds::StatusCode_Name(record.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+            << ", message: " << record.GetMessage());
 
-        ReplyFinishStream(record.GetStatusCode(), issues, ctx);
+        NYql::TIssue issue(record.GetMessage());
+        ReplyFinishStream(record.GetStatusCode(), issue, ctx);
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
@@ -634,12 +629,10 @@ void TGRpcRequestProxy::Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, cons
         Ydb::Experimental::ExecuteStreamQueryResponse>(ev->Release().Release(), rpcBufferSize));
 }
 
-void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
-    auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TStreamExecuteScanQueryRPC<TEvStreamExecuteScanQueryRequest,
-        Ydb::Table::ExecuteScanQueryPartialResponse>(req, rpcBufferSize));
+void TGRpcRequestProxy::Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx) {
+    ui64 rpcBufferSize = GetAppConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ctx.Register(new TStreamExecuteScanQueryRPC<TEvStreamExecuteScanQueryRequest,
+        Ydb::Table::ExecuteScanQueryPartialResponse>(ev->Release().Release(), rpcBufferSize));
 }
 
 } // namespace NGRpcService

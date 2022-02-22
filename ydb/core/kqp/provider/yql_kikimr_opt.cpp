@@ -593,7 +593,7 @@ TExprNode::TPtr KiRewritePartialTakeSortOverSelectIndexRange(TExprBase node, con
     if (!CanPushPartialSort(maybePartialSort.Cast(), indexDesc, &sortByColumns)) {
         return node.Ptr();
     }
-
+    
     auto filter = [&ctx, &node, &partialSort, &partialTake](const TExprBase& in) mutable {
         auto out = Build<TKiPartialTake>(ctx, node.Pos())
             .Input<TKiPartialSort>()
@@ -755,7 +755,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             if (auto maybeDatasink = node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
                 auto cluster = TString(maybeDatasink.Cast().Cluster());
                 auto useNewEngine = sessionCtx->Config().UseNewEngine.Get();
-                if (!useNewEngine.Defined() && sessionCtx->Config().HasKqpForceNewEngine()) {
+                if (sessionCtx->Config().HasKqpForceNewEngine()) {
                     useNewEngine = true;
                 }
 

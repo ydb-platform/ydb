@@ -30,7 +30,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
     const auto& hostName = taskInternal.HostName;
     const auto& owner = taskInternal.Owner;
 
-    TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(write)");
+    TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix);
     queryBuilder.AddString("scope", task.Scope);
     queryBuilder.AddString("query_id", task.QueryId);
     queryBuilder.AddString("query", task.Query.SerializeAsString());
@@ -44,15 +44,21 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
 
     // update queries
     queryBuilder.AddText(
-        "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation, `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal\n"
+        "UPDATE `" QUERIES_TABLE_NAME "` SET `" GENERATION_COLUMN_NAME "` = $generation" + (taskInternal.ShouldAbortTask ? ", `" QUERY_COLUMN_NAME "` = $query" : TString{""}) + "\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+    );
+
+    // update pending
+    queryBuilder.AddText(
+        "UPDATE `" PENDING_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" INTERNAL_COLUMN_NAME "` = $internal,\n"
+        "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     // update pending small
     queryBuilder.AddText(
         "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now,\n"
-        "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" IS_RESIGN_QUERY_COLUMN_NAME "` = false,\n"
-        "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
+        "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" IS_RESIGN_QUERY_COLUMN_NAME "` = false\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
@@ -72,24 +78,27 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
 {
     const auto& task = taskInternal.Task;
 
-    TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(read)");
+    TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix);
     queryBuilder.AddString("scope", task.Scope);
     queryBuilder.AddString("query_id", task.QueryId);
     queryBuilder.AddTimestamp("from", taskLeaseTimestamp);
 
     queryBuilder.AddText(
-        "SELECT `" GENERATION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`\n"
+        "SELECT `" GENERATION_COLUMN_NAME "`\n"
         "FROM `" QUERIES_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "SELECT `" LAST_SEEN_AT_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" LAST_SEEN_AT_COLUMN_NAME "` < $from;\n"
+        "SELECT `" INTERNAL_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`\n"
+        "FROM `" PENDING_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks](const TVector<TResultSet>& resultSets) mutable {
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
-        constexpr size_t expectedResultSetsSize = 2;
+        constexpr size_t expectedResultSetsSize = 3;
 
         if (resultSets.size() != expectedResultSetsSize || !resultSets[1].RowsCount()) {
             return std::make_pair(TString{}, TParamsBuilder{}.Build());
@@ -99,7 +108,12 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
             TResultSetParser parser(resultSets[0]);
             while (parser.TryNextRow()) {
                 task.Generation = parser.ColumnParser(GENERATION_COLUMN_NAME).GetOptionalUint64().GetOrElse(0) + 1;
+            }
+        }
 
+        {
+            TResultSetParser parser(resultSets[2]);
+            while (parser.TryNextRow()) {
                 if (!task.Query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     throw TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
                 }
@@ -159,7 +173,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     auto response = std::make_shared<std::tuple<TVector<TEvControlPlaneStorage::TTask>, TString>>(); //tasks, owner
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "GetTask(read stale ro)");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     const auto taskLeaseTimestamp = TInstant::Now() - Config.TaskLeaseTtl;
     queryBuilder.AddTimestamp("from", taskLeaseTimestamp);
     queryBuilder.AddUint64("tasks_limit", tasksBatchSize);
@@ -220,9 +234,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         const size_t numTasks = (std::min(tasks.size(), tasksBatchSize) + numTasksProportion - 1) / numTasksProportion;
 
         for (size_t i = 0; i < numTasks; ++i) {
-            auto tupleParams = MakeGetTaskUpdateQuery(tasks[i],
-                responseTasks, taskLeaseTimestamp, Config.Proto.GetDisableCurrentIam(),
-                Config.AutomaticQueriesTtl, Config.ResultSetsTtl); // using for win32 build
+            auto tupleParams = MakeGetTaskUpdateQuery(tasks[i], responseTasks, taskLeaseTimestamp, Config.Proto.GetDisableCurrentIam(), Config.AutomaticQueriesTtl, Config.ResultSetsTtl); // using for win32 build
             auto readQuery = std::get<0>(tupleParams);
             auto readParams = std::get<1>(tupleParams);
             auto prepareParams = std::get<2>(tupleParams);
@@ -233,13 +245,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     const auto query = queryBuilder.Build();
     auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
-    auto result = readStatus.Apply(
-        [=,
-        resultSets=resultSets,
-        requestCounters=requestCounters,
-        debugInfo=debugInfo,
-        responseTasks=responseTasks] (const auto& readFuture) mutable
-    {
+    auto result = readStatus.Apply([=, resultSets=resultSets, requestCounters=requestCounters, debugInfo=debugInfo, responseTasks=responseTasks](const auto& readFuture) mutable {
         try {
             if (!readFuture.GetValue().IsSuccess())
                 return readFuture;

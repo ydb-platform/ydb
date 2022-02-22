@@ -327,9 +327,6 @@ void TProgram::SetParametersYson(const TString& parameters) {
     }
 
     OperationOptions_.ParametersYson = node;
-    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-        modules->SetParameters(node);
-    }
 }
 
 bool TProgram::ExtractQueryParametersMetadata() {
@@ -1387,19 +1384,6 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
 bool TProgram::HasActiveProcesses() {
     for (const auto& dp : DataProviders_) {
         if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool TProgram::NeedWaitForActiveProcesses() {
-    bool flag = HasActiveProcesses();
-    if (!flag) {
-        return false;
-    }
-    for (const auto& dp : DataProviders_) {
-        if (dp.WaitForActiveProcesses) {
             return true;
         }
     }

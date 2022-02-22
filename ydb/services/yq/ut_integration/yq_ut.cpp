@@ -822,8 +822,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                 request, CreateYqSettings<TDescribeJobSettings>(folderId))
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_meta().common().id(), queryId);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().meta().id(), jobId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_meta().common().id(), queryId);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_name(), "test_query_name_1");
         }
     }

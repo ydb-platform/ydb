@@ -13,7 +13,6 @@ SRCS(
     yql_restricted_yson.h
     yql_codec_type_flags.cpp
     yql_codec_type_flags.h
-    yql_json_codec.cpp
 )
 
 PEERDIR(
@@ -22,7 +21,6 @@ PEERDIR(
     ydb/library/yql/providers/common/mkql
     library/cpp/yson/node
     library/cpp/yson
-    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()
@@ -30,7 +28,3 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

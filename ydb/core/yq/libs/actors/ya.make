@@ -36,11 +36,10 @@ PEERDIR(
     ydb/core/yq/libs/actors/logging
     ydb/core/yq/libs/checkpointing
     ydb/core/yq/libs/checkpointing_common
-    ydb/core/yq/libs/db_id_async_resolver_impl
     ydb/core/yq/libs/common
     ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/control_plane_storage/events
-    ydb/library/yql/providers/common/db_id_async_resolver
+    ydb/core/yq/libs/db_resolver
     ydb/core/yq/libs/db_schema
     ydb/core/yq/libs/events
     ydb/core/yq/libs/private_client
@@ -58,7 +57,6 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
     ydb/library/yql/sql/settings
-    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/yq

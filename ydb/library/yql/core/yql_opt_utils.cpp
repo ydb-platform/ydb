@@ -207,8 +207,7 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
 
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) {
-    const TTypeAnnotationNode* argType = RemoveOptionalType(arg.GetTypeAnn());
-    if (argType->GetKind() != ETypeAnnotationKind::Struct) {
+    if (arg.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
         return false;
     }
 
@@ -216,7 +215,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
         return false;
     }
 
-    const auto inputStructType = argType->Cast<TStructExprType>();
+    const auto inputStructType = arg.GetTypeAnn()->Cast<TStructExprType>();
     if (!IsDepended(*start, arg)) {
         return inputStructType->GetSize() > 0;
     }

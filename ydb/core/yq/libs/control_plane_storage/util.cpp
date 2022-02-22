@@ -121,10 +121,4 @@ NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {
     return itemsAsList.Build();
 }
 
-std::pair<TString, TString> SplitId(const TString& id, char delim) {
-    auto it = std::find(id.begin(), id.end(), delim);
-    return std::make_pair(id.substr(0, it - id.begin()),
-        (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""}));
-}
-
 } //namespace NYq

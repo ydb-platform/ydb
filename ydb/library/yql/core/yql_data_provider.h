@@ -193,7 +193,6 @@ struct TDataProviderInfo {
     TIntrusivePtr<IDataProvider> Source;
     TIntrusivePtr<IDataProvider> Sink;
     bool SupportFullResultDataSink = false;
-    bool WaitForActiveProcesses = true;
 
     std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
         ESourceSyntax syntax)> RemoteClusterProvider;

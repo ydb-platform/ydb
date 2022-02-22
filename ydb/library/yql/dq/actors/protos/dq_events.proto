@@ -75,8 +75,7 @@ message TEvComputeChannelDataAck {
 
 message TEvAbortExecution {
     optional Ydb.StatusIds.StatusCode StatusCode = 1;
-    optional string LegacyMessage = 2; // TODO: remove
-    repeated Ydb.Issue.IssueMessage Issues = 4;
+    optional string Message = 2;
 }
 
 message TRlPath {

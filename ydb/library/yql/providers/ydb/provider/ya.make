@@ -25,6 +25,7 @@ PEERDIR(
     library/cpp/time_provider
     library/cpp/yson/node
     ydb/core/yq/libs/common
+    ydb/core/yq/libs/db_resolver
     ydb/library/yql/ast
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
@@ -38,7 +39,6 @@ PEERDIR(
     ydb/library/yql/core/type_ann
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/dq
     ydb/library/yql/providers/common/mkql
     ydb/library/yql/providers/common/proto

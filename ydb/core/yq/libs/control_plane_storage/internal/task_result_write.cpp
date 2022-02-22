@@ -47,7 +47,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
 
     itemsAsList.EndList();
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "TaskResultWrite");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix);
     queryBuilder.AddString("result_id", resultId);
     queryBuilder.AddInt32("result_set_id", resultSetId);
     queryBuilder.AddTimestamp("expire_at", deadline);

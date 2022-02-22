@@ -4,53 +4,10 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
-#include <util/string/builder.h>
-#include <util/string/hex.h>
-#include <util/digest/murmur.h>
-#include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr {
 namespace NPQ {
-
-
-TString GetSourceIdSelectQueryFromPath(const TString& path) {
-    TStringBuilder res;
-    res << "--!syntax_v1\n"
-           "DECLARE $Hash AS Uint32; "
-           "DECLARE $Topic AS Utf8; "
-           "DECLARE $SourceId AS Utf8; "
-           "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
-           "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
-    return res;
-}
-
-TString GetSourceIdSelectQuery(const TString& root) {
-    return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2");
-}
-
-TString GetUpdateIdSelectQueryFromPath(const TString& path) {
-    TStringBuilder res;
-    res << "--!syntax_v1\n"
-           "DECLARE $SourceId AS Utf8; "
-           "DECLARE $Topic AS Utf8; "
-           "DECLARE $Hash AS Uint32; "
-           "DECLARE $Partition AS Uint32; "
-           "DECLARE $CreateTime AS Uint64; "
-           "DECLARE $AccessTime AS Uint64;\n"
-           "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
-                                       "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
-
-    return res;
-}
-
-TString GetUpdateIdSelectQuery(const TString& root) {
-    return GetUpdateIdSelectQueryFromPath(root + "/SourceIdMeta2");
-}
-
-
 namespace NSourceIdEncoding {
-
-static const ui32 MURMUR_ARRAY_SEED = 0x9747b28c;
 
 struct TTags {
     static constexpr char Simple = 0;
@@ -126,18 +83,6 @@ bool IsValidEncoded(const TString& sourceId) {
         return false;
     }
 }
-
-
-TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId) {
-    TEncodedSourceId res;
-    TString encodedSourceId = Encode(userSourceId);
-    res.EscapedSourceId = HexEncode(encodedSourceId);
-
-    TString s = topic + encodedSourceId;
-    res.Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
-    return res;
-}
-
 
 } // NSourceIdEncoding
 } // NPQ

@@ -40,10 +40,14 @@ TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_l
     : TYdbCommand(name, aliases, description)
     , Seconds(0)
     , Threads(0)
+    , ClientTimeoutMs(0)
+    , OperationTimeoutMs(0)
+    , CancelAfterTimeoutMs(0)
+    , WindowDurationSec(0)
     , Quiet(false)
     , PrintTimestamp(false)
-    , WindowHist(1000, 2) // highestTrackableValue 1000ms = 1s, precision 2
-    , TotalHist(1000, 2)
+    , WindowHist(60000, 2) // highestTrackableValue 60000ms = 60s, precision 2
+    , TotalHist(60000, 2)
     , TotalRetries(0)
     , WindowRetryCount(0)
     , TotalErrors(0)
@@ -61,6 +65,14 @@ void TWorkloadCommand::Config(TConfig& config) {
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&PrintTimestamp);
+    config.Opts->AddLongOption("client-timeout", "Client timeout in ms.")
+        .DefaultValue(1000).StoreResult(&ClientTimeoutMs);
+    config.Opts->AddLongOption("operation-timeout", "Operation timeout in ms.")
+        .DefaultValue(800).StoreResult(&OperationTimeoutMs);
+    config.Opts->AddLongOption("cancel-after", "Cancel after timeout in ms.")
+        .DefaultValue(800).StoreResult(&CancelAfterTimeoutMs);
+    config.Opts->AddLongOption("window", "Window duration in seconds.")
+        .DefaultValue(1).StoreResult(&WindowDurationSec);
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
@@ -84,7 +96,9 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
 void TWorkloadCommand::WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, const int type) {
     auto querySettings = NYdb::NTable::TExecDataQuerySettings()
             .KeepInQueryCache(true)
-            .ClientTimeout(TDuration::Seconds(2));
+            .OperationTimeout(TDuration::MilliSeconds(OperationTimeoutMs))
+            .ClientTimeout(TDuration::MilliSeconds(ClientTimeoutMs))
+            .CancelAfter(TDuration::MilliSeconds(CancelAfterTimeoutMs));
     int retryCount = -1;
 
     NYdbWorkload::TQueryInfo queryInfo;
@@ -140,7 +154,7 @@ void TWorkloadCommand::WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, co
 
 int TWorkloadCommand::RunWorkload(TWorkloadQueryGenPtr workloadGen, const int type) {
     if (!Quiet) {
-        std::cout << "Elapsed\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
+        std::cout << "Window\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
         if (PrintTimestamp) {
             std::cout << "\tTimestamp";
         }
@@ -156,11 +170,12 @@ int TWorkloadCommand::RunWorkload(TWorkloadQueryGenPtr workloadGen, const int ty
     }, 0, Threads, NPar::TLocalExecutor::MED_PRIORITY);
 
     int windowIt = 1;
+    auto windowDuration = TDuration::Seconds(WindowDurationSec);
     while (Now() < StopTime) {
-        if (StartTime + windowIt * WINDOW_DURATION < Now()) {
+        if (StartTime + windowIt * windowDuration < Now()) {
             PrintWindowStats(windowIt++);
         }
-        Sleep(std::max(TDuration::Zero(), Now() - StartTime - windowIt * WINDOW_DURATION));
+        Sleep(std::max(TDuration::Zero(), Now() - StartTime - windowIt * windowDuration));
     }
 
     for (auto f : futures) {
@@ -187,7 +202,7 @@ void TWorkloadCommand::PrintWindowStats(int windowIt) {
         WindowHist.Reset();
     }
     if (!Quiet) {
-        std::cout << windowIt << "\t" << std::setw(7) << stats.OpsCount / WINDOW_DURATION.Seconds() << "\t" << retries << "\t"
+        std::cout << windowIt << "\t" << std::setw(7) << stats.OpsCount / WindowDurationSec << "\t" << retries << "\t"
             << errors << "\t" << stats.Percentile50 << "\t" << stats.Percentile95 << "\t"
             << stats.Percentile99 << "\t" << stats.Percentile100;
         if (PrintTimestamp) {

@@ -41,13 +41,15 @@ protected:
     void WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, const int type);
     void PrintWindowStats(int windowIt);
 
-    static constexpr TDuration WINDOW_DURATION = TDuration::Seconds(1);
-
     std::unique_ptr<NYdb::TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
 
     size_t Seconds;
     size_t Threads;
+    unsigned int ClientTimeoutMs;
+    unsigned int OperationTimeoutMs;
+    unsigned int CancelAfterTimeoutMs;
+    unsigned int WindowDurationSec;
     bool Quiet;
     bool PrintTimestamp;
 

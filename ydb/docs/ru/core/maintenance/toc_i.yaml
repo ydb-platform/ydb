@@ -33,8 +33,6 @@ items:
       href: manual/disk_end_space.md
     - name: Расширение кластера
       href: manual/cluster_expansion.md
-    - name: Декоммиссия узлов и дисков
-      href: manual/cluster_decomision.md
     - name: Добавление групп хранения
       href: manual/adding_storage_groups.md
     - name: Безопасные рестарт и выключение узлов
@@ -43,7 +41,7 @@ items:
       href: manual/selfheal.md
     - name: Включение/выключение Scrubbing
       href: manual/scrubbing.md
-    - name: Перевоз виртуальных дисков
+    - name: Перевоз VDisk'ов
       href: manual/moving_vdisks.md
     - name: Изменение конфигураций через CMS
       href: manual/cms.md

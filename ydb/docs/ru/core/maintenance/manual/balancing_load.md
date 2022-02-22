@@ -4,7 +4,7 @@
 
 ## Распределить нагрузку равномерно по группам
 
-На странице [web-мониторинга хайва](../embedded_monitoring/hive.md#reassign_groups), в нижней части экрана есть кнокпа "Reassign Groups".
+На странице [Hive web-viewer](../embedded_monitoring/hive.md#reassign_groups), в нижней части экрана есть кнопка "Reassign Groups".
 
 ## Разложить VDisk'и равномерно по устройствам
 
@@ -25,7 +25,7 @@ Command {
 ```
     
 ```
-kikimr -s <ендпоинт> admin bs config invoke --proto-file ReadHostConfig.txt
+kikimr -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
 ```
 
 Требуется вставить полученный конфиг в протобуф ниже и поменять в нем поле **PDiskConfig/ExpectedSlotCount**.
@@ -39,5 +39,5 @@ Command {
 ```
     
 ```
-kikimr -s <ендпоинт> admin bs config invoke --proto-file DefineHostConfig.txt
+kikimr -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
 ```

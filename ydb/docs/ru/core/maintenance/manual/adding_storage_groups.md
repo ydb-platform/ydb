@@ -15,10 +15,10 @@ Command {
 ```
     
 ```
-kikimr -s <ендпоинт> admin bs config invoke --proto-file ReadStoragePool.txt
+kikimr -s <endpoint> admin bs config invoke --proto-file ReadStoragePool.txt
 ```
 
-Требуется вставить полученный конфиг пула в протобуф ниже и поменять в нем поле **NumGroups**.
+Требуется вставить полученный конфиг пула в protobuf ниже и поменять в нем поле **NumGroups**.
 
 ```proto
 Command {
@@ -29,5 +29,5 @@ Command {
 ```
     
 ```
-kikimr -s <ендпоинт> admin bs config invoke --proto-file DefineStoragePool.txt
+kikimr -s <endpoint> admin bs config invoke --proto-file DefineStoragePool.txt
 ```

@@ -2,7 +2,7 @@
 
 ## Увезти один VDisk'ов с блочного устройтства {#moving_vdisk}
 
-Для того чтобы перевезти VDisk'и с блочного устройства, надо зайти на ноду по ssh и выполнить следующую команду.
+Для того чтобы перевезти VDisk'и с блочного устройства, надо зайти на узел по ssh и выполнить следующую команду.
 
 ```bash
 kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <ID группы хранения> GroupGeneration: <Поколение группы хранения> FailRealmIdx: <FailRealm> FailDomainIdx: <FailDomain> VDiskIdx: <Номер слота> } }'
@@ -16,7 +16,7 @@ kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <I
 
 1. Убедиться в мониторинге, что VDisk действительно в нерабочем состоянии.
 
-    Записать fqdn узла, ic-port, путь до VDisk'а, pdiskId
+    Записать fqdn узла, ic-port, путь до VDisk'а, pdisk-id
 
 2. Зайти на любой узел кластера
 
@@ -30,12 +30,12 @@ kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <I
 
 1. Убедиться в мониторинге, что PDisk в рабочем состоянии
 
-    Записать fqdn узла, ic-port, путь до устройства, pdiskId
+    Записать fqdn узла, ic-port, путь до устройства, pdisk-id
 
 2. Зайти на любой узел кластера
 
 3. Вернуть PDisk
 
     ```bash
-    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-pord>} Path: "<Путь до партлейбла устройства>" PDiskId: <pdisk-id> Status: ACTIVE } }'
+    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Путь до партлейбла устройства>" PDiskId: <pdisk-id> Status: ACTIVE } }'
     ```

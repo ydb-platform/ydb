@@ -35,7 +35,7 @@
 
 3) Добавить новые узлы в DefineBox
 
-    Пример протофайла для DefineBox
+    Пример protobuf для DefineBox
 
     ```
     Command {
@@ -74,5 +74,5 @@
     Применение команды
 
     ```
-    kikimr -s <ендпоинт> admin bs config invoke --proto-file DefineBox.txt
+    kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```

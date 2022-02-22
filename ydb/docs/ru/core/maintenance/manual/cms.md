@@ -5,11 +5,11 @@
 Следующая команда позволит получить текущие настройки по кластеру или по тенанту.
 
 ```
-./kikimr -s <ендпоинт> admin console configs load --out-dir <папка-для-конфигов>
+./kikimr -s <endpoint> admin console configs load --out-dir <config-folder>
 ```
 
 ```
-./kikimr -s <ендпоинт> admin console configs load --out-dir <папка-для-конфигов> --tenant <имя-тенанта>
+./kikimr -s <endpoint> admin console configs load --out-dir <config-folder> --tenant <tenant-name>
 ```
 
 ## Обновить настройки
@@ -20,15 +20,15 @@
 Actions {
   AddConfigItem {
     ConfigItem {
-      Cookie: "<куки>"
+      Cookie: "<cookie>"
       UsageScope {
         TenantAndNodeTypeFilter {
-          Tenant: "<имя-тенанта>"
+          Tenant: "<tenant-name>"
         }
       }
       Config {
-          <имя-конфига> {
-              <полный конфиг>
+          <config-name> {
+              <full-config>
           }
       }
     }
@@ -39,5 +39,5 @@ Actions {
 Поле UsageScope необязательно, и нужно для применения настроек для определенного тенанта.
 
 ```
-./kikimr -s <ендпоинт> admin console configs update <файл-с-настройками>
+./kikimr -s <endpoint> admin console configs update <protobuf-file>
 ```

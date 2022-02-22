@@ -57,9 +57,44 @@ struct TCompactionInfo {
     }
 };
 
-struct TTtlInfo {
+struct TTiersInfo {
+    struct TTierTimeBorder {
+        TString TierName;
+        TInstant EvictBorder;
+
+        TTierTimeBorder(TString tierName, TInstant evictBorder)
+            : TierName(tierName)
+            , EvictBorder(evictBorder)
+        {}
+
+        std::shared_ptr<arrow::Scalar> ToTimestamp() const {
+            if (Scalar) {
+                return Scalar;
+            }
+
+            Scalar = std::make_shared<arrow::TimestampScalar>(
+                EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
+            return Scalar;
+        }
+
+    private:
+        mutable std::shared_ptr<arrow::Scalar> Scalar;
+    };
+
     TString Column;
-    std::shared_ptr<arrow::Scalar> Border;
+    std::vector<TTierTimeBorder> TierBorders; // Ordered tiers from hottest to coldest
+
+    TTiersInfo(const TString& column, TInstant border = {}, const TString& tierName = {})
+        : Column(column)
+    {
+        if (border) {
+            AddTier(tierName, border);
+        }
+    }
+
+    void AddTier(const TString& tierName, TInstant border) {
+        TierBorders.emplace_back(TTierTimeBorder(tierName, border));
+    }
 };
 
 class TColumnEngineChanges {
@@ -92,6 +127,8 @@ public:
     TVector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
     TVector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
     TVector<TPortionInfo> PortionsToDrop;
+    TVector<std::pair<TPortionInfo, TString>> PortionsToEvict; // {portion, target tier name}
+    TVector<TColumnRecord> EvictedRecords;
     TVector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     THashMap<TBlobRange, TString> Blobs;
 
@@ -143,6 +180,13 @@ public:
             out << "move " << moved << " portions";
             for (auto& [portionInfo, granule] : changes.PortionsToMove) {
                 out << portionInfo << " (to " << granule << ")";
+            }
+            out << "; ";
+        }
+        if (ui32 evicted = changes.PortionsToEvict.size()) {
+            out << "evict " << evicted << " portions";
+            for (auto& [portionInfo, tier] : changes.PortionsToEvict) {
+                out << portionInfo << " (to " << tier << ")";
             }
             out << "; ";
         }
@@ -260,6 +304,7 @@ struct TColumnEngineStats {
     TPortionsStats Compacted{};
     TPortionsStats SplitCompacted{};
     TPortionsStats Inactive{};
+    TPortionsStats Evicted{};
 
     void Clear() {
         *this = {};
@@ -288,7 +333,7 @@ public:
                                                                   const TSnapshot& outdatedSnapshot) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
                                                                THashSet<ui64>& pathsToDrop) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTtlInfo>& pathTtls) = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls) = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO

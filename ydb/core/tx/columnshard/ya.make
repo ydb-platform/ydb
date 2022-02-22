@@ -23,6 +23,7 @@ SRCS(
     columnshard_impl.cpp
     columnshard_common.cpp
     compaction_actor.cpp
+    eviction_actor.cpp
     indexing_actor.cpp
     read_actor.cpp
     write_actor.cpp

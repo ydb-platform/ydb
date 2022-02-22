@@ -12,7 +12,8 @@ struct TPortionMeta {
         INSERTED = 1,
         COMPACTED = 2,
         SPLIT_COMPACTED = 3,
-        INACTIVE = 4
+        INACTIVE = 4,
+        EVICTED = 5,
     };
 
     struct TColumnMeta {
@@ -42,9 +43,12 @@ struct TPortionMeta {
 };
 
 struct TPortionInfo {
+    static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
+
     TVector<TColumnRecord> Records;
     TPortionMeta Meta;
     ui32 FirstPkColumn = 0;
+    TString TierName;
 
     bool Empty() const { return Records.empty(); }
     bool Valid() const { return !Empty() && Meta.Produced != TPortionMeta::UNSPECIFIED && HasMinMax(FirstPkColumn); }
@@ -112,6 +116,13 @@ struct TPortionInfo {
         }
     }
 
+    void UpdateRecordsMeta(TPortionMeta::EProduced produced) {
+        Meta.Produced = produced;
+        for (auto& record : Records) {
+            record.Metadata = GetMetadata(record);
+        }
+    }
+
     void SetStale(const TSnapshot& snapshot) {
         for (auto& rec : Records) {
             rec.SetXSnapshot(snapshot);
@@ -125,7 +136,8 @@ struct TPortionInfo {
 
     TString GetMetadata(const TColumnRecord& rec) const;
     void LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec);
-    void AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch);
+    void AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch,
+                     const TString& tierName);
     void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
@@ -176,17 +188,24 @@ struct TPortionInfo {
                                            const std::shared_ptr<arrow::Schema>& schema,
                                            const THashMap<TBlobRange, TString>& data) const;
 
+    static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
+                                   const std::shared_ptr<arrow::Field>& field,
+                                   const arrow::ipc::IpcWriteOptions& writeOptions);
+
     TString AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                               const std::shared_ptr<arrow::Field>& field,
                               TColumnRecord&& record,
                               const arrow::ipc::IpcWriteOptions& writeOptions,
-                              ui32 limitBytes = 8 * 1024 * 1024);
+                              ui32 limitBytes = BLOB_BYTES_LIMIT);
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         for (auto& rec : info.Records) {
             out << " " << rec;
             out << " (1 of " << info.Records.size() << " blobs shown)";
             break;
+        }
+        if (!info.TierName.empty()) {
+            out << " tier: " << info.TierName;
         }
         out << " " << info.Meta;
         return out;

@@ -225,9 +225,8 @@ public:
         return batch;
     }
 
-    static NOlap::TTtlInfo MakeTtl(ui64 ts) {
-        auto scalar = std::make_shared<arrow::TimestampScalar>(ts, arrow::timestamp(arrow::TimeUnit::MICRO));
-        return NOlap::TTtlInfo{testColumns[0].first, scalar};
+    static NOlap::TTiersInfo MakeTtl(TInstant border) {
+        return NOlap::TTiersInfo(testColumns[0].first, border);
     }
 
 private:
@@ -341,7 +340,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 }
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
-         const THashMap<ui64, NOlap::TTtlInfo>& pathTtls, ui32 expectedToDrop) {
+         const THashMap<ui64, NOlap::TTiersInfo>& pathTtls, ui32 expectedToDrop) {
     std::shared_ptr<TColumnEngineChanges> changes = engine.StartTtl(pathTtls);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
@@ -649,8 +648,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         // TTL
-        THashMap<ui64, NOlap::TTtlInfo> pathTtls;
-        pathTtls.emplace(pathId, TBuilder::MakeTtl(10000));
+        THashMap<ui64, NOlap::TTiersInfo> pathTtls;
+        pathTtls.emplace(pathId, TBuilder::MakeTtl(TInstant::MicroSeconds(10000)));
         Ttl(engine, db, pathTtls, 2);
 
         // read + load + read

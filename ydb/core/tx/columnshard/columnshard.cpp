@@ -13,6 +13,7 @@ namespace NKikimr::NColumnShard {
 
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent);
 IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent);
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
@@ -27,6 +28,7 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx)
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     ctx.Send(IndexingActor, new TEvents::TEvPoisonPill);
     ctx.Send(CompactionActor, new TEvents::TEvPoisonPill);
+    ctx.Send(EvictionActor, new TEvents::TEvPoisonPill);
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
@@ -34,6 +36,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
+    EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
     SignalTabletActive(ctx);
 }
 
@@ -308,6 +311,12 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_INACTIVE_ROWS, stats.Inactive.Rows);
     SetCounter(COUNTER_INACTIVE_BYTES, stats.Inactive.Bytes);
     SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.Inactive.RawBytes);
+
+    SetCounter(COUNTER_EVICTED_PORTIONS, stats.Evicted.Portions);
+    SetCounter(COUNTER_EVICTED_BLOBS, stats.Evicted.Blobs);
+    SetCounter(COUNTER_EVICTED_ROWS, stats.Evicted.Rows);
+    SetCounter(COUNTER_EVICTED_BYTES, stats.Evicted.Bytes);
+    SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.Evicted.RawBytes);
 }
 
 void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {

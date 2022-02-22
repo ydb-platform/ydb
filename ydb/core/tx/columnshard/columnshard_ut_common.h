@@ -53,8 +53,11 @@ struct TTestSchema {
             return !Codec.empty();
         }
 
-        TStorageTier& SetCodec(const TString& codec) {
+        TStorageTier& SetCodec(const TString& codec, std::optional<int> level = {}) {
             Codec = codec;
+            if (level) {
+                CompressionLevel = *level;
+            }
             return *this;
         }
 
@@ -186,6 +189,7 @@ struct TTestSchema {
             auto* tiering = ttlSettings->MutableTiering();
             for (auto& tier : specials.Tiers) {
                 auto* t = tiering->AddTiers();
+                t->SetName(tier.Name);
                 t->MutableEviction()->SetColumnName(tier.TtlColumn);
                 t->MutableEviction()->SetExpireAfterSeconds(*tier.EvictAfterSeconds);
             }
@@ -215,6 +219,7 @@ struct TTestSchema {
             auto* tiering = ttlSettings->MutableTiering();
             for (auto& tier : specials.Tiers) {
                 auto* t = tiering->AddTiers();
+                t->SetName(tier.Name);
                 t->MutableEviction()->SetColumnName(tier.TtlColumn);
                 t->MutableEviction()->SetExpireAfterSeconds(*tier.EvictAfterSeconds);
             }

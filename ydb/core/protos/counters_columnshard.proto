@@ -43,6 +43,11 @@ enum ESimpleCounters {
     COUNTER_INACTIVE_BYTES = 33                             [(CounterOpts) = {Name: "Index/InactiveBytes"}];
     COUNTER_INACTIVE_RAW_BYTES = 34                         [(CounterOpts) = {Name: "Index/InactiveBytesRaw"}];
     COUNTER_SCAN_IN_FLY = 35                                [(CounterOpts) = {Name: "ScanTxInFly"}];
+    COUNTER_EVICTED_PORTIONS = 36                           [(CounterOpts) = {Name: "Index/EvictedPortions"}];
+    COUNTER_EVICTED_BLOBS = 37                              [(CounterOpts) = {Name: "Index/EvictedBlobs"}];
+    COUNTER_EVICTED_ROWS = 38                               [(CounterOpts) = {Name: "Index/EvictedRows"}];
+    COUNTER_EVICTED_BYTES = 39                              [(CounterOpts) = {Name: "Index/EvictedBytes"}];
+    COUNTER_EVICTED_RAW_BYTES = 40                          [(CounterOpts) = {Name: "Index/EvictedBytesRaw"}];
 }
 
 enum ECumulativeCounters {
@@ -110,6 +115,9 @@ enum ECumulativeCounters {
     COUNTER_SMALL_BLOB_READ_BYTES = 61                      [(CounterOpts) = {Name: "SmallBlobReadBytes"}];
     COUNTER_SMALL_BLOB_DELETE_COUNT = 62                    [(CounterOpts) = {Name: "SmallBlobDeleteCount"}];
     COUNTER_SMALL_BLOB_DELETE_BYTES = 63                    [(CounterOpts) = {Name: "SmallBlobDeleteBytes"}];
+    COUNTER_EVICTION_PORTIONS_WRITTEN = 64                  [(CounterOpts) = {Name: "EvictionPortionsWritten"}];
+    COUNTER_EVICTION_BLOBS_WRITTEN = 65                     [(CounterOpts) = {Name: "EvictionBlobsWritten"}];
+    COUNTER_EVICTION_BYTES_WRITTEN = 66                     [(CounterOpts) = {Name: "EvictionBytesWritten"}];
 }
 
 enum EPercentileCounters {

@@ -1134,6 +1134,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
+        static ui32 numKinds = 5;
 
         CreateTestOlapTable(kikimr);
         for (ui64 i = 0; i < 100; ++i) {
@@ -1151,7 +1152,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4*3);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), numKinds*3);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
         UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
         UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
@@ -1175,6 +1176,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
+        static ui32 numKinds = 5;
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1195,9 +1197,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GT(rows.size(), 1*4);
-            UNIT_ASSERT_LE(rows.size(), 3*4);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds
+            UNIT_ASSERT_GT(rows.size(), 1*numKinds);
+            UNIT_ASSERT_LE(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull);
         }
@@ -1210,9 +1212,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GT(rows.size(), 1*4);
-            UNIT_ASSERT_LE(rows.size(), 3*4);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds
+            UNIT_ASSERT_GT(rows.size(), 1*numKinds);
+            UNIT_ASSERT_LE(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull);
         }
@@ -1236,6 +1238,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
+        static ui32 numKinds = 5;
 
         CreateTestOlapTable(kikimr);
         for (ui64 i = 0; i < 10; ++i) {
@@ -1271,7 +1274,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
             UNIT_ASSERT_LE(GetUint64(rows[0].at("Bytes")), GetUint64(rows[1].at("Bytes")));
         }
         {
@@ -1282,7 +1285,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("Rows")), GetUint64(rows[2].at("Rows2")));
@@ -1296,6 +1299,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
+        static ui32 numKinds = 5;
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1344,11 +1348,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3*4);
+            ui32 numExpected = 3*3*numKinds;
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[35].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[35].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
         }
 
         {
@@ -1366,11 +1371,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2*3*4);
+            ui32 numExpected = 2*3*numKinds;
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[23].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[23].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
         }
     }
 
@@ -1424,7 +1430,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind == UInt32("5")
+                WHERE Kind == UInt32("6")
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -1444,7 +1450,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GE(rows.size(), 3*2);
+            UNIT_ASSERT_GE(rows.size(), 3*3);
         }
     }
 
@@ -1453,6 +1459,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
+        static ui32 numKinds = 5;
 
         CreateTestOlapTable(kikimr, "olapTable_1");
         CreateTestOlapTable(kikimr, "olapTable_2");
@@ -1589,7 +1596,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             // 3 Tables with 3 Shards each and 4 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*4);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
         }
 
         {
@@ -1603,7 +1610,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 4ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), numKinds);
             UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
         }
 
@@ -1619,7 +1626,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
             for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 12);
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 3*numKinds);
             }
         }
     }

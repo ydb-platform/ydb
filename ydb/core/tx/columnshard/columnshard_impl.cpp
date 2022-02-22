@@ -412,7 +412,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
             schemaPreset.emplace(NOlap::TSnapshot{version.Step, version.TxId},
                                  ConvertSchema(schemaPresetVerProto.GetSchema()));
 
-            SetPrimaryIndex(std::move(schemaPreset), Ttl.TtlColumns());
+            SetPrimaryIndex(std::move(schemaPreset));
         }
 
         tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
@@ -544,14 +544,13 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
 #endif
 
     if (!schemaPreset.empty()) {
-        SetPrimaryIndex(std::move(schemaPreset), Ttl.TtlColumns());
+        SetPrimaryIndex(std::move(schemaPreset));
     }
 }
 
-void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions,
-                                   const THashSet<TString>& ttlColumns) {
+void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions) {
     for (auto& [snap, indexInfo] : schemaVersions) {
-        for (auto& columnName : ttlColumns) {
+        for (auto& columnName : Ttl.TtlColumns()) {
             indexInfo.AddTtlColumn(columnName);
         }
 
@@ -587,7 +586,11 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     }
 
     if (auto event = SetupTtl()) {
-        ctx.Send(SelfId(), event.release());
+        if (event->NeedWrites()) {
+            ctx.Send(EvictionActor, event.release());
+        } else {
+            ctx.Send(SelfId(), event->TxEvent.release());
+        }
     }
 
     LastBackActivation = TInstant::Now();
@@ -698,8 +701,8 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev));
 }
 
-std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTtlInfo>& pathTtls,
-                                                                  bool force) {
+std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiersInfo>& pathTtls,
+                                                               bool force) {
     if (ActiveTtl) {
         LOG_S_DEBUG("Ttl already in progress at tablet " << TabletID());
         return {};
@@ -709,9 +712,9 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap
         return {};
     }
 
-    THashMap<ui64, NOlap::TTtlInfo> regularTtls;
+    THashMap<ui64, NOlap::TTiersInfo> regularTtls;
     if (pathTtls.empty()) {
-        regularTtls = Ttl.MakeIndexTtlMap(force);
+        regularTtls = Ttl.MakeIndexTtlMap(TInstant::Now(), force);
     }
 
     if (pathTtls.empty() && regularTtls.empty()) {
@@ -733,10 +736,11 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap
         return {};
     }
 
+    bool needWrites = !indexChanges->PortionsToEvict.empty();
+
     ActiveTtl = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false);
-    ev->PutStatus = NKikimrProto::OK; // No blobs to write, start TTxWriteIndex in event handler
-    return ev;
+    return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), needWrites);
 }
 
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
@@ -792,6 +796,28 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     return ev;
 }
 
+static NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    NOlap::TCompression out;
+    if (compression.HasCompressionCodec()) {
+        switch (compression.GetCompressionCodec()) {
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+                out.Codec = arrow::Compression::UNCOMPRESSED;
+                break;
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                out.Codec = arrow::Compression::LZ4_FRAME;
+                break;
+            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                out.Codec = arrow::Compression::ZSTD;
+                break;
+        }
+    }
+
+    if (compression.HasCompressionLevel()) {
+        out.Level = compression.GetCompressionLevel();
+    }
+    return out;
+}
+
 NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
     Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
@@ -812,29 +838,17 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     }
 
     if (schema.HasDefaultCompression()) {
-        auto& compression = schema.GetDefaultCompression();
-        if (compression.HasCompressionCodec()) {
-            arrow::Compression::type codec = arrow::Compression::LZ4_FRAME;
-            switch (compression.GetCompressionCodec()) {
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                    codec = arrow::Compression::UNCOMPRESSED;
-                    break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                    codec = arrow::Compression::LZ4_FRAME; // TODO: should ColumnCodecLZ4 be mapped to LZ4 (row variant)?
-                    break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                    codec = arrow::Compression::ZSTD;
-                    break;
-            }
-            indexInfo.SetDefaultCompressionCodec(codec);
-        }
+        NOlap::TCompression compression = ConvertCompression(schema.GetDefaultCompression());
+        indexInfo.SetDefaultCompression(compression);
+    }
 
-        if (compression.HasCompressionLevel()) {
-            int level = compression.GetCompressionLevel();
-            indexInfo.SetDefaultCompressionLevel(level);
-        } else {
-            indexInfo.SetDefaultCompressionLevel(); // set default
+    for (auto& tierConfig : schema.GetStorageTiers()) {
+        NOlap::TStorageTier tier;
+        tier.Name = tierConfig.GetName();
+        if (tierConfig.HasCompression()) {
+            tier.Compression = ConvertCompression(tierConfig.GetCompression());
         }
+        indexInfo.AddStorageTier(std::move(tier));
     }
 
     return indexInfo;

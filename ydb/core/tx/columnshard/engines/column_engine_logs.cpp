@@ -15,12 +15,14 @@ std::shared_ptr<arrow::TimestampArray> GetTimestampColumn(const TIndexInfo& inde
 
 namespace {
 
-arrow::ipc::IpcWriteOptions WriteOptions(arrow::Compression::type codec, const std::optional<int>& level) {
+arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
+    auto& codec = compression.Codec;
+
     arrow::ipc::IpcWriteOptions options(arrow::ipc::IpcWriteOptions::Defaults());
     Y_VERIFY(arrow::util::Codec::IsAvailable(codec));
     arrow::Result<std::unique_ptr<arrow::util::Codec>> resCodec;
-    if (level) {
-        resCodec = arrow::util::Codec::Create(codec, *level);
+    if (compression.Level) {
+        resCodec = arrow::util::Codec::Create(codec, *compression.Level);
         if (!resCodec.ok()) {
             resCodec = arrow::util::Codec::Create(codec);
         }
@@ -49,7 +51,9 @@ ui64 ExtractTimestamp(const std::shared_ptr<TPredicate>& pkPredicate, const std:
 
 // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
 // They have const snapshot columns that do not break sorting inside batch.
-std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted, const TString& data) {
+std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted,
+                                                const TString& data)
+{
     auto schema = indexInfo.ArrowSchema();
     Y_VERIFY(!data.empty(), "Blob data not present");
     auto batch = NArrow::DeserializeBatch(data, schema);
@@ -70,6 +74,50 @@ std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, con
     return arrow::RecordBatch::Make(extendedSchema, numRows, columns);
 }
 
+bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo, const TString& tierName,
+                          const THashMap<TBlobRange, TString>& srcBlobs,
+                          TVector<TColumnRecord>& evictedRecords, TVector<TString>& newBlobs)
+{
+    Y_VERIFY(portionInfo.TierName != tierName);
+
+    auto compression = indexInfo.GetTierCompression(tierName);
+    if (!compression) {
+        // Noting to recompress. We have no other kinds of evictions yet. Return.
+        portionInfo.TierName = tierName;
+        return true;
+    }
+
+    auto schema = indexInfo.ArrowSchemaWithSpecials();
+    auto batch = portionInfo.AssembleInBatch(indexInfo, schema, srcBlobs);
+    auto writeOptions = WriteOptions(*compression);
+
+    TPortionInfo undo = portionInfo;
+    size_t undoSize = newBlobs.size();
+
+    std::vector<TString> blobs;
+    for (auto& rec : portionInfo.Records) {
+        auto colName = indexInfo.GetColumnName(rec.ColumnId);
+        std::string name(colName.data(), colName.size());
+        auto field = schema->GetFieldByName(name);
+
+        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(name), field, writeOptions);
+        if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
+            portionInfo = undo;
+            newBlobs.resize(undoSize);
+            return false;
+        }
+        newBlobs.emplace_back(std::move(blob));
+        rec.BlobRange = TBlobRange{};
+    }
+
+    for (auto& rec : undo.Records) {
+        evictedRecords.emplace_back(std::move(rec));
+    }
+
+    portionInfo.AddMetadata(indexInfo, batch, tierName);
+    return true;
+}
+
 TVector<TPortionInfo> MakeAppendedPortions(const TIndexInfo& indexInfo,
                                            std::shared_ptr<arrow::RecordBatch> batch,
                                            ui64 granule,
@@ -79,7 +127,12 @@ TVector<TPortionInfo> MakeAppendedPortions(const TIndexInfo& indexInfo,
     auto schema = indexInfo.ArrowSchemaWithSpecials();
     TVector<TPortionInfo> out;
 
-    auto writeOptions = WriteOptions(indexInfo.CompressionCodec(), indexInfo.CompressionLevel());
+    TString tierName = indexInfo.GetTierName(0);
+    auto compression = indexInfo.GetTierCompression(0);
+    if (!compression) {
+        compression = indexInfo.GetDefaultCompression();
+    }
+    auto writeOptions = WriteOptions(*compression);
 
     std::shared_ptr<arrow::RecordBatch> portionBatch = batch;
     for (i32 pos = 0; pos < batch->num_rows();) {
@@ -111,7 +164,7 @@ TVector<TPortionInfo> MakeAppendedPortions(const TIndexInfo& indexInfo,
         }
 
         if (ok) {
-            portionInfo.AddMetadata(indexInfo, portionBatch);
+            portionInfo.AddMetadata(indexInfo, portionBatch, tierName);
             out.emplace_back(std::move(portionInfo));
             for (auto& blob : portionBlobs) {
                 blobs.push_back(blob);
@@ -341,7 +394,8 @@ ui64 TColumnEngineForLogs::MemoryUsage() const {
     ui64 numPortions = Counters.Inserted.Portions +
         Counters.Compacted.Portions +
         Counters.SplitCompacted.Portions +
-        Counters.Inactive.Portions;
+        Counters.Inactive.Portions +
+        Counters.Evicted.Portions;
 
     return Counters.Granules * (sizeof(TGranuleMeta) + sizeof(ui64)) +
         numPortions * (sizeof(TPortionInfo) + sizeof(ui64)) +
@@ -413,6 +467,9 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
             break;
         case NOlap::TPortionMeta::INACTIVE:
             srcStats = &engineStats.Inactive;
+            break;
+        case NOlap::TPortionMeta::EVICTED:
+            srcStats = &engineStats.Evicted;
             break;
     }
     Y_VERIFY(srcStats);
@@ -699,7 +756,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTtlInfo>& pathTtls) {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls) {
     if (pathTtls.empty()) {
         return {};
     }
@@ -716,6 +773,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
             continue;
         }
 
+        Y_VERIFY(!ttl.TierBorders.empty());
+
         ui32 ttlColumnId = IndexInfo.GetColumnId(ttl.Column);
         auto& tsGranule = PathGranules[pathId];
         for (auto [ts, granule] : tsGranule) {
@@ -723,8 +782,23 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
             Y_VERIFY(spg);
 
             for (auto& [portion, info] : spg->Portions) {
+                if (!info.IsActive()) {
+                    continue;
+                }
+
                 if (auto max = info.MaxValue(ttlColumnId)) {
-                    if (NArrow::ScalarLess(*max, *ttl.Border)) {
+                    bool keep = false;
+                    for (auto& border : ttl.TierBorders) {
+                        if (NArrow::ScalarLess(*border.ToTimestamp(), *max)) {
+                            keep = true;
+                            if (info.TierName != border.TierName) {
+                                changes->PortionsToEvict.emplace_back(info, border.TierName);
+                            }
+                            break;
+                        }
+                    }
+                    if (!keep) {
+                        Y_VERIFY(!NArrow::ScalarLess(*ttl.TierBorders.back().ToTimestamp(), *max));
                         changes->PortionsToDrop.push_back(info);
                     }
                 }
@@ -732,7 +806,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
         }
     }
 
-    if (changes->PortionsToDrop.empty()) {
+    if (changes->PortionsToDrop.empty() &&
+        changes->PortionsToEvict.empty()) {
         return {};
     }
 
@@ -815,17 +890,19 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     for (auto& portionInfo : changes->AppendedPortions) {
         portionInfo.UpdateRecords(++portion, granuleRemap, snapshot);
 
-        portionInfo.Meta.Produced = TPortionMeta::INSERTED;
+        TPortionMeta::EProduced produced = TPortionMeta::INSERTED;
         // If it's a split compaction with moves appended portions are INSERTED (could have overlaps with others)
         if (changes->IsCompaction() && changes->PortionsToMove.empty()) {
             Y_VERIFY(changes->CompactionInfo);
-            portionInfo.Meta.Produced = changes->CompactionInfo->InGranule ?
+            produced = changes->CompactionInfo->InGranule ?
                 TPortionMeta::COMPACTED : TPortionMeta::SPLIT_COMPACTED;
         }
 
-        for (auto& record : portionInfo.Records) {
-            record.Metadata = portionInfo.GetMetadata(record);
-        }
+        portionInfo.UpdateRecordsMeta(produced);
+    }
+
+    for (auto& [portionInfo, _] : changes->PortionsToEvict) {
+        portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
     }
 
     for (auto& [_, id] : changes->PortionsToMove) {
@@ -940,7 +1017,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
 
             ui64 granule = portionInfo.Granule();
             if (!Granules.count(granule)) {
-                LOG_S_ERROR("Cannot update portions with unknown granule " << granule << " at tablet " << TabletId);
+                LOG_S_ERROR("Cannot update portion " << portionInfo << " with unknown granule at tablet " << TabletId);
                 return false;
             }
 
@@ -966,6 +1043,43 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
                 for (auto& record : portionInfo.Records) {
                     ColumnsTable->Write(db, record);
                 }
+            }
+        }
+    }
+
+    // Update evicted portions
+    // There could be race between compaction and eviction. Allow compaction and disallow eviction in this case.
+
+    for (auto& [info, _] : changes.PortionsToEvict) {
+        const auto& portionInfo = info;
+        Y_VERIFY(!portionInfo.Empty());
+        Y_VERIFY(portionInfo.IsActive());
+
+        ui64 granule = portionInfo.Granule();
+        ui64 portion = portionInfo.Portion();
+        if (!Granules.count(granule) || !Granules[granule]->Portions.count(portion)) {
+            LOG_S_ERROR("Cannot evict unknown portion " << portionInfo << " at tablet " << TabletId);
+            return false;
+        }
+
+        // In case of race with compaction portion could become inactive
+        // TODO: evict others instead of abort eviction
+        auto& oldInfo = Granules[granule]->Portions[portion];
+        if (!oldInfo.IsActive()) {
+            LOG_S_WARN("Cannot evict inactive portion " << oldInfo << " at tablet " << TabletId);
+            return false;
+        }
+        Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
+
+        // TODO: update stats
+        if (!UpsertPortion(portionInfo, apply, false)) {
+            LOG_S_ERROR("Cannot evict portion " << portionInfo << " at tablet " << TabletId);
+            return false;
+        }
+
+        if (apply) {
+            for (auto& record : portionInfo.Records) {
+                ColumnsTable->Write(db, record);
             }
         }
     }
@@ -1793,6 +1907,31 @@ TVector<TString> TColumnEngineForLogs::CompactBlobs(const TIndexInfo& indexInfo,
         return CompactInGranule(indexInfo, castedChanges);
     }
     return CompactSplitGranule(indexInfo, castedChanges);
+}
+
+TVector<TString> TColumnEngineForLogs::EvictBlobs(const TIndexInfo& indexInfo,
+                                                  std::shared_ptr<TColumnEngineChanges> changes) {
+    Y_VERIFY(changes);
+    Y_VERIFY(!changes->Blobs.empty()); // src data
+    Y_VERIFY(!changes->PortionsToEvict.empty()); // src meta
+    Y_VERIFY(changes->EvictedRecords.empty()); // dst meta
+
+    TVector<TString> newBlobs;
+    TVector<std::pair<TPortionInfo, TString>> evicted;
+    evicted.reserve(changes->PortionsToEvict.size());
+
+    for (auto& [portionInfo, tierName] : changes->PortionsToEvict) {
+        Y_VERIFY(!portionInfo.Empty());
+        Y_VERIFY(portionInfo.IsActive());
+
+        if (UpdateEvictedPortion(portionInfo, indexInfo, tierName, changes->Blobs, changes->EvictedRecords, newBlobs)) {
+            Y_VERIFY(portionInfo.TierName == tierName);
+            evicted.emplace_back(std::move(portionInfo), TString{});
+        }
+    }
+
+    changes->PortionsToEvict.swap(evicted);
+    return newBlobs;
 }
 
 }

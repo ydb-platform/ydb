@@ -213,7 +213,17 @@ public:
         TString accumulatedBlob;
         TVector<std::pair<size_t, TString>> recordsInBlob;
 
-        for (auto& portionInfo : indexChanges->AppendedPortions) {
+        size_t portionsToWrite = indexChanges->AppendedPortions.size();
+        bool appended = true;
+        if (indexChanges->PortionsToEvict.size()) {
+            Y_VERIFY(portionsToWrite == 0);
+            portionsToWrite = indexChanges->PortionsToEvict.size();
+            appended = false;
+        }
+
+        for (size_t pos = 0; pos < portionsToWrite; ++pos) {
+            auto& portionInfo = appended ? indexChanges->AppendedPortions[pos]
+                                         : indexChanges->PortionsToEvict[pos].first;
             auto& records = portionInfo.Records;
 
             accumulatedBlob.clear();

@@ -75,8 +75,8 @@ private:
 
     TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
 
-    static constexpr const ui64 NUM_KINDS = 4;
-    static_assert(NUM_KINDS == NOlap::TPortionMeta::INACTIVE, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
+    static constexpr const ui64 NUM_KINDS = 5;
+    static_assert(NUM_KINDS == NOlap::TPortionMeta::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
 
     std::shared_ptr<arrow::RecordBatch> FillStatsBatch() {
 
@@ -132,40 +132,51 @@ private:
         using TUInt64 = arrow::UInt64Type::c_type;
         using TUInt32 = arrow::UInt32Type::c_type;
 
-        TUInt64 pathIds[NUM_KINDS] = {pathId, pathId, pathId, pathId};
-        /// It's better to keep it in sync with TPortionMeta::EProduced
-        TUInt32 kinds[NUM_KINDS] = {1, 2, 3, 4};
+        TUInt64 pathIds[NUM_KINDS] = {pathId, pathId, pathId, pathId, pathId};
+        /// It's in sync with TPortionMeta::EProduced
+        TUInt32 kinds[NUM_KINDS] = {
+            (ui32)NOlap::TPortionMeta::INSERTED,
+            (ui32)NOlap::TPortionMeta::COMPACTED,
+            (ui32)NOlap::TPortionMeta::SPLIT_COMPACTED,
+            (ui32)NOlap::TPortionMeta::INACTIVE,
+            (ui32)NOlap::TPortionMeta::EVICTED
+        };
         ui64 tabletId = ReadMetadata->TabletId;
-        TUInt64 tabletIds[NUM_KINDS] = {tabletId, tabletId, tabletId, tabletId};
+        TUInt64 tabletIds[NUM_KINDS] = {tabletId, tabletId, tabletId, tabletId, tabletId};
         TUInt64 rows[NUM_KINDS] = {
             stats.Inserted.Rows,
             stats.Compacted.Rows,
             stats.SplitCompacted.Rows,
-            stats.Inactive.Rows
+            stats.Inactive.Rows,
+            stats.Evicted.Rows
         };
         TUInt64 bytes[NUM_KINDS] = {
             stats.Inserted.Bytes,
             stats.Compacted.Bytes,
             stats.SplitCompacted.Bytes,
-            stats.Inactive.Bytes
+            stats.Inactive.Bytes,
+            stats.Evicted.Bytes
         };
         TUInt64 rawBytes[NUM_KINDS] = {
             stats.Inserted.RawBytes,
             stats.Compacted.RawBytes,
             stats.SplitCompacted.RawBytes,
-            stats.Inactive.RawBytes
+            stats.Inactive.RawBytes,
+            stats.Evicted.RawBytes
         };
         TUInt64 portions[NUM_KINDS] = {
             stats.Inserted.Portions,
             stats.Compacted.Portions,
             stats.SplitCompacted.Portions,
-            stats.Inactive.Portions
+            stats.Inactive.Portions,
+            stats.Evicted.Portions
         };
         TUInt64 blobs[NUM_KINDS] = {
             stats.Inserted.Blobs,
             stats.Compacted.Blobs,
             stats.SplitCompacted.Blobs,
-            stats.Inactive.Blobs
+            stats.Inactive.Blobs,
+            stats.Evicted.Blobs
         };
 
         if (Reverse) {

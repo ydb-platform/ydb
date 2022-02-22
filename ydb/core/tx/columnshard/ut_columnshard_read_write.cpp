@@ -1119,7 +1119,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto batchStats = scan->ArrowBatch;
             UNIT_ASSERT(batchStats);
             // Cerr << batchStats->ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 5);
 
             for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                 auto paths = batchStats->GetColumnByName("PathId");

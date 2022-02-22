@@ -9,36 +9,51 @@ public:
 
     struct TEviction {
         TString TierName;
-        TString ColumnName;
-        TDuration ExpireAfter;
+        TDuration EvictAfter;
     };
 
     struct TDescription {
+        TString ColumnName;
         std::vector<TEviction> Evictions;
 
         TDescription() = default;
 
         TDescription(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
+            TDuration prevEvicSec;
+
             if (ttl.HasEnabled()) {
                 auto& enabled = ttl.GetEnabled();
-                Evictions.emplace_back(
-                    TEviction{{}, enabled.GetColumnName(), TDuration::Seconds(enabled.GetExpireAfterSeconds())});
+                ColumnName = enabled.GetColumnName();
+                auto expireSec = TDuration::Seconds(enabled.GetExpireAfterSeconds());
+
+                Evictions.reserve(1);
+                Evictions.emplace_back(TEviction{{}, expireSec});
             } else if (ttl.HasTiering()) {
+                Evictions.reserve(ttl.GetTiering().TiersSize());
+
                 for (auto& tier : ttl.GetTiering().GetTiers()) {
                     auto& eviction = tier.GetEviction();
-                    Evictions.emplace_back(TEviction{tier.GetName(),
-                        eviction.GetColumnName(), TDuration::Seconds(eviction.GetExpireAfterSeconds())});
+                    Y_VERIFY(ColumnName.empty() || ColumnName == eviction.GetColumnName());
+                    ColumnName = eviction.GetColumnName();
+                    auto evictSec = TDuration::Seconds(eviction.GetExpireAfterSeconds());
+
+                    // Ignore next tier if it has smaller eviction time. Prefer first tier with same eviction time.
+                    if (evictSec > prevEvicSec) {
+                        Evictions.emplace_back(TEviction{tier.GetName(), evictSec});
+                        prevEvicSec = evictSec;
+                    }
                 }
+
+                Evictions.shrink_to_fit();
+            }
+
+            if (Enabled()) {
+                Y_VERIFY(!ColumnName.empty());
             }
         }
 
         bool Enabled() const {
             return !Evictions.empty();
-        }
-
-        const TEviction& LastTier() const {
-            Y_VERIFY(!Evictions.empty());
-            return Evictions.back();
         }
     };
 
@@ -48,10 +63,11 @@ public:
 
     void SetPathTtl(ui64 pathId, TDescription&& descr) {
         if (descr.Enabled()) {
-            for (auto& evict : descr.Evictions) {
-                if (!evict.ColumnName.empty()) {
-                    Columns.insert(evict.ColumnName);
-                }
+            auto it = Columns.find(descr.ColumnName);
+            if (it != Columns.end()) {
+                descr.ColumnName = *it; // replace string dups (memory efficiency)
+            } else {
+                Columns.insert(descr.ColumnName);
             }
             PathTtls[pathId] = descr;
         } else {
@@ -63,17 +79,17 @@ public:
         PathTtls.erase(pathId);
     }
 
-    THashMap<ui64, NOlap::TTtlInfo> MakeIndexTtlMap(bool force = false) {
-        if ((TInstant::Now() < LastRegularTtl + RegularTtlTimeout) && !force) {
+    THashMap<ui64, NOlap::TTiersInfo> MakeIndexTtlMap(TInstant now, bool force = false) {
+        if ((now < LastRegularTtl + RegularTtlTimeout) && !force) {
             return {};
         }
 
-        THashMap<ui64, NOlap::TTtlInfo> out;
+        THashMap<ui64, NOlap::TTiersInfo> out;
         for (auto& [pathId, descr] : PathTtls) {
-            out.emplace(pathId, Convert(descr));
+            out.emplace(pathId, Convert(descr, now));
         }
 
-        LastRegularTtl = TInstant::Now();
+        LastRegularTtl = now;
         return out;
     }
 
@@ -85,13 +101,16 @@ private:
     TDuration RegularTtlTimeout{TDuration::Seconds(DEFAULT_TTL_TIMEOUT_SEC)};
     TInstant LastRegularTtl;
 
-    NOlap::TTtlInfo Convert(const TDescription& descr) const {
-        auto& lastTier = descr.LastTier();
-        ui64 border = (TInstant::Now() - lastTier.ExpireAfter).MicroSeconds();
-        return NOlap::TTtlInfo{
-            .Column = lastTier.ColumnName,
-            .Border = std::make_shared<arrow::TimestampScalar>(border, arrow::timestamp(arrow::TimeUnit::MICRO))
-        };
+    NOlap::TTiersInfo Convert(const TDescription& descr, TInstant timePoint) const {
+        Y_VERIFY(descr.Enabled());
+        NOlap::TTiersInfo out(descr.ColumnName);
+
+        for (auto& tier : descr.Evictions) {
+            auto border = timePoint - tier.EvictAfter;
+            out.AddTier(tier.TierName, border);
+        }
+
+        return out;
     }
 };
 

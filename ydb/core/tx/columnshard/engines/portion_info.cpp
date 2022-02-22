@@ -3,24 +3,19 @@
 
 namespace NKikimr::NOlap {
 
-namespace {
-
-TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-                        const std::shared_ptr<arrow::Field>& field,
-                        const arrow::ipc::IpcWriteOptions& writeOptions, int64_t& memSize) {
-
+TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
+                                      const std::shared_ptr<arrow::Field>& field,
+                                      const arrow::ipc::IpcWriteOptions& writeOptions)
+{
     std::vector<std::shared_ptr<arrow::Field>> tmp{field};
     auto schema = std::make_shared<arrow::Schema>(tmp);
     auto batch = arrow::RecordBatch::Make(schema, array->length(), {array});
     Y_VERIFY(batch);
-#if 0
-    auto status = GetRecordBatchSize(*batch, arrow::ipc::IpcWriteOptions::Defaults(), &memSize);
-    Y_VERIFY(status.ok());
-#else
-    Y_UNUSED(memSize);
-#endif
+
     return NArrow::SerializeBatch(batch, writeOptions);
 }
+
+namespace {
 
 std::shared_ptr<arrow::ChunkedArray> DeserializeBlobs(const TVector<TString>& blobs, std::shared_ptr<arrow::Field> field) {
     Y_VERIFY(!blobs.empty());
@@ -46,8 +41,7 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
                                         TColumnRecord&& record,
                                         const arrow::ipc::IpcWriteOptions& writeOptions,
                                         ui32 limitBytes) {
-    int64_t memSize = 0;
-    auto blob = SerializeColumn(array, field, writeOptions, memSize);
+    auto blob = SerializeColumn(array, field, writeOptions);
     if (blob.size() >= limitBytes) {
         return {};
     }
@@ -124,7 +118,11 @@ void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>&
     Meta.ColumnMeta[columnId].Max = NArrow::GetScalar(column, minMaxPos.second);
 }
 
-void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch) {
+void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch,
+                               const TString& tierName) {
+    TierName = tierName;
+    Meta = {};
+
     /// @note It does not add RawBytes info for snapshot columns, only for user ones.
     for (auto& [columnId, col] : indexInfo.Columns) {
         auto column = batch->GetColumnByName(col.Name);
@@ -165,22 +163,31 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
     }
 
     if (rec.ColumnId == FirstPkColumn) {
+        auto* portionMeta = meta.MutablePortionMeta();
+
         switch (Meta.Produced) {
             case TPortionMeta::UNSPECIFIED:
                 Y_VERIFY(false);
             case TPortionMeta::INSERTED:
-                meta.MutablePortionMeta()->SetIsInserted(true);
+                portionMeta->SetIsInserted(true);
                 break;
             case TPortionMeta::COMPACTED:
-                meta.MutablePortionMeta()->SetIsCompacted(true);
+                portionMeta->SetIsCompacted(true);
                 break;
             case TPortionMeta::SPLIT_COMPACTED:
-                meta.MutablePortionMeta()->SetIsSplitCompacted(true);
+                portionMeta->SetIsSplitCompacted(true);
+                break;
+            case TPortionMeta::EVICTED:
+                portionMeta->SetIsEvicted(true);
                 break;
             case TPortionMeta::INACTIVE:
                 Y_FAIL("Unexpected inactive case");
-                //meta.MutablePortionMeta()->SetInactive(true);
+                //portionMeta->SetInactive(true);
                 break;
+        }
+
+        if (!TierName.empty()) {
+            portionMeta->SetTierName(TierName);
         }
     }
 
@@ -203,12 +210,16 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
 
     if (meta.HasPortionMeta()) {
         auto& portionMeta = meta.GetPortionMeta();
+        TierName = portionMeta.GetTierName();
+
         if (portionMeta.GetIsInserted()) {
             Meta.Produced = TPortionMeta::INSERTED;
         } else if (portionMeta.GetIsCompacted()) {
             Meta.Produced = TPortionMeta::COMPACTED;
         } else if (portionMeta.GetIsSplitCompacted()) {
             Meta.Produced = TPortionMeta::SPLIT_COMPACTED;
+        } else if (portionMeta.GetIsEvicted()) {
+            Meta.Produced = TPortionMeta::EVICTED;
         }
     }
     if (meta.HasNumRows()) {

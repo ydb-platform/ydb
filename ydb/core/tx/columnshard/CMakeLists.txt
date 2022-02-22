@@ -44,6 +44,7 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/indexing_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp

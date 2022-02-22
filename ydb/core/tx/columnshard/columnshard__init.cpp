@@ -271,7 +271,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     Self->SetCounter(COUNTER_TABLE_TTLS, ttls.size());
 
     if (!schemaPreset.empty()) {
-        Self->SetPrimaryIndex(std::move(schemaPreset), Self->Ttl.TtlColumns());
+        Self->SetPrimaryIndex(std::move(schemaPreset));
     }
 
     { // Load long tx writes

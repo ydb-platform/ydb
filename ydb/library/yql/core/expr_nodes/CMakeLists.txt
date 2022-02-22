@@ -6,13 +6,11 @@ target_link_libraries(yql-core-expr_nodes PUBLIC
   yql-public-udf
   yql-core-issue
 )
-target_sources(yql-core-expr_nodes INTERFACE
+target_sources(yql-core-expr_nodes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes/yql_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes/yql_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes/yql_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes/yql_expr_nodes.defs.inl.h
-)
-target_sources(yql-core-expr_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes/yql_expr_nodes.cpp
 )
 add_custom_command(
   OUTPUT

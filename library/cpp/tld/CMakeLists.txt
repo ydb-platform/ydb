@@ -6,11 +6,9 @@ target_link_libraries(library-cpp-tld PUBLIC
   yutil
   cpp-digest-lower_case
 )
-target_sources(library-cpp-tld INTERFACE
-  ${CMAKE_BINARY_DIR}/library/cpp/tld/tld.inc
-)
 target_sources(library-cpp-tld PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/tld/tld.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/tld/tld.inc
 )
 add_custom_command(
   OUTPUT

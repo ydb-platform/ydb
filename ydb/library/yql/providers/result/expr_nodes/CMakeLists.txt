@@ -5,13 +5,11 @@ target_link_libraries(providers-result-expr_nodes PUBLIC
   yql-core-expr_nodes
   providers-common-provider
 )
-target_sources(providers-result-expr_nodes INTERFACE
+target_sources(providers-result-expr_nodes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h
-)
-target_sources(providers-result-expr_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.cpp
 )
 add_custom_command(
   OUTPUT

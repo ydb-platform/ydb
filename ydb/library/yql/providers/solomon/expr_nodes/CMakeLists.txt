@@ -5,13 +5,11 @@ target_link_libraries(providers-solomon-expr_nodes PUBLIC
   yql-core-expr_nodes
   providers-common-provider
 )
-target_sources(providers-solomon-expr_nodes INTERFACE
+target_sources(providers-solomon-expr_nodes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.defs.inl.h
-)
-target_sources(providers-solomon-expr_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.cpp
 )
 add_custom_command(
   OUTPUT

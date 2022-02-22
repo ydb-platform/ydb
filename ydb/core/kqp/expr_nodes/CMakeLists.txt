@@ -4,13 +4,11 @@ target_link_libraries(core-kqp-expr_nodes PUBLIC
   yutil
   yql-dq-expr_nodes
 )
-target_sources(core-kqp-expr_nodes INTERFACE
+target_sources(core-kqp-expr_nodes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
-)
-target_sources(core-kqp-expr_nodes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.cpp
 )
 add_custom_command(
   OUTPUT

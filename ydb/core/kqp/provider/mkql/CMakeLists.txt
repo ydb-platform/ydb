@@ -32,11 +32,6 @@ target_link_libraries(kqp-provider-mkql INTERFACE
   library-cpp-cpuid_check
   src-Modules-_sqlite
 )
-target_sources(kqp-provider-mkql INTERFACE
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.defs.inl.h
-)
 add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.gen.h

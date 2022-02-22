@@ -6,11 +6,9 @@ target_link_libraries(library-cpp-build_info PUBLIC
   yutil
   cpp-string_utils-base64
 )
-target_sources(library-cpp-build_info INTERFACE
-  ${CMAKE_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
-)
 target_sources(library-cpp-build_info PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/build_info/build_info_static.cpp
+  ${CMAKE_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
   ${CMAKE_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
   ${CMAKE_BINARY_DIR}/library/cpp/build_info/build_info.cpp
 )

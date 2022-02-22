@@ -28,11 +28,6 @@ target_link_libraries(core-kqp-provider PUBLIC
   yql-sql-pg_dummy
   tools-enum_parser-enum_serialization_runtime
 )
-target_sources(core-kqp-provider INTERFACE
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
-)
 target_sources(core-kqp-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/kqp_opt_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_datasink.cpp
@@ -52,6 +47,9 @@ target_sources(core-kqp-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_results.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
+  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
+  ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
 )
 add_custom_command(
   OUTPUT

@@ -4,11 +4,6 @@ target_link_libraries(providers-dq-expr_nodes INTERFACE
   yutil
   yql-core-expr_nodes
 )
-target_sources(providers-dq-expr_nodes INTERFACE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.gen.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.decl.inl.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.defs.inl.h
-)
 add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.gen.h

@@ -186,7 +186,7 @@ namespace NKikimr::NYaml {
         std::unordered_map<TString, ui64> tablets = {
             {"FLAT_HIVE", 72057594037968897},
             {"FLAT_BS_CONTROLLER", 72057594037932033},
-            {"FLAT_SCHEMESHARD", 72075186232723360},
+            {"FLAT_SCHEMESHARD", 72057594046678944},
             {"CMS", 72057594037936128},
             {"NODE_BROKER", 72057594037936129},
             {"TENANT_SLOT_BROKER", 72057594037936130},
@@ -530,7 +530,7 @@ namespace NKikimr::NYaml {
             }
 
             if (!domain.Has("scheme_root")) {
-                domain.InsertValue("scheme_root", std::move(NJson::TJsonValue(72075186232723360)));
+                domain.InsertValue("scheme_root", std::move(NJson::TJsonValue(72057594046678944)));
             }
 
             if (!domain.Has("plan_resolution")){

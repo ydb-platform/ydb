@@ -1558,19 +1558,17 @@ TRuntimeNode TProgramBuilder::Sort(TRuntimeNode list, TRuntimeNode ascending, co
 
 TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        auto itemType = flowType->IsFlow() ? AS_TYPE(TFlowType, flowType)->GetItemType() : AS_TYPE(TStreamType, flowType)->GetItemType();
-        const auto finalKeyExtractor = [&](TRuntimeNode item) {
-            return keyExtractor(Unpickle(itemType, item));
-        };
+        const auto itemType = flowType->IsFlow() ? AS_TYPE(TFlowType, flowType)->GetItemType() : AS_TYPE(TStreamType, flowType)->GetItemType();
+        const auto finalKeyExtractor = [&](TRuntimeNode item) { return Nth(item, 1U); };
 
         return Map(FlatMap(Condense1(flow,
-                [this](TRuntimeNode item) { return AsList(Pickle(item)); },
+                [&](TRuntimeNode item) { return AsList(NewTuple({Pickle(item), keyExtractor(item)})); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
-                [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, Pickle(item), ascending, finalKeyExtractor); }
+                [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, NewTuple({Pickle(item), keyExtractor(item)}), ascending, finalKeyExtractor); }
             ),
             [&](TRuntimeNode list) { return Top(list, count, ascending, finalKeyExtractor); }
         ), [&](TRuntimeNode item) {
-            return Unpickle(itemType, item);
+            return Unpickle(itemType, Nth(item, 0U));
         });
     }
 
@@ -1579,19 +1577,18 @@ TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntim
 
 TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        auto itemType = flowType->IsFlow() ? AS_TYPE(TFlowType, flowType)->GetItemType() : AS_TYPE(TStreamType, flowType)->GetItemType();
-        const auto finalKeyExtractor = [&](TRuntimeNode item) {
-            return keyExtractor(Unpickle(itemType, item));
-        };
-
+        const auto itemType = flowType->IsFlow() ? AS_TYPE(TFlowType, flowType)->GetItemType() : AS_TYPE(TStreamType, flowType)->GetItemType();
+        const auto finalKeyExtractor = [&](TRuntimeNode item) { return Nth(item, 1U); };
         return Map(FlatMap(Condense1(flow,
-                [this](TRuntimeNode item) { return AsList(Pickle(item)); },
+                [&](TRuntimeNode item) { return AsList(NewTuple({Pickle(item), keyExtractor(item)})); },
                 [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
-                [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, Pickle(item), ascending, finalKeyExtractor); }
+                [&](TRuntimeNode item, TRuntimeNode state) {
+                    return KeepTop(count, state, NewTuple({Pickle(item), keyExtractor(item)}), ascending, finalKeyExtractor);
+                }
             ),
             [&](TRuntimeNode list) { return TopSort(list, count, ascending, finalKeyExtractor); }
         ), [&](TRuntimeNode item) {
-            return Unpickle(itemType, item);
+            return Unpickle(itemType, Nth(item, 0U));
         });
     }
 

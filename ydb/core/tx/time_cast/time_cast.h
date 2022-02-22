@@ -21,15 +21,41 @@ public:
     void Update(ui64 step, ui64 *exemption, ui64 exsz);
 };
 
+class TMediatorTimecastReadStep : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<TMediatorTimecastReadStep>;
+    using TCPtr = TIntrusiveConstPtr<TMediatorTimecastReadStep>;
+
+    TMediatorTimecastReadStep(ui64 nextReadStep = 0)
+        : NextReadStep{ nextReadStep }
+    { }
+
+    ui64 Get() const {
+        return NextReadStep.load();
+    }
+
+    void Update(ui64 nextReadStep) {
+        NextReadStep.store(nextReadStep);
+    }
+
+private:
+    std::atomic<ui64> NextReadStep;
+};
+
 struct TEvMediatorTimecast {
     enum EEv {
         // local part
         EvRegisterTablet = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATORTIMECAST),
         EvUnregisterTablet,
         EvWaitPlanStep,
+        EvSubscribeReadStep,
+        EvUnsubscribeReadStep,
+        EvWaitReadStep,
 
         EvRegisterTabletResult = EvRegisterTablet + 1 * 512,
         EvNotifyPlanStep,
+        EvSubscribeReadStepResult,
+        EvNotifyReadStep,
 
         // mediator part
         EvWatch = EvRegisterTablet + 2 * 512,
@@ -135,6 +161,100 @@ struct TEvMediatorTimecast {
                 << " TabletId# " << TabletId
                 << " PlanStep# " << PlanStep
                 << "}";
+        }
+    };
+
+    struct TEvSubscribeReadStep : public TEventLocal<TEvSubscribeReadStep, EvSubscribeReadStep> {
+        const ui64 CoordinatorId;
+
+        explicit TEvSubscribeReadStep(ui64 coordinatorId)
+            : CoordinatorId(coordinatorId)
+        {
+            Y_VERIFY(coordinatorId != 0);
+        }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << ToStringHeader() << "{"
+                << " CoordinatorId# " << CoordinatorId
+                << " }";
+        }
+    };
+
+    struct TEvUnsubscribeReadStep : public TEventLocal<TEvUnsubscribeReadStep, EvUnsubscribeReadStep> {
+        const ui64 CoordinatorId;
+
+        explicit TEvUnsubscribeReadStep(ui64 coordinatorId = 0)
+            : CoordinatorId(coordinatorId)
+        { }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << ToStringHeader() << "{"
+                << " CoordinatorId# " << CoordinatorId
+                << " }";
+        }
+    };
+
+    struct TEvSubscribeReadStepResult : public TEventLocal<TEvSubscribeReadStepResult, EvSubscribeReadStepResult> {
+        const ui64 CoordinatorId;
+        const ui64 LastReadStep;
+        const TMediatorTimecastReadStep::TCPtr ReadStep;
+
+        TEvSubscribeReadStepResult(
+                ui64 coordinatorId,
+                ui64 lastReadStep,
+                TMediatorTimecastReadStep::TCPtr readStep)
+            : CoordinatorId(coordinatorId)
+            , LastReadStep(lastReadStep)
+            , ReadStep(std::move(readStep))
+        {
+            Y_VERIFY(ReadStep);
+        }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << ToStringHeader() << "{"
+                << " CoordinatorId# " << CoordinatorId
+                << " LastReadStep# " << LastReadStep
+                << " ReadStep# " << ReadStep->Get()
+                << " }";
+        }
+    };
+
+    struct TEvWaitReadStep : public TEventLocal<TEvWaitReadStep, EvWaitReadStep> {
+        const ui64 CoordinatorId;
+        const ui64 ReadStep;
+
+        TEvWaitReadStep(ui64 coordinatorId, ui64 readStep)
+            : CoordinatorId(coordinatorId)
+            , ReadStep(readStep)
+        { }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << ToStringHeader() << "{"
+                << " CoordinatorId# " << CoordinatorId
+                << " ReadStep# " << ReadStep
+                << " }";
+        }
+    };
+
+    struct TEvNotifyReadStep : public TEventLocal<TEvNotifyReadStep, EvNotifyReadStep> {
+        const ui64 CoordinatorId;
+        const ui64 ReadStep;
+
+        TEvNotifyReadStep(ui64 coordinatorId, ui64 readStep)
+            : CoordinatorId(coordinatorId)
+            , ReadStep(readStep)
+        { }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << ToStringHeader() << "{"
+                << " CoordinatorId# " << CoordinatorId
+                << " ReadStep# " << ReadStep
+                << " }";
         }
     };
 

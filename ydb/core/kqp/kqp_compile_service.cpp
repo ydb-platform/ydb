@@ -54,7 +54,7 @@ public:
             }
 
             QueryIndex.erase(*removedItem->Value.CompileResult->Query);
-            Index.erase(removedItem->Key);
+            Index.erase(*removedItem);
         }
 
         Y_VERIFY(List.GetSize() == Index.size());

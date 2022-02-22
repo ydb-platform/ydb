@@ -43,7 +43,7 @@ GROUP BY user, SessionWindow(<time_expr>, <timeout_expr>) AS session_start
 $max_len = 1000; -- максимальная длина сессии
 $timeout = 100; -- таймаут (timeout_expr в упрощенном варианте SessionWindow)
 
-$init = ($row) -> (AsTuple($row.ts, $row.ts)); -- состояние сеессии - тапл из 1) значения временной колонки ts на первой строчке сессии и 2) на текущей строчке
+$init = ($row) -> (AsTuple($row.ts, $row.ts)); -- состояние сессии - тапл из 1) значения временной колонки ts на первой строчке сессии и 2) на текущей строчке
 $update = ($row, $state) -> {
   $is_end_session = $row.ts - $state.0 > $max_len OR $row.ts - $state.1 > $timeout;
   $new_state = AsTuple(IF($is_end_session, $row.ts, $state.0), $row.ts);

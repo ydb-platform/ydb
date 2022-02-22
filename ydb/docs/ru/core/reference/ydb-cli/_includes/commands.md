@@ -65,7 +65,7 @@ table ttl drop  | Удаление параметров TTL
 table ttl set  | Установка параметров TTL
 tools copy | Копирование таблиц
 tools dump | Выгрузка директории или таблицы в файловую систему
-[tools rename](../commands/tools/rename.md) | Переменование таблиц
+[tools rename](../commands/tools/rename.md) | Переименование таблиц
 tools restore | Восстановление из файловой системы
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Обновление YDB CLI

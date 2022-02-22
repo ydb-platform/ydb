@@ -21,7 +21,7 @@ import (
   "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // для работы с table-сервисом
   "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // для работы с table-сервисом
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // для аутентификации с использованием перменных окружения
+  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // для аутентификации с использованием переменных окружения
   "github.com/ydb-platform/ydb-go-yc" // для работы с YDB в Яндекс Облаке
 )
 ```

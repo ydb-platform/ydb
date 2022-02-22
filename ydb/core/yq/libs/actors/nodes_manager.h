@@ -29,7 +29,6 @@ IActor* CreateYqlNodesManager(
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
-    const TString& address,
     const TString& tenant = "",
     ui64 mkqlInitialMemoryLimit = 0,
     const NMonitoring::TDynamicCounterPtr& clientCounters = MakeIntrusive<NMonitoring::TDynamicCounters>());

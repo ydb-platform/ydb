@@ -60,7 +60,6 @@ public:
         const ::NYq::NCommon::TServiceCounters& serviceCounters,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
-        const TString& address,
         const TString& tenant,
         ui64 mkqlInitialMemoryLimit,
         const NMonitoring::TDynamicCounterPtr& clientCounters)
@@ -73,7 +72,6 @@ public:
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
-        , Address(address)
         , Client(
             YqSharedResources->YdbDriver,
             NYdb::TCommonClientSettings()
@@ -191,7 +189,7 @@ private:
         node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
         node.set_interconnect_port(IcPort);
-        node.set_node_address(Address);
+        // node.set_node_address(Address); // TODO: Clarify Address use and necessity
         const auto actorSystem = NActors::TActivationContext::ActorSystem();
         const auto selfId = SelfId();
         Client
@@ -264,7 +262,6 @@ private:
     NYq::TYqSharedResources::TPtr YqSharedResources;
 
     const ui32 IcPort; // Interconnect Port
-    const TString Address;
 
     TPrivateClient Client;
 
@@ -299,13 +296,12 @@ IActor* CreateYqlNodesManager(
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
-    const TString& address,
     const TString& tenant,
     ui64 mkqlInitialMemoryLimit,
     const NMonitoring::TDynamicCounterPtr& clientCounters) {
     return new TYqlNodesManagerActor(yqSharedResources, workerManagerCounters,
         timeProvider, randomProvider,
-        serviceCounters, privateApiConfig, icPort, address, tenant, mkqlInitialMemoryLimit, clientCounters);
+        serviceCounters, privateApiConfig, icPort, tenant, mkqlInitialMemoryLimit, clientCounters);
 }
 
 } // namespace NYq

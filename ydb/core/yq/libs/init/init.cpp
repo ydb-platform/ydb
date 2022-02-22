@@ -37,60 +37,6 @@
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
 
-namespace {
-
-std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname = nullptr) {
-    constexpr auto MaxLocalHostNameLength = 4096;
-    std::array<char, MaxLocalHostNameLength> buffer;
-    buffer.fill(0);
-    TString hostName;
-    TString localAddress;
-
-    int result = gethostname(buffer.data(), buffer.size() - 1);
-    if (result != 0) {
-        Cerr << "gethostname failed " << strerror(errno) << Endl;
-        return std::make_tuple(hostName, localAddress);
-    }
-
-    if (overrideHostname) {
-        memcpy(&buffer[0], overrideHostname->c_str(), Min<int>(
-            overrideHostname->size()+1, buffer.size()-1
-        ));
-    }
-
-    hostName = &buffer[0];
-
-    addrinfo request;
-    memset(&request, 0, sizeof(request));
-    request.ai_family = AF_INET6;
-    request.ai_socktype = SOCK_STREAM;
-
-    addrinfo* response = nullptr;
-    result = getaddrinfo(buffer.data(), nullptr, &request, &response);
-    if (result != 0) {
-        Cerr << "getaddrinfo failed " << gai_strerror(result) << Endl;
-        return std::make_tuple(hostName, localAddress);
-    }
-
-    std::unique_ptr<addrinfo, void (*)(addrinfo*)> holder(response, &freeaddrinfo);
-
-    if (!response->ai_addr) {
-        Cerr << "getaddrinfo failed: no ai_addr" << Endl;
-        return std::make_tuple(hostName, localAddress);
-    }
-
-    auto* sa = response->ai_addr;
-    Y_VERIFY(sa->sa_family == AF_INET6);
-    inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr),
-                &buffer[0], buffer.size() - 1);
-
-    localAddress = &buffer[0];
-
-    return std::make_tuple(hostName, localAddress);
-}
-
-}
-
 namespace NYq {
 
 using namespace NKikimr;
@@ -217,7 +163,6 @@ void Init(
     ::NYq::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
     if (protoConfig.GetNodesManager().GetEnabled()) {
-        const auto localAddr =  GetLocalAddress(&HostName());
         auto nodesManager = CreateYqlNodesManager(
             workerManagerCounters,
             TAppData::TimeProvider,
@@ -226,7 +171,6 @@ void Init(
             protoConfig.GetPrivateApi(),
             yqSharedResources,
             icPort,
-            std::get<1>(localAddr),
             tenant,
             mkqlInitialMemoryLimit,
             clientCounters);

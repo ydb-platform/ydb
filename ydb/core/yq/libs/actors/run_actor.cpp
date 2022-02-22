@@ -480,10 +480,7 @@ private:
         return count;
     }
 
-    void PrepareGraphs() {
-        if (AbortOnExceedingDqGraphsLimits()) {
-            return;
-        }
+    void UpdateAstAndPlan() {
         Yq::Private::PingTaskRequest request;
 
         TStringStream exprOut;
@@ -492,6 +489,16 @@ private:
         const auto planStr = NJson2Yson::ConvertYson2Json(planOut.Str());
         request.set_ast(exprOut.Str());
         request.set_plan(planStr);
+
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request));
+    }
+
+    void PrepareGraphs() {
+        if (AbortOnExceedingDqGraphsLimits()) {
+            return;
+        }
+
+        Yq::Private::PingTaskRequest request;
 
         request.set_result_set_count(UpdateResultIndices());
         QueryStateUpdateRequest.set_result_set_count(UpdateResultIndices());
@@ -1205,6 +1212,8 @@ private:
         } catch (const std::exception& err) {
             Issues.AddIssue(ExceptionToIssue(err));
         }
+
+        UpdateAstAndPlan();
 
         if (status == TProgram::TStatus::Ok || (DqGraphParams.size() > 0 && !DqGraphParams[0].GetResultType())) {
             PrepareGraphs();

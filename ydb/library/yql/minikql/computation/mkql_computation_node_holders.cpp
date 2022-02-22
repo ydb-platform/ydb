@@ -254,8 +254,8 @@ public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
     void operator delete(void *mem, std::size_t sz) {
-        auto extraSize = ((TDirectArrayHolderInplace*)mem)->GetSize() * sizeof(NUdf::TUnboxedValue);
-        MKQLFreeWithSize(mem, sz + extraSize);
+        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + offsetof(TDirectArrayHolderInplace, Size));
+        MKQLFreeWithSize(mem, sz + *static_cast<ui32*>(pSize) * sizeof(NUdf::TUnboxedValue));
     }
 
     void operator delete[](void *mem, std::size_t sz) = delete;

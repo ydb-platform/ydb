@@ -1600,7 +1600,7 @@ TExprNode::TPtr OptimizeLookup(const TExprNode::TPtr& node, TExprContext& ctx, T
 
 constexpr std::initializer_list<std::string_view> FlowPriority = {
     "AssumeSorted", "AssumeUnique",
-    "Map", "OrderedMap",
+    "Map", "OrderedMap", "MapNext",
     "Filter", "OrderedFilter",
     "FlatMap", "OrderedFlatMap",
     "MultiMap", "OrderedMultiMap",

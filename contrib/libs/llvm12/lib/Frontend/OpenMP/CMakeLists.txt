@@ -1,3 +1,7 @@
+set_property(SOURCE ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp
+  PROPERTY GENERATED On
+)
+
 add_library(lib-Frontend-OpenMP)
 target_include_directories(lib-Frontend-OpenMP PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP
@@ -15,3 +19,6 @@ target_sources(lib-Frontend-OpenMP PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPContext.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMPIRBuilder.cpp
 )
+
+add_dependencies(lib-Frontend-OpenMP OpenMP-gen-srcs-stealing)
+

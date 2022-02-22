@@ -7334,3 +7334,7 @@ add_custom_command(
   -d
   ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/tools/llvm-symbolizer/Opts.inc.d
 )
+add_custom_target(OpenMP-gen-srcs-stealing
+  DEPENDS ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp
+)
+

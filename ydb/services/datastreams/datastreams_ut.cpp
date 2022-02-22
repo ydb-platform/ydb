@@ -676,9 +676,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_INFO);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::EPriority::PRI_INFO);
 
@@ -737,7 +734,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                           .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy())
                                                           .AppendTopics(NYdb::NPersQueue::TTopicReadSettings().Path(streamPath)));
         ui32 readCount = 0;
-        while (readCount < 14) {
+        while (readCount < 16) {
             auto event = session->GetEvent(true);
 
             if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
@@ -753,7 +750,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 14);
+        UNIT_ASSERT_VALUES_EQUAL(readCount, 16);
     }
 
     Y_UNIT_TEST(TestPutRecords) {

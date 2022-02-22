@@ -13,7 +13,8 @@ class TUrlBuilder {
 public:
     explicit TUrlBuilder(const TString& uri);
 
-    void AddUrlParam(const TString& name, const TString& value); // Assuming name is already escaped, do not use strings from user input
+    // Assuming name is already escaped, do not use strings from user input
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value);
 
     TString Build() const;
 private:

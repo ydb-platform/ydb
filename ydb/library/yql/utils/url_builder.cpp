@@ -3,21 +3,25 @@
 
 namespace NYql {
 
-TUrlBuilder::TUrlBuilder(
-    const TString& uri)
+TUrlBuilder::TUrlBuilder(const TString& uri)
     : MainUri(uri)
-    {}
+{
+}
 
-void TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
+TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
     Params.emplace_back(TParam {name, value});
+    return *this;
 }
 
 TString TUrlBuilder::Build() const {
-    TString res = MainUri + "?";
-    for (size_t i = 0; i < Params.size(); ++i) {
-        res += TStringBuilder() << (i > 0 ? "&" : "") << Params[i].Name  << "=" << CGIEscapeRet(Params[i].Value);
+    TStringBuilder res;
+    res << MainUri << "?";
+    TStringBuf separator = ""sv;
+    for (const auto& p : Params) {
+        res << separator << p.Name  << "=" << CGIEscapeRet(p.Value);
+        separator = "&"sv;
     }
-    return res;
+    return std::move(res);
 }
 
 } // NYql

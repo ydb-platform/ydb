@@ -7,6 +7,12 @@ target_link_libraries(blockcodecs-codecs-lzma INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-lzma.global blockcodecs-codecs-lzma)
+target_link_libraries(blockcodecs-codecs-lzma.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-lzmasdk
+  cpp-blockcodecs-core
+)
 target_sources(blockcodecs-codecs-lzma.global PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/blockcodecs/codecs/lzma/lzma.cpp
 )

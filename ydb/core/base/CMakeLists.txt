@@ -73,6 +73,35 @@ generate_enum_serilization(ydb-core-base
 )
 
 add_global_library_for(ydb-core-base.global ydb-core-base)
+target_link_libraries(ydb-core-base.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-actors-core
+  cpp-actors-helpers
+  cpp-actors-interconnect
+  cpp-actors-protos
+  cpp-deprecated-enum_codegen
+  library-cpp-logger
+  library-cpp-lwtrace
+  cpp-lwtrace-mon
+  library-cpp-random_provider
+  library-cpp-time_provider
+  core-base-services
+  ydb-core-debug
+  ydb-core-erasure
+  ydb-core-protos
+  core-protos-out
+  ydb-library-aclib
+  ydb-library-login
+  ydb-library-pdisk_io
+  library-pretty_types_print-protobuf
+  library-pretty_types_print-wilson
+  ydb-library-wilson
+  api-protos-out
+  library-yql-minikql
+  library-cpp-resource
+  tools-enum_parser-enum_serialization_runtime
+)
 target_sources(ydb-core-base.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/base/f531e5f3938fdb7748ac5883aae02753.cpp
 )

@@ -13,6 +13,13 @@ target_compile_options(ip_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(ip_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  common-ip_base-lib
+)
 target_sources(ip_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
 )

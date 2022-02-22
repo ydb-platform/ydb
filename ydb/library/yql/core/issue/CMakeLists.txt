@@ -12,6 +12,14 @@ target_sources(yql-core-issue PRIVATE
 )
 
 add_global_library_for(yql-core-issue.global yql-core-issue)
+target_link_libraries(yql-core-issue.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  contrib-libs-protobuf
+  yql-public-issue
+  core-issue-protos
+)
 target_sources(yql-core-issue.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/issue/6939e1a0697a96c4e354038ff01108b2.cpp
 )

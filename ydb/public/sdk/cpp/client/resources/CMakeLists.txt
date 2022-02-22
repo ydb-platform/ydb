@@ -10,6 +10,11 @@ target_sources(cpp-client-resources PRIVATE
 )
 
 add_global_library_for(cpp-client-resources.global cpp-client-resources)
+target_link_libraries(cpp-client-resources.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+)
 target_sources(cpp-client-resources.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/public/sdk/cpp/client/resources/6ed212bf45019efe2a5e72b6d5ed50fb.cpp
 )

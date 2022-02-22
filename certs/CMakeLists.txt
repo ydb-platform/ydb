@@ -6,6 +6,11 @@ target_link_libraries(certs INTERFACE
 )
 
 add_global_library_for(certs.global certs)
+target_link_libraries(certs.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+)
 target_sources(certs.global PRIVATE
   ${CMAKE_BINARY_DIR}/certs/b03c08f91a00a60ac9d7daef45f3075a.cpp
 )

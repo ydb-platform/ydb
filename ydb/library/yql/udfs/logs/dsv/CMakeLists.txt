@@ -13,6 +13,13 @@ target_compile_options(dsv_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(dsv_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  cpp-deprecated-split
+)
 target_sources(dsv_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/logs/dsv/dsv_udf.cpp
 )

@@ -20,6 +20,16 @@ generate_enum_serilization(ydb-core-metering
 )
 
 add_global_library_for(ydb-core-metering.global ydb-core-metering)
+target_link_libraries(ydb-core-metering.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  cpp-actors-core
+  library-cpp-json
+  library-cpp-logger
+  ydb-core-base
+  library-cpp-resource
+)
 target_sources(ydb-core-metering.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
 )

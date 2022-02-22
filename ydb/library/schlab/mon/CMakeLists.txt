@@ -12,6 +12,14 @@ target_sources(library-schlab-mon PRIVATE
 )
 
 add_global_library_for(library-schlab-mon.global library-schlab-mon)
+target_link_libraries(library-schlab-mon.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-html-pcdata
+  cpp-monlib-dynamic_counters
+  library-schlab-schemu
+)
 target_sources(library-schlab-mon.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
 )

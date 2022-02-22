@@ -14,6 +14,14 @@ target_compile_options(datetime_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(datetime_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  library-cpp-timezone_conversion
+  util-draft
+)
 target_sources(datetime_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/datetime/datetime_udf.cpp
 )

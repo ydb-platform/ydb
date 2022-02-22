@@ -14,6 +14,14 @@ target_compile_options(hyperscan_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=23
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(hyperscan_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  cpp-regex-hyperscan
+  cpp-regex-pcre
+)
 target_sources(hyperscan_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperscan/hyperscan_udf.cpp
 )

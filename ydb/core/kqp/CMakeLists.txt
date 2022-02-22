@@ -55,6 +55,43 @@ add_global_library_for(ydb-core-kqp.global ydb-core-kqp)
 target_compile_options(ydb-core-kqp.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-core-kqp.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  libs-apache-arrow
+  cpp-actors-core
+  cpp-actors-helpers
+  cpp-digest-md5
+  cpp-string_utils-base64
+  ydb-core-actorlib_impl
+  ydb-core-base
+  core-client-minikql_compile
+  ydb-core-engine
+  ydb-core-formats
+  core-grpc_services-local_rpc
+  core-kqp-common
+  core-kqp-compute_actor
+  core-kqp-counters
+  core-kqp-executer
+  core-kqp-host
+  core-kqp-node
+  core-kqp-proxy
+  core-kqp-rm
+  core-kqp-runtime
+  ydb-core-protos
+  core-sys_view-service
+  ydb-core-util
+  ydb-core-ydb_convert
+  ydb-library-aclib
+  core-services-mounts
+  yql-public-issue
+  yql-utils-actor_log
+  yql-utils-log
+  api-protos
+  public-lib-base
+  public-lib-operation_id
+  library-cpp-resource
+)
 target_sources(ydb-core-kqp.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/da10233abc65c3f178c7da0ce0d7a4ea.cpp
 )

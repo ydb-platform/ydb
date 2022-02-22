@@ -232,6 +232,37 @@ add_global_library_for(core-tx-datashard.global core-tx-datashard)
 target_compile_options(core-tx-datashard.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(core-tx-datashard.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  library-cpp-resource
+  cpp-actors-core
+  cpp-containers-flat_hash
+  cpp-html-pcdata
+  cpp-string_utils-quote
+  ydb-core-actorlib_impl
+  ydb-core-base
+  ydb-core-engine
+  core-engine-minikql
+  ydb-core-formats
+  ydb-core-io_formats
+  core-kqp-runtime
+  core-persqueue-partition_key_range
+  core-persqueue-writer
+  ydb-core-protos
+  ydb-core-tablet
+  ydb-core-tablet_flat
+  ydb-core-util
+  ydb-core-wrappers
+  ydb-core-ydb_convert
+  ydb-library-aclib
+  ydb-library-binary_json
+  ydb-library-dynumber
+  api-protos
+  lib-deprecated-kicli
+  dq-actors-compute
+)
 target_sources(core-tx-datashard.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
 )

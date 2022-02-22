@@ -12,6 +12,12 @@ target_compile_options(set_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=19
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(set_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+)
 target_sources(set_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
 )

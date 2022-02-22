@@ -14,6 +14,16 @@ target_sources(cpp-lwtrace-mon PRIVATE
 )
 
 add_global_library_for(cpp-lwtrace-mon.global cpp-lwtrace-mon)
+target_link_libraries(cpp-lwtrace-mon.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-html-pcdata
+  library-cpp-lwtrace
+  lwtrace-mon-analytics
+  cpp-monlib-dynamic_counters
+  cpp-string_utils-base64
+)
 target_sources(cpp-lwtrace-mon.global PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/lwtrace/mon/55ff1192d5e8c2c093974f8d6c720a35.cpp
 )

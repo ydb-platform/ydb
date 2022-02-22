@@ -17,6 +17,13 @@ add_global_library_for(core-services-mounts.global core-services-mounts)
 target_compile_options(core-services-mounts.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(core-services-mounts.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  yql-core-user_data
+  library-yql-core
+)
 target_sources(core-services-mounts.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/services/mounts/bee1a30d03545744c170685330eaf0c3.cpp
 )

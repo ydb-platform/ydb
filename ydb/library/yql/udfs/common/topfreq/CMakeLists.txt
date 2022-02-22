@@ -13,6 +13,13 @@ target_compile_options(topfreq_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=10
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(topfreq_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  common-topfreq-static
+)
 target_sources(topfreq_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
 )

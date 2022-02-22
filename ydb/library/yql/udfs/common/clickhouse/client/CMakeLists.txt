@@ -58,6 +58,29 @@ target_include_directories(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
 )
+target_link_libraries(clickhouse_client_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  contrib-libs-cctz
+  contrib-restricted-boost
+  boost-libs-program_options
+  contrib-restricted-cityhash-1.0.2
+  contrib-restricted-fast_float
+  contrib-libs-pdqsort
+  contrib-libs-lz4
+  dragonbox
+  libs-poco-Util
+  libs-poco-Net
+  libs-poco-NetSSL_OpenSSL
+  contrib-libs-fmt
+  contrib-libs-re2
+  libs-apache-arrow
+  libs-apache-orc
+  libs-apache-avro
+  library-yql-utils
+)
 target_sources(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/clickhouse_client_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/common/DateLUT.cpp

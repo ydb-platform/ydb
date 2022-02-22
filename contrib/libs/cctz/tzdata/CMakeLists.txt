@@ -7,6 +7,12 @@ target_link_libraries(libs-cctz-tzdata INTERFACE
 )
 
 add_global_library_for(libs-cctz-tzdata.global libs-cctz-tzdata)
+target_link_libraries(libs-cctz-tzdata.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-cctz
+  library-cpp-resource
+)
 target_sources(libs-cctz-tzdata.global PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/cctz/tzdata/factory.cpp
   ${CMAKE_BINARY_DIR}/contrib/libs/cctz/tzdata/798da2443778cbca06089b6be4a5909d.cpp

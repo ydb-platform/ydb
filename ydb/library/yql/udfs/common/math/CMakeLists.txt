@@ -13,6 +13,13 @@ target_compile_options(math_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=16
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(math_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  common-math-lib
+)
 target_sources(math_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/math_udf.cpp
 )

@@ -110,6 +110,10 @@ target_include_directories(contrib-libs-protobuf.global PUBLIC
 target_include_directories(contrib-libs-protobuf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
+target_link_libraries(contrib-libs-protobuf.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+)
 target_sources(contrib-libs-protobuf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/generated_message_util.cc
 )

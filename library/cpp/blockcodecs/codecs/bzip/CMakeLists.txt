@@ -7,6 +7,12 @@ target_link_libraries(blockcodecs-codecs-bzip INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-bzip.global blockcodecs-codecs-bzip)
+target_link_libraries(blockcodecs-codecs-bzip.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-libbz2
+  cpp-blockcodecs-core
+)
 target_sources(blockcodecs-codecs-bzip.global PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/blockcodecs/codecs/bzip/bzip.cpp
 )

@@ -58,6 +58,27 @@ generate_enum_serilization(ydb-core-cms
 )
 
 add_global_library_for(ydb-core-cms.global ydb-core-cms)
+target_link_libraries(ydb-core-cms.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-actors-core
+  ydb-core-actorlib_impl
+  ydb-core-base
+  ydb-core-blobstorage
+  core-blobstorage-base
+  core-blobstorage-crypto
+  core-engine-minikql
+  ydb-core-mind
+  core-mind-bscontroller
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  core-protos-out
+  ydb-core-tablet_flat
+  core-tx-datashard
+  ydb-library-aclib
+  tools-enum_parser-enum_serialization_runtime
+)
 target_sources(ydb-core-cms.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/cms/348ccbcf47529a3467f7e0dad6f7777d.cpp
 )

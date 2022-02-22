@@ -7,6 +7,12 @@ target_link_libraries(service-pages-tablesorter INTERFACE
 )
 
 add_global_library_for(service-pages-tablesorter.global service-pages-tablesorter)
+target_link_libraries(service-pages-tablesorter.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-monlib-dynamic_counters
+)
 target_sources(service-pages-tablesorter.global PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/0c255888afcc3e2adc5fd360ee152bac.cpp
 )

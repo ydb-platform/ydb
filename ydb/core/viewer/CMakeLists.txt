@@ -35,6 +35,28 @@ add_global_library_for(ydb-core-viewer.global ydb-core-viewer)
 target_compile_options(ydb-core-viewer.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-core-viewer.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  cpp-actors-core
+  library-cpp-archive
+  cpp-mime-types
+  ydb-core-base
+  core-blobstorage-base
+  core-client-server
+  ydb-core-health_check
+  ydb-core-node_whiteboard
+  ydb-core-protos
+  ydb-core-scheme
+  core-tx-schemeshard
+  ydb-core-util
+  core-viewer-json
+  core-viewer-protos
+  library-persqueue-topic_parser
+  api-protos
+  lib-deprecated-kicli
+)
 target_sources(ydb-core-viewer.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/viewer/a073715b970a7de907a0a315d7b65d79.cpp
 )

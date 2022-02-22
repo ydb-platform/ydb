@@ -15,6 +15,11 @@ add_global_library_for(contrib-libs-tcmalloc.global contrib-libs-tcmalloc)
 target_compile_options(contrib-libs-tcmalloc.global PRIVATE
   -DTCMALLOC_256K_PAGES
 )
+target_link_libraries(contrib-libs-tcmalloc.global PUBLIC
+  contrib-libs-cxxsupp
+  contrib-restricted-abseil-cpp
+  libs-tcmalloc-malloc_extension
+)
 target_sources(contrib-libs-tcmalloc.global PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/tcmalloc/tcmalloc/tcmalloc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/tcmalloc/tcmalloc/arena.cc

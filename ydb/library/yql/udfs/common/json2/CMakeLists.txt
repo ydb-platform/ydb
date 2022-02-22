@@ -15,6 +15,15 @@ target_compile_options(json2_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=21
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(json2_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  ydb-library-binary_json
+  yql-minikql-dom
+  yql-minikql-jsonpath
+)
 target_sources(json2_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/json2/json2_udf.cpp
 )

@@ -29,6 +29,12 @@ generate_enum_serilization(library-cpp-logger
 )
 
 add_global_library_for(library-cpp-logger.global library-cpp-logger)
+target_link_libraries(library-cpp-logger.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+  library-cpp-json
+)
 target_sources(library-cpp-logger.global PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/logger/composite_creator.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/logger/file_creator.cpp

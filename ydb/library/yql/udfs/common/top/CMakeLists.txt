@@ -13,6 +13,13 @@ target_compile_options(top_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=10
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(top_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  cpp-containers-top_keeper
+)
 target_sources(top_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
 )

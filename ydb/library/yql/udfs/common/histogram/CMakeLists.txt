@@ -13,6 +13,13 @@ target_compile_options(histogram_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
+target_link_libraries(histogram_udf.global INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  cpp-histogram-adaptive
+)
 target_sources(histogram_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
 )

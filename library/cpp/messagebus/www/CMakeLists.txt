@@ -19,6 +19,20 @@ target_sources(cpp-messagebus-www PRIVATE
 )
 
 add_global_library_for(cpp-messagebus-www.global cpp-messagebus-www)
+target_link_libraries(cpp-messagebus-www.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+  library-cpp-cgiparam
+  cpp-html-pcdata
+  cpp-http-fetch
+  cpp-http-server
+  cpp-json-writer
+  library-cpp-messagebus
+  cpp-messagebus-oldmodule
+  monlib-deprecated-json
+  library-cpp-uri
+)
 target_sources(cpp-messagebus-www.global PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
 )

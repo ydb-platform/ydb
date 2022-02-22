@@ -208,7 +208,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .DefaultValue(config.IamEndpoint);
     }
 
-    opts.AddLongOption("profile", "Profile name to use configuration parameters from.")
+    opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
         .RequiredArgument("NAME").StoreResult(&ProfileName);
 
     TStringStream stream;

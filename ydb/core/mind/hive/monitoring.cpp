@@ -2390,6 +2390,94 @@ public:
     }
 };
 
+class TMoveTabletWaitActor : public TActor<TMoveTabletWaitActor>, public ISubActor {
+public:
+    TActorId Source;
+    THive* Hive;
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+    }
+
+    TMoveTabletWaitActor(const TActorId& source, THive* hive)
+        : TActor(&TMoveTabletWaitActor::StateWork)
+        , Source(source)
+        , Hive(hive)
+    {}
+
+    void PassAway() override {
+        Hive->RemoveSubActor(this);
+        return IActor::PassAway();
+    }
+
+    void Cleanup() override {
+        PassAway();
+    }
+
+    void Handle(TEvPrivate::TEvRestartComplete::TPtr& result) {
+        NJson::TJsonValue response;
+        response["status"] = result->Get()->Status;
+        Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false)));
+        PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TEvPrivate::TEvRestartComplete, Handle);
+        }
+    }
+};
+
+class TTxMonEvent_MoveTablet : public TTransactionBase<THive> {
+public:
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    TTabletId TabletId = 0;
+    TNodeId NodeId = 0;
+    bool Wait = true;
+
+    TTxMonEvent_MoveTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
+        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), NodeId);
+        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_MOVE_TABLET; }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        if (tablet == nullptr) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
+            return true;
+        }
+        TNodeInfo* node = Self->FindNode(NodeId);
+        if (node == nullptr) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Node not found\"}"));
+            return true;
+        }
+        if (Wait) {
+            TMoveTabletWaitActor* waitActor = new TMoveTabletWaitActor(Source, Self);
+            TActorId waitActorId = ctx.RegisterWithSameMailbox(waitActor);
+            tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId);
+            Self->SubActors.emplace_back(waitActor);
+        }
+        TInstant now = TActivationContext::Now();
+        tablet->MakeBalancerDecision(now);
+        Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId(), NodeId));
+        if (!Wait) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
 class TStopTabletWaitActor : public TActor<TStopTabletWaitActor>, public ISubActor {
 public:
     TActorId Source;
@@ -2426,7 +2514,6 @@ public:
         }
     }
 };
-
 
 class TTxMonEvent_StopTablet : public TTransactionBase<THive> {
 public:
@@ -3371,6 +3458,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "QueryMigration") {
         return Execute(new TTxMonEvent_QueryMigration(ev->Sender, ev, this), ctx);
+    }
+    if (page == "MoveTablet") {
+        return Execute(new TTxMonEvent_MoveTablet(ev->Sender, ev, this), ctx);
     }
     if (page == "StopTablet") {
         return Execute(new TTxMonEvent_StopTablet(ev->Sender, ev, this), ctx);

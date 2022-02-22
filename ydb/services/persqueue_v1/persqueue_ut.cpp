@@ -2269,7 +2269,7 @@ namespace {
         auto log = setup.GetLog();
         setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
         setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
-        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0);
+        setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(3);
 
         const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
 
@@ -2277,12 +2277,11 @@ namespace {
         log << TLOG_INFO << "Wait for cluster tracker event";
         auto clustersUpdate = setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
 
-
+        TInstant now = TInstant::Now();
         auto session = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
 
-        AssertStreamingSessionAlive(session.first);
-
         AssertStreamingSessionDead(session.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+        UNIT_ASSERT(TInstant::Now() - now > TDuration::Seconds(3));
     }
 
     Y_UNIT_TEST(PreferredCluster_NonExistentPreferredCluster_SessionDiesOnlyAfterDelay) {

@@ -424,7 +424,7 @@ void registerInputFormatProcessorCSV(FormatFactory & factory)
 {
     for (bool with_names : {false, true})
     {
-        factory.registerInputFormatProcessor(with_names ? "CSVWithNames" : "CSV", [=](
+        factory.registerInputFormatProcessor(with_names ? "csv_with_names" : "CSV", [=](
             ReadBuffer & buf,
             const Block & sample,
             IRowInputFormat::Params params,
@@ -502,7 +502,7 @@ static std::pair<bool, size_t> fileSegmentationEngineCSVImpl(ReadBuffer & in, DB
 void registerFileSegmentationEngineCSV(FormatFactory & factory)
 {
     factory.registerFileSegmentationEngine("CSV", &fileSegmentationEngineCSVImpl);
-    factory.registerFileSegmentationEngine("CSVWithNames", &fileSegmentationEngineCSVImpl);
+    factory.registerFileSegmentationEngine("csv_with_names", &fileSegmentationEngineCSVImpl);
 }
 
 }

@@ -1,6 +1,6 @@
 # Приложение на C++
 
-На этой странице подробно разбирается код [тестового приложения](https://a.yandex-team.ru/arc/trunk/arcadia/ydb/public/sdk/cpp/examples/basic_example), доступного в составе [C++ SDK](https://a.yandex-team.ru/arc/trunk/arcadia/ydb/public/sdk/cpp) {{ ydb-short-name }}.
+На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example), доступного в составе [C++ SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp) {{ ydb-short-name }}.
 
 {% include [init.md](steps/01_init.md) %}
 
@@ -21,7 +21,7 @@
     TClient client(driver);
 ```
 
-{% include [create_table.md](steps/02_create_table.md) %}
+{% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
 Для создания таблиц используется метод `CreateTable`:
 
@@ -71,9 +71,28 @@ Column, name: series_info, type: Utf8?
 Column, name: release_date, type: Uint64?
 ```
 
+{% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
+
+Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
+
+```c++
+//! Shows basic usage of mutating operations.
+static TStatus UpsertSimpleTransaction(TSession session, const TString& path) {
+    auto query = Sprintf(R"(
+        PRAGMA TablePathPrefix("%s");
+
+        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
+            (2, 6, 1, "TBD");
+    )", path.c_str());
+
+    return session.ExecuteDataQuery(query,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+}
+```
+
 {% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
 
-{% include [query_processing.md](steps/03_query_processing.md) %}
+{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `ExecuteDataQuery`.
 SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TTxControl`.
@@ -111,7 +130,7 @@ static TStatus SelectSimpleTransaction(TSession session, const TString& path,
 }
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
+{% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
 Для обработки результатов выполнения запроса используется класс `TResultSetParser`.
 Фрагмент кода, приведенный ниже, демонстрирует обработку результатов запроса с помощью объекта `parser`:
@@ -134,24 +153,7 @@ static TStatus SelectSimpleTransaction(TSession session, const TString& path,
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
 
-{% include [write_queries.md](steps/05_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
-
-```c++
-//! Shows basic usage of mutating operations.
-static TStatus UpsertSimpleTransaction(TSession session, const TString& path) {
-    auto query = Sprintf(R"(
-        PRAGMA TablePathPrefix("%s");
-
-        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
-            (2, 6, 1, "TBD");
-    )", path.c_str());
-
-    return session.ExecuteDataQuery(query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
-}
-```
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
@@ -429,4 +431,3 @@ static TStatus ExplicitTclTransaction(TSession session, const TString& path, con
 }
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

@@ -94,10 +94,30 @@ private void describeTables() {
     }
 }
 ```
+{% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
+
+Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
+
+```java
+private void upsertSimple() {
+    String query = String.format(
+        "PRAGMA TablePathPrefix(\"%s\");\n" +
+        "\n" +
+        "UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES\n" +
+        "(2, 6, 1, \"TBD\");",
+        database);
+
+    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
+
+    execute(session -> session.executeDataQuery(query, txControl)
+        .join()
+        .toStatus());
+}
+```
 
 {% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
 
-{% include [query_processing.md](steps/03_query_processing.md) %}
+{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `Session.executeDataQuery()`.
 SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
@@ -127,17 +147,9 @@ private void selectSimple() {
 }
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
+В результате исполнения запроса формируется объект класса `DataQueryResult`, который может содержать несколько выборок, получаемых методом `getResultSet( <index> )`. Так как запрос содержал только одну команду `SELECT`, то результат содержит только одну выборку под индексом `0`.
 
-В качестве результатов выполнения запроса возвращается `result.getResultSet(0)`.
-Фрагмент кода, приведенный ниже, демонстрирует вывод результатов запроса с помощью вспомогательного класса `TablePrinter`.
-
-```java
-System.out.println("\n--[ SelectSimple ]--");
-new TablePrinter(result.getResultSet(0)).print();
-```
-
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+Для его вывода с форматированием псевдографикой применяется вспомогательноый класс `TablePrinter`. Приведенный фрагмент кода при запуске выводит на консоль текст:
 
 ```bash
 --[ SelectSimple ]--
@@ -148,28 +160,9 @@ new TablePrinter(result.getResultSet(0)).print();
 +-----------+------------------+--------------------+
 ```
 
-{% include [write_queries.md](steps/05_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
 
-```java
-private void upsertSimple() {
-    String query = String.format(
-        "PRAGMA TablePathPrefix(\"%s\");\n" +
-        "\n" +
-        "UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES\n" +
-        "(2, 6, 1, \"TBD\");",
-        database);
-
-    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
-
-    execute(session -> session.executeDataQuery(query, txControl)
-        .join()
-        .toStatus());
-}
-```
-
-{% include [write_queries.md](steps/05_write_queries.md) %}
+{% include [param_queries.md](steps/06_param_queries.md) %}
 
 Фрагмент кода, приведенный ниже, демонстрирует использование параметризованных запросов и класс `Params` для формирования параметров и передачи их методу `executeDataQuery`.
 
@@ -438,4 +431,4 @@ private Status explicitTcl(Session session) {
 }
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}
+

@@ -3,11 +3,10 @@ items:
   href: index.md
 - name: C++
   href: example-cpp.md
-  when: oss
 - name: C# (.NET)
   href: example-dotnet.md
 - name: Go
-  href: example-go.md
+  href: go/index.md
 - name: Java
   href: example-java.md
 - name: Node.js
@@ -15,7 +14,7 @@ items:
 - name: PHP
   href: example-php.md
 - name: Python
-  href: example-python.md
+  href: python/index.md
 - name: Архив
   items:
   - name: Go v1

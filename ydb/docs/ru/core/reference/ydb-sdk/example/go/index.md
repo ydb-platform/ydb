@@ -1,11 +1,24 @@
-<<<<<<< ydb/docs/ru/core/reference/ydb-sdk/example/_includes/example-go.md
 # Приложение на Go
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/cmd/basic), использующего [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3) {{ ydb-short-name }}.
 
-{% include [addition.md](auxilary/addition.md) %}
+## Скачивание и запуск {#download}
 
-{% include [init.md](steps/01_init.md) %}
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [YDB Go SDK](../../install.md).
+
+Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
+
+``` bash
+git clone https://github.com/ydb-platform/ydb-go-examples/
+```
+
+Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того к какой базе данных необходимо подключиться.
+
+{% include [run_options.md](_includes/run_options.md) %}
+
+
+
+{% include [init.md](../_includes/steps/01_init.md) %}
 
 Для работы с `YDB` в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
 
@@ -51,7 +64,7 @@ if err != nil {
 // закрытие драйвера по окончании работы программы обязательно
 defer func() {
   _ = db.Close(ctx)
-}()
+}
 ```
 
 Объект `db` является входной точкой для работы с сервисами `YDB`.
@@ -60,7 +73,7 @@ defer func() {
 Наиболее востребован метод `db.Table().Do(ctx, op)`, который реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op`, в которую пользовательскому коду отдается подготовленная сессия.
 Сессия имеет исчерпывающее `API`, позволяющее выполнять `DDL`, `DML`, `DQL` и `TCL` запросы.
 
-{% include [steps/02_create_table.md](steps/02_create_table.md) %}
+{% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
 Для создания таблиц используется метод `table.Session.CreateTable()`:
 
@@ -98,14 +111,14 @@ err = db.Table().Do(
       log.Printf("  > column, name: %s, %s\n", c.Type, c.Name)
     }
     return
-  },
+  }
 )
 if err != nil {
   // обработка ситуации, когда не удалось выполнить запрос
 }
 ```
 
-{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
+{% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `table.Session.Execute()`.
 SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `table.TxControl`.
@@ -182,7 +195,7 @@ if err != nil {
 }
 ```
 
-{% include [scan_query.md](steps/08_scan_query.md) %}
+{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 
 Для выполнения scan-запросов используется метод `table.Session.StreamExecuteScanQuery()`.
 
@@ -257,5 +270,3 @@ if err != nil {
  - [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) доступен по [ссылке](../archive/example-go-v2.md).
 
 {% endnote %}
-=======
->>>>>>> ydb/docs/ru/core/reference/ydb-sdk/example/_includes/example-go.md

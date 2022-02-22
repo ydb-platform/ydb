@@ -1,6 +1,8 @@
 items:
   - name: Обзор
     href: index.md
+  - name: Установка
+    href: install.md
   - name: Аутентификация
     href: auth.md
   - name: Тестовое приложение

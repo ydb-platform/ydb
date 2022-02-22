@@ -86,7 +86,7 @@ func describeTable(ctx context.Context, sp *table.SessionPool, path string) (err
   )
 ```
 
-{% include [query_processing.md](../_includes/steps/03_query_processing.md) %}
+{% include [query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `Session.Execute()`.
   SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса ```TxControl```.
@@ -131,7 +131,7 @@ if err != nil {
 }
 ```
 
-{% include [results_processing.md](../_includes/steps/04_results_processing.md) %}
+{% include [results_processing.md](../_includes/steps/05_results_processing.md) %}
 
 Результат выполнения запроса:
 
@@ -183,7 +183,7 @@ if err != nil {
 }
 ```
 
-{% include [results_processing.md](../_includes/steps/04_results_processing.md) %}
+{% include [results_processing.md](../_includes/steps/08_scan_query.md) %}
 
 Результат выполнения запроса:
 

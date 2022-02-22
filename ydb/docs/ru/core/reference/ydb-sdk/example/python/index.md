@@ -2,7 +2,22 @@
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1), доступного в составе [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk) {{ ydb-short-name }}.
 
-{% include [init.md](steps/01_init.md) %}
+## Скачивание и запуск {#download}
+
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Python3](https://www.python.org/downloads/). Предварительно должен быть установлен [YDB Python SDK](../../install.md).
+
+Создайте рабочую директорию и выполните в ней из командной строки команды клонирования репозитория с github.com и установки необходимых пакетов Python:
+
+``` bash
+git clone https://github.com/ydb-platform/ydb-python-sdk.git
+python3 -m pip install iso8601
+```
+
+Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того к какой базе данных необходимо подключиться.
+
+{% include [run_options.md](_includes/run_options.md) %}
+
+{% include [init.md](../_includes/steps/01_init.md) %}
 
 Фрагмент кода приложения для инициализации драйвера:
 
@@ -28,7 +43,7 @@ def run(endpoint, database, path):
 session = driver.table_client.session().create()
 ```
 
-{% include [create_table.md](steps/02_create_table.md) %}
+{% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
 Для создания таблиц используется метод `session.create_table()`:
 
@@ -64,10 +79,25 @@ def describe_table(session, path, name):
 ('column, name:', 'series_info', ',', 'type_id: UTF8')
 ('column, name:', 'release_date', ',', 'type_id: UINT64')
 ```
+{% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-{% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
+Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
 
-{% include [create_table.md](steps/03_query_processing.md) %}
+```python
+def upsert_simple(session, path):
+    session.transaction().execute(
+        """
+        PRAGMA TablePathPrefix("{}");
+        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
+            (2, 6, 1, "TBD");
+        """.format(path),
+        commit_tx=True,
+    )
+```
+
+{% include [pragmatablepathprefix.md](../_includes/auxilary/pragmatablepathprefix.md) %}
+
+{% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 Для выполнения YQL-запросов используется метод `session.transaction().execute()`.
 SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
@@ -96,40 +126,15 @@ def select_simple(session, path):
     return result_sets[0]
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
-
-В качестве результата выполнения запроса возвращается `result_set`:
-
-```python
-print("\n> select_simple_transaction:")
-for row in result_sets[0].rows:
-    print("series, id: ", row.series_id, ", title: ", row.title, ", release date: ", row.release_date)
-```
-
-Приведенный фрагмент кода при запуске выводит на консоль текст:
+В качестве результата выполнения запроса возвращается `result_set`, итерирование по которому выводит на консоль текст:
 
 ```bash
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
 
-{% include [write_queries.md](steps/05_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
-
-```python
-def upsert_simple(session, path):
-    session.transaction().execute(
-        """
-        PRAGMA TablePathPrefix("{}");
-        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
-            (2, 6, 1, "TBD");
-        """.format(path),
-        commit_tx=True,
-    )
-```
-
-{% include [param_prep_queries.md](steps/07_param_prep_queries.md) %}
+{% include [param_prep_queries.md](../_includes/steps/07_param_prep_queries.md) %}
 
 ```python
 def select_prepared(session, path, series_id, season_id, episode_id):
@@ -169,7 +174,7 @@ def select_prepared(session, path, series_id, season_id, episode_id):
 ('episode title:', u'To Build a Better Beta', ', air date:', '2016-06-05')
 ```
 
-{% include [scan_query.md](steps/08_scan_query.md) %}
+{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 
 ```python
 def executeScanQuery(driver):
@@ -190,7 +195,7 @@ def executeScanQuery(driver):
         break
 ```
 
-{% include [transaction_control.md](steps/10_transaction_control.md) %}
+{% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
 Фрагмент кода, демонстрирующий явное использование вызовов `transaction().begin()` и `tx.Commit()`:
 
@@ -224,4 +229,3 @@ def explicit_tcl(session, path, series_id, season_id, episode_id):
     tx.commit()
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

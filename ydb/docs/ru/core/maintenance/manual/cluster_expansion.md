@@ -5,9 +5,9 @@
     ```
     Node {
         NodeId: 1
-        Port: <ик-порт>
-        Host: "<старый-хост>"
-        InterconnectHost: "<старый-хост>"
+        Port: <ic-port>
+        Host: "<существующий-хост>"
+        InterconnectHost: "<существующий-хост>"
         Location {
             DataCenter: "DC1"
             Module: "M1"
@@ -17,7 +17,7 @@
     }
     Node {
         NodeId: 2
-        Port: <ик-порт>
+        Port: <ic-port>
         Host: "<новый-хост>"
         InterconnectHost: "<новый-хост>"
         Location {
@@ -55,15 +55,15 @@
             BoxId: 1
             Host {
                 Key {
-                    Fqdn: "<старый-хост>"
-                    IcPort: <ик-порт>
+                    Fqdn: "<существующий-хост>"
+                    IcPort: <ic-port>
                 }
                 HostConfigId: 1
             }
             Host {
                 Key {
                     Fqdn: "<новый-хост>"
-                    IcPort: <ик-порт>
+                    IcPort: <ic-port>
                 }
                 HostConfigId: 1
             }

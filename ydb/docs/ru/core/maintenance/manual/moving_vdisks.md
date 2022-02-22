@@ -23,7 +23,7 @@ kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <I
 3. Выполнить перевоз VDisk'а
 
     ```bash
-    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<Xост>" IcPort: <ic-port>} Path: "<Путь до партлейбла устройства>" PDiskId: <PDiskID> Status: BROKEN } }'
+    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Путь до партлейбла устройства>" PDiskId: <pdisk-id> Status: BROKEN } }'
     ```
 
 ## Вернуть PDisk после развоза  {#return_a_device_to_work}
@@ -37,5 +37,5 @@ kikimr admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <I
 3. Вернуть PDisk
 
     ```bash
-    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<Xост>" IcPort: <IC Порт>} Path: "<Путь до партлейбла устройства>" PDiskId: <ID ПДиска> Status: ACTIVE } }'
+    kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-pord>} Path: "<Путь до партлейбла устройства>" PDiskId: <pdisk-id> Status: ACTIVE } }'
     ```

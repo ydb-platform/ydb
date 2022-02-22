@@ -54,8 +54,7 @@ NActors::IActor* CreatePendingFetcher(
 NActors::IActor* CreateRunActor(
     const NActors::TActorId& fetcherId,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
-    TRunActorParams&& params
-    );
+    TRunActorParams&& params);
 
 struct TResultId {
     TString Id;
@@ -85,7 +84,9 @@ NActors::IActor* CreatePingerActor(
     const NYq::TPrivateClient& client,
     const NActors::TActorId parent,
     const NConfig::TPingerConfig& config,
-    const TInstant& deadline);
+    TInstant deadline,
+    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+    TInstant createdAt);
 
 TString MakeInternalError(const TString& text);
 

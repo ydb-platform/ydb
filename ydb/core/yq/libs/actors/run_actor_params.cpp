@@ -44,7 +44,9 @@ TRunActorParams::TRunActorParams(
     bool automatic,
     const TString& queryName,
     const TInstant& deadline,
-    const NMonitoring::TDynamicCounterPtr& clientCounters
+    const NMonitoring::TDynamicCounterPtr& clientCounters,
+    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptimeCounter,
+    TInstant createdAt
     )
     : Driver(driver)
     , S3Gateway(s3Gateway)
@@ -86,6 +88,8 @@ TRunActorParams::TRunActorParams(
     , QueryName(queryName)
     , Deadline(deadline)
     , ClientCounters(clientCounters)
+    , QueryUptimeCounter(queryUptimeCounter)
+    , CreatedAt(createdAt)
     {
     }
 

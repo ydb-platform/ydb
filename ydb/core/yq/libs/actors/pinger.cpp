@@ -59,7 +59,7 @@ private:
 class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
     class TRetryState {
     public:
-        void Init(const TInstant& now, const TInstant& startLeaseTime, const TDuration& maxRetryTime) {
+        void Init(TInstant now, TInstant startLeaseTime, TDuration maxRetryTime) {
             StartRequestTime = now;
             StartLeaseTime = startLeaseTime;
             Delay = TDuration::Zero();
@@ -149,7 +149,9 @@ public:
         const TPrivateClient& client,
         const TActorId parent,
         const NConfig::TPingerConfig& config,
-        const TInstant& deadline)
+        TInstant deadline,
+        const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+        TInstant createdAt)
         : Config(config)
         , Scope(scope)
         , UserId(userId)
@@ -158,6 +160,8 @@ public:
         , Client(client)
         , Parent(parent)
         , Deadline(deadline)
+        , QueryUptime(queryUptime)
+        , CreatedAt(createdAt)
     {
     }
 
@@ -378,6 +382,7 @@ private:
     }
 
     void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) {
+        QueryUptime->Set((TInstant::Now() - CreatedAt).Seconds());
         // Fill ids
         request.set_scope(Scope.ToString());
         request.set_owner_id(OwnerId);
@@ -426,6 +431,9 @@ private:
     const TActorId Parent;
     const TInstant Deadline;
 
+    const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
+    const TInstant CreatedAt;
+
     std::deque<TForwardPingReqInfo> ForwardRequests;
     bool Finishing = false;
     bool FatalError = false; // Nonretryable error from PingTask or all retries finished.
@@ -441,7 +449,9 @@ IActor* CreatePingerActor(
     const TPrivateClient& client,
     const TActorId parent,
     const NConfig::TPingerConfig& config,
-    const TInstant& deadline)
+    TInstant deadline,
+    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+    TInstant createdAt)
 {
     return new TPingerActor(
         scope,
@@ -451,7 +461,9 @@ IActor* CreatePingerActor(
         client,
         parent,
         config,
-        deadline);
+        deadline,
+        queryUptime,
+        createdAt);
 }
 
 } /* NYq */

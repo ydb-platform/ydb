@@ -91,17 +91,19 @@ public:
         , TRunActorParams&& params)
         : FetcherId(fetcherId)
         , Params(std::move(params))
-        , CreatedAt(TInstant::Now())
+        , CreatedAt(Params.CreatedAt)
         , QueryCounters(queryCounters)
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
     {
+        Params.QueryUptimeCounter->Set(0);
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        Params.QueryUptimeCounter->Set((TInstant::Now() - CreatedAt).Seconds());
         LogReceivedParams();
         Pinger = Register(
             CreatePingerActor(
@@ -119,7 +121,9 @@ public:
                     Params.ClientCounters),
                 SelfId(),
                 Params.PingerConfig,
-                Params.Deadline
+                Params.Deadline,
+                Params.QueryUptimeCounter,
+                CreatedAt
                 ));
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
         try {
@@ -1287,6 +1291,7 @@ private:
     NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYq::NCommon::TServiceCounters QueryCounters;
+    const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;

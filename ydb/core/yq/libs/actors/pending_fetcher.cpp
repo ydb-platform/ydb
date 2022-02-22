@@ -173,7 +173,7 @@ private:
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        switch(ev->Get()->Tag) { 
+        switch(ev->Get()->Tag) {
         case WAKEUP_TAG_FETCH:
             Schedule(PendingFetchPeriod, new NActors::TEvents::TEvWakeup(WAKEUP_TAG_FETCH));
             if (!HasRunningRequest) {
@@ -230,12 +230,11 @@ private:
         }
         auto queryId = itA->second;
         RunActorMap.erase(itA);
-        
+
         auto itC = CountersMap.find(queryId);
         if (itC != CountersMap.end()) {
             auto& info = itC->second;
-            if (info.RunActorId == runActorId) 
-            {
+            if (info.RunActorId == runActorId) {
                 info.RunActorId = TActorId();
                 info.CleanupDeadline = Now() + CLEANUP_PERIOD;
                 Schedule(CLEANUP_PERIOD, new NActors::TEvents::TEvWakeup(WAKEUP_TAG_CLEANUP));
@@ -285,6 +284,31 @@ private:
             serviceAccounts[identity.value()] = identity.signature();
         }
 
+        NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
+
+        const TVector<TString> path = StringSplitter(task.scope()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
+        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
+                            ? path.back() : TString{};
+        const TString cloudId = task.sensor_labels().at("cloud_id");
+        const TString queryId = task.query_id().value();
+
+        ::NYq::NCommon::TServiceCounters queryCounters(ServiceCounters);
+        auto publicCountersParent = ServiceCounters.PublicCounters;
+
+        if (cloudId && folderId) {
+            publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", cloudId)->GetSubgroup("folder_id", folderId);
+        }
+        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
+            task.automatic() ? (task.query_name() ? task.query_name() : "automatic") : queryId);
+
+        auto rootCountersParent = ServiceCounters.RootCounters;
+        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
+            task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
+        queryCounters.Counters = queryCounters.RootCounters;
+
+        const auto queryUptimeCounter = queryCounters.PublicCounters->GetNamedCounter("name", "query.uptime_seconds", false);
+        const auto createdAt = TInstant::Now();
+
         TRunActorParams params(
             YqSharedResources->YdbDriver, S3Gateway,
             FunctionRegistry, RandomProvider,
@@ -293,7 +317,7 @@ private:
             CommonConfig, CheckpointCoordinatorConfig,
             PrivateApiConfig, GatewaysConfig, PingerConfig,
             task.text(), task.scope(), task.user_token(),
-            DatabaseResolver, task.query_id().value(),
+            DatabaseResolver, queryId,
             task.user_id(), Guid, task.generation(),
             VectorFromProto(task.connection()),
             VectorFromProto(task.binding()),
@@ -305,7 +329,7 @@ private:
             task.state_load_mode(),
             task.disposition(),
             task.status(),
-            task.sensor_labels().at("cloud_id"),
+            cloudId,
             VectorFromProto(task.result_set_meta()),
             VectorFromProto(task.dq_graph()),
             task.dq_graph_index(),
@@ -313,27 +337,9 @@ private:
             task.automatic(),
             task.query_name(),
             NProtoInterop::CastFromProto(task.deadline()),
-            ClientCounters);
-
-        NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
-
-        const TVector<TString> path = StringSplitter(params.Scope.ToString()).Split('/').SkipEmpty(); // yandexcloud://{folder_id}
-        const TString folderId = path.size() == 2 && path.front().StartsWith(NYdb::NYq::TScope::YandexCloudScopeSchema)
-                            ? path.back() : TString{};
-
-        ::NYq::NCommon::TServiceCounters queryCounters(ServiceCounters);
-        auto publicCountersParent = ServiceCounters.PublicCounters;
-
-        if (params.CloudId && folderId) {
-            publicCountersParent = publicCountersParent->GetSubgroup("cloud_id", params.CloudId)->GetSubgroup("folder_id", folderId);
-        }
-        queryCounters.PublicCounters = publicCountersParent->GetSubgroup("query_id",
-            params.Automatic ? (params.QueryName ? params.QueryName : "automatic") : params.QueryId);
-
-        auto rootCountersParent = ServiceCounters.RootCounters;
-        queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
-            params.Automatic ? (folderId ? "automatic_" + folderId : "automatic") : params.QueryId);
-        queryCounters.Counters = queryCounters.RootCounters;
+            ClientCounters,
+            queryUptimeCounter,
+            createdAt);
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 

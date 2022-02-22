@@ -475,10 +475,12 @@ void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig
 }
 
 void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
-    auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
-    auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-    KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
-    KqpShutdownController->Initialize(ActorSystem.Get());
+    if (runConfig.ServicesMask.EnableKqp) {
+        auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
+        auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
+        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+        KqpShutdownController->Initialize(ActorSystem.Get());
+    }
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {

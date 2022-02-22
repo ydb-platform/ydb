@@ -16,7 +16,7 @@
 
 Примеры:
 - `grpc://localhost:7135` - протокол обмена данными без шифрования (gRPC), сервер запущен на том же хосте что и клиент, принимает соединения на порту 7135
-- `grpcs://ydb.somecorp-int.ru` - протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.somecorp-int.ru в изолированной корпоративной интрасети компании "SomeCorp", принмимает соединения на порту YDB по-умолчанию 2135
+- `grpcs://ydb.somecorp-int.ru` - протокол обмена данными с шифрованием (gRPCs), сервер запущен на хосте ydb.somecorp-int.ru в изолированной корпоративной интрасети компании "SomeCorp", принмимает соединения на порту YDB по умолчанию 2135
 - `grpcs://ydb.serverless.yandexcloud.net:2135` - протокол обмена данными с шифрованием (gRPCs), публичный сервер Serverless YDB Yandex.Cloud ydb.serverless.yandexcloud.net, порт 2135
 
 {% include [overlay/endpoint_example.md](connect_overlay/endpoint_example.md) %}
@@ -77,7 +77,7 @@
 
 Примеры:
 - `/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr` -- база данных Yandex.Cloud с идентификатором `etn01q3ko8sh271beftr` в облаке `b1g8skpbljhs03malf3s`, развернутая в регионе `ru-central1`
-- `/local` -- база данных по-умолчанию при самостоятельном развертывании [с использованием Docker](../../getting_started/ydb_docker.md)
+- `/local` -- база данных по умолчанию при самостоятельном развертывании [с использованием Docker](../../getting_started/ydb_docker.md)
 
 {% include [overlay/database_example.md](connect_overlay/database_example.md) %}
 

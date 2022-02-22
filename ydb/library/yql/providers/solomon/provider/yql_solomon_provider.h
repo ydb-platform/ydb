@@ -7,6 +7,9 @@
 
 namespace NYql {
 
+constexpr i32 SolomonMaxLabelsCount = 16;
+constexpr i32 SolomonMaxSensorsCount = 50;
+
 struct TSolomonState : public TThrRefBase
 {
     using TPtr = TIntrusivePtr<TSolomonState>;

@@ -18,9 +18,6 @@ using namespace NNodes;
 
 namespace {
 
-constexpr i32 MaxLabelsCount = 16;
-constexpr i32 MaxSensorsCount = 50;
-
 NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType) {
     switch (clusterType) {
         case TSolomonClusterConfig::SCT_SOLOMON:
@@ -50,9 +47,6 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
     for (const TItemExprType* structItem : itemType.Cast<TStructExprType>()->GetItems()) {
         const auto itemName = structItem->GetName();
         const auto* itemType = structItem->GetItemType();
-        YQL_ENSURE(
-            itemType->GetKind() != ETypeAnnotationKind::Optional,
-            "Optional types are not supported in monitoring sink. FieldName: " << itemName);
 
         const auto dataType = NUdf::GetDataTypeInfo(itemType->Cast<TDataExprType>()->GetSlot());
 
@@ -62,7 +56,6 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
         schemeItem.SetDataTypeId(dataType.TypeId);
 
         if (dataType.Features & NUdf::DateType || dataType.Features & NUdf::TzDateType) {
-            YQL_ENSURE(!scheme.HasTimestamp(), "Multiple timestamps were provided for monitoing sink");
             *scheme.MutableTimestamp() = schemeItem;
         } else if (dataType.Features & NUdf::NumericType) {
             scheme.MutableSensors()->Add(std::move(schemeItem));
@@ -72,15 +65,6 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
             YQL_ENSURE(false, "Ivalid data type for monitoing sink: " << dataType.Name);
         }
     }
-
-    YQL_ENSURE(scheme.HasTimestamp(), "Timestamp wasn't provided for monitoing sink");
-    YQL_ENSURE(!scheme.GetSensors().empty(), "No sensors were provided for monitoing sink");
-    YQL_ENSURE(!scheme.GetLabels().empty(), "No labels were provided for monitoing sink");
-
-    YQL_ENSURE(scheme.GetLabels().size() <= MaxLabelsCount,
-        "Max labels count is " << MaxLabelsCount << " but " << scheme.GetLabels().size() << " were provided");
-    YQL_ENSURE(scheme.GetSensors().size() <= MaxSensorsCount,
-        "Max sensors count is " << MaxSensorsCount << " but " << scheme.GetSensors().size() << " were provided");
 }
 
 class TSolomonDqIntegration: public TDqIntegrationBase {

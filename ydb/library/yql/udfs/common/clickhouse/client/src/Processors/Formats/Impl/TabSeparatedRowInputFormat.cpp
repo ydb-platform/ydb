@@ -409,7 +409,7 @@ void registerInputFormatProcessorTabSeparated(FormatFactory & factory)
         });
     }
 
-    for (const auto * name : {"TabSeparatedWithNames", "TSVWithNames"})
+    for (const auto * name : {"TabSeparatedWithNames", "tsv_with_names"})
     {
         factory.registerInputFormatProcessor(name, [](
             ReadBuffer & buf,
@@ -473,7 +473,7 @@ static std::pair<bool, size_t> fileSegmentationEngineTabSeparatedImpl(ReadBuffer
 void registerFileSegmentationEngineTabSeparated(FormatFactory & factory)
 {
     // We can use the same segmentation engine for TSKV.
-    for (const auto & name : {"TabSeparated", "TSV", "TSKV", "TabSeparatedWithNames", "TSVWithNames"})
+    for (const auto & name : {"TabSeparated", "TSV", "TSKV", "TabSeparatedWithNames", "tsv_with_names"})
     {
         factory.registerFileSegmentationEngine(name, &fileSegmentationEngineTabSeparatedImpl);
     }

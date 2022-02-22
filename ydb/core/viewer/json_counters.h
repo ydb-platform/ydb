@@ -17,7 +17,7 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     using TThis = TJsonCounters;
     using TBase = TActorBootstrapped<TJsonCounters>;
     IViewer* Viewer;
-    TActorId Initiator;
+    NMon::TEvHttpInfo::TPtr Event;
     ui32 Requested;
     ui32 Received;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
@@ -33,7 +33,7 @@ public:
 
     TJsonCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
+        , Event(ev)
         , Requested(0)
         , Received(0)
     {}
@@ -421,12 +421,12 @@ public:
         json << ']';
         json << '}';
 
-        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
     void Timeout(const TActorContext& ctx) {
-        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 };

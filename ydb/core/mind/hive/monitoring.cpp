@@ -1495,8 +1495,7 @@ public:
                 if (down && $(element).hasClass('glyphicon-ok')) {
                     $(element).removeClass('glyphicon-ok');
                     element.inProgress = true;
-                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&
-                    =1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
+                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
                 } else if (!down && $(element).hasClass('glyphicon-remove')) {
                     $(element).removeClass('glyphicon-remove');
                     element.inProgress = true;

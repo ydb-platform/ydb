@@ -87,7 +87,7 @@ public:
 
     void ReplyAndPassAway() {
         TStringStream json;
-        TString headers = Viewer->GetHTTPOKJSON();
+        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
             TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
             switch (DescribeResult->GetRecord().GetStatus()) {

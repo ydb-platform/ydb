@@ -113,8 +113,8 @@ public:
         NKikimrViewer::EObjectType objectType,
         const TContentHandler& handler) = 0;
 
-    TString GetHTTPOKJSON();
-    TString GetHTTPGATEWAYTIMEOUT();
+    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPGATEWAYTIMEOUT() = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);

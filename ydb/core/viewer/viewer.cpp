@@ -172,6 +172,8 @@ public:
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("http-mon", Sprintf(":%d", mon->GetListenPort())));
 
+            AllowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
+
             TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::InitMerger();
 
@@ -213,6 +215,9 @@ public:
         return KikimrRunConfig;
     }
 
+    TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPGATEWAYTIMEOUT() override;
+
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
             TVirtualHandlerType handler) override {
@@ -246,6 +251,7 @@ private:
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
+    TString AllowOrigin;
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -382,23 +388,35 @@ private:
             if (type.empty()) {
                 type = "application/json";
             }
-            TString allowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
-            if (allowOrigin) {
+            if (AllowOrigin) {
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                             "HTTP/1.1 204 No Content\r\n"
-                             "Access-Control-Allow-Origin: " + allowOrigin + "\r\n"
-                             "Access-Control-Allow-Credentials: true\r\n"
-                             "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                             "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                             "Allow: OPTIONS, GET, POST\r\n"
-                             "Content-Type: " + type + "\r\n"
-                             "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    "HTTP/1.1 204 No Content\r\n"
+                    "Access-Control-Allow-Origin: " + AllowOrigin + "\r\n"
+                    "Access-Control-Allow-Credentials: true\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                    "Allow: OPTIONS, GET, POST\r\n"
+                    "Content-Type: " + type + "\r\n"
+                    "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             } else {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
-                             "HTTP/1.1 204 No Content\r\n"
-                             "Allow: OPTIONS, GET, POST\r\n"
-                             "Content-Type: " + type + "\r\n"
-                             "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                TString origin = TString(msg->Request.GetHeader("Origin"));
+                if (!origin.empty()) {
+                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        "HTTP/1.1 204 No Content\r\n"
+                        "Access-Control-Allow-Origin: " + origin + "\r\n"
+                        "Access-Control-Allow-Credentials: true\r\n"
+                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                        "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                        "Allow: OPTIONS, GET, POST\r\n"
+                        "Content-Type: " + type + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                } else {
+                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(
+                        "HTTP/1.1 204 No Content\r\n"
+                        "Allow: OPTIONS, GET, POST\r\n"
+                        "Content-Type: " + type + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                }
             }
             return;
         }
@@ -493,13 +511,22 @@ IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig) {
     return new TViewer(kikimrRunConfig);
 }
 
-TString IViewer::GetHTTPOKJSON() {
-    const auto& kikimrRunConfig = GetKikimrRunConfig();
-    TString allowOrigin = kikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
-    if (allowOrigin) {
+TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request) {
+    if (AllowOrigin) {
         return TStringBuilder()
                 << "HTTP/1.1 200 Ok\r\n"
-                << "Access-Control-Allow-Origin: " << allowOrigin << "\r\n"
+                << "Access-Control-Allow-Origin: " << AllowOrigin << "\r\n"
+                << "Access-Control-Allow-Credentials: true\r\n"
+                << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                << "Content-Type: application/json; charset=utf-8\r\n"
+                << "Connection: Close\r\n"
+                << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"
+                << "\r\n";
+    } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
+        return TStringBuilder()
+                << "HTTP/1.1 200 Ok\r\n"
+                << "Access-Control-Allow-Origin: " << request->Request.GetHeader("Origin") << "\r\n"
                 << "Access-Control-Allow-Credentials: true\r\n"
                 << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
                 << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
@@ -517,7 +544,7 @@ TString IViewer::GetHTTPOKJSON() {
     }
 }
 
-TString IViewer::GetHTTPGATEWAYTIMEOUT() {
+TString TViewer::GetHTTPGATEWAYTIMEOUT() {
     return TStringBuilder()
             << "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n"
             << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"

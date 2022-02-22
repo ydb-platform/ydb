@@ -151,11 +151,19 @@ namespace NActors {
             if (type.empty()) {
                 type = "application/json";
             }
-            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(
-                                "HTTP/1.1 204 No Content\r\n"
-                                "Allow: OPTIONS, GET, POST\r\n"
-                                "Content-Type: " + type + "\r\n"
-                                "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            TString origin = TString(Request.GetHeader("Origin"));
+            if (origin.empty()) {
+                origin = "*";
+            }
+            TStringBuilder response;
+            response << "HTTP/1.1 204 No Content\r\n"
+                        "Access-Control-Allow-Origin: " << origin << "\r\n"
+                        "Access-Control-Allow-Credentials: true\r\n"
+                        "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+                        "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                        "Content-Type: " + type + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n";
+            Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             Die(ctx);
         }
 
@@ -167,7 +175,15 @@ namespace NActors {
                 body << "<p>" << error << "</p>";
             }
             body << "</body></html>";
+            TString origin = TString(Request.GetHeader("Origin"));
+            if (origin.empty()) {
+                origin = "*";
+            }
             response << "HTTP/1.1 401 Unauthorized\r\n";
+            response << "Access-Control-Allow-Origin: " << origin << "\r\n";
+            response << "Access-Control-Allow-Credentials: true\r\n";
+            response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+            response << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
             response << "Content-Type: text/html\r\n";
             response << "Content-Length: " << body.Size() << "\r\n";
             response << "\r\n";

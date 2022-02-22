@@ -391,7 +391,7 @@ public:
             pbCluster.SetName(itMax->first);
         }
         TProtoToJson::ProtoToJson(json, pbCluster, JsonSettings);
-        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 

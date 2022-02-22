@@ -19,13 +19,8 @@ conan_cmake_configure(
   GENERATORS cmake_find_package
   REQUIRES
     bison/3.5.3
-    c-ares/1.17.2
-    libiconv/1.15
-    libidn/1.36
-    openssl/1.1.1l
     ragel/6.10
     yasm/1.3.0
-    zlib/1.2.11
   IMPORTS
     "bin, *yasm* -> ./bin"
     "bin, bison* -> ./bin/bison/bin"
@@ -398,7 +393,6 @@ add_subdirectory(library/cpp/digest/argonish/internal/proxies/sse2)
 add_subdirectory(library/cpp/digest/argonish/internal/proxies/sse41)
 add_subdirectory(library/cpp/digest/argonish/internal/proxies/ssse3)
 add_subdirectory(ydb/library/pdisk_io)
-add_subdirectory(contrib/libs/libaio)
 add_subdirectory(ydb/library/pdisk_io/protos)
 add_subdirectory(ydb/library/wilson)
 add_subdirectory(library/cpp/actors/wilson)

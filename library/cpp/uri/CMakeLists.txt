@@ -1,10 +1,7 @@
-find_package(libidn)
-
 add_library(library-cpp-uri)
 target_link_libraries(library-cpp-uri PUBLIC
   contrib-libs-cxxsupp
   yutil
-  libidn::libidn
   library-cpp-charset
 )
 target_sources(library-cpp-uri PRIVATE

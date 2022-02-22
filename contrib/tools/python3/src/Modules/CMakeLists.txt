@@ -1,6 +1,3 @@
-find_package(OpenSSL)
-find_package(ZLIB)
-
 add_library(python3-src-Modules)
 target_compile_options(python3-src-Modules PRIVATE
   -DPy_BUILD_CORE_MODULE
@@ -20,8 +17,6 @@ target_include_directories(python3-src-Modules PRIVATE
 target_link_libraries(python3-src-Modules PUBLIC
   contrib-libs-expat
   contrib-libs-libbz2
-  OpenSSL::OpenSSL
-  ZLIB::ZLIB
   libs-xz-liblzma
   contrib-restricted-libffi
 )

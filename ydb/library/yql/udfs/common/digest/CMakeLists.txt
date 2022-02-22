@@ -1,5 +1,3 @@
-find_package(OpenSSL)
-
 add_library(digest_udf INTERFACE)
 target_link_libraries(digest_udf INTERFACE
   contrib-libs-cxxsupp
@@ -8,7 +6,6 @@ target_link_libraries(digest_udf INTERFACE
   public-udf-support
   contrib-libs-farmhash
   contrib-libs-highwayhash
-  OpenSSL::OpenSSL
   contrib-libs-xxhash
   cpp-digest-argonish
   cpp-digest-crc32c
@@ -47,7 +44,6 @@ target_link_libraries(digest_udf.udf PUBLIC
   public-udf-support
   contrib-libs-farmhash
   contrib-libs-highwayhash
-  OpenSSL::OpenSSL
   contrib-libs-xxhash
   cpp-digest-argonish
   cpp-digest-crc32c

@@ -1,5 +1,3 @@
-find_package(ZLIB)
-
 add_library(libs-apache-orc)
 target_include_directories(libs-apache-orc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
@@ -12,7 +10,6 @@ target_link_libraries(libs-apache-orc PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-lz4
   contrib-libs-snappy
-  ZLIB::ZLIB
   contrib-libs-zstd
   contrib-libs-protobuf
 )

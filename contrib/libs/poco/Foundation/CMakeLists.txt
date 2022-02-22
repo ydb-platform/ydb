@@ -1,5 +1,3 @@
-find_package(ZLIB)
-
 add_library(libs-poco-Foundation)
 target_include_directories(libs-poco-Foundation PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
@@ -14,7 +12,6 @@ target_link_libraries(libs-poco-Foundation PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-double-conversion
   contrib-libs-pcre
-  ZLIB::ZLIB
 )
 target_sources(libs-poco-Foundation PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/src/ASCIIEncoding.cpp

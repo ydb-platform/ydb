@@ -1,11 +1,8 @@
-find_package(OpenSSL)
-
 add_library(cpp-openssl-io)
 target_link_libraries(cpp-openssl-io PUBLIC
   contrib-libs-cxxsupp
   yutil
   certs
-  OpenSSL::OpenSSL
   cpp-openssl-init
   cpp-openssl-method
 )

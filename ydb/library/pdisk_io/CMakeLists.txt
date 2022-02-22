@@ -1,9 +1,11 @@
+find_package(AIO)
+
 add_library(ydb-library-pdisk_io)
 target_link_libraries(ydb-library-pdisk_io PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  contrib-libs-libaio
+  AIO
   cpp-actors-core
   cpp-monlib-dynamic_counters
   ydb-core-debug

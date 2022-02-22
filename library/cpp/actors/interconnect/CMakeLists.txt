@@ -1,11 +1,8 @@
-find_package(OpenSSL)
-
 add_library(cpp-actors-interconnect)
 target_link_libraries(cpp-actors-interconnect PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-libc_compat
-  OpenSSL::OpenSSL
   cpp-actors-core
   cpp-actors-dnscachelib
   cpp-actors-dnsresolver

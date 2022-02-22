@@ -1,5 +1,3 @@
-find_package(OpenSSL)
-
 add_library(libs-poco-NetSSL_OpenSSL)
 target_include_directories(libs-poco-NetSSL_OpenSSL PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/include
@@ -14,7 +12,6 @@ target_include_directories(libs-poco-NetSSL_OpenSSL PRIVATE
 )
 target_link_libraries(libs-poco-NetSSL_OpenSSL PUBLIC
   contrib-libs-cxxsupp
-  OpenSSL::OpenSSL
   libs-poco-Crypto
   libs-poco-Foundation
   libs-poco-JSON

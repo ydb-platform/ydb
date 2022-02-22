@@ -1,7 +1,3 @@
-find_package(OpenSSL)
-find_package(ZLIB)
-find_package(c-ares)
-
 add_library(libs-grpc-grpc)
 target_compile_options(libs-grpc-grpc PRIVATE
   -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
@@ -23,13 +19,10 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   contrib-libs-cxxsupp
   yutil
   certs
-  c-ares::c-ares
   src-core-lib
   grpc-third_party-address_sorting
   grpc-third_party-upb
-  OpenSSL::OpenSSL
   contrib-libs-re2
-  ZLIB::ZLIB
   abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
   abseil-cpp-tstring-y_absl-status

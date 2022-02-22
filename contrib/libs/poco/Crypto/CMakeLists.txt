@@ -1,5 +1,3 @@
-find_package(OpenSSL)
-
 add_library(libs-poco-Crypto)
 target_include_directories(libs-poco-Crypto PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/include
@@ -11,7 +9,6 @@ target_include_directories(libs-poco-Crypto PRIVATE
 )
 target_link_libraries(libs-poco-Crypto PUBLIC
   contrib-libs-cxxsupp
-  OpenSSL::OpenSSL
   libs-poco-Foundation
 )
 target_sources(libs-poco-Crypto PRIVATE

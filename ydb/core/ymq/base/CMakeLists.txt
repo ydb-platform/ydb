@@ -1,11 +1,8 @@
-find_package(OpenSSL)
-
 add_library(core-ymq-base)
 target_link_libraries(core-ymq-base PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  OpenSSL::OpenSSL
   library-cpp-cgiparam
   library-cpp-ipmath
   library-cpp-lwtrace

@@ -1,10 +1,7 @@
-find_package(ZLIB)
-
 add_library(blockcodecs-codecs-zlib INTERFACE)
 target_link_libraries(blockcodecs-codecs-zlib INTERFACE
   contrib-libs-cxxsupp
   yutil
-  ZLIB::ZLIB
   cpp-blockcodecs-core
 )
 

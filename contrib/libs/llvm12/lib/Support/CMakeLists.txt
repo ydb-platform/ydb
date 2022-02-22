@@ -1,5 +1,3 @@
-find_package(ZLIB)
-
 add_library(llvm12-lib-Support)
 target_include_directories(llvm12-lib-Support PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Support
@@ -8,7 +6,6 @@ target_link_libraries(llvm12-lib-Support PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-llvm12
   llvm12-lib-Demangle
-  ZLIB::ZLIB
 )
 target_sources(llvm12-lib-Support PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Support/AArch64TargetParser.cpp

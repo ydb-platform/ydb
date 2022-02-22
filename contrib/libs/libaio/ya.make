@@ -16,6 +16,13 @@ OWNER(
 
 NO_RUNTIME()
 
+OPENSOURCE_EXPORT_REPLACEMENT(
+    CMAKE AIO
+    CMAKE_TARGET AIO
+)
+
+IF (NOT EXPORT_CMAKE)
+
 IF (USE_DYNAMIC_AIO)
     PEERDIR(
         contrib/libs/libaio/dynamic
@@ -24,6 +31,8 @@ ELSE()
     PEERDIR(
         contrib/libs/libaio/static
     )
+ENDIF()
+
 ENDIF()
 
 END()

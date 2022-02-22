@@ -1,5 +1,3 @@
-find_package(OpenSSL)
-
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_ADX
@@ -15,9 +13,6 @@ target_include_directories(restricted-aws-s2n PUBLIC
 target_include_directories(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/api
-)
-target_link_libraries(restricted-aws-s2n PUBLIC
-  OpenSSL::OpenSSL
 )
 target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r2/sikep434r2_fp_x64_asm.S

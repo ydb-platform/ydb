@@ -1,5 +1,3 @@
-find_package(ZLIB)
-
 add_library(libs-apache-arrow)
 target_compile_options(libs-apache-arrow PUBLIC
   -DARROW_STATIC
@@ -47,7 +45,6 @@ target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-snappy
   contrib-libs-utf8proc
   contrib-libs-xxhash
-  ZLIB::ZLIB
   contrib-libs-zstd
   contrib-restricted-boost
   contrib-restricted-fast_float

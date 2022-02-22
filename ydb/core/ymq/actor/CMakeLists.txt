@@ -1,5 +1,3 @@
-find_package(OpenSSL)
-
 add_library(core-ymq-actor)
 target_compile_options(core-ymq-actor PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
@@ -7,7 +5,6 @@ target_compile_options(core-ymq-actor PRIVATE
 target_link_libraries(core-ymq-actor PUBLIC
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
   contrib-libs-protobuf
   cpp-actors-core
   cpp-containers-intrusive_rb_tree

@@ -1,6 +1,3 @@
-find_package(OpenSSL)
-find_package(ZLIB)
-
 add_library(contrib-restricted-thrift)
 target_compile_options(contrib-restricted-thrift PRIVATE
   -Wno-deprecated-declarations
@@ -18,8 +15,6 @@ target_include_directories(contrib-restricted-thrift PRIVATE
 target_link_libraries(contrib-restricted-thrift PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-libevent
-  OpenSSL::OpenSSL
-  ZLIB::ZLIB
   contrib-restricted-boost
   boost-libs-system
   boost-libs-thread

@@ -3177,10 +3177,6 @@ void TPartition::ReportLabeledCounters(const TActorContext& ctx)
             haveChanges = true;
             userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Set(readOffsetRewindSum);
         }
-        if (readOffsetRewindSum != userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_TOTAL].Get()) {
-            haveChanges = true;
-            userInfo.LabeledCounters.GetCounters()[METRIC_READ_OFFSET_REWIND_TOTAL].Set(readOffsetRewindSum);
-        }
 
         ui32 id = METRIC_TOTAL_READ_SPEED_1;
         for (ui32 i = 0; i < userInfo.AvgReadBytes.size(); ++i) {

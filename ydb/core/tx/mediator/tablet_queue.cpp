@@ -337,7 +337,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
+        return NKikimrServices::TActivity::TX_MEDIATOR_TABLET_QUEUE_ACTOR;
     }
 
     TTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket)

@@ -5,8 +5,8 @@
 Выполните команду по следующему образцу:
 
 ``` bash
-( export <auth_mode_var>="<auth_mode_value>" &&  \
-python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database> )
+<auth_mode_var>="<auth_mode_value>" \
+python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 ```
 
 , где

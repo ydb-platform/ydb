@@ -4,7 +4,7 @@
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Для работы с `YDB` в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
+Для работы с {{ ydb-short-name }} в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
 
 ```go
 import (

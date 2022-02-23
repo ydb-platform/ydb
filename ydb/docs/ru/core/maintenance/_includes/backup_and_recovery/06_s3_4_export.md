@@ -2,7 +2,7 @@
 
 Команды в примерах ниже составлены из расчёта, что данные ключей доступа сохранены в файл `~/.aws/credentials`.
 
-Запуск операции операции экспорта данных из таблиц `$YDB_DB_PATH/backup/episodes`, `$YDB_DB_PATH/backup/seasons`, `$YDB_DB_PATH/backup/series` в YDB в базе `$YDB_DB_PATH` в файлы с префиксом `20200601/` в бакете `testdbbackups` в {{ objstorage-name }}.
+Запуск операции операции экспорта данных из таблиц `$YDB_DB_PATH/backup/episodes`, `$YDB_DB_PATH/backup/seasons`, `$YDB_DB_PATH/backup/series` в {{ ydb-short-name }} в базе `$YDB_DB_PATH` в файлы с префиксом `20200601/` в бакете `testdbbackups` в {{ objstorage-name }}.
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH export s3 --s3-endpoint {{ s3-storage-host }}  --bucket testdbbackups\
 --item source=$YDB_DB_PATH/backup/episodes,destination=20200601/episodes\
@@ -50,7 +50,7 @@ aws --endpoint-url=https://{{ s3-storage-host }} s3 ls testdbbackups/20200601/
 
 {% note info "Работа с директориями" %}
 
-Чтобы сделать резервную копию всех таблиц в директории YDB, следует указать путь до директории в качестве источника.
+Чтобы сделать резервную копию всех таблиц в директории {{ ydb-short-name }}, следует указать путь до директории в качестве источника.
 
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH export s3 \

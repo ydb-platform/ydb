@@ -1,4 +1,4 @@
-## Сервис {{ ydb-full-name }} {#ydb}
+## Сервис {{ ydb-short-name }} {#ydb}
 
 ### Метрики использования ресурсов {#resources}
 

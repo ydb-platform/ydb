@@ -4,7 +4,7 @@
 
 Порядок установки YFM-Docs описан на [вводной странице документации по этой утилите](https://ydocs.tech/ru/tools/docs/).
 
-Для сборки OpenSource документации YDB нужно выполнить команду:
+Для сборки OpenSource документации {{ ydb-short-name }} нужно выполнить команду:
 
 ``` bash
 $ yfm -i <source_dir> -o <output_dir> --allowHTML

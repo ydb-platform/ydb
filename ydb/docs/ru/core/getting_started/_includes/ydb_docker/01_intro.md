@@ -1,4 +1,4 @@
-# Использование Docker-контейнера YDB
+# Использование Docker-контейнера {{ ydb-short-name }}
 
 Для отладки или тестирования вы можете запустить [Docker](https://docs.docker.com/get-docker/)-контейнер YDB.
 

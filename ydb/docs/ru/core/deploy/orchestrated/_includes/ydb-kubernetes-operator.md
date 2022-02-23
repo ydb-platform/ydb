@@ -1,8 +1,8 @@
 # Установка кластера
 
-## Установите контроллер {{ ydb-name }} в кластер {#install-ydb-controller}
+## Установите контроллер {{ ydb-short-name }} в кластер {#install-ydb-controller}
 
-Установите {{ ydb-name }} в стандартной конфигурации:
+Установите {{ ydb-short-name }} в стандартной конфигурации:
 
 {% list tabs %}
 
@@ -30,7 +30,7 @@
 
 {% endlist %}
 
-## Создайте кластер {{ ydb-name }} {#create-cluster}
+## Создайте кластер {{ ydb-short-name }} {#create-cluster}
 
 Примените манифест для создания кластера {{ ydb-short-name }}:
 
@@ -140,7 +140,7 @@
 
 ## Проверьте работу {#test-ydb}
 
-Проверьте работоспособность {{ ydb-name }}:
+Проверьте работоспособность {{ ydb-short-name }}:
 
 {% list tabs %}
 
@@ -222,7 +222,7 @@
       kubectl delete pvc -l app.kubernetes.io/name=ydb
       ```
 
-  1. Чтобы удалить контроллер {{ ydb-name }} из кластера {{ k8s }}, удалите релиз, созданный Helm:
+  1. Чтобы удалить контроллер {{ ydb-short-name }} из кластера {{ k8s }}, удалите релиз, созданный Helm:
 
       ```bash
       helm delete ydb-operator

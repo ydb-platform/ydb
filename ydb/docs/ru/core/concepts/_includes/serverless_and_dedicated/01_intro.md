@@ -1,5 +1,5 @@
 ---
-title: Режимы работы Serverless и Dedicated в Yandex Database
+title: Режимы работы Serverless и Dedicated в YDB
 description: "Базы YDB могут быть созданы в двух режимах Dedicated и Serverless. Режим работы Dedicated предполагает, что ресурсы на инстансы Таблеток и на выполнение YQL-запросов выбираются из явно выделенных для базы данных compute ресурсов. В Serverless режиме работы инфраструктура YDB определяет сколько вычислительных ресурсов необходимо выделить для обслуживания пользовательской базы."
 keywords:
   - ydb
@@ -8,7 +8,7 @@ keywords:
 editable: false
 ---
 
-# Serverless и Dedicated режимы работы {{ ydb-full-name }}
+# Serverless и Dedicated режимы работы {{ ydb-short-name }}
 
 Вы можете создать и использовать множество баз данных {{ ydb-short-name }}. Для каждой БД при создании выбирается один из двух режимов работы: Serverless или Dedicated. В дальнейшем он не может быть изменен.
 

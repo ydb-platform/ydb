@@ -1,4 +1,4 @@
-# YDB CLI - Начало работы
+# {{ ydb-short-name }} CLI - Начало работы
 
 ## Предварительные требования {#prerequisites}
 
@@ -11,7 +11,7 @@
 
 ## Установка CLI {#install}
 
-Установите YDB CLI как описано в статье [Установка YDB CLI](../../reference/ydb-cli/install.md).
+Установите {{ ydb-short-name }} CLI как описано в статье [Установка {{ ydb-short-name }} CLI](../../reference/ydb-cli/install.md).
 
 Проверьте успешность установки YDB CLI запуском с параметром `--help`:
 
@@ -34,7 +34,7 @@ ydb
 ...
 ```
 
-Все возможности работы со встроенной справкой YDB CLI описаны в статье [Встроенная справка](../../reference/ydb-cli/commands/service.md#help) справочника по YDB CLI.
+Все возможности работы со встроенной справкой {{ ydb-short-name }} CLI описаны в статье [Встроенная справка](../../reference/ydb-cli/commands/service.md#help) справочника по {{ ydb-short-name }} CLI.
 
 ## Проверьте успешность соединения {#ping} {#scheme-ls}
 
@@ -67,7 +67,7 @@ ydb
 
 ## Исполнение YQL скрипта {#yql}
 
-Команда YDB CLI `scripting yql` позволяет выполнить любую команду (как DDL так и DML) на [языке YQL](../../yql/reference/index.md) - диалекте SQL, поддерживаемом YDB:
+Команда {{ ydb-short-name }} CLI `scripting yql` позволяет выполнить любую команду (как DDL так и DML) на [языке YQL](../../yql/reference/index.md) - диалекте SQL, поддерживаемом {{ ydb-short-name }}:
 
 ``` bash
 {{ ydb-cli }} --profile <profile_name> yql -s <yql_request>

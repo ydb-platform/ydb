@@ -23,6 +23,10 @@ items:
     # when: audience == "tech"
   - name: Kubernetes
     include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
+  - name: Вручную
+    include: { mode: link, path: ../deploy/manual/toc_p.yaml }
+  - name: Production checklist
+    href: ../deploy/production_checklist.md
 - name: Полезные ссылки
   href: useful_links.md
 

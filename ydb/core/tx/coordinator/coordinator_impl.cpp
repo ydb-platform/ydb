@@ -305,6 +305,17 @@ void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& 
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
+void TTxCoordinator::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
+    PipeServers.insert(ev->Get()->ServerId);
+}
+
+void TTxCoordinator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PipeServers.erase(ev->Get()->ServerId);
+    if (ReadStepSubscriptionManager) {
+        ctx.Send(ReadStepSubscriptionManager, new TEvPrivate::TEvPipeServerDisconnected(ev->Get()->ServerId));
+    }
+}
+
 void TTxCoordinator::OnActivateExecutor(const TActorContext &ctx) {
     TryInitMonCounters(ctx);
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
@@ -354,7 +365,12 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
                 << ", txid# " << tx.TxId << " marker# C2");
         }
 
-        VolatileState.LastSentStep = Max(VolatileState.LastSentStep, extracted->Step);
+        if (VolatileState.LastSentStep < extracted->Step) {
+            VolatileState.LastSentStep = extracted->Step;
+            if (ReadStepSubscriptionManager) {
+                ctx.Send(ReadStepSubscriptionManager, new TEvPrivate::TEvReadStepUpdated(VolatileState.LastSentStep));
+            }
+        }
         ctx.Send(mediator.QueueActor, new TEvTxCoordinator::TEvMediatorQueueStep(mediator.GenCookie, extracted));
     }
 }

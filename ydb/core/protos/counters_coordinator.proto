@@ -30,4 +30,6 @@ enum ETxTypes {
     TXTYPE_MEDIATOR_CONFIRMATIONS = 2                     [(TxTypeOpts) = {Name: "TxMediatorConfirmations"}];
     TXTYPE_RESTART_MEDIATOR = 3                           [(TxTypeOpts) = {Name: "TxRestartMediator"}];
     TXTYPE_ACQUIRE_READ_STEP = 4                          [(TxTypeOpts) = {Name: "TxAcquireReadStep"}];
+    TXTYPE_SUBSCRIBE_READ_STEP = 5                        [(TxTypeOpts) = {Name: "TxSubscribeReadStep"}];
+    TXTYPE_UNSUBSCRIBE_READ_STEP = 6                      [(TxTypeOpts) = {Name: "TxUnsubscribeReadStep"}];
 }

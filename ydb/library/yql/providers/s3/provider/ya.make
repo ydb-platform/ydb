@@ -26,7 +26,6 @@ PEERDIR(
     library/cpp/json
     library/cpp/random_provider
     library/cpp/retry
-    library/cpp/string_utils/quote
     library/cpp/time_provider
     library/cpp/xml/document
     ydb/library/yql/ast

@@ -7,7 +7,6 @@
 
 #include <util/generic/size_literals.h>
 
-#include <library/cpp/string_utils/quote/quote.h>
 #include <contrib/libs/re2/re2/re2.h>
 
 #ifdef THROW
@@ -81,19 +80,21 @@ void OnDiscovery(
                 if (const auto g = gateway.lock()) {
                     const auto& next = root.Node("s3:NextContinuationToken", false, nss).Value<TString>();
                     const auto& maxKeys = root.Node("s3:MaxKeys", false, nss).Value<TString>();
-                    TString prefix(std::get<1U>(keys));
-                    CGIEscape(prefix);
+
                     IHTTPGateway::THeaders headers;
                     if (const auto& token = std::get<2U>(keys); !token.empty())
                         headers.emplace_back(token);
 
+                    TString prefix(std::get<1U>(keys));
                     TUrlBuilder urlBuilder(std::get<0U>(keys));
-                    urlBuilder.AddUrlParam("list-type", "2");
-                    urlBuilder.AddUrlParam("prefix", prefix);
-                    urlBuilder.AddUrlParam("continuation-token", next);
-                    urlBuilder.AddUrlParam("max-keys", maxKeys);
+                    auto url = urlBuilder.AddUrlParam("list-type", "2")
+                                         .AddUrlParam("prefix", prefix)
+                                         .AddUrlParam("continuation-token", next)
+                                         .AddUrlParam("max-keys", maxKeys)
+                                         .Build();
+
                     return g->Download(
-                        urlBuilder.Build(),
+                        url,
                         std::move(headers),
                         0U,
                         std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd, retryPolicy),
@@ -216,17 +217,17 @@ public:
         for (auto& bucket : *PendingBuckets_) {
             auto promise = NThreading::NewPromise();
             handles.emplace_back(promise.GetFuture());
-            TString prefix(std::get<1U>(bucket.first));
-            CGIEscape(prefix);
             IHTTPGateway::THeaders headers;
             if (const auto& token = std::get<2U>(bucket.first); !token.empty())
                 headers.emplace_back(token);
             std::weak_ptr<TPendingBuckets> pendingBucketsWPtr = PendingBuckets_;
+            TString prefix(std::get<1U>(bucket.first));
             TUrlBuilder urlBuilder(std::get<0U>(bucket.first));
-            urlBuilder.AddUrlParam("list-type", "2");
-            urlBuilder.AddUrlParam("prefix", prefix);
+            const auto url = urlBuilder.AddUrlParam("list-type", "2")
+                                       .AddUrlParam("prefix", prefix)
+                                       .Build();
             Gateway_->Download(
-                urlBuilder.Build(),
+                url,
                 headers,
                 0U,
                 std::bind(&OnDiscovery,

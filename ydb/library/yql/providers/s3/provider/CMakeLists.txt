@@ -9,7 +9,6 @@ target_link_libraries(providers-s3-provider PUBLIC
   library-cpp-json
   library-cpp-random_provider
   library-cpp-retry
-  cpp-string_utils-quote
   library-cpp-time_provider
   cpp-xml-document
   library-yql-ast

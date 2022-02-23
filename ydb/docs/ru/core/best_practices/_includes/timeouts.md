@@ -44,7 +44,7 @@ description: 'Значение operation_timeout определяет время
 
 {% if oss == true %}
 
-- С++
+- C++
 
   ```cpp
   #include <ydb/public/sdk/cpp/client/ydb.h>

@@ -13,12 +13,12 @@ python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 
 - `<endpoint>` - [Эндпоинт](../../../../../concepts/connect.md#endpoint)
 - `<database>` - [Размещение базы данных](../../../../../concepts/connect.md#database) 
-- `<auth_mode_var`> - [Переменная окружения](../../../auth.md#env), определяющая режима аутентификации
+- `<auth_mode_var`> - [Переменная окружения](../../../auth.md#env), определяющая режим аутентификации
 - `<auth_mode_value>` - Значение параметра аутентификации для выбранного режима
 
 Например:
 ``` bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." &&  \
+YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:2135 -d /path/db )
 ```
 

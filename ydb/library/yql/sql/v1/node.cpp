@@ -1833,14 +1833,34 @@ private:
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildFrameNode(const TFrameBound& frame) {
-    YQL_ENSURE(frame.Settings != FrameUndefined);
+TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
+    TString settingStr;
+    switch (frame.Settings) {
+        case FramePreceding: settingStr = "preceding"; break;
+        case FrameCurrentRow: settingStr = "currentRow"; break;
+        case FrameFollowing: settingStr = "following"; break;
+        default: YQL_ENSURE(false, "Unexpected frame setting");
+    }
 
     TNodePtr node = frame.Bound;
     TPosition pos = frame.Pos;
-    if (frame.Settings == FrameCurrentRow) {
-        node = BuildQuotedAtom(pos, "currentRow", TNodeFlags::Default);
-    } else if (!node) {
+    if (frameType != EFrameType::FrameByRows) {
+        TVector<TNodePtr> settings;
+        settings.push_back(BuildQuotedAtom(pos, settingStr, TNodeFlags::Default));
+        if (frame.Settings != FrameCurrentRow) {
+            if (!node) {
+                node = BuildQuotedAtom(pos, "unbounded", TNodeFlags::Default);
+            } else if (!node->IsLiteral()) {
+                node = new TYqlFrameBound(pos, node);
+            }
+            settings.push_back(std::move(node));
+        }
+        return BuildTuple(pos, std::move(settings));
+    }
+
+    // TODO: switch FrameByRows to common format above
+    YQL_ENSURE(frame.Settings != FrameCurrentRow, "Should be already replaced by 0 preceding/following");
+    if (!node) {
         node = BuildLiteralVoid(pos);
     } else if (node->IsLiteral()) {
         YQL_ENSURE(node->GetLiteralType() == "Int32");
@@ -1860,13 +1880,12 @@ TNodePtr BuildFrameNode(const TFrameBound& frame) {
 }
 
 TNodePtr ISource::BuildWindowFrame(const TFrameSpecification& spec, bool isCompact) {
-    YQL_ENSURE(spec.FrameType == FrameByRows);
     YQL_ENSURE(spec.FrameExclusion == FrameExclNone);
     YQL_ENSURE(spec.FrameBegin);
     YQL_ENSURE(spec.FrameEnd);
 
-    auto frameBeginNode = BuildFrameNode(*spec.FrameBegin);
-    auto frameEndNode = BuildFrameNode(*spec.FrameEnd);
+    auto frameBeginNode = BuildFrameNode(*spec.FrameBegin, spec.FrameType);
+    auto frameEndNode = BuildFrameNode(*spec.FrameEnd, spec.FrameType);
 
     auto begin = Q(Y(Q("begin"), frameBeginNode));
     auto end = Q(Y(Q("end"), frameEndNode));
@@ -1937,7 +1956,14 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         const auto& funcs = (funcsIter == FuncOverWindow.end()) ? TVector<TNodePtr>() : funcsIter->second;
 
         auto frames = Y();
-        auto callOnFrame = Y("WinOnRows", BuildWindowFrame(*spec->Frame, spec->IsCompact));
+        TString frameType;
+        switch (spec->Frame->FrameType) {
+            case EFrameType::FrameByRows: frameType = "WinOnRows"; break;
+            case EFrameType::FrameByRange: frameType = "WinOnRange"; break;
+            case EFrameType::FrameByGroups: frameType = "WinOnGroups"; break;
+        }
+        YQL_ENSURE(frameType);
+        auto callOnFrame = Y(frameType, BuildWindowFrame(*spec->Frame, spec->IsCompact));
         for (auto& agg : aggs) {
             auto winTraits = agg->WindowTraits(listType);
             callOnFrame = L(callOnFrame, winTraits);

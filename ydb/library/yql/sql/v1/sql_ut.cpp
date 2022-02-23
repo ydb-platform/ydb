@@ -2629,6 +2629,19 @@ select FormatType($f());
         check("ROWS BETWEEN 5 FOLLOWING AND 5 PRECEDING", "<main>:2:14: Error: Frame cannot start from FOLLOWING and end with PRECEDING\n");
     }
 
+    Y_UNIT_TEST(BlockedRangeValueWithoutSingleOrderBy) {
+        UNIT_ASSERT(SqlToYql("SELECT COUNT(*) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM plato.Input").IsOk());
+        UNIT_ASSERT(SqlToYql("SELECT COUNT(*) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM plato.Input").IsOk());
+
+        auto res = SqlToYql("SELECT COUNT(*) OVER (RANGE 5 PRECEDING) FROM plato.Input");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: RANGE with <offset> PRECEDING/FOLLOWING requires exactly one expression in ORDER BY partition clause\n");
+
+        res = SqlToYql("SELECT COUNT(*) OVER (ORDER BY key, value RANGE 5 PRECEDING) FROM plato.Input");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:49: Error: RANGE with <offset> PRECEDING/FOLLOWING requires exactly one expression in ORDER BY partition clause\n");
+    }
+
     Y_UNIT_TEST(NoColumnsInFrameBounds) {
         NYql::TAstParseResult res = SqlToYql(
             "SELECT SUM(x) OVER w FROM plato.Input WINDOW w AS (ROWS BETWEEN\n"

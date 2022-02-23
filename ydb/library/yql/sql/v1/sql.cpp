@@ -859,11 +859,11 @@ protected:
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) ;
 private:
-    static bool IsValidFrameSettings(TContext& ctx, const TFrameBound& begin, const TFrameBound& end);
+    static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);
 
     bool FrameBound(const TRule_window_frame_bound& rule, TFrameBoundPtr& bound);
-    bool FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec);
+    bool FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize);
     bool SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
@@ -6746,8 +6746,10 @@ bool CheckFrameBoundLiteral(TContext& ctx, const TFrameBound& bound, TMaybe<i32>
     return true;
 }
 
-bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameBound& begin, const TFrameBound& end) {
-    Y_UNUSED(ctx);
+bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize) {
+    const TFrameBound& begin = *frameSpec.FrameBegin;
+    const TFrameBound& end = *frameSpec.FrameEnd;
+
     YQL_ENSURE(begin.Settings != FrameUndefined);
     YQL_ENSURE(end.Settings != FrameUndefined);
 
@@ -6770,11 +6772,25 @@ bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameBound& beg
         return false;
     }
 
+    if (frameSpec.FrameType == FrameByRange && sortSpecSize != 1) {
+        TStringBuf msg = "RANGE with <offset> PRECEDING/FOLLOWING requires exactly one expression in ORDER BY partition clause";
+        if (begin.Bound) {
+            ctx.Error(begin.Bound->GetPos()) << msg;
+            return false;
+        }
+        if (end.Bound) {
+            ctx.Error(end.Bound->GetPos()) << msg;
+            return false;
+        }
+    }
+
     TMaybe<i32> beginValue;
     TMaybe<i32> endValue;
 
-    if (!CheckFrameBoundLiteral(ctx, begin, beginValue) || !CheckFrameBoundLiteral(ctx, end, endValue)) {
-        return false;
+    if (frameSpec.FrameType != EFrameType::FrameByRange) {
+        if (!CheckFrameBoundLiteral(ctx, begin, beginValue) || !CheckFrameBoundLiteral(ctx, end, endValue)) {
+            return false;
+        }
     }
 
     if (beginValue.Defined() && endValue.Defined()) {
@@ -6840,25 +6856,21 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
     return true;
 }
 
-bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameSpecificationPtr& frameSpec) {
+bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize) {
+    // window_frame_clause: window_frame_units window_frame_extent window_frame_exclusion?;
     frameSpec = new TFrameSpecification;
     const TString frameUnitStr = to_lower(Token(rule.GetRule_window_frame_units1().GetToken1()));
     if (frameUnitStr == "rows") {
         frameSpec->FrameType = EFrameType::FrameByRows;
     } else if (frameUnitStr == "range") {
         frameSpec->FrameType = EFrameType::FrameByRange;
-    } else if (frameUnitStr == "groups") {
-        frameSpec->FrameType = EFrameType::FrameByGroups;
     } else {
-        Ctx.Error() << "Unknown frame type in window specification: " << frameUnitStr;
-        return false;
-    }
-    if (frameSpec->FrameType != EFrameType::FrameByRows) {
-        Ctx.Error() << "Only ROWS is supported as window frame unit";
-        return false;
+        YQL_ENSURE(frameUnitStr == "groups");
+        frameSpec->FrameType = EFrameType::FrameByGroups;
     }
 
     auto frameExtent = rule.GetRule_window_frame_extent2();
+    // window_frame_extent: window_frame_bound | window_frame_between;
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {
             auto start = frameExtent.GetAlt_window_frame_extent1().GetRule_window_frame_bound1();
@@ -6866,12 +6878,14 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
                 return false;
             }
 
+            // frame end is CURRENT ROW
             frameSpec->FrameEnd = new TFrameBound;
             frameSpec->FrameEnd->Pos = frameSpec->FrameBegin->Pos;
             frameSpec->FrameEnd->Settings = FrameCurrentRow;
             break;
         }
         case TRule_window_frame_extent::kAltWindowFrameExtent2: {
+            // window_frame_between: BETWEEN window_frame_bound AND window_frame_bound;
             auto between = frameExtent.GetAlt_window_frame_extent2().GetRule_window_frame_between1();
             if (!FrameBound(between.GetRule_window_frame_bound2(), frameSpec->FrameBegin)) {
                 return false;
@@ -6886,13 +6900,12 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
     }
     YQL_ENSURE(frameSpec->FrameBegin);
     YQL_ENSURE(frameSpec->FrameEnd);
-    // check for literal
-    if (!IsValidFrameSettings(Ctx, *frameSpec->FrameBegin, *frameSpec->FrameEnd))
-    {
+    if (!IsValidFrameSettings(Ctx, *frameSpec, sortSpecSize)) {
         return false;
     }
 
     if (rule.HasBlock3()) {
+        // window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXCLUDE NO OTHERS;
         switch (rule.GetBlock3().GetRule_window_frame_exclusion1().Alt_case()) {
             case TRule_window_frame_exclusion::kAltWindowFrameExclusion1:
                 frameSpec->FrameExclusion = FrameExclCurRow;
@@ -6914,22 +6927,6 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
     if (frameSpec->FrameExclusion != FrameExclNone) {
         Ctx.Error() << "Frame exclusion is not supported yet";
         return false;
-    }
-
-    if (frameSpec->FrameType != EFrameType::FrameByRange) {
-        // replace FrameCurrentRow for ROWS/GROUPS with 0 preceding/following
-        // FrameCurrentRow has special meaning ( = first/last peer row)
-        auto replaceCurrent = [](TFrameBound& frame, bool preceding) {
-            frame.Settings = preceding ? EFrameSettings::FramePreceding : EFrameSettings::FrameFollowing;
-            frame.Bound = new TLiteralNumberNode<i32>(frame.Pos, "Int32", "0");
-        };
-        if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
-            replaceCurrent(*frameSpec->FrameBegin, true);
-        }
-
-        if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
-            replaceCurrent(*frameSpec->FrameEnd, false);
-        }
     }
 
     return true;
@@ -6975,37 +6972,73 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
             return {};
         }
     }
+    const bool ordered = !winSpecPtr->OrderBy.empty();
     if (rule.HasBlock4()) {
-        if (!FrameClause(rule.GetBlock4().GetRule_window_frame_clause1(), winSpecPtr->Frame)) {
+        if (!FrameClause(rule.GetBlock4().GetRule_window_frame_clause1(), winSpecPtr->Frame, winSpecPtr->OrderBy.size())) {
             return {};
         }
     } else {
         winSpecPtr->Frame = new TFrameSpecification;
-        winSpecPtr->Frame->FrameType = EFrameType::FrameByRows;
-        winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
-
-        // BETWEEN UNBOUNDED PRECEDING AND ...
         winSpecPtr->Frame->FrameBegin = new TFrameBound;
-        winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
-
-        const bool ordered = !winSpecPtr->OrderBy.empty();
         winSpecPtr->Frame->FrameEnd = new TFrameBound;
         winSpecPtr->Frame->FrameBegin->Pos = winSpecPtr->Frame->FrameEnd->Pos = Ctx.Pos();
-        if (ordered) {
-            if (Ctx.AnsiCurrentRow) {
-                // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                // We emit FrameByRows here, but FrameCurrentRow works specially for ROWS
-                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
-            } else {
-                // ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING
-                winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
-                winSpecPtr->Frame->FrameEnd->Bound = new TLiteralNumberNode<i32>(Ctx.Pos(), "Int32", "0");
-            }
+        winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
+
+        winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
+        if (Ctx.AnsiCurrentRow) {
+            // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            winSpecPtr->Frame->FrameType = EFrameType::FrameByRange;
+            winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
+        } else if (ordered) {
+            // legacy behavior
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            winSpecPtr->Frame->FrameType = EFrameType::FrameByRows;
+            winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
         } else {
             // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            winSpecPtr->Frame->FrameType = EFrameType::FrameByRows;
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameFollowing;
         }
     }
+
+    // Normalize and simplify
+    auto replaceCurrentWith = [](TFrameBound& frame, bool preceding, TNodePtr value ) {
+        frame.Settings = preceding ? EFrameSettings::FramePreceding : EFrameSettings::FrameFollowing;
+        frame.Bound = value;
+    };
+
+    const auto frameSpec = winSpecPtr->Frame;
+    if (frameSpec->FrameType == EFrameType::FrameByRange) {
+        if (!ordered) {
+            // CURRENT ROW -> UNBOUNDED
+            if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
+                replaceCurrentWith(*frameSpec->FrameBegin, true, nullptr);
+            }
+            if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
+                replaceCurrentWith(*frameSpec->FrameBegin, false, nullptr);
+            }
+        }
+
+        // RANGE UNBOUNDED -> ROWS UNBOUNDED
+        if (frameSpec->FrameBegin->Settings == EFrameSettings::FramePreceding && !frameSpec->FrameBegin->Bound &&
+            frameSpec->FrameEnd->Settings == EFrameSettings::FrameFollowing && !frameSpec->FrameEnd->Bound)
+        {
+            frameSpec->FrameType = EFrameType::FrameByRows;
+        }
+    } else {
+        // replace FrameCurrentRow for ROWS/GROUPS with 0 preceding/following
+        // FrameCurrentRow has special meaning ( = first/last peer row)
+        if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
+            TNodePtr zero = new TLiteralNumberNode<i32>(winSpecPtr->Frame->FrameBegin->Pos, "Int32", "0");
+            replaceCurrentWith(*frameSpec->FrameBegin, true, zero);
+        }
+
+        if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
+            TNodePtr zero = new TLiteralNumberNode<i32>(winSpecPtr->Frame->FrameEnd->Pos, "Int32", "0");
+            replaceCurrentWith(*frameSpec->FrameEnd, false, zero);
+        }
+    }
+
     return winSpecPtr;
 }
 

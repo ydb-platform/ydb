@@ -4941,7 +4941,17 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus WinOnRowsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (input->IsCallable("WinOnGroups")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "GROUPS in frame specification are not supported yet"));
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (input->IsCallable("WinOnRange")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "RANGE in frame specification is not supported yet"));
+            return IGraphTransformer::TStatus::Error;
+        }
+        YQL_ENSURE(input->IsCallable("WinOnRows"));
+
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4994,12 +5004,6 @@ namespace {
 
         input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
         return IGraphTransformer::TStatus::Ok;
-    }
-
-    IGraphTransformer::TStatus WinOnRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "WinOnRange is not supported yet"));
-        return IGraphTransformer::TStatus::Error;
     }
 
     IGraphTransformer::TStatus WindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

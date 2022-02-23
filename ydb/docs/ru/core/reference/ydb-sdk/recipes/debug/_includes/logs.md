@@ -2,7 +2,7 @@
 
 {% include [work in progress message](../../_includes/addition.md) %}
 
-Ниже приведены примеры кода включения логгирования в разных `Ydb SDK`
+Ниже приведены примеры кода включения логгирования в разных {{ ydb-short-name }} SDK
 
 {% list tabs %}
 

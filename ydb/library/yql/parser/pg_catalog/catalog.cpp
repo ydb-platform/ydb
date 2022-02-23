@@ -193,7 +193,6 @@ struct TCatalog {
         Procs = ParseProcs(procData);
         for (const auto& [k, v]: Procs) {
             ProcByName[v.Name].push_back(k);
-            ProcBySrc[v.Src] = k;
         }
     }
 
@@ -204,31 +203,26 @@ struct TCatalog {
     TOperators Operators;
     TProcs Procs;
     THashMap<TString, TVector<ui32>> ProcByName;
-    THashMap<TString, ui32> ProcBySrc;
 };
 
-const TProcDesc* LookupFunctionSignature(const TString& name) {
+const TProcDesc& LookupProc(const TString& name, const TVector<TString>& argTypes) {
     const auto& catalog = TCatalog::Instance();
-    auto srcIdPtr = catalog.ProcBySrc.FindPtr(name);
-    ui32 procId;
-    if (srcIdPtr) {
-        procId = *srcIdPtr;
-    } else {
-        auto procIdPtr = catalog.ProcByName.FindPtr(name);
-        if (!procIdPtr) {
-            return nullptr;
-        }
-
-        if (procIdPtr->size() != 1) {
-            throw yexception() << "Ambiguous name: " << name;
-        }
-
-        procId = procIdPtr->at(0);
+    auto procIdPtr = catalog.ProcByName.FindPtr(name);
+    if (!procIdPtr) {
+        throw yexception() << "No such function: " << name;
     }
 
-    auto desc = catalog.Procs.FindPtr(procId);
-    Y_ENSURE(desc);
-    return desc;
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.Procs.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->ArgTypes != argTypes) {
+            continue;
+        }
+
+        return *d;
+    }
+
+    throw yexception() << "Unable to find an overload for function " << name << " with given argument types";
 }
 
 }

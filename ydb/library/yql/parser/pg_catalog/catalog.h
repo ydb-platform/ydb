@@ -29,6 +29,6 @@ struct TProcDesc {
     bool IsStrict = true;
 };
 
-const TProcDesc* LookupFunctionSignature(const TString& name);
+const TProcDesc& LookupProc(const TString& name, const TVector<TString>& argTypes);
 
 }

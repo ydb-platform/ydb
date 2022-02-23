@@ -13,7 +13,7 @@ target_compile_options(url_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=23
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(url_udf.global INTERFACE
+target_link_libraries(url_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

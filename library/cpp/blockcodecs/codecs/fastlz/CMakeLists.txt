@@ -7,7 +7,7 @@ target_link_libraries(blockcodecs-codecs-fastlz INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-fastlz.global blockcodecs-codecs-fastlz)
-target_link_libraries(blockcodecs-codecs-fastlz.global INTERFACE
+target_link_libraries(blockcodecs-codecs-fastlz.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-fastlz

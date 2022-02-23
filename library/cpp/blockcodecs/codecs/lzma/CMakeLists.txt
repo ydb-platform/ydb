@@ -7,7 +7,7 @@ target_link_libraries(blockcodecs-codecs-lzma INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-lzma.global blockcodecs-codecs-lzma)
-target_link_libraries(blockcodecs-codecs-lzma.global INTERFACE
+target_link_libraries(blockcodecs-codecs-lzma.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-lzmasdk

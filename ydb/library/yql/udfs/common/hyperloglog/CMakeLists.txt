@@ -13,7 +13,7 @@ target_compile_options(hyperloglog_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(hyperloglog_udf.global INTERFACE
+target_link_libraries(hyperloglog_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

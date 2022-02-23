@@ -6,7 +6,7 @@ target_link_libraries(blockcodecs-codecs-zlib INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-zlib.global blockcodecs-codecs-zlib)
-target_link_libraries(blockcodecs-codecs-zlib.global INTERFACE
+target_link_libraries(blockcodecs-codecs-zlib.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-blockcodecs-core

@@ -18,7 +18,7 @@ target_compile_options(string_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=9
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(string_udf.global INTERFACE
+target_link_libraries(string_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

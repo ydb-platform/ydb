@@ -7,7 +7,7 @@ target_link_libraries(blockcodecs-codecs-legacy_zstd06 INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-legacy_zstd06.global blockcodecs-codecs-legacy_zstd06)
-target_link_libraries(blockcodecs-codecs-legacy_zstd06.global INTERFACE
+target_link_libraries(blockcodecs-codecs-legacy_zstd06.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-zstd06

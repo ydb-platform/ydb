@@ -6,7 +6,7 @@ target_link_libraries(certs INTERFACE
 )
 
 add_global_library_for(certs.global certs)
-target_link_libraries(certs.global INTERFACE
+target_link_libraries(certs.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource

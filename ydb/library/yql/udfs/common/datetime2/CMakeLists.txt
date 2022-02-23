@@ -15,7 +15,7 @@ target_compile_options(datetime2_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=24
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(datetime2_udf.global INTERFACE
+target_link_libraries(datetime2_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

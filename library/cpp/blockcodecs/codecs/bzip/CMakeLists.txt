@@ -7,7 +7,7 @@ target_link_libraries(blockcodecs-codecs-bzip INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-bzip.global blockcodecs-codecs-bzip)
-target_link_libraries(blockcodecs-codecs-bzip.global INTERFACE
+target_link_libraries(blockcodecs-codecs-bzip.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-libbz2

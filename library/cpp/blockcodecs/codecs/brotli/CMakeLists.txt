@@ -8,7 +8,7 @@ target_link_libraries(blockcodecs-codecs-brotli INTERFACE
 )
 
 add_global_library_for(blockcodecs-codecs-brotli.global blockcodecs-codecs-brotli)
-target_link_libraries(blockcodecs-codecs-brotli.global INTERFACE
+target_link_libraries(blockcodecs-codecs-brotli.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-brotli-enc

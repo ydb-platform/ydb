@@ -15,7 +15,7 @@ target_compile_options(yson2_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=21
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(yson2_udf.global INTERFACE
+target_link_libraries(yson2_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

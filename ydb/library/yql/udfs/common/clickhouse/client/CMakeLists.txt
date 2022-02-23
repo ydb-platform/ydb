@@ -58,7 +58,7 @@ target_include_directories(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
 )
-target_link_libraries(clickhouse_client_udf.global INTERFACE
+target_link_libraries(clickhouse_client_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

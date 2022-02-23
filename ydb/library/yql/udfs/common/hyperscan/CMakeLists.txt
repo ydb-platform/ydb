@@ -14,7 +14,7 @@ target_compile_options(hyperscan_udf.global PRIVATE
   -DUDF_ABI_VERSION_MINOR=23
   -DUDF_ABI_VERSION_PATCH=0
 )
-target_link_libraries(hyperscan_udf.global INTERFACE
+target_link_libraries(hyperscan_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

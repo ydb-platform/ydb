@@ -23,7 +23,7 @@ target_compile_options(digest_udf.global PRIVATE
 target_include_directories(digest_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash
 )
-target_link_libraries(digest_udf.global INTERFACE
+target_link_libraries(digest_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-public-udf

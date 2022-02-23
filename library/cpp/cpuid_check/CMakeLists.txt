@@ -5,7 +5,7 @@ target_link_libraries(library-cpp-cpuid_check INTERFACE
 )
 
 add_global_library_for(library-cpp-cpuid_check.global library-cpp-cpuid_check)
-target_link_libraries(library-cpp-cpuid_check.global INTERFACE
+target_link_libraries(library-cpp-cpuid_check.global PUBLIC
   contrib-libs-cxxsupp
   yutil
 )

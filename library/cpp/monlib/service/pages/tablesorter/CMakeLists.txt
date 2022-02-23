@@ -7,7 +7,7 @@ target_link_libraries(service-pages-tablesorter INTERFACE
 )
 
 add_global_library_for(service-pages-tablesorter.global service-pages-tablesorter)
-target_link_libraries(service-pages-tablesorter.global INTERFACE
+target_link_libraries(service-pages-tablesorter.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource

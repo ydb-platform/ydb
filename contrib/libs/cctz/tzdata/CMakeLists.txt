@@ -7,7 +7,7 @@ target_link_libraries(libs-cctz-tzdata INTERFACE
 )
 
 add_global_library_for(libs-cctz-tzdata.global libs-cctz-tzdata)
-target_link_libraries(libs-cctz-tzdata.global INTERFACE
+target_link_libraries(libs-cctz-tzdata.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-cctz

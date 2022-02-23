@@ -6,7 +6,7 @@ target_link_libraries(python-symbols-python INTERFACE
 )
 
 add_global_library_for(python-symbols-python.global python-symbols-python)
-target_link_libraries(python-symbols-python.global INTERFACE
+target_link_libraries(python-symbols-python.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   python-symbols-registry

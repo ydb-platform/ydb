@@ -1394,12 +1394,8 @@ bool TProgram::HasActiveProcesses() {
 }
 
 bool TProgram::NeedWaitForActiveProcesses() {
-    bool flag = HasActiveProcesses();
-    if (!flag) {
-        return false;
-    }
     for (const auto& dp : DataProviders_) {
-        if (dp.WaitForActiveProcesses) {
+        if (dp.HasActiveProcesses && dp.HasActiveProcesses() && dp.WaitForActiveProcesses) {
             return true;
         }
     }

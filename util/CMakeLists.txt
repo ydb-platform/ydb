@@ -1,4 +1,7 @@
 add_library(yutil)
+target_compile_options(yutil PRIVATE
+  -Wnarrowing
+)
 target_link_libraries(yutil PUBLIC
   contrib-libs-cxxsupp
   util-charset

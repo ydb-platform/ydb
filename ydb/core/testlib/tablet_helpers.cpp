@@ -69,7 +69,7 @@ namespace NKikimr {
     class TFakeMediatorTimecastProxy : public TActor<TFakeMediatorTimecastProxy> {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
+            return NKikimrServices::TActivity::TX_MEDIATOR_TIMECAST_ACTOR;
         }
 
         TFakeMediatorTimecastProxy()

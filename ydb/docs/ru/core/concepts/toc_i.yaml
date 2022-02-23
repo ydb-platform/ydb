@@ -11,7 +11,6 @@ items:
 - { name: Скан запросы,                           href: scan_query.md }
 - { name: Ограничения базы данных,                href: limits-ydb.md }
 - name: Кластер YDB
-  when: true # audience == "tech"
   items:
   - name: Обзор
     href: cluster/index.md

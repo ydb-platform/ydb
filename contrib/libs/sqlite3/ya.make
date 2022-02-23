@@ -7,9 +7,9 @@ OWNER(
     g:maps-mrc
 )
 
-VERSION(3.37.2)
+VERSION(3.38.0)
 
-ORIGINAL_SOURCE(https://github.com/sqlite/sqlite/archive/version-3.37.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/sqlite/sqlite/archive/version-3.38.0.tar.gz)
 
 LICENSE(
     Public-Domain AND

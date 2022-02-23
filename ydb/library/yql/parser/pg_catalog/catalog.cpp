@@ -8,32 +8,7 @@
 
 namespace NYql {
 
-enum class EOperKind {
-    Binary,
-    LeftUnary,
-    RightUnary
-};
-
-struct TOperDesc {
-    ui32 OperId = 0;
-    EOperKind Kind = EOperKind::Binary;
-    TString LeftType;
-    TString RightType;
-    TString ResultType;
-    TString Code;
-};
-
 using TOperators = THashMap<ui32, TOperDesc>;
-
-struct TProcDesc {
-    ui32 ProcId = 0;
-    TString Name;
-    TString Src;
-    TVector<TString> ArgTypes;
-    TString ResultType;
-    bool IsStrict = true;
-    bool IsVariadic = false;
-};
 
 using TProcs = THashMap<ui32, TProcDesc>;
 
@@ -217,8 +192,8 @@ struct TCatalog {
         Operators = ParseOperators(opData);
         Procs = ParseProcs(procData);
         for (const auto& [k, v]: Procs) {
-           ProcByName[v.Name].push_back(k);
-           ProcBySrc[v.Src] = k;
+            ProcByName[v.Name].push_back(k);
+            ProcBySrc[v.Src] = k;
         }
     }
 
@@ -232,7 +207,7 @@ struct TCatalog {
     THashMap<TString, ui32> ProcBySrc;
 };
 
-TMaybe<TString> LookupFunctionSignature(const TString& name) {
+const TProcDesc* LookupFunctionSignature(const TString& name) {
     const auto& catalog = TCatalog::Instance();
     auto srcIdPtr = catalog.ProcBySrc.FindPtr(name);
     ui32 procId;
@@ -241,7 +216,7 @@ TMaybe<TString> LookupFunctionSignature(const TString& name) {
     } else {
         auto procIdPtr = catalog.ProcByName.FindPtr(name);
         if (!procIdPtr) {
-            return Nothing();
+            return nullptr;
         }
 
         if (procIdPtr->size() != 1) {
@@ -253,21 +228,7 @@ TMaybe<TString> LookupFunctionSignature(const TString& name) {
 
     auto desc = catalog.Procs.FindPtr(procId);
     Y_ENSURE(desc);
-    TStringBuilder builder;
-    builder << "Callable<(";
-    for (size_t i = 0; i < desc->ArgTypes.size(); ++i) {
-        if (i) {
-            builder << ',';
-        }
-
-        builder << "pg_" << desc->ArgTypes[i];
-    }
-
-    builder << ")->";
-    builder << "pg_" << desc->ResultType;
-    builder << ">";
-
-    return builder;
+    return desc;
 }
 
 }

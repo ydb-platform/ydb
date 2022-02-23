@@ -590,18 +590,19 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         }
     }
 
-    if (request.HasOlapProgram()) {
-        auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
-            << " Unexpected process program in datashard scan at " << TabletID();
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, msg);
-
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation);
-        ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::DEFAULT_ERROR, msg);
-        IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-        Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
-        return;
-    }
+//    21-4 compatibility....
+//    if (request.HasOlapProgram()) {
+//        auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
+//            << " Unexpected process program in datashard scan at " << TabletID();
+//        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, msg);
+//
+//        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation);
+//        ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+//        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::DEFAULT_ERROR, msg);
+//        IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+//        Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
+//        return;
+//    }
 
     auto& snapshot = request.GetSnapshot();
 

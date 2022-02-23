@@ -245,6 +245,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_OPTIONAL(ui32, AbcId);
     FLUENT_SETTING_OPTIONAL(TString, AbcSlug);
 
+    //TODO: FLUENT_SETTING_VECTOR
     FLUENT_SETTING_DEFAULT(TVector<TReadRuleSettings>, ReadRules, {});
     FLUENT_SETTING_OPTIONAL(TRemoteMirrorRuleSettings, RemoteMirrorRule);
 

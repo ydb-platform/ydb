@@ -1065,7 +1065,7 @@ void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui
 }
 
 
-void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, TString& client, ui32 partition, ui64 offset) {
+void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, const TString& client, ui32 partition, ui64 offset) {
     NPQ::TKeyPrefix ikey(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUser);
     ikey.Append(client.c_str(), client.size());
 
@@ -1086,7 +1086,7 @@ void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, TString& cli
     write->SetValue(idata.Data(), idata.Size());
 }
 
-void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, TString& client, ui32 partition, ui64 offset) {
+void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, const TString& client, ui32 partition, ui64 offset) {
     TString session = "test-session";
     ui32 gen = 1;
     ui32 step = 2;

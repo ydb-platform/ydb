@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/retry
     ydb/public/sdk/cpp/client/ydb_persqueue_core/impl
     ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/client/ydb_driver
 )
 
 END()

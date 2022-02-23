@@ -617,7 +617,7 @@ namespace {
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue8"});
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue9"});
 
-        writer.Read(SHORT_TOPIC_NAME, "user1", "", false, false);
+        writer.Read(SHORT_TOPIC_NAME, "user", "", false, false);
     }
 
     Y_UNIT_TEST(SetupReadSession) {
@@ -769,7 +769,7 @@ namespace {
 
     Y_UNIT_TEST(BigRead) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "user1", 2000000);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "user", 2000000);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -778,12 +778,12 @@ namespace {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
         // trying to read small PQ messages in a big messagebus event
-        auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
+        auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromCache, 4);
 
         TInstant now(TInstant::Now());
-        info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user1"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
+        info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
         TDuration dur = TInstant::Now() - now;
         UNIT_ASSERT_C(dur > TDuration::Seconds(7) && dur < TDuration::Seconds(20), "dur = " << dur); //speed limit is 2000kb/s and burst is 2000kb, so to read 24mb it will take at least 11 seconds
 
@@ -803,8 +803,8 @@ namespace {
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16);
-        auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16);
+        auto info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
+        auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 3);
         UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
@@ -813,8 +813,8 @@ namespace {
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
 
-        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user1"}, 16);
-        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user1"}, 16);
+        info0 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 16, "user"}, 16);
+        info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
@@ -3180,6 +3180,7 @@ namespace {
         const ui32 topicsCount = 4;
         for (ui32 i = 1; i <= topicsCount; ++i) {
             TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1);
+            createTopicRequest.ReadRules.clear();
             createTopicRequest.ReadRules.push_back("acc@user1");
             createTopicRequest.ReadRules.push_back("acc@user2");
             createTopicRequest.ReadRules.push_back("acc@user3");

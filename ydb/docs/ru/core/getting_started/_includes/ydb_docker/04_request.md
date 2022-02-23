@@ -1,51 +1,23 @@
-## Выполните запрос к базе данных {#request}
+## Выполнение запросов {#request}
 
-Скачайте [YDB CLI](../../../getting_started/cli.md) и выполните запрос к базе данных {{ ydb-short-name }} в Docker-контейнере:
-
-```bash
-ydb \
-  -e grpcs://localhost:2135 \
-  --ca-file $(pwd)/ydb_certs/ca.pem \
-  -d /local table query execute -q 'select 1;'
-```
-
-Где:
-
-* `-e` — эндпоинт базы данных.
-* `--ca-file` — путь к TLS-сертификату.
-* `-d` — имя базы данных и параметры запроса.
-
-Результат выполнения:
-
-```text
-┌─────────┐
-| column0 |
-├─────────┤
-| 1       |
-└─────────┘
-```
-
-Также можно выполнить запрос к контейнеру через порт без TLS, например:
+Установите YDB CLI и выполните запросы, как описано в статье [YDB CLI - Начало работы](../../cli.md), используя эндпоинт и размещение базы данных в начале данной статьи, например:
 
 ```bash
-ydb \
-  -e grpc://localhost:2136 \
-  -d /local table query execute -q 'select 1;'
+ydb -e grpc://localhost:2136 -d /local scheme ls
 ```
 
+Для успешного соединения с использованием TLS в параметры соединения нужно добавить имя файла с сертификатом. Запрос в примере ниже должен быть выполнен из той же рабочей директории, которую вы использовали для запуска контейнера:
+
+```bash
+ydb -e grpcs://localhost:2135 --ca-file ydb_certs/ca.pem -d /local scheme ls
+```
 
 Предсобранная версия [YDB CLI](../../../reference/ydb-cli/index.md) также доступа внутри образа:
 
 ```bash
-docker exec <CONTAINER-ID> /ydb -e localhost:2136 -d /local table query execute -q 'select 1;'
+docker exec <container_id> /ydb -e localhost:2136 -d /local scheme ls
 ```
 
-Результат выполнения:
+, где
 
-```text
-┌─────────┐
-| column0 |
-├─────────┤
-| 1       |
-└─────────┘
-```
+`<container_id>`: идентификатор контейнера, выведенный при его [запуске](#start).

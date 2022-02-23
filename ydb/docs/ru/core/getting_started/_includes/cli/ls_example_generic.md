@@ -6,6 +6,11 @@
 
 То команда и результат выполнения будут выглядеть следующим образом:
 ``` bash
-$ {{ ydb-cli }} -e grpc://ydb.example.com:2136 -d /john/db1 scheme ls
-.sys
+{{ ydb-cli }} -e grpc://ydb.example.com:2136 -d /john/db1 scheme ls
+```
+
+Результат выполнения на только что созданной пустой базе данных:
+
+``` text
+.sys_health .sys
 ```

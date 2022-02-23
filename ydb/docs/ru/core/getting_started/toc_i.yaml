@@ -5,11 +5,11 @@ items:
 - include: { mode: link, path: _includes/index/toc_network.yaml }
 - name: Аутентификация
   href: auth.md
-- name: Интерфейс командной строки (CLI)
+- name: Интерфейс командной строки YDB CLI
   href: cli.md
 - name: Язык запросов YQL
   href: yql.md
-- name: SDK для разных языков программирования
+- name: YDB SDK
   href: sdk.md
 - name: Самостоятельное развертывание
   items:

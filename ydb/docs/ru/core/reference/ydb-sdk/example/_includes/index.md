@@ -3,15 +3,13 @@
 В данном разделе разбирается код однотипного тестового приложения, реализованного с использованием YDB SDK на разных языках программирования:
 
 {% if oss %}
-- C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example)
+- [C++](../example-cpp.md)
 {% endif %}
-- С# (.NET) [https://github.com/ydb-platform/ydb-dotnet-examples](https://github.com/ydb-platform/ydb-dotnet-examples)
-- Go [https://github.com/ydb-platform/ydb-go-examples/tree/master/basic](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic)
-- Java [https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/maven_project](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/maven_project)
-- Node.js [https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1)
-- Python [https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1)
-
-Инструкции по скачиванию и запуску тестового приложения находятся в файле `readme.md` по приведенным выше ссылкам.
+- [С# (.NET)](../example-dotnet.md)
+- [Go](../go/index.md)
+- [Java](../example-java.md)
+- [Node.js](../example-nodejs.md)
+- [Python](../python/index.md)
 
 Тестовое приложение выполняет следующие шаги:
 

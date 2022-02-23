@@ -19,7 +19,7 @@ target_link_libraries(libs-grpc-grpc++ PUBLIC
   src-core-lib
   grpc-third_party-address_sorting
   grpc-third_party-upb
-  abseil-cpp-tstring-y_absl-strings
+  yabseil-cpp-tstring-y_absl-strings
 )
 target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/channel_cc.cc

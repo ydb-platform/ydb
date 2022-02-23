@@ -1,32 +1,32 @@
-add_library(strings-internal-cordz_handle)
-target_include_directories(strings-internal-cordz_handle PUBLIC
+add_library(ystrings-internal-cordz_handle)
+target_include_directories(ystrings-internal-cordz_handle PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(strings-internal-cordz_handle PRIVATE
+target_include_directories(ystrings-internal-cordz_handle PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(strings-internal-cordz_handle PUBLIC
+target_link_libraries(ystrings-internal-cordz_handle PUBLIC
   contrib-libs-cxxsupp
   yutil
-  abseil-cpp-tstring-y_absl-base
-  base-internal-low_level_alloc
-  base-internal-raw_logging
-  base-internal-spinlock_wait
-  base-internal-throw_delegate
-  y_absl-base-log_severity
-  abseil-cpp-tstring-y_absl-debugging
-  y_absl-debugging-stacktrace
-  y_absl-debugging-symbolize
-  abseil-cpp-tstring-y_absl-demangle
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-strings
-  strings-internal-absl_strings_internal
-  abseil-cpp-tstring-y_absl-synchronization
-  y_absl-synchronization-internal
-  abseil-cpp-tstring-y_absl-time
-  y_absl-time-civil_time
-  y_absl-time-time_zone
+  yabseil-cpp-tstring-y_absl-base
+  ybase-internal-low_level_alloc
+  ybase-internal-raw_logging
+  ybase-internal-spinlock_wait
+  ybase-internal-throw_delegate
+  yabsl-base-log_severity
+  yabseil-cpp-tstring-y_absl-debugging
+  yabsl-debugging-stacktrace
+  yabsl-debugging-symbolize
+  yabseil-cpp-tstring-y_absl-demangle
+  yabseil-cpp-tstring-y_absl-numeric
+  yabseil-cpp-tstring-y_absl-strings
+  ystrings-internal-absl_strings_internal
+  yabseil-cpp-tstring-y_absl-synchronization
+  yabsl-synchronization-internal
+  yabseil-cpp-tstring-y_absl-time
+  yabsl-time-civil_time
+  yabsl-time-time_zone
 )
-target_sources(strings-internal-cordz_handle PRIVATE
+target_sources(ystrings-internal-cordz_handle PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/cordz_handle.cc
 )

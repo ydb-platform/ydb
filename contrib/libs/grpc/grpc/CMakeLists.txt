@@ -23,13 +23,13 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   grpc-third_party-address_sorting
   grpc-third_party-upb
   contrib-libs-re2
-  abseil-cpp-tstring-y_absl-hash
+  yabseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
-  abseil-cpp-tstring-y_absl-status
-  abseil-cpp-tstring-y_absl-strings
-  y_absl-strings-cord
-  strings-internal-str_format
-  abseil-cpp-tstring-y_absl-time
+  yabseil-cpp-tstring-y_absl-status
+  yabseil-cpp-tstring-y_absl-strings
+  yabsl-strings-cord
+  ystrings-internal-str_format
+  yabseil-cpp-tstring-y_absl-time
   library-cpp-resource
 )
 target_sources(libs-grpc-grpc PRIVATE

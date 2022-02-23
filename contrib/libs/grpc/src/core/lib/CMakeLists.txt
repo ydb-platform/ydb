@@ -13,13 +13,13 @@ target_include_directories(src-core-lib PRIVATE
 target_link_libraries(src-core-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
-  base-internal-spinlock_wait
+  ybase-internal-spinlock_wait
   abseil-cpp-tstring-y_absl-container
   abseil-cpp-tstring-y_absl-memory
-  abseil-cpp-tstring-y_absl-strings
-  strings-internal-str_format
-  abseil-cpp-tstring-y_absl-synchronization
-  abseil-cpp-tstring-y_absl-time
+  yabseil-cpp-tstring-y_absl-strings
+  ystrings-internal-str_format
+  yabseil-cpp-tstring-y_absl-synchronization
+  yabseil-cpp-tstring-y_absl-time
 )
 target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/alloc.cc

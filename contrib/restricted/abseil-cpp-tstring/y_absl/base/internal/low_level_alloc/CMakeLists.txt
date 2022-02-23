@@ -1,18 +1,18 @@
-add_library(base-internal-low_level_alloc)
-target_include_directories(base-internal-low_level_alloc PUBLIC
+add_library(ybase-internal-low_level_alloc)
+target_include_directories(ybase-internal-low_level_alloc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(base-internal-low_level_alloc PRIVATE
+target_include_directories(ybase-internal-low_level_alloc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(base-internal-low_level_alloc PUBLIC
+target_link_libraries(ybase-internal-low_level_alloc PUBLIC
   contrib-libs-cxxsupp
   yutil
-  abseil-cpp-tstring-y_absl-base
-  base-internal-raw_logging
-  base-internal-spinlock_wait
-  y_absl-base-log_severity
+  yabseil-cpp-tstring-y_absl-base
+  ybase-internal-raw_logging
+  ybase-internal-spinlock_wait
+  yabsl-base-log_severity
 )
-target_sources(base-internal-low_level_alloc PRIVATE
+target_sources(ybase-internal-low_level_alloc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/low_level_alloc.cc
 )

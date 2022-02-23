@@ -961,9 +961,9 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
             NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkSourceId);
             range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
             range->SetIncludeFrom(true);
-            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 1, NPQ::TKeyPrefix::MarkSourceId);
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkUserDeprecated);
             range->SetTo(ikeyTo.Data(), ikeyTo.Size());
-            range->SetIncludeTo(true);
+            range->SetIncludeTo(false);
             Cout << request.Get()->ToString() << Endl;
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
             result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);

@@ -20,10 +20,10 @@ public:
     };
 
     enum EMark : char {
-        MarkUserDeprecated = 'u',
-        MarkSourceId = 's',
+        MarkUser = 'c',
         MarkProtoSourceId = 'p',
-        MarkUser = 'c'
+        MarkSourceId = 's',
+        MarkUserDeprecated = 'u'
     };
 
     TKeyPrefix(EType type, const ui32 partition)

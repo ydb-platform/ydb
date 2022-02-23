@@ -179,9 +179,6 @@ enum EClientLabeledCounters {
     METRIC_LAST_READ_TIME = 25                                       [(LabeledCounterOpts) = {Name: "TimeSinceLastReadMs" AggrFunc : EAF_MIN Type : CT_TIMELAG}];
 
     METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX}];
-
-    METRIC_READ_OFFSET_REWIND_TOTAL = 27                             [(LabeledCounterOpts) = {Name: "ReadOffsetRewindTotal" AggrFunc : EAF_SUM}];
-
 }
 
 

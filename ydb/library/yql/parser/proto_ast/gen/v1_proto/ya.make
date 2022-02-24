@@ -14,7 +14,12 @@ IF (GEN_PROTO)
     SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
 
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
-    CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
+
+    IF(EXPORT_CMAKE)
+        MANUAL_GENERATION(${sql_grammar})
+    ELSE()
+        CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
+    ENDIF()
 
     RUN_ANTLR(
         ${sql_grammar}

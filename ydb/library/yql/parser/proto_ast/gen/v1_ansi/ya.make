@@ -20,7 +20,12 @@ SET(GRAMMAR_STRING_CORE_DOUBLE "\"~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)\""
 SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\"MULTILINE_COMMENT | .\"")
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
-CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
+
+IF(EXPORT_CMAKE)
+    MANUAL_GENERATION(${sql_grammar})
+ELSE()
+    CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
+ENDIF()
 
 NO_COMPILER_WARNINGS()
 

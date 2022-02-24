@@ -19,14 +19,6 @@ target_sources(yutil PRIVATE
   ${CMAKE_SOURCE_DIR}/util/system/valgrind.cpp
   ${CMAKE_SOURCE_DIR}/util/system/mktemp_system.cpp
 )
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/util/system/compiler.cpp
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -fno-lto
-)
 target_joined_source(yutil
   all_datetime.cpp
   ${CMAKE_SOURCE_DIR}/util/datetime/base.cpp

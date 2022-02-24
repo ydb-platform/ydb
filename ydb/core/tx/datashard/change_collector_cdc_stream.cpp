@@ -115,10 +115,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
         switch (stream.Mode) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-            Persist(pathId, rop, key, keyTags, {});
+            Persist(tableId, pathId, rop, key, keyTags, {});
             break;
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
-            Persist(pathId, rop, key, keyTags, updates);
+            Persist(tableId, pathId, rop, key, keyTags, updates);
             break;
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
@@ -131,14 +131,14 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeOldImage) {
-                Persist(pathId, rop, key, keyTags, NullIfErased(&*oldState), nullptr, valueTags);
+                Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), nullptr, valueTags);
             } else {
                 const auto newState = PatchState(*oldState, rop, MakeTagToPos(valueTags), MappedUpdates(updates));
 
                 if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeNewImage) {
-                    Persist(pathId, rop, key, keyTags, nullptr, NullIfErased(&newState), valueTags);
+                    Persist(tableId, pathId, rop, key, keyTags, nullptr, NullIfErased(&newState), valueTags);
                 } else {
-                    Persist(pathId, rop, key, keyTags, NullIfErased(&*oldState), NullIfErased(&newState), valueTags);
+                    Persist(tableId, pathId, rop, key, keyTags, NullIfErased(&*oldState), NullIfErased(&newState), valueTags);
                 }
             }
 
@@ -202,15 +202,15 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
     return newState;
 }
 
-void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
+void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    TBaseChangeCollector::Persist(TChangeRecord::EKind::CdcDataChange, pathId, body);
+    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
 }
 
-void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
+void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
 {
@@ -220,7 +220,7 @@ void TCdcStreamChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
 
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-    TBaseChangeCollector::Persist(TChangeRecord::EKind::CdcDataChange, pathId, body);
+    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);
 }
 
 } // NDataShard

@@ -28,7 +28,7 @@ protected:
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags);
 
-    void Persist(TChangeRecord::EKind kind, const TPathId& pathId, const TDataChange& body);
+    void Persist(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body);
 
 public:
     explicit TBaseChangeCollector(TDataShard* self, NTable::TDatabase& db, bool isImmediateTx);

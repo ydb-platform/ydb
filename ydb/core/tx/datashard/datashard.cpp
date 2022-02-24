@@ -467,7 +467,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
         NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
         NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-        NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()));
+        NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+        NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()));
     db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
         NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
         NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));

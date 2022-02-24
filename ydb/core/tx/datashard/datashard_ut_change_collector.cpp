@@ -28,14 +28,14 @@ auto GetValueFromLocalDb(TTestActorRuntime& runtime, const TActorId& sender, ui6
 auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
     auto protoValue = GetValueFromLocalDb(runtime, sender, tabletId, R"((
         (let range '( '('Order (Uint64 '0) (Void) )))
-        (let columns '('Order 'Group 'PlanStep 'TxId 'PathOwnerId 'LocalPathId) )
+        (let columns '('Order 'Group 'PlanStep 'TxId 'PathOwnerId 'LocalPathId 'SchemaVersion) )
         (let result (SelectRange 'ChangeRecords range columns '()))
         (return (AsList (SetResult 'Result result) ))
     ))");
     auto value = NClient::TValue::Create(protoValue);
     const auto& result = value["Result"]["List"];
 
-    TVector<std::tuple<ui64, ui64, ui64, ui64, TPathId>> records;
+    TVector<std::tuple<ui64, ui64, ui64, ui64, TPathId, ui64>> records;
     for (size_t i = 0; i < result.Size(); ++i) {
         const auto& item = result[i];
         records.emplace_back(
@@ -43,7 +43,8 @@ auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 t
             item["Group"],
             item["PlanStep"],
             item["TxId"],
-            TPathId(item["PathOwnerId"], item["LocalPathId"])
+            TPathId(item["PathOwnerId"], item["LocalPathId"]),
+            item["SchemaVersion"]
         );
     }
 
@@ -96,6 +97,8 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithGroup(std::get<1>(record))
                 .WithStep(std::get<2>(record))
                 .WithTxId(std::get<3>(record))
+                .WithPathId(std::get<4>(record))
+                .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
                 .Build()
         );
@@ -333,6 +336,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -633,6 +637,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }

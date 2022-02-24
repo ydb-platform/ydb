@@ -135,7 +135,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needDeletion) {
-                Persist(pathId, ERowOp::Erase, IndexKeyVals, IndexKeyTags, {});
+                Persist(tableId, pathId, ERowOp::Erase, IndexKeyVals, IndexKeyTags, {});
             }
 
             Clear();
@@ -178,7 +178,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needUpdate) {
-                Persist(pathId, ERowOp::Upsert, IndexKeyVals, IndexKeyTags, IndexDataVals);
+                Persist(tableId, pathId, ERowOp::Upsert, IndexKeyVals, IndexKeyTags, IndexDataVals);
             }
 
             Clear();
@@ -283,12 +283,12 @@ void TAsyncIndexChangeCollector::FillDataWithNull(TTag tag, NScheme::TTypeId typ
     IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue({}, type));
 }
 
-void TAsyncIndexChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
+void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    TBaseChangeCollector::Persist(TChangeRecord::EKind::AsyncIndex, pathId, body);
+    TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
 }
 
 void TAsyncIndexChangeCollector::Clear() {

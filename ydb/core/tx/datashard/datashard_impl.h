@@ -652,9 +652,10 @@ class TDataShard
             struct PathOwnerId : Column<5, NScheme::NTypeIds::Uint64> {};
             struct LocalPathId : Column<6, NScheme::NTypeIds::Uint64> {};
             struct BodySize    : Column<7, NScheme::NTypeIds::Uint64> {};
+            struct SchemaVersion : Column<8, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Group, PlanStep, TxId, PathOwnerId, LocalPathId, BodySize>;
+            using TColumns = TableColumns<Order, Group, PlanStep, TxId, PathOwnerId, LocalPathId, BodySize, SchemaVersion>;
         };
 
         struct ChangeRecordDetails : Table<18> {

@@ -103,6 +103,11 @@ TChangeRecordBuilder& TChangeRecordBuilder::WithPathId(const TPathId& pathId) {
     return *this;
 }
 
+TChangeRecordBuilder& TChangeRecordBuilder::WithSchemaVersion(ui64 version) {
+    Record.SchemaVersion = version;
+    return *this;
+}
+
 TChangeRecordBuilder& TChangeRecordBuilder::WithBody(const TString& body) {
     Record.Body = body;
     return *this;

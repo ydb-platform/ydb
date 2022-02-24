@@ -30,6 +30,7 @@ public:
     ui64 GetStep() const { return Step; }
     ui64 GetTxId() const { return TxId; }
     const TPathId& GetPathId() const { return PathId; }
+    ui64 GetSchemaVersion() const { return SchemaVersion; }
     EKind GetKind() const { return Kind; }
     const TString& GetBody() const { return Body; }
     i64 GetSeqNo() const;
@@ -46,6 +47,7 @@ private:
     ui64 Step;
     ui64 TxId;
     TPathId PathId;
+    ui64 SchemaVersion;
     EKind Kind;
     TString Body;
 
@@ -64,6 +66,7 @@ public:
     TChangeRecordBuilder& WithStep(ui64 step);
     TChangeRecordBuilder& WithTxId(ui64 txId);
     TChangeRecordBuilder& WithPathId(const TPathId& pathId);
+    TChangeRecordBuilder& WithSchemaVersion(ui64 version);
 
     TChangeRecordBuilder& WithBody(const TString& body);
     TChangeRecordBuilder& WithBody(TString&& body);

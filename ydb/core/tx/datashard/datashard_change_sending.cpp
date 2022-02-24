@@ -72,6 +72,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         basic.GetValue<Schema::ChangeRecords::PathOwnerId>(),
                         basic.GetValue<Schema::ChangeRecords::LocalPathId>()
                     ))
+                    .WithSchemaVersion(basic.GetValue<Schema::ChangeRecords::SchemaVersion>())
                     .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>())
                     .Build());
 

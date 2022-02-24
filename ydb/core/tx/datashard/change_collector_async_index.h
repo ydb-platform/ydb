@@ -42,7 +42,7 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
     void FillDataFromUpdate(NTable::TTag tag, NTable::TPos pos, TArrayRef<const NTable::TUpdateOp> updates);
     void FillDataWithNull(NTable::TTag tag, NScheme::TTypeId type);
 
-    void Persist(const TPathId& pathId, NTable::ERowOp rop,
+    void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         TArrayRef<const NTable::TUpdateOp> updates);
 

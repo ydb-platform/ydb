@@ -1,4 +1,4 @@
-# Загрузки {# downloads}
+# Загрузки
 
 ## {{ ydb-short-name }} CLI
 

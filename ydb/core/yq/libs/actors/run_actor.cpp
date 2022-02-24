@@ -681,6 +681,7 @@ private:
         const bool failure = Issues.Size() > 0;
         const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
         if (finalize) {
+
             if (RetryNeeded) {
                 ResignQuery();
                 return;

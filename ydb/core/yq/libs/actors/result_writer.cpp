@@ -84,7 +84,7 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext& ) {
-        auto req = MakeHolder<TEvDqFailure>(TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
+        auto req = MakeHolder<TEvDqFailure>(TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), true, /*needFallback=*/false);
         Send(ExecuterId, req.Release());
         HasError = true;
     }
@@ -93,8 +93,7 @@ private:
         LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
         Issues.AddIssues(issues);
         HasError = true;
-        auto req = MakeHolder<TEvDqFailure>();
-        IssuesToMessage(issues, req->Record.MutableIssues());
+        auto req = MakeHolder<TEvDqFailure>(Issues);
         Send(ExecuterId, req.Release());
     }
 

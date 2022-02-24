@@ -107,7 +107,11 @@ private:
         auto ydbStatusId = ev->Get()->Record.GetStatusCode();
         TIssues issues = ev->Get()->GetIssues();
         YQL_LOG(DEBUG) << "AbortExecution from " << ev->Sender << ":" << ydbStatusId << " " << issues.ToOneLineString();
-        OnError(issues, ydbStatusId == Ydb::StatusIds::UNAVAILABLE, false); // TODO: check fallback
+        auto retry = true;
+        if (ydbStatusId == Ydb::StatusIds::BAD_REQUEST) {
+            retry = false;
+        }
+        OnError(issues, retry, false); // TODO: check fallback
     }
 
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {
@@ -139,7 +143,7 @@ private:
             case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
                 NYql::IssuesFromMessage(state.GetIssues(), Issues);
-                OnError(Issues, false, false);
+                OnError(Issues, true, false);
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {

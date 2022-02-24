@@ -141,7 +141,7 @@ public:
                                                           const TSnapshot& outdatedSnapshot) override;
     std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot,
                                                        THashSet<ui64>& pathsToDrop) override;
-    std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTtlInfo>& pathTtls) override;
+    std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls) override;
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) override;
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
@@ -163,6 +163,9 @@ public:
 
     /// @note called from CompactionActor
     static TVector<TString> CompactBlobs(const TIndexInfo& indexInfo, std::shared_ptr<TColumnEngineChanges> changes);
+
+    /// @note called from EvictionActor
+    static TVector<TString> EvictBlobs(const TIndexInfo& indexInfo, std::shared_ptr<TColumnEngineChanges> changes);
 
     static ui64 ExtractKey(const TString& key) {
         Y_VERIFY(key.size() == 8);

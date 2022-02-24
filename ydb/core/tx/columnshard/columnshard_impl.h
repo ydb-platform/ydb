@@ -45,6 +45,7 @@ class TColumnShard
 {
     friend class TIndexingActor;
     friend class TCompactionActor;
+    friend class TEvictionActor;
     friend class TTxInit;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -307,6 +308,7 @@ private:
 
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
     TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
+    TActorId EvictionActor;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
@@ -374,14 +376,14 @@ private:
     void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions, const THashSet<TString>& ttlColumns);
+    void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions);
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
 
     std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();
-    std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupTtl(const THashMap<ui64, NOlap::TTtlInfo>& pathTtls = {},
-                                                        bool force = false);
+    std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiersInfo>& pathTtls = {},
+                                                      bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
 
     void UpdateBlobMangerCounters();

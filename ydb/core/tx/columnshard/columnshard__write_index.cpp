@@ -36,12 +36,12 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 << ") apply changes: " << *changes << " at tablet " << Self->TabletID());
 
             TBlobManagerDb blobManagerDb(txc.DB);
-            for (const auto& cmtd : Ev->Get()->IndexChanges->DataToIndex) {
+            for (const auto& cmtd : changes->DataToIndex) {
                 Self->InsertTable->EraseCommitted(dbWrap, cmtd);
                 Self->BlobManager->DeleteBlob(cmtd.BlobId, blobManagerDb);
             }
 
-            const auto& switchedPortions = Ev->Get()->IndexChanges->SwitchedPortions;
+            const auto& switchedPortions = changes->SwitchedPortions;
             Self->IncCounter(COUNTER_PORTIONS_DEACTIVATED, switchedPortions.size());
 
             THashSet<TUnifiedBlobId> blobsDeactivated;
@@ -57,7 +57,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 Self->IncCounter(COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
             }
 
-            for (auto& portionInfo : Ev->Get()->IndexChanges->AppendedPortions) {
+            for (auto& portionInfo : changes->AppendedPortions) {
                 switch (portionInfo.Meta.Produced) {
                     case NOlap::TPortionMeta::UNSPECIFIED:
                         Y_VERIFY(false); // unexpected
@@ -70,6 +70,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                     case NOlap::TPortionMeta::SPLIT_COMPACTED:
                         Self->IncCounter(COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                         break;
+                    case NOlap::TPortionMeta::EVICTED:
+                        Y_FAIL("Unexpected evicted case");
+                        break;
                     case NOlap::TPortionMeta::INACTIVE:
                         Y_FAIL("Unexpected inactive case");
                         break;
@@ -78,7 +81,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 // Put newly created blobs into cache
                 if (Ev->Get()->CacheData) {
                     for (const auto& columnRec : portionInfo.Records) {
-                        const auto* blob = Ev->Get()->IndexChanges->Blobs.FindPtr(columnRec.BlobRange);
+                        const auto* blob = changes->Blobs.FindPtr(columnRec.BlobRange);
                         Y_VERIFY_DEBUG(blob, "Column data must be passed if CacheData is set");
                         if (blob) {
                             Y_VERIFY(columnRec.BlobRange.Size == blob->Size());
@@ -88,7 +91,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 }
             }
 
-            const auto& portionsToDrop = Ev->Get()->IndexChanges->PortionsToDrop;
+            Self->IncCounter(COUNTER_EVICTION_PORTIONS_WRITTEN, changes->PortionsToEvict.size());
+
+            const auto& portionsToDrop = changes->PortionsToDrop;
             THashSet<TUnifiedBlobId> blobsToDrop;
             Self->IncCounter(COUNTER_PORTIONS_ERASED, portionsToDrop.size());
             for (const auto& portionInfo : portionsToDrop) {
@@ -96,6 +101,12 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                     blobsToDrop.insert(rec.BlobRange.BlobId);
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
+            }
+
+            // Note: RAW_BYTES_ERASED and BYTES_ERASED counters are not in sync for evicted data
+            const auto& evictedRecords = changes->EvictedRecords;
+            for (const auto& rec : evictedRecords) {
+                blobsToDrop.insert(rec.BlobRange.BlobId);
             }
 
             Self->IncCounter(COUNTER_BLOBS_ERASED, blobsToDrop.size());
@@ -152,6 +163,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
         Self->ActiveTtl = false;
 
         Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
+        Self->IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);
+        Self->IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
     }
 
     Self->UpdateResourceMetrics(Ev->Get()->ResourceUsage);

@@ -231,7 +231,9 @@ message TIndexPortionMeta {
         bool IsInserted = 1;
         bool IsCompacted = 2;
         bool IsSplitCompacted = 3;
+        bool IsEvicted = 4;
     }
+    optional string TierName = 5;
 }
 
 message TIndexColumnMeta {

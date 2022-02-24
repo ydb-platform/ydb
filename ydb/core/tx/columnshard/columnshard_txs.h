@@ -23,6 +23,7 @@ struct TEvPrivate {
         EvScanStats,
         EvReadFinished,
         EvPeriodicWakeup,
+        EvEviction,
         EvEnd
     };
 
@@ -65,6 +66,22 @@ struct TEvPrivate {
             : TxEvent(std::move(txEvent))
         {
             TxEvent->GranuleCompaction = true;
+        }
+    };
+
+    struct TEvEviction : public TEventLocal<TEvEviction, EvEviction> {
+        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+
+        explicit TEvEviction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, bool needWrites)
+            : TxEvent(std::move(txEvent))
+        {
+            if (!needWrites) {
+                TxEvent->PutStatus = NKikimrProto::OK;
+            }
+        }
+
+        bool NeedWrites() const {
+            return (TxEvent->PutStatus != NKikimrProto::OK);
         }
     };
 

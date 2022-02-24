@@ -175,19 +175,16 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             // If no paths trigger schema defined TTL
-            THashMap<ui64, NOlap::TTtlInfo> pathTtls;
+            THashMap<ui64, NOlap::TTiersInfo> pathTtls;
             if (!ttlBody.GetPathIds().empty()) {
-                ui64 unixTimeSec = ttlBody.GetUnixTimeSeconds();
-                auto ts = std::make_shared<arrow::TimestampScalar>(unixTimeSec * 1000 * 1000,
-                                                                   arrow::timestamp(arrow::TimeUnit::MICRO));
-                TString columnName = ttlBody.GetTtlColumnName();
-
-                if (!unixTimeSec || !ts->value) {
+                auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
+                if (!unixTime) {
                     statusMessage = "TTL tx wrong timestamp";
                     status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                     break;
                 }
 
+                TString columnName = ttlBody.GetTtlColumnName();
                 if (columnName.empty()) {
                     statusMessage = "TTL tx wrong TTL column";
                     status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
@@ -195,12 +192,16 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
 
                 for (ui64 pathId : ttlBody.GetPathIds()) {
-                    pathTtls.emplace(pathId, NOlap::TTtlInfo{columnName, ts});
+                    pathTtls.emplace(pathId, NOlap::TTiersInfo(columnName, unixTime));
                 }
             }
 
             if (auto event = Self->SetupTtl(pathTtls, true)) {
-                ctx.Send(Self->SelfId(), event.release());
+                if (event->NeedWrites()) {
+                    ctx.Send(Self->EvictionActor, event.release());
+                } else {
+                    ctx.Send(Self->SelfId(), event->TxEvent.release());
+                }
                 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
             }
 

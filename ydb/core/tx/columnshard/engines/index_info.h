@@ -54,6 +54,16 @@ GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>
 
 struct TInsertedData;
 
+struct TCompression {
+    arrow::Compression::type Codec{arrow::Compression::LZ4_FRAME};
+    std::optional<int> Level;
+};
+
+struct TStorageTier {
+    TString Name;
+    std::optional<TCompression> Compression;
+};
+
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
@@ -189,10 +199,45 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     static bool IsSpecialColumn(const arrow::Field& field);
     static std::vector<std::shared_ptr<arrow::Array>> MakeSpecialColumns(const TInsertedData& blob, ui64 size);
 
-    arrow::Compression::type CompressionCodec() const { return DefaultCompressionCodec; }
-    void SetDefaultCompressionCodec(arrow::Compression::type codec) { DefaultCompressionCodec = codec; }
-    std::optional<int> CompressionLevel() const { return DefaultCompressionLevel; }
-    void SetDefaultCompressionLevel(const std::optional<int>& level = {}) { DefaultCompressionLevel = level; }
+    void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
+    const TCompression& GetDefaultCompression() const { return DefaultCompression; }
+
+    std::optional<TCompression> GetTierCompression(ui32 tierNo) const {
+        if (!Tiers.empty()) {
+            Y_VERIFY(tierNo < Tiers.size());
+            return Tiers[tierNo].Compression;
+        }
+        return {};
+    }
+
+    std::optional<TCompression> GetTierCompression(const TString& tierName) const {
+        if (tierName.empty()) {
+            return {};
+        }
+        ui32 tierNo = GetTierNumber(tierName);
+        Y_VERIFY(tierNo != Max<ui32>());
+        return GetTierCompression(tierNo);
+    }
+
+    TString GetTierName(ui32 tierNo) const {
+        if (!Tiers.empty()) {
+            Y_VERIFY(tierNo < Tiers.size());
+            return Tiers[tierNo].Name;
+        }
+        return {};
+    }
+
+    void AddStorageTier(TStorageTier&& tier) {
+        TierByName[tier.Name] = Tiers.size();
+        Tiers.emplace_back(std::move(tier));
+    }
+
+    ui32 GetTierNumber(const TString& tierName) const {
+        if (auto it = TierByName.find(tierName); it != TierByName.end()) {
+            return it->second;
+        }
+        return Max<ui32>();
+    }
 
 private:
     ui32 Id;
@@ -205,8 +250,9 @@ private:
     std::shared_ptr<arrow::Schema> IndexKey;
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
-    arrow::Compression::type DefaultCompressionCodec{arrow::Compression::LZ4_FRAME};
-    std::optional<int> DefaultCompressionLevel;
+    TCompression DefaultCompression;
+    std::vector<TStorageTier> Tiers;
+    THashMap<TString, ui32> TierByName;
 
     void AddRequiredColumns(const TVector<TString>& columns) {
         for (auto& name: columns) {

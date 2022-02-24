@@ -538,4 +538,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )", {NKikimrScheme::StatusInvalidParameter});
     }
+
+    // TODO: AlterTiers
+    // negatives for store: disallow alters
+    // negatives for table: wrong tiers count, wrong tiers, wrong eviction column, wrong eviction values,
+    //      different TTL columns in tiers
 }

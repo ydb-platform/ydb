@@ -62,13 +62,20 @@ public:
         return Handle;
     }
 
-    void AddCallback(IHTTPGateway::TOnResult callback) {
+    // return true if callback successfully added to this work
+    bool AddCallback(IHTTPGateway::TOnResult callback) {
+        const std::unique_lock lock(SyncCallbacks);
+        if (Callbacks.empty())
+            return false;
         Callbacks.emplace(std::move(callback));
+        return true;
     }
 
-    void Fail(TIssue error) {
+    void Fail(const TIssue& error) {
+        TIssues issues{error};
+        const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            Callbacks.top()(TIssues{error});
+            Callbacks.top()(issues);
             Callbacks.pop();
         }
     }
@@ -77,6 +84,7 @@ public:
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
 
+        const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
             if (1U == Callbacks.size())
                 Callbacks.top()(IHTTPGateway::TContent(std::move(Buffer)));
@@ -107,6 +115,8 @@ private:
     TString Buffer;
     TStringInput Input;
     TStringOutput Output;
+
+    std::mutex SyncCallbacks;
     std::stack<IHTTPGateway::TOnResult> Callbacks;
 };
 
@@ -294,7 +304,8 @@ private:
         const std::unique_lock lock(Sync);
         auto& entry = Requests[TKeyType(url, headers, data, retryPolicy)];
         if (const auto& easy = entry.lock())
-            return easy->AddCallback(std::move(callback));
+            if (easy->AddCallback(std::move(callback)))
+                return;
 
         auto easy = TEasyCurl::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
         entry = easy;
@@ -404,7 +415,8 @@ private:
         const std::unique_lock lock(Sync);
         auto& entry = Requests[TKeyType(url, headers, data, std::move(retryPolicy))];
         if (const auto& easy = entry.first.lock())
-            return easy->AddCallback(std::move(callback));
+            if (easy->AddCallback(std::move(callback)))
+                return;
         auto easy = TEasyCurl::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
         entry = std::make_pair(TEasyCurl::TWeakPtr(easy), std::thread(&THTTPEasyGateway::Perform, weak_from_this(), easy));
     }

@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(libs-aws-sdk-cpp-aws-cpp-sdk-core)
 target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE

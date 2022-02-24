@@ -1,4 +1,4 @@
-find_package(c-ares)
+find_package(c-ares REQUIRED)
 
 add_library(cpp-actors-dnsresolver)
 target_include_directories(cpp-actors-dnsresolver PRIVATE

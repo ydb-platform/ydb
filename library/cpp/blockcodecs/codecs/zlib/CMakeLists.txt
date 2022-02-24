@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(blockcodecs-codecs-zlib INTERFACE)
 target_link_libraries(blockcodecs-codecs-zlib INTERFACE

@@ -1,5 +1,5 @@
-find_package(OpenSSL)
-find_package(ZLIB)
+find_package(OpenSSL REQUIRED)
+find_package(ZLIB REQUIRED)
 
 add_library(contrib-restricted-thrift)
 target_compile_options(contrib-restricted-thrift PRIVATE

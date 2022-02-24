@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(contrib-libs-protobuf)
 target_compile_options(contrib-libs-protobuf PRIVATE

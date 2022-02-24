@@ -1,4 +1,4 @@
-find_package(libidn)
+find_package(libidn REQUIRED)
 
 add_library(cpp-unicode-punycode)
 target_link_libraries(cpp-unicode-punycode PUBLIC

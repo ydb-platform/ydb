@@ -2,6 +2,10 @@ OWNER(
     g:rtmr
 )
 
+SUBSCRIBER(
+    swarmer
+)
+
 LIBRARY()
 
 SRCS(

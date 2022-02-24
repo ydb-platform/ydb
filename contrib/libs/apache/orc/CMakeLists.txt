@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(libs-apache-orc)
 target_include_directories(libs-apache-orc PRIVATE

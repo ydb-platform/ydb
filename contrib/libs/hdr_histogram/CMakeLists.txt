@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(contrib-libs-hdr_histogram)
 target_include_directories(contrib-libs-hdr_histogram PRIVATE

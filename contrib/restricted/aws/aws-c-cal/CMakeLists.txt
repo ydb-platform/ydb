@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-aws-c-cal)
 target_include_directories(restricted-aws-aws-c-cal PUBLIC

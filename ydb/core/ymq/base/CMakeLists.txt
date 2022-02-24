@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(core-ymq-base)
 target_link_libraries(core-ymq-base PUBLIC

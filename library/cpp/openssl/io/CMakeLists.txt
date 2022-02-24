@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(cpp-openssl-io)
 target_link_libraries(cpp-openssl-io PUBLIC

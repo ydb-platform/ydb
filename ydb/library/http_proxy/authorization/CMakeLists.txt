@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(library-http_proxy-authorization)
 target_link_libraries(library-http_proxy-authorization PUBLIC

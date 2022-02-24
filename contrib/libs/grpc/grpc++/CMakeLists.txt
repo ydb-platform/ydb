@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(libs-grpc-grpc++)
 target_compile_options(libs-grpc-grpc++ PRIVATE

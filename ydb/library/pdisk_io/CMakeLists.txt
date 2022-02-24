@@ -1,4 +1,4 @@
-find_package(AIO)
+find_package(AIO REQUIRED)
 
 add_library(ydb-library-pdisk_io)
 target_link_libraries(ydb-library-pdisk_io PUBLIC

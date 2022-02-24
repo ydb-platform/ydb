@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(llvm12-lib-Support)
 target_include_directories(llvm12-lib-Support PRIVATE

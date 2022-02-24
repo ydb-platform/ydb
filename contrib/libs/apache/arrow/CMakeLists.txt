@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(libs-apache-arrow)
 target_compile_options(libs-apache-arrow PUBLIC

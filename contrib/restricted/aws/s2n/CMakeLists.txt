@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE

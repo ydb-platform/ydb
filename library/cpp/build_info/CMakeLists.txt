@@ -1,4 +1,4 @@
-find_package(Python2)
+find_package(Python2 REQUIRED)
 
 add_library(library-cpp-build_info)
 target_link_libraries(library-cpp-build_info PUBLIC

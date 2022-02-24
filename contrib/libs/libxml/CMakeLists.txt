@@ -1,5 +1,5 @@
-find_package(Iconv)
-find_package(ZLIB)
+find_package(Iconv REQUIRED)
+find_package(ZLIB REQUIRED)
 
 add_library(contrib-libs-libxml)
 target_compile_options(contrib-libs-libxml PUBLIC

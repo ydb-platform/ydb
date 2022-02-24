@@ -1,6 +1,6 @@
-find_package(OpenSSL)
-find_package(ZLIB)
-find_package(c-ares)
+find_package(OpenSSL REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(c-ares REQUIRED)
 
 add_library(libs-grpc-grpc)
 target_compile_options(libs-grpc-grpc PRIVATE

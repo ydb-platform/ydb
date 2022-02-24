@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(cpp-http-fetch)
 target_link_libraries(cpp-http-fetch PUBLIC

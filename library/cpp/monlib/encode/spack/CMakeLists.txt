@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(monlib-encode-spack)
 target_link_libraries(monlib-encode-spack PUBLIC

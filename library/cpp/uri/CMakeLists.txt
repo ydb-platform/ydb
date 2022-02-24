@@ -1,4 +1,4 @@
-find_package(libidn)
+find_package(libidn REQUIRED)
 
 add_library(library-cpp-uri)
 target_link_libraries(library-cpp-uri PUBLIC

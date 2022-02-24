@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(cpp-actors-http)
 target_link_libraries(cpp-actors-http PUBLIC

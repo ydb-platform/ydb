@@ -1,4 +1,4 @@
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 
 add_library(boost-libs-iostreams)
 target_compile_options(boost-libs-iostreams PRIVATE

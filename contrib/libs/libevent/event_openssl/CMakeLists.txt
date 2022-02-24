@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(libs-libevent-event_openssl)
 target_compile_options(libs-libevent-event_openssl PRIVATE

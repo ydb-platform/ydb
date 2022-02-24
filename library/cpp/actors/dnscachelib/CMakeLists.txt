@@ -1,4 +1,4 @@
-find_package(c-ares)
+find_package(c-ares REQUIRED)
 
 add_library(cpp-actors-dnscachelib)
 target_link_libraries(cpp-actors-dnscachelib PUBLIC

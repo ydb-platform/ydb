@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(core-ymq-actor)
 target_compile_options(core-ymq-actor PRIVATE

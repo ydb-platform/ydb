@@ -1,4 +1,4 @@
-find_package(Iconv)
+find_package(Iconv REQUIRED)
 
 add_library(library-cpp-charset)
 target_link_libraries(library-cpp-charset PUBLIC

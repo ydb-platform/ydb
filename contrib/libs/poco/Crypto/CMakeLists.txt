@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(libs-poco-Crypto)
 target_include_directories(libs-poco-Crypto PUBLIC

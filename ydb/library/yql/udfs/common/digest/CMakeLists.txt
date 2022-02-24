@@ -1,4 +1,4 @@
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 
 add_library(digest_udf INTERFACE)
 target_link_libraries(digest_udf INTERFACE

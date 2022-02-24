@@ -4,6 +4,10 @@ OWNER(
     ishfb
 )
 
+SUBSCRIBER(
+    swarmer
+)
+
 LIBRARY()
 
 SRCS(

@@ -23,7 +23,7 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`pwd`/lib"
 Подготовьте конфигурацию локального кластера, которую хотите развернуть. Для того, чтобы поднять кластер с хранением данных в памяти достаточно скопировать конфигурацию. Для разворачивания кластера с хранением данных в файле, необходимо дополнительно создать файл для хранения данных размером 64GB и указать путь до него в конфигурации.
 
 {% list tabs %}
-- В пямяти
+- В памяти
 
   ```bash
   wget https://raw.githubusercontent.com/ydb-platform/ydb/main/ydb/deploy/yaml_config_examples/single-node-in-memory.yaml -O config.yaml

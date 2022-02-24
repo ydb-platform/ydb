@@ -1,3 +1,5 @@
+find_package(OpenSSL)
+
 add_library(libs-aws-sdk-cpp-aws-cpp-sdk-core)
 target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   -DAWS_CAL_USE_IMPORT_EXPORT
@@ -30,6 +32,7 @@ target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
 target_link_libraries(libs-aws-sdk-cpp-aws-cpp-sdk-core PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-curl
+  OpenSSL::OpenSSL
   restricted-aws-aws-c-common
   restricted-aws-aws-c-event-stream
 )

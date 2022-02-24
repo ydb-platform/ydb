@@ -1,7 +1,10 @@
+find_package(OpenSSL)
+
 add_library(library-http_proxy-authorization)
 target_link_libraries(library-http_proxy-authorization PUBLIC
   contrib-libs-cxxsupp
   yutil
+  OpenSSL::OpenSSL
   library-cpp-cgiparam
   cpp-http-io
   cpp-http-misc

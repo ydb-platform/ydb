@@ -1,3 +1,5 @@
+find_package(ZLIB)
+
 add_library(boost-libs-iostreams)
 target_compile_options(boost-libs-iostreams PRIVATE
   -DBOOST_ATOMIC_STATIC_LINK=1
@@ -26,6 +28,7 @@ target_include_directories(boost-libs-iostreams PRIVATE
 target_link_libraries(boost-libs-iostreams PUBLIC
   contrib-libs-cxxsupp
   contrib-restricted-boost
+  ZLIB::ZLIB
   contrib-libs-libbz2
 )
 target_sources(boost-libs-iostreams PRIVATE

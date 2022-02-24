@@ -1,3 +1,7 @@
+find_package(OpenSSL)
+find_package(ZLIB)
+find_package(c-ares)
+
 add_library(contrib-libs-curl)
 target_compile_options(contrib-libs-curl PUBLIC
   -DCURL_STATICLIB
@@ -17,7 +21,10 @@ target_include_directories(contrib-libs-curl PRIVATE
 )
 target_link_libraries(contrib-libs-curl PUBLIC
   contrib-libs-libc_compat
+  OpenSSL::OpenSSL
+  ZLIB::ZLIB
   contrib-libs-nghttp2
+  c-ares::c-ares
 )
 target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/altsvc.c

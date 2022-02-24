@@ -1,7 +1,10 @@
+find_package(OpenSSL)
+
 add_library(cpp-actors-http)
 target_link_libraries(cpp-actors-http PUBLIC
   contrib-libs-cxxsupp
   yutil
+  OpenSSL::OpenSSL
   cpp-actors-core
   cpp-actors-interconnect
   library-cpp-dns

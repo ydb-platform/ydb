@@ -1,7 +1,10 @@
+find_package(c-ares)
+
 add_library(cpp-actors-dnscachelib)
 target_link_libraries(cpp-actors-dnscachelib PUBLIC
   contrib-libs-cxxsupp
   yutil
+  c-ares::c-ares
   library-cpp-lwtrace
 )
 target_sources(cpp-actors-dnscachelib PRIVATE

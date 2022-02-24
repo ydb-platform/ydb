@@ -1,7 +1,10 @@
+find_package(ZLIB)
+
 add_library(cpp-http-fetch)
 target_link_libraries(cpp-http-fetch PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ZLIB::ZLIB
   library-cpp-charset
   cpp-digest-md5
   cpp-http-misc

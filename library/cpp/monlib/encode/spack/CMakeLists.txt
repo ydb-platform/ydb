@@ -1,3 +1,5 @@
+find_package(ZLIB)
+
 add_library(monlib-encode-spack)
 target_link_libraries(monlib-encode-spack PUBLIC
   contrib-libs-cxxsupp
@@ -6,6 +8,7 @@ target_link_libraries(monlib-encode-spack PUBLIC
   cpp-monlib-exception
   contrib-libs-lz4
   contrib-libs-xxhash
+  ZLIB::ZLIB
   contrib-libs-zstd
 )
 target_sources(monlib-encode-spack PRIVATE

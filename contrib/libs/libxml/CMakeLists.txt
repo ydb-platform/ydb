@@ -1,3 +1,6 @@
+find_package(Iconv)
+find_package(ZLIB)
+
 add_library(contrib-libs-libxml)
 target_compile_options(contrib-libs-libxml PUBLIC
   -DLIBXML_STATIC
@@ -16,6 +19,8 @@ target_include_directories(contrib-libs-libxml PRIVATE
 target_link_libraries(contrib-libs-libxml PUBLIC
   contrib-libs-cxxsupp
   yutil
+  Iconv::Iconv
+  ZLIB::ZLIB
   library-cpp-charset
 )
 target_sources(contrib-libs-libxml PRIVATE

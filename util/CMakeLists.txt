@@ -1,3 +1,5 @@
+find_package(ZLIB)
+
 add_library(yutil)
 target_compile_options(yutil PRIVATE
   -Wnarrowing
@@ -5,6 +7,7 @@ target_compile_options(yutil PRIVATE
 target_link_libraries(yutil PUBLIC
   contrib-libs-cxxsupp
   util-charset
+  ZLIB::ZLIB
   contrib-libs-double-conversion
   contrib-libs-libc_compat
 )

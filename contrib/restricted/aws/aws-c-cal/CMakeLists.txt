@@ -1,3 +1,5 @@
+find_package(OpenSSL)
+
 add_library(restricted-aws-aws-c-cal)
 target_include_directories(restricted-aws-aws-c-cal PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
@@ -6,6 +8,7 @@ target_include_directories(restricted-aws-aws-c-cal PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
 )
 target_link_libraries(restricted-aws-aws-c-cal PUBLIC
+  OpenSSL::OpenSSL
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-cal PRIVATE

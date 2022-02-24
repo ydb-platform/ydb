@@ -1,3 +1,5 @@
+find_package(OpenSSL)
+
 add_library(libs-grpc-grpc++)
 target_compile_options(libs-grpc-grpc++ PRIVATE
   -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
@@ -19,6 +21,7 @@ target_link_libraries(libs-grpc-grpc++ PUBLIC
   src-core-lib
   grpc-third_party-address_sorting
   grpc-third_party-upb
+  OpenSSL::OpenSSL
   yabseil-cpp-tstring-y_absl-strings
 )
 target_sources(libs-grpc-grpc++ PRIVATE

@@ -3,7 +3,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-namespace NYql {
+namespace NYql::NPg {
 
 enum class EOperKind {
     Binary,
@@ -13,10 +13,11 @@ enum class EOperKind {
 
 struct TOperDesc {
     ui32 OperId = 0;
+    TString Name;
     EOperKind Kind = EOperKind::Binary;
-    TString LeftType;
-    TString RightType;
-    TString ResultType;
+    ui32 LeftType = 0;
+    ui32 RightType = 0;
+    ui32 ResultType = 0;
     TString Code;
 };
 
@@ -24,11 +25,21 @@ struct TProcDesc {
     ui32 ProcId = 0;
     TString Name;
     TString Src;
-    TVector<TString> ArgTypes;
-    TString ResultType;
+    TVector<ui32> ArgTypes;
+    ui32 ResultType = 0;
     bool IsStrict = true;
 };
 
-const TProcDesc& LookupProc(const TString& name, const TVector<TString>& argTypes);
+struct TTypeDesc {
+    ui32 TypeId = 0;
+    ui32 ArrayTypeId = 0;
+    TString Name;
+    TString ElementType;
+};
+
+const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
+
+const TTypeDesc& LookupType(const TString& name);
+const TTypeDesc& LookupType(ui32 typeId);
 
 }

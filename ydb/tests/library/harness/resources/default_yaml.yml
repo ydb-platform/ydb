@@ -43,6 +43,7 @@ domains_config:
   domain:
   - name: "{ydb_domain_name}"
     domain_id: 1
+    scheme_root: 72075186232723360
     storage_pool_types:
     - kind: "hdd"
       pool_config:
@@ -90,6 +91,9 @@ system_tablets:
   - node: {ydb_defaut_tablet_node_ids}
   tx_mediator:
   - node: {ydb_defaut_tablet_node_ids}
+  flat_schemeshard:
+  - info:
+      tablet_id: 72075186232723360
 actor_system_config:
   executor:
   - type: BASIC

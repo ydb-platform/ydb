@@ -487,8 +487,9 @@ protected:
         }
         if (NodeId)
             RunConfig.NodeId = NodeId;
+
+        bool nodeIdFoundInConfig = false;
         if (AppConfig.HasNameserviceConfig() && NodeId) {
-            bool nodeIdMatchesConfig = true;
             TString localhost("localhost");
             TString hostname;
             try {
@@ -500,17 +501,26 @@ protected:
                     Y_VERIFY(node.HasHost());
                     Y_VERIFY(node.HasNodeId());
                     if (node.GetNodeId() == NodeId) {
+                        nodeIdFoundInConfig = true;
                         if ((node.GetHost() != hostname && node.GetHost() != localhost) ||
                             (InterconnectPort && InterconnectPort != node.GetPort())) {
-                            nodeIdMatchesConfig = false;
+                            Y_FAIL("Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
                             break;
                         }
                     }
                 }
             } catch(TSystemError& e) {
             }
-            Y_VERIFY(nodeIdMatchesConfig, "Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
         }
+
+        if (!nodeIdFoundInConfig && NodeKind == NODE_KIND_YQ && InterconnectPort && NodeId) {
+            auto& nameserviceConfig = *AppConfig.MutableNameserviceConfig();
+            auto& node = *nameserviceConfig.AddNode();
+            node.SetPort(InterconnectPort);
+            node.SetHost(HostName());
+            node.SetNodeId(NodeId);
+        }
+
         if (config.ParseResult->Has("suppress-version-check")) {
             if (AppConfig.HasNameserviceConfig()) {
                 AppConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);

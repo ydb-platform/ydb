@@ -669,19 +669,25 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     TCdcStream KeysOnly() {
         return TCdcStream{
-            "keys_stream", NKikimrSchemeOp::ECdcStreamModeKeysOnly
+            .Name = "keys_stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 
     TCdcStream Updates() {
         return TCdcStream{
-            "updates_stream", NKikimrSchemeOp::ECdcStreamModeUpdate
+            .Name = "updates_stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 
     TCdcStream NewAndOldImages() {
         return TCdcStream{
-            "new_and_old_images", NKikimrSchemeOp::ECdcStreamModeNewAndOldImages
+            .Name = "new_and_old_images",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 

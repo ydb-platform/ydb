@@ -394,9 +394,11 @@ struct TShardedTableOptions {
 
     struct TCdcStream {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
+        using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
 
         TString Name;
         EMode Mode;
+        EFormat Format;
     };
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \

@@ -209,6 +209,16 @@ public:
             return result;
         }
 
+        switch (streamDesc.GetFormat()) {
+        case NKikimrSchemeOp::ECdcStreamFormatProto:
+        case NKikimrSchemeOp::ECdcStreamFormatJson:
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat()));
+            return result;
+        }
+
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);

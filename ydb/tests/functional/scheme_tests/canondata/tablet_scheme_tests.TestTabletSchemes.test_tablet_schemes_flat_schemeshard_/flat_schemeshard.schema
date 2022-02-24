@@ -6085,6 +6085,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Mode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Format",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6095,7 +6100,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6145,6 +6151,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Mode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Format",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6155,7 +6166,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

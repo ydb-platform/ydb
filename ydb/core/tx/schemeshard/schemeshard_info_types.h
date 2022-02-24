@@ -2103,11 +2103,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     using TPtr = TIntrusivePtr<TCdcStreamInfo>;
     using EMode = NKikimrSchemeOp::ECdcStreamMode;
+    using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
     using EState = NKikimrSchemeOp::ECdcStreamState;
 
-    TCdcStreamInfo(ui64 version, EMode mode, EState state)
+    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, EState state)
         : AlterVersion(version)
         , Mode(mode)
+        , Format(format)
         , State(state)
     {}
 
@@ -2121,12 +2123,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode) {
-        return new TCdcStreamInfo(0, mode, EState::ECdcStreamStateInvalid);
+    static TPtr New(EMode mode, EFormat format) {
+        return new TCdcStreamInfo(0, mode, format, EState::ECdcStreamStateInvalid);
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode());
+        TPtr result = New(desc.GetMode(), desc.GetFormat());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
 
@@ -2135,6 +2137,7 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
 
     ui64 AlterVersion = 1;
     EMode Mode;
+    EFormat Format;
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;

@@ -1673,6 +1673,7 @@ ui64 AsyncAlterAddStream(
     desc.SetTableName(tableName);
     desc.MutableStreamDescription()->SetName(streamDesc.Name);
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
+    desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
 
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);

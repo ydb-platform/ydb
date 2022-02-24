@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 StreamDescription {
                   Name: "Stream"
                   Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
                 }
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -48,9 +49,17 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     StreamDescription {
                       Name: "Stream"
                       Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
                     }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::PathExist,
+                    NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+                    NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                    NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+                });
             }
 
             auto request = AlterCdcStreamRequest(++t.TxId, "/MyRoot", R"(
@@ -63,6 +72,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 NKikimrScheme::StatusMultipleModifications,
             });
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                NLs::PathExist,
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+                NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
+            });
         });
     }
 
@@ -84,6 +100,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     StreamDescription {
                       Name: "Stream"
                       Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
                     }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -119,6 +136,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     StreamDescription {
                       Name: "Stream"
                       Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
                     }
                 )");
                 t.TestEnv->ReliablePropose(runtime, request, {
@@ -149,6 +167,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     StreamDescription {
                       Name: "Stream"
                       Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
                     }
                 )");
                 t.TestEnv->ReliablePropose(runtime, request, {

@@ -7,9 +7,9 @@ OWNER(
     g:geoapps_infra
 )
 
-VERSION(1.46.0)
+VERSION(1.47.0)
 
-ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.46.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.47.0.tar.gz)
 
 LICENSE(
     FSFAP AND

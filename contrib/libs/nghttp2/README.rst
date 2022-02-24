@@ -151,11 +151,11 @@ To enable the experimental HTTP/3 support for h2load and nghttpx, the
 following libraries are required:
 
 * `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1k+quic>`_; or
+  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1m+quic>`_; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  f6ef1c560ae5af51e2df5d8d2175bed207b28b8f)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_
-* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_
+  36a41bf0bf2dd3176f8780e09c03585351f29963)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.2.0
+* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 0.2.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
 h2load and nghttpx.
@@ -164,13 +164,13 @@ In order to build optional eBPF program to direct an incoming QUIC UDP
 datagram to a correct socket for nghttpx, the following libraries are
 required:
 
-* libbpf-dev >= 0.4.0
+* libbpf-dev >= 0.7.0
 
 Use ``--with-libbpf`` configure option to build eBPF program.
 libelf-dev is needed to build libbpf.
 
 For Ubuntu 20.04, you can build libbpf from `the source code
-<https://github.com/libbpf/libbpf/releases/tag/v0.4.0>`_.  nghttpx
+<https://github.com/libbpf/libbpf/releases/tag/v0.7.0>`_.  nghttpx
 requires eBPF program for reloading its configuration and hot swapping
 its executable.
 
@@ -355,7 +355,7 @@ Build custom OpenSSL:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1l+quic https://github.com/quictls/openssl
+   $ git clone --depth 1 -b OpenSSL_1_1_1m+quic https://github.com/quictls/openssl
    $ cd openssl
    $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
    $ make -j$(nproc)
@@ -366,7 +366,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v0.2.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
@@ -378,7 +378,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v0.2.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only \
@@ -387,12 +387,12 @@ Build ngtcp2:
    $ make install
    $ cd ..
 
-If your Linux distribution does not have libbpf-dev >= 0.4.0, build
+If your Linux distribution does not have libbpf-dev >= 0.7.0, build
 from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.4.0 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v0.7.0 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..

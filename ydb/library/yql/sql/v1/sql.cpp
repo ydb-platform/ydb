@@ -7008,24 +7008,24 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
     };
 
     const auto frameSpec = winSpecPtr->Frame;
-    if (frameSpec->FrameType == EFrameType::FrameByRange) {
-        if (!ordered) {
-            // CURRENT ROW -> UNBOUNDED
-            if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
-                replaceCurrentWith(*frameSpec->FrameBegin, true, nullptr);
-            }
-            if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
-                replaceCurrentWith(*frameSpec->FrameBegin, false, nullptr);
-            }
+    if (!ordered && frameSpec->FrameType != EFrameType::FrameByRows) {
+        // CURRENT ROW -> UNBOUNDED
+        if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {
+            replaceCurrentWith(*frameSpec->FrameBegin, true, nullptr);
         }
+        if (frameSpec->FrameEnd->Settings == EFrameSettings::FrameCurrentRow) {
+            replaceCurrentWith(*frameSpec->FrameBegin, false, nullptr);
+        }
+    }
 
-        // RANGE UNBOUNDED -> ROWS UNBOUNDED
-        if (frameSpec->FrameBegin->Settings == EFrameSettings::FramePreceding && !frameSpec->FrameBegin->Bound &&
-            frameSpec->FrameEnd->Settings == EFrameSettings::FrameFollowing && !frameSpec->FrameEnd->Bound)
-        {
-            frameSpec->FrameType = EFrameType::FrameByRows;
-        }
-    } else {
+    // RANGE/GROUPS UNBOUNDED -> ROWS UNBOUNDED
+    if (frameSpec->FrameBegin->Settings == EFrameSettings::FramePreceding && !frameSpec->FrameBegin->Bound &&
+        frameSpec->FrameEnd->Settings == EFrameSettings::FrameFollowing && !frameSpec->FrameEnd->Bound)
+    {
+        frameSpec->FrameType = EFrameType::FrameByRows;
+    }
+
+    if (frameSpec->FrameType != EFrameType::FrameByRange) {
         // replace FrameCurrentRow for ROWS/GROUPS with 0 preceding/following
         // FrameCurrentRow has special meaning ( = first/last peer row)
         if (frameSpec->FrameBegin->Settings == EFrameSettings::FrameCurrentRow) {

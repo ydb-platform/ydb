@@ -44,3 +44,6 @@ target_link_libraries(json2_udf.udf PUBLIC
   yql-minikql-dom
   yql-minikql-jsonpath
 )
+target_sources(json2_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/json2/json2_udf.cpp
+)

@@ -38,3 +38,6 @@ target_link_libraries(ip_udf.udf PUBLIC
   public-udf-support
   common-ip_base-lib
 )
+target_sources(ip_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
+)

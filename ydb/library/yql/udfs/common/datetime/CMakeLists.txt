@@ -41,3 +41,6 @@ target_link_libraries(datetime_udf.udf PUBLIC
   library-cpp-timezone_conversion
   util-draft
 )
+target_sources(datetime_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/datetime/datetime_udf.cpp
+)

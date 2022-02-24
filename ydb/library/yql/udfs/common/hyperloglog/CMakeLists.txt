@@ -38,3 +38,6 @@ target_link_libraries(hyperloglog_udf.udf PUBLIC
   public-udf-support
   library-cpp-hyperloglog
 )
+target_sources(hyperloglog_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
+)

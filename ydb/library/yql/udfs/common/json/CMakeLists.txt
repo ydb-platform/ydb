@@ -38,3 +38,6 @@ target_link_libraries(json_udf.udf PUBLIC
   public-udf-support
   cpp-json-easy_parse
 )
+target_sources(json_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/json/json_udf.cpp
+)

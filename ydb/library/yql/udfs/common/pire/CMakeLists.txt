@@ -38,3 +38,6 @@ target_link_libraries(pire_udf.udf PUBLIC
   public-udf-support
   cpp-regex-pire
 )
+target_sources(pire_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/pire/pire_udf.cpp
+)

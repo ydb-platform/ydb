@@ -38,3 +38,6 @@ target_link_libraries(url_udf.udf PUBLIC
   public-udf-support
   common-url_base-lib
 )
+target_sources(url_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/url_base.cpp
+)

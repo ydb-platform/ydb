@@ -38,3 +38,6 @@ target_link_libraries(histogram_udf.udf PUBLIC
   public-udf-support
   cpp-histogram-adaptive
 )
+target_sources(histogram_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
+)

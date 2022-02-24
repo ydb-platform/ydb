@@ -35,3 +35,6 @@ target_link_libraries(set_udf.udf PUBLIC
   yql-public-udf
   public-udf-support
 )
+target_sources(set_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
+)

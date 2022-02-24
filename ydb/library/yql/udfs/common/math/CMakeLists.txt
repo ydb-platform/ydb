@@ -38,3 +38,6 @@ target_link_libraries(math_udf.udf PUBLIC
   public-udf-support
   common-math-lib
 )
+target_sources(math_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/math_udf.cpp
+)

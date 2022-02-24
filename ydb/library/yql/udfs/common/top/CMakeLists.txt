@@ -38,3 +38,6 @@ target_link_libraries(top_udf.udf PUBLIC
   public-udf-support
   cpp-containers-top_keeper
 )
+target_sources(top_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
+)

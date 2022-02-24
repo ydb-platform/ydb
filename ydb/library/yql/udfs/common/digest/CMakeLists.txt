@@ -70,3 +70,6 @@ target_link_libraries(digest_udf.udf PUBLIC
   cpp-digest-old_crc
   cpp-digest-sfh
 )
+target_sources(digest_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/digest/digest_udf.cpp
+)

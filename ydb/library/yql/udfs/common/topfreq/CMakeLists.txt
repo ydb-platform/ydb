@@ -38,3 +38,6 @@ target_link_libraries(topfreq_udf.udf PUBLIC
   public-udf-support
   common-topfreq-static
 )
+target_sources(topfreq_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
+)

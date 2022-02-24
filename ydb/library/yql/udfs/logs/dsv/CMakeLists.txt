@@ -38,3 +38,6 @@ target_link_libraries(dsv_udf.udf PUBLIC
   public-udf-support
   cpp-deprecated-split
 )
+target_sources(dsv_udf.udf PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/logs/dsv/dsv_udf.cpp
+)

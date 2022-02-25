@@ -228,7 +228,7 @@ struct TUserInfo {
     }
 
     void ForgetSubscription(const TInstant& now) {
-        if(Subscriptions > 0)
+        if (Subscriptions > 0)
             --Subscriptions;
         UpdateReadingTimeAndState(now);
     }
@@ -290,7 +290,7 @@ struct TUserInfo {
         const ui64 readRuleGeneration, const bool important, const TString& topic, const ui32 partition, const TString &session,
         ui32 gen, ui32 step, i64 offset, const ui64 readOffsetRewindSum, const TString& dcId,
         TInstant readFromTimestamp, const TString& cloudId, const TString& dbId, const TString& folderId,
-        ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
+        ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000, const TString& streamName = "undefined"
     )
         : ReadSpeedLimiter(std::move(readSpeedLimiter))
         , Session(session)
@@ -324,7 +324,7 @@ struct TUserInfo {
     {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), topic, cloudId, dbId, folderId);
+                SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), streamName, cloudId, dbId, folderId);
             } else {
                 if (topic.find("--") == TString::npos)
                     return;
@@ -336,38 +336,38 @@ struct TUserInfo {
     void SetupStreamCounters(const TActorContext& ctx, const TString& dcId, const TString& partition,
                              const TString& topic, const TString& cloudId,
                              const TString& dbId, const TString& folderId) {
-        auto subgroup = [&](const TString& subsystem) {
-            return NKikimr::NPQ::GetCountersForStream(AppData(ctx)->Counters, subsystem);
-        };
-        auto additionalLabels = [&](const TVector<std::pair<TString, TString>>& subgroups = {}) {
+        auto additionalLabels = [](const TVector<std::pair<TString, TString>>& subgroups = {}) {
             TVector<std::pair<TString, TString>> result;
-            if (User != CLIENTID_TO_READ_INTERNALLY)
-                result.push_back({"consumer", User});
-
-            for (const auto& sb : subgroups) {
-                result.push_back(sb);
-            }
+            std::copy_if(subgroups.begin(), subgroups.end(), std::back_inserter(result),
+                         [] (const auto& sb) {
+                             return sb.first != "consumer" ||
+                                 sb.second != CLIENTID_TO_READ_INTERNALLY;
+                         });
             return result;
         };
         const TVector<NPQ::TLabelsInfo> aggregates =
             NKikimr::NPQ::GetLabelsForStream(topic, cloudId, dbId, folderId);
 
-        if (DoExternalRead) {
-            BytesRead = TMultiCounter(subgroup("readSession"), aggregates, additionalLabels(),
-                                      {"stream.internal_read.bytes_per_second",
-                                       "stream.outcoming_bytes_per_second"}, true);
-            MsgsRead = TMultiCounter(subgroup("readSession"), aggregates, additionalLabels(),
-                                     {"stream.internal_read.records_per_second",
-                                      "stream.outcoming_records_per_second"}, true);
-        }
+        BytesRead = TMultiCounter(NKikimr::NPQ::GetCountersForStream(AppData(ctx)->Counters),
+                                  aggregates, additionalLabels({{"consumer", User}}),
+                                  {"stream.internal_read.bytes_per_second",
+                                   "stream.outgoing_bytes_per_second"}, true, "name");
+        MsgsRead = TMultiCounter(NKikimr::NPQ::GetCountersForStream(AppData(ctx)->Counters),
+                                 aggregates, additionalLabels({{"consumer", User}}),
+                                 {"stream.internal_read.records_per_second",
+                                  "stream.outgoing_records_per_second"}, true, "name");
 
-        Counter.SetCounter(subgroup("readingTime"),
-                           additionalLabels({{"host", dcId}, {"shard", partition}, {"stream", topic}}),
+        Counter.SetCounter(NKikimr::NPQ::GetCountersForStream(AppData(ctx)->Counters),
+                           additionalLabels({{"database", dbId}, {"cloud", cloudId}, {"folder", folderId},
+                                             {"stream", topic}, {"consumer", User}, {"host", dcId},
+                                             {"shard", partition}}),
                            {"name", "stream.await_operating_milliseconds", true});
 
-        ReadTimeLag.reset(new TPercentileCounter(subgroup("readTimeLag"), aggregates,
-                     additionalLabels({{"name", "stream.internal_read.time_lags_milliseconds"}}), "bin",
-                      TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
+        ReadTimeLag.reset(new TPercentileCounter(
+                     NKikimr::NPQ::GetCountersForStream(AppData(ctx)->Counters), aggregates,
+                     additionalLabels({{"consumer", User},
+                                       {"name", "stream.internal_read.time_lags_milliseconds"}}), "bin",
+                     TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
                                                         {1000, "1000"}, {2000, "2000"},
                                                         {5000, "5000"}, {10'000, "10000"},
                                                         {30'000, "30000"}, {60'000, "60000"},
@@ -509,7 +509,8 @@ class TUsersInfoStorage {
 public:
     TUsersInfoStorage(TString dcId, ui64 tabletId, const TString& topicName, ui32 partition,
                       const TTabletCountersBase& counters, const NKikimrPQ::TPQTabletConfig& config,
-                      const TString& CloudId, const TString& DbId, const TString& FolderId);
+                      const TString& CloudId, const TString& DbId, const TString& FolderId,
+                      const TString& streamName);
 
     void Init(TActorId tabletActor, TActorId partitionActor);
 
@@ -553,6 +554,7 @@ private:
     TString CloudId;
     TString DbId;
     TString FolderId;
+    TString StreamName;
 };
 
 } //NPQ

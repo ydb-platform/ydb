@@ -1316,70 +1316,201 @@ namespace {
 
 
     Y_UNIT_TEST(TestWriteStat) {
-        NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false);
-        auto netDataUpdated = server.PrepareNetDataFile(FormNetData());
-        UNIT_ASSERT(netDataUpdated);
-        server.StartServer();
+        auto testWriteStat = [](const TString& originallyProvidedConsumerName,
+                                const TString& consumerName,
+                                const TString& consumerPath) {
+            auto checkCounters = [](auto monPort, const TString& session,
+                                    const std::set<std::string>& canonicalSensorNames,
+                                    const TString& clientDc, const TString& originDc,
+                                    const TString& client, const TString& consumerPath) {
+                NJson::TJsonValue counters;
+                if (clientDc.empty() && originDc.empty()) {
+                    counters = GetClientCountersLegacy(monPort, "pqproxy", session, client, consumerPath);
+                } else {
+                    counters = GetCountersLegacy(monPort, "pqproxy", session, "account/topic1",
+                                                 clientDc, originDc, client, consumerPath);
+                }
+                const auto sensors = counters["sensors"].GetArray();
+                std::set<std::string> sensorNames;
+                std::transform(sensors.begin(), sensors.end(),
+                               std::inserter(sensorNames, sensorNames.begin()),
+                               [](auto& el) {
+                                   return el["labels"]["sensor"].GetString();
+                               });
+                auto equal = sensorNames == canonicalSensorNames;
+                UNIT_ASSERT(equal);
+            };
 
-        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::NET_CLASSIFIER });
-        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_ERROR);
+            NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false);
+            auto netDataUpdated = server.PrepareNetDataFile(FormNetData());
+            UNIT_ASSERT(netDataUpdated);
+            server.StartServer();
 
-        auto sender = server.CleverServer->GetRuntime()->AllocateEdgeActor();
+            const auto monPort = TPortManager().GetPort();
+            auto Counters = server.CleverServer->GetGRpcServerRootCounters();
+            NActors::TMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
+            Monitoring.RegisterCountersPage("counters", "Counters", Counters);
+            Monitoring.Start();
 
-        GetClassifierUpdate(*server.CleverServer, sender); //wait for initializing
+            server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::NET_CLASSIFIER });
+            server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_ERROR);
 
-        server.AnnoyingClient->CreateTopic("rt3.dc1--account--topic1", 10, 10000, 10000, 2000);
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10, 10000, 10000, 2000);
+            auto sender = server.CleverServer->GetRuntime()->AllocateEdgeActor();
 
-        auto driver = server.AnnoyingClient->GetDriver();
+            GetClassifierUpdate(*server.CleverServer, sender); //wait for initializing
 
-        auto writer = CreateWriter(*driver, "account/topic1", "base64:AAAAaaaa____----12", 0, "raw");
+            server.AnnoyingClient->CreateTopic("rt3.dc1--account--topic1", 10, 10000, 10000, 2000);
 
-        auto msg = writer->GetEvent(true);
-        UNIT_ASSERT(msg); // ReadyToAcceptEvent
+            auto driver = server.AnnoyingClient->GetDriver();
 
-        auto ev = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
-        UNIT_ASSERT(ev);
+            auto writer = CreateWriter(*driver, "account/topic1", "base64:AAAAaaaa____----12", 0, "raw");
 
-        TInstant st(TInstant::Now());
-        for (ui32 i = 1; i <= 5; ++i) {
-            writer->Write(std::move(ev->ContinuationToken), TString(2000, 'a'));
-            msg = writer->GetEvent(true);
+            auto msg = writer->GetEvent(true);
             UNIT_ASSERT(msg); // ReadyToAcceptEvent
 
-            ev = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
+            auto ev = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
             UNIT_ASSERT(ev);
 
-            msg = writer->GetEvent(true);
+            TInstant st(TInstant::Now());
+            for (ui32 i = 1; i <= 5; ++i) {
+                writer->Write(std::move(ev->ContinuationToken), TString(2000, 'a'));
+                msg = writer->GetEvent(true);
+                UNIT_ASSERT(msg); // ReadyToAcceptEvent
 
-            Cerr << DebugString(*msg) << "\n";
+                ev = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
+                UNIT_ASSERT(ev);
 
-            auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*msg);
-            UNIT_ASSERT(ack);
+                msg = writer->GetEvent(true);
 
-            if (i == 5) {
-                UNIT_ASSERT(TInstant::Now() - st > TDuration::Seconds(3));
-                // TODO: Describe this assert in comment
-                UNIT_ASSERT(!ack->Acks.empty());
-                UNIT_ASSERT(ack->Acks.back().Stat);
-                UNIT_ASSERT(ack->Acks.back().Stat->TotalTimeInPartitionQueue >= ack->Acks.back().Stat->PartitionQuotedTime);
-                UNIT_ASSERT(ack->Acks.back().Stat->TotalTimeInPartitionQueue <= ack->Acks.back().Stat->PartitionQuotedTime + TDuration::Seconds(10));
+                Cerr << DebugString(*msg) << "\n";
+
+                auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*msg);
+                UNIT_ASSERT(ack);
+                if (i == 5) {
+                    UNIT_ASSERT(TInstant::Now() - st > TDuration::Seconds(3));
+                    UNIT_ASSERT(!ack->Acks.empty());
+                    UNIT_ASSERT(ack->Acks.back().Stat);
+                }
             }
-        }
-        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "writeSession", "account/topic1", "Vla");
-        {
-            NYdb::NPersQueue::TReadSessionSettings settings;
-            settings.ConsumerName("shared/user").AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
+            checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                          "writeSession",
+                          {
+                              "BytesWrittenOriginal",
+                              "CompactedBytesWrittenOriginal",
+                              "MessagesWrittenOriginal",
+                              "UncompressedBytesWrittenOriginal"
+                          },
+                          "", "cluster", "", ""
+                          );
 
-            auto reader = CreateReader(*driver, settings);
+            checkCounters(monPort,
+                          "writeSession",
+                          {
+                              "BytesInflight",
+                              "BytesInflightTotal",
+                              "Errors",
+                              "SessionsActive",
+                              "SessionsCreated",
+                              // "WithoutAuth" - this counter just not present in this test
+                          },
+                          "", "cluster", "", ""
+                          );
 
-            auto msg = GetNextMessageSkipAssignment(reader);
-            UNIT_ASSERT(msg);
+            {
+                NYdb::NPersQueue::TReadSessionSettings settings;
+                settings.ConsumerName(originallyProvidedConsumerName)
+                    .AppendTopics(TString("account/topic1")).ReadOriginal({"dc1"});
 
-            Cerr << NYdb::NPersQueue::DebugString(*msg) << "\n";
-        }
-        GetCounters(server.CleverServer->GetRuntime()->GetMonPort(), "pqproxy", "readSession", "account/topic1", "Vla");
+                auto reader = CreateReader(*driver, settings);
+
+                auto msg = GetNextMessageSkipAssignment(reader);
+                UNIT_ASSERT(msg);
+
+                Cerr << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+                checkCounters(monPort,
+                              "readSession",
+                              {
+                                  "Commits",
+                                  "PartitionsErrors",
+                                  "PartitionsInfly",
+                                  "PartitionsLocked",
+                                  "PartitionsReleased",
+                                  "PartitionsToBeLocked",
+                                  "PartitionsToBeReleased",
+                                  "WaitsForData"
+                              },
+                              "", "cluster", "", ""
+                              );
+
+                checkCounters(monPort,
+                              "readSession",
+                              {
+                                  "BytesInflight",
+                                  "Errors",
+                                  "PipeReconnects",
+                                  "SessionsActive",
+                                  "SessionsCreated",
+                                  "PartsPerSession"
+                              },
+                              "", "", consumerName, consumerPath
+                              );
+
+                checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                              "readSession",
+                              {
+                                  "BytesReadFromDC"
+                              },
+                              "Vla", "", "", ""
+                              );
+
+                checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                              "readSession",
+                              {
+                                  "BytesRead",
+                                  "MessagesRead"
+                              },
+                              "", "Dc1", "", ""
+                              );
+
+                checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                              "readSession",
+                              {
+                                  "BytesRead",
+                                  "MessagesRead"
+                              },
+                              "", "cluster", "", ""
+                              );
+
+                checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                              "readSession",
+                              {
+                                  "BytesRead",
+                                  "MessagesRead"
+                              },
+                              "", "cluster", "", ""
+                              );
+
+                checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                              "readSession",
+                              {
+                                  "BytesRead",
+                                  "MessagesRead"
+                              },
+                              "", "Dc1", consumerName, consumerPath
+                              );
+            }
+        };
+
+        testWriteStat("some@random@consumer", "some@random@consumer", "some/random/consumer");
+        testWriteStat("some@user", "some@user", "some/user");
+        testWriteStat("shared@user", "shared@user", "shared/user");
+        testWriteStat("shared/user", "user", "shared/user");
+        testWriteStat("user", "user", "shared/user");
+        testWriteStat("some@random/consumer", "some@random@consumer", "some/random/consumer");
+        testWriteStat("/some/user", "some@user", "some/user");
     }
+
 
     Y_UNIT_TEST(TestWriteSessionsConflicts) {
         NPersQueue::TTestServer server;

@@ -124,7 +124,6 @@ TWriteSessionActor::TWriteSessionActor(
     , SourceIdUpdatesInflight(0)
 {
     Y_ASSERT(Request);
-    ++(*GetServiceCounters(Counters, "pqproxy|writeSession")->GetCounter("SessionsCreatedTotal", true));
 }
 
 
@@ -344,7 +343,7 @@ void TWriteSessionActor::SetupCounters()
 {
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(LocalDC, TopicConverter->GetClientsideName());
+    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(TopicConverter->GetClientsideName());
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false);
@@ -356,18 +355,17 @@ void TWriteSessionActor::SetupCounters()
     SessionsActive.Inc();
 }
 
-void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& dbId,
-                                       const TString& folderId)
+void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId)
 {
     //now topic is checked, can create group for real topic, not garbage
-    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters, "writeSession");
+    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters);
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId);
 
-    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false);
-    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false);
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true);
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false);
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true);
+    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false, "name");
+    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false, "name");
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true, "name");
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false, "name");
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true, "name");
 
     SessionsCreated.Inc();
     SessionsActive.Inc();

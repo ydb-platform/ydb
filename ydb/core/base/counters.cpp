@@ -39,11 +39,12 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|readSession"),
          TString("pqproxy|schemecache"),
          TString("pqproxy|mirrorWriteTimeLag"),
+         TString("datastreams"),
     }};
 
 
 static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES
-    = {{ TString("ydb") }};
+    = {{ TString("ydb"), TString("datastreams") }};
 
 static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS
     = {{ TString("cloud_id"),

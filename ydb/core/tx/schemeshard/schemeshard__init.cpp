@@ -1374,7 +1374,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->RootPathElements = SplitPath(rootPath->Name);
 
                 Y_VERIFY(!rootPath->StepDropped);
-                Self->PathsById[rootPath->PathId ] = rootPath;
+                Self->PathsById[rootPath->PathId] = rootPath;
 
                 pathesRows.pop_front();
             }

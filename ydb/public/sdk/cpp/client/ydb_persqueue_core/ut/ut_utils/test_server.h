@@ -39,11 +39,11 @@ public:
             StartServer();
     }
 
-    void StartServer(bool doClientInit = true) {
+    void StartServer(bool doClientInit = true, TMaybe<TString> databaseName = Nothing()) {
         PrepareNetDataFile();
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
-        AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort);
+        AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
         EnableLogs(LOGGED_SERVICES);
         if (doClientInit) {
             AnnoyingClient->FullInit();

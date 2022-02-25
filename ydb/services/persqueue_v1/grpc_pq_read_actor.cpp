@@ -142,8 +142,7 @@ private:
 
     void Handle(TEvPQProxy::TEvReleasePartition::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPQProxy::TEvGetStatus::
-    TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvGetStatus::TPtr& ev, const NActors::TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const NActors::TActorContext& ctx);
 
@@ -270,7 +269,6 @@ TReadSessionActor::TReadSessionActor(
     , TopicsHandler(topicsHandler)
 {
     Y_ASSERT(Request);
-    ++(*GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("SessionsCreatedTotal", true));
 }
 
 
@@ -279,6 +277,11 @@ TReadSessionActor::~TReadSessionActor() = default;
 
 void TReadSessionActor::Bootstrap(const TActorContext& ctx) {
     Y_VERIFY(Request);
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        ++(*GetServiceCounters(Counters, "pqproxy|readSession")
+           ->GetNamedCounter("sensor", "SessionsCreatedTotal", true));
+    }
+
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
@@ -464,13 +467,13 @@ void TReadSessionActor::Die(const TActorContext& ctx) {
     }
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " is DEAD");
 
-    if (SessionsActive) {
-        --(*SessionsActive);
-    }
     if (BytesInflight) {
         (*BytesInflight) -= BytesInflight_;
     }
-    if (SessionsActive) { //PartsPerSession is inited too
+    if (SessionsActive) {
+        --(*SessionsActive);
+    }
+    if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
     }
 
@@ -549,11 +552,13 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvStartRead::TPtr& ev, const TActorC
     if (it == Partitions.end() || it->second.Releasing) {
         //do nothing - already released partition
         LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got NOTACTUAL StartRead from client for " << ev->Get()->Partition
-                            << " at offset " << ev->Get()->ReadOffset);
+                   << " at offset " << ev->Get()->ReadOffset);
         return;
     }
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got StartRead from client for " << ev->Get()->Partition
-                         << " at readOffset " << ev->Get()->ReadOffset << " commitOffset " << ev->Get()->CommitOffset);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got StartRead from client for "
+               << ev->Get()->Partition <<
+               " at readOffset " << ev->Get()->ReadOffset <<
+               " commitOffset " << ev->Get()->CommitOffset);
 
     //proxy request to partition - allow initing
     //TODO: add here VerifyReadOffset too and check it againts Committed position
@@ -597,10 +602,14 @@ void TReadSessionActor::DropPartition(THashMap<ui64, TPartitionActorInfo>::itera
         Y_VERIFY(res);
     }
 
-    PartsPerSession.DecFor(Partitions.size(), 1);
+    if (SessionsActive) {
+        PartsPerSession.DecFor(Partitions.size(), 1);
+    }
     BalancerGeneration.erase(it->first);
     Partitions.erase(it);
-    PartsPerSession.IncFor(Partitions.size(), 1);
+    if (SessionsActive) {
+        PartsPerSession.IncFor(Partitions.size(), 1);
+    }
 }
 
 
@@ -696,7 +705,11 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     }
 
     ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
-    ClientPath = init.consumer();
+    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        ClientPath = init.consumer();
+    } else {
+        ClientPath = NPersQueue::NormalizeFullPath(NPersQueue::MakeConsumerPath(init.consumer()));
+    }
 
     TStringBuilder session;
     session << ClientPath << "_" << ctx.SelfID.NodeId() << "_" << Cookie << "_" << TAppData::RandomProvider->GenRand64() << "_v1";
@@ -750,7 +763,10 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     }
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " init: " << event->Request << " from " << PeerName);
 
-    SetupCounters();
+
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        SetupCounters();
+    }
 
     if (Request->GetInternalToken().empty()) {
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -810,23 +826,31 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
 
 void TReadSessionActor::SetupCounters()
 {
-    auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession")->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
-    SessionsCreated = subGroup->GetExpiringCounter("SessionsCreated", true);
-    SessionsActive = subGroup->GetExpiringCounter("SessionsActive", false);
-    Errors = subGroup->GetExpiringCounter("Errors", true);
-    PipeReconnects = subGroup->GetExpiringCounter("PipeReconnects", true);
+    if (SessionsCreated) {
+        return;
+    }
 
-    BytesInflight = subGroup->GetExpiringCounter("BytesInflight", false);
+    auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
+    subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+    const TString name = "sensor";
 
-    PartsPerSession = NKikimr::NPQ::TPercentileCounter(subGroup->GetSubgroup("sensor", "PartsPerSession"), {}, {}, "Count",
-                                            TVector<std::pair<ui64, TString>>{{1, "1"}, {2, "2"}, {5, "5"},
-                                                                              {10, "10"}, {20, "20"}, {50, "50"}, {70, "70"},
-                                                                              {100, "100"}, {150, "150"}, {300,"300"}, {99999999, "99999999"}}, false);
+    BytesInflight = subGroup->GetExpiringNamedCounter(name, "BytesInflight", false);
+    Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);
+    PipeReconnects = subGroup->GetExpiringNamedCounter(name, "PipeReconnects", true);
+    SessionsActive = subGroup->GetExpiringNamedCounter(name, "SessionsActive", false);
+    SessionsCreated = subGroup->GetExpiringNamedCounter(name, "SessionsCreated", true);
+    PartsPerSession = NKikimr::NPQ::TPercentileCounter(
+        subGroup->GetSubgroup(name, "PartsPerSession"),
+        {}, {}, "Count",
+        TVector<std::pair<ui64, TString>>{{1, "1"}, {2, "2"}, {5, "5"},
+                                          {10, "10"}, {20, "20"}, {50, "50"},
+                                          {70, "70"}, {100, "100"}, {150, "150"},
+                                          {300,"300"}, {99999999, "99999999"}},
+        false, true);
 
     ++(*SessionsCreated);
     ++(*SessionsActive);
     PartsPerSession.IncFor(Partitions.size(), 1); //for 0
-
 }
 
 
@@ -856,19 +880,19 @@ void TReadSessionActor::SetupTopicCounters(const TString& topic, const TString& 
                                            const TString& dbId, const TString& folderId)
 {
     auto& topicCounters = TopicCounters[topic];
-    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters, "readSession");
+    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters);
 //client/consumerPath Account/Producer OriginDC Topic/TopicPath
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(topic, cloudId, dbId, folderId);
-    TVector<std::pair<TString, TString>> cons{};
+    TVector<std::pair<TString, TString>> cons = {{"consumer", ClientPath}};
 
-    topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_locked_per_second"}, true);
-    topicCounters.PartitionsReleased     = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_released_per_second"}, true);
-    topicCounters.PartitionsToBeReleased = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_to_be_released"}, false);
-    topicCounters.PartitionsToBeLocked   = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_to_be_locked"}, false);
-    topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_locked"}, false);
-    topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_errors_per_second"}, true);
-    topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.commits_per_second"}, true);
-    topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.waits_for_data"}, true);
+    topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_locked_per_second"}, true, "name");
+    topicCounters.PartitionsReleased     = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_released_per_second"}, true, "name");
+    topicCounters.PartitionsToBeReleased = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_to_be_released"}, false, "name");
+    topicCounters.PartitionsToBeLocked   = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_to_be_locked"}, false, "name");
+    topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_locked"}, false, "name");
+    topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_errors_per_second"}, true, "name");
+    topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.commits_per_second"}, true, "name");
+    topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.waits_for_data"}, true, "name");
 
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
@@ -931,6 +955,9 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
             auto& topicHolder = Topics[t.TopicNameConverter->GetClientsideName()];
             topicHolder.TabletID = t.TabletID;
             topicHolder.TopicNameConverter = t.TopicNameConverter;
+            topicHolder.CloudId = t.CloudId;
+            topicHolder.DbId = t.DbId;
+            topicHolder.FolderId = t.FolderId;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         }
 
@@ -1012,11 +1039,15 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
                                                     record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC);
 
     TActorId actorId = ctx.Register(partitionActor);
-    PartsPerSession.DecFor(Partitions.size(), 1);
+    if (SessionsActive) {
+        PartsPerSession.DecFor(Partitions.size(), 1);
+    }
     Y_VERIFY(record.GetGeneration() > 0);
     auto pp = Partitions.insert(std::make_pair(assignId, TPartitionActorInfo{actorId, partitionId, ctx}));
     Y_VERIFY(pp.second);
-    PartsPerSession.IncFor(Partitions.size(), 1);
+    if (SessionsActive) {
+        PartsPerSession.IncFor(Partitions.size(), 1);
+    }
 
     bool res = ActualPartitionActors.insert(actorId).second;
     Y_VERIFY(res);
@@ -1234,7 +1265,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const PersQueue
         }
         if (Errors) {
             ++(*Errors);
-        } else {
+        } else if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             ++(*GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("Errors", true));
         }
 
@@ -1349,8 +1380,12 @@ bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorConte
             clientConfig.RetryPolicy = RetryPolicyForPipes;
             t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
             if (InitDone) {
-                ++(*PipeReconnects);
-                ++(*Errors);
+                if (PipeReconnects) {
+                    ++(*PipeReconnects);
+                }
+                if (Errors) {
+                    ++(*Errors);
+                }
 
                 RegisterSession(t.second.PipeClient, t.first, t.second.Groups, ctx);
             }
@@ -1447,7 +1482,9 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TAct
     --formedResponse->RequestsInfly;
 
     BytesInflight_ += diff;
-    (*BytesInflight) += diff;
+    if (BytesInflight) {
+        (*BytesInflight) += diff;
+    }
 
     if (formedResponse->RequestsInfly == 0) {
         ProcessAnswer(ctx, formedResponse);
@@ -1458,7 +1495,9 @@ bool TReadSessionActor::WriteResponse(PersQueue::V1::MigrationStreamingReadServe
     ui64 sz = response.ByteSize();
     ActiveWrites.push(sz);
     BytesInflight_ += sz;
-    if (BytesInflight) (*BytesInflight) += sz;
+    if (BytesInflight) {
+        (*BytesInflight) += sz;
+    }
 
     return finish ? Request->GetStreamCtx()->WriteAndFinish(std::move(response), grpc::Status::OK) : Request->GetStreamCtx()->Write(std::move(response));
 }
@@ -1490,7 +1529,9 @@ void TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
     }
 
     BytesInflight_ -= diff;
-    (*BytesInflight) -= diff;
+    if (BytesInflight) {
+        (*BytesInflight) -= diff;
+    }
 
     for (auto& pp : formedResponse->PartitionsTookPartInControlMessages) {
         auto it = PartitionToControlMessages.find(pp);
@@ -1613,7 +1654,9 @@ void TReadSessionActor::ProcessReads(const TActorContext& ctx) {
         i64 diff = formedResponse->Response.ByteSize();
         BytesInflight_ += diff;
         formedResponse->ByteSize = diff;
-        (*BytesInflight) += diff;
+        if (BytesInflight) {
+            (*BytesInflight) += diff;
+        }
         Reads.pop_front();
     }
 }
@@ -2629,6 +2672,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     Y_VERIFY(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
+    topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
+    topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
+    topicsIter->second.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 

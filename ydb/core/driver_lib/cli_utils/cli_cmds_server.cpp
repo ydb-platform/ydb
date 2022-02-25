@@ -513,12 +513,11 @@ protected:
             }
         }
 
-        if (!nodeIdFoundInConfig && NodeKind == NODE_KIND_YQ && InterconnectPort && NodeId) {
-            auto& nameserviceConfig = *AppConfig.MutableNameserviceConfig();
-            auto& node = *nameserviceConfig.AddNode();
-            node.SetPort(InterconnectPort);
-            node.SetHost(HostName());
-            node.SetNodeId(NodeId);
+        if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
+            auto& yqConfig = *AppConfig.MutableYandexQueryConfig();
+            auto& nmConfig = *yqConfig.MutableNodesManager();
+            nmConfig.SetPort(InterconnectPort);
+            nmConfig.SetHost(HostName());
         }
 
         if (config.ParseResult->Has("suppress-version-check")) {

@@ -352,6 +352,14 @@ static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemC
     return TSchedulerConfig(resolution, spinThreshold, progressThreshold, useSchedulerActor);
 }
 
+static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId service)
+{
+    for (auto &pr : setup->LocalServices)
+        if (pr.first == service)
+            return true;
+    return false;
+}
+
 TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {
@@ -561,7 +569,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             } else if (node.HasLocation()) {
                 location = TNodeLocation(node.GetLocation());
             }
-
             table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
 
             ++numNodes;
@@ -753,6 +760,25 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
                 setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
                     TMailboxType::ReadAsFilled, interconnectPoolId));
+            }
+
+            if (!IsServiceInitialized(setup, MakeInterconnectListenerActorId(false)) && !IsServiceInitialized(setup, MakeInterconnectListenerActorId(false))) {
+                if (Config.HasYandexQueryConfig() && Config.GetYandexQueryConfig().GetEnabled()) {
+                    auto& nodesManagerConfig = Config.GetYandexQueryConfig().GetNodesManager();
+                    if (nodesManagerConfig.GetEnabled()) {
+                        TYandexQueryInitializer::SetIcPort(nodesManagerConfig.GetPort());
+                        icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
+                        //bind ipv6 interfaces by default
+                        auto listener = new TInterconnectListenerTCP("::", nodesManagerConfig.GetPort(), icCommon);
+                        if (int err = listener->Bind()) {
+                            Cerr << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
+                                << " errno# " << err << " (" << strerror(err) << ")" << Endl;
+                            exit(1);
+                        }
+                        setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
+                            TMailboxType::ReadAsFilled, interconnectPoolId));
+                    }
+                }
             }
 
             // create load responder for interconnect
@@ -1405,14 +1431,6 @@ void TMiniKQLCompileServiceInitializer::InitializeServices(NActors::TActorSystem
                                                                        TActorSetupCmd(compileService,
                                                                                       TMailboxType::ReadAsFilled,
                                                                                       appData->UserPoolId)));
-}
-
-static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId service)
-{
-    for (auto &pr : setup->LocalServices)
-        if (pr.first == service)
-            return true;
-    return false;
 }
 
 // TMessageBusServicesInitializer

@@ -8,4 +8,6 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TNodesManagerConfig {
     bool Enabled = 1;
+    uint32 Port = 2;
+    string Host = 3;
 }

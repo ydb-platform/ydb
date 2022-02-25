@@ -15,6 +15,16 @@ using namespace NNodes;
 
 namespace {
 
+TStringBuf GetCompression(const TExprNode& settings) {
+    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+        const auto& child = *settings.Child(i);
+        if (child.Head().IsAtom("compression") && child.Tail().IsCallable({"String", "Utf8"}))
+            if (const auto& comp = child.Tail().Head().Content(); !comp.empty())
+                return comp;
+    }
+    return "";
+}
+
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
     TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
@@ -119,6 +129,10 @@ public:
         }
 
         if (input->ChildrenSize() > TS3Object::idx_Settings && !EnsureTuple(*input->Child(TS3Object::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (const auto& compression = GetCompression(*input->Child(TS3Object::idx_Settings)); !NCommon::ValidateCompression(compression, ctx)) {
             return TStatus::Error;
         }
 

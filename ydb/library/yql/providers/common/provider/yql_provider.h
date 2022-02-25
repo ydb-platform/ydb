@@ -120,5 +120,7 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 
+bool ValidateCompression(TStringBuf compression, TExprContext& ctx);
+
 } // namespace NCommon
 } // namespace NYql

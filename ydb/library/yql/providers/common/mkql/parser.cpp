@@ -34,7 +34,7 @@ std::array<TString, 2U> GetSettings(const TExprNode& settings) {
                 writer.OpenMap();
                 child.Tail().ForEachChild([&writer, &compression](const TExprNode& pair) {
                     if (pair.Head().IsAtom("compression") && pair.Tail().IsCallable({"String", "Utf8"}))
-                        if (const auto& comp = pair.Tail().Head().Content(); !comp.empty() && std::isupper(comp.front()))
+                        if (const auto& comp = pair.Tail().Head().Content(); !comp.empty())
                             compression = comp;
                         else {
                             writer.WriteKey(pair.Head().Content());
@@ -79,7 +79,29 @@ std::array<TString, 2U> GetSettings(const TExprNode& settings) {
     }
     return {TString(), TString()};
 }
+
+TString ResolveUDFNameByCompression(std::string_view input) {
+    if (input == "gzip"sv) {
+        return "Gzip";
+    }
+    if (input == "zstd"sv) {
+        return "Zstd";
+    }
+    if (input == "lz4"sv) {
+        return "Lz4";
+    }
+    if (input == "brotli"sv) {
+        return "Brotli";
+    }
+    if (input == "bzip2"sv) {
+        return "Bzip2";
+    }
+    if (input == "xz"sv) {
+        return "Xz";
+    }
+    THROW yexception() << "Invalid compression: " << input;
 }
+} // namespace
 
 TRuntimeNode BuildParseCall(
     TRuntimeNode input,
@@ -91,7 +113,7 @@ TRuntimeNode BuildParseCall(
 {
     if (!compression.empty()) {
         input = ctx.ProgramBuilder.Map(input, [&ctx, &compression](TRuntimeNode item) {
-            return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf(std::string("Decompress.") += compression), {item});
+            return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf(std::string("Decompress.") += ResolveUDFNameByCompression(compression)), {item});
         });
     }
 

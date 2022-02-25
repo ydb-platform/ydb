@@ -11,7 +11,9 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <util/folder/path.h>
+#include <util/generic/is_in.h>
 #include <util/generic/utility.h>
+
 
 namespace NYql {
 namespace NCommon {
@@ -1046,6 +1048,25 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 
     writer.OnEndMap();
 }
+
+bool ValidateCompression(TStringBuf compression, TExprContext& ctx) {
+    if (compression.empty() ||
+        IsIn({
+            "gzip"sv,
+            "zstd"sv,
+            "lz4"sv,
+            "brotli"sv,
+            "bzip2"sv,
+            "xz"sv
+        }, compression))
+    {
+        return true;
+    }
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
+        << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz"));
+    return false;
+}
+
 
 } // namespace NCommon
 } // namespace NYql

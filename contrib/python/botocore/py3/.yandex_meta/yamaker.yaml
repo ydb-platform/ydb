@@ -1,0 +1,8 @@
+additional_requirements:
+- six
+- library/python/resource
+exclude:
+- botocore/vendored/six.py
+- tests/.+
+keep:
+- tests/SQS-119.py

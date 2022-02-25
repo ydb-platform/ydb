@@ -8773,9 +8773,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
     };
 
-    IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        bool isResolved = input->Content() == "PgResolvedCall";
+        if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8784,68 +8785,115 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto name = input->Head().Content();
-        const TTypeAnnotationNode* result = nullptr;
-        TVector<const TTypeAnnotationNode*> argTypes;
-        bool isNull = false;
-        bool isOptional = false;
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            auto type = input->Child(i)->GetTypeAnn();
-            if (type->GetKind() == ETypeAnnotationKind::Null) {
-                argTypes.push_back(type);
-                isNull = true;
-                result = type;
-                continue;
-            }
 
-            if (type->GetKind() == ETypeAnnotationKind::Optional) {
-                type = RemoveOptionalType(type);
-                isOptional = true;
-            }
-
-            argTypes.push_back(type);
-        }
-
-        const auto& funcs = TPgFuncMap::Instance().Funcs;
-        auto it = funcs.find(name);
-        if (it != funcs.end()) {
-            const auto& desc = it->second;
-            if (argTypes.size() > desc.MaxArgs || argTypes.size() < desc.MinArgs) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Incorrect arguments count: " << argTypes.size() << " for function: " << name));
+        if (isResolved) {
+            if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
+        }
 
-            for (ui32 i = 0; i < argTypes.size(); ++i) {
-                auto expectedType = desc.DataTypes[i];
-                if (argTypes[i]->GetKind() != ETypeAnnotationKind::Null) {
-                    if (argTypes[i]->GetKind() != ETypeAnnotationKind::Data) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                            TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << argTypes[i]->GetKind() << " for function: " << name));
-                        return IGraphTransformer::TStatus::Error;
-                    } else {
-                        auto dataType = argTypes[i]->Cast<TDataExprType>()->GetSlot();
-                        if (dataType != expectedType) {
+        if (ctx.Types.PgTypes || isResolved) {
+            TVector<ui32> argTypes;
+            for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
+                auto type = input->Child(i)->GetTypeAnn();
+                if (type->GetKind() == ETypeAnnotationKind::Null) {
+                    argTypes.push_back(0);
+                    continue;
+                }
+
+                if (type->GetKind() != ETypeAnnotationKind::Pg) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Expected PG type for argument " << (i - (isResolved ? 2 : 1) + 1) << ", but got: " << type->GetKind() << " for function: " << name));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                argTypes.push_back(type->Cast<TPgExprType>()->GetId());
+            }
+
+            if (isResolved) {
+                auto procId = FromString<ui32>(input->Child(1)->Content());
+                const auto& proc = NPg::LookupProc(procId, argTypes);
+                if (proc.Name != name) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+                input->SetTypeAnn(result);
+                return IGraphTransformer::TStatus::Ok;
+            } else {
+                const auto& proc = NPg::LookupProc(TString(name), argTypes);
+                auto children = input->ChildrenList();
+                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
+                children.insert(children.begin() + 1, idNode);
+                output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        } else {
+            const TTypeAnnotationNode* result = nullptr;
+            TVector<const TTypeAnnotationNode*> argTypes;
+            bool isNull = false;
+            bool isOptional = false;
+            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+                auto type = input->Child(i)->GetTypeAnn();
+                if (type->GetKind() == ETypeAnnotationKind::Null) {
+                    argTypes.push_back(type);
+                    isNull = true;
+                    result = type;
+                    continue;
+                }
+
+                if (type->GetKind() == ETypeAnnotationKind::Optional) {
+                    type = RemoveOptionalType(type);
+                    isOptional = true;
+                }
+
+                argTypes.push_back(type);
+            }
+
+            const auto& funcs = TPgFuncMap::Instance().Funcs;
+            auto it = funcs.find(name);
+            if (it != funcs.end()) {
+                const auto& desc = it->second;
+                if (argTypes.size() > desc.MaxArgs || argTypes.size() < desc.MinArgs) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Incorrect arguments count: " << argTypes.size() << " for function: " << name));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                for (ui32 i = 0; i < argTypes.size(); ++i) {
+                    auto expectedType = desc.DataTypes[i];
+                    if (argTypes[i]->GetKind() != ETypeAnnotationKind::Null) {
+                        if (argTypes[i]->GetKind() != ETypeAnnotationKind::Data) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << dataType << " for function: " << name));
+                                TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << argTypes[i]->GetKind() << " for function: " << name));
                             return IGraphTransformer::TStatus::Error;
+                        } else {
+                            auto dataType = argTypes[i]->Cast<TDataExprType>()->GetSlot();
+                            if (dataType != expectedType) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                    TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << dataType << " for function: " << name));
+                                return IGraphTransformer::TStatus::Error;
+                            }
                         }
                     }
                 }
+
+                result = ctx.Expr.MakeType<TDataExprType>(desc.ReturnType);
+            } else {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Unsupported function: " << name));
+                return IGraphTransformer::TStatus::Error;
             }
 
-            result = ctx.Expr.MakeType<TDataExprType>(desc.ReturnType);
-        } else {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Unsupported function: " << name));
-            return IGraphTransformer::TStatus::Error;
-        }
+            if (!isNull && isOptional && result->GetKind() != ETypeAnnotationKind::Optional) {
+                result = ctx.Expr.MakeType<TOptionalExprType>(result);
+            }
 
-        if (!isNull && isOptional && result->GetKind() != ETypeAnnotationKind::Optional) {
-            result = ctx.Expr.MakeType<TOptionalExprType>(result);
+            input->SetTypeAnn(result);
+            return IGraphTransformer::TStatus::Ok;
         }
-
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -9376,6 +9424,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
         input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(typeId));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus PgTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(ctx.Expr.MakeType<TPgExprType>(typeId)));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -13080,7 +13143,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
         Functions["PgStar"] = &PgStarWrapper;
-        Functions["PgCall"] = &PgCallWrapper;
         Functions["PgAgg"] = &PgAggWrapper;
         Functions["PgAggWindowCall"] = &PgAggWrapper;
         Functions["PgWindowCall"] = &PgWindowCallWrapper;
@@ -13093,6 +13155,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgWindow"] = &PgWindowWrapper;
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
         Functions["PgConst"] = &PgConstWrapper;
+        Functions["PgType"] = &PgTypeWrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;
@@ -13219,6 +13282,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RoundDown"] = &RoundWrapper;
         Functions["NextValue"] = &NextValueWrapper;
 
+        ExtFunctions["PgCall"] = &PgCallWrapper;
+        ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
         ExtFunctions["TablePath"] = &TablePathWrapper;

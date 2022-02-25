@@ -1918,9 +1918,14 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
 
-    return OptimizeExpr(input, output, [&optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [&optimizers, &types](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule)
             return (rule->second)(node, ctx);
+
+        if (!types.PgTypes && node->IsCallable("PgCall")) {
+            return ExpandPgCall(node, ctx);
+        }
+
         return node;
     }, ctx, settings);
 }
@@ -5754,8 +5759,7 @@ struct TPeepHoleRules {
         {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
-        {"RangeFor", &ExpandRangeFor},
-        {"PgCall", &ExpandPgCall},
+        {"RangeFor", &ExpandRangeFor}
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

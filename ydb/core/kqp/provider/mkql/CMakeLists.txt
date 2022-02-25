@@ -5,42 +5,11 @@ set_property(TARGET kqp-provider-mkql PROPERTY
 target_link_libraries(kqp-provider-mkql PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  tools-python3-src
-  contrib-libs-cxxsupp
-  yutil
-  python-symbols-libc
-  python-symbols-python
-  tools-python3-lib
-  contrib-libs-cxxsupp
-  yutil
-  tools-python3-src
-  library-cpp-resource
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  cpp-malloc-jemalloc
-  library-cpp-cpuid_check
-  src-Modules-_sqlite
 )
 target_sources(kqp-provider-mkql PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/core/kqp/provider/mkql/yql_kikimr_mkql_expr_nodes.defs.inl.h
-  ${CMAKE_SOURCE_DIR}/library/python/symbols/module/module.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/python/MarkupSafe/py3/markupsafe/_speedups.c
 )
 add_custom_command(
   OUTPUT

@@ -299,6 +299,40 @@ struct TCatalog {
     THashMap<TString, ui32> TypeByName;
 };
 
+bool ValidateArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
+    if (argTypeIds.size() != d.ArgTypes.size()) {
+        return false;
+    }
+
+    bool found = true;
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        if (argTypeIds[i] == 0) {
+            continue; // NULL
+        }
+
+        if (argTypeIds[i] != d.ArgTypes[i]) {
+            found = false;
+            break;
+        }
+    }
+
+    return found;
+}
+
+const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
+    const auto& catalog = TCatalog::Instance();
+    auto procPtr = catalog.Procs.FindPtr(procId);
+    if (!procPtr) {
+        throw yexception() << "No such proc: " << procId;
+    }
+
+    if (!ValidateArgs(*procPtr, argTypeIds)) {
+        throw yexception() << "Unable to find an overload for with oid " << procId << " with given argument types";
+    }
+
+    return *procPtr;
+}
+
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.ProcByName.FindPtr(name);
@@ -309,7 +343,7 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
-        if (argTypeIds != d->ArgTypes) {
+        if (!ValidateArgs(*d, argTypeIds)) {
             continue;
         }
 
@@ -317,6 +351,16 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     }
 
     throw yexception() << "Unable to find an overload for function " << name << " with given argument types";
+}
+
+const TProcDesc& LookupProc(ui32 procId) {
+    const auto& catalog = TCatalog::Instance();
+    auto procPtr = catalog.Procs.FindPtr(procId);
+    if (!procPtr) {
+        throw yexception() << "No such proc: " << procId;
+    }
+
+    return *procPtr;
 }
 
 const TTypeDesc& LookupType(const TString& name) {

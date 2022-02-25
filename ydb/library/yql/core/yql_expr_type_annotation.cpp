@@ -4689,6 +4689,12 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
         }
     }
 
+    case ETypeAnnotationKind::Pg:
+    {
+        const auto pgType = type.Cast<TPgExprType>();
+        return ctx.NewCallable(position, "PgType", { ctx.NewAtom(position, pgType->GetName(), TNodeFlags::Default) });
+    }
+
     case ETypeAnnotationKind::Optional:
     {
         auto ret = ctx.NewCallable(position, "OptionalType",

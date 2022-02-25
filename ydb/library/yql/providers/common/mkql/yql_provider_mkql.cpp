@@ -2241,6 +2241,19 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.PgConst(type, node.Tail().Content());
     });
 
+    AddCallable("PgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto name = node.Head().Content();
+        auto id = FromString<ui32>(node.Child(1)->Content());
+        std::vector<TRuntimeNode> args;
+        args.reserve(node.ChildrenSize() - 1);
+        for (ui32 i = 2; i < node.ChildrenSize(); ++i) {
+            args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
+        }
+
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.PgResolvedCall(name, id, args, returnType);
+    });
+
     AddCallable("QueueCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto initCapacity = MkqlBuildExpr(*node.Child(1), ctx);
         const auto initSize = MkqlBuildExpr(*node.Child(2), ctx);

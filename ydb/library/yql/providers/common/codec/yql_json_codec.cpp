@@ -8,8 +8,11 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/join.h>
 
+#include <cmath>
+
 namespace NYql {
 namespace NCommon {
+namespace NJsonCodec {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -34,13 +37,13 @@ TJsonWriterConfig MakeJsonConfig() {
     config.SortKeys = false;
     config.ValidateUtf8 = false;
     config.DontEscapeStrings = true;
-    config.WriteNanAsString = false;
+    config.WriteNanAsString = true;
 
     return config;
 }
 
 void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod& value,
-                      NKikimr::NMiniKQL::TType* type, std::set<EValueConvertPolicy> convertPolicy) {
+                      NKikimr::NMiniKQL::TType* type, TValueConvertPolicy convertPolicy) {
 
     switch (type->GetKind()) {
     case TType::EKind::Void:
@@ -54,12 +57,18 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
         break;
     case TType::EKind::Data:
         {
-            bool numberToStr = convertPolicy.contains(EValueConvertPolicy::WriteNumberString);
+            bool numberToStr = convertPolicy.Test(EValueConvertPolicy::NUMBER_AS_STRING);
             auto dataType = AS_TYPE(TDataType, type);
             switch (dataType->GetSchemeType()) {
-            case NUdf::TDataType<bool>::Id:
-                writer.Write(value.Get<bool>());
+            case NUdf::TDataType<bool>::Id: {
+                auto boolValue = value.Get<bool>();
+                if (convertPolicy.Test(EValueConvertPolicy::BOOL_AS_STRING)) {
+                    writer.Write(boolValue ? "true" : "false");
+                } else {
+                    writer.Write(boolValue);
+                }
                 break;
+            }
             case NUdf::TDataType<i32>::Id: {
                 auto number = value.Get<i32>();
                 if (numberToStr) {
@@ -82,7 +91,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
                 auto number = value.Get<i64>();
                 if (numberToStr) {
                     writer.Write(ToString(number));
-                } else if (convertPolicy.contains(EValueConvertPolicy::WriteUnsafeNumberString)) {
+                } else if (convertPolicy.Test(EValueConvertPolicy::UNSAFE_NUMBER_AS_STRING)) {
                     if (number > MAX_JS_SAFE_INTEGER || number < MIN_JS_SAFE_INTEGER) {
                         writer.Write(ToString(number));
                     } else {
@@ -97,7 +106,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
                 auto number = value.Get<ui64>();
                 if (numberToStr) {
                     writer.Write(ToString(number));
-                } else if (convertPolicy.contains(EValueConvertPolicy::WriteUnsafeNumberString)) {
+                } else if (convertPolicy.Test(EValueConvertPolicy::UNSAFE_NUMBER_AS_STRING)) {
                     if (number > MAX_JS_SAFE_INTEGER) {
                         writer.Write(ToString(number));
                     } else {
@@ -144,25 +153,37 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
                 }
                 break;
             }
-            case NUdf::TDataType<float>::Id:
+            case NUdf::TDataType<float>::Id: {
+                auto floatValue = value.Get<float>();
+                bool isUndetermined = std::isnan(floatValue) || std::isinf(floatValue);
+                if (convertPolicy.Test(EValueConvertPolicy::DISALLOW_NaN) && isUndetermined) {
+                    YQL_ENSURE(false, "NaN and Inf aren't allowed");
+                }
+
                 if (numberToStr) {
-                    TString number = FloatToString(value.Get<float>(), FLOAT_MODE, FLOAT_N_DIGITS);
+                    TString number = FloatToString(floatValue, FLOAT_MODE, FLOAT_N_DIGITS);
                     writer.Write(number);
                 } else {
-                    writer.Write(value.Get<float>());
+                    writer.Write(floatValue);
                 }
                 break;
-            case NUdf::TDataType<double>::Id:
+            }
+            case NUdf::TDataType<double>::Id: {
+                auto doubleValue = value.Get<double>();
+                bool isUndetermined = std::isnan(doubleValue) || std::isinf(doubleValue);
+                if (convertPolicy.Test(EValueConvertPolicy::DISALLOW_NaN) && isUndetermined) {
+                    YQL_ENSURE(false, "NaN and Inf aren't allowed");
+                }
+
                 if (numberToStr) {
-                    TString number = FloatToString(value.Get<double>(), FLOAT_MODE, DOUBLE_N_DIGITS);
+                    TString number = FloatToString(doubleValue, FLOAT_MODE, DOUBLE_N_DIGITS);
                     writer.Write(number);
                 } else {
-                    writer.Write(value.Get<double>());
+                    writer.Write(doubleValue);
                 }
                 break;
+            }
             case NUdf::TDataType<NUdf::TJson>::Id:
-                writer.UnsafeWrite(value.AsStringRef());
-                break;
             case NUdf::TDataType<NUdf::TUtf8>::Id:
                 writer.Write(value.AsStringRef());
                 break;
@@ -225,9 +246,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
     case TType::EKind::Optional:
     {
         writer.OpenArray();
-        if (!value.GetOptionalValue()) {
-            writer.WriteNull();
-        } else {
+        if (value.GetOptionalValue()) {
             auto optionalType = AS_TYPE(TOptionalType, type);
             WriteValueToJson(writer, value.GetOptionalValue(), optionalType->GetItemType(), convertPolicy);
         }
@@ -239,11 +258,18 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
         writer.OpenArray();
         auto dictType = AS_TYPE(TDictType, type);
         const auto it = value.GetDictIterator();
-        for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
-            writer.OpenArray();
-            WriteValueToJson(writer, key, dictType->GetKeyType(), convertPolicy);
-            WriteValueToJson(writer, payload, dictType->GetPayloadType(), convertPolicy);
-            writer.CloseArray();
+        // is Set<>
+        if (dictType->GetPayloadType()->GetKind() == TType::EKind::Void) {
+            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
+                WriteValueToJson(writer, key, dictType->GetKeyType(), convertPolicy);
+            }
+        } else {
+            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
+                writer.OpenArray();
+                WriteValueToJson(writer, key, dictType->GetKeyType(), convertPolicy);
+                WriteValueToJson(writer, payload, dictType->GetPayloadType(), convertPolicy);
+                writer.CloseArray();
+            }
         }
         writer.CloseArray();
         break;
@@ -262,15 +288,15 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
     {
         writer.OpenArray();
         auto index = value.GetVariantIndex();
-        writer.Write(index);
-
         auto underlyingType = AS_TYPE(TVariantType, type)->GetUnderlyingType();
         if (underlyingType->IsTuple()) {
+            writer.Write(index);
             WriteValueToJson(writer, value.GetVariantItem(),
                              AS_TYPE(TTupleType, underlyingType)->GetElementType(index), convertPolicy);
         } else {
-            WriteValueToJson(writer, value.GetVariantItem(),
-                             AS_TYPE(TStructType, underlyingType)->GetMemberType(index), convertPolicy);
+            auto structType = AS_TYPE(TStructType, underlyingType);
+            writer.Write(structType->GetMemberName(index));
+            WriteValueToJson(writer, value.GetVariantItem(), structType->GetMemberType(index), convertPolicy);
         }
         writer.CloseArray();
         break;
@@ -351,11 +377,16 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
     }
     case TType::EKind::Optional:
     {
-        if (json.IsNull()) {
-            return NUdf::TUnboxedValuePod();
+        YQL_ENSURE(json.IsArray()
+                    && json.GetArray().size() <= 1
+                   , "Unexpected json type (expected array no more than one element, but got " << jsonType << ")");
+
+        auto array = json.GetArray();
+        if (array.empty()) {
+            return NUdf::TUnboxedValuePod().MakeOptional();
         }
         auto optionalType = AS_TYPE(TOptionalType, type);
-        auto value = ReadJsonValue(json, optionalType->GetItemType(), holderFactory);
+        auto value = ReadJsonValue(array.front(), optionalType->GetItemType(), holderFactory);
         return value.Release().MakeOptional();
     }
     case TType::EKind::Data:
@@ -444,15 +475,6 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
     return NKikimr::NUdf::TUnboxedValuePod();
 }
 
-NKikimr::NUdf::TUnboxedValue ReadJsonValue(IInputStream* in, NKikimr::NMiniKQL::TType* type,
-    const NMiniKQL::THolderFactory& holderFactory)
-{
-    TJsonValue json;
-    if (!ReadJsonTree(in, &json, false)) {
-        YQL_ENSURE(false, "Error parse json");
-    }
-    return ReadJsonValue(json, type, holderFactory);
 }
-
 }
 }

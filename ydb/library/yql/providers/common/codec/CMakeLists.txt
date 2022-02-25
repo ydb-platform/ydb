@@ -11,6 +11,7 @@ target_link_libraries(providers-common-codec PUBLIC
   cpp-yson-node
   library-cpp-yson
   library-cpp-json
+  library-cpp-enumbitset
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-common-codec PRIVATE

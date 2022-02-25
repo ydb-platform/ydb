@@ -2,12 +2,15 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/string/cast.h>
 
 namespace NYql {
 namespace NCommon {
+namespace NJsonCodec {
 
 using namespace NYql::NCommon;
 using namespace NKikimr;
@@ -33,10 +36,10 @@ struct TTestContext {
     }
 };
 
-TString WriteValueToExportJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL::TType* type) {
+TString WriteValueToExportJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL::TType* type, TValueConvertPolicy policy = {}) {
     TStringStream out;
     NJson::TJsonWriter jsonWriter(&out, MakeJsonConfig());
-    WriteValueToJson(jsonWriter,value, type, {});
+    WriteValueToJson(jsonWriter,value, type, policy);
     jsonWriter.Flush();
     return out.Str();
 }
@@ -44,9 +47,20 @@ TString WriteValueToExportJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL:
 TString WriteValueToFuncJsonStr(const NUdf::TUnboxedValuePod& value, NMiniKQL::TType* type) {
     TStringStream out;
     NJson::TJsonWriter jsonWriter(&out, MakeJsonConfig());
-    WriteValueToJson(jsonWriter,value, type, {EValueConvertPolicy::WriteNumberString});
+    TValueConvertPolicy policy;
+    policy.Set(EValueConvertPolicy::NUMBER_AS_STRING);
+    WriteValueToJson(jsonWriter,value, type, policy);
     jsonWriter.Flush();
     return out.Str();
+}
+
+NUdf::TUnboxedValue ReadJsonStrValue(IInputStream* in, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory)
+{
+    NJson::TJsonValue json;
+    if (!NJson::ReadJsonTree(in, &json, false)) {
+        YQL_ENSURE(false, "Error parse json");
+    }
+    return ReadJsonValue(json, type, holderFactory);
 }
 }
 
@@ -72,6 +86,14 @@ Y_UNIT_TEST_SUITE(SerializeBool) {
         auto json2 = WriteValueToFuncJsonStr(NUdf::TUnboxedValuePod(false), type);
         UNIT_ASSERT_VALUES_EQUAL(json2, "false");
     }
+
+    Y_UNIT_TEST(StringBool) {
+        TTestContext ctx;
+        auto type = TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv);
+        TValueConvertPolicy policy{EValueConvertPolicy::BOOL_AS_STRING};
+        auto json = WriteValueToExportJsonStr(NUdf::TUnboxedValuePod(true), type, policy);
+        UNIT_ASSERT_VALUES_EQUAL(json, "\"true\"");
+    }
 }
 
 Y_UNIT_TEST_SUITE(SerializeUuid) {
@@ -90,7 +112,7 @@ Y_UNIT_TEST_SUITE(SerializeJson) {
         auto type = TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, ctx.TypeEnv);
         auto value = ctx.Vb.NewString("\"some string с русскими йЁ\"");
         auto json = WriteValueToFuncJsonStr(value, type);
-        UNIT_ASSERT_VALUES_EQUAL(json, "\"some string с русскими йЁ\"");
+        UNIT_ASSERT_VALUES_EQUAL(json, "\"\"some string с русскими йЁ\"\"");
     }
 
     Y_UNIT_TEST(ComplexJson) {
@@ -107,7 +129,7 @@ Y_UNIT_TEST_SUITE(SerializeJson) {
         items[1] = NUdf::TUnboxedValuePod(ui32(73));
 
         auto json = WriteValueToExportJsonStr(value, type);
-        UNIT_ASSERT_VALUES_EQUAL(json, "{\"X\":{\"a\":500,\"b\":[1,2,3]},\"Y\":73}");
+        UNIT_ASSERT_VALUES_EQUAL(json, "{\"X\":\"{\"a\":500,\"b\":[1,2,3]}\",\"Y\":73}");
     }
 }
 
@@ -196,6 +218,20 @@ Y_UNIT_TEST_SUITE(SerializeContainers) {
         UNIT_ASSERT_VALUES_EQUAL(json, "[[\"key_b\",-500],[\"key_a\",781]]");
     }
 
+    Y_UNIT_TEST(SetType) {
+        TTestContext ctx;
+        auto type = TDictType::Create(
+            TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),
+            ctx.TypeEnv.GetTypeOfVoid(),
+            ctx.TypeEnv
+        );
+        auto dictBuilder = ctx.Vb.NewDict(type, NUdf::TDictFlags::EDictKind::Hashed);
+        dictBuilder->Add(ctx.Vb.NewString("key_a"), NUdf::TUnboxedValuePod());
+        dictBuilder->Add(ctx.Vb.NewString("key_b"), NUdf::TUnboxedValuePod());
+        auto json = WriteValueToExportJsonStr(dictBuilder->Build(), type);
+        UNIT_ASSERT_VALUES_EQUAL(json, "[\"key_b\",\"key_a\"]");
+    }
+
     Y_UNIT_TEST(Tagged) {
         TTestContext ctx;
         auto type = TTaggedType::Create(TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, ctx.TypeEnv),
@@ -236,11 +272,11 @@ Y_UNIT_TEST_SUITE(SerializeContainers) {
 
         auto value0 = ctx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
         auto json0 = WriteValueToExportJsonStr(value0, type);
-        UNIT_ASSERT_VALUES_EQUAL(json0, "[0,true]");
+        UNIT_ASSERT_VALUES_EQUAL(json0, "[\"A\",true]");
 
         auto value1 = ctx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(200), 1);
         auto json1 = WriteValueToExportJsonStr(value1, type);
-        UNIT_ASSERT_VALUES_EQUAL(json1, "[1,200]");
+        UNIT_ASSERT_VALUES_EQUAL(json1, "[\"B\",200]");
     }
 
     Y_UNIT_TEST(StructType) {
@@ -276,14 +312,24 @@ Y_UNIT_TEST_SUITE(SerializeOptional) {
         UNIT_ASSERT_VALUES_EQUAL(json, "[[0,67,4]]");
     }
 
+    Y_UNIT_TEST(SimpleJust) {
+        TTestContext ctx;
+        auto elementType = TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv);
+        TType* type = TOptionalType::Create(elementType, ctx.TypeEnv);
+        auto value = NUdf::TUnboxedValuePod(ui32(6641)).MakeOptional();
+        auto json = WriteValueToExportJsonStr(value, type);
+        UNIT_ASSERT_VALUES_EQUAL(json, "[6641]");
+    }
+
     Y_UNIT_TEST(NothingOptional) {
         TTestContext ctx;
         auto value = NUdf::TUnboxedValuePod().MakeOptional();
         auto elementType = TListType::Create(TDataType::Create(NUdf::TDataType<ui8>::Id, ctx.TypeEnv), ctx.TypeEnv);
         auto type = TOptionalType::Create(elementType, ctx.TypeEnv);
         auto json = WriteValueToFuncJsonStr(value, type);
-        UNIT_ASSERT_VALUES_EQUAL(json, "[null]");
+        UNIT_ASSERT_VALUES_EQUAL(json, "[]");
     }
+
 
     Y_UNIT_TEST(SeveralOptionals) {
         TTestContext ctx;
@@ -294,7 +340,7 @@ Y_UNIT_TEST_SUITE(SerializeOptional) {
 
         auto value1 = NUdf::TUnboxedValuePod().MakeOptional().MakeOptional().MakeOptional();
         auto json1 = WriteValueToFuncJsonStr(value1, type);
-        UNIT_ASSERT_VALUES_EQUAL(json1, "[[[null]]]");
+        UNIT_ASSERT_VALUES_EQUAL(json1, "[[[]]]");
 
         auto value2 = NUdf::TUnboxedValuePod(ui8(120)).MakeOptional().MakeOptional().MakeOptional();
         auto json2 = WriteValueToExportJsonStr(value2, type);
@@ -390,7 +436,57 @@ Y_UNIT_TEST_SUITE(SerializeNumbers) {
         auto json1 = WriteValueToFuncJsonStr(value, type);
         UNIT_ASSERT_VALUES_EQUAL(json1, "\"788765.43\"");
     }
+
+    Y_UNIT_TEST(InfValue) {
+        TTestContext ctx;
+        auto value = NUdf::TUnboxedValuePod(std::numeric_limits<float>::infinity());
+        auto json1 = WriteValueToExportJsonStr(value, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv));
+        UNIT_ASSERT_VALUES_EQUAL(json1, "\"inf\"");
+
+        auto json2 = WriteValueToFuncJsonStr(value, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv));
+        UNIT_ASSERT_VALUES_EQUAL(json2, "\"inf\"");
+    }
+
+    Y_UNIT_TEST(NaNValue) {
+        TTestContext ctx;
+        auto value = NUdf::TUnboxedValuePod(std::numeric_limits<double>::quiet_NaN());
+        auto json1 = WriteValueToExportJsonStr(value, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv));
+        UNIT_ASSERT_VALUES_EQUAL(json1, "\"nan\"");
+
+        auto json2 = WriteValueToFuncJsonStr(value, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv));
+        UNIT_ASSERT_VALUES_EQUAL(json2, "\"nan\"");
+    }
+
+    Y_UNIT_TEST(DisallowNaN) {
+        TTestContext ctx;
+        auto valueNan = NUdf::TUnboxedValuePod(std::numeric_limits<float>::quiet_NaN());
+        TValueConvertPolicy policy{EValueConvertPolicy::DISALLOW_NaN};
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            WriteValueToExportJsonStr(valueNan, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), policy),
+            yexception,
+            "NaN and Inf aren't allowed"
+        );
+
+        auto valueInf = NUdf::TUnboxedValuePod(std::numeric_limits<double>::infinity());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            WriteValueToExportJsonStr(valueInf, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), policy),
+            yexception,
+            "NaN and Inf aren't allowed"
+        );
+    }
 }
+
+Y_UNIT_TEST_SUITE(DefaultPolicy) {
+    Y_UNIT_TEST(CloudFunction) {
+        TTestContext ctx;
+        auto value = NUdf::TUnboxedValuePod(i64(540138));
+        auto policy = DefaultPolicy::getInstance().CloudFunction();
+        auto json = WriteValueToExportJsonStr(value, TDataType::Create(NUdf::TDataType<i64>::Id, ctx.TypeEnv), policy);
+        UNIT_ASSERT_VALUES_EQUAL(json, "\"540138\"");
+    }
+}
+
 
 Y_UNIT_TEST_SUITE(DeserializeNumbers) {
 
@@ -400,18 +496,18 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
             \
         TStringStream maxJson; \
         maxJson << ToString(std::numeric_limits<type>::max()); \
-        auto maxValue = ReadJsonValue(&maxJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory); \
+        auto maxValue = ReadJsonStrValue(&maxJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory); \
         UNIT_ASSERT_VALUES_EQUAL(maxValue.Get<type>(), std::numeric_limits<type>::max()); \
             \
         TStringStream minJson; \
         minJson << ToString(std::numeric_limits<type>::min()); \
-        auto minValue = ReadJsonValue(&minJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory); \
+        auto minValue = ReadJsonStrValue(&minJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory); \
         UNIT_ASSERT_VALUES_EQUAL(minValue.Get<type>(), std::numeric_limits<type>::min()); \
             \
         TStringStream exceededJson; \
         exceededJson << ToString(wideType(std::numeric_limits<type>::max() + wideType(1))); \
         UNIT_ASSERT_EXCEPTION_CONTAINS( \
-            ReadJsonValue(&exceededJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory), \
+            ReadJsonStrValue(&exceededJson, TDataType::Create(NUdf::TDataType<type>::Id, ctx.TypeEnv), ctx.HolderFactory), \
             yexception, \
             "Exceeded the range" \
         ); \
@@ -431,13 +527,13 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
         TTestContext ctx;
         TStringStream json;
         json << "0.0431";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 0.0431f);
 
         TStringStream exceededJson;
         exceededJson << ToString(std::numeric_limits<double>::max());
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            ReadJsonValue(&exceededJson, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory),
+            ReadJsonStrValue(&exceededJson, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory),
             yexception,
             "Exceeded the range"
         );
@@ -447,7 +543,7 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
         TTestContext ctx;
         TStringStream json;
         json << "1766718243";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), ctx.HolderFactory);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<float>(), 1766718243.0f);
     }
 
@@ -455,7 +551,7 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
         TTestContext ctx;
         TStringStream json;
         json << "7773.13";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), 7773.13);
     }
 
@@ -463,7 +559,7 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
         TTestContext ctx;
         TStringStream json;
         json << "-667319001";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<double>::Id, ctx.TypeEnv), ctx.HolderFactory);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<double>(), -667319001.0l);
     }
 
@@ -497,7 +593,7 @@ Y_UNIT_TEST_SUITE(DeserializeStringTypes) {
         TTestContext ctx;
         TStringStream json;
         json << "\"fffaaae423\"";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv), ctx.HolderFactory);
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf("fffaaae423"), TStringBuf(value.AsStringRef()));
     }
 }
@@ -570,7 +666,7 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TTestContext ctx;
         TStringStream json;
         json << "\"2020-09-11\"";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory);
         ui16 date;
         ctx.Vb.MakeDate(2020, 9, 11, date);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<ui16>(), date);
@@ -580,7 +676,7 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TTestContext ctx;
         TStringStream json;
         json << "\"2021-07-14T00:00:43Z\"";
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, ctx.TypeEnv), ctx.HolderFactory);
         ui32 datetime;
         ctx.Vb.MakeDatetime(2021, 7, 14, 0, 0, 43, datetime);
         UNIT_ASSERT_VALUES_EQUAL(value.Get<ui32>(), datetime);
@@ -590,7 +686,7 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TTestContext ctx;
         TStringStream json;
         json << "\"2020-09-11,Europe/Moscow\""; // timeZoneId == 1
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, ctx.TypeEnv), ctx.HolderFactory);
         ui16 date;
         ctx.Vb.MakeDate(2020, 9, 10, date);
         UNIT_ASSERT_VALUES_EQUAL(value.GetTimezoneId(), 1);
@@ -601,7 +697,7 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TTestContext ctx;
         TStringStream json;
         json << "\"2020-09-11T01:11:05,Europe/Moscow\""; // timeZoneId == 1
-        auto value = ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, ctx.TypeEnv), ctx.HolderFactory);
+        auto value = ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, ctx.TypeEnv), ctx.HolderFactory);
         ui32 datetime;
         ctx.Vb.MakeDatetime(2020, 9, 11, 1, 11, 5, datetime, 1);
         UNIT_ASSERT_VALUES_EQUAL(value.GetTimezoneId(), 1);
@@ -613,7 +709,7 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TStringStream json;
         json << "[\"2020-22-12\"]";
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory),
+            ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory),
             yexception,
             "Unexpected json type (expected string"
         );
@@ -624,13 +720,14 @@ Y_UNIT_TEST_SUITE(DeserializeDateTypes) {
         TStringStream json;
         json << "\"2020-18-43\"";
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            ReadJsonValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory),
+            ReadJsonStrValue(&json, TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, ctx.TypeEnv), ctx.HolderFactory),
             yexception,
             "Invalid date format"
         );
     }
 }
 
+} // namespace
 } // namespace
 } // namespace
 

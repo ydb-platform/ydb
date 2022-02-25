@@ -51,7 +51,7 @@ CREATE TABLE series (
     series_id Uint64,
     title Utf8,
     series_info Utf8,
-    release_date Uint64,
+    release_date Date,
     PRIMARY KEY (series_id)
 );
 
@@ -59,8 +59,8 @@ CREATE TABLE seasons (
     series_id Uint64,
     season_id Uint64,
     title Utf8,
-    first_aired Uint64,
-    last_aired Uint64,
+    first_aired Date,
+    last_aired Date,
     PRIMARY KEY (series_id, season_id)
 );
 
@@ -69,7 +69,7 @@ CREATE TABLE episodes (
     season_id Uint64,
     episode_id Uint64,
     title Utf8,
-    air_date Uint64,
+    air_date Date,
     PRIMARY KEY (series_id, season_id, episode_id)
 );
 ```
@@ -112,40 +112,40 @@ VALUES
     (
         1,
         "IT Crowd",
-        CAST(Date("2006-02-03") AS Uint64),
+        Date("2006-02-03"),
         "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."),
     (
         2,
         "Silicon Valley",
-        CAST(Date("2014-04-06") AS Uint64),
+        Date("2014-04-06"),
         "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley."
     )
     ;
 
 UPSERT INTO seasons (series_id, season_id, title, first_aired, last_aired)
 VALUES
-    (1, 1, "Season 1", CAST(Date("2006-02-03") AS Uint64), CAST(Date("2006-03-03") AS Uint64)),
-    (1, 2, "Season 2", CAST(Date("2007-08-24") AS Uint64), CAST(Date("2007-09-28") AS Uint64)),
-    (2, 1, "Season 1", CAST(Date("2014-04-06") AS Uint64), CAST(Date("2014-06-01") AS Uint64)),
-    (2, 2, "Season 2", CAST(Date("2015-04-12") AS Uint64), CAST(Date("2015-06-14") AS Uint64))
+    (1, 1, "Season 1", Date("2006-02-03"), Date("2006-03-03")),
+    (1, 2, "Season 2", Date("2007-08-24"), Date("2007-09-28")),
+    (2, 1, "Season 1", Date("2014-04-06"), Date("2014-06-01")),
+    (2, 2, "Season 2", Date("2015-04-12"), Date("2015-06-14"))
 ;
 
 UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
 VALUES
-    (1, 1, 1, "Yesterday's Jam", CAST(Date("2006-02-03") AS Uint64)),
-    (1, 1, 2, "Calamity Jen", CAST(Date("2006-02-03") AS Uint64)),
-    (2, 1, 1, "Minimum Viable Product", CAST(Date("2014-04-06") AS Uint64)),
-    (2, 1, 2, "The Cap Table", CAST(Date("2014-04-13") AS Uint64))
+    (1, 1, 1, "Yesterday's Jam", Date("2006-02-03")),
+    (1, 1, 2, "Calamity Jen", Date("2006-02-03")),
+    (2, 1, 1, "Minimum Viable Product", Date("2014-04-06")),
+    (2, 1, 2, "The Cap Table", Date("2014-04-13"))
 ;
 ```
 Для исполнения скрипта через {{ ydb-short-name }} CLI выполните инструкции, приведенные в пункте ["Исполнение в {{ ydb-short-name }} CLI"](#cli) данной статьи.
 
-Вы можете дополнительно ознакомиться с командами записи занных в справочнике YQL:
+Вы можете дополнительно ознакомиться с командами записи данных в справочнике YQL:
 
 - [`INSERT`](../../yql/reference/syntax/insert_into.md) - добавление записей
 - [`REPLACE`](../../yql/reference/syntax/replace_into.md) - добавление/изменение записей
 - [`UPDATE`](../../yql/reference/syntax/update.md) - изменение указанных полей
-- [`UPSERT`](../../yql/reference/syntax/upsert_into.md) - добавлени записей/изменение указанных полей
+- [`UPSERT`](../../yql/reference/syntax/upsert_into.md) - добавление записей/изменение указанных полей
 
 ### SELECT : Выборка данных {#select}
 
@@ -155,7 +155,7 @@ VALUES
 SELECT 
     series_id,
     title AS series_title,
-    DateTime::ToDate(DateTime::FromDays(release_date)) AS release_date
+    release_date
 FROM series;
 ```
 или
@@ -183,7 +183,7 @@ SELECT * FROM episodes;
 
 При отладке параметризованного запроса в {{ ydb-short-name }} SDK вы можете проверить его работоспособность вызовом {{ ydb-short-name }} CLI, скопировав полный текст запроса без каких-либо корректировок, и задав значения параметров.
 
-Сохраните скрипт выполнения параметрированного запроса в текстовом файле `script.yql`:
+Сохраните скрипт выполнения параметризованного запроса в текстовом файле `script.yql`:
 
 ``` sql
 DECLARE $seriesId AS Uint64;

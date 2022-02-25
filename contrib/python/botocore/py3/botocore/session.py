@@ -886,6 +886,19 @@ class Session(object):
         resolver = self._get_internal_component('endpoint_resolver')
         return resolver.get_available_partitions()
 
+    def get_partition_for_region(self, region_name):
+        """Lists the partition name of a particular region.
+
+        :type region_name: string
+        :param region_name: Name of the region to list partition for (e.g.,
+             us-east-1).
+
+        :rtype: string
+        :return: Returns the respective partition name (e.g., aws).
+        """
+        resolver = self._get_internal_component('endpoint_resolver')
+        return resolver.get_partition_for_region(region_name)
+
     def get_available_regions(self, service_name, partition_name='aws',
                               allow_non_regional=False):
         """Lists the region and endpoint names of a particular partition.

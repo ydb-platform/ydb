@@ -50,6 +50,7 @@ from botocore.utils import parse_to_aware_datetime
 from botocore.utils import percent_encode
 from botocore.utils import is_json_value_header
 from botocore.utils import conditionally_calculate_md5
+from botocore.utils import has_header
 from botocore import validate
 
 
@@ -471,6 +472,7 @@ class BaseRestSerializer(Serializer):
             serialized['headers'] = partitioned['headers']
         self._serialize_payload(partitioned, parameters,
                                 serialized, shape, shape_members)
+        self._serialize_content_type(serialized, shape, shape_members)
 
         host_prefix = self._expand_host_prefix(parameters, operation_model)
         if host_prefix is not None:
@@ -506,8 +508,7 @@ class BaseRestSerializer(Serializer):
         # shape - Describes the expected input shape
         # shape_members - The members of the input struct shape
         payload_member = shape.serialization.get('payload')
-        if payload_member is not None and \
-                shape_members[payload_member].type_name in ['blob', 'string']:
+        if self._has_streaming_payload(payload_member, shape_members):
             # If it's streaming, then the body is just the
             # value of the payload.
             body_payload = parameters.get(payload_member, b'')
@@ -521,9 +522,38 @@ class BaseRestSerializer(Serializer):
                 serialized['body'] = self._serialize_body_params(
                     body_params,
                     shape_members[payload_member])
+            else:
+                serialized['body'] = self._serialize_empty_body()
         elif partitioned['body_kwargs']:
             serialized['body'] = self._serialize_body_params(
                 partitioned['body_kwargs'], shape)
+        elif self._requires_empty_body(shape):
+            serialized['body'] = self._serialize_empty_body()
+
+    def _serialize_empty_body(self):
+        return b''
+
+    def _serialize_content_type(self, serialized, shape, shape_members):
+        """
+        Some protocols require varied Content-Type headers
+        depending on user input. This allows subclasses to apply
+        this conditionally.
+        """
+        pass
+
+    def _requires_empty_body(self, shape):
+        """
+        Some protocols require a specific body to represent an empty
+        payload. This allows subclasses to apply this conditionally.
+        """
+        return False
+
+    def _has_streaming_payload(self, payload, shape_members):
+        """Determine if payload is streaming (a blob or string)."""
+        return (
+            payload is not None and
+            shape_members[payload].type_name in ['blob', 'string']
+        )
 
     def _encode_payload(self, body):
         if isinstance(body, six.text_type):
@@ -598,6 +628,31 @@ class BaseRestSerializer(Serializer):
 
 
 class RestJSONSerializer(BaseRestSerializer, JSONSerializer):
+
+    def _serialize_empty_body(self):
+        return b'{}'
+
+    def _requires_empty_body(self, shape):
+        """
+        Serialize an empty JSON object whenever the shape has
+        members not targeting a location.
+        """
+        for member, val in shape.members.items():
+            if 'location' not in val.serialization:
+                return True
+        return False
+
+    def _serialize_content_type(self, serialized, shape, shape_members):
+        """Set Content-Type to application/json for all structured bodies."""
+        payload = shape.serialization.get('payload')
+        if self._has_streaming_payload(payload, shape_members):
+            # Don't apply content-type to streaming bodies
+            return
+
+        has_body = serialized['body'] != b''
+        has_content_type = has_header('Content-Type', serialized['headers'])
+        if has_body and not has_content_type:
+            serialized['headers']['Content-Type'] = 'application/json'
 
     def _serialize_body_params(self, params, shape):
         serialized_body = self.MAP_TYPE()

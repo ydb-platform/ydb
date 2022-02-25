@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 OWNER(g:python-contrib)
 
-VERSION(1.21.65)
+VERSION(1.22.12)
 
 LICENSE(Apache-2.0)
 
@@ -178,6 +178,8 @@ RESOURCE_FILES(
     #botocore/data/ce/2017-10-25/service-2.json
     #botocore/data/chime-sdk-identity/2021-04-20/paginators-1.json
     #botocore/data/chime-sdk-identity/2021-04-20/service-2.json
+    #botocore/data/chime-sdk-meetings/2021-07-15/paginators-1.json
+    #botocore/data/chime-sdk-meetings/2021-07-15/service-2.json
     #botocore/data/chime-sdk-messaging/2021-05-15/paginators-1.json
     #botocore/data/chime-sdk-messaging/2021-05-15/service-2.json
     #botocore/data/chime/2018-05-01/paginators-1.json
@@ -703,6 +705,7 @@ RESOURCE_FILES(
     #botocore/data/networkmanager/2019-07-05/service-2.json
     #botocore/data/nimble/2020-08-01/paginators-1.json
     #botocore/data/nimble/2020-08-01/service-2.json
+    #botocore/data/nimble/2020-08-01/waiters-2.json
     #botocore/data/opensearch/2021-01-01/paginators-1.json
     #botocore/data/opensearch/2021-01-01/service-2.json
     #botocore/data/opsworks/2013-02-18/examples-1.json
@@ -718,6 +721,8 @@ RESOURCE_FILES(
     #botocore/data/organizations/2016-11-28/service-2.json
     #botocore/data/outposts/2019-12-03/paginators-1.json
     #botocore/data/outposts/2019-12-03/service-2.json
+    #botocore/data/panorama/2019-07-24/paginators-1.json
+    #botocore/data/panorama/2019-07-24/service-2.json
     #botocore/data/personalize-events/2018-03-22/paginators-1.json
     #botocore/data/personalize-events/2018-03-22/service-2.json
     #botocore/data/personalize-runtime/2018-05-22/paginators-1.json

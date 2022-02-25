@@ -228,6 +228,18 @@ def is_json_value_header(shape):
     )
 
 
+def has_header(header_name, headers):
+    """Case-insensitive check for header key."""
+    if header_name is None:
+        return False
+    elif isinstance(headers, botocore.awsrequest.HeadersDict):
+        return header_name in headers
+    else:
+        return header_name.lower() in [
+            key.lower() for key in headers.keys()
+        ]
+
+
 def get_service_module_name(service_model):
     """Returns the module name for a service
 

@@ -21,7 +21,17 @@ from botocore.docs.utils import DocumentedShape
 from botocore.compat import OrderedDict
 
 
+def _allowlist_generate_presigned_url(method_name, service_name, **kwargs):
+    if method_name != 'generate_presigned_url':
+        return None
+    return service_name in ['s3']
+
+
 class ClientDocumenter(object):
+    _CLIENT_METHODS_FILTERS = [
+        _allowlist_generate_presigned_url,
+    ]
+
     def __init__(self, client, shared_examples=None):
         self._client = client
         self._shared_examples = shared_examples
@@ -36,9 +46,35 @@ class ClientDocumenter(object):
         """
         self._add_title(section)
         self._add_class_signature(section)
-        client_methods = get_instance_public_methods(self._client)
+        client_methods = self._get_client_methods()
         self._add_client_intro(section, client_methods)
         self._add_client_methods(section, client_methods)
+
+    def _get_client_methods(self):
+        client_methods = get_instance_public_methods(self._client)
+        return self._filter_client_methods(client_methods)
+
+    def _filter_client_methods(self, client_methods):
+        filtered_methods = {}
+        for method_name, method in client_methods.items():
+            include = self._filter_client_method(
+                method=method,
+                method_name=method_name,
+                service_name=self._service_name,
+            )
+            if include:
+                filtered_methods[method_name] = method
+        return filtered_methods
+
+    def _filter_client_method(self, **kwargs):
+        # Apply each filter to the method
+        for filter in self._CLIENT_METHODS_FILTERS:
+            filter_include = filter(**kwargs)
+            # Use the first non-None value returned by any of the filters
+            if filter_include is not None:
+                return filter_include
+        # Otherwise default to including it
+        return True
 
     def _add_title(self, section):
         section.style.h2('Client')

@@ -10,6 +10,7 @@
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
@@ -105,6 +106,11 @@ public:
                 } else {
                     TBase::SaveDataType(dataType);
                 }
+                break;
+            }
+            case TType::EKind::Pg: {
+                const auto name = static_cast<const TPgType*>(type)->GetName();
+                TBase::SavePgType(name);
                 break;
             }
             case TType::EKind::Struct:
@@ -212,6 +218,11 @@ struct TRuntimeTypeLoader {
         }
 
         return Builder.NewDataType(NUdf::GetDataTypeInfo(*slot).TypeId);
+    }
+
+    TMaybe<TType> LoadPgType(const TString& pgType, ui32 /*level*/) {
+        auto typeId = NYql::NPg::LookupType(pgType).TypeId;
+        return Builder.NewPgType(typeId);
     }
 
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) {

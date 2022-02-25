@@ -59,6 +59,7 @@ class TItemExprType;
 class TListExprType;
 class TStreamExprType;
 class TDataExprType;
+class TPgExprType;
 class TWorldExprType;
 class TOptionalExprType;
 class TCallableExprType;
@@ -92,6 +93,7 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TStreamExprType& type) = 0;
     virtual void Visit(const TFlowExprType& type) = 0;
     virtual void Visit(const TDataExprType& type) = 0;
+    virtual void Visit(const TPgExprType& type) = 0;
     virtual void Visit(const TWorldExprType& type) = 0;
     virtual void Visit(const TOptionalExprType& type) = 0;
     virtual void Visit(const TCallableExprType& type) = 0;
@@ -695,6 +697,35 @@ private:
     const TStringBuf One, Two;
 };
 
+class TPgExprType : public TTypeAnnotationNode {
+public:
+    static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Pg;
+
+    TPgExprType(ui64 hash, ui32 typeId)
+        : TTypeAnnotationNode(KindValue, TypeHasManyValues, hash)
+        , TypeId(typeId)
+    {
+    }
+
+    static ui64 MakeHash(ui32 typeId) {
+        ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Pg;
+        return StreamHash(typeId, hash);
+    }
+
+    const TString& GetName() const;
+
+    ui32 GetId() const {
+        return TypeId;
+    }
+
+    bool operator==(const TPgExprType& other) const {
+        return TypeId == other.TypeId;
+    }
+
+private:
+    ui32 TypeId;
+};
+
 class TWorldExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::World;
@@ -1191,6 +1222,9 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     case ETypeAnnotationKind::Data:
         return static_cast<const TDataExprType&>(*this) == static_cast<const TDataExprType&>(node);
 
+    case ETypeAnnotationKind::Pg:
+        return static_cast<const TPgExprType&>(*this) == static_cast<const TPgExprType&>(node);
+
     case ETypeAnnotationKind::World:
         return static_cast<const TWorldExprType&>(*this) == static_cast<const TWorldExprType&>(node);
 
@@ -1263,6 +1297,8 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
         return visitor.Visit(static_cast<const TListExprType&>(*this));
     case ETypeAnnotationKind::Data:
         return visitor.Visit(static_cast<const TDataExprType&>(*this));
+    case ETypeAnnotationKind::Pg:
+        return visitor.Visit(static_cast<const TPgExprType&>(*this));
     case ETypeAnnotationKind::World:
         return visitor.Visit(static_cast<const TWorldExprType&>(*this));
     case ETypeAnnotationKind::Optional:
@@ -2151,6 +2187,11 @@ struct TMakeTypeImpl<TTypeExprType> {
 template <>
 struct TMakeTypeImpl<TDataExprType> {
     static const TDataExprType* Make(TExprContext& ctx, EDataSlot slot);
+};
+
+template <>
+struct TMakeTypeImpl<TPgExprType> {
+    static const TPgExprType* Make(TExprContext& ctx, ui32 typeId);
 };
 
 template <>

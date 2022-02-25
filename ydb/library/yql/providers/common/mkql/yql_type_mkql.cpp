@@ -31,6 +31,11 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         }
     }
 
+    case ETypeAnnotationKind::Pg: {
+        auto pg = annotation.Cast<TPgExprType>();
+        return pgmBuilder.NewPgType(pg->GetId());
+    }
+
     case ETypeAnnotationKind::Struct: {
         auto structObj = annotation.Cast<TStructExprType>();
         std::vector<std::pair<std::string_view, NKikimr::NMiniKQL::TType*>> members;

@@ -37,6 +37,7 @@ namespace NSQLTranslation {
         , SyntaxVersion(0)
         , AnsiLexer(false)
         , PgParser(false)
+        , PgTypes(false)
         , InferSyntaxVersion(false)
         , V0Behavior(EV0Behavior::Silent)
         , V0ForceDisable(InTestEnvironment())
@@ -105,6 +106,9 @@ namespace NSQLTranslation {
                 settings.AnsiLexer = true;
             } else if (value == "syntax_pg") {
                 settings.PgParser = true;
+            } else if (value == "syntax_pg_types") {
+                settings.PgParser = true;
+                settings.PgTypes = true;
             } else {
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL translation setting: " << value));

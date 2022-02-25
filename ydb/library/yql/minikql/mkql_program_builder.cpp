@@ -2040,6 +2040,10 @@ TType* TProgramBuilder::NewDataType(NUdf::TDataTypeId schemeType, bool optional)
     return optional ? NewOptionalType(TDataType::Create(schemeType, Env)) : TDataType::Create(schemeType, Env);
 }
 
+TType* TProgramBuilder::NewPgType(ui32 typeId) {
+    return TPgType::Create(typeId, Env);
+}
+
 TType* TProgramBuilder::NewDecimalType(ui8 precision, ui8 scale) {
     return TDataDecimalType::Create(precision, scale, Env);
 }
@@ -5008,6 +5012,17 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
         callableBuilder.Add(NewDataLiteral(column));
     }
 
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& value) {
+    if constexpr (RuntimeVersion < 30U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, pgType);
+    callableBuilder.Add(NewDataLiteral(pgType->GetTypeId()));
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(value));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

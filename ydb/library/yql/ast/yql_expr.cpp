@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/utils/utf8.h>
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/size_literals.h>
@@ -230,6 +231,15 @@ namespace {
 
                         return ann;
                     }
+                }  else if (content == TStringBuf("Pg")) {
+                    const auto count = node.GetChildrenCount();
+                    if (count != 2 || !node.GetChild(1)->IsAtom()) {
+                        AddError(node, "Bad data type annotation");
+                        return nullptr;
+                    }
+
+                    auto typeId = NPg::LookupType(TString(node.GetChild(1)->GetContent())).TypeId;
+                    return Expr.MakeType<TPgExprType>(typeId);
                 } else if (content == TStringBuf("List")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad list type annotation");
@@ -626,6 +636,13 @@ namespace {
 
                 return TAstNode::NewList(TPosition(), pool, self, datatype);
             }
+
+        case ETypeAnnotationKind::Pg:
+        {
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Pg"), pool);
+            auto name = TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TPgExprType>()->GetName(), pool);
+            return TAstNode::NewList(TPosition(), pool, self, name);
+        }
 
         case ETypeAnnotationKind::World:
         {
@@ -2861,6 +2878,10 @@ bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
     return Validate(ctx.GetPosition(position), ctx);
 }
 
+const TString& TPgExprType::GetName() const {
+    return NPg::LookupType(TypeId).Name;
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -3052,6 +3073,15 @@ const TDataExprType* TMakeTypeImpl<TDataExprType>::Make(TExprContext& ctx, EData
         return found;
 
     return AddType<TDataExprType>(ctx, hash, slot);
+}
+
+const TPgExprType* TMakeTypeImpl<TPgExprType>::Make(TExprContext& ctx, ui32 typeId) {
+    const auto hash = TPgExprType::MakeHash(typeId);
+    TPgExprType sample(hash, typeId);
+    if (const auto found = FindType(sample, ctx))
+        return found;
+
+    return AddType<TPgExprType>(ctx, hash, typeId);
 }
 
 const TDataExprParamsType* TMakeTypeImpl<TDataExprParamsType>::Make(TExprContext& ctx, EDataSlot slot, const TStringBuf& one, const TStringBuf& two) {

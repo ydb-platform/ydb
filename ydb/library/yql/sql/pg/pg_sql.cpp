@@ -147,6 +147,11 @@ public:
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
+        if (Settings.PgTypes) {
+            Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("PgTypes"))));
+        }
+
         if (DqEngineEnabled) {
             Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                 QA("DqEngine"), QA(DqEngineForce ? "force" : "auto"))));
@@ -815,13 +820,19 @@ public:
         const auto& val = value->val;
         switch (NodeTag(val)) {
         case T_Integer: {
-            return L(A("Just"), L(A("Int32"), QA(ToString(IntVal(val)))));
+            return Settings.PgTypes ?
+                L(A("PgConst"), QA("int4"), QA(ToString(IntVal(val)))) :
+                L(A("Just"), L(A("Int32"), QA(ToString(IntVal(val)))));
         }
         case T_Float: {
-            return L(A("Just"), L(A("Double"), QA(ToString(StrFloatVal(val)))));
+            return Settings.PgTypes ?
+                L(A("PgConst"), QA("float8"), QA(ToString(StrFloatVal(val)))) :
+                L(A("Just"), L(A("Double"), QA(ToString(StrFloatVal(val)))));
         }
         case T_String: {
-            return L(A("Just"), L(A("Utf8"), QA(ToString(StrVal(val)))));
+            return Settings.PgTypes ?
+                L(A("PgConst"), QA("text"), QA(ToString(StrVal(val)))) :
+                L(A("Just"), L(A("Utf8"), QA(ToString(StrVal(val)))));
         }
         case T_Null: {
             return L(A("Null"));

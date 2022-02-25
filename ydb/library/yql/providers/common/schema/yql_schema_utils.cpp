@@ -49,7 +49,7 @@ bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& 
         return true;
     } else if (typeName == "EmptyDictType") {
         return true;
-    } else if (typeName == "DataType") {
+    } else if (typeName == "DataType" || typeName == "PgType") {
         return left == right;
     } else if (typeName == "ResourceType") {
         return left[1].AsString() == right[1].AsString();

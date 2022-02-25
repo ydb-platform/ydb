@@ -12,6 +12,7 @@ target_link_libraries(library-yql-ast PUBLIC
   yql-public-udf
   library-yql-utils
   yql-core-issue
+  yql-parser-pg_catalog
 )
 target_sources(library-yql-ast PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp

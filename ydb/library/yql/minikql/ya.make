@@ -68,6 +68,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/tz
     ydb/library/yql/utils
+    ydb/library/yql/parser/pg_catalog
 )
 
 IF (MKQL_RUNTIME_VERSION)

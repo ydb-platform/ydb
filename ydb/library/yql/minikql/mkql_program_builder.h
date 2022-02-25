@@ -135,6 +135,7 @@ public:
     }
 
     TType* NewDecimalType(ui8 precision, ui8 scale);
+    TType* NewPgType(ui32 typeId);
 
     template <typename T, typename = std::enable_if_t<NUdf::TKnownDataType<T>::Result>>
     TRuntimeNode NewDataLiteral(T data) const {
@@ -621,6 +622,8 @@ public:
     typedef TRuntimeNode (TProgramBuilder::*ArrayFunctionMethod)(const TArrayRef<const TRuntimeNode>&);
     typedef TRuntimeNode (TProgramBuilder::*ProcessFunctionMethod)(TRuntimeNode, const TUnaryLambda&);
     typedef TRuntimeNode (TProgramBuilder::*NarrowFunctionMethod)(TRuntimeNode, const TNarrowLambda&);
+
+    TRuntimeNode PgConst(TPgType* pgType, const std::string_view& value);
 
 protected:
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);

@@ -41,6 +41,11 @@ void TThrowingNodeVisitor::Visit(TDataType& node) {
     ThrowUnexpectedNodeType();
 }
 
+void TThrowingNodeVisitor::Visit(TPgType& node) {
+    Y_UNUSED(node);
+    ThrowUnexpectedNodeType();
+}
+
 void TThrowingNodeVisitor::Visit(TStructType& node) {
     Y_UNUSED(node);
     ThrowUnexpectedNodeType();
@@ -199,6 +204,10 @@ void TEmptyNodeVisitor::Visit(TDataType& node) {
     Y_UNUSED(node);
 }
 
+void TEmptyNodeVisitor::Visit(TPgType& node) {
+    Y_UNUSED(node);
+}
+
 void TEmptyNodeVisitor::Visit(TStructType& node) {
     Y_UNUSED(node);
 }
@@ -324,6 +333,10 @@ void TExploringNodeVisitor::Visit(TEmptyDictType& node) {
 }
 
 void TExploringNodeVisitor::Visit(TDataType& node) {
+    AddChildNode(&node, *node.GetType());
+}
+
+void TExploringNodeVisitor::Visit(TPgType& node) {
     AddChildNode(&node, *node.GetType());
 }
 

@@ -154,6 +154,18 @@ namespace {
                 IsProcessed0 = false;
             }
 
+            void Visit(TPgType& node) override {
+                if (node.GetCookie() != 0) {
+                    Owner.WriteReference(node);
+                    IsProcessed0 = true;
+                    return;
+                }
+
+                Owner.Write(TypeMarker | (char)TType::EKind::Pg);
+                Owner.WriteVar32(node.GetTypeId());
+                IsProcessed0 = false;
+            }
+
             void Visit(TStructType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
@@ -572,6 +584,10 @@ namespace {
             }
 
             void Visit(TDataType& node) override {
+                Owner.RegisterReference(node);
+            }
+
+            void Visit(TPgType& node) override {
                 Owner.RegisterReference(node);
             }
 
@@ -1174,7 +1190,7 @@ namespace {
             case TType::EKind::Void:
                 return ReadVoidOrEmptyListOrEmptyDictType(code);
             case TType::EKind::Data:
-                return ReadDataType();
+                return ReadDataOrPgType(code);
             case TType::EKind::Struct:
                 return ReadStructType();
             case TType::EKind::List:
@@ -1233,6 +1249,12 @@ namespace {
             } else {
                 Nodes.emplace_back(TDataType::Create(static_cast<NUdf::TDataTypeId>(schemeType), Env));
             }
+            return Nodes.back();
+        }
+
+        TNode* ReadPgType() {
+            const auto typeId = ReadVar32();
+            Nodes.emplace_back(TPgType::Create(typeId, Env));
             return Nodes.back();
         }
 
@@ -1380,6 +1402,15 @@ namespace {
             switch ((TType::EKind)(code & TypeMask)) {
             case TType::EKind::Optional: return ReadOptionalType();
             case TType::EKind::Tagged: return ReadTaggedType();
+            default:
+                ThrowCorrupted();
+            }
+        }
+
+        TNode* ReadDataOrPgType(char code) {
+            switch ((TType::EKind)(code & TypeMask)) {
+            case TType::EKind::Data: return ReadDataType();
+            case TType::EKind::Pg: return ReadPgType();
             default:
                 ThrowCorrupted();
             }

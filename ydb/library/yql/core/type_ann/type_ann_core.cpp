@@ -21,6 +21,7 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
@@ -9359,6 +9360,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus PgConstWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(typeId));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     using TInputs = TVector<std::tuple<TString, const TStructExprType*, TMaybe<TColumnOrder>>>;
 
     bool ScanColumns(TExprNode::TPtr root, const TInputs& inputs, const THashSet<TString>& possibleAliases,
@@ -13072,6 +13092,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGroup"] = &PgWhereWrapper;
         Functions["PgWindow"] = &PgWindowWrapper;
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
+        Functions["PgConst"] = &PgConstWrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;

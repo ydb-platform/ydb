@@ -2236,6 +2236,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         });
     });
 
+    AddCallable("PgConst", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto type = AS_TYPE(TPgType, BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder));
+        return ctx.ProgramBuilder.PgConst(type, node.Tail().Content());
+    });
+
     AddCallable("QueueCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto initCapacity = MkqlBuildExpr(*node.Child(1), ctx);
         const auto initSize = MkqlBuildExpr(*node.Child(2), ctx);

@@ -2,6 +2,7 @@
 #include "mkql_node_visitor.h"
 #include <util/stream/str.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -80,6 +81,12 @@ namespace {
 
             Out << ", schemeTypeId: ";
             Out << node.GetSchemeType();
+            WriteNewline();
+        }
+
+        void Visit(TPgType& node) override {
+            WriteIndentation();
+            Out << "Type (Pg), name: " << NYql::NPg::LookupType(node.GetTypeId()).Name;
             WriteNewline();
         }
 

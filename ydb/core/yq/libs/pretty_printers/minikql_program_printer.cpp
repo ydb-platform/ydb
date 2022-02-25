@@ -32,6 +32,9 @@ public:
     void Visit(TDataType&) override {
         Out << "DataType";
     }
+    void Visit(TPgType&) override {
+        Out << "PgType";
+    }
     void Visit(TStructType&) override {
         Out << "StructType";
     }

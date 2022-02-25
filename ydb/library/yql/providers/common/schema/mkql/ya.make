@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/schema/parser
+    ydb/library/yql/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

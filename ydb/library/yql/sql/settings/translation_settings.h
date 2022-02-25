@@ -75,6 +75,7 @@ namespace NSQLTranslation {
         ui16 SyntaxVersion;
         bool AnsiLexer;
         bool PgParser;
+        bool PgTypes;
         bool InferSyntaxVersion;
         EV0Behavior V0Behavior;
         bool V0ForceDisable;

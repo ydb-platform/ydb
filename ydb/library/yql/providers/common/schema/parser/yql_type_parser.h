@@ -31,6 +31,7 @@ protected:
     void SaveEmptyListType();
     void SaveEmptyDictType();
     void SaveDataType(const TStringBuf& dataType);
+    void SavePgType(const TStringBuf& pgType);
     void SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo);
     void SaveResourceType(const TStringBuf& tag);
 
@@ -232,6 +233,12 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         }
 
         return loader.LoadDataTypeParams(node[1].AsString(), node[2].AsString(), node[3].AsString(), level);
+    } else if (typeName == "PgType") {
+        if (node.Size() != 2 || !node[1].IsString()) {
+            loader.Error("Invalid pg type scheme");
+            return Nothing();
+        }
+        return loader.LoadPgType(node[1].AsString(), level);
     } else if (typeName == "ResourceType") {
         if (node.Size() != 2 || !node[1].IsString()) {
             loader.Error("Invalid resource type scheme");

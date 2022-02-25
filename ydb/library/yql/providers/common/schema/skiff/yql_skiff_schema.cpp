@@ -84,6 +84,10 @@ struct TSkiffTypeLoader {
         ythrow yexception() << "Unsupported data type" << NUdf::GetDataTypeInfo(*slot).Name;
     }
 
+    TMaybe<TType> LoadPgType(const TString& /*pgType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported PG type";
+    }
+
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& /*paramTwo*/, ui32 /*level*/) {
         const auto slot = NUdf::FindDataSlot(dataType);
         if (!slot) {

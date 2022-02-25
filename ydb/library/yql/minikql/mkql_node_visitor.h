@@ -20,6 +20,7 @@ public:
     virtual void Visit(TEmptyListType& node) = 0;
     virtual void Visit(TEmptyDictType& node) = 0;
     virtual void Visit(TDataType& node) = 0;
+    virtual void Visit(TPgType& node) = 0;
     virtual void Visit(TStructType& node) = 0;
     virtual void Visit(TListType& node) = 0;
     virtual void Visit(TOptionalType& node) = 0;
@@ -56,6 +57,7 @@ public:
     void Visit(TEmptyListType& node) override;
     void Visit(TEmptyDictType& node) override;
     void Visit(TDataType& node) override;
+    void Visit(TPgType& node) override;
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;
@@ -95,6 +97,7 @@ public:
     void Visit(TEmptyListType& node) override;
     void Visit(TEmptyDictType& node) override;
     void Visit(TDataType& node) override;
+    void Visit(TPgType& node) override;
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;
@@ -133,6 +136,7 @@ public:
     void Visit(TEmptyListType& node) override;
     void Visit(TEmptyDictType& node) override;
     void Visit(TDataType& node) override;
+    void Visit(TPgType& node) override;
     void Visit(TStructType& node) override;
     void Visit(TListType& node) override;
     void Visit(TOptionalType& node) override;

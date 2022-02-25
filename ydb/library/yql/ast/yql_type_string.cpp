@@ -1178,6 +1178,10 @@ private:
         }
     }
 
+    void Visit(const TPgExprType& type) final {
+        Out_ << "pg_" << type.GetName();
+    }
+
     void Visit(const TWorldExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("World");

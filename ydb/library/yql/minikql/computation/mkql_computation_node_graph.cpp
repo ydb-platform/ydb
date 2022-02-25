@@ -270,6 +270,10 @@ private:
         VisitType<TDataType>(node);
     }
 
+    void Visit(TPgType& node) override {
+        VisitType<TPgType>(node);
+    }
+
     void Visit(TStructType& node) override {
         VisitType<TStructType>(node);
     }

@@ -9,6 +9,7 @@ target_link_libraries(common-schema-expr PUBLIC
   yql-public-udf
   library-yql-utils
   common-schema-parser
+  yql-parser-pg_catalog
 )
 target_sources(common-schema-expr PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/expr/yql_expr_schema.cpp

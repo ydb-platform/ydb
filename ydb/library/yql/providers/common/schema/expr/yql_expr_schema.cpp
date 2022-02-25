@@ -5,6 +5,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
@@ -161,9 +162,13 @@ public:
                 const auto dataType = type->Cast<TDataExprType>();
                 if (const auto dataParamsType = dynamic_cast<const TDataExprParamsType*>(dataType)) {
                     TBase::SaveDataTypeParams(dataType->GetName(), dataParamsType->GetParamOne(), dataParamsType->GetParamTwo());
-                } else
+                } else {
                     TBase::SaveDataType(dataType->GetName());
                 }
+                break;
+            }
+            case ETypeAnnotationKind::Pg:
+                TBase::SavePgType(type->Cast<TPgExprType>()->GetName());
                 break;
             case ETypeAnnotationKind::Struct:
                 TBase::SaveStructType(TStructAdaptor(type->Cast<TStructExprType>()));
@@ -288,6 +293,9 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadDataType(const TString& dataType, ui32 /*level*/) {
         return Ctx.MakeType<TDataExprType>(NYql::NUdf::GetDataSlot(dataType));
+    }
+    TMaybe<TType> LoadPgType(const TString& name, ui32 /*level*/) {
+        return Ctx.MakeType<TPgExprType>(NYql::NPg::LookupType(name).TypeId);
     }
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TDataExprParamsType>(NYql::NUdf::GetDataSlot(dataType), paramOne, paramTwo);

@@ -148,7 +148,8 @@ class TTypeEnvironment;
     XX(EmptyList, 16 + 2)   \
     XX(EmptyDict, 32 + 2)   \
     XX(Tagged, 48 + 7)      \
-    XX(Block, 16 + 13)
+    XX(Block, 16 + 13)      \
+    XX(Pg, 16 + 3)
 
 class TType : public TNode {
 public:
@@ -279,6 +280,7 @@ class TAnyType;
 class TTupleLiteral;
 class TResourceType;
 class TDataType;
+class TPgType;
 
 
 // A non-owning reference to internalized string
@@ -582,6 +584,34 @@ private:
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
+};
+
+class TPgType : public TType {
+    friend class TType;
+public:
+    static TPgType* Create(ui32 typeId, const TTypeEnvironment& env);
+
+    using TType::IsSameType;
+    bool IsSameType(const TPgType& typeToCompare) const;
+
+    using TType::IsConvertableTo;
+    bool IsConvertableTo(const TPgType& typeToCompare, bool ignoreTagged = false) const;
+
+    ui32 GetTypeId() const {
+        return TypeId;
+    }
+
+    const TString& GetName() const;
+
+protected:
+    TPgType(ui32 typeId, const TTypeEnvironment& env);
+
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
+    void DoFreeze(const TTypeEnvironment& env);
+
+private:
+    const ui32 TypeId;
 };
 
 struct TStructMember {

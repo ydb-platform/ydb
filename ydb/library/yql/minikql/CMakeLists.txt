@@ -20,6 +20,7 @@ target_link_libraries(library-yql-minikql PUBLIC
   yql-public-udf
   public-udf-tz
   library-yql-utils
+  yql-parser-pg_catalog
 )
 target_sources(library-yql-minikql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool.cpp

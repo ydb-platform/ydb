@@ -41,6 +41,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/core/issue
+    ydb/library/yql/parser/pg_catalog
 )
 
 END()

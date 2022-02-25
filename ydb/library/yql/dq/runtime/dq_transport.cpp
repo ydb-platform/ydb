@@ -389,6 +389,7 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::ReservedKind:
         case TType::EKind::Tagged:
         case TType::EKind::Block:
+        case TType::EKind::Pg:
             THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
 }

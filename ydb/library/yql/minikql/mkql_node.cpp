@@ -3,6 +3,7 @@
 #include "mkql_node_cast.h"
 #include "mkql_node_visitor.h"
 #include "mkql_node_printer.h"
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>
@@ -210,6 +211,7 @@ TStringBuf TType::GetKindAsStr() const {
     xx(EmptyDict, TEmptyDictType) \
     xx(Tagged, TTaggedType) \
     xx(Block, TBlockType) \
+    xx(Pg, TPgType) \
 
 void TType::Accept(INodeVisitor& visitor) {
     switch (Kind) {
@@ -460,6 +462,42 @@ bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
         case NUdf::TDataType<NUdf::TDecimal>::Id: return self.GetInt128() == that.GetInt128();
         default: return self.AsStringRef() == that.AsStringRef();
     }
+}
+
+TPgType::TPgType(ui32 typeId, const TTypeEnvironment& env)
+    : TType(EKind::Pg, env.GetTypeOfType())
+    , TypeId(typeId)
+{
+}
+
+TPgType* TPgType::Create(ui32 typeId, const TTypeEnvironment& env) {
+    return ::new(env.Allocate<TPgType>()) TPgType(typeId, env);
+}
+
+bool TPgType::IsSameType(const TPgType& typeToCompare) const {
+    return TypeId == typeToCompare.TypeId;
+}
+
+bool TPgType::IsConvertableTo(const TPgType& typeToCompare, bool ignoreTagged) const {
+    Y_UNUSED(ignoreTagged);
+    return IsSameType(typeToCompare);
+}
+
+void TPgType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
+    Y_UNUSED(links);
+}
+
+TNode* TPgType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
+    Y_UNUSED(env);
+    return const_cast<TPgType*>(this);
+}
+
+void TPgType::DoFreeze(const TTypeEnvironment& env) {
+    Y_UNUSED(env);
+}
+
+const TString& TPgType::GetName() const {
+    return NYql::NPg::LookupType(TypeId).Name;
 }
 
 TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env,

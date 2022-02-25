@@ -12,6 +12,7 @@ target_link_libraries(common-schema-mkql PUBLIC
   library-yql-utils
   providers-common-codec
   common-schema-parser
+  yql-parser-pg_catalog
 )
 target_sources(common-schema-mkql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.cpp

@@ -150,7 +150,7 @@ void MyAllocSetFree(MemoryContext context, void* pointer) {
 
 void* MyAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
     if (!size) {
-        return;
+        return nullptr;
     }
 
     void* ret = MyAllocSetAlloc(context, size);

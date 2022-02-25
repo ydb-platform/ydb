@@ -113,7 +113,10 @@ private:
             if (Y_UNLIKELY(outputChannel.Stats)) {
                 outputChannel.Stats->BlockedByCapacity++;
             }
-            this->Send(this->SelfId(), new NTaskRunnerActor::TEvChannelPopFinished(channelId));
+            CA_LOG_D("Cannot drain channel cause it blocked by capacity, channelId: " << channelId);
+            auto ev = MakeHolder<NTaskRunnerActor::TEvChannelPopFinished>(channelId);
+            Y_VERIFY(!ev->Finished);
+            this->Send(this->SelfId(), std::move(ev));  // try again, ev.Finished == false
             return;
         }
 

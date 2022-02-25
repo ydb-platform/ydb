@@ -210,6 +210,9 @@ struct TEvChannelPopFinished
     TEvChannelPopFinished() = default;
     TEvChannelPopFinished(ui32 channelId)
         : ChannelId(channelId)
+        , Data()
+        , Finished(false)
+        , Changed(false)
     { }
     TEvChannelPopFinished(ui32 channelId, TVector<NDqProto::TData>&& data, bool finished, bool changed, const TTaskRunnerActorSensors& sensors = {})
         : Sensors(sensors)

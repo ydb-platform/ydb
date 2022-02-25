@@ -1,8 +1,9 @@
 #include "ydb_operation.h"
 
+#include <ydb/core/grpc_services/service_operation.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/public/api/protos/ydb_operation.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -33,29 +34,27 @@ void TGRpcOperationService::DecRequest() {
 
 void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    using namespace Ydb;
+
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Operations::IN, Ydb::Operations::OUT, TGRpcOperationService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::Operation::V1::OperationService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("operation", #NAME))->Run();
+#define ADD_REQUEST(NAME, CB, TCALL)                                                                              \
+    MakeIntrusive<TGRpcRequest<Operations::NAME##Request, Operations::NAME##Response, TGRpcOperationService>>     \
+        (this, &Service_, CQ_,                                                                                    \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                             \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                  \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                           \
+                    new TCALL<Operations::NAME##Request, Operations::NAME##Response>                              \
+                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));                         \
+            }, &Operation::V1::OperationService::AsyncService::Request ## NAME,                                   \
+            #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 
-    ADD_REQUEST(GetOperation, GetOperationRequest, GetOperationResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvGetOperationRequest(ctx));
-    })
-    ADD_REQUEST(CancelOperation, CancelOperationRequest, CancelOperationResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCancelOperationRequest(ctx));
-    })
-    ADD_REQUEST(ForgetOperation, ForgetOperationRequest, ForgetOperationResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvForgetOperationRequest(ctx));
-    })
-    ADD_REQUEST(ListOperations, ListOperationsRequest, ListOperationsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvListOperationsRequest(ctx));
-    })
+    ADD_REQUEST(GetOperation, DoGetOperationRequest, TGrpcRequestOperationCall)
+    ADD_REQUEST(CancelOperation, DoCancelOperationRequest, TGrpcRequestNoOperationCall)
+    ADD_REQUEST(ForgetOperation, DoForgetOperationRequest, TGrpcRequestNoOperationCall)
+    ADD_REQUEST(ListOperations, DoListOperationsRequest, TGrpcRequestNoOperationCall)
+
 #undef ADD_REQUEST
 }
 

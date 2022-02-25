@@ -1,6 +1,7 @@
 #include "grpc_service.h"
-
+#include <ydb/core/grpc_services/service_discovery.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
@@ -44,25 +45,40 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
 
  void TGRpcDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
      auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
- #ifdef ADD_REQUEST
- #error ADD_REQUEST macro already defined
- #endif
- #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
-         [this](NGrpc::IRequestContextBase *reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
-            ACTION; \
-         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \
-         #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
+     using namespace Ydb;
+#ifdef ADD_REQUEST
+#error macro already defined
+#endif
+#define ADD_REQUEST(NAME, CB) \
+    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcDiscoveryService>>   \
+        (this, &Service_, CQ_,                                                                                \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                         \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
+                    new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
+                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));                     \
+            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
+            #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
-     ADD_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
+     ADD_REQUEST(WhoAmI, DoWhoAmIRequest)
+
+#ifdef ADD_LEGACY_REQUEST
+#error macro already defined
+#endif
+#define ADD_LEGACY_REQUEST(NAME, IN, OUT, ACTION)                                                                     \
+    MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
+        [this](NGrpc::IRequestContextBase *reqCtx) {                                                                  \
+           NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx));               \
+           ACTION;                                                                                                    \
+        }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                                      \
+        #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
+
+     ADD_LEGACY_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
          ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
      })
-     ADD_REQUEST(WhoAmI, WhoAmIRequest, WhoAmIResponse, {
-         ActorSystem_->Send(GRpcRequestProxyId_, new TEvWhoAmIRequest(reqCtx));
-     })
 
- #undef ADD_REQUEST
+#undef ADD_REQUEST
+#undef ADD_LEGACY_REQUEST
  }
 
 } // namespace NGRpcService

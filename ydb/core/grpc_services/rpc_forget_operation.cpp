@@ -1,8 +1,8 @@
-#include "grpc_request_proxy.h"
+#include "service_operation.h"
 #include "operation_helpers.h"
-#include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -18,6 +18,9 @@ using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace NOperationId;
 using namespace Ydb;
+
+using TEvForgetOperationRequest = TGrpcRequestNoOperationCall<Ydb::Operations::ForgetOperationRequest,
+    Ydb::Operations::ForgetOperationResponse>;
 
 class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC, TEvForgetOperationRequest> {
     TStringBuf GetLogPrefix() const override {
@@ -77,7 +80,7 @@ public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {
-        const TString& id = Request->GetProtoRequest()->id();
+        const TString& id = GetProtoRequest()->id();
 
         try {
             OperationId = TOperationId(id);
@@ -119,8 +122,8 @@ private:
 
 }; // TForgetOperationRPC
 
-void TGRpcRequestProxy::Handle(TEvForgetOperationRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TForgetOperationRPC(ev->Release().Release()));
+void DoForgetOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TForgetOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

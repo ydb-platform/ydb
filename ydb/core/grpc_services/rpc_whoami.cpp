@@ -1,12 +1,15 @@
-#include "grpc_request_proxy.h"
-#include "rpc_calls.h"
+#include "service_discovery.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/security/ticket_parser.h>
-
+#include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
+
+using TEvWhoAmIRequest = TGrpcRequestOperationCall<Ydb::Discovery::WhoAmIRequest,
+    Ydb::Discovery::WhoAmIResponse>;
 
 class TWhoAmIRPC : public TActorBootstrapped<TWhoAmIRPC> {
 public:
@@ -14,12 +17,16 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TWhoAmIRPC(TEvWhoAmIRequest::TPtr& request)
-        : Request(request->Release().Release())
+    TWhoAmIRPC(IRequestOpCtx* request)
+        : Request(request)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        TMaybe<TString> authToken = Request->GetYdbToken();
+        //TODO: Do we realy realy need to make call to the ticket parser here???
+        //we have done it already in grpc_request_proxy
+        auto req = dynamic_cast<TEvWhoAmIRequest*>(Request.get());
+        Y_VERIFY(req, "Unexpected request type for TWhoAmIRPC");
+        TMaybe<TString> authToken = req->GetYdbToken();
         if (authToken) {
             TMaybe<TString> database = Request->GetDatabaseName();
             ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
@@ -49,7 +56,7 @@ private:
         if (!result.Error) {
             if (result.Token != nullptr) {
                 response->set_user(result.Token->GetUserSID());
-                if (Request->GetProtoRequest()->include_groups()) {
+                if (TEvWhoAmIRequest::GetProtoRequest(Request)->include_groups()) {
                     for (const auto& group : result.Token->GetGroupSIDs()) {
                         response->add_groups(group);
                     }
@@ -75,11 +82,11 @@ private:
         Request->ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    THolder<TEvWhoAmIRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
 };
 
-void TGRpcRequestProxy::Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TWhoAmIRPC(ev));
+void DoWhoAmIRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TWhoAmIRPC(p.release()));
 }
 
 } // namespace NGRpcService

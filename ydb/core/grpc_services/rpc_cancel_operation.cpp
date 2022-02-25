@@ -1,8 +1,7 @@
-#include "grpc_request_proxy.h"
+#include "service_operation.h"
 #include "operation_helpers.h"
-#include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
-
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -18,6 +17,9 @@ using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace NOperationId;
 using namespace Ydb;
+
+using TEvCancelOperationRequest = TGrpcRequestNoOperationCall<Ydb::Operations::CancelOperationRequest,
+    Ydb::Operations::CancelOperationResponse>;
 
 class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC, TEvCancelOperationRequest> {
     TStringBuf GetLogPrefix() const override {
@@ -77,7 +79,7 @@ public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {
-        const TString& id = Request->GetProtoRequest()->id();
+        const TString& id = GetProtoRequest()->id();
 
         try {
             OperationId = TOperationId(id);
@@ -119,8 +121,8 @@ private:
 
 }; // TCancelOperationRPC
 
-void TGRpcRequestProxy::Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TCancelOperationRPC(ev->Release().Release()));
+void DoCancelOperationRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TCancelOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

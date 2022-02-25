@@ -566,17 +566,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
     switch (ev->GetTypeRewrite()) {
         HFunc(TRefreshTokenImpl, PreHandle);
         HFunc(TEvLoginRequest, PreHandle);
-        HFunc(TEvGetOperationRequest, PreHandle);
-        HFunc(TEvCancelOperationRequest, PreHandle);
-        HFunc(TEvForgetOperationRequest, PreHandle);
-        HFunc(TEvListOperationsRequest, PreHandle);
-        HFunc(TEvCreateTenantRequest, PreHandle);
-        HFunc(TEvAlterTenantRequest, PreHandle);
-        HFunc(TEvGetTenantStatusRequest, PreHandle);
-        HFunc(TEvListTenantsRequest, PreHandle);
-        HFunc(TEvRemoveTenantRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
-        HFunc(TEvDescribeTenantOptionsRequest, PreHandle);
         HFunc(TEvCreateCoordinationNode, PreHandle);
         HFunc(TEvAlterCoordinationNode, PreHandle);
         HFunc(TEvDropCoordinationNode, PreHandle);
@@ -601,7 +591,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvImportFromS3Request, PreHandle);
         HFunc(TEvImportDataRequest, PreHandle);
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
-        HFunc(TEvWhoAmIRequest, PreHandle);
         HFunc(TEvCreateRateLimiterResource, PreHandle);
         HFunc(TEvAlterRateLimiterResource, PreHandle);
         HFunc(TEvDropRateLimiterResource, PreHandle);
@@ -611,7 +600,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvKikhouseCreateSnapshotRequest, PreHandle);
         HFunc(TEvKikhouseRefreshSnapshotRequest, PreHandle);
         HFunc(TEvKikhouseDiscardSnapshotRequest, PreHandle);
-        HFunc(TEvSelfCheckRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvLongTxBeginRequest, PreHandle);
         HFunc(TEvLongTxCommitRequest, PreHandle);

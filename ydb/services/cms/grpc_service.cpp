@@ -1,8 +1,8 @@
 #include "grpc_service.h"
 
+#include <ydb/core/grpc_services/service_cms.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -37,35 +37,28 @@ void TGRpcCmsService::DecRequest() {
 
 void TGRpcCmsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    using namespace Ydb;
+
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Cms::IN, Ydb::Cms::OUT, TGRpcCmsService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
-            ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::Cms::V1::CmsService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("cms", #NAME))->Run();
+#define ADD_REQUEST(NAME, CB) \
+    MakeIntrusive<TGRpcRequest<Cms::NAME##Request, Cms::NAME##Response, TGRpcCmsService>>          \
+        (this, &Service_, CQ_,                                                                     \
+            [this](NGrpc::IRequestContextBase *ctx) {                                              \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                   \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                            \
+                    new TGrpcRequestOperationCall<Cms::NAME##Request, Cms::NAME##Response>         \
+                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));          \
+            }, &Cms::V1::CmsService::AsyncService::Request ## NAME,                             \
+            #NAME, logger, getCounterBlock("cms", #NAME))->Run();
 
-    ADD_REQUEST(CreateDatabase, CreateDatabaseRequest, CreateDatabaseResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateTenantRequest(ctx));
-    })
-    ADD_REQUEST(AlterDatabase, AlterDatabaseRequest, AlterDatabaseResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvAlterTenantRequest(ctx));
-    })
-    ADD_REQUEST(GetDatabaseStatus, GetDatabaseStatusRequest, GetDatabaseStatusResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvGetTenantStatusRequest(ctx));
-    })
-    ADD_REQUEST(ListDatabases, ListDatabasesRequest, ListDatabasesResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvListTenantsRequest(ctx));
-    })
-    ADD_REQUEST(RemoveDatabase, RemoveDatabaseRequest, RemoveDatabaseResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvRemoveTenantRequest(ctx));
-    })
-    ADD_REQUEST(DescribeDatabaseOptions, DescribeDatabaseOptionsRequest, DescribeDatabaseOptionsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTenantOptionsRequest(ctx));
-    })
+    ADD_REQUEST(CreateDatabase, DoCreateTenantRequest)
+    ADD_REQUEST(AlterDatabase, DoAlterTenantRequest)
+    ADD_REQUEST(GetDatabaseStatus, DoGetTenantStatusRequest)
+    ADD_REQUEST(ListDatabases, DoListTenantsRequest)
+    ADD_REQUEST(RemoveDatabase, DoRemoveTenantRequest)
+    ADD_REQUEST(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest)
 
 #undef ADD_REQUEST
 }

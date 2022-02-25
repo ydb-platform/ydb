@@ -12,7 +12,7 @@ namespace NGRpcService {
 
 using namespace NSchemeShard;
 
-class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest> {
+class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
@@ -54,7 +54,7 @@ public:
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
             PipeClient = RegisterWithSameMailbox(pipe);
             THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
-            const Ydb::Auth::LoginRequest* protoRequest = Request->GetProtoRequest();
+            const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
             request.Get()->Record.SetUser(protoRequest->user());
             request.Get()->Record.SetPassword(protoRequest->password());
             NTabletPipe::SendData(SelfId(), PipeClient, request.Release());

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "grpc_request_proxy.h"
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/protos/services.pb.h>
@@ -24,6 +26,7 @@ public:
     using TRequest = typename TEvRequest::TRequest;
     using TResponse = typename TEvRequest::TResponse;
     using TOperation = Ydb::Operations::Operation;
+    typedef typename std::conditional<HasOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestCtx;
 
 protected:
     void Reply(
@@ -114,12 +117,16 @@ protected:
         return MakeOperation(status, ErrorToIssues(error));
     }
 
+    const typename TEvRequest::TRequest* GetProtoRequest() const {
+        return TEvRequest::GetProtoRequest(Request);
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TRpcRequestActor(TEvRequest* ev)
+    explicit TRpcRequestActor(TRequestCtx* ev)
         : Request(ev)
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
     {
@@ -157,7 +164,7 @@ private:
     }
 
 protected:
-    THolder<TEvRequest> Request;
+    THolder<TRequestCtx> Request;
     const TString DatabaseName;
     THolder<const NACLib::TUserToken> UserToken;
 

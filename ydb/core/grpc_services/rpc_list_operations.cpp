@@ -1,10 +1,11 @@
-#include "grpc_request_proxy.h"
+#include "service_operation.h"
+
 #include "operation_helpers.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
-#include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -21,11 +22,14 @@ using namespace NKikimrIssues;
 using namespace NOperationId;
 using namespace Ydb;
 
+using TEvListOperationsRequest = TGrpcRequestNoOperationCall<Ydb::Operations::ListOperationsRequest,
+    Ydb::Operations::ListOperationsResponse>;
+
 class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, TEvListOperationsRequest>,
                           public TExportConv {
 
     TStringBuf GetLogPrefix() const override {
-        switch (ParseKind(Request->GetProtoRequest()->kind())) {
+        switch (ParseKind(GetProtoRequest()->kind())) {
         case TOperationId::EXPORT:
             return "[ListExports]";
         case TOperationId::IMPORT:
@@ -38,9 +42,9 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
     }
 
     IEventBase* MakeRequest() override {
-        const auto& request = *Request->GetProtoRequest();
+        const auto& request = *GetProtoRequest();
 
-        switch (ParseKind(Request->GetProtoRequest()->kind())) {
+        switch (ParseKind(GetProtoRequest()->kind())) {
         case TOperationId::EXPORT:
             return new TEvExport::TEvListExportsRequest(DatabaseName, request.page_size(), request.page_token(), request.kind());
         case TOperationId::IMPORT:
@@ -112,7 +116,7 @@ public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {
-        switch (ParseKind(Request->GetProtoRequest()->kind())) {
+        switch (ParseKind(GetProtoRequest()->kind())) {
         case TOperationId::EXPORT:
         case TOperationId::IMPORT:
         case TOperationId::BUILD_INDEX:
@@ -138,8 +142,8 @@ public:
 
 }; // TListOperationsRPC
 
-void TGRpcRequestProxy::Handle(TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TListOperationsRPC(ev->Release().Release()));
+void DoListOperationsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(new TListOperationsRPC(p.release()));
 }
 
 } // namespace NGRpcService

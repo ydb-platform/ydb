@@ -25,7 +25,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     IEventBase* MakeRequest() override {
-        const auto& request = *this->Request->GetProtoRequest();
+        const auto& request = *(this->GetProtoRequest());
 
         auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>();
         ev->Record.SetTxId(this->TxId);
@@ -56,7 +56,7 @@ public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
     void Bootstrap(const TActorContext&) {
-        const auto& request = *this->Request->GetProtoRequest();
+        const auto& request = *(this->GetProtoRequest());
 
         if (request.settings().items().empty()) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");

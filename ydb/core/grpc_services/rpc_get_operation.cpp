@@ -1,9 +1,11 @@
-#include "grpc_request_proxy.h"
+#include "service_operation.h"
+
 #include "operation_helpers.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <google/protobuf/text_format.h>
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -26,6 +28,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace NOperationId;
 using namespace Ydb;
+
+using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOperationRequest,
+    Ydb::Operations::GetOperationResponse>;
 
 class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
                          public TExportConv {
@@ -69,7 +74,7 @@ public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap(const TActorContext &ctx) {
-        const auto req = Request->GetProtoRequest();
+        const auto req = GetProtoRequest();
 
         try {
             OperationId_ = TOperationId(req->id());
@@ -153,7 +158,7 @@ private:
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
-        request->Record.MutableRequest()->set_id(Request->GetProtoRequest()->id());
+        request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
         request->Record.SetUserToken(Request->GetInternalToken());
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }
@@ -227,7 +232,7 @@ private:
                         const TActorContext &ctx) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(GetProtoRequest()->id());
         deferred->set_ready(true);
         deferred->set_status(status);
         if (issues.size())
@@ -238,7 +243,7 @@ private:
     void ReplyGetOperationResponse(bool ready, const TActorContext& ctx, StatusIds::StatusCode status = StatusIds::SUCCESS) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(GetProtoRequest()->id());
         deferred->set_ready(ready);
         if (ready) {
             deferred->set_status(status);
@@ -252,7 +257,7 @@ private:
     {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(Request->GetProtoRequest()->id());
+        deferred->set_id(GetProtoRequest()->id());
         deferred->set_ready(ready);
         if (ready) {
             deferred->set_status(status);
@@ -278,8 +283,8 @@ private:
     TActorId PipeActorId_;
 };
 
-void TGRpcRequestProxy::Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TGetOperationRPC(ev->Release().Release()));
+void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetOperationRPC(p.release()));
 }
 
 } // namespace NGRpcService

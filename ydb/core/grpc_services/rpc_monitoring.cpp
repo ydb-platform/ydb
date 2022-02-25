@@ -1,9 +1,9 @@
-#include "grpc_request_proxy.h"
+#include "service_monitoring.h"
 
-#include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 #include "rpc_request_base.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -15,6 +15,7 @@
 #include <util/random/shuffle.h>
 
 #include <ydb/core/health_check/health_check.h>
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -22,7 +23,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-class TSelfCheckRPC : public TRpcRequestActor<TSelfCheckRPC, TEvSelfCheckRequest> {
+using TEvSelfCheckRequest = TGrpcRequestOperationCall<Ydb::Monitoring::SelfCheckRequest, Ydb::Monitoring::SelfCheckResponse>;
+
+class TSelfCheckRPC : public TRpcRequestActor<TSelfCheckRPC, TEvSelfCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
@@ -31,7 +34,7 @@ public:
 
     void Bootstrap() {
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
-        request->Request = *(Request->GetProtoRequest());
+        request->Request = *GetProtoRequest();
         if (Request->GetDatabaseName()) {
             request->Database = Request->GetDatabaseName().GetRef();
         }
@@ -69,8 +72,8 @@ public:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvSelfCheckRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TSelfCheckRPC(ev->Release().Release()));
+void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TSelfCheckRPC(p.release()));
 }
 
 } // namespace NGRpcService

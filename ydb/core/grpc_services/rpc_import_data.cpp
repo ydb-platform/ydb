@@ -119,7 +119,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
-        entry.Path = NKikimr::SplitPath(Request->GetProtoRequest()->path());
+        entry.Path = NKikimr::SplitPath(GetProtoRequest()->path());
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolvePath);
@@ -221,7 +221,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     /// Process data
 
     void ProcessData() {
-        const auto& request = *Request->GetProtoRequest();
+        const auto& request = *GetProtoRequest();
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
@@ -414,7 +414,7 @@ public:
     using TRpcRequestActor<TImportDataRPC, TEvImportDataRequest, true>::TRpcRequestActor;
 
     void Bootstrap() {
-        switch (Request->GetProtoRequest()->format_case()) {
+        switch (GetProtoRequest()->format_case()) {
         case Import::ImportDataRequest::kYdbDump:
             break;
         default:

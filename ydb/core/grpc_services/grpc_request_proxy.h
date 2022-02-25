@@ -48,17 +48,8 @@ public:
     };
 
 protected:
-    void Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvForgetOperationRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCreateTenantRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAlterTenantRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvGetTenantStatusRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvListTenantsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvRemoveTenantRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvCreateCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropCoordinationNode::TPtr& ev, const TActorContext& ctx);
@@ -83,7 +74,6 @@ protected:
     void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx);
@@ -93,7 +83,6 @@ protected:
     void Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSelfCheckRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx);

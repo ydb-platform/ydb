@@ -1,11 +1,11 @@
-#include "grpc_request_proxy.h"
-
-#include "rpc_calls.h"
+#include "service_cms.h"
 #include "rpc_deferrable.h"
 
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -13,6 +13,19 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
+
+using TEvCreateTenantRequest = TGrpcRequestOperationCall<Cms::CreateDatabaseRequest,
+    Cms::CreateDatabaseResponse>;
+using TEvAlterTenantRequest = TGrpcRequestOperationCall<Cms::AlterDatabaseRequest,
+    Cms::AlterDatabaseResponse>;
+using TEvGetTenantStatusRequest = TGrpcRequestOperationCall<Cms::GetDatabaseStatusRequest,
+    Cms::GetDatabaseStatusResponse>;
+using TEvListTenantsRequest = TGrpcRequestOperationCall<Cms::ListDatabasesRequest,
+    Cms::ListDatabasesResponse>;
+using TEvRemoveTenantRequest = TGrpcRequestOperationCall<Cms::RemoveDatabaseRequest,
+    Cms::RemoveDatabaseResponse>;
+using TEvDescribeTenantOptionsRequest = TGrpcRequestOperationCall<Cms::DescribeDatabaseOptionsRequest,
+    Cms::DescribeDatabaseOptionsResponse>;
 
 template <typename TRequest, typename TCmsRequest, typename TCmsResponse>
 class TCmsRPC : public TRpcOperationRequestActor<TCmsRPC<TRequest, TCmsRequest, TCmsResponse>, TRequest> {
@@ -22,7 +35,7 @@ class TCmsRPC : public TRpcOperationRequestActor<TCmsRPC<TRequest, TCmsRequest, 
     TActorId CmsPipe;
 
 public:
-    TCmsRPC(TRequest* msg)
+    TCmsRPC(IRequestOpCtx* msg)
         : TBase(msg)
     {
     }
@@ -131,46 +144,46 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvCreateTenantRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvCreateTenantRequest,
-                             TEvConsole::TEvCreateTenantRequest,
-                             TEvConsole::TEvCreateTenantResponse>(ev->Release().Release()));
+void DoCreateTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvCreateTenantRequest,
+                    TEvConsole::TEvCreateTenantRequest,
+                    TEvConsole::TEvCreateTenantResponse>(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvAlterTenantRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvAlterTenantRequest,
-                             TEvConsole::TEvAlterTenantRequest,
-                             TEvConsole::TEvAlterTenantResponse>(ev->Release().Release()));
+void DoAlterTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvAlterTenantRequest,
+                    TEvConsole::TEvAlterTenantRequest,
+                    TEvConsole::TEvAlterTenantResponse>(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvGetTenantStatusRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvGetTenantStatusRequest,
-                             TEvConsole::TEvGetTenantStatusRequest,
-                             TEvConsole::TEvGetTenantStatusResponse>(ev->Release().Release()));
+void DoGetTenantStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvGetTenantStatusRequest,
+                    TEvConsole::TEvGetTenantStatusRequest,
+                    TEvConsole::TEvGetTenantStatusResponse>(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvListTenantsRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvListTenantsRequest,
-                             TEvConsole::TEvListTenantsRequest,
-                             TEvConsole::TEvListTenantsResponse>(ev->Release().Release()));
+void DoListTenantsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvListTenantsRequest,
+                TEvConsole::TEvListTenantsRequest,
+                TEvConsole::TEvListTenantsResponse>(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvRemoveTenantRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvRemoveTenantRequest,
-                             TEvConsole::TEvRemoveTenantRequest,
-                             TEvConsole::TEvRemoveTenantResponse>(ev->Release().Release()));
+void DoRemoveTenantRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvRemoveTenantRequest,
+                TEvConsole::TEvRemoveTenantRequest,
+                TEvConsole::TEvRemoveTenantResponse>(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvDescribeTenantOptionsRequest::TPtr& ev, const TActorContext& ctx)
-{
-    ctx.Register(new TCmsRPC<TEvDescribeTenantOptionsRequest,
-                             TEvConsole::TEvDescribeTenantOptionsRequest,
-                             TEvConsole::TEvDescribeTenantOptionsResponse>(ev->Release().Release()));
+void DoDescribeTenantOptionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TCmsRPC<TEvDescribeTenantOptionsRequest,
+                    TEvConsole::TEvDescribeTenantOptionsRequest,
+                    TEvConsole::TEvDescribeTenantOptionsResponse>(p.release()));
 }
 
 } // namespace NGRpcService

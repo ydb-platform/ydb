@@ -48,6 +48,7 @@ RECURSE(
     cxxsupp/libcxxabi-parts
     djvulibre
     dlib
+    double-conversion
     dpdk
     dr_wav
     dwarflib

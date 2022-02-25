@@ -1,6 +1,6 @@
 function(target_bison_parser Tgt Scope)
   foreach(arg ${ARGN})
-    file(REAL_PATH ${arg} argPath)
+    get_filename_component(argPath ${arg} REALPATH)
     if (argPath MATCHES "${CMAKE_SOURCE_DIR}/.*")
       file(RELATIVE_PATH argRel ${CMAKE_CURRENT_SOURCE_DIR} ${argPath})
       string(REPLACE ".." "__" ArgInBindir ${argRel})
@@ -12,6 +12,7 @@ function(target_bison_parser Tgt Scope)
     get_filename_component(OutputDir ${ArgInBindir} DIRECTORY)
     add_custom_command(
       OUTPUT ${OutputDir}/${OutputBase}.cpp ${OutputDir}/${OutputBase}.h
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${OutputDir}
       COMMAND ${CMAKE_BINARY_DIR}/bin/bison/bin/bison ${BISON_FLAGS} -v --defines=${OutputDir}/${OutputBase}.h -o ${OutputDir}/${OutputBase}.cpp ${arg}
       DEPENDS ${arg}
     )

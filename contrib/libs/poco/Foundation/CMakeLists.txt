@@ -6,7 +6,7 @@ target_include_directories(libs-poco-Foundation PUBLIC
 )
 target_include_directories(libs-poco-Foundation PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/double-conversion/include
+  ${CMAKE_SOURCE_DIR}/contrib/libs/double-conversion
   ${CMAKE_SOURCE_DIR}/contrib/libs/pcre
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/src
 )

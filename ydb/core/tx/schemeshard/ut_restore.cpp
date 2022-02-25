@@ -1,4 +1,4 @@
-#include <contrib/libs/double-conversion/ieee.h>
+#include <contrib/libs/double-conversion/double-conversion/ieee.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tablet/resource_broker.h>

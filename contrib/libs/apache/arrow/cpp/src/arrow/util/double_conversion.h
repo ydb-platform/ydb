@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "contrib/libs/double-conversion/double-conversion.h"  // IWYU pragma: export
+#include "contrib/libs/double-conversion/double-conversion/double-conversion.h"  // IWYU pragma: export
 
 namespace arrow {
 namespace util {

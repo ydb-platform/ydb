@@ -4,6 +4,9 @@ project(YDB LANGUAGES C CXX ASM)
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS Off)
+set(YDB_MAX_LINK_JOBS 5 CACHE STRING "Maximum parallel link jobs for Ninja generator")
+set_property(GLOBAL PROPERTY JOB_POOLS link_jobs=${YDB_MAX_LINK_JOBS})
+set(CMAKE_JOB_POOL_LINK link_jobs)
 set(CMAKE_C_FLAGS "\
   -m64 \
   -g \

@@ -26,7 +26,7 @@ PEERDIR(
 
 ADDINCL(
     GLOBAL contrib/libs/poco/Foundation/include
-    contrib/libs/double-conversion/include
+    contrib/libs/double-conversion
     contrib/libs/pcre
     contrib/libs/poco/Foundation/src
 )

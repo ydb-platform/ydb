@@ -12,10 +12,6 @@ target_proto_messages(library-mkql_proto-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/protos/minikql.proto
 )
 target_proto_plugin(library-mkql_proto-protos
-  cpp_styleguide
-  cpp_styleguide
-)
-target_proto_plugin(library-mkql_proto-protos
   grpc_cpp
   grpc_cpp
 )

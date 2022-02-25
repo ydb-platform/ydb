@@ -7,7 +7,3 @@ target_link_libraries(core-file_storage-proto PUBLIC
 target_proto_messages(core-file_storage-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/proto/file_storage.proto
 )
-target_proto_plugin(core-file_storage-proto
-  cpp_styleguide
-  cpp_styleguide
-)

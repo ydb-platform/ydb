@@ -7,7 +7,3 @@ target_link_libraries(yql-public-types PUBLIC
 target_proto_messages(yql-public-types PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/types/yql_types.proto
 )
-target_proto_plugin(yql-public-types
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -41,3 +41,4 @@ target_link_libraries(stat_udf.udf PUBLIC
 target_sources(stat_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf.cpp
 )
+vcs_info(stat_udf.udf)

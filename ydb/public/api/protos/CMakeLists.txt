@@ -55,10 +55,6 @@ generate_enum_serilization(api-protos
   ydb/public/api/protos/draft/datastreams.pb.h
 )
 target_proto_plugin(api-protos
-  cpp_styleguide
-  cpp_styleguide
-)
-target_proto_plugin(api-protos
   validation
   validation
 )

@@ -47,3 +47,4 @@ target_link_libraries(datetime2_udf.udf PUBLIC
 target_sources(datetime2_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/datetime2/datetime_udf.cpp
 )
+vcs_info(datetime2_udf.udf)

@@ -44,3 +44,4 @@ target_link_libraries(re2_udf.udf PUBLIC
 target_sources(re2_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/re2/re2_udf.cpp
 )
+vcs_info(re2_udf.udf)

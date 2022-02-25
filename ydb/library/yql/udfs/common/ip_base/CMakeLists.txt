@@ -41,3 +41,4 @@ target_link_libraries(ip_udf.udf PUBLIC
 target_sources(ip_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
 )
+vcs_info(ip_udf.udf)

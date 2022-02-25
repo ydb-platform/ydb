@@ -41,3 +41,4 @@ target_link_libraries(unicode_udf.udf PUBLIC
 target_sources(unicode_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/unicode_base/unicode_base.cpp
 )
+vcs_info(unicode_udf.udf)

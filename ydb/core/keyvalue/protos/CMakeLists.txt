@@ -7,7 +7,3 @@ target_link_libraries(core-keyvalue-protos PUBLIC
 target_proto_messages(core-keyvalue-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/protos/events.proto
 )
-target_proto_plugin(core-keyvalue-protos
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -11,7 +11,3 @@ target_proto_messages(yql-dq-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/proto/dq_tasks.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/proto/dq_transport.proto
 )
-target_proto_plugin(yql-dq-proto
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -7,7 +7,3 @@ target_link_libraries(providers-dq-config PUBLIC
 target_proto_messages(providers-dq-config PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/config/config.proto
 )
-target_proto_plugin(providers-dq-config
-  cpp_styleguide
-  cpp_styleguide
-)

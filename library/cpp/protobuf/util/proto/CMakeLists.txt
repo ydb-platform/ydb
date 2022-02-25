@@ -7,7 +7,3 @@ target_link_libraries(protobuf-util-proto PUBLIC
 target_proto_messages(protobuf-util-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/proto/merge.proto
 )
-target_proto_plugin(protobuf-util-proto
-  cpp_styleguide
-  cpp_styleguide
-)

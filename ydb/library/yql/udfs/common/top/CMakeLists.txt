@@ -41,3 +41,4 @@ target_link_libraries(top_udf.udf PUBLIC
 target_sources(top_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/top/top_udf.cpp
 )
+vcs_info(top_udf.udf)

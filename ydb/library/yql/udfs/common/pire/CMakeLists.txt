@@ -41,3 +41,4 @@ target_link_libraries(pire_udf.udf PUBLIC
 target_sources(pire_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/pire/pire_udf.cpp
 )
+vcs_info(pire_udf.udf)

@@ -70,7 +70,3 @@ run_antlr(
   -fo
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
 )
-target_proto_plugin(proto_ast-gen-v0
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -13,10 +13,6 @@ target_proto_messages(dq-api-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/grpc/api.proto
 )
 target_proto_plugin(dq-api-grpc
-  cpp_styleguide
-  cpp_styleguide
-)
-target_proto_plugin(dq-api-grpc
   grpc_cpp
   grpc_cpp
 )

@@ -56,3 +56,4 @@ target_link_libraries(string_udf.udf PUBLIC
 target_sources(string_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/string/string_udf.cpp
 )
+vcs_info(string_udf.udf)

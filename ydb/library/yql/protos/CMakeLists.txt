@@ -9,7 +9,3 @@ target_proto_messages(library-yql-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/protos/yql_mount.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/protos/clickhouse.proto
 )
-target_proto_plugin(library-yql-protos
-  cpp_styleguide
-  cpp_styleguide
-)

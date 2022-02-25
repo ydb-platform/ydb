@@ -9,7 +9,3 @@ target_link_libraries(libs-graph_params-proto PUBLIC
 target_proto_messages(libs-graph_params-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/graph_params/proto/graph_params.proto
 )
-target_proto_plugin(libs-graph_params-proto
-  cpp_styleguide
-  cpp_styleguide
-)

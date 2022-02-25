@@ -70,7 +70,3 @@ run_antlr(
   -fo
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
 )
-target_proto_plugin(proto_ast-gen-jsonpath
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -842,3 +842,4 @@ target_sources(clickhouse_client_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/TabSeparatedRowInputFormat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Processors/Formats/Impl/TSKVRowInputFormat.cpp
 )
+vcs_info(clickhouse_client_udf.udf)

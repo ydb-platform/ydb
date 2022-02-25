@@ -8,7 +8,3 @@ target_link_libraries(libs-checkpoint_storage-proto PUBLIC
 target_proto_messages(libs-checkpoint_storage-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpoint_storage/proto/graph_description.proto
 )
-target_proto_plugin(libs-checkpoint_storage-proto
-  cpp_styleguide
-  cpp_styleguide
-)

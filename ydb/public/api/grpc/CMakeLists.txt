@@ -25,10 +25,6 @@ target_proto_messages(api-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/yq_v1.proto
 )
 target_proto_plugin(api-grpc
-  cpp_styleguide
-  cpp_styleguide
-)
-target_proto_plugin(api-grpc
   grpc_cpp
   grpc_cpp
 )

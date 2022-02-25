@@ -10,7 +10,3 @@ target_proto_messages(cpp-actors-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/services_common.proto
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/unittests.proto
 )
-target_proto_plugin(cpp-actors-protos
-  cpp_styleguide
-  cpp_styleguide
-)

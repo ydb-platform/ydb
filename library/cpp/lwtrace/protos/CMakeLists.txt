@@ -7,7 +7,3 @@ target_link_libraries(cpp-lwtrace-protos PUBLIC
 target_proto_messages(cpp-lwtrace-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/lwtrace/protos/lwtrace.proto
 )
-target_proto_plugin(cpp-lwtrace-protos
-  cpp_styleguide
-  cpp_styleguide
-)

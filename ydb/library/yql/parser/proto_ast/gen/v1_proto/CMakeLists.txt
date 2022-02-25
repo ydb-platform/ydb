@@ -48,10 +48,6 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
-target_proto_plugin(proto_ast-gen-v1_proto
-  cpp_styleguide
-  cpp_styleguide
-)
 set(GRAMMAR_STRING_CORE_SINGLE "~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)")
 set(GRAMMAR_STRING_CORE_DOUBLE "~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)")
 set(GRAMMAR_MULTILINE_COMMENT_CORE       ".")

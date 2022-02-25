@@ -41,3 +41,4 @@ target_link_libraries(json_udf.udf PUBLIC
 target_sources(json_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/json/json_udf.cpp
 )
+vcs_info(json_udf.udf)

@@ -7,7 +7,3 @@ target_link_libraries(library-schlab-protos PUBLIC
 target_proto_messages(library-schlab-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/protos/schlab.proto
 )
-target_proto_plugin(library-schlab-protos
-  cpp_styleguide
-  cpp_styleguide
-)

@@ -44,3 +44,4 @@ target_link_libraries(hyperscan_udf.udf PUBLIC
 target_sources(hyperscan_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperscan/hyperscan_udf.cpp
 )
+vcs_info(hyperscan_udf.udf)

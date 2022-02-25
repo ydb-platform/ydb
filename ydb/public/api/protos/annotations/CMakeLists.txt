@@ -8,7 +8,3 @@ target_proto_messages(api-protos-annotations PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/sensitive.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/validation.proto
 )
-target_proto_plugin(api-protos-annotations
-  cpp_styleguide
-  cpp_styleguide
-)

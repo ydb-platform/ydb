@@ -14,7 +14,3 @@ target_proto_messages(dq-api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/protos/dqs.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/protos/task_command_executor.proto
 )
-target_proto_plugin(dq-api-protos
-  cpp_styleguide
-  cpp_styleguide
-)

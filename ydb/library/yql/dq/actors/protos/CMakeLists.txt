@@ -14,7 +14,3 @@ target_proto_messages(dq-actors-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_events.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_stats.proto
 )
-target_proto_plugin(dq-actors-protos
-  cpp_styleguide
-  cpp_styleguide
-)

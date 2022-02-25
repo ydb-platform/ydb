@@ -41,3 +41,4 @@ target_link_libraries(histogram_udf.udf PUBLIC
 target_sources(histogram_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/histogram/histogram_udf.cpp
 )
+vcs_info(histogram_udf.udf)

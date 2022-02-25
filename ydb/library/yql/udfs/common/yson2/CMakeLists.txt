@@ -47,3 +47,4 @@ target_link_libraries(yson2_udf.udf PUBLIC
 target_sources(yson2_udf.udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/yson2/yson2_udf.cpp
 )
+vcs_info(yson2_udf.udf)

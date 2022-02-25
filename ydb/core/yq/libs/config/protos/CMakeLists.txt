@@ -28,7 +28,3 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/token_accessor.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/yq_config.proto
 )
-target_proto_plugin(libs-config-protos
-  cpp_styleguide
-  cpp_styleguide
-)

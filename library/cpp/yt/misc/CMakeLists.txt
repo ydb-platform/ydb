@@ -2,6 +2,7 @@ add_library(cpp-yt-misc)
 target_link_libraries(cpp-yt-misc PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-farmhash
   cpp-yt-exception
 )
 target_sources(cpp-yt-misc PRIVATE

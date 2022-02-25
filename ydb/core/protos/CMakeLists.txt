@@ -143,10 +143,6 @@ generate_enum_serilization(ydb-core-protos
   ydb/core/protos/blobstorage_pdisk_config.pb.h
 )
 target_proto_plugin(ydb-core-protos
-  cpp_styleguide
-  cpp_styleguide
-)
-target_proto_plugin(ydb-core-protos
   grpc_cpp
   grpc_cpp
 )

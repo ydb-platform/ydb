@@ -95,16 +95,14 @@ public:
     }
 private:
     static size_t
-    WriteMemoryCallback(void* contents, size_t size, size_t nmemb, void* userp)
-    {
+    WriteMemoryCallback(void* contents, size_t size, size_t nmemb, void* userp) {
         const auto realsize = size * nmemb;
         static_cast<TStringOutput*>(userp)->Write(contents, realsize);
         return realsize;
     };
 
     static size_t
-    ReadMemoryCallback(char *buffer, size_t size, size_t nmemb, void *userp)
-    {
+    ReadMemoryCallback(char *buffer, size_t size, size_t nmemb, void *userp) {
         return static_cast<TStringInput*>(userp)->Read(buffer, size * nmemb);
     };
 
@@ -148,9 +146,11 @@ public:
         const THttpGatewayConfig* httpGatewaysCfg,
         NMonitoring::TDynamicCounterPtr counters)
         : Counters(std::move(counters))
-        , Rps(Counters->GetCounter("RPS", true))
+        , Rps(Counters->GetCounter("Requests", true))
         , InFlight(Counters->GetCounter("InFlight"))
+        , MaxInFlight(Counters->GetCounter("MaxInFlight"))
         , AllocatedMemory(Counters->GetCounter("AllocatedMemory"))
+        , MaxAllocatedMemory(Counters->GetCounter("MaxAllocatedMemory"))
     {
         if (!httpGatewaysCfg) {
             return;
@@ -158,9 +158,12 @@ public:
         if (httpGatewaysCfg->HasMaxInFlightCount()) {
             MaxHandlers = httpGatewaysCfg->GetMaxInFlightCount();
         }
+        MaxInFlight->Set(MaxHandlers);
+
         if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) {
             MaxSimulatenousDownloadsSize  = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize();
         }
+        MaxAllocatedMemory->Set(MaxSimulatenousDownloadsSize);
 
         TaskScheduler.Start();
     }
@@ -369,7 +372,9 @@ private:
     const NMonitoring::TDynamicCounterPtr Counters;
     const NMonitoring::TDynamicCounters::TCounterPtr Rps;
     const NMonitoring::TDynamicCounters::TCounterPtr InFlight;
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxInFlight;
     const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxAllocatedMemory;
 
     TTaskScheduler TaskScheduler;
 };

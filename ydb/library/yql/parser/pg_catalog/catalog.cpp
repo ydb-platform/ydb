@@ -222,6 +222,14 @@ public:
             LastType.Name = value;
         } else if (key == "typelem") {
             LastType.ElementType = value;
+        } else if (key == "typbyval") {
+            if (value == "f") {
+                LastType.PassByValue = false;
+            } else if (value == "t" || value == "FLOAT8PASSBYVAL") {
+                LastType.PassByValue = true;
+            } else {
+                ythrow yexception() << "Unknown typbyval value: " << value;
+            }
         }
     }
 

@@ -35,6 +35,7 @@ struct TTypeDesc {
     ui32 ArrayTypeId = 0;
     TString Name;
     TString ElementType;
+    bool PassByValue = false;
 };
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);

@@ -108,6 +108,7 @@ set(CMAKE_CXX_FLAGS "\
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/cmake)
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR})
 enable_testing()
+include(cmake/FindAIO.cmake)
 include(cmake/antlr.cmake)
 include(cmake/bison.cmake)
 include(cmake/conan.cmake)

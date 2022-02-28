@@ -242,16 +242,17 @@ def enable_pq(arguments):
 
 
 def pq_client_service_types(arguments):
-    items = getattr(arguments, 'pq_client_service_types')
+    items = getattr(arguments, 'pq_client_service_types', None)
     if not items:
         types_str = os.getenv('YDB_PQ_CLIENT_SERVICE_TYPES')
         if types_str:
             items = types_str.split(',')
     service_types = []
-    for item in items:
-        item = item.strip()
-        if item:
-            service_types.append(item)
+    if items:
+        for item in items:
+            item = item.strip()
+            if item:
+                service_types.append(item)
     return service_types
 
 

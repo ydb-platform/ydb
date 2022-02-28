@@ -762,7 +762,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     TMailboxType::ReadAsFilled, interconnectPoolId));
             }
 
-            if (!IsServiceInitialized(setup, MakeInterconnectListenerActorId(false)) && !IsServiceInitialized(setup, MakeInterconnectListenerActorId(false))) {
+            if (!IsServiceInitialized(setup, MakeInterconnectListenerActorId(false)) && !IsServiceInitialized(setup, MakeInterconnectListenerActorId(true))) {
                 if (Config.HasYandexQueryConfig() && Config.GetYandexQueryConfig().GetEnabled()) {
                     auto& nodesManagerConfig = Config.GetYandexQueryConfig().GetNodesManager();
                     if (nodesManagerConfig.GetEnabled()) {

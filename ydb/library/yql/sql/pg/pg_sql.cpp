@@ -1005,6 +1005,10 @@ public:
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
+                if (Settings.PgTypes) {
+                    return L(A("PgConst"), QA("bool"), QA(str));
+                }
+
                 if (!StrCompare(str, "t")) {
                     return L(A("Just"), L(A("Bool"), QA("1")));
                 } else if (!StrCompare(str, "f")) {

@@ -1807,14 +1807,32 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
-                auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
-                NSysView::CollectQueryStats(ctx, stats, queryDuration, ExtractQueryText(),
-                    userSID, QueryState->ParametersSize, database, type, requestUnits);
+                TString text = ExtractQueryText();
+                if (IsQueryAllowedToLog(text)) {
+                    auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
+                    NSysView::CollectQueryStats(ctx, stats, queryDuration, text,
+                        userSID, QueryState->ParametersSize, database, type, requestUnits);
+                }
                 break;
             }
             default:
                 break;
         }
+    }
+
+    bool IsQueryAllowedToLog(const TString& text) {
+        static const TString user = "user";
+        static const TString password = "password";
+        auto itUser = std::search(text.begin(), text.end(), user.begin(), user.end(), [](const char a, const char b) -> bool {
+            return std::tolower(a) == b;
+        });
+        if (itUser == text.end()) {
+            return true;
+        }
+        auto itPassword = std::search(itUser, text.end(), password.begin(), password.end(), [](const char a, const char b) -> bool {
+            return std::tolower(a) == b;
+        });
+        return itPassword == text.end();
     }
 
     TString ExtractQueryText() const {

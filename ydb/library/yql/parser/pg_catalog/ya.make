@@ -5,6 +5,7 @@ OWNER(g:yql)
 RESOURCE(pg_operator.dat pg_operator.dat)
 RESOURCE(pg_proc.dat pg_proc.dat)
 RESOURCE(pg_type.dat pg_type.dat)
+RESOURCE(pg_cast.dat pg_cast.dat)
 
 SRCS(
     catalog.cpp

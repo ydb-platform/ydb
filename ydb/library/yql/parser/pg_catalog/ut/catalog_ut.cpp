@@ -25,19 +25,19 @@ Y_UNIT_TEST_SUITE(TTypesTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, 25);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArrayTypeId, 1009);
         UNIT_ASSERT_VALUES_EQUAL(ret.Name, "text");
-        UNIT_ASSERT_VALUES_EQUAL(ret.ElementType, "");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, 0);
 
         ret = LookupType("point");
         UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, 600);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArrayTypeId, 1017);
         UNIT_ASSERT_VALUES_EQUAL(ret.Name, "point");
-        UNIT_ASSERT_VALUES_EQUAL(ret.ElementType, "float8");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, LookupType("float8").TypeId);
 
         ret = LookupType(1009);
         UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, 25);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArrayTypeId, 1009);
         UNIT_ASSERT_VALUES_EQUAL(ret.Name, "text");
-        UNIT_ASSERT_VALUES_EQUAL(ret.ElementType, "");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, 0);
     }
 }
 
@@ -75,3 +75,27 @@ Y_UNIT_TEST_SUITE(TFunctionsTests) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TCastsTests) {
+    Y_UNIT_TEST(TestMissing) {
+        UNIT_ASSERT_EXCEPTION(LookupCast(LookupType("circle").TypeId, LookupType("int8").TypeId), yexception);
+    }
+
+    Y_UNIT_TEST(TestOk) {
+        auto ret = LookupCast(LookupType("int8").TypeId, LookupType("int4").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.SourceId, LookupType("int8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TargetId, LookupType("int4").TypeId);
+        UNIT_ASSERT(ret.Method == ECastMethod::Function);
+        UNIT_ASSERT_VALUES_UNEQUAL(ret.FunctionId, 0);
+
+        ret = LookupCast(LookupType("int4").TypeId, LookupType("oid").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.SourceId, LookupType("int4").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TargetId, LookupType("oid").TypeId);
+        UNIT_ASSERT(ret.Method == ECastMethod::Binary);
+        UNIT_ASSERT_VALUES_EQUAL(ret.FunctionId, 0);
+
+        ret = LookupCast(LookupType("json").TypeId, LookupType("jsonb").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.SourceId, LookupType("json").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TargetId, LookupType("jsonb").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.FunctionId, 0);
+    }
+}

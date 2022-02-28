@@ -34,8 +34,22 @@ struct TTypeDesc {
     ui32 TypeId = 0;
     ui32 ArrayTypeId = 0;
     TString Name;
-    TString ElementType;
+    ui32 ElementTypeId = 0;
     bool PassByValue = false;
+};
+
+enum class ECastMethod {
+    Function,
+    InOut,
+    Binary
+};
+
+struct TCastDesc {
+    ui32 CastId = 0;
+    ui32 SourceId = 0;
+    ui32 TargetId = 0;
+    ECastMethod Method = ECastMethod::Function;
+    ui32 FunctionId = 0;
 };
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
@@ -44,5 +58,8 @@ const TProcDesc& LookupProc(ui32 procId);
 
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
+
+const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);
+const TCastDesc& LookupCast(ui32 castId);
 
 }

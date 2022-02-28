@@ -9,8 +9,6 @@ set_property(GLOBAL PROPERTY JOB_POOLS link_jobs=${YDB_MAX_LINK_JOBS})
 set(CMAKE_JOB_POOL_LINK link_jobs)
 set(CMAKE_C_FLAGS "\
   -m64 \
-  -g \
-  -ggnu-pubnames \
   -fexceptions \
   -fno-common \
   -fuse-init-array \
@@ -53,8 +51,6 @@ set(CMAKE_C_FLAGS "\
 )
 set(CMAKE_CXX_FLAGS "\
   -m64 \
-  -g \
-  -ggnu-pubnames \
   -fexceptions \
   -fno-common \
   -fuse-init-array \

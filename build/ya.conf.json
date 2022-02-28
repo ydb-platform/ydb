@@ -305,11 +305,11 @@
         "gofmt": {
             "description": "Run gofmt tool (1.17.7)"
         },
-        "go_1.18beta2": {
-            "description": "Run go tool (1.18beta2)"
+        "go_1.18rc1": {
+            "description": "Run go tool (1.18rc1)"
         },
-        "gofmt_1.18beta2": {
-            "description": "Run gofmt tool (1.18beta2)"
+        "gofmt_1.18rc1": {
+            "description": "Run gofmt tool (1.18rc1)"
         },
         "godoc": {
             "description": "Arcadia version of godoc"
@@ -5026,19 +5026,19 @@
                 "version": "1.17.7"
             }
         },
-        "golang_1_18beta2": {
+        "golang_1_18rc1": {
             "tools": {
-                "golang_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "golang_1.18beta2"
+                "golang_1.18rc1": {
+                    "bottle": "golang_1.18rc1",
+                    "executable": "golang_1.18rc1"
                 },
-                "go_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "go_1.18beta2"
+                "go_1.18rc1": {
+                    "bottle": "golang_1.18rc1",
+                    "executable": "go_1.18rc1"
                 },
-                "gofmt_1.18beta2": {
-                    "bottle": "golang_1.18beta2",
-                    "executable": "gofmt_1.18beta2"
+                "gofmt_1.18rc1": {
+                    "bottle": "golang_1.18rc1",
+                    "executable": "gofmt_1.18rc1"
                 }
             },
             "platforms": [
@@ -5070,7 +5070,7 @@
             ],
             "params": {
                 "type": "golang",
-                "version": "1.18beta2"
+                "version": "1.18rc1"
             }
         },
         "godoc": {
@@ -5948,9 +5948,7 @@
         },
         "ymake": {
             "formula": {
-                "sandbox_id": [
-                    1220934101
-                ],
+                "sandbox_id": [1227864528],
                 "match": "ymake"
             },
             "executable": {
@@ -7449,7 +7447,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1227375700,
+                "sandbox_id": 1228958697,
                 "match": "horadric"
             },
             "executable": {
@@ -7592,7 +7590,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1227376697,
+                "sandbox_id": 1228957362,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -7672,22 +7670,22 @@
                 ]
             }
         },
-        "golang_1.18beta2": {
+        "golang_1.18rc1": {
             "formula": {
                 "sandbox_id": [
-                    1206631393,
-                    1206631765,
-                    1206632232,
-                    1206632597
+                    1225225209,
+                    1225225645,
+                    1225225909,
+                    1225226383
                 ],
                 "match": "GOLANG"
             },
             "executable": {
-                "go_1.18beta2": [
+                "go_1.18rc1": [
                     "bin",
                     "go"
                 ],
-                "gofmt_1.18beta2": [
+                "gofmt_1.18rc1": [
                     "bin",
                     "gofmt"
                 ]
@@ -8244,7 +8242,7 @@
         },
         "bigb_request": {
             "formula": {
-                "sandbox_id": 1227376731,
+                "sandbox_id": 1228957393,
                 "match": "bb_requester"
             },
             "executable": {
@@ -8255,7 +8253,7 @@
         },
         "bigb_hitlog_analyser": {
             "formula": {
-                "sandbox_id": 1227375975,
+                "sandbox_id": 1228957355,
                 "match": "hitlog_analyser"
             },
             "executable": {
@@ -8277,7 +8275,7 @@
         },
         "bigb_bb_cluster_analyzer": {
             "formula": {
-                "sandbox_id": 1227375846,
+                "sandbox_id": 1228958739,
                 "match": "bb_cluster_analyzer"
             },
             "executable": {
@@ -8288,7 +8286,7 @@
         },
         "bigb_yt_profiles_dumper": {
             "formula": {
-                "sandbox_id": 1227375820,
+                "sandbox_id": 1228958228,
                 "match": "yt_profiles_dumper"
             },
             "executable": {
@@ -8299,7 +8297,7 @@
         },
         "bigb_ab": {
             "formula": {
-                "sandbox_id": 1227376054,
+                "sandbox_id": 1228956697,
                 "match": "ab"
             },
             "executable": {
@@ -8323,7 +8321,7 @@
         },
         "caesar_yt_sync": {
             "formula": {
-                "sandbox_id": 1227376439,
+                "sandbox_id": 1228957631,
                 "match": "yt_sync"
             },
             "executable": {
@@ -8334,7 +8332,7 @@
         },
         "caesar_lookup_profile": {
             "formula": {
-                "sandbox_id": 1227376891,
+                "sandbox_id": 1228958099,
                 "match": "lookup_profile"
             },
             "executable": {
@@ -8345,7 +8343,7 @@
         },
         "exp_stats": {
             "formula": {
-                "sandbox_id": 1226279195,
+                "sandbox_id": 1228957356,
                 "match": "exp_stats"
             },
             "executable": {
@@ -8356,7 +8354,7 @@
         },
         "caesar_profile_size_analyzer": {
             "formula": {
-                "sandbox_id": 1227375531,
+                "sandbox_id": 1228957192,
                 "match": "profile_size_analyzer"
             },
             "executable": {

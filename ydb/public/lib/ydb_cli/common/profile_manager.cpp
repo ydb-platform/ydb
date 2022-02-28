@@ -151,7 +151,14 @@ private:
             if (!configFilePath.Parent().Exists()) {
                 configFilePath.Parent().MkDirs();
             }
-            TFileOutput resultConfigFile(configFilePath);
+            if (TFileStat(configFilePath).Mode & (S_IRGRP | S_IROTH)) {
+                int chmodResult = Chmod(configFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR);
+                if (chmodResult) {
+                    Cerr << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"" << Endl;
+                    exit(chmodResult);
+                }
+            }
+            TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
             resultConfigFile << YAML::Dump(Config);
         }
         catch (const std::exception& e) {

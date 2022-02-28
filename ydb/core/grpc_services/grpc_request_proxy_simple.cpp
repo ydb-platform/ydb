@@ -26,8 +26,7 @@ TString InferPublicHostFromServerHost(const TString& serverHost) {
     return serverHost && serverHost != "[::]" ? serverHost : FQDNHostName();
 }
 
-template <typename T>
-void AddEndpointsForGrpcConfig(const T& grpcConfig, Ydb::Discovery::ListEndpointsResult& result) {
+void AddEndpointsForGrpcConfig(const NKikimrConfig::TGRpcConfig& grpcConfig, Ydb::Discovery::ListEndpointsResult& result) {
     const TString& address = InferPublicHostFromServerHost(grpcConfig.GetHost());
     if (const ui32 port = grpcConfig.GetPort()) {
         FillEnpointInfo(address, port, grpcConfig.GetPublicHost(), grpcConfig.GetPublicPort(), false, *result.add_endpoints());
@@ -70,18 +69,19 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        } else {
-            THolder<TEvListEndpointsRequest> request(event->Release().Release());
-            auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
-            const auto& grpcConfig = AppConfig.GetGRpcConfig();
-            AddEndpointsForGrpcConfig(grpcConfig, *result);
-
-            for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
-                AddEndpointsForGrpcConfig(externalEndpoint, *result);
-            }
-
-            request->SendResult(*result, Ydb::StatusIds::SUCCESS);
+            return;
         }
+
+        THolder<TEvListEndpointsRequest> request(event->Release().Release());
+        auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
+        const auto& grpcConfig = AppConfig.GetGRpcConfig();
+        AddEndpointsForGrpcConfig(grpcConfig, *result);
+
+        for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
+            AddEndpointsForGrpcConfig(externalEndpoint, *result);
+        }
+
+        request->SendResult(*result, Ydb::StatusIds::SUCCESS);
     }
 
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {

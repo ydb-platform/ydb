@@ -23,22 +23,3 @@ target_link_libraries(ip_udf.global PUBLIC
 target_sources(ip_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
 )
-
-add_library(ip_udf.udf SHARED)
-target_compile_options(ip_udf.udf PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=9
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(ip_udf.udf PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-ip_base-lib
-)
-target_sources(ip_udf.udf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/ip_base/ip_base.cpp
-)
-vcs_info(ip_udf.udf)

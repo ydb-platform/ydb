@@ -23,22 +23,3 @@ target_link_libraries(topfreq_udf.global PUBLIC
 target_sources(topfreq_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
 )
-
-add_library(topfreq_udf.udf SHARED)
-target_compile_options(topfreq_udf.udf PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=10
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(topfreq_udf.udf PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-topfreq-static
-)
-target_sources(topfreq_udf.udf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
-)
-vcs_info(topfreq_udf.udf)

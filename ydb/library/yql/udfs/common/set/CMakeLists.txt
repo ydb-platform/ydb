@@ -21,21 +21,3 @@ target_link_libraries(set_udf.global PUBLIC
 target_sources(set_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
 )
-
-add_library(set_udf.udf SHARED)
-target_compile_options(set_udf.udf PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=19
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(set_udf.udf PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-)
-target_sources(set_udf.udf PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
-)
-vcs_info(set_udf.udf)

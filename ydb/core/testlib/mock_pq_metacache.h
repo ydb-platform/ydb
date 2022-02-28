@@ -69,7 +69,7 @@ public:
             response->Success = success;
             auto* result = new NSchemeCache::TSchemeCacheNavigate();
             result->ResultSet = resultSet;
-            response->Result.Reset(result);
+            response->Result.reset(result);
             ctx.Send(ev->Sender, std::move(response));
         };
 

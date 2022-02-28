@@ -42,8 +42,8 @@ struct TEvPqNewMetaCache {
         EvQueryPrepared,
         EvQueryComplete,
         EvRestartQuery,
-        EvListTopicsRequest,
-        EvListTopicsResponse,
+        EvGetVersionRequest,
+        EvGetVersionResponse,
         EvDescribeTopicsRequest,
         EvDescribeTopicsResponse,
         EvDescribeAllTopicsRequest,
@@ -74,11 +74,14 @@ struct TEvPqNewMetaCache {
             : Type(type) {}
     };
 
-    struct TEvListTopicsRequest : public TEventLocal<TEvListTopicsRequest, EvListTopicsRequest> {
+    struct TEvGetVersionRequest : public TEventLocal<TEvGetVersionRequest, EvGetVersionRequest> {
     };
 
-    struct TEvListTopicsResponse : public TEventLocal<TEvListTopicsResponse, EvListTopicsResponse> {
-        TVector<TString> Topics;
+    struct TEvGetVersionResponse : public TEventLocal<TEvGetVersionResponse, EvGetVersionResponse> {
+        TEvGetVersionResponse(ui64 version)
+                : TopicsVersion(version)
+        {}
+
         ui64 TopicsVersion;
     };
 
@@ -89,23 +92,23 @@ struct TEvPqNewMetaCache {
         TEvDescribeTopicsRequest() = default;
 
         explicit TEvDescribeTopicsRequest(const TVector<TString>& topics)
-            : Topics(topics)
+                : Topics(topics)
         {}
 
         TEvDescribeTopicsRequest(const TVector<TString>& topics, const TString& pathPrefix)
-            : PathPrefix(pathPrefix)
-            , Topics(topics)
+                : PathPrefix(pathPrefix)
+                , Topics(topics)
         {}
     };
 
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
         TVector<TString> TopicsRequested;
-        THolder<NSchemeCache::TSchemeCacheNavigate> Result;
+        std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
         explicit TEvDescribeTopicsResponse(const TVector<TString>& topics,
                                            NSchemeCache::TSchemeCacheNavigate* result)
 
-            : TopicsRequested(topics)
-            , Result(result)
+                : TopicsRequested(topics)
+                , Result(result)
         {}
     };
 
@@ -120,13 +123,13 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeAllTopicsResponse : public TEventLocal<TEvDescribeAllTopicsResponse, EvDescribeAllTopicsResponse> {
         bool Success = true;
         TString Path;
-        THolder<NSchemeCache::TSchemeCacheNavigate> Result;
+        std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
         explicit TEvDescribeAllTopicsResponse(const TString& path)
-            : Path(path)
+                : Path(path)
         {}
-        TEvDescribeAllTopicsResponse(const TString& path, NSchemeCache::TSchemeCacheNavigate* result)
-            : Path(path)
-            , Result(result)
+        TEvDescribeAllTopicsResponse(const TString& path, const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
+                : Path(path)
+                , Result(result)
         {}
     };
 };

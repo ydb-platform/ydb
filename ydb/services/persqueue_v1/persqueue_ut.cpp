@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -3568,5 +3568,66 @@ namespace {
             Cerr << "partition status: " << partitionStatus->DebugString() << Endl;
         }
     }
+    Y_UNIT_TEST(SrcIdCompatibility) {
+        NPersQueue::TTestServer server{};
+        auto runTest = [&] (
+                const TString& topicToAdd, const TString& topicForHash, const TString& topicName,
+                const TString& srcId, ui32 partId, ui64 accessTime = 0
+        ) {
+            TStringBuilder query;
+            auto encoded = NPQ::NSourceIdEncoding::EncodeSrcId(topicForHash, srcId);
+            Cerr << "===save partition with time: " << accessTime << Endl;
+
+            if (accessTime == 0) {
+                accessTime = TInstant::Now().MilliSeconds();
+            }
+            if (!topicToAdd.empty()) { // Empty means don't add anything
+                query <<
+                      "--!syntax_v1\n"
+                      "UPSERT INTO `/Root/PQ/SourceIdMeta2` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES ("
+                      << encoded.Hash << ", \"" << topicToAdd << "\", \"" << encoded.EscapedSourceId << "\", "
+                      << TInstant::Now().MilliSeconds() << ", " << accessTime << ", " << partId << "); ";
+                Cerr << "Run query:\n" << query << Endl;
+                auto scResult = server.AnnoyingClient->RunYqlDataQuery(query);
+                //UNIT_ASSERT(scResult.Defined());
+            }
+
+            auto driver = server.AnnoyingClient->GetDriver();
+            auto writer = CreateWriter(*driver, topicName, srcId);
+            auto ev = writer->GetEvent(true);
+            auto ct = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent >(&*ev);
+            UNIT_ASSERT(ct);
+            writer->Write(std::move(ct->ContinuationToken), "1234567890");
+            UNIT_ASSERT(ev.Defined());
+            while(true) {
+                ev = writer->GetEvent(true);
+                auto ack = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*ev);
+                if (ack) {
+                    UNIT_ASSERT_VALUES_EQUAL(ack->Acks[0].Details->PartitionId, partId);
+                    break;
+                }
+
+            }
+        };
+
+        TString legacyName = "rt3.dc1--account--topic100";
+        TString shortLegacyName = "account--topic100";
+        TString fullPath = "/Root/PQ/rt3.dc1--account--topic100";
+        TString topicName = "account/topic100";
+        TString srcId1 = "test-src-id-compat", srcId2 = "test-src-id-compat2";
+        server.AnnoyingClient->CreateTopic(legacyName, 100);
+
+        runTest(legacyName, shortLegacyName, topicName, srcId1, 5, 100);
+        runTest(legacyName, legacyName, topicName, srcId2, 6, 100);
+        runTest("", "", topicName, srcId1, 5, 100);
+        runTest("", "", topicName, srcId2, 6, 100);
+
+        ui64 time = (TInstant::Now() + TDuration::Hours(4)).MilliSeconds();
+        runTest(legacyName, legacyName, topicName, srcId2, 7, time);
+
+
+
+    }
+
 }
 }

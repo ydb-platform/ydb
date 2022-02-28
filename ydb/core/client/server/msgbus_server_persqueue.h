@@ -145,7 +145,7 @@ protected:
     const TActorId PqMetaCache;
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
-    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheResponse;
+    std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> SchemeCacheResponse;
 
     // Nodes info
     const bool ListNodes;

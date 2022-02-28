@@ -33,7 +33,7 @@ const TString& TopicPrefix(const TActorContext& ctx) {
 }
 
 TProcessingResult ProcessMetaCacheAllTopicsResponse(TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev) {
-    auto *res = ev->Get()->Result.Get();
+    auto& res = ev->Get()->Result;
     const TString& path = ev->Get()->Path;
     TProcessingResult result;
     if (!ev->Get()->Success) {
@@ -874,7 +874,7 @@ public:
 
     void Handle(TEvAllTopicsDescribeResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
-        auto* res = ev->Get()->Result.Get();
+        auto& res = ev->Get()->Result;
         auto processResult = ProcessMetaCacheAllTopicsResponse(ev);
         if (processResult.IsFatal) {
             ErrorReason = processResult.Reason;

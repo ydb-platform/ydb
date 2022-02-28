@@ -337,31 +337,31 @@ public:
     void ProcessCmd(TIntermediate::TRead &read,
         NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(TIntermediate::TRangeRead &request,
         NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(TIntermediate::TWrite &request,
         NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TDelete &request,
         NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TRename &request,
         NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TCopyRange &request,
         NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TConcat &request,
         NKikimrClient::TKeyValueResponse::TConcatResult *resplegacyResponseonse,
         NKikimrKeyValue::Channel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime);
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
@@ -492,7 +492,7 @@ public:
         return false;
     }
 
-    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx);
+    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx, TIntermediate *intermediate);
 
     bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly);

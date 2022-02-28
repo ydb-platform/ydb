@@ -22,6 +22,7 @@ private:
     public:
         TImpl(const TString& tokenAccessorEndpoint,
             bool useSsl,
+            const TString& sslCaCert,
             const TString& serviceAccountId,
             const TString& serviceAccountIdSignature,
             const TDuration& refreshPeriod,
@@ -38,6 +39,7 @@ private:
             NGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = tokenAccessorEndpoint;
             grpcConf.EnableSsl = useSsl;
+            grpcConf.SslCaCert = sslCaCert;
             Connection = Client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
         }
 
@@ -144,12 +146,13 @@ public:
     TTokenAccessorCredentialsProvider(
         const TString& tokenAccessorEndpoint,
         bool useSsl,
+        const TString& sslCaCert,
         const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const TDuration& refreshPeriod,
         const TDuration& requestTimeout
     )
-        : Impl(std::make_shared<TImpl>(tokenAccessorEndpoint, useSsl, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout))
+        : Impl(std::make_shared<TImpl>(tokenAccessorEndpoint, useSsl, sslCaCert, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout))
     {
         Impl->UpdateTicket(true);
     }
@@ -175,11 +178,12 @@ private:
 std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvider(
     const TString& tokenAccessorEndpoint,
     bool useSsl,
+    const TString& sslCaCert,
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod,
     const TDuration& requestTimeout
 ) {
-    return std::make_shared<TTokenAccessorCredentialsProvider>(tokenAccessorEndpoint, useSsl, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
+    return std::make_shared<TTokenAccessorCredentialsProvider>(tokenAccessorEndpoint, useSsl, sslCaCert, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
 }
 }

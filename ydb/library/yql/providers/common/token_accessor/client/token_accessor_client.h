@@ -8,6 +8,7 @@ namespace NYql {
 std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvider(
     const TString& tokenAccessorEndpoint,
     bool useSsl,
+    const TString& sslCaCert,
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod = TDuration::Hours(1),

@@ -123,7 +123,8 @@ void Init(
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(protoConfig.GetTokenAccessor().GetEndpoint(), protoConfig.GetTokenAccessor().GetUseSsl());
+        const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
+        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), tokenAccessorConfig.GetSslCaCert());
         RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*sourceActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory,

@@ -17,6 +17,7 @@ public:
 ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
     const TString& tokenAccessorEndpoint,
     bool useSsl,
+    const TString& sslCaCert,
     const TDuration& refreshPeriod = TDuration::Hours(1),
     const TDuration& requestTimeout = TDuration::Seconds(10)
 );

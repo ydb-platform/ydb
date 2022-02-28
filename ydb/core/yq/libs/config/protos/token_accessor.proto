@@ -11,4 +11,5 @@ message TTokenAccessorConfig {
     string Endpoint = 2; // GRPC endpoint of token accessor daemon
     bool UseSsl = 3; // Whether to use SSL
     string HmacSecretFile = 4;
+    string SslCaCert = 5;
 }

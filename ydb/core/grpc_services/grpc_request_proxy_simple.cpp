@@ -5,11 +5,40 @@
 
 #include <ydb/core/base/appdata.h>
 
+#include <util/system/hostname.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
 
+namespace {
+
+void FillEnpointInfo(const TString& host, ui32 port, const TString& publicHost, ui32 publicPort, bool ssl, Ydb::Discovery::EndpointInfo& info) {
+    auto effectivePublicHost = publicHost ? publicHost : host;
+    auto effectivePublicPort = publicPort ? publicPort : port;
+    info.set_address(effectivePublicHost);
+    info.set_port(effectivePublicPort);
+    info.set_ssl(ssl);
+}
+
+TString InferPublicHostFromServerHost(const TString& serverHost) {
+    return serverHost && serverHost != "[::]" ? serverHost : FQDNHostName();
+}
+
+template <typename T>
+void AddEndpointsForGrpcConfig(const T& grpcConfig, Ydb::Discovery::ListEndpointsResult& result) {
+    const TString& address = InferPublicHostFromServerHost(grpcConfig.GetHost());
+    if (const ui32 port = grpcConfig.GetPort()) {
+        FillEnpointInfo(address, port, grpcConfig.GetPublicHost(), grpcConfig.GetPublicPort(), false, *result.add_endpoints());
+    }
+
+    if (const ui32 sslPort = grpcConfig.GetSslPort()) {
+        FillEnpointInfo(address, sslPort, grpcConfig.GetPublicHost(), grpcConfig.GetPublicSslPort(), true, *result.add_endpoints());
+    }
+}
+
+}
 
 class TGRpcRequestProxySimple
     : public TActorBootstrapped<TGRpcRequestProxySimple>
@@ -42,14 +71,16 @@ private:
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         } else {
-            THolder<TEvListEndpointsRequest> Request(event->Release().Release());
-            auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(Request);
-            auto xres = result->add_endpoints();
-            auto publicHost = AppConfig.GetGRpcConfig().GetPublicHost();
-            xres->set_address(publicHost ? publicHost : AppConfig.GetGRpcConfig().GetHost()); //TODO: use cfg
-            auto publicPort = AppConfig.GetGRpcConfig().GetPublicPort();
-            xres->set_port(publicPort ? publicPort : AppConfig.GetGRpcConfig().GetPort());
-            Request->SendResult(*result, Ydb::StatusIds::SUCCESS);
+            THolder<TEvListEndpointsRequest> request(event->Release().Release());
+            auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
+            const auto& grpcConfig = AppConfig.GetGRpcConfig();
+            AddEndpointsForGrpcConfig(grpcConfig, *result);
+
+            for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
+                AddEndpointsForGrpcConfig(externalEndpoint, *result);
+            }
+
+            request->SendResult(*result, Ydb::StatusIds::SUCCESS);
         }
     }
 

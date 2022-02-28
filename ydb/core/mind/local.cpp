@@ -439,6 +439,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
         }
 
+        if (record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER && tabletId.second != 0) {
+            LOG_WARN_S(ctx, NKikimrServices::LOCAL,
+                       "TLocalNodeRegistrar: unsuccessful attempt to promote follower "
+                       << "tabletId: " << tabletId << " suggestedGen: " << suggestedGen);
+            tabletId.second = 0; // we change tabletid to leader because it was unsuccessful attempt to boot leader, not a follower
+            ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusFailed, tabletId, suggestedGen));
+            return;
+        }
+
         TTabletEntry &entry = InbootTablets[tabletId];
         if (entry.Tablet && entry.Generation != suggestedGen) {
             ctx.Send(entry.Tablet, new TEvents::TEvPoisonPill());

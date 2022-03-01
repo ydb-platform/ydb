@@ -36,6 +36,10 @@ struct TTypeDesc {
     TString Name;
     ui32 ElementTypeId = 0;
     bool PassByValue = false;
+    char Category = '\0';
+    ui32 InFuncId = 0;
+    ui32 OutFuncId = 0;
+    i32 TypeLen = 0;
 };
 
 enum class ECastMethod {
@@ -59,6 +63,7 @@ const TProcDesc& LookupProc(ui32 procId);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
 
+bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 castId);
 

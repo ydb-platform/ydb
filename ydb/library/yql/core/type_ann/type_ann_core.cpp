@@ -9427,6 +9427,41 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto targetTypeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
+
+        auto type = input->Tail().GetTypeAnn();
+        ui32 inputTypeId = 0;
+        if (type->GetKind() != ETypeAnnotationKind::Null) {
+            if (type->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Expected PG type for cast argument, but got: " << type->GetKind()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            inputTypeId = type->Cast<TPgExprType>()->GetId();
+        }
+
+        if (inputTypeId != 0 && inputTypeId != targetTypeId) {
+            if (NPg::LookupType(inputTypeId).Category != 'S' &&
+                NPg::LookupType(targetTypeId).Category != 'S') {
+                Y_UNUSED(NPg::LookupCast(inputTypeId, targetTypeId));
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(targetTypeId));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus PgTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -13156,6 +13191,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
         Functions["PgConst"] = &PgConstWrapper;
         Functions["PgType"] = &PgTypeWrapper;
+        Functions["PgCast"] = &PgCastWrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;

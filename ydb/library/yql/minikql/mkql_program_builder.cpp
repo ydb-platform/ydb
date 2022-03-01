@@ -5042,6 +5042,16 @@ TRuntimeNode TProgramBuilder::PgResolvedCall(const std::string_view& name, ui32 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType) {
+    if constexpr (RuntimeVersion < 30U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(input);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 bool CanExportType(TType* type, const TTypeEnvironment& env) {
     if (type->GetKind() == TType::EKind::Type) {
         return false; // Type of Type

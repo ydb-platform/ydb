@@ -802,7 +802,7 @@ public:
             return ParseColumnRef(CAST_NODE(ColumnRef, node));
         }
         case T_TypeCast: {
-            return ParseTypeCast(CAST_NODE(TypeCast, node));
+            return ParseTypeCast(CAST_NODE(TypeCast, node), settings);
         }
         case T_BoolExpr: {
             return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
@@ -976,7 +976,7 @@ public:
         return VL(args.data(), args.size());
     }
 
-    TAstNode* ParseTypeCast(const TypeCast* value) {
+    TAstNode* ParseTypeCast(const TypeCast* value, const TExprSettings& settings) {
         if (!value->arg) {
             AddError("Expected arg");
             return nullptr;
@@ -989,19 +989,21 @@ public:
 
         auto arg = value->arg;
         auto typeName = value->typeName;
-        if (NodeTag(arg) == T_A_Const &&
-            (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
-            NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
-            typeName->typeOid == 0 &&
+        auto supportedTypeName = typeName->typeOid == 0 &&
             !typeName->setof &&
             !typeName->pct_type &&
             ListLength(typeName->typmods) == 0 &&
             ListLength(typeName->arrayBounds) == 0 &&
             (ListLength(typeName->names) == 2 &&
-            NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
-            !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
+                NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
+                !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
             NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String &&
-            typeName->typemod == -1) {
+            typeName->typemod == -1;
+
+        if (NodeTag(arg) == T_A_Const &&
+            (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
+            NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
+            supportedTypeName) {
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
@@ -1019,7 +1021,7 @@ public:
                 }
             }
 
-            if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) {
+            if (!Settings.PgTypes && NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) {
                 TString yqlType;
                 if (targetType == "bool") {
                     yqlType = "Bool";
@@ -1035,6 +1037,16 @@ public:
                     return L(A("Nothing"), L(A("OptionalType"), L(A("DataType"), QA(yqlType))));
                 }
             }
+        }
+
+        if (Settings.PgTypes && supportedTypeName) {
+            TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
+            auto input = ParseExpr(arg, settings);
+            if (!input) {
+                return nullptr;
+            }
+
+            return L(A("PgCast"), QA(TString(targetType)), input);
         }
 
         AddError("Unsupported form of type cast");

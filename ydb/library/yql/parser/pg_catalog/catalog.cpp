@@ -209,11 +209,17 @@ private:
     bool IsSupported = true;
 };
 
+struct TLazyTypeInfo {
+    TString ElementType;
+    TString InFunc;
+    TString OutFunc;
+};
+
 class TTypesParser : public TParser {
 public:
-    TTypesParser(TTypes& types, THashMap<ui32, TString>& elementTypes)
+    TTypesParser(TTypes& types, THashMap<ui32, TLazyTypeInfo>& lazyInfos)
         : Types(types)
-        , ElementTypes(elementTypes)
+        , LazyInfos(lazyInfos)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
@@ -223,8 +229,23 @@ public:
             LastType.ArrayTypeId = FromString<ui32>(value);
         } else if (key == "typname") {
             LastType.Name = value;
+        } else if (key == "typcategory") {
+            Y_ENSURE(value.size() == 1);
+            LastType.Category = value[0];
+        } else if (key == "typlen") {
+            if (value == "NAMEDATALEN") {
+                LastType.TypeLen = 64;
+            } else if (value == "SIZEOF_POINTER") {
+                LastType.TypeLen = 8;
+            } else {
+                LastType.TypeLen = FromString<i32>(value);
+            }
         } else if (key == "typelem") {
-            LastElementType = value; // resolve later
+            LastLazyTypeInfo.ElementType = value; // resolve later
+        } else if (key == "typinput") {
+            LastLazyTypeInfo.InFunc = value; // resolve later
+        } else if (key == "typoutput") {
+            LastLazyTypeInfo.OutFunc = value; // resolve later
         } else if (key == "typbyval") {
             if (value == "f") {
                 LastType.PassByValue = false;
@@ -243,19 +264,17 @@ public:
             Types[LastType.ArrayTypeId] = LastType;
         }
 
-        if (LastElementType) {
-            ElementTypes[LastType.TypeId] = LastElementType;
-        }
+        LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
 
         LastType = TTypeDesc();
-        LastElementType = TString();
+        LastLazyTypeInfo = TLazyTypeInfo();
     }
 
 private:
     TTypes& Types;
-    THashMap<ui32, TString>& ElementTypes;
+    THashMap<ui32, TLazyTypeInfo>& LazyInfos;
     TTypeDesc LastType;
-    TString LastElementType;
+    TLazyTypeInfo LastLazyTypeInfo;
 };
 
 class TCastsParser : public TParser {
@@ -365,9 +384,9 @@ TProcs ParseProcs(const TString& dat, const THashMap<TString, ui32>& typeByName)
     return ret;
 }
 
-TTypes ParseTypes(const TString& dat, THashMap<ui32, TString>& elementTypes) {
+TTypes ParseTypes(const TString& dat, THashMap<ui32, TLazyTypeInfo>& lazyInfos) {
     TTypes ret;
-    TTypesParser parser(ret, elementTypes);
+    TTypesParser parser(ret, lazyInfos);
     parser.Do(dat);
     return ret;
 }
@@ -390,8 +409,8 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_proc.dat", &procData));
         TString castData;
         Y_ENSURE(NResource::FindExact("pg_cast.dat", &castData));
-        THashMap<ui32, TString> elementTypes;
-        Types = ParseTypes(typeData, elementTypes);
+        THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
+        Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
             if (k == v.TypeId) {
                 Y_ENSURE(TypeByName.insert(std::make_pair(v.Name, k)).second);
@@ -402,8 +421,12 @@ struct TCatalog {
             }
         }
 
-        for (const auto& [k, v]: elementTypes) {
-            auto elemTypePtr = TypeByName.FindPtr(v);
+        for (const auto& [k, v]: lazyTypeInfos) {
+            if (!v.ElementType) {
+                continue;
+            }
+
+            auto elemTypePtr = TypeByName.FindPtr(v.ElementType);
             Y_ENSURE(elemTypePtr);
             auto typePtr = Types.FindPtr(k);
             Y_ENSURE(typePtr);
@@ -415,6 +438,19 @@ struct TCatalog {
 
         for (const auto& [k, v]: Procs) {
             ProcByName[v.Name].push_back(k);
+        }
+
+        for (const auto&[k, v] : lazyTypeInfos) {
+            auto inFuncIdPtr = ProcByName.FindPtr(v.InFunc);
+            Y_ENSURE(inFuncIdPtr);
+            Y_ENSURE(inFuncIdPtr->size() == 1);
+            auto outFuncIdPtr = ProcByName.FindPtr(v.OutFunc);
+            Y_ENSURE(outFuncIdPtr);
+            Y_ENSURE(outFuncIdPtr->size() == 1);
+            auto typePtr = Types.FindPtr(k);
+            Y_ENSURE(typePtr);
+            typePtr->InFuncId = inFuncIdPtr->at(0);
+            typePtr->OutFuncId = outFuncIdPtr->at(0);
         }
 
         Casts = ParseCasts(castData, TypeByName, ProcByName, Procs);
@@ -520,6 +556,11 @@ const TTypeDesc& LookupType(ui32 typeId) {
     }
 
     return *typePtr;
+}
+
+bool HasCast(ui32 sourceId, ui32 targetId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.CastsByDir.contains(std::make_pair(sourceId, targetId));
 }
 
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId) {

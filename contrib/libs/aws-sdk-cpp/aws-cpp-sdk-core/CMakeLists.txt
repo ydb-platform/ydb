@@ -19,9 +19,16 @@ target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   -DHAS_PATHCONF
   -DHAS_UMASK
   -DS2N_ADX
+  -DS2N_BIKE_R3_AVX2
+  -DS2N_BIKE_R3_AVX512
+  -DS2N_BIKE_R3_PCLMUL
+  -DS2N_BIKE_R3_VPCLMUL
   -DS2N_CPUID_AVAILABLE
+  -DS2N_FALL_THROUGH_SUPPORTED
   -DS2N_HAVE_EXECINFO
-  -DS2N_SIKEP434R2_ASM
+  -DS2N_KYBER512R3_AVX2_BMI2
+  -DS2N_SIKE_P434_R3_ASM
+  -DS2N___RESTRICT__SUPPORTED
 )
 target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-core PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include

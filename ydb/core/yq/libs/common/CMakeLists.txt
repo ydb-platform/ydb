@@ -14,7 +14,6 @@ target_compile_options(yq-libs-common PRIVATE
 target_link_libraries(yq-libs-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-monlib-dynamic_counters
   libs-control_plane_storage-events
   yq-libs-events
   providers-common-structured_token

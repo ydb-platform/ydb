@@ -31,7 +31,6 @@ target_link_libraries(yq-libs-actors PUBLIC
   yq-libs-common
   yq-libs-control_plane_storage
   libs-control_plane_storage-events
-  providers-common-db_id_async_resolver
   yq-libs-db_schema
   yq-libs-events
   yq-libs-private_client
@@ -57,6 +56,8 @@ target_link_libraries(yq-libs-actors PUBLIC
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
+  providers-common-db_id_async_resolver
+  providers-common-metrics
   providers-common-provider
   common-schema-mkql
   providers-common-udf_resolve

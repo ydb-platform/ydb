@@ -150,7 +150,7 @@ public:
         const TActorId parent,
         const NConfig::TPingerConfig& config,
         TInstant deadline,
-        const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+        const ::NYq::NCommon::TServiceCounters& queryCounters,
         TInstant createdAt)
         : Config(config)
         , Scope(scope)
@@ -160,7 +160,7 @@ public:
         , Client(client)
         , Parent(parent)
         , Deadline(deadline)
-        , QueryUptime(queryUptime)
+        , QueryCounters(queryCounters)
         , CreatedAt(createdAt)
     {
     }
@@ -382,7 +382,7 @@ private:
     }
 
     void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) {
-        QueryUptime->Set((TInstant::Now() - CreatedAt).Seconds());
+        QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         // Fill ids
         request.set_scope(Scope.ToString());
         request.set_owner_id(OwnerId);
@@ -431,7 +431,7 @@ private:
     const TActorId Parent;
     const TInstant Deadline;
 
-    const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
+    const ::NYq::NCommon::TServiceCounters QueryCounters;
     const TInstant CreatedAt;
 
     std::deque<TForwardPingReqInfo> ForwardRequests;
@@ -450,7 +450,7 @@ IActor* CreatePingerActor(
     const TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,
-    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+    const ::NYq::NCommon::TServiceCounters& queryCounters,
     TInstant createdAt)
 {
     return new TPingerActor(
@@ -462,7 +462,7 @@ IActor* CreatePingerActor(
         parent,
         config,
         deadline,
-        queryUptime,
+        queryCounters,
         createdAt);
 }
 

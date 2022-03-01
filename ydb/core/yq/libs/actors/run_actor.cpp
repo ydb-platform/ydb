@@ -96,14 +96,14 @@ public:
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
     {
-        Params.QueryUptimeCounter->Set(0);
+        QueryCounters.SetUptimePublicAndServiceCounter(0);
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
-        Params.QueryUptimeCounter->Set((TInstant::Now() - CreatedAt).Seconds());
+        QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         LogReceivedParams();
         Pinger = Register(
             CreatePingerActor(
@@ -122,7 +122,7 @@ public:
                 SelfId(),
                 Params.PingerConfig,
                 Params.Deadline,
-                Params.QueryUptimeCounter,
+                QueryCounters,
                 CreatedAt
                 ));
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);

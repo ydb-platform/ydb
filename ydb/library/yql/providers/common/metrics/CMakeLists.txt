@@ -18,4 +18,5 @@ target_link_libraries(providers-common-metrics PUBLIC
 target_sources(providers-common-metrics PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/metrics_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/sensors_group.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/service_counters.cpp
 )

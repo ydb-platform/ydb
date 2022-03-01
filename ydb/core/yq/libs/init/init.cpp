@@ -4,7 +4,7 @@
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
 
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
-#include <ydb/core/yq/libs/common/service_counters.h>
+#include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>

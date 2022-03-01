@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/yq/libs/audit
     ydb/core/yq/libs/checkpoint_storage
     ydb/core/yq/libs/checkpointing
+    ydb/core/yq/libs/common
     ydb/core/yq/libs/control_plane_proxy
     ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/events
@@ -29,6 +30,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/clickhouse/actors
     ydb/library/yql/providers/common/comp_nodes
+    ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/provider

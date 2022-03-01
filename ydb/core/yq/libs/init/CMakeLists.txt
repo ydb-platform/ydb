@@ -22,6 +22,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yq-libs-audit
   yq-libs-checkpoint_storage
   yq-libs-checkpointing
+  yq-libs-common
   yq-libs-control_plane_proxy
   yq-libs-control_plane_storage
   yq-libs-events
@@ -36,6 +37,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yql-dq-comp_nodes
   providers-clickhouse-actors
   providers-common-comp_nodes
+  providers-common-metrics
   providers-dq-actors
   dq-api-protos
   providers-dq-provider

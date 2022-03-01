@@ -31,6 +31,7 @@ target_link_libraries(providers-dq-actors PUBLIC
   yql-dq-runtime
   yql-dq-tasks
   yql-utils-failure_injector
+  providers-common-metrics
   dq-api-grpc
   dq-api-protos
   providers-dq-common

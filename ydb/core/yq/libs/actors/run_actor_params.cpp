@@ -45,7 +45,6 @@ TRunActorParams::TRunActorParams(
     const TString& queryName,
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters,
-    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptimeCounter,
     TInstant createdAt
     )
     : Driver(driver)
@@ -88,7 +87,6 @@ TRunActorParams::TRunActorParams(
     , QueryName(queryName)
     , Deadline(deadline)
     , ClientCounters(clientCounters)
-    , QueryUptimeCounter(queryUptimeCounter)
     , CreatedAt(createdAt)
     {
     }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/common/service_counters.h>
+#include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 

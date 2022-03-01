@@ -7,6 +7,7 @@ OWNER(
 SRCS(
     metrics_registry.cpp
     sensors_group.cpp
+    service_counters.cpp
 )
 
 PEERDIR(

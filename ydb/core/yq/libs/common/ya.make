@@ -8,7 +8,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/dynamic_counters
     ydb/core/yq/libs/control_plane_storage/events
     ydb/core/yq/libs/events
     ydb/library/yql/providers/common/structured_token

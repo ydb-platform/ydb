@@ -20,7 +20,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-#include <ydb/core/yq/libs/common/service_counters.h>
+#include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
 namespace NKikimr  {
     namespace NMiniKQL {
@@ -85,7 +85,7 @@ NActors::IActor* CreatePingerActor(
     const NActors::TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,
-    const NMonitoring::TDynamicCounters::TCounterPtr& queryUptime,
+    const ::NYq::NCommon::TServiceCounters& queryCounters,
     TInstant createdAt);
 
 TString MakeInternalError(const TString& text);

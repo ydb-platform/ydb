@@ -40,7 +40,6 @@ PEERDIR(
     ydb/core/yq/libs/common
     ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/control_plane_storage/events
-    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/core/yq/libs/db_schema
     ydb/core/yq/libs/events
     ydb/core/yq/libs/private_client
@@ -66,6 +65,8 @@ PEERDIR(
     ydb/library/yql/providers/clickhouse/provider
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes
+    ydb/library/yql/providers/common/db_id_async_resolver
+    ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/mkql
     ydb/library/yql/providers/common/udf_resolve

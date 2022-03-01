@@ -323,7 +323,7 @@ private:
             task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
         queryCounters.Counters = queryCounters.RootCounters;
 
-        const auto queryUptimeCounter = queryCounters.PublicCounters->GetNamedCounter("name", "query.uptime_seconds", false);
+        queryCounters.InitUptimeCounter();
         const auto createdAt = TInstant::Now();
 
         TRunActorParams params(
@@ -355,7 +355,6 @@ private:
             task.query_name(),
             NProtoInterop::CastFromProto(task.deadline()),
             ClientCounters,
-            queryUptimeCounter,
             createdAt);
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));

@@ -59,7 +59,6 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& queryName,
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters,
-        const NMonitoring::TDynamicCounters::TCounterPtr& queryUptimeCounter,
         TInstant createdAt
     );
 
@@ -109,7 +108,6 @@ struct TRunActorParams { // TODO2 : Change name
     TInstant Deadline;
 
     const NMonitoring::TDynamicCounterPtr ClientCounters;
-    const NMonitoring::TDynamicCounters::TCounterPtr QueryUptimeCounter;
     const TInstant CreatedAt;
 };
 

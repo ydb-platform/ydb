@@ -105,9 +105,11 @@ public:
 
 class TOperatorsParser : public TParser {
 public:
-    TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName)
+    TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName,
+        const THashMap<TString, TVector<ui32>>& procByName)
         : Operators(operators)
         , TypeByName(typeByName)
+        , ProcByName(procByName)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
@@ -138,20 +140,34 @@ public:
             Y_ENSURE(typeIdPtr);
             LastOperator.ResultType = *typeIdPtr;
         } else if (key == "oprcode") {
-            LastOperator.Code = value;
+            auto procIdPtr = ProcByName.FindPtr(value);
+            // skip operator if proc isn't buildin, e.g. path_contain_pt
+            if (!procIdPtr) {
+                IsSupported = false;
+                return;
+            }
+
+            Y_ENSURE(procIdPtr->size() == 1);
+            LastOperator.ProcId = procIdPtr->at(0);
         }
     }
 
     void OnFinish() override {
-        Y_ENSURE(!LastOperator.Name.empty());
-        Operators[LastOperator.OperId] = LastOperator;
+        if (IsSupported) {
+            Y_ENSURE(!LastOperator.Name.empty());
+            Operators[LastOperator.OperId] = LastOperator;
+        }
+
         LastOperator = TOperDesc();
+        IsSupported = true;
     }
 
 private:
     TOperators& Operators;
     const THashMap<TString, ui32>& TypeByName;
+    const THashMap<TString, TVector<ui32>>& ProcByName;
     TOperDesc LastOperator;
+    bool IsSupported = true;
 };
 
 class TProcsParser : public TParser {
@@ -370,9 +386,10 @@ private:
     bool IsSupported = true;
 };
 
-TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName) {
+TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
+    const THashMap<TString, TVector<ui32>>& procByName) {
     TOperators ret;
-    TOperatorsParser parser(ret, typeByName);
+    TOperatorsParser parser(ret, typeByName, procByName);
     parser.Do(dat);
     return ret;
 }
@@ -433,7 +450,6 @@ struct TCatalog {
             typePtr->ElementTypeId = *elemTypePtr;
         }
 
-        Operators = ParseOperators(opData, TypeByName);
         Procs = ParseProcs(procData, TypeByName);
 
         for (const auto& [k, v]: Procs) {
@@ -457,6 +473,11 @@ struct TCatalog {
         for (const auto&[k, v] : Casts) {
             Y_ENSURE(CastsByDir.insert(std::make_pair(std::make_pair(v.SourceId, v.TargetId), k)).second);
         }
+
+        Operators = ParseOperators(opData, TypeByName, ProcByName);
+        for (const auto&[k, v] : Operators) {
+            OperatorsByName[v.Name].push_back(k);
+        }
     }
 
     static const TCatalog& Instance() {
@@ -470,9 +491,10 @@ struct TCatalog {
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
+    THashMap<TString, TVector<ui32>> OperatorsByName;
 };
 
-bool ValidateArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
+bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
     if (argTypeIds.size() != d.ArgTypes.size()) {
         return false;
     }
@@ -499,8 +521,8 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
         throw yexception() << "No such proc: " << procId;
     }
 
-    if (!ValidateArgs(*procPtr, argTypeIds)) {
-        throw yexception() << "Unable to find an overload for with oid " << procId << " with given argument types";
+    if (!ValidateProcArgs(*procPtr, argTypeIds)) {
+        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types";
     }
 
     return *procPtr;
@@ -510,20 +532,20 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.ProcByName.FindPtr(name);
     if (!procIdPtr) {
-        throw yexception() << "No such function: " << name;
+        throw yexception() << "No such proc: " << name;
     }
 
     for (const auto& id : *procIdPtr) {
         const auto& d = catalog.Procs.FindPtr(id);
         Y_ENSURE(d);
-        if (!ValidateArgs(*d, argTypeIds)) {
+        if (!ValidateProcArgs(*d, argTypeIds)) {
             continue;
         }
 
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for function " << name << " with given argument types";
+    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types";
 }
 
 const TProcDesc& LookupProc(ui32 procId) {
@@ -583,6 +605,78 @@ const TCastDesc& LookupCast(ui32 castId) {
     }
 
     return *castPtr;
+}
+
+bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
+    ui32 size = d.Kind == EOperKind::Binary ? 2 : 1;
+    if (argTypeIds.size() != size) {
+        return false;
+    }
+
+    bool found = true;
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        if (argTypeIds[i] == 0) {
+            continue; // NULL
+        }
+
+        ui32 expectedArgType;
+        if (d.Kind == EOperKind::RightUnary || (d.Kind == EOperKind::Binary && i == 0)) {
+            expectedArgType = d.LeftType;
+        } else {
+            expectedArgType = d.RightType;
+        }
+
+        if (argTypeIds[i] != expectedArgType) {
+            found = false;
+            break;
+        }
+    }
+
+    return found;
+}
+
+const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {
+    const auto& catalog = TCatalog::Instance();
+    auto operIdPtr = catalog.OperatorsByName.FindPtr(name);
+    if (!operIdPtr) {
+        throw yexception() << "No such operator: " << name;
+    }
+
+    for (const auto& id : *operIdPtr) {
+        const auto& d = catalog.Operators.FindPtr(id);
+        Y_ENSURE(d);
+        if (!ValidateOperArgs(*d, argTypeIds)) {
+            continue;
+        }
+
+        return *d;
+    }
+
+    throw yexception() << "Unable to find an overload for operator " << name << " with given argument types";
+}
+
+const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds) {
+    const auto& catalog = TCatalog::Instance();
+    auto operPtr = catalog.Operators.FindPtr(operId);
+    if (!operPtr) {
+        throw yexception() << "No such oper: " << operId;
+    }
+
+    if (!ValidateOperArgs(*operPtr, argTypeIds)) {
+        throw yexception() << "Unable to find an overload for operator with oid " << operId << " with given argument types";
+    }
+
+    return *operPtr;
+}
+
+const TOperDesc& LookupOper(ui32 operId) {
+    const auto& catalog = TCatalog::Instance();
+    auto operPtr = catalog.Operators.FindPtr(operId);
+    if (!operPtr) {
+        throw yexception() << "No such oper: " << operId;
+    }
+
+    return *operPtr;
 }
 
 }

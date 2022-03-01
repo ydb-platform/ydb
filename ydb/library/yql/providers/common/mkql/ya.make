@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

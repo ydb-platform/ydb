@@ -1455,32 +1455,40 @@ public:
         }
 
         if (!value->lexpr) {
-            auto opIt = UnaryOpTranslation.find(op);
-            if (opIt == UnaryOpTranslation.end()) {
-                AddError(TStringBuilder() << "Unsupported unary op: " << op);
-                return nullptr;
-            }
-
             auto rhs = ParseExpr(value->rexpr, settings);
             if (!rhs) {
                 return nullptr;
             }
 
-            return L(A(opIt->second), rhs);
-        } else {
-            auto opIt = BinaryOpTranslation.find(op);
-            if (opIt == BinaryOpTranslation.end()) {
-                AddError(TStringBuilder() << "Unsupported binary op: " << op);
-                return nullptr;
-            }
+            if (Settings.PgTypes) {
+                return L(A("PgOp"), QA(op), rhs);
+            } else {
+                auto opIt = UnaryOpTranslation.find(op);
+                if (opIt == UnaryOpTranslation.end()) {
+                    AddError(TStringBuilder() << "Unsupported unary op: " << op);
+                    return nullptr;
+                }
 
+                return L(A(opIt->second), rhs);
+            }
+        } else {
             auto lhs = ParseExpr(value->lexpr, settings);
             auto rhs = ParseExpr(value->rexpr, settings);
             if (!lhs || !rhs) {
                 return nullptr;
             }
 
-            return L(A(opIt->second), lhs, rhs);
+            if (Settings.PgTypes) {
+                return L(A("PgOp"), QA(op), lhs, rhs);
+            } else {
+                auto opIt = BinaryOpTranslation.find(op);
+                if (opIt == BinaryOpTranslation.end()) {
+                    AddError(TStringBuilder() << "Unsupported binary op: " << op);
+                    return nullptr;
+                }
+
+                return L(A(opIt->second), lhs, rhs);
+            }
         }
     }
 

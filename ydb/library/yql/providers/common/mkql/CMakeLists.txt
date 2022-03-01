@@ -24,6 +24,7 @@ target_link_libraries(providers-common-mkql PUBLIC
   yql-core-expr_nodes
   common-schema-expr
   providers-dq-expr_nodes
+  yql-parser-pg_catalog
 )
 target_sources(providers-common-mkql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/mkql/parser.cpp

@@ -18,7 +18,7 @@ struct TOperDesc {
     ui32 LeftType = 0;
     ui32 RightType = 0;
     ui32 ResultType = 0;
-    TString Code;
+    ui32 ProcId = 0;
 };
 
 struct TProcDesc {
@@ -66,5 +66,9 @@ const TTypeDesc& LookupType(ui32 typeId);
 bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 castId);
+
+const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds);
+const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
+const TOperDesc& LookupOper(ui32 operId);
 
 }

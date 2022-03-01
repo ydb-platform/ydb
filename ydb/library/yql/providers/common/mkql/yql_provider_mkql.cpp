@@ -13,6 +13,7 @@
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/stream/null.h>
 
@@ -2245,13 +2246,27 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto name = node.Head().Content();
         auto id = FromString<ui32>(node.Child(1)->Content());
         std::vector<TRuntimeNode> args;
-        args.reserve(node.ChildrenSize() - 1);
+        args.reserve(node.ChildrenSize() - 2);
         for (ui32 i = 2; i < node.ChildrenSize(); ++i) {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.PgResolvedCall(name, id, args, returnType);
+    });
+
+    AddCallable("PgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto operId = FromString<ui32>(node.Child(1)->Content());
+        auto procId = NPg::LookupOper(operId).ProcId;
+        auto procName = NPg::LookupProc(procId).Name;
+        std::vector<TRuntimeNode> args;
+        args.reserve(node.ChildrenSize() - 2);
+        for (ui32 i = 2; i < node.ChildrenSize(); ++i) {
+            args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
+        }
+
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.PgResolvedCall(procName, procId, args, returnType);
     });
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {

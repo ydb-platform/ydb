@@ -8774,7 +8774,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     };
 
     IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
         bool isResolved = input->Content() == "PgResolvedCall";
         if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -8893,6 +8892,66 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             input->SetTypeAnn(result);
             return IGraphTransformer::TStatus::Ok;
+        }
+    }
+
+    IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        bool isResolved = input->IsCallable("PgResolvedOp");
+        if (!EnsureMinArgsCount(*input, isResolved ? 3 : 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMaxArgsCount(*input, isResolved ? 4 : 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto name = input->Head().Content();
+        if (isResolved) {
+            if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        TVector<ui32> argTypes;
+        for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
+            auto type = input->Child(i)->GetTypeAnn();
+            if (type->GetKind() == ETypeAnnotationKind::Null) {
+                argTypes.push_back(0);
+                continue;
+            }
+
+            if (type->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Expected PG type for argument " << (i - (isResolved ? 2 : 1) + 1) << ", but got: " << type->GetKind() << " for function: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            argTypes.push_back(type->Cast<TPgExprType>()->GetId());
+        }
+
+        if (isResolved) {
+            auto operId = FromString<ui32>(input->Child(1)->Content());
+            const auto& oper = NPg::LookupOper(operId, argTypes);
+            if (oper.Name != name) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Mismatch of resolved operator name, expected: " << name << ", but got:" << oper.Name));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto result = ctx.Expr.MakeType<TPgExprType>(oper.ResultType);
+            input->SetTypeAnn(result);
+            return IGraphTransformer::TStatus::Ok;
+        } else {
+            const auto& oper = NPg::LookupOper(TString(name), argTypes);
+            auto children = input->ChildrenList();
+            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
+            children.insert(children.begin() + 1, idNode);
+            output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedOp", std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
         }
     }
 
@@ -13320,6 +13379,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ExtFunctions["PgCall"] = &PgCallWrapper;
         ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
+        ExtFunctions["PgOp"] = &PgOpWrapper;
+        ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
         ExtFunctions["TablePath"] = &TablePathWrapper;

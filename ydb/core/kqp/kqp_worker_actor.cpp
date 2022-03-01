@@ -362,9 +362,6 @@ public:
         auto& queryRequest = QueryState->Request;
 
         if (fallbackToOldEngine) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_WORKER, "OldEngine fallback request, proxyRequestId: "
-                << QueryState->ProxyRequestId);
-
             QueryState->ForceNewEngineState.ForcedNewEngine = false;
             QueryState->OldEngineFallback = true;
         }
@@ -592,6 +589,10 @@ public:
                                 QueryState->NewEngineCompatibleQuery = false;
 
                                 GetServiceCounters(AppData()->Counters, "kqp")->GetCounter("Requests/OldEngineFallback", true)->Inc();
+
+                                LOG_ERROR_S(ctx, NKikimrServices::KQP_WORKER, "OldEngine fallback request"
+                                    << ", satus: " << Ydb::StatusIds::StatusCode_Name(status)
+                                    << ", issues: " << QueryState->QueryResult.Issues().ToString());
 
                                 NCpuTime::TCpuTimer timer;
                                 HandleQueryRequest(timer, true, ctx);
